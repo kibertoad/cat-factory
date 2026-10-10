@@ -6,7 +6,12 @@
 // with slice 4.
 import type { Block, InitiativeStatus } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
-import { INITIATIVE_STATUS_LABEL_KEYS, initiativeProgress } from '~/utils/initiative'
+import {
+  INITIATIVE_ATTENTION_ICONS,
+  INITIATIVE_ATTENTION_LABEL_KEYS,
+  INITIATIVE_STATUS_LABEL_KEYS,
+  initiativeProgress,
+} from '~/utils/initiative'
 
 const props = defineProps<{ block: Block }>()
 
@@ -23,6 +28,8 @@ const {
   planningPipeline,
   running,
   awaitingAnswers,
+  interviewing,
+  attention,
   starting,
   runPlanning,
   openPlanning,
@@ -45,18 +52,33 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       <UBadge color="primary" variant="subtle" size="sm">
         {{ t(INITIATIVE_STATUS_LABEL_KEYS[status]) }}
       </UBadge>
-      <span v-if="progress" class="text-[11px] text-slate-400">
+      <span v-if="progress" class="text-2xs text-muted">
         {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
       </span>
     </div>
 
-    <p v-if="initiative?.goal" class="whitespace-pre-wrap text-[12px] text-slate-300">
+    <p v-if="initiative?.goal" class="whitespace-pre-wrap text-xs text-toned">
       {{ initiative.goal }}
     </p>
 
     <div class="flex flex-wrap items-center gap-2">
+      <!-- Parked for a human (the drafted plan awaits approval, or an agent raised a decision).
+           The same affordance the board card carries, resolved from the same composable — the
+           run's park must not be reachable only through the execution panel's step list. -->
       <UButton
-        v-if="awaitingAnswers"
+        v-if="attention"
+        data-testid="initiative-review"
+        :data-attention="attention.kind"
+        color="warning"
+        variant="solid"
+        size="sm"
+        :icon="INITIATIVE_ATTENTION_ICONS[attention.kind]"
+        @click="attention.open()"
+      >
+        {{ t(INITIATIVE_ATTENTION_LABEL_KEYS[attention.kind]) }}
+      </UButton>
+      <UButton
+        v-else-if="awaitingAnswers"
         data-testid="initiative-answer-planning"
         color="primary"
         variant="solid"
@@ -65,6 +87,20 @@ function control(action: 'pause' | 'resume' | 'cancel') {
         @click="openPlanning"
       >
         {{ t('initiative.inspector.answerPlanning') }}
+      </UButton>
+      <!-- Mid-pass there is nothing to answer, but the window must stay reachable — it is where
+           the "planner is working" state is shown. -->
+      <UButton
+        v-else-if="interviewing"
+        data-testid="initiative-planning-in-progress"
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-loader-circle"
+        :ui="{ leadingIcon: 'animate-spin' }"
+        @click="openPlanning"
+      >
+        {{ t('initiative.inspector.planningInProgress') }}
       </UButton>
       <UButton
         data-testid="initiative-run-planning"
@@ -129,7 +165,7 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       </UButton>
     </div>
 
-    <p class="text-[11px] text-slate-500">
+    <p class="text-2xs text-dimmed">
       {{ t('initiative.inspector.hint') }}
     </p>
   </div>

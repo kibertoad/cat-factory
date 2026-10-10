@@ -36,6 +36,7 @@ describe('task context injection', () => {
     })
     const task = await app.call<Block>('POST', `/workspaces/${ws}/blocks/${frame.body.id}/tasks`, {
       title: 'Implement limiter',
+      description: 'Add a per-tenant token-bucket rate limiter in front of the gateway.',
     })
 
     // Connect, import the issue and attach it to the task as context.
@@ -53,6 +54,7 @@ describe('task context injection', () => {
     // Run a one-step pipeline on the task and drive it to completion.
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Build',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {

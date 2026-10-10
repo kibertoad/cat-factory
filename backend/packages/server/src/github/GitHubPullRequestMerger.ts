@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   GitHubClient,
@@ -60,7 +61,7 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
       } catch (err) {
         return {
           merged,
-          failed: { entry, error: err instanceof Error ? err.message : String(err) },
+          failed: { entry, error: getErrorMessage(err) },
           skipped: prs.slice(i + 1),
         }
       }
@@ -77,10 +78,13 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
         await this.deps.githubClient
           .deleteBranch(installationId, ref, branch)
           .catch((e: unknown) => {
-            logger.warn(
-              { workspaceId, blockId, repo: `${owner}/${name}`, branch, err: e },
-              'mergePullRequests: failed to delete merged work branch (left behind)',
-            )
+            logger.warn('mergePullRequests: failed to delete merged work branch (left behind)', {
+              workspaceId,
+              blockId,
+              repo: `${owner}/${name}`,
+              branch,
+              err: e,
+            })
           })
       }
     }

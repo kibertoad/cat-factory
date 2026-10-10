@@ -19,8 +19,12 @@ import {
 // inherited) — but ENTITY-NATIVE: the questions / answers / synthesized brief live directly on the
 // `initiatives` entity (its `qa` + `interview` + goal/constraints/nonGoals fields) via
 // InitiativeService's CAS `mutate`, not in a parallel session table. The interviewer LLM lives in
-// InitiativeInterviewService. Because the initiative entity's own lifecycle isolates runs, this
-// gate needs no per-run reset hook (contrast the document interviewer).
+// InitiativeInterviewService.
+//
+// The entity OUTLIVES any one run (an initiative block is re-plannable), so this gate DOES need the
+// spine's per-run reset hook: without it a re-run resumes the previous run's round counter and its
+// still-pending questions, which is how a wedged planning run stayed wedged — a run that burned its
+// rounds force-converges on its very first pass, so re-running never asks the human anything again.
 // ---------------------------------------------------------------------------
 
 export interface InitiativeInterviewControllerDeps extends InterviewGateDeps {
@@ -37,6 +41,17 @@ function initiativeInterviewKind(
     agentKind: INITIATIVE_INTERVIEWER_AGENT_KIND,
     entityName: 'Initiative',
     enabled: () => !!interviewService?.enabled,
+    // Runs on every FRESH entry — including when no interviewer is wired — so a stale brief from an
+    // earlier wired run can't bleed into the planner. The answered + dismissed digest (the
+    // preset form's seeded exchanges among it) survives; only the round bookkeeping and the last
+    // run's unanswered questions go.
+    //
+    // It does NOT touch `analysisSummary`, which matters now that the analyst runs AHEAD of this
+    // gate in `pl_initiative`: the reset fires between the two, and clearing the analysis here
+    // would throw away the very reading of the repository this interview is meant to be grounded in.
+    async resetForFreshRun(workspaceId, blockId) {
+      await initiativeService.resetInterview(workspaceId, blockId)
+    },
     async runPass(workspaceId, _instance, block, opts) {
       const initiative = interviewService
         ? await initiativeService.getByBlock(workspaceId, block.id)
@@ -54,7 +69,8 @@ function initiativeInterviewKind(
         await initiativeService.recordInterviewQuestions(workspaceId, block.id, output.questions)
         return 'park'
       }
-      // Converged: fold the synthesized brief onto the entity and advance to the analyst.
+      // Converged: fold the synthesized brief onto the entity and advance to the planner (the
+      // analyst already ran, ahead of this gate — its analysis is what the interview built on).
       await initiativeService.recordInterviewOutcome(workspaceId, block.id, {
         goal: output.goal,
         constraints: output.constraints,
@@ -65,6 +81,33 @@ function initiativeInterviewKind(
     recordAnswer: (workspaceId, blockId, questionId, answer) =>
       initiativeService.recordInterviewAnswer(workspaceId, blockId, questionId, answer),
     current: (workspaceId, blockId) => initiativeService.getByBlock(workspaceId, blockId),
+    // The entity outlives its runs, so `interview` absent is the real state "this initiative has
+    // never been interviewed" rather than a converged one: null, not an empty view.
+    //
+    // `qa` carries the bounded DIGEST as well as the live batch (the preset form seeds answered
+    // exchanges into it), so a projected view legitimately shows answered questions nobody asked
+    // this round. That is the entity's own shape and the window renders the same list; dropping
+    // them here would hide the context the pending questions were asked against.
+    view: (initiative) => {
+      const state = initiative.interview
+      if (!state) return null
+      return {
+        status: state.status,
+        round: state.round,
+        maxRounds: state.maxRounds,
+        questions: (initiative.qa ?? []).map((qa) => ({
+          id: qa.id ?? null,
+          question: qa.question,
+          answer: qa.answer ?? '',
+          status:
+            qa.status === 'dismissed'
+              ? 'dismissed'
+              : (qa.answer ?? '').trim()
+                ? 'answered'
+                : 'open',
+        })),
+      }
+    },
   }
 }
 

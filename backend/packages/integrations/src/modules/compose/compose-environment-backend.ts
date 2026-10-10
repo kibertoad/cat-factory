@@ -1,4 +1,4 @@
-import { ValidationError } from '@cat-factory/kernel'
+import { getErrorMessage, ValidationError } from '@cat-factory/kernel'
 import { ComposeEnvironmentProvider } from './ComposeEnvironmentProvider.js'
 import { type ComposeRuntime, parseComposeEnvConfig } from './compose-environment.logic.js'
 // Type-only import of the registry seam so there is no runtime cycle (the kubernetes backend
@@ -39,7 +39,7 @@ export function composeEnvironmentBackend(runtime: ComposeRuntime): EnvironmentB
       try {
         parseComposeEnvConfig(config.manifest)
       } catch (err) {
-        throw new ValidationError(err instanceof Error ? err.message : String(err))
+        throw new ValidationError(getErrorMessage(err))
       }
     },
     toManifest: (config) => {

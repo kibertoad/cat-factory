@@ -2,7 +2,8 @@ import { connectMothershipContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { mintSession } from '../auth/AuthController.js'
+import { mintSession, sessionGenerationFor } from '../auth/loginFlow.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /**
  * Local-mode mothership login: `POST /local/mothership/connect`.
@@ -25,14 +26,8 @@ export function mothershipConnectController(): Hono<AppEnv> {
   buildHonoRoute(app, connectMothershipContract, async (c) => {
     const connector = c.get('container').mothershipConnect
     if (!connector) {
-      return c.json(
-        {
-          error: {
-            code: 'unavailable',
-            message: 'Mothership connect is only available on a mothership-mode local node',
-          },
-        },
-        503,
+      throw new UnavailableError(
+        'Mothership connect is only available on a mothership-mode local node',
       )
     }
     const { session } = c.req.valid('json')
@@ -51,7 +46,17 @@ export function mothershipConnectController(): Hono<AppEnv> {
     // secret and cannot be verified here. `exp` describes THIS returned session (not the far
     // longer-lived machine token), so a consumer scheduling re-auth uses the right deadline.
     const cfg = c.get('container').config.auth
-    const { token: sessionToken, exp } = await mintSession(cfg, result.user)
+    // The generation is read through the node's own `userService`, which in mothership mode
+    // resolves it from the MOTHERSHIP over the persistence RPC (`sessionGeneration` is
+    // allow-listed for exactly this). So a node's local session carries the same generation the
+    // mothership would check, and revoking the user there stops this node honouring its own
+    // minted session too — which is the point: an offboarded person must not keep working access
+    // by virtue of having connected a laptop.
+    const { token: sessionToken, exp } = await mintSession(
+      cfg,
+      result.user,
+      await sessionGenerationFor(c, result.user.id),
+    )
     return c.json(
       { accountIds: result.accountIds, exp, session: sessionToken, user: result.user },
       200,

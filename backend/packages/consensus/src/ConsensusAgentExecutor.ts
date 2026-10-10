@@ -1,4 +1,5 @@
 import {
+  agentRunScopeSubject,
   type AgentExecutor,
   type AgentJobHandle,
   type AgentJobUpdate,
@@ -6,26 +7,40 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   type ConsensusSession,
-  type ConsensusStrategy,
   type ConsensusSessionRepository,
+  type ConsensusStrategy,
+  describeError,
   type ExecutionEventPublisher,
+  getErrorMessage,
+  inlineModelRef,
+  isAsyncAgentExecutor,
+  resolveInlineScope,
+  type Logger,
+  type ModelFlavor,
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
-  inlineModelRef,
-  isAsyncAgentExecutor,
+  type RunReclaimReport,
+  type RunReclaimTarget,
 } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
   composeBlockSystemPrompt,
   defaultAgentKindRegistry,
+  INLINE_PANEL_SURFACE,
   resolveAgentConfig,
   resolveInlineModelRef,
+  standardsVerbosityFor,
   systemPromptFor,
+  traitDeliveryFor,
+  usageBillingFields,
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
+import { panelDesignImageCeiling } from './designImages.js'
+import { panelToolServerCeiling } from './toolServers.js'
 import { isConsensusEligible } from './traits.js'
 import { runSpecialistPanel } from './strategies/specialistPanel.js'
 import { runDebate } from './strategies/debate.js'
@@ -51,7 +66,10 @@ export interface ConsensusAgentExecutorDependencies {
   /** Static provider (tests / no pool). One of the two MUST be present. */
   modelProvider?: ModelProvider
   agentRouting: AgentRouting
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  resolveBlockModel?: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as an
    * INLINE call in this deployment (local mode's ambient CLI). Consensus runs its participants
@@ -73,7 +91,7 @@ export interface ConsensusAgentExecutorDependencies {
   /** Epoch-ms clock; defaults to Date.now. */
   now?: () => number
   /** Structured logger; optional. */
-  logger?: { info(obj: unknown, msg?: string): void; warn?(obj: unknown, msg?: string): void }
+  logger?: Logger
   /** Inject the LLM call (tests); defaults to the Vercel AI SDK wrapper. */
   generate?: GenerateFn
   /**
@@ -99,7 +117,10 @@ const STRATEGIES: Record<ConsensusStrategy, (input: StrategyInput) => Promise<St
  */
 export class ConsensusAgentExecutor implements AsyncAgentExecutor {
   private readonly deps: ConsensusAgentExecutorDependencies
-  private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  private readonly resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   private readonly now: () => number
   private readonly generate: GenerateFn
   private readonly agentKindRegistry: AgentKindRegistry
@@ -133,17 +154,24 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
 
   private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
     if (this.deps.modelProviderResolver && context.workspaceId) {
-      return this.deps.modelProviderResolver.forScope({
-        workspaceId: context.workspaceId,
-        userId: context.initiatedByUserId,
-        // Carry the run so a leased-per-run inline subscription backend can lease the
-        // initiator's activation for a consensus participant's inline call.
-        executionId: context.executionId,
-      })
+      // Carry the run so a leased-per-run inline subscription backend can lease the initiator's
+      // activation for a consensus participant's inline call. The SAME kernel fold the plain
+      // executor uses: a panel participant and the step run alone must draw on one pool.
+      return this.deps.modelProviderResolver.forScope(
+        await resolveInlineScope(
+          agentRunScopeSubject({
+            workspaceId: context.workspaceId,
+            ...(context.executionId ? { executionId: context.executionId } : {}),
+            ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+          }),
+        ),
+      )
     }
     if (this.deps.modelProvider) return this.deps.modelProvider
     if (this.deps.modelProviderResolver) {
-      return this.deps.modelProviderResolver.forScope({ workspaceId: context.workspaceId ?? '' })
+      return this.deps.modelProviderResolver.forScope(
+        await resolveInlineScope({ kind: 'workspace', workspaceId: context.workspaceId ?? '' }),
+      )
     }
     throw new Error('ConsensusAgentExecutor: no model provider available')
   }
@@ -163,14 +191,30 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         blockModelId: context.block.modelId,
         modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
+        // The preset's route order, resolved once per dispatch by the engine. Read off the
+        // CONTEXT so a panel's participants run on the same providers the single-actor path
+        // would have used for the same step.
+        ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
+        // The initiator's local-model declarations, threaded for consistency with the other two
+        // paths. A panel withholds design images for its OWN reason (`consensus_panel`: one
+        // composed prompt across models that need not agree), so nothing here reads the modality
+        // today, but a base ref that answered differently per executor is exactly the drift the
+        // per-dispatch resolution exists to prevent.
+        ...(context.localModelDeclarations
+          ? { localModelDeclarations: context.localModelDeclarations }
+          : {}),
       },
     )
   }
 
   /** A participant/synthesizer's ref: its pinned model (degraded for inline) else the base ref. */
-  private refForModelId(modelId: string | undefined, base: ModelRef): ModelRef {
+  private refForModelId(
+    modelId: string | undefined,
+    base: ModelRef,
+    providerPreference?: readonly ModelFlavor[],
+  ): ModelRef {
     if (modelId) {
-      const pinned = this.resolveBlockModel(modelId)
+      const pinned = this.resolveBlockModel(modelId, providerPreference)
       if (pinned)
         return inlineModelRef(
           pinned,
@@ -188,14 +232,72 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const provider = await this.providerFor(context)
     const base = await this.baseRef(context)
     const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
-    const baseSystem = composeBlockSystemPrompt(
-      config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry),
+    const composedSystem = composeBlockSystemPrompt(
+      // Same precedence the single-actor inline executor applies: the workspace's own prompt
+      // for this kind wins over the deployment-wide `AGENT_ROUTING` system prompt, and
+      // `systemPromptFor` re-applies the engine-enforced directives on top of it.
+      // The delivered `.cat-context/` paths ride along for the same reason the single-actor
+      // inline executor passes them: a panel participant has no filesystem and reads the same
+      // files folded into its USER prompt, so guidance naming one must not point at nothing.
+      context.systemPromptOverride
+        ? systemPromptFor(
+            context.agentKind,
+            this.agentKindRegistry,
+            context.systemPromptOverride,
+            traitDeliveryFor(context),
+          )
+        : (config.system ??
+            systemPromptFor(
+              context.agentKind,
+              this.agentKindRegistry,
+              undefined,
+              traitDeliveryFor(context),
+            )),
       context.block,
+      this.agentKindRegistry.standardsDelivery(context.agentKind),
+      // An inline call has no filesystem, so a `context-files` kind's standards were never
+      // really delivered as files: fold them into the SYSTEM prompt here, at this kind's
+      // verbosity. `userPromptFor` correspondingly leaves the standards files out of its own
+      // fold, so each standard reaches the model exactly once and at the right length.
+      false,
+      // Same per-kind verbosity the single-actor executors resolve: a consensus session runs the
+      // SAME kind, so an implementer kind must not silently regain the full standards here.
+      standardsVerbosityFor(context.agentKind, this.agentKindRegistry),
     )
-    const goalPrompt = userPromptFor(context, this.agentKindRegistry)
+    // Most consensus-eligible kinds are CONTAINER kinds whose shipped prompt is written for a
+    // real checkout (run `git diff`, read `.cat-context/*`, dispatch slice subagents). A panel
+    // participant is a plain inline call with none of that, so the surface it is actually on is
+    // stated last — after any workspace override, which must not be able to drop it.
+    //
+    // The tool servers the kind declared go the same way, and are NAMED rather than covered by the
+    // paragraph above: the surface statement tells a participant it has no CLI, which does not tell
+    // it that the vendor tool its instructions send it to is one of the things it has lost.
+    // Recomputed rather than threaded from the preview the engine already asked for, the same way
+    // the model is resolved twice: a pure read of the kind's declarations, and the alternative is
+    // an executor holding per-dispatch state between two port calls.
+    const ceiling = panelToolServerCeiling(context, this.agentKindRegistry, this.deps.logger)
+    if (ceiling.record) {
+      this.deps.logger?.warn('consensus panel withholds the tool servers this kind declares', {
+        agentKind: context.agentKind,
+        strategy: cfg.strategy,
+        executionId: context.executionId,
+        stepIndex: context.stepIndex,
+        toolServerIds: ceiling.record.unavailable.map((server) => server.id),
+      })
+    }
+    const baseSystem = ceiling.section
+      ? `${composedSystem}\n\n${INLINE_PANEL_SURFACE}\n\n${ceiling.section}`
+      : `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
+    // Composed from the context PLUS what this surface cannot carry, so the one shared goal prompt
+    // states a withheld design exactly as the container dispatch of the same kind would state an
+    // undeliverable one. Absent for a task with no linked design: the prompt is then unchanged.
+    const goalPrompt = userPromptFor(
+      { ...context, ...panelDesignImageCeiling(context) },
+      this.agentKindRegistry,
+    )
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
-      const ref = this.refForModelId(p.modelId, base)
+      const ref = this.refForModelId(p.modelId, base, context.providerPreference)
       return {
         id: p.id,
         role: p.role,
@@ -204,7 +306,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         modelLabel: `${ref.provider}:${ref.model}`,
       }
     })
-    const synthRef = this.refForModelId(cfg.synthesizerModelId, base)
+    const synthRef = this.refForModelId(cfg.synthesizerModelId, base, context.providerPreference)
     const synthesizer = {
       model: provider.resolve(synthRef),
       modelLabel: `${synthRef.provider}:${synthRef.model}`,
@@ -218,6 +320,11 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       agentKind: context.agentKind,
       strategy: cfg.strategy,
       status: 'running',
+      // Which workspace consensus GROUP the engine selected for this dispatch, when the step
+      // named a tier set. Copied onto the transcript (rather than looked up later) so the
+      // session still says which panel fired after the library row is edited or deleted.
+      groupId: cfg.selectedGroup?.id ?? null,
+      groupName: cfg.selectedGroup?.name ?? null,
       participants: cfg.participants,
       rounds: [],
       synthesis: null,
@@ -228,17 +335,14 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       updatedAt: this.now(),
     }
     await this.emit(context, session)
-    this.deps.logger?.info(
-      {
-        msg: 'consensus.start',
-        strategy: cfg.strategy,
-        agentKind: context.agentKind,
-        participants: participants.length,
-        executionId: context.executionId,
-        stepIndex: context.stepIndex,
-      },
-      'consensus session started',
-    )
+    this.deps.logger?.info('consensus session started', {
+      msg: 'consensus.start',
+      strategy: cfg.strategy,
+      agentKind: context.agentKind,
+      participants: participants.length,
+      executionId: context.executionId,
+      stepIndex: context.stepIndex,
+    })
 
     const tags = {
       agentKind: context.agentKind,
@@ -269,24 +373,33 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       session.status = 'done'
       session.updatedAt = this.now()
       await this.emit(context, session)
-      this.deps.logger?.info(
-        { msg: 'consensus.done', strategy: cfg.strategy, confidence: result.confidence },
-        'consensus session complete',
-      )
+      this.deps.logger?.info('consensus session complete', {
+        msg: 'consensus.done',
+        strategy: cfg.strategy,
+        confidence: result.confidence,
+      })
       return {
         output: result.synthesis,
         model: `consensus:${cfg.strategy}:${synthesizer.modelLabel}`,
         usage: result.usage,
+        // How the panel's tokens were BILLED, read off the resolved models the same way the
+        // single-actor inline executor reads it off its one model. `result.usage` is the sum
+        // across every participant and the synthesizer, so the ledger's one row can only state
+        // an attribution they ALL declare: a panel mixing a subscription credential with a
+        // metered key spent real money, and the `'metered'` default is what keeps it visible to
+        // the budget gate. Without this a diverted step on a subscription-only deployment filed
+        // as spend that no card was charged for, the same bug one layer over.
+        ...usageBillingFields([...participants.map((p) => p.model), synthesizer.model]),
       }
     } catch (error) {
       session.status = 'failed'
-      session.error = error instanceof Error ? error.message : String(error)
+      session.error = getErrorMessage(error)
       session.updatedAt = this.now()
       await this.emit(context, session)
-      this.deps.logger?.warn?.(
-        { msg: 'consensus.failed', error: session.error },
-        'consensus session failed',
-      )
+      this.deps.logger?.warn('consensus session failed', {
+        sessionId: session.id,
+        ...describeError(error),
+      })
       throw error
     }
   }
@@ -310,7 +423,11 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       return this.deps.standard.resolveModel?.(context) ?? Promise.resolve(undefined)
     }
     const base = await this.baseRef(context)
-    const ref = this.refForModelId(context.consensus!.synthesizerModelId, base)
+    const ref = this.refForModelId(
+      context.consensus!.synthesizerModelId,
+      base,
+      context.providerPreference,
+    )
     return `consensus:${context.consensus!.strategy}:${ref.provider}:${ref.model}`
   }
 
@@ -318,6 +435,25 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     // Consensus makes metered inline calls; only the delegated path can be quota-based.
     if (this.consensusActive(context)) return Promise.resolve(false)
     return this.deps.standard.isQuotaBased?.(context) ?? Promise.resolve(false)
+  }
+
+  /**
+   * The tool-server ceiling of a diverted step, answered at DISPATCH so the engine records it
+   * before the panel runs. A panel that throws still leaves a step saying what it could not reach,
+   * which is the state a reader most needs it in: without the record, a failed diverted step is
+   * indistinguishable from an ordinary inline step whose kind declared no servers.
+   *
+   * Reads the declarations only, which is what makes it cheap enough to sit ahead of the work: no
+   * transport, credential or harness test can change the answer on this surface, and running them
+   * would resolve credentials for a dispatch that has nowhere to send them.
+   */
+  previewToolServers(context: AgentRunContext): Promise<DispatchToolServers | undefined> {
+    if (!this.consensusActive(context)) {
+      return this.deps.standard.previewToolServers?.(context) ?? Promise.resolve(undefined)
+    }
+    return Promise.resolve(
+      panelToolServerCeiling(context, this.agentKindRegistry, this.deps.logger).record,
+    )
   }
 
   // --- Async delegation: only ever reached for non-consensus (delegated) steps, since
@@ -342,9 +478,19 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     return this.deps.standard.pollJob(handle)
   }
 
-  async stopJob(handle: AgentJobHandle): Promise<void> {
-    if (isAsyncAgentExecutor(this.deps.standard) && this.deps.standard.stopJob) {
-      await this.deps.standard.stopJob(handle)
+  /**
+   * Forward the run-level reclaim, and ANSWER with what it achieved.
+   *
+   * The report is not optional plumbing on this path: it is how the engine tells "the external
+   * work was stopped" from "we asked and it is still running", and a wrapper that awaited the
+   * inner reclaim and returned nothing turned every successful delegated cancel into the second.
+   * With `CONSENSUS_ENABLED` this wrapper is the executor the engine holds, so the whole
+   * distinction died here and every stopped run sent its operator to chase work already dead.
+   */
+  async reclaimRun(target: RunReclaimTarget): Promise<RunReclaimReport | void> {
+    if (isAsyncAgentExecutor(this.deps.standard) && this.deps.standard.reclaimRun) {
+      return await this.deps.standard.reclaimRun(target)
     }
+    return undefined
   }
 }

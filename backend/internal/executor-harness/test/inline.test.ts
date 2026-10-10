@@ -113,7 +113,15 @@ describe.skipIf(!unix)('handleInline', () => {
       {},
     )
     expect(result.text).toBe('REVIEW OK')
-    expect(result.usage).toEqual({ inputTokens: 150, outputTokens: 20 })
+    // Folded from the per-call metrics, so the input side keeps its three orthogonal classes:
+    // 100 fresh + 50 cache read, NOT one 150 lump (the coarse `result` usage sums the buckets
+    // for the rotation window, which is a different question).
+    expect(result.usage).toEqual({
+      inputTokens: 100,
+      cacheReadTokens: 50,
+      cacheWriteTokens: 0,
+      outputTokens: 20,
+    })
     expect(result.finishReason).toBe('length')
     expect(result.callMetrics?.length).toBeGreaterThan(0)
   })

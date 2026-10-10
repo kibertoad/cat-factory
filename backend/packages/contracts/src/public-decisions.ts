@@ -1,0 +1,1411 @@
+import * as v from 'valibot'
+import { brainstormStageSchema } from './brainstorm.js'
+import {
+  bugFishingConfidenceSchema,
+  bugFishingFindingKindSchema,
+  bugFishingPhaseStatusSchema,
+  bugFishingSeveritySchema,
+  bugFishingSpawnStatusSchema,
+  bugFishingStatusSchema,
+} from './bugFishing.js'
+import { environmentStatusSchema } from './environments.js'
+import {
+  answerFollowUpSchema,
+  followUpItemKindSchema,
+  followUpItemStatusSchema,
+} from './followUp.js'
+import { stepApprovalStatusSchema } from './step-decisions.js'
+import { forkDecisionStatusSchema, forkOptionSchema } from './forkDecision.js'
+import { humanTestPhaseSchema, visualConfirmPhaseSchema } from './human-verdict-gates.js'
+import {
+  inputGateIssueSchema,
+  inputGateModeSchema,
+  inputGateStatusSchema,
+  resolveInputGateSchema,
+} from './input-gate.js'
+import { iterationCapChoiceSchema } from './iteration-cap.js'
+import { judgeStatusSchema, judgeVerdictSchema, resolveJudgeSchema } from './judge.js'
+import {
+  prReviewCategorySchema,
+  prReviewResolutionSchema,
+  prReviewSeveritySchema,
+  prReviewStatusSchema,
+} from './prReview.js'
+import { publicRunStatusSchema } from './public-api.js'
+import {
+  requirementReviewStatusSchema,
+  reviewItemCategorySchema,
+  reviewItemSeveritySchema,
+  reviewItemStatusSchema,
+} from './requirements.js'
+
+// ---------------------------------------------------------------------------
+// Public-API wire contracts for a run's PARKED HUMAN DECISIONS (`/api/v1/runs/:runId/decisions`).
+//
+// The requirements-review loop is the platform's clarification machinery: the reviewer raises
+// findings, the run parks on a durable decision-wait, a human answers/dismisses, an incorporation
+// pass folds the answers in, and the run advances. Until now that loop was reachable only through
+// the SPA, so a headless (`/api/v1`) run could not include clarification at all — the public
+// surface refused any pipeline that could park.
+//
+// These resources are the external counterpart of that loop, and now of every OTHER way a run
+// stops for a person. Each kind is deliberately a SMALL projection of the internal entity,
+// following the `publicTask` / `publicService` pattern: a caller sees the question and the stable
+// ids it answers by, never the engine's step internals, the recommendation machinery, or the
+// reviewer's model plumbing.
+//
+// Answering rides the SAME service methods the SPA controllers call, so the park's CAS/approval-id
+// arbitration and the task's merge-preset knobs (iteration cap, tolerated severity) apply
+// identically whichever surface answers first. See
+// `backend/docs/adr/0047-headless-clarification-loop.md` and
+// `backend/docs/adr/0043-public-decision-surface.md`.
+//
+// WHAT MAY BE REUSED FROM AN INTERNAL SCHEMA, AND WHAT MUST BE PROJECTED.
+//
+// `/api/v1` is frozen and internals explicitly are not (see the compatibility section of
+// `AGENTS.md`), so every internal schema named in a `public*` shape below silently promotes that
+// internal to the stable surface. The line this file draws:
+//
+//  - A CLOSED PICKLIST is reused as-is (`requirementReviewStatusSchema`, `prReviewStatusSchema`,
+//    `environmentStatusSchema`, …). Adding a member is additive and `/api/v1` ships those freely,
+//    and RETIRING one is already governed by the closed-vocabulary rule that applies wherever the
+//    value is persisted. A parallel `public*` copy of a picklist would carry no extra information
+//    and would drift the first time only one side gained a member.
+//  - An OBJECT is PROJECTED, always, however closely the projection resembles today's internal
+//    shape. An object grows fields, nests sub-objects and gets refactored on an internal
+//    timetable, so aliasing one makes an ordinary internal edit a public break that arrives as a
+//    clean diff nobody reads. `publicPrReviewFindingSchema` is the worked example: it looks like
+//    `prReviewFindingSchema` today, and the internal one is mid-evolution (slice reviews, resume)
+//    while the published shape must not move.
+//
+// A projection also normalises what the internal shape leaves ambiguous: an internal
+// `v.optional(v.nullable(X))` (absent OR null, a distinction that survives no round trip an SDK
+// makes) becomes a plain `v.nullable(X)` that is ALWAYS present. The `to*` projection supplies the
+// `?? null`, so four generated clients get one shape to check instead of two.
+// ---------------------------------------------------------------------------
+
+/**
+ * Which parked decision a `publicDecision` entry describes.
+ *
+ * The list is the surface's own honesty check: `PUBLICLY_ANSWERABLE_PARK_SURFACES` (server-side
+ * admission) names the park surfaces a `decide` key is TOLD it can answer, and a kind here with no
+ * route behind it is exactly the "refusal advertising a capability we do not have" defect that set
+ * builds. Add a member only together with its routes.
+ */
+export const publicDecisionKindSchema = v.picklist([
+  'requirements-review',
+  'fork',
+  'judge',
+  'input-gate',
+  'approval-gate',
+  'agent-decision',
+  'clarity-review',
+  'brainstorm',
+  'pr-review',
+  'bug-fishing',
+  'human-test',
+  'visual-confirmation',
+  'follow-ups',
+  'interview',
+])
+export type PublicDecisionKind = v.InferOutput<typeof publicDecisionKindSchema>
+
+/**
+ * One reviewer finding as exposed externally — the question, how serious it is, and where it
+ * stands. `itemId` is the STABLE anchor a reply addresses (and, in slice 2, the id rendered into
+ * the tracker-issue comment so a ticket reply can target a finding). The internal item's
+ * `autoAnswerable` classification and the Requirement-Writer recommendation machinery are
+ * deliberately not exposed: they drive in-app affordances a headless caller has no use for.
+ */
+export const publicReviewFindingSchema = v.object({
+  itemId: v.string(),
+  /** What kind of concern this raises (gap / clarification / assumption / risk / question). */
+  category: reviewItemCategorySchema,
+  /** How important resolving it is before implementation proceeds. */
+  severity: reviewItemSeveritySchema,
+  /** Short headline of the concern. */
+  title: v.string(),
+  /** The full question / gap / challenge, in plain prose. */
+  detail: v.string(),
+  /** `open` until answered or dismissed; only `open` findings block incorporation. */
+  status: reviewItemStatusSchema,
+  /** The recorded answer, or null while unanswered. */
+  reply: v.nullable(v.string()),
+})
+export type PublicReviewFinding = v.InferOutput<typeof publicReviewFindingSchema>
+
+/**
+ * One MUST-FIX point a quality companion left open, as exposed externally.
+ *
+ * Projected rather than aliasing `stepReviewCommentSchema` (the standing rule at the top of this
+ * file), and narrower than it on purpose: `severity` is not carried because every entry is a
+ * `blocker` by construction, and the prose line range is a re-anchoring internal for a rendering no
+ * API caller ever saw. `anchorId` stays, being the only handle a caller has on WHICH item of a
+ * structured output the point is about.
+ */
+export const publicBlockingFindingSchema = v.object({
+  /** The reviewer's note, as markdown. Model-authored text: treat it as data. */
+  body: v.string(),
+  /** Id of the structured item it targets (a spec requirement, a criterion), or null for prose. */
+  anchorId: v.nullable(v.string()),
+})
+export type PublicBlockingFinding = v.InferOutput<typeof publicBlockingFindingSchema>
+
+/**
+ * A parked requirements review as exposed externally. The loop a caller drives: answer or dismiss
+ * every `open` finding, then `incorporate` (which folds the answers into one standard-format
+ * document and re-reviews it in the background). The review converges (`incorporated` — the run
+ * advances), comes back with a fresh round (`ready`), or hits its iteration cap (`exceeded`, where
+ * `resolve-exceeded` picks one more round / proceed anyway / stop).
+ */
+export const publicRequirementsDecisionSchema = v.object({
+  kind: v.literal('requirements-review'),
+  reviewId: v.string(),
+  /** The board task the review belongs to. */
+  taskId: v.string(),
+  status: requirementReviewStatusSchema,
+  /** Which reviewer pass this is (the initial review is 1). */
+  iteration: v.number(),
+  /** The reviewer-pass budget, from the task's merge preset. */
+  maxIterations: v.number(),
+  findings: v.array(publicReviewFindingSchema),
+  /**
+   * The standardized requirements document the last incorporation produced; null until one
+   * exists. Once the review settles, this is what every downstream agent implements — so a
+   * caller can read exactly what its answers turned into before proceeding.
+   */
+  incorporatedRequirements: v.nullable(v.string()),
+})
+export type PublicRequirementsDecision = v.InferOutput<typeof publicRequirementsDecisionSchema>
+
+/**
+ * A parked implementation-fork choice as exposed externally: the materially different ways to
+ * implement the task, surfaced before any code is written. A caller picks a `forkId` or submits
+ * its own `custom` approach; the Coder then runs with the choice folded in as a binding directive.
+ * The grounded chat is deliberately NOT exposed — it is an interactive deliberation affordance,
+ * and a headless caller that wants to reason about the forks has the full `approach`/`tradeoffs`
+ * text right here.
+ */
+export const publicForkDecisionSchema = v.object({
+  kind: v.literal('fork'),
+  /** The run's fork-decision lifecycle state; only `awaiting_choice` accepts a choice. */
+  status: forkDecisionStatusSchema,
+  /** The proposer's read of where the change lands (grounding for the choice). */
+  seamSummary: v.nullable(v.string()),
+  /** The proposed approaches, each with its id, plan, trade-offs and risk notes. */
+  forks: v.array(forkOptionSchema),
+})
+export type PublicForkDecision = v.InferOutput<typeof publicForkDecisionSchema>
+
+/**
+ * A parked JUDGE verdict as exposed externally (the fourth step-taxonomy bucket): a rubric
+ * scored the run's work below the task's threshold and the run stopped for a human. A caller
+ * reads the score, the threshold it missed, and the findings behind it, then resolves it with
+ * `proceed` / `bounce` / `stop` — the SAME service method the SPA's judge window calls.
+ *
+ * The rubric BODY is deliberately not exposed: it is deployment (or workspace) policy text, often
+ * long, and a caller answering a verdict acts on the findings, not on the rubric that produced them.
+ */
+export const publicJudgeDecisionSchema = v.object({
+  kind: v.literal('judge'),
+  /** The judge step's kind (`agentKind`), which names WHICH judge is asking. */
+  stepKind: v.string(),
+  status: judgeStatusSchema,
+  /** The rubric's stable id + human name, so a caller can tell two judges apart. */
+  rubricId: v.nullable(v.string()),
+  rubricName: v.nullable(v.string()),
+  /** The score the verdict had to reach (from the task's merge preset). */
+  threshold: v.nullable(v.number()),
+  /** The latest verdict: score, summary and the findings behind it. */
+  verdict: v.nullable(judgeVerdictSchema),
+  /** Rework rounds spent and the ceiling, so a caller knows whether `bounce` is the last word. */
+  bounces: v.number(),
+  maxBounces: v.number(),
+})
+export type PublicJudgeDecision = v.InferOutput<typeof publicJudgeDecisionSchema>
+
+/**
+ * A run parked on the PRE-DISPATCH INPUT GATE as exposed externally: the task states nothing an
+ * agent could act on, and the run stopped before its first dispatch having spent nothing.
+ *
+ * This one is exposed for a reason the other three do not have. The gate parks on the shape of
+ * the TASK rather than the shape of the pipeline, so it can hold ANY public run, including one
+ * whose pipeline carries no park at all; a caller filing title-only tasks would otherwise watch
+ * them stop with `GET .../decisions` reporting `parked: true` and nothing to answer, and
+ * `POST /api/v1/jobs/:id/cancel` as the only way out. The findings are the same closed codes the
+ * SPA renders, so an integration can map them to its own copy or hand them back to whoever filed
+ * the ticket.
+ */
+export const publicInputGateDecisionSchema = v.object({
+  kind: v.literal('input-gate'),
+  /** The disposition; only `blocked` accepts an answer. */
+  status: inputGateStatusSchema,
+  /** The workspace mode the evaluation ran under, so a verdict explains its own severities. */
+  mode: inputGateModeSchema,
+  /** Every finding, blocking and advisory alike, in a stable order. */
+  issues: v.array(inputGateIssueSchema),
+  /** Epoch ms of the evaluation that produced this verdict. */
+  checkedAt: v.number(),
+})
+export type PublicInputGateDecision = v.InferOutput<typeof publicInputGateDecisionSchema>
+
+/**
+ * A run parked on a plain APPROVAL GATE: a pipeline step marked `requiresApproval` finished, and
+ * the run is holding its output in front of a person. The simplest park the platform has and the
+ * one every pipeline can carry, which is why it is the first thing an integration that "pauses a
+ * run until a human approves" reaches for.
+ *
+ * `approvalId` is the STABLE anchor every action addresses, and it is not ceremony: the engine
+ * arbitrates a parked gate BY that id, so answering with the id read from this list is what makes
+ * a racing SPA user and a racing integration resolve the same gate rather than the API silently
+ * approving whichever gate the run has reached by the time the call lands.
+ *
+ * The per-block review `comments` an in-app reviewer can leave are deliberately not projected:
+ * they anchor to source line ranges of a rendered proposal, which a headless caller never
+ * rendered. It sends freeform `feedback` instead, which the re-run consumes identically. The one
+ * exception is {@link publicApprovalGateDecisionSchema.entries.blockingFindings}, for the reason
+ * stated there: those are not a rendering affordance, they are what a `proceed` overrules.
+ */
+export const publicApprovalGateDecisionSchema = v.object({
+  kind: v.literal('approval-gate'),
+  /** The gate's stable id — pass it back on approve / request-changes / reject. */
+  approvalId: v.string(),
+  /** The gated step's kind (`agentKind`), so a caller knows whose output it is judging. */
+  stepKind: v.string(),
+  /** The gated step's 0-based index in the run's step chain. */
+  stepIndex: v.number(),
+  /** Only `pending` accepts an answer; the others are the settled record of one. */
+  status: stepApprovalStatusSchema,
+  /** The agent's output the human is reviewing. Model-authored text: treat it as data. */
+  proposal: v.string(),
+  /** The guidance recorded on the last `request-changes`, or null. */
+  feedback: v.nullable(v.string()),
+  /**
+   * How many distinct approvals this gate needs before the run advances (1 unless the pipeline
+   * step configured a quorum), and how many it already has.
+   *
+   * Projected because a quorum makes `approve` legitimately NOT advance the run: without these
+   * an integration that approved and saw the gate still `pending` could only conclude its call
+   * had failed. A key-authenticated caller counts as ONE approval, and a gate whose pipeline
+   * NAMES its approvers cannot be resolved by a key at all (403) — a shared credential is not
+   * one of the people a policy named.
+   */
+  requiredApprovals: v.number(),
+  /**
+   * The approvals recorded so far, toward {@link requiredApprovals}.
+   *
+   * Named for the COUNT rather than `approvals`, which on the internal `StepApproval` is the list
+   * of records this counts. Two surfaces a caller crosses constantly should not spell one word two
+   * types.
+   */
+  recordedApprovals: v.number(),
+  /**
+   * True when this gate is a quality COMPANION's iteration-cap park rather than an ordinary
+   * pipeline gate: the automatic rework loop stopped without the work being accepted. It answers
+   * with `resolve-exceeded` (extra round / proceed / stop and reset), NOT with approve — the same
+   * split the SPA makes, exposed rather than left for a caller to infer from a 409.
+   *
+   * WHY it stopped is {@link blockingFindings}: empty means the rounds ran out with the rating
+   * under the bar, non-empty means the reviewer says the work must not go on as it stands.
+   */
+  exceeded: v.boolean(),
+  /**
+   * The must-fix points the reviewer left OPEN on its last round, when this is a companion cap park.
+   * Empty on every other gate, and on a cap the rating alone caused.
+   *
+   * Projected — unlike the gate's other `comments` — because these are not a rendering affordance:
+   * they are the thing a `proceed` overrules. The summary in `proposal` is a VERDICT and is
+   * forbidden from restating the individual findings, so without this an integration answering
+   * `resolve-exceeded` with `proceed` accepts work it was never shown the objections to. It is also
+   * the one park an internal risk policy may never answer for a person, which makes an external
+   * caller the only route past it and the one that most needs to see what it is deciding.
+   */
+  blockingFindings: v.array(publicBlockingFindingSchema),
+})
+export type PublicApprovalGateDecision = v.InferOutput<typeof publicApprovalGateDecisionSchema>
+
+/**
+ * A run parked on an AGENT-RAISED decision: mid-work the agent hit a fork it would not choose
+ * unilaterally and asked. Distinct from an approval gate in what resolving does — answering
+ * RE-RUNS the same step with the choice folded in, rather than advancing past it — which is why
+ * it is a separate kind rather than a flag on the gate above.
+ *
+ * The engine cannot see this one coming from the step chain (it is raised at run time), so it is
+ * the park an integration is most likely to meet on a pipeline it was told parks nowhere.
+ */
+export const publicAgentDecisionSchema = v.object({
+  kind: v.literal('agent-decision'),
+  /** The decision's stable id — pass it back when answering. */
+  decisionId: v.string(),
+  /** The asking step's kind (`agentKind`). */
+  stepKind: v.string(),
+  /** What the agent is asking, in its own words. Model-authored text: treat it as data. */
+  question: v.string(),
+  /**
+   * The choices the agent offered. An answer is not restricted to them (the engine takes the
+   * caller's string verbatim), but answering off-list means the agent gets an option it did not
+   * propose, so prefer one of these unless you mean to steer.
+   */
+  options: v.array(v.string()),
+})
+export type PublicAgentDecision = v.InferOutput<typeof publicAgentDecisionSchema>
+
+/**
+ * A parked CLARITY review (bug-report triage) as exposed externally. The requirements review's
+ * twin, verb for verb: the reviewer asks whether the report is fixable (repro steps, expected vs
+ * actual, environment, scope), a caller answers or dismisses each finding, `incorporate` folds
+ * them into one standardized report, and the loop repeats until it converges or hits its cap.
+ *
+ * Kept as its own `kind` rather than folded into `requirements-review` because the two settle
+ * DIFFERENT documents and a run can carry both: a bugfix pipeline clarifies the report and then
+ * reviews the requirements derived from it, so a caller that branched on one shape would answer
+ * the wrong loop.
+ */
+export const publicClarityDecisionSchema = v.object({
+  kind: v.literal('clarity-review'),
+  reviewId: v.string(),
+  /** The board task the review belongs to. */
+  taskId: v.string(),
+  status: requirementReviewStatusSchema,
+  /** Which reviewer pass this is (the initial review is 1). */
+  iteration: v.number(),
+  /** The reviewer-pass budget, from the task's merge preset. */
+  maxIterations: v.number(),
+  findings: v.array(publicReviewFindingSchema),
+  /**
+   * The standardized bug report the last incorporation produced; null until one exists. Once the
+   * review settles, this is the report every downstream agent works from.
+   */
+  clarifiedReport: v.nullable(v.string()),
+})
+export type PublicClarityDecision = v.InferOutput<typeof publicClarityDecisionSchema>
+
+/**
+ * A parked BRAINSTORM dialogue as exposed externally: the agent proposed a handful of concrete
+ * options with their trade-offs, and the run is waiting for a person to pick and steer before it
+ * converges on one direction.
+ *
+ * Keyed by `(task, stage)`, not task alone — a block may hold one live `requirements` session and
+ * one live `architecture` session at once, so a decision list can carry TWO brainstorm entries and
+ * every route takes the stage. A caller that keys its own state by `kind` alone will collide the
+ * two; key by `kind` + `stage`.
+ */
+export const publicBrainstormDecisionSchema = v.object({
+  kind: v.literal('brainstorm'),
+  sessionId: v.string(),
+  /** Which dialogue this is: the requirements direction, or the architecture approach. */
+  stage: brainstormStageSchema,
+  /** The board task the session belongs to. */
+  taskId: v.string(),
+  status: requirementReviewStatusSchema,
+  /** Which agent pass this is (the initial pass is 1). */
+  iteration: v.number(),
+  /** The agent-pass budget, from the task's merge preset. */
+  maxIterations: v.number(),
+  /**
+   * The proposed options. Structurally the same shape as a review finding (one source of truth
+   * for the item), but read it as a proposal to pick or steer, not a defect to answer.
+   */
+  options: v.array(publicReviewFindingSchema),
+  /** The converged direction the last incorporation produced; null until one exists. */
+  convergedDirection: v.nullable(v.string()),
+})
+export type PublicBrainstormDecision = v.InferOutput<typeof publicBrainstormDecisionSchema>
+
+/**
+ * One cohesive group of changed files the reviewer worked as a unit, as exposed externally.
+ * Findings anchor to a slice by `sliceId`, so a caller can present them grouped the way the
+ * reviewer actually reasoned rather than as one flat list.
+ *
+ * The internal `prReviewSliceReviewSchema` (each slice's verbatim in-flight subagent report, which
+ * exists so a dying review can be RESUMED per slice) is deliberately absent: it is recovery
+ * plumbing for the engine, and its prose is superseded by the aggregated `findings`.
+ */
+export const publicPrReviewSliceSchema = v.object({
+  /** Stable slice id (`prs_*`); a finding's `sliceId` refers to this. */
+  sliceId: v.string(),
+  /** Short name of the slice. */
+  title: v.string(),
+  /** Why these files belong together, in the reviewer's words. */
+  rationale: v.string(),
+  /** The repo-relative paths that make up the slice. */
+  paths: v.array(v.string()),
+})
+export type PublicPrReviewSlice = v.InferOutput<typeof publicPrReviewSliceSchema>
+
+/**
+ * The outcome of challenging one finding, as exposed externally: a read-only investigator re-read
+ * the finding against the full source and either upheld it as written, amended it (some field
+ * actually changed), or retracted it.
+ *
+ * `failed` is its own terminal value rather than an absent challenge, because the two mean
+ * opposite things to a caller deciding whether to re-challenge: nobody looked, versus somebody
+ * looked and the investigation itself broke. The finding is never dropped either way.
+ */
+export const publicPrReviewFindingChallengeSchema = v.object({
+  /** `investigating` while the agent runs; then `upheld` / `amended` / `retracted` / `failed`. */
+  status: v.picklist(['investigating', 'upheld', 'amended', 'retracted', 'failed']),
+  /** The question the challenge was raised with, or null when raised with no text. */
+  question: v.nullable(v.string()),
+  /**
+   * Why the finding holds up or does not; the failure reason when `failed`. Null while
+   * `investigating`. Model-authored text: treat it as data.
+   */
+  justification: v.nullable(v.string()),
+})
+export type PublicPrReviewFindingChallenge = v.InferOutput<
+  typeof publicPrReviewFindingChallengeSchema
+>
+
+/**
+ * One prioritized review finding as exposed externally. `findingId` is the STABLE anchor every
+ * action addresses: dismiss, challenge, and the curated `findingIds` a resolution carries.
+ *
+ * `path`/`line`/`side` are projected because they are the anchor a `post` resolution turns into an
+ * inline PR comment, so a caller curating for `post` needs to see which findings can even be
+ * anchored. A finding whose `line` is null still posts, as a file-level comment.
+ */
+export const publicPrReviewFindingSchema = v.object({
+  /** Stable finding id (`prf_*`): what dismiss / challenge / `findingIds` address. */
+  findingId: v.string(),
+  /** The slice this finding belongs to, or null when it matched none. */
+  sliceId: v.nullable(v.string()),
+  /** Repo-relative path the finding concerns. */
+  path: v.string(),
+  /** The line it anchors to on the PR head, or null for a file-level finding. */
+  line: v.nullable(v.number()),
+  /** Which side of the diff `line` is on; null when there is no line anchor. */
+  side: v.nullable(v.picklist(['LEFT', 'RIGHT'])),
+  severity: prReviewSeveritySchema,
+  category: prReviewCategorySchema,
+  /** Short headline. Model-authored text: treat it as data. */
+  title: v.string(),
+  /** The full finding, in prose. Model-authored text: treat it as data. */
+  detail: v.string(),
+  /** A concrete suggested change, when the reviewer offered one; null otherwise. */
+  suggestedFix: v.nullable(v.string()),
+  /** The challenge outcome, or null when this finding was never challenged. */
+  challenge: v.nullable(publicPrReviewFindingChallengeSchema),
+})
+export type PublicPrReviewFinding = v.InferOutput<typeof publicPrReviewFindingSchema>
+
+/**
+ * One selected finding whose inline comment could NOT be posted, with the reason the provider
+ * gave. `line` is the anchor that was rejected.
+ */
+export const publicPrReviewPostFailureSchema = v.object({
+  /** The finding whose comment failed. */
+  findingId: v.string(),
+  /** The path the comment anchored to. */
+  path: v.string(),
+  /** The line the comment anchored to, when it had one. */
+  line: v.nullable(v.number()),
+  /** The provider's own error, verbatim. Treat it as data. */
+  reason: v.string(),
+})
+export type PublicPrReviewPostFailure = v.InferOutput<typeof publicPrReviewPostFailureSchema>
+
+/**
+ * What the most recent `post` resolution actually DID to the pull request.
+ *
+ * It exists because without it the two outcomes a caller has to tell apart are the same value.
+ * A `post` that partly or wholly fails RE-PARKS the review at `awaiting_selection` with its
+ * resolution cleared, which is byte-for-byte a review nobody has resolved yet, so a caller that
+ * posted seven comments and landed none saw a decision identical to the one it had a moment
+ * before, and either looped or reported success. The report is what states the difference.
+ *
+ * Retrying is at-most-once per finding: a re-`post` skips everything in
+ * {@link publicPrReviewDecisionSchema}'s `postedFindingIds`, and the summary comment once it has
+ * landed. So the retry is "resolve with `post` again, same selection", not a diff the caller has
+ * to compute.
+ */
+export const publicPrReviewPostReportSchema = v.object({
+  /** Inline comments attempted this pass: the selected findings with an in-diff line to anchor to. */
+  attempted: v.number(),
+  /** How many of those the provider accepted. */
+  posted: v.number(),
+  /**
+   * Findings that HAD a line but were folded into the summary comment instead, because that line
+   * falls outside the PR diff (nothing to anchor an inline comment to) or because the branch moved
+   * after the review started, so the frozen line numbers can no longer be trusted. A finding that
+   * never had a line is summarised too but is NOT counted here: it could never have been an inline
+   * comment. `attempted` + `folded` therefore counts the findings that carried a line, not every
+   * selected finding.
+   */
+  folded: v.number(),
+  /**
+   * Whether the summary comment posted on THIS pass; null when this pass had no body to send.
+   *
+   * Null has two causes and they are opposite facts, so read it beside
+   * {@link publicPrReviewDecisionSchema}'s `postedBody`: with that flag true the summary landed on
+   * an earlier pass and was deliberately suppressed here (the body's at-most-once guard), with it
+   * false the review never had a summary to post at all.
+   */
+  bodyPosted: v.nullable(v.boolean()),
+  /** The error posting the summary comment, when it failed. */
+  bodyError: v.nullable(v.string()),
+  /**
+   * Per-finding inline-comment failures, in the order attempted.
+   *
+   * Every `findingId` here resolves against the same decision's `findings`: dismissing a finding
+   * prunes its failure row along with it, so this never names a finding a caller can no longer
+   * see. The count can therefore be smaller than `attempted - posted`, which stays the tally of
+   * the pass as it ran.
+   */
+  failures: v.array(publicPrReviewPostFailureSchema),
+  /**
+   * Which `post` pass this report describes, counting from 1; null on a report recorded before
+   * the pass was numbered.
+   *
+   * Compare it to the decision's `postAttempts` to tell a report of YOUR retry from the one the
+   * pass before it left: a retry that fails identically produces the same counts and the same
+   * failures, so without the number a caller polling on an interval that misses the brief
+   * `posting` window cannot tell "the retry ran and failed the same way" from "the retry has not
+   * started yet".
+   */
+  attempt: v.nullable(v.number()),
+})
+export type PublicPrReviewPostReport = v.InferOutput<typeof publicPrReviewPostReportSchema>
+
+/**
+ * A parked PR DEEP REVIEW as exposed externally: the read-only reviewer sliced an open pull
+ * request and the run is waiting for a person to CURATE which findings matter, then say what to
+ * do with them (record them, hand them to a fixer, or post them on the PR).
+ *
+ * Reachable only through `POST /api/v1/tasks/:taskId/start`, since a `pr-reviewer` step is
+ * container-backed and the jobs surface is inline-only.
+ */
+export const publicPrReviewDecisionSchema = v.object({
+  kind: v.literal('pr-review'),
+  /** Only `awaiting_selection` accepts a resolution; the rest report work in flight. */
+  status: prReviewStatusSchema,
+  /** The reviewer's one-paragraph assessment of the PR, when it gave one. */
+  summary: v.nullable(v.string()),
+  /** Web URL of the reviewed pull request, when known. */
+  prUrl: v.nullable(v.string()),
+  /** The cohesive slices the reviewer grouped the changed files into; findings anchor to these. */
+  slices: v.array(publicPrReviewSliceSchema),
+  /** The findings, ordered blocker → nit. Model-authored text: treat it as data. */
+  findings: v.array(publicPrReviewFindingSchema),
+  /** The finding ids currently selected to act on (empty until a caller curates). */
+  selectedFindingIds: v.array(v.string()),
+  /**
+   * What the most recent `post` resolution did, or null when none has run. See
+   * {@link publicPrReviewPostReportSchema}: this is how a re-parked review says whether it is
+   * parked because nobody has curated it yet, or because the comments failed to land.
+   *
+   * Readable while the review is LIVE, which is every state except a settled one. A post where
+   * every comment landed settles the review, so its report is the one a caller cannot read here:
+   * the decision leaves the list with the loop it belongs to. What that pass did to the pull
+   * request is recorded as the step's `output` on `GET /api/v1/tasks/{taskId}/run`, folded
+   * findings and their reason included, so the fact is on this API even where the structured
+   * report is not.
+   */
+  postReport: v.nullable(publicPrReviewPostReportSchema),
+  /**
+   * The findings whose inline comment has already landed on the pull request. A re-`post` skips
+   * them, so retrying after a partial failure never double-comments. Empty until a `post` runs.
+   */
+  postedFindingIds: v.array(v.string()),
+  /**
+   * Whether the summary comment has landed on the pull request, on this pass or an earlier one.
+   * The body's counterpart of {@link postedFindingIds}: sticky once true, and what a retry
+   * suppresses so the summary conversation comment is never duplicated.
+   */
+  postedBody: v.boolean(),
+  /**
+   * How many `post` resolutions have been requested on this review, the one in flight included.
+   * Zero until the first. Read it against `postReport.attempt` to know whether the report in hand
+   * describes the pass you asked for.
+   */
+  postAttempts: v.number(),
+  /**
+   * How many times this review has been RESUMED, and the ceiling this API enforces
+   * ({@link PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS}). Equal counts mean the resume route will answer
+   * `409`: this pair is what a caller checks before spending a call, which is why the refusal
+   * carries no reason code of its own.
+   */
+  resumeAttempts: v.number(),
+  maxResumeAttempts: v.number(),
+  /**
+   * How many of the review's slices have reported so far. Read against `slices.length` while the
+   * status is `reviewing`: equal counts mean every slice is in and the reviewer is on its final
+   * aggregation turn, which is the phase a resume exists for.
+   */
+  reportedSlices: v.number(),
+  /**
+   * Epoch ms of the last activity the reviewer's job reported, or null when it has reported none.
+   *
+   * The evidence a headless caller needs before spending a resume, and it is deliberately not a
+   * staleness VERDICT: the heartbeat freezes on a long silent turn, so nothing on either side of
+   * this API can tell a wedged reviewer from a quiet-but-working one. What it can do is stop a
+   * poller resuming on a bare timer, which kills a container that may be seconds from returning.
+   */
+  lastActivityAt: v.nullable(v.number()),
+})
+export type PublicPrReviewDecision = v.InferOutput<typeof publicPrReviewDecisionSchema>
+
+/**
+ * How many times `POST /api/v1/runs/{runId}/decisions/pr-review/resume` will re-dispatch one
+ * review before it refuses.
+ *
+ * A resume STOPS the running reviewer and starts a fresh container, so an uncapped one is an
+ * unbounded spend on a run nobody is watching: a poller resuming every ten minutes on a review
+ * that legitimately takes twenty kills it, forever, each time it is about to finish. Every other
+ * loop the engine runs is bounded (`ciMaxAttempts`, the human-test fix budget, an interview's
+ * `maxRounds`) and this is that rule applied to the one loop a KEY drives.
+ *
+ * The ceiling binds this API, not the app: a person clicking Resume in the review window is
+ * watching what they nudged, which is the judgement a headless caller cannot supply. `slices`,
+ * `reportedSlices` and `lastActivityAt` on the decision are what it reads instead.
+ */
+export const PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS = 3
+
+// ---- Bug-fishing expedition -------------------------------------------------
+
+/**
+ * One angle of an expedition as exposed externally: what the pass was told to hunt, how far it
+ * got, and which slice of the codebase it covered.
+ *
+ * `title` / `goal` / `territoryLabel` are the values the expedition RECORDED when it planned the
+ * pass, never a lookup against today's catalog. An angle this build has since retired, or a
+ * territory a later survey of a moved tree no longer produces, therefore still renders as the
+ * thing that actually ran rather than as a blank or a guess at a current member.
+ */
+export const publicBugFishingPhaseSchema = v.object({
+  /** The angle's id. An OPEN string on the wire: a stored run can name one this build retired. */
+  phaseId: v.string(),
+  /** The angle's label as it stood when this expedition planned it. */
+  title: v.string(),
+  /** What this pass was told to hunt, as it stood when this expedition planned it. */
+  goal: v.string(),
+  status: bugFishingPhaseStatusSchema,
+  /** The agent's account of what it covered; null until the pass settles. */
+  summary: v.nullable(v.string()),
+  /** Why the pass failed, on a `failed` phase. Null otherwise. */
+  failureReason: v.nullable(v.string()),
+  /** The territory this pass fished, or null for a whole-codebase pass. */
+  territoryId: v.nullable(v.string()),
+  /** The territory's label as it stood when this pass ran. */
+  territoryLabel: v.nullable(v.string()),
+  /** Epoch ms the pass settled; null while pending or fishing. */
+  settledAt: v.nullable(v.number()),
+  /**
+   * How many manifest files the pass reported reading, against how many the territory held.
+   * SELF-REPORTED by the agent, which the field names say: a low share is what tells a reader
+   * that "found nothing here" may mean "did not look". Null when the pass reported none, which is
+   * a different fact from a share of zero.
+   */
+  filesRead: v.nullable(v.number()),
+  manifestFiles: v.nullable(v.number()),
+})
+export type PublicBugFishingPhase = v.InferOutput<typeof publicBugFishingPhaseSchema>
+
+/** One cell of the planned (territory x angle) matrix the pass budget cut before it was fished. */
+export const publicBugFishingUnfishedCellSchema = v.object({
+  territoryId: v.string(),
+  territoryLabel: v.string(),
+  phaseId: v.string(),
+  phaseTitle: v.string(),
+})
+export type PublicBugFishingUnfishedCell = v.InferOutput<typeof publicBugFishingUnfishedCellSchema>
+
+/**
+ * What the expedition decided to fish, and what it decided not to.
+ *
+ * `unfished` is the reason this is published rather than left as an implementation detail: a cap
+ * that says nothing about its tail teaches a reader that the tail was clean. An integration
+ * filing what an expedition caught has to be able to say which ground nobody covered.
+ */
+export const publicBugFishingPlanSchema = v.object({
+  /** The most container dispatches this expedition may make. */
+  passBudget: v.number(),
+  /** How many cells the full matrix held before the budget trimmed it. */
+  plannedCells: v.number(),
+  /** The cells the budget cut. Empty when the whole matrix fitted. */
+  unfished: v.array(publicBugFishingUnfishedCellSchema),
+  /**
+   * True when the tree the survey partitioned was TRUNCATED by the provider. The coverage numbers
+   * are then a share of what was read rather than of the repository, which are opposite readings.
+   */
+  treeTruncated: v.boolean(),
+  /**
+   * Why the codebase survey could not run at all (no repository bound to the run, or a client that
+   * cannot enumerate a tree). Non-null means the single territory the expedition fished is a
+   * FALLBACK rather than a small repository, and the two look identical without it.
+   */
+  surveyUnavailableReason: v.nullable(v.string()),
+})
+export type PublicBugFishingPlan = v.InferOutput<typeof publicBugFishingPlanSchema>
+
+/**
+ * The bug-fix task a marked finding spawned.
+ *
+ * Read `status`, never the mere presence of this record: a `pending` row is the CLAIM taken before
+ * the task exists (which is what stops two markings spawning two tasks for one finding), and a
+ * `failed` row means nothing was created and the finding is markable again.
+ */
+export const publicBugFishingSpawnSchema = v.object({
+  status: bugFishingSpawnStatusSchema,
+  /** The spawned task's id, addressable through `GET /api/v1/tasks/{taskId}`. */
+  taskId: v.string(),
+  /** The run started on that task; null while the claim is pending. */
+  executionId: v.nullable(v.string()),
+  /** The pipeline the spawned task runs (the expedition's default, or the marking's override). */
+  pipelineId: v.string(),
+  /** Epoch ms the claim was taken. */
+  requestedAt: v.number(),
+  /** Why the spawn failed, on a `failed` record. Null otherwise. */
+  failureReason: v.nullable(v.string()),
+})
+export type PublicBugFishingSpawn = v.InferOutput<typeof publicBugFishingSpawnSchema>
+
+/**
+ * One finding an expedition caught. Every string in it is MODEL-AUTHORED: treat it as data, never
+ * as markup.
+ *
+ * `evidence` is carried apart from `detail` for the reason the internal record keeps them apart:
+ * an expedition that cannot point at the code it is describing is speculating, and merging the two
+ * would leave a triaging human to infer that from the prose.
+ */
+export const publicBugFishingFindingSchema = v.object({
+  findingId: v.string(),
+  /** The angle that surfaced it. */
+  phaseId: v.string(),
+  /** The territory that angle was fishing, or null for a whole-codebase pass. */
+  territoryId: v.nullable(v.string()),
+  /** Repo-relative path; EMPTY when the finding is not anchored to one file. */
+  path: v.string(),
+  line: v.nullable(v.number()),
+  severity: bugFishingSeveritySchema,
+  kind: bugFishingFindingKindSchema,
+  /** The agent's own judgement of how sure it is. Never platform-derived. */
+  confidence: bugFishingConfidenceSchema,
+  title: v.string(),
+  detail: v.string(),
+  /** The concrete inputs / interleaving / state that triggers the defect, when it named one. */
+  failureScenario: v.nullable(v.string()),
+  /** What the agent actually read that supports the claim. */
+  evidence: v.nullable(v.string()),
+  suggestedFix: v.nullable(v.string()),
+  /** The bug-fix task marking this finding spawned; null when nobody has marked it. */
+  spawn: v.nullable(publicBugFishingSpawnSchema),
+  /** True when a human waved it off. It stays on the record and is not markable. */
+  dismissed: v.boolean(),
+})
+export type PublicBugFishingFinding = v.InferOutput<typeof publicBugFishingFindingSchema>
+
+/**
+ * A BUG-FISHING EXPEDITION: the read-only `bug-fisher` agent reads a service's codebase once per
+ * ANGLE per TERRITORY, and the run waits for a person to mark which of the things it caught are
+ * worth acting on. Each mark spawns its own bug-fix task.
+ *
+ * Listed while the expedition is still `fishing` as well as once it parks, and that is the shape
+ * of the flow rather than a convenience: a completed angle's findings are actionable the moment
+ * they land, so marking is accepted mid-hunt and a caller waiting for `awaiting_triage` before it
+ * reads anything would sit out the very overlap the separate passes exist to create.
+ *
+ * Reachable only through `POST /api/v1/tasks/{taskId}/start`, since `bug-fisher` is
+ * container-backed and the jobs surface is inline-only.
+ */
+export const publicBugFishingDecisionSchema = v.object({
+  kind: v.literal('bug-fishing'),
+  /** `fishing` while angles are still in flight, `awaiting_triage` once every one has settled. */
+  status: bugFishingStatusSchema,
+  /** The step this expedition rides, lined up against `publicRun.steps`. */
+  stepKind: v.string(),
+  stepIndex: v.number(),
+  /** The planned angles, in the order they are fished. */
+  phases: v.array(publicBugFishingPhaseSchema),
+  /**
+   * Index into `phases` of the pass being fished. Equal to `phases.length` once every angle has
+   * settled, which is the same fact `status: "awaiting_triage"` states.
+   */
+  currentPhaseIndex: v.number(),
+  /** Every finding caught so far, oldest angle first and severity-ordered within an angle. */
+  findings: v.array(publicBugFishingFindingSchema),
+  /**
+   * What the expedition planned and what the budget cut; null on an expedition that recorded no
+   * plan. See {@link publicBugFishingPlanSchema} for why the cut cells are published.
+   */
+  plan: v.nullable(publicBugFishingPlanSchema),
+  /**
+   * The pipeline a marked finding's spawned task runs when the marking names none. Null when the
+   * expedition resolved none, in which case a marking must name one.
+   */
+  defaultFixPipelineId: v.nullable(v.string()),
+  /** Identifier of the model that fished, for transparency. Null when the run recorded none. */
+  model: v.nullable(v.string()),
+})
+export type PublicBugFishingDecision = v.InferOutput<typeof publicBugFishingDecisionSchema>
+
+/** The ephemeral environment a `human-test` gate parked against, as exposed externally. */
+export const publicHumanTestEnvironmentSchema = v.object({
+  /** The public URL to test against; null while still provisioning. */
+  url: v.nullable(v.string()),
+  status: environmentStatusSchema,
+  /** Epoch ms the environment expires, when known. */
+  expiresAt: v.nullable(v.number()),
+})
+export type PublicHumanTestEnvironment = v.InferOutput<typeof publicHumanTestEnvironmentSchema>
+
+/**
+ * A run parked on the HUMAN-TEST gate: a live ephemeral environment is up and the run is waiting
+ * for a person to exercise it.
+ *
+ * Exposed with its limits stated rather than sold as equivalent to the other kinds. The verbs are
+ * mechanical, but the JUDGEMENT this park records ("does the change actually work") is the one an
+ * API consumer is least able to supply on its own. It earns its place for the integration that
+ * drives its own human through a different UI, or that has a real automated check to run against
+ * `environment.url`; it is not a way to wave a run through unlooked-at.
+ */
+export const publicHumanTestDecisionSchema = v.object({
+  kind: v.literal('human-test'),
+  /** Only `awaiting_human` accepts an answer; the others report work in flight. */
+  phase: humanTestPhaseSchema,
+  /** The environment to test against; null in degraded manual mode or after a destroy. */
+  environment: v.nullable(publicHumanTestEnvironmentSchema),
+  /**
+   * Why no environment was provisioned (no env provider wired, or provisioning errored). Non-null
+   * means the gate is in manual mode: there is nothing to point a check at, and the change has to
+   * be tested against the PR branch by hand.
+   */
+  degradedReason: v.nullable(v.string()),
+  /** Fixer rounds spent, and the ceiling from the task's merge preset. */
+  attempts: v.number(),
+  maxAttempts: v.number(),
+})
+export type PublicHumanTestDecision = v.InferOutput<typeof publicHumanTestDecisionSchema>
+
+/**
+ * One actual-vs-reference pairing the visual-confirmation gate is showing, as exposed externally:
+ * a logical view, the screenshot captured of it, and the reference design for the same view when
+ * one was uploaded.
+ *
+ * Either side may be null (a captured view with no reference, or a reference whose view was never
+ * captured), and BOTH ids being null is meaningful rather than degenerate: it says the view is
+ * known and neither image exists. That is why the fields are always-present nullables instead of
+ * optional ones.
+ */
+export const publicVisualConfirmPairSchema = v.object({
+  /** The logical view this pairing is for. */
+  view: v.string(),
+  /** Artifact id of the captured screenshot, or null. Fetchable; see below. */
+  actualArtifactId: v.nullable(v.string()),
+  /** Artifact id of the uploaded reference design, or null. Fetchable; see below. */
+  referenceArtifactId: v.nullable(v.string()),
+})
+export type PublicVisualConfirmPair = v.InferOutput<typeof publicVisualConfirmPairSchema>
+
+/**
+ * A run parked on the VISUAL-CONFIRMATION gate: the UI tester's screenshots are waiting to be
+ * compared against the uploaded reference designs.
+ *
+ * Same caveat as {@link publicHumanTestDecisionSchema}: the verbs are mechanical, but the
+ * judgement this park records is one an integration has to supply from somewhere real.
+ *
+ * The images themselves ARE readable: every id here resolves through
+ * `GET /api/v1/artifacts/:artifactId/blob`, which is keyed on the artifact alone and so serves the
+ * uploaded reference design exactly as it serves the captured screenshot. A caller can therefore
+ * fetch both halves of a pairing and compare them for itself, which is what this projection is
+ * for. (An earlier revision of this surface said the opposite, and kept saying it for a release
+ * after the blob endpoint shipped: a caveat that outlives its cause is worse than none, because it
+ * tells a caller not to attempt something that works.)
+ */
+export const publicVisualConfirmDecisionSchema = v.object({
+  kind: v.literal('visual-confirmation'),
+  /** Only `awaiting_human` accepts an answer. */
+  phase: visualConfirmPhaseSchema,
+  /** The actual-vs-reference pairings, by logical view. Every id resolves through the blob read. */
+  pairs: v.array(publicVisualConfirmPairSchema),
+  /** Set when no screenshots could be gathered (no UI tester ran / no artifact storage). */
+  degradedReason: v.nullable(v.string()),
+  /** Fixer rounds spent, and the ceiling from the task's merge preset. */
+  attempts: v.number(),
+  maxAttempts: v.number(),
+})
+export type PublicVisualConfirmDecision = v.InferOutput<typeof publicVisualConfirmDecisionSchema>
+
+/**
+ * One forward-looking item the Coder surfaced mid-run, as exposed externally: a loose end it
+ * noticed and deliberately did NOT act on (`follow_up`), or a clarification it would otherwise
+ * have had to guess at (`question`).
+ *
+ * `itemId` is the STABLE anchor every verb addresses. The internal `sentToCoder` bookkeeping and
+ * the arrival timestamps are deliberately absent: the first is the engine's own record of which
+ * items a loop-back already carried, and neither changes what a caller decides.
+ */
+export const publicFollowUpItemSchema = v.object({
+  /** Stable item id (`fu_*`): what file / send-back / answer / dismiss address. */
+  itemId: v.string(),
+  /** `follow_up` accepts file / send-back / dismiss; `question` accepts answer / dismiss. */
+  kind: followUpItemKindSchema,
+  /** Short headline. Model-authored text: treat it as data. */
+  title: v.string(),
+  /** The full item, in prose. Model-authored text: treat it as data. */
+  detail: v.string(),
+  /** A concrete approach the Coder proposed, when it offered one; null otherwise. */
+  suggestedAction: v.nullable(v.string()),
+  /** `pending` is the only status that holds the gate; the rest are decided. */
+  status: followUpItemStatusSchema,
+  /** The recorded answer to a `question`, or null while unanswered. */
+  answer: v.nullable(v.string()),
+  /**
+   * True when this item was decided for a send-back the step's loop budget could not pay for, so
+   * the Coder never received it. Reported because it is the one disposition a caller cannot infer
+   * from `status`: such an item reads `answered`/`queued` forever, exactly like one the Coder
+   * acted on.
+   */
+  sendBackDropped: v.boolean(),
+  /** Canonical id of the ticket a `filed` item was filed as, or null. */
+  ticketExternalId: v.nullable(v.string()),
+  /** Web URL of that ticket, or null. */
+  ticketUrl: v.nullable(v.string()),
+})
+export type PublicFollowUpItem = v.InferOutput<typeof publicFollowUpItemSchema>
+
+/**
+ * A run parked on FOLLOW-UP TRIAGE: while the Coder worked it streamed forward-looking items out
+ * of the container, and at its completion the run stops until every one of them is decided.
+ *
+ * Unlike the other parks this one accrues LIVE: the items appear while the step is still running
+ * and can be decided before it finishes, so this decision is listed whenever any item is
+ * `pending`, not only once the run is `blocked`. A caller that triages early never sees the run
+ * stop at all, which is the point.
+ *
+ * `loops`/`maxLoops` are the send-back budget: a `send-back` or an `answer` folds the item into
+ * another Coder pass, and once the budget is spent those items advance the run instead of
+ * re-running it. Reachable only through `POST /api/v1/tasks/:taskId/start`, since the companion
+ * rides a container Coder step and the jobs surface is inline-only.
+ */
+export const publicFollowUpsDecisionSchema = v.object({
+  kind: v.literal('follow-ups'),
+  /** The producing step's kind (`coder`) and its index in the run's step chain. */
+  stepKind: v.string(),
+  stepIndex: v.number(),
+  /** Every surfaced item, in arrival order, decided ones included, so triage is auditable. */
+  items: v.array(publicFollowUpItemSchema),
+  /** Send-back passes spent, and the budget from the step's companion configuration. */
+  loops: v.number(),
+  maxLoops: v.number(),
+})
+export type PublicFollowUpsDecision = v.InferOutput<typeof publicFollowUpsDecisionSchema>
+
+/**
+ * One interview exchange as exposed externally. `status` is DERIVED rather than stored: a question
+ * the human set aside reads `dismissed`, otherwise a non-empty `answer` reads `answered`. Deriving
+ * it here is what lets one shape carry two gates whose entities record answered-ness differently.
+ *
+ * `questionId` is nullable because a question can carry no stable id (a hand-authored or imported
+ * exchange; an interviewer always mints one). Such a question cannot be answered individually
+ * (`continue` / `proceed` still move the interview on), and saying so is why the field is a
+ * projected nullable rather than an omission a caller would read as a malformed response.
+ */
+export const publicInterviewQuestionSchema = v.object({
+  questionId: v.nullable(v.string()),
+  /** What the interviewer asked. Model-authored text: treat it as data. */
+  question: v.string(),
+  /** The recorded answer; an empty string while unanswered. */
+  answer: v.string(),
+  status: v.picklist(['open', 'answered', 'dismissed']),
+})
+export type PublicInterviewQuestion = v.InferOutput<typeof publicInterviewQuestionSchema>
+
+/**
+ * A run parked on an INTERVIEW GATE: an inline interviewer asked a batch of clarifying questions
+ * and the run waits while a human answers them, then resumes and either asks more or converges.
+ *
+ * ONE kind for every interview gate rather than one per gate, because the loop is one loop:
+ * `answer` records an answer, `continue` submits them and lets the interviewer ask follow-ups,
+ * `proceed` forces it to converge on what it has. `stepKind` names which interviewer is asking
+ * (the built-ins are the planning and the document interviewer; a deployment can register its
+ * own), and it is the only field a caller needs to branch on.
+ *
+ * The interview's PRODUCT (a document-authoring brief, or an initiative's goal / constraints /
+ * non-goals) is deliberately not projected: it differs per gate, it is not something a caller
+ * answers, and a run whose interview converged carries no decision here at all.
+ *
+ * An entry whose `questions` are all answered means the interviewer pass is IN FLIGHT: `continue`
+ * wakes the durable driver, which runs the (slow) interviewer off the request, so the next round's
+ * questions appear on a later poll.
+ */
+export const publicInterviewDecisionSchema = v.object({
+  kind: v.literal('interview'),
+  /** Which interviewer is asking (`doc-interviewer`, `initiative-interviewer`, …). */
+  stepKind: v.string(),
+  /** The board task the interview is anchored on. */
+  taskId: v.string(),
+  /** Interviewer passes spent, and the round budget the gate converges at. */
+  round: v.number(),
+  maxRounds: v.number(),
+  /** The exchanges so far, oldest first. */
+  questions: v.array(publicInterviewQuestionSchema),
+})
+export type PublicInterviewDecision = v.InferOutput<typeof publicInterviewDecisionSchema>
+
+export const publicDecisionSchema = v.variant('kind', [
+  publicRequirementsDecisionSchema,
+  publicForkDecisionSchema,
+  publicJudgeDecisionSchema,
+  publicInputGateDecisionSchema,
+  publicApprovalGateDecisionSchema,
+  publicAgentDecisionSchema,
+  publicClarityDecisionSchema,
+  publicBrainstormDecisionSchema,
+  publicPrReviewDecisionSchema,
+  publicBugFishingDecisionSchema,
+  publicHumanTestDecisionSchema,
+  publicVisualConfirmDecisionSchema,
+  publicFollowUpsDecisionSchema,
+  publicInterviewDecisionSchema,
+])
+export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
+
+/**
+ * Why a wait this surface cannot answer is holding the run. A CLOSED vocabulary, so an
+ * integration maps each cause to its own copy and its own escalation instead of parsing prose:
+ *
+ * - `human_wait_gate` — a shipped gate whose poll has no deadline because a PERSON is the gate
+ *   (`human-review`). Its answer is that person acting on the pull request, not an API call this
+ *   surface could offer, so there is nothing here to build.
+ * - `unclassified_gate` — a gate the DEPLOYMENT registered. Whether it ever ends on its own is
+ *   declared inside the object its factory builds, which no request-time read can reach, so this
+ *   surface says what it knows (the run is sitting on this gate) rather than guessing which.
+ *   Whoever registered the gate owns its answer.
+ * - `unwired_interview_gate` — an interviewer this deployment REGISTERED as an agent kind but
+ *   never wired a controller for. The run is genuinely parked on its questions and no surface,
+ *   here or in the app, can read them; the fix belongs to the operator, not the caller.
+ * - `curation_gate`: a step that CURATES (a `curation-gate` kind a DEPLOYMENT registered) parked
+ *   so a person can mark which of the things it found are worth acting on, and this API has no
+ *   route that marks one. Both SHIPPED curating kinds are answerable here and so are never
+ *   reported: the PR deep review as `kind: 'pr-review'`, the bug-fishing expedition as
+ *   `kind: 'bug-fishing'`. That is the whole distinction rather than a detail: what a caller must
+ *   be able to do differs per curating kind, so one shared label would promise an answer path for
+ *   whichever one it did not mean. The step's approval gate can still be resolved to END such a
+ *   run, and that is worth knowing rather than a contradiction: ending a curation discards what it
+ *   caught, so it is an exit, not an answer.
+ *
+ * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
+ * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
+ * steps keep the state they held when it ended, so reading them alone would go on demanding a
+ * reviewer for work that is over. And a wait the SAME response answers is never listed either — a
+ * deployment gate that spent its attempt budget parks on an ordinary approval, which is a
+ * `decisions[]` entry, so naming it here too would send a caller looking for an answer they were
+ * just handed.
+ */
+export const publicUnanswerableReasonSchema = v.picklist([
+  'human_wait_gate',
+  'unclassified_gate',
+  'unwired_interview_gate',
+  'curation_gate',
+])
+export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
+
+/** One wait holding a run that `/api/v1/runs/:runId/decisions` cannot answer. */
+export const publicUnanswerableWaitSchema = v.object({
+  reason: publicUnanswerableReasonSchema,
+  /** The step kind holding the run: the gate's kind, or the interviewer's agent kind. */
+  stepKind: v.string(),
+  /** Its index in the run's step chain, so a caller can line it up with `publicRun.steps`. */
+  stepIndex: v.number(),
+  /** Where the answer actually lives, in prose, for a human reading a log or an alert. */
+  detail: v.string(),
+})
+export type PublicUnanswerableWait = v.InferOutput<typeof publicUnanswerableWaitSchema>
+
+/**
+ * What a run is currently asking a human, and whether it has STOPPED to ask. The two are related
+ * but not the same question, and a caller that treats `parked` as a gate on reading `decisions`
+ * gets the common case right and the useful case wrong:
+ *
+ * - `parked: true`, non-empty list: the ordinary park. The run is `blocked` and will not move
+ *   until one of these is answered.
+ * - `parked: false`, non-empty list: the run is still working and asking anyway. Today only
+ *   `follow-ups` does this: the Coder streams its items mid-run and they can be decided before it
+ *   finishes, so an integration that polls `decisions` regardless of `parked` never sees the run
+ *   stop at all. One that reads `decisions` only when `parked` is true still works, it just waits.
+ * - EMPTY list: the run is either still working or waiting on something this surface cannot
+ *   answer. `unanswerable` is what tells the two apart — see below.
+ */
+export const publicDecisionListSchema = v.object({
+  runId: v.string(),
+  taskId: v.string(),
+  /** The run's raw status — `blocked` is the parked state. */
+  status: publicRunStatusSchema,
+  /**
+   * Whether the run has STOPPED awaiting a human decision (`status === 'blocked'`). Not a
+   * precondition for `decisions` being non-empty: see the note above.
+   */
+  parked: v.boolean(),
+  decisions: v.array(publicDecisionSchema),
+  /**
+   * Waits holding the run that this surface cannot answer, each NAMED.
+   *
+   * This is what an empty `decisions` used to leave as a riddle: a run stopped on a surface the
+   * projection does not model reported `parked: true` with nothing in it, indistinguishable from a
+   * bug, and a caller's only recourse was to stop the run. Reporting the wait does not make it
+   * answerable here (by construction it is not), but it turns "something is wrong" into "a person
+   * has to review the pull request", which is the difference between escalating to a human and
+   * cancelling the work.
+   *
+   * Deliberately NOT gated on `parked`. An unbounded wait GATE keeps the run `running` between
+   * polls rather than `blocked` — the honest state, since the engine is still probing — so the
+   * riddle's worst form is a run that reads as working and never moves. Populated whenever a wait
+   * is present, so a poller reading only this field sees it either way.
+   *
+   * A BOUNDED built-in gate (`ci`, `conflicts`) is never listed: it resolves itself, and putting
+   * it here would read as a demand for a human that nobody has to meet.
+   */
+  unanswerable: v.array(publicUnanswerableWaitSchema),
+  /**
+   * Whether model-authored TEXT in this payload was clipped to a preview.
+   *
+   * Always `false` from `GET /api/v1/runs/{runId}/decisions`, which serves every field whole. The
+   * SSE decision channel re-sends the whole list on every change, and what the list carries is
+   * model-authored prose in quantity (a deep review parks with a finding per issue, each with its
+   * own detail, evidence and suggested fix), so an unreduced frame repeats all of it for as long
+   * as the run keeps moving. The stream clips the long strings and says so here; the point read is
+   * where a caller goes for the whole thing.
+   *
+   * A flag rather than a per-field marker, because the reduction is kind-AGNOSTIC (it clips by
+   * length, wherever the text sits) and so covers a decision kind that grows a field with no edit.
+   * What it must never mean is that a DECISION was left out: the list itself is always complete,
+   * since an empty `decisions` that means "narrowed" and one that means "nothing is being asked"
+   * are opposite facts.
+   */
+  truncated: v.boolean(),
+})
+export type PublicDecisionList = v.InferOutput<typeof publicDecisionListSchema>
+
+// ---- Request bodies -------------------------------------------------------
+
+/** Answer one reviewer finding. Mirrors the SPA's `replyReviewItemSchema` bounds. */
+export const publicReplyFindingSchema = v.object({
+  reply: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000)),
+})
+export type PublicReplyFindingInput = v.InferOutput<typeof publicReplyFindingSchema>
+
+/**
+ * Set a finding's status. Deliberately narrower than the SPA's full item-status patch: a headless
+ * caller may `dismiss` a finding as not applicable or `reopen` one it dismissed by mistake.
+ * `answered` is reached by REPLYING (which is what records the answer the incorporation folds in),
+ * and `recommend_requested` drives an in-app-only affordance, so neither is settable here.
+ */
+export const publicSetFindingStatusSchema = v.object({
+  status: v.picklist(['dismissed', 'open']),
+})
+export type PublicSetFindingStatusInput = v.InferOutput<typeof publicSetFindingStatusSchema>
+
+/**
+ * Incorporate the recorded answers. Optional `feedback` is the "do it differently" lever when
+ * redoing a merge, exactly as in the SPA. Asynchronous: the durable driver folds and re-reviews in
+ * the background, so the response is the `incorporating` review, not the finished document.
+ */
+export const publicIncorporateSchema = v.object({
+  feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+})
+export type PublicIncorporateInput = v.InferOutput<typeof publicIncorporateSchema>
+
+/**
+ * Resolve an iteration cap: one more pass, proceed with what the last pass produced, or stop and
+ * reset the task to an editable state. The same three choices the SPA offers — there is
+ * deliberately no timed default (a parked run waits for an answer indefinitely, so a silent
+ * auto-proceed would ship work nobody approved).
+ *
+ * Shared by every capped loop the surface exposes: the three iterative reviews and a quality
+ * companion at its automatic-rework cap. They are ONE body because they are one question, and
+ * minting a per-loop DTO would put four identical types in four published SDKs.
+ */
+export const publicResolveExceededSchema = v.object({
+  choice: iterationCapChoiceSchema,
+})
+export type PublicResolveExceededInput = v.InferOutput<typeof publicResolveExceededSchema>
+
+/**
+ * Choose an implementation approach: EXACTLY one of a proposed `forkId` or a free-text `custom`
+ * approach, optionally with a steering `note` on a picked fork. Mirrors the SPA's `chooseForkSchema`
+ * (same xor rule and bounds) so both surfaces accept identical input.
+ */
+export const publicChooseForkSchema = v.pipe(
+  v.object({
+    forkId: v.optional(v.nullable(v.string())),
+    custom: v.optional(v.nullable(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(8000)))),
+    note: v.optional(v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(4000)))),
+  }),
+  v.check(
+    (c) => (c.forkId != null && c.forkId.length > 0) !== (c.custom != null && c.custom.length > 0),
+    'Provide exactly one of forkId or custom.',
+  ),
+)
+export type PublicChooseForkInput = v.InferOutput<typeof publicChooseForkSchema>
+
+/**
+ * Resolve a parked judge verdict from a headless caller. Identical to the SPA's
+ * {@link resolveJudgeSchema} — the two surfaces drive the SAME service method, so there is
+ * nothing to narrow: `proceed` / `bounce` / `stop` mean exactly the same thing either way.
+ */
+export const publicResolveJudgeSchema = resolveJudgeSchema
+export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSchema>
+
+/**
+ * Resolve a run parked on the PRE-DISPATCH INPUT GATE from a headless caller. Identical to the
+ * SPA's {@link resolveInputGateSchema} — both surfaces drive the SAME service method, so there
+ * is nothing to narrow: `recheck` re-evaluates the task as it now stands (which is what actually
+ * clears the park, so an integration fixes the task over `PATCH /api/v1/tasks/:taskId` first),
+ * and `proceed` waives the findings and records who did it.
+ *
+ * "Fixes the task first" covers every finding the gate can raise, which it did not always: three
+ * codes name the description (`title`/`description` on that patch), and the other four name a
+ * per-type field, which reached the patch only when it gained `fields`. Until then this comment
+ * named a remedy for four of its own codes that the surface did not offer, and `proceed` — waiving
+ * a finding rather than fixing it — was the only headless way past them.
+ */
+export const publicResolveInputGateSchema = resolveInputGateSchema
+export type PublicResolveInputGateInput = v.InferOutput<typeof publicResolveInputGateSchema>
+
+/**
+ * Approve a parked gate, optionally replacing the agent's proposal with an edited one. The edit
+ * is what flows to every downstream step, so supplying it is how a caller corrects the output
+ * rather than bouncing the whole step; omit it to approve the text as written.
+ */
+export const publicApproveStepSchema = v.object({
+  proposal: v.optional(v.pipe(v.string(), v.maxLength(50000))),
+})
+export type PublicApproveStepInput = v.InferOutput<typeof publicApproveStepSchema>
+
+/**
+ * Request changes on a parked gate: the step re-runs with this guidance folded in.
+ *
+ * `feedback` is REQUIRED here where the SPA's twin accepts either freeform text or anchored
+ * per-block comments. An anchored comment carries the source line range of a rendered proposal, so
+ * a headless caller has nothing to anchor to; requiring the freeform half means a re-run always
+ * has something to act on rather than looping on an empty instruction.
+ */
+export const publicRequestStepChangesSchema = v.object({
+  feedback: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
+})
+export type PublicRequestStepChangesInput = v.InferOutput<typeof publicRequestStepChangesSchema>
+
+/** Reject a parked gate: the run stops entirely (a terminal failure the board can retry). */
+export const publicRejectStepSchema = v.object({
+  reason: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+})
+export type PublicRejectStepInput = v.InferOutput<typeof publicRejectStepSchema>
+
+/**
+ * Resolve a companion gate parked at its automatic-rework cap. The SAME body as a review at its
+ * cap ({@link publicResolveExceededSchema}), aliased rather than re-declared: the two carry one
+ * question, and a structurally identical twin would be a second published type in four SDKs
+ * meaning exactly what the first one means.
+ */
+export const publicResolveStepExceededSchema = publicResolveExceededSchema
+export type PublicResolveStepExceededInput = v.InferOutput<typeof publicResolveStepExceededSchema>
+
+/**
+ * Answer an agent-raised decision. The choice is taken verbatim, so it may be one of the offered
+ * `options` or a steer of the caller's own — the engine re-runs the asking step with it either way.
+ */
+export const publicResolveAgentDecisionSchema = v.object({
+  choice: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000)),
+})
+export type PublicResolveAgentDecisionInput = v.InferOutput<typeof publicResolveAgentDecisionSchema>
+
+/**
+ * Resolve a parked PR deep review: the curated `findingIds` plus what to do with them. `finish`
+ * records the selection and completes the read-only review; `fix` hands the selected findings to a
+ * fixer that commits onto the reviewed PR's branch; `post` publishes them as inline PR review
+ * comments. `fix`/`post` need at least one selected finding, and both act on the real pull
+ * request — this is the one decision route with an effect outside the platform.
+ *
+ * Both fields are plainly OPTIONAL rather than carrying a schema `default`, unlike the internal
+ * twin. A default is "always present" on the way out and "may be omitted" on the way in, and the
+ * SDK emitters read a request field's default as the former — so declaring one here would emit
+ * four clients whose types insist on a value the API does not require. The fallbacks are applied
+ * where the call is made instead, and documented on each field so the wire contract still states
+ * what omitting it means.
+ */
+export const publicResolvePrReviewSchema = v.object({
+  /** Omitted reads as `finish`. */
+  action: v.optional(prReviewResolutionSchema),
+  /** Omitted reads as an empty selection, which only `finish` accepts. */
+  findingIds: v.optional(v.array(v.string())),
+})
+export type PublicResolvePrReviewInput = v.InferOutput<typeof publicResolvePrReviewSchema>
+
+/**
+ * Challenge one parked finding: a read-only investigator digs into it against the full source and
+ * either upholds, strengthens or retracts it. An omitted / blank `question` uses the generic
+ * "validate this finding" prompt.
+ */
+export const publicChallengePrReviewFindingSchema = v.object({
+  question: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+})
+export type PublicChallengePrReviewFindingInput = v.InferOutput<
+  typeof publicChallengePrReviewFindingSchema
+>
+
+/**
+ * Mark bug-fishing findings to be addressed: each one spawns its OWN bug-fix task, linked back to
+ * the expedition.
+ *
+ * Accepted while the expedition is still fishing later angles as well as once it has parked, which
+ * is the flow's whole point: a completed angle's findings are actionable the moment they land.
+ *
+ * `pipelineId` overrides, FOR THIS REQUEST ONLY, the pipeline the spawned tasks run. Omitted, the
+ * expedition's own resolved default applies (the decision publishes it as `defaultFixPipelineId`,
+ * so a caller can see what it is about to get rather than infer it).
+ */
+export const publicAddressBugFishingFindingsSchema = v.object({
+  /** The findings to act on. At least one; an unknown or already-spawned id is refused. */
+  findingIds: v.pipe(v.array(v.string()), v.minLength(1)),
+  /** Pipeline the spawned tasks run; omitted ⇒ the expedition's default. */
+  pipelineId: v.optional(v.string()),
+})
+export type PublicAddressBugFishingFindingsInput = v.InferOutput<
+  typeof publicAddressBugFishingFindingsSchema
+>
+
+/**
+ * Submit findings against a human-verdict gate (human-test or visual-confirmation) and request a
+ * fix. The findings ARE the prompt the fixer works from, so unlike the SPA's textarea there is no
+ * blank-is-fine case: an empty request would dispatch an agent with nothing to fix.
+ */
+export const publicRequestGateFixSchema = v.object({
+  findings: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
+})
+export type PublicRequestGateFixInput = v.InferOutput<typeof publicRequestGateFixSchema>
+
+/**
+ * Answer one `question` item the Coder surfaced. Identical to the SPA's
+ * {@link answerFollowUpSchema} and aliased rather than re-declared, on the same grounds as the
+ * judge and input-gate bodies: both surfaces drive the SAME service method, so there is nothing
+ * to narrow, and a structurally identical twin would be a second published type in four SDKs
+ * meaning exactly what the first one means.
+ */
+export const publicAnswerFollowUpSchema = answerFollowUpSchema
+export type PublicAnswerFollowUpInput = v.InferOutput<typeof publicAnswerFollowUpSchema>
+
+/**
+ * Answer one interview question. Declared fresh rather than aliased, unlike the bodies above: two
+ * gates ride this route (the planning and the document interviewer) and each declares its own
+ * internal body, so aliasing either one would privilege that gate's bounds on a surface serving
+ * both, and a bound that is right for one and wrong for the other refuses valid input.
+ *
+ * The numbers are therefore taken from what the two gates STORE rather than from what either one
+ * accepts: an exchange lives in `initiativeQaSchema` / `docInterviewQaSchema`, both of which cap an
+ * id at 80 and an answer at 2000, so a question this surface can name is a question these bounds
+ * can address. They are stated as literals rather than derived from those constants because this
+ * is a published contract: deriving it would let an internal cap SHRINK the public bound silently,
+ * which is the one direction `/api/v1` may not move. `publicAnswerInterviewBounds` in
+ * `public-decisions.test.ts` asserts the relation instead, so a gate that widens its own storage
+ * fails a test here rather than refusing valid input in production.
+ *
+ * An EMPTY `answer` is accepted, because both services accept it: it clears an answer recorded by
+ * mistake, where a minimum length would leave a caller no way to undo one.
+ */
+export const publicAnswerInterviewSchema = v.object({
+  /** The `questionId` from the decision's `questions`. */
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
+  answer: v.pipe(v.string(), v.maxLength(2000)),
+})
+export type PublicAnswerInterviewInput = v.InferOutput<typeof publicAnswerInterviewSchema>

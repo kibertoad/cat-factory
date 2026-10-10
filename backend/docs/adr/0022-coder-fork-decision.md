@@ -8,8 +8,8 @@
 
 The Coder (agentKind `coder`, the standard `build` phase) commits to the first viable
 implementation strategy it finds. For non-trivial tasks there are often **materially
-different** ways to do the work — "patch the call site vs refactor the seam", "migrate the
-schema vs adapt the mapper", "targeted fix vs behind a flag" — and picking between them is
+different** ways to do the work ("patch the call site vs refactor the seam", "migrate the
+schema vs adapt the mapper", "targeted fix vs behind a flag"), and picking between them is
 frequently a product/architecture judgement, not a coding judgement. The existing surfaces
 caught this badly: the follow-up companion evaluates only AFTER the Coder finished (the branch
 already embodies one fork), and the agent-raised `Decision` is unreliable (the Coder decides on
@@ -35,10 +35,10 @@ dispatches on the same coder step**:
   (`parkStepOnDecision`) and raises a `fork_decision_pending` notification.
 - **Human interaction:** pick / custom / chat via a dedicated `fork-decision` result-view window.
   Chat replies are computed by an **inline `ModelProvider` LLM call in the durable driver**
-  (`ForkChatService`) using the transient-marker async re-entry protocol (`step.pendingForkChat`
-  - the `reentrantForkDecision` guard in `stepInstance`), exactly the `pendingIncorporation`
-    pattern. Each chat turn re-parks with a fresh approval id; `maxChatTurns` (default 15) is a hard
-    budget.
+  (`ForkChatService`) using the transient-marker async re-entry protocol (`step.pendingForkChat` +
+  the `reentrantForkDecision` guard in `stepInstance`), exactly the `pendingIncorporation`
+  pattern. Each chat turn re-parks with a fresh approval id; `maxChatTurns` (default 15) is a hard
+  budget.
 - **Phase B (implement):** on choose, the step is reset for re-run and the ordinary Coder dispatch
   runs with the chosen fork folded into `AgentRunContext.implementationChoice` (the chosen
   approach + the rejected alternatives), rendered by `implementationChoiceSection` into the
@@ -48,7 +48,7 @@ dispatches on the same coder step**:
 (`riskPolicySchema.forkDecision`, reusing `stepGatingSchema` verbatim so the runtime check is the
 existing `shouldRunGatedStep`), disabled by default; and a per-task **tri-state**
 (`coder.forkDecision` ∈ `auto`/`always`/`off`) riding the existing agent-config contribution seam
-(`BUILTIN_CONFIG_CONTRIBUTIONS`) — so no pipeline-builder change and no new `Block` field.
+(`BUILTIN_CONFIG_CONTRIBUTIONS`), so no pipeline-builder change and no new `Block` field.
 
 ## Rationale
 
@@ -56,7 +56,7 @@ existing `shouldRunGatedStep`), disabled by default; and a per-task **tri-state*
   to be added to every pipeline, would need cross-step plumbing to reach the coder, and could not
   ride the estimate gate (`assertValidGating` restricts `stepGating` to companion kinds). The
   accepted pattern for a producer-attached feature with its own estimate gate is the tester-QC
-  companion — config on the producer step — and this mirrors it.
+  companion (config on the producer step), and this mirrors it.
 - **All state rides the run's `PipelineStep`** (`step.forkDecision` + the transient
   `pendingForkChat`), so D1 ⇄ Drizzle parity is free (no side table), exactly like `followUps` /
   `testerQuality`. No new `WorkspaceEvent` (the `execution` event carries the whole instance) and
@@ -70,7 +70,7 @@ existing `shouldRunGatedStep`), disabled by default; and a per-task **tri-state*
   coder after a full coding container was already spent.
 - **Pass-through everywhere it can't run** (tri-state `off`, gate not met, proposer/chat model
   unwired) so existing pipelines and engine tests behave exactly as before. A no-model chat
-  degrades to a canned "chat unavailable" turn rather than wedging the parked run — pick / custom
+  degrades to a canned "chat unavailable" turn rather than wedging the parked run; pick / custom
   still work.
 
 ## Consequences

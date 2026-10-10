@@ -15,6 +15,25 @@ import * as v from 'valibot'
 
 const slugSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
 const nameSchema = v.pipe(v.string(), v.maxLength(200))
+/**
+ * The bound on a vendor-stated date. Exported because the PARSER has to honour the same number:
+ * a value this schema would reject must be dropped where the payload is read, or one odd model
+ * fails the whole browse response and a workspace cannot refresh its catalog at all.
+ * OpenRouter states these as `YYYY-MM-DD`; 40 leaves room for a full timestamp.
+ */
+export const OPENROUTER_DATE_TEXT_MAX = 40
+
+/**
+ * A vendor-stated date, kept VERBATIM rather than parsed, but bounded like every other string on
+ * this object: the schema is also the client-supplied body of the catalog upsert, so an unbounded
+ * member is an unbounded row a workspace admin's client can post 200 of.
+ */
+const dateTextSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(OPENROUTER_DATE_TEXT_MAX),
+)
 
 /**
  * Metadata for one OpenRouter model, in the spend pricing's terms (per-1M-token
@@ -28,10 +47,35 @@ export const openRouterModelMetaSchema = v.object({
   name: nameSchema,
   /** Total context window (input + output tokens), when reported. */
   contextLength: v.optional(v.number()),
-  /** Input price per 1M tokens, in the spend currency. */
+  /** Input price per 1M FRESH (uncached) tokens, in the spend currency. */
   inputPerMillion: v.number(),
   /** Output price per 1M tokens, in the spend currency. */
   outputPerMillion: v.number(),
+  /**
+   * Price per 1M input tokens served from the upstream's prompt cache, when OpenRouter
+   * publishes one (`pricing.input_cache_read`).
+   *
+   * Optional and MEANINGFUL when absent: the spend table's `CACHE_READ_MULTIPLIER` derives a
+   * 0.1x fallback, so an omitted rate is "estimate it" while a present one is "this is what the
+   * gateway charges". A cache read and a cache write are priced an order of magnitude apart in
+   * opposite directions, so folding either into {@link inputPerMillion} would make a run riding
+   * a warm cache and one thrashing it cost the same on paper.
+   */
+  cachedInputPerMillion: v.optional(v.number()),
+  /** Price per 1M input tokens WRITTEN into the upstream's cache, when published. */
+  cacheWritePerMillion: v.optional(v.number()),
+  /**
+   * The date this model endpoint is withdrawn (`pricing`-adjacent `expiration_date`), verbatim
+   * as OpenRouter states it. Carried rather than acted on: a pinned slug that stops being served
+   * fails SILENTLY (the route just answers something else), so the one place that fact exists
+   * has to keep it.
+   */
+  expirationDate: v.optional(dateTextSchema),
+  /**
+   * OpenRouter's permanent slug for this model (`canonical_slug`), when it differs from `id`.
+   * `id` is the addressable route and may be re-pointed; this is what survives.
+   */
+  canonicalSlug: v.optional(slugSchema),
 })
 export type OpenRouterModelMeta = v.InferOutput<typeof openRouterModelMetaSchema>
 

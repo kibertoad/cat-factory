@@ -9,6 +9,7 @@
 // as a drag-and-drop / click upload target (emits `uploadReference`).
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   view: string
@@ -16,6 +17,13 @@ const props = defineProps<{
   referenceId: string | null | undefined
   blobs: ArtifactBlobs
   busy?: boolean
+  /**
+   * Where the reference came from, when the caller knows. A frame rendered from a linked design
+   * and a mock a person attached are different claims about what "the reference" is, so the
+   * caption says which; absent leaves the plain label, which is what an unattributed reference
+   * honestly is.
+   */
+  referenceOrigin?: 'upload' | 'design' | null
 }>()
 
 const emit = defineEmits<{
@@ -75,6 +83,13 @@ function onSwipeUp() {
 
 // --- diff canvas ---
 const diffCanvas = ref<HTMLCanvasElement | null>(null)
+// A fixed black backing, opting out of the theme on purpose. The CSS background does not take part
+// in the canvas `difference` composite (that runs on the bitmap); it shows through wherever the
+// bitmap is transparent, before the first draw and in any transparent region of the diff. Black
+// there reads as "no difference", the same zero the difference composite produces, in either colour
+// mode, so no mode-following token fits. Bound as a const so the guard's `fixed-colour-ok:` marker
+// stays on the class string; the inline-template form gets reflowed off its own line by oxfmt.
+const DIFF_CANVAS_CLASS = 'w-full rounded-sm border border-default bg-black' // fixed-colour-ok: diff canvas backdrop
 const CAP = 2000
 // Bumped on every renderDiff entry so a render whose async work (image decode) is overtaken
 // by a newer mode/image change bails out instead of drawing stale pixels onto the canvas.
@@ -121,56 +136,60 @@ async function renderDiff() {
 watch([mode, actualUrl, refUrl], renderDiff, { immediate: true })
 
 // --- reference upload (drag-drop + click) ---
-const dragOver = ref(false)
-const refInput = ref<HTMLInputElement | null>(null)
-// Accept only the formats the file input advertises (PNG/JPEG), so a dropped GIF/SVG/WebP
-// can't slip past the picker's `accept` filter.
+// `UFileUpload` owns the picker, the drop zone and the drag state; the click-to-replace
+// affordance calls its `open()`. The type guard stays ours: `accept` filters the PICKER, and a
+// dropped GIF/SVG/WebP would otherwise arrive anyway.
 const ACCEPTED = /^image\/(png|jpeg)$/
-function pickFile(files: FileList | null | undefined) {
-  const file = files?.[0]
+const pendingRef = ref<File | null>(null)
+watch(pendingRef, (file) => {
   if (file && ACCEPTED.test(file.type)) emit('uploadReference', file)
-}
-function onDrop(e: DragEvent) {
-  dragOver.value = false
-  pickFile(e.dataTransfer?.files)
-}
-function onRefInput(e: Event) {
-  pickFile((e.target as HTMLInputElement).files)
-  if (refInput.value) refInput.value.value = ''
-}
+  // Cleared either way, so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the
+  // other half of this: clearing the model alone leaves the native input holding the file it
+  // already has, and the browser fires no change event when the same one is chosen twice.
+  if (file) pendingRef.value = null
+})
 </script>
 
 <template>
-  <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+  <div class="rounded-lg border border-default bg-default/60 p-3">
     <div class="mb-2 flex items-center justify-between gap-2">
-      <h3 class="min-w-0 truncate text-[12px] font-semibold text-slate-200">{{ view }}</h3>
+      <h3 class="min-w-0 truncate text-xs font-semibold text-default">{{ view }}</h3>
       <!-- Mode switch -->
       <div
         v-if="MODES.length > 1"
-        class="flex items-center gap-0.5 rounded-md border border-slate-800 bg-slate-950/60 p-0.5"
+        class="flex items-center gap-0.5 rounded-md border border-default bg-app-950/60 p-0.5"
       >
-        <button
+        <IconButton
           v-for="m in MODES"
           :key="m.id"
-          class="rounded px-1.5 py-1 text-slate-400 hover:text-slate-200"
-          :class="mode === m.id ? 'bg-slate-800 text-slate-100' : ''"
-          :title="m.label"
+          color="neutral"
+          variant="ghost"
+          :icon="m.icon"
+          :label="m.label"
+          :aria-pressed="mode === m.id"
+          :ui="{
+            base: [
+              'rounded-sm px-1.5 py-1 text-muted hover:bg-transparent hover:text-default',
+              mode === m.id ? 'bg-elevated text-app-100' : '',
+            ].join(' '),
+            leadingIcon: 'h-3.5 w-3.5',
+          }"
           @click="mode = m.id"
-        >
-          <UIcon :name="m.icon" class="h-3.5 w-3.5" />
-        </button>
+        />
       </div>
     </div>
 
     <!-- SIDE BY SIDE -->
     <div v-if="mode === 'side-by-side'" class="grid grid-cols-2 gap-3">
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
+        <figcaption class="text-3xs uppercase tracking-wide text-dimmed">
           {{ t('media.compare.actual') }}
         </figcaption>
-        <button
+        <UButton
           v-if="actualUrl"
-          class="block w-full overflow-hidden rounded border border-slate-800 hover:border-slate-600"
+          color="neutral"
+          variant="ghost"
+          class="block w-full overflow-hidden rounded-sm border border-default p-0 hover:border-app-600 hover:bg-transparent"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -178,10 +197,10 @@ function onRefInput(e: Event) {
             :alt="t('media.compare.actualAlt', { view })"
             class="w-full cursor-zoom-in"
           />
-        </button>
+        </UButton>
         <div
           v-else
-          class="flex h-32 items-center justify-center rounded border border-dashed border-slate-700 text-[11px] text-slate-600"
+          class="flex h-32 items-center justify-center rounded-sm border border-dashed border-muted text-2xs text-app-600"
         >
           {{
             props.blobs.statusFor(actualId) === 'error'
@@ -194,49 +213,51 @@ function onRefInput(e: Event) {
       </figure>
 
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
+        <figcaption class="text-3xs uppercase tracking-wide text-dimmed">
           {{ t('media.compare.reference') }}
-        </figcaption>
-        <button
-          v-if="refUrl"
-          class="group relative block w-full overflow-hidden rounded border border-slate-800 hover:border-slate-600"
-          @click="referenceId && emit('expand', referenceId)"
-        >
-          <img
-            :src="refUrl"
-            :alt="t('media.compare.referenceAlt', { view })"
-            class="w-full cursor-zoom-in"
-          />
-          <span
-            class="absolute bottom-1 end-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100"
-            @click.stop="refInput?.click()"
-          >
-            {{ t('media.compare.replace') }}
+          <span v-if="referenceOrigin === 'design'" class="text-app-warning-300/80">
+            {{ t('media.compare.fromLinkedDesign') }}
           </span>
-        </button>
-        <!-- Drop zone when no reference yet -->
-        <div
-          v-else
-          class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed text-[11px] transition"
-          :class="
-            dragOver
-              ? 'border-amber-500 bg-amber-500/5 text-amber-300'
-              : 'border-slate-700 text-slate-600 hover:border-slate-500 hover:text-slate-400'
-          "
-          @click="refInput?.click()"
-          @dragover.prevent="dragOver = true"
-          @dragleave.prevent="dragOver = false"
-          @drop.prevent="onDrop"
+        </figcaption>
+        <UFileUpload
+          v-model="pendingRef"
+          reset
+          accept="image/png,image/jpeg"
+          :disabled="busy"
+          :preview="false"
+          :label="t('media.compare.dropHint')"
+          icon="i-lucide-image-up"
+          :ui="{ base: 'h-32 text-2xs' }"
         >
-          <UIcon name="i-lucide-image-up" class="h-5 w-5" />
-          <span>{{ t('media.compare.dropHint') }}</span>
-        </div>
+          <!-- With a reference already in place the tile IS the surface: it opens the lightbox,
+               and the hover affordance opens the picker the same drop zone would. -->
+          <template v-if="refUrl" #default="{ open }">
+            <UButton
+              variant="ghost"
+              color="neutral"
+              class="group relative block w-full overflow-hidden rounded-sm border border-default p-0 hover:border-app-600 hover:bg-transparent"
+              @click="referenceId && emit('expand', referenceId)"
+            >
+              <img
+                :src="refUrl"
+                :alt="t('media.compare.referenceAlt', { view })"
+                class="w-full cursor-zoom-in"
+              />
+              <span
+                class="absolute bottom-1 end-1 rounded-sm bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
+                @click.stop="open()"
+              >
+                {{ t('media.compare.replace') }}
+              </span>
+            </UButton>
+          </template>
+        </UFileUpload>
       </figure>
     </div>
 
     <!-- OVERLAY (onion-skin) -->
     <div v-else-if="mode === 'overlay'" class="space-y-2">
-      <div class="relative w-full overflow-hidden rounded border border-slate-800">
+      <div class="relative w-full overflow-hidden rounded-sm border border-default">
         <img :src="refUrl" :alt="t('media.compare.referenceAlt', { view })" class="w-full" />
         <!-- object-contain so a differing aspect ratio onion-skins undistorted over the reference. -->
         <img
@@ -246,14 +267,15 @@ function onRefInput(e: Event) {
           :style="{ opacity: overlayOpacity / 100 }"
         />
       </div>
-      <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
+      <div class="flex items-center gap-2 text-2xs uppercase tracking-wide text-muted">
         <span>{{ t('media.compare.reference') }}</span>
-        <input
-          v-model.number="overlayOpacity"
-          type="range"
-          min="0"
-          max="100"
-          class="flex-1 accent-amber-500"
+        <USlider
+          v-model="overlayOpacity"
+          :min="0"
+          :max="100"
+          color="warning"
+          size="xs"
+          class="flex-1"
         />
         <span>{{ t('media.compare.actual') }}</span>
       </div>
@@ -263,7 +285,7 @@ function onRefInput(e: Event) {
     <div
       v-else-if="mode === 'swipe'"
       ref="swipeBox"
-      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded border border-slate-800"
+      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded-sm border border-default"
       @pointerdown="onSwipeDown"
       @pointermove="moveSwipe"
       @pointerup="onSwipeUp"
@@ -287,37 +309,27 @@ function onRefInput(e: Event) {
            `clientX - rect.left`), so the handle and the corner labels stay PHYSICAL too.
            Logical (`start-`/`end-`) here would flip the labels under RTL while the image
            regions stayed put, mislabeling actual vs reference. -->
-      <div class="absolute inset-y-0 w-0.5 bg-amber-400" :style="{ left: `${splitPct}%` }">
+      <div class="absolute inset-y-0 w-0.5 bg-app-warning-400" :style="{ left: `${splitPct}%` }">
         <span
-          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow"
+          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-app-warning-400 text-app-950 shadow"
         >
           <UIcon name="i-lucide-move-horizontal" class="h-3.5 w-3.5" />
         </span>
       </div>
       <span
-        class="absolute left-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
+        class="absolute left-1 top-1 rounded-sm bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.actual') }}</span
       >
       <span
-        class="absolute right-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
+        class="absolute right-1 top-1 rounded-sm bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.reference') }}</span
       >
     </div>
 
     <!-- DIFF (canvas) -->
     <div v-else-if="mode === 'diff'" class="space-y-1">
-      <canvas ref="diffCanvas" class="w-full rounded border border-slate-800 bg-black" />
-      <p class="text-[10px] text-slate-500">{{ t('media.compare.diffHint') }}</p>
+      <canvas ref="diffCanvas" :class="DIFF_CANVAS_CLASS" />
+      <p class="text-3xs text-dimmed">{{ t('media.compare.diffHint') }}</p>
     </div>
-
-    <!-- Hidden file input shared by replace/drop zone -->
-    <input
-      ref="refInput"
-      type="file"
-      accept="image/png,image/jpeg"
-      class="hidden"
-      :disabled="busy"
-      @change="onRefInput"
-    />
   </div>
 </template>

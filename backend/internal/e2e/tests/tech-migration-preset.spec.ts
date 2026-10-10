@@ -23,10 +23,13 @@ import {
 // end on the keyless e2e backend:
 //   - the interviewer runs an INLINE LLM (not the faked agent executor); `testServer.ts` injects a
 //     converging fake inline model (`fakeInlineModel.ts`), so the interviewer converges on its first
-//     pass over the seeded intake-form qa and the run advances to the analyst — no human Q&A needed.
+//     pass over the seeded intake-form qa and the run advances to the planner (the analyst having
+//     already run ahead of it) — no human Q&A needed.
 //   - the `initiative-planner` gate (`gate: true` in `pl_initiative`) parks the run for human
-//     approval, but no SPA surface exposes that gate for an initiative-level block, so it is
-//     approved over REST (a trigger) — see `findParkedApproval` / `approveStep`.
+//     approval. That gate has its own UI path (the card's review button → the tracker window's
+//     plan-review rail, pinned by `initiative-plan-review.spec`); here it is only a trigger on the
+//     way to this spec's subject, so it is approved over REST — see `findParkedApproval` /
+//     `approveStep`.
 
 // The plan the fake `initiative-planner` returns. It MUST carry the five migration template phase
 // ids in order (imported, never retyped — they are the contract the ingest normalizer matches on);
@@ -77,7 +80,7 @@ const MIGRATION_PLAN = {
       description: 'Prove parity on PostgreSQL, flip defaults, remove the old path.',
     },
   ],
-  policy: { maxConcurrent: 2, defaultPipelineId: 'pl_quick', rules: [] },
+  policy: { maxConcurrent: 2, defaultPipelineId: 'pl_simple', rules: [] },
 }
 
 test('a tech-migration initiative interviews, plans a 5-phase migration, and spawns a decorated blast-zone document', async ({
@@ -85,7 +88,7 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   request,
   seededBoard,
 }) => {
-  // Drives a full planning run (interviewer → analyst → planner → gate → committer) then a loop
+  // Drives a full planning run (analyst → interviewer → planner → gate → committer) then a loop
   // spawn — several durable pg-boss steps — so give it the slow budget.
   test.slow()
   const { workspaceId } = seededBoard
@@ -117,14 +120,16 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   )
   await expect(page.getByTestId('initiative-card')).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-  // Start the preset's full-interview planning pipeline against the anchor block. The interviewer
-  // converges on the seeded qa (fake inline model) → analyst → planner returns MIGRATION_PLAN → the
-  // ingest normalizer accepts the five template phases → the run PARKS at the planner's human gate.
+  // Start the preset's full-interview planning pipeline against the anchor block. The analyst reads
+  // the repo → the interviewer converges on the seeded qa (fake inline model) → planner returns
+  // MIGRATION_PLAN → the ingest normalizer accepts the five template phases → the run PARKS at the
+  // planner's human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
-  // Approve the parked planner gate over REST (no SPA affordance exposes it for an initiative
-  // block). Poll for the parked approval — a green ingest of the 5-phase plan is a precondition for
-  // it existing, so reaching here already proves the template normalization accepted the plan.
+  // Approve the parked planner gate over REST — the gate has its own SPA review surface (see
+  // `initiative-plan-review.spec.ts`), but here it is only setup for the preset under test. Poll
+  // for the parked approval — a green ingest of the 5-phase plan is a precondition for it
+  // existing, so reaching here already proves the template normalization accepted the plan.
   let approval: Awaited<ReturnType<typeof findParkedApproval>> = null
   await expect
     .poll(

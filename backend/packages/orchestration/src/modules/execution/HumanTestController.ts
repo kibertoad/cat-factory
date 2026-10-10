@@ -22,7 +22,11 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
+import { liveJobId } from './step-fold.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -61,9 +65,19 @@ export interface HumanTestControllerDeps {
   /** Merge the repo default branch into the block's PR branch (server-side). */
   branchUpdater?: BranchUpdater
   /** The task's helper attempt budget (from the resolved merge preset). */
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<{ ciMaxAttempts: number }>
   /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record, calls the executor and folds what came back: a
+   * delegation claim for a helper kind whose work leaves the platform, a container cold boot
+   * otherwise. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
   clockNow: () => number
@@ -132,9 +146,12 @@ export class HumanTestController {
     // A helper (fixer / conflict-resolver) is in flight: the step is `working` with a live
     // job, NOT parked. Re-attach to its job instead of re-parking, so a re-drive through
     // `advance` (the stale-run sweeper, or a durable replay that lost the `awaiting_job`
-    // position) keeps polling the job rather than abandoning it.
-    if ((ht.phase === 'fixing' || ht.phase === 'resolving_conflicts') && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // position) keeps polling the job rather than abandoning it. LIVE is the question, not
+    // "has a job id": a delegated helper's claim is committed before its executor is called, so
+    // an unanswered one re-parks the human rather than polling work nobody started.
+    const attached = liveJobId(step)
+    if ((ht.phase === 'fixing' || ht.phase === 'resolving_conflicts') && attached) {
+      return awaitingJob(step, instance.currentStep, attached)
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(ht))
   }
@@ -250,7 +267,8 @@ export class HumanTestController {
     step: PipelineStep,
     block: Block,
   ): Promise<AdvanceResult> {
-    const maxAttempts = (await this.deps.resolveRiskPolicy(workspaceId, block)).ciMaxAttempts
+    const maxAttempts = (await this.deps.resolveRiskPolicy(workspaceId, block, instance))
+      .ciMaxAttempts
     step.humanTest = {
       phase: 'provisioning',
       environment: null,
@@ -409,13 +427,16 @@ export class HumanTestController {
             ],
           }
         : { ...base, agentKind: helperKind }
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    // The dispatch returned, so the helper's per-run container is up; surface it via the
-    // same `container` projection the Coder/Tester use (the live phase + id/url arrive on
-    // the first poll). A finished cold-boot must NOT linger as a stale "spinning up".
-    step.container = { status: 'up' }
+    // The helper's record, opened and committed before the executor is called, and settled by
+    // the same seam if the call throws: a deployment whose fixer runs on its own external loop
+    // reaches this site and needs the same claim-before-effect every other dispatch takes.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job (like the Tester→Fixer loop), NOT `waiting_decision` on a stale approval. If
@@ -433,14 +454,13 @@ export class HumanTestController {
         findings:
           roundKind === 'fix' ? findings : 'Pulled latest main into the branch (conflicts).',
         helperKind,
-        jobId: handle.jobId,
+        jobId,
         outcome: null,
         at: this.deps.clockNow(),
       },
     ]
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**
@@ -494,8 +514,7 @@ export class HumanTestController {
     this.deps.stepGraph.rerunRange(instance, deployerIndex, humanTestIndex)
     step.humanTest = preserved
     if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'continue' }
   }
 
@@ -532,25 +551,8 @@ export class HumanTestController {
     step: PipelineStep,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    this.deps.stepGraph.finishStep(step)
-    step.progress = 1
-    step.subtasks = undefined
-    step.approval = null
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.deps.stepGraph.startStep(next)
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    this.deps.stateMachine.finishHumanGateStep(step)
+    return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
 
   /**
@@ -704,11 +706,8 @@ export class HumanTestController {
   private async clearReadyNotification(workspaceId: string, blockId: string): Promise<void> {
     const svc = this.deps.notificationService
     if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    for (const n of open) {
-      if (n.type === 'human_test_ready' && n.blockId === blockId) {
-        await svc.resolve(workspaceId, n.id, 'act')
-      }
-    }
+    // `act`, not `dismiss`: the human did the thing the card asked for. One indexed
+    // (block, type) lookup and one write, never a scan of the workspace's open inbox.
+    await svc.clearOnBlock(workspaceId, blockId, 'human_test_ready', 'act')
   }
 }

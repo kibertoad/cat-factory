@@ -1,0 +1,1 @@
+ALTER TABLE "public_api_keys" ADD COLUMN "external_identity" text;

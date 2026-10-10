@@ -11,24 +11,40 @@ import {
   deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
+  makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  seedFrameRepoLink,
+  withDelegatedArm,
+  lateHarnessCallRecorder,
+  type FrameRepoLink,
+  type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
+  DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
+  DrizzleTaskRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
   buildNodeContainer,
   createApp,
   createDbClient,
   createDrizzleRepositories,
+  DrizzleGitHubInstallationRepository,
+  DrizzleRepoProjectionRepository,
   migrate,
   schema,
 } from '@cat-factory/node-server'
 import {
+  type LocalFirstPersistenceRepository,
   type PersistenceRpcClient,
   type PersistenceRpcRequest,
   type PersistenceRpcResponse,
@@ -36,18 +52,22 @@ import {
   createRemoteRepositoryRegistry,
 } from '@cat-factory/server'
 import type { GateProviderOverrides } from '@cat-factory/gates'
+import { callBinaryThrough } from '../harness.js'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type {
   Account,
   Clock,
   ExecutionInstance,
+  Pipeline,
   Service,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
+import { createLocalTelemetryStore } from '../../src/sqlite/telemetryStore.js'
 import { ENCRYPTION_KEY, SESSION_SECRET, buildMothershipEnv, mintMachineToken } from './setup.js'
 
 // ---------------------------------------------------------------------------
@@ -201,29 +221,46 @@ function getMothership(db: DrizzleDb): Mothership {
   return ms
 }
 
-/**
- * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
- * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
- * agent + no-op runner let the suite advance runs itself via `drive`.
- */
-export function makeMothershipConformanceApp(
-  db: DrizzleDb,
-  agentOptions?: FakeAgentOptions,
-  opts?: {
-    cloudflareModelsEnabled?: boolean
-    resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
-    resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
-    gateProviders?: GateProviderOverrides
-    environmentProvider?: CoreDependencies['environmentProvider']
-    resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
-    backendRegistries?: BackendRegistries
-    initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
-    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
-    detectionConventions?: CoreDependencies['detectionConventions']
-  },
-): ConformanceApp {
-  const ms = getMothership(db)
+/** The per-suite injections a mothership conformance app is built with. */
+interface MothershipAppOptions {
+  cloudflareModelsEnabled?: boolean
+  resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+  resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
+  gateProviders?: GateProviderOverrides
+  environmentProvider?: CoreDependencies['environmentProvider']
+  resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+  prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
+  appBaseUrl?: string
+  apiBaseUrl?: string
+  backendRegistries?: BackendRegistries
+  initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
+  taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  pipelineRegistry?: CoreDependencies['pipelineRegistry']
+  testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+  judgeRegistry?: CoreDependencies['judgeRegistry']
+  judgeAssessor?: CoreDependencies['judgeAssessor']
+  detectionConventions?: CoreDependencies['detectionConventions']
+  /**
+   * The app-owned agent-kind registry, and the external-executor registry beside it.
+   *
+   * On THIS harness for the reason mothership mode exists as a topology at all: a node with no
+   * main database resolves the same kinds and runs the same engine, so a step whose work leaves
+   * the platform has to dispatch, poll and settle here exactly as it does on a facade with a
+   * database. Absent, the suite's delegated kind fell through to the deterministic fake and every
+   * delegated assertion passed judgement on nothing.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  gateRegistry?: CoreDependencies['gateRegistry']
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
+}
 
+/**
+ * Build the in-process persistence-RPC client the mothership SUT's remote repositories call
+ * through: it signs a fresh machine token over the CURRENT account scope per call and posts to
+ * the mothership app's `/internal/persistence` route. Extracted from
+ * {@link makeMothershipConformanceApp} for the per-function line budget.
+ */
+function buildMothershipRpcClient(ms: Mothership): PersistenceRpcClient {
   // The machine token's account scope grows as the harness seeds workspaces (each under a real,
   // scoped account on the mothership — a dev-open node's null/personal account would 404 over
   // the scoped RPC). The in-process client signs a fresh token over the CURRENT scope per call,
@@ -231,7 +268,7 @@ export function makeMothershipConformanceApp(
   // is unit-tested in persistenceRpc.spec.ts; here a broad self-authored token just lets the
   // repository-surface assertions run.)
   const scopeAccountIds = ms.scopeAccountIds
-  const client: PersistenceRpcClient = {
+  return {
     async call(request: PersistenceRpcRequest): Promise<PersistenceRpcResponse> {
       const { token } = await mintMachineToken(SESSION_SECRET, {
         userId: CONF_USER.id,
@@ -261,14 +298,38 @@ export function makeMothershipConformanceApp(
       }
     },
   }
+}
 
-  const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
-  const credentialStore = createLocalCredentialStore(':memory:')
-  const recorder = new RecordingEventPublisher()
-  const overrides: Partial<CoreDependencies> = {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentOptions)
-      : new FakeAgentExecutor(agentOptions),
+/**
+ * The `CoreDependencies` overrides the mothership SUT is built with: the deterministic fake
+ * agent + the no-op durable runners the suite drives itself via `drive`, plus whatever a suite
+ * injected. Extracted from {@link makeMothershipConformanceApp} for the per-function line budget.
+ */
+function buildMothershipOverrides(
+  recorder: RecordingEventPublisher,
+  agentOptions: FakeAgentOptions | undefined,
+  opts: MothershipAppOptions | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
+): Partial<CoreDependencies> {
+  // The custom-kind suites inject a pre-loaded registry: thread it into BOTH the fake executor
+  // (so it detects the custom kind's structured output) and the container build below.
+  const agentExecutorOptions: FakeAgentOptions = {
+    ...agentOptions,
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+  }
+  return {
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. The same wrapping the other three harnesses do, and
+    // needed here for the same reason: overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      opts ?? {},
+      recordHarnessCalls,
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     repoBootstrapper: new FakeRepoBootstrapper(),
@@ -289,8 +350,62 @@ export function makeMothershipConformanceApp(
     // full QC loop is driven through the mothership composition root without a model, identically
     // to the Worker/Node/local-standalone harnesses.
     ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
+    // Inject the judge's verdict producer (a deterministic fake in the suite) so the rubric
+    // pass / park / bounce / fail loop — and the unwired pass-through — are driven through the
+    // mothership composition root too, not only the Worker/Node/local-standalone ones.
+    ...(opts?.judgeAssessor ? { judgeAssessor: opts.judgeAssessor } : {}),
+    // The engine's PR verification-report publisher (+ the public app URL its observability
+    // deep link is built from, and the public BACKEND url its artifact links are built from),
+    // so the report hook is driven through the mothership composition root exactly as through
+    // the Worker/Node/local-standalone harnesses. The two urls are threaded separately because
+    // the report keeps them apart: one opens a panel a human browses, the other returns bytes.
+    ...(opts?.prVerificationReportPublisher
+      ? { prVerificationReportPublisher: opts.prVerificationReportPublisher }
+      : {}),
+    ...(opts?.appBaseUrl ? { appBaseUrl: opts.appBaseUrl } : {}),
+    ...(opts?.apiBaseUrl ? { apiBaseUrl: opts.apiBaseUrl } : {}),
   }
+}
 
+/**
+ * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
+ * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
+ * agent + no-op runner let the suite advance runs itself via `drive`.
+ */
+export function makeMothershipConformanceApp(
+  db: DrizzleDb,
+  agentOptions?: FakeAgentOptions,
+  opts?: MothershipAppOptions,
+): ConformanceApp {
+  const ms = getMothership(db)
+
+  // The machine token's account scope grows as the harness seeds workspaces (each under a real,
+  // scoped account on the mothership), and the RPC client signs a fresh token over the CURRENT
+  // scope per call — so a workspace created after the SUT was built is still reachable.
+  const scopeAccountIds = ms.scopeAccountIds
+  const client = buildMothershipRpcClient(ms)
+
+  // Telemetry is LOCAL-FIRST on a mothership-mode node (docs/initiatives/mothership-mode.md,
+  // PR 5), so the SUT composes the same in-memory `node:sqlite` telemetry store production
+  // composes — otherwise the run path's per-step token rollups and the observability reads would
+  // resolve to remote proxies the allow-list refuses, and the topology would stop matching the
+  // real local facade. Typed by the server-side bucket declaration, so it cannot half-wire.
+  const telemetryStore = createLocalTelemetryStore(':memory:')
+  const localFirst: Record<LocalFirstPersistenceRepository, unknown> = {
+    llmCallMetricRepository: telemetryStore.llmCallMetricRepository,
+    agentContextSnapshotRepository: telemetryStore.agentContextSnapshotRepository,
+    agentSearchQueryRepository: telemetryStore.agentSearchQueryRepository,
+    agentToolCallRepository: telemetryStore.agentToolCallRepository,
+    provisioningLogRepository: telemetryStore.provisioningLogRepository,
+    subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
+  }
+  const repos = createRemoteRepositoryRegistry(client, localFirst) as unknown as CoreRepositories
+  const credentialStore = createLocalCredentialStore(':memory:')
+  const recorder = new RecordingEventPublisher()
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildMothershipOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const container = buildNodeContainer({
     // No `db`: org/durable state is the remote registry, credentials are the local sqlite store.
     repos,
@@ -315,7 +430,26 @@ export function makeMothershipConformanceApp(
     ...(opts?.initiativePresetRegistry
       ? { initiativePresetRegistry: opts.initiativePresetRegistry }
       : {}),
+    // Inject the app-owned task-type registry (pre-loaded in the custom-task-type suite) so the
+    // SUT container resolves it by reference on this runtime.
+    ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
+    // Inject the app-owned PIPELINE registry (pre-loaded in the pipeline-retirement suite) so the
+    // SUT container resolves it by reference on this runtime.
+    ...(opts?.pipelineRegistry ? { pipelineRegistry: opts.pipelineRegistry } : {}),
+    // Inject the app-owned JUDGE registry (pre-loaded in the judge suite) so the SUT container
+    // resolves it by reference on this runtime.
+    ...(opts?.judgeRegistry ? { judgeRegistry: opts.judgeRegistry } : {}),
+    // The app-owned agent-kind registry and the external-executor registry, resolved by reference
+    // on this runtime like every other registry above. The kind registry is what tells the engine
+    // a kind's work leaves the platform, so the pair travels together: one without the other
+    // composes a container that can never route to the executor.
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
+    ...(opts?.delegatedExecutorRegistry
+      ? { delegatedExecutorRegistry: opts.delegatedExecutorRegistry }
+      : {}),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, SUT_ENV)
 
   async function call<T>(method: string, path: string, body?: unknown) {
@@ -331,6 +465,11 @@ export function makeMothershipConformanceApp(
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
   }
 
+  // The bytes read (the artifact blob endpoint), shared with the ordinary local harness rather
+  // than copied: a mothership node serves the same routes through the same app.
+  const callBinary = (method: string, path: string, extraHeaders?: Record<string, string>) =>
+    callBinaryThrough(app, method, path, extraHeaders)
+
   // Seed workspaces on the MOTHERSHIP directly (org/account creation is an onboarding concern,
   // deliberately NOT exposed over the persistence RPC — a machine token scopes accounts, it can't
   // mint them). Each new account id is added to the token scope so the SUT can reach it remotely.
@@ -339,7 +478,7 @@ export function makeMothershipConformanceApp(
     return (await ms.container.workspaceService.create(
       // Match the HTTP `POST /workspaces` default (`input.seed ?? true`) the other harnesses
       // get for free — most execution assertions reference the seeded demo board (`task_login`,
-      // `pl_quick`, `mod_sessions`). `createOrgWorkspace` overrides this to `false`.
+      // `pl_simple`, `mod_sessions`). `createOrgWorkspace` overrides this to `false`.
       { name: options.name ?? 'Board', seed: options.seed ?? true },
       CONF_USER.id,
       account.id,
@@ -416,9 +555,85 @@ export function makeMothershipConformanceApp(
   }
 
   // Seed/probe helpers write to the MOTHERSHIP's own Drizzle repos (the source of truth), so the
-  // SUT then reads them back over the RPC — exactly as the engine does in production.
+  // SUT then reads them back over the RPC — exactly as the engine does in production. Grouped in a
+  // sibling factory so this harness stays within the per-function line budget.
+  const {
+    seedPipeline,
+    seedIncorporatedReview,
+    seedReadyReview,
+    seedIncorporatedClarityReview,
+    seedReadyClarityReview,
+    seedService,
+    getService,
+    linkFrameRepo,
+    mothershipRepos,
+  } = createMothershipSeedHelpers(db)
+
+  return {
+    call,
+    callBinary,
+    createWorkspace,
+    createOrgWorkspace,
+    // The mothership harness routes persistence over the RPC and does not run the auth-enabled
+    // workspace-RBAC suite; expose the fields to satisfy the type, with auth reported off.
+    authEnabled: false,
+    session: async () => {
+      throw new Error('mothership harness does not run the auth-enabled workspace-RBAC suite')
+    },
+    createWorkspaceInAccount: (accountId, ownerUserId, options) =>
+      container.workspaceService.create(
+        { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
+        ownerUserId,
+        accountId,
+      ),
+    drive,
+    startExecution: (workspaceId, blockId, pipelineId, opts) =>
+      container.executionService.start(workspaceId, blockId, pipelineId, {
+        gatesOverride: opts?.gates,
+      }),
+    driveBootstrap,
+    driveEnvConfigRepair,
+    executionEmits,
+    boardEmits,
+    seedPipeline,
+    seedIncorporatedReview,
+    seedReadyReview,
+    seedIncorporatedClarityReview,
+    seedReadyClarityReview,
+    // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
+    executionRepository: () => ms.container.executionRepository,
+    requirementReviewRepository: () => mothershipRepos().requirementReviewRepository,
+    agentRunRepository: () => ms.container.agentRunRepository,
+    // Direct-store probes read the mothership's authoritative Postgres, like seedService.
+    blockRepository: () => mothershipRepos().blockRepository,
+    workspaceRepository: () => new DrizzleWorkspaceRepository(db),
+    workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
+    initiativeRepository: () => mothershipRepos().initiativeRepository,
+    notificationRepository: () => new DrizzleNotificationRepository(db),
+    documentRepository: () => new DrizzleDocumentRepository(db),
+    taskRepository: () => new DrizzleTaskRepository(db),
+    docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
+    accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
+    accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
+    seedService,
+    getService,
+    linkFrameRepo,
+    ...containerServiceProbes(container),
+  }
+}
+
+/**
+ * The suite's seed/probe helpers, writing straight to the mothership's own Drizzle repositories so
+ * the SUT reads them back over the persistence RPC exactly as the engine does in production. Split
+ * out of {@link makeMothershipConformanceApp} purely for size.
+ */
+function createMothershipSeedHelpers(db: DrizzleDb) {
   const mothershipRepos = () => createDrizzleRepositories(db, SEED_CLOCK)
 
+  function seedPipeline(workspaceId: string, pipeline: Pipeline) {
+    return mothershipRepos().pipelineRepository.insert(workspaceId, pipeline)
+  }
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return mothershipRepos().requirementReviewRepository.upsert(
       workspaceId,
@@ -437,47 +652,64 @@ export function makeMothershipConformanceApp(
       makeIncorporatedClarityReview(blockId, report),
     )
   }
+  function seedReadyClarityReview(workspaceId: string, blockId: string, openItems?: number) {
+    return mothershipRepos().clarityReviewRepository.upsert(
+      workspaceId,
+      makeReadyClarityReview(blockId, openItems),
+    )
+  }
   function seedService(service: Service) {
     return mothershipRepos().serviceRepository.insert(service)
   }
   function getService(id: string) {
     return mothershipRepos().serviceRepository.get(id)
   }
+  /**
+   * Written to the MOTHERSHIP's stores like every other seeder here, so a db-less node resolves the
+   * frame's repository over the persistence RPC rather than from a local copy it does not have.
+   */
+  function linkFrameRepo(link: FrameRepoLink) {
+    return seedFrameRepoLink(
+      {
+        installations: new DrizzleGitHubInstallationRepository(db),
+        projection: new DrizzleRepoProjectionRepository(db),
+        services: mothershipRepos().serviceRepository,
+      } satisfies FrameRepoLinkRepositories,
+      link,
+    )
+  }
 
   return {
-    call,
-    createWorkspace,
-    createOrgWorkspace,
-    drive,
-    startExecution: (workspaceId, blockId, pipelineId, opts) =>
-      container.executionService.start(
-        workspaceId,
-        blockId,
-        pipelineId,
-        undefined,
-        undefined,
-        undefined,
-        opts?.gates,
-      ),
-    driveBootstrap,
-    driveEnvConfigRepair,
-    executionEmits,
-    boardEmits,
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
-    // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
-    executionRepository: () => ms.container.executionRepository,
-    agentRunRepository: () => ms.container.agentRunRepository,
-    // Direct-store probes read the mothership's authoritative Postgres, like seedService.
-    blockRepository: () => mothershipRepos().blockRepository,
-    initiativeRepository: () => mothershipRepos().initiativeRepository,
-    notificationRepository: () => new DrizzleNotificationRepository(db),
-    documentRepository: () => new DrizzleDocumentRepository(db),
-    docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    seedReadyClarityReview,
     seedService,
     getService,
+    linkFrameRepo,
+    mothershipRepos,
+  }
+}
+
+/**
+ * The optional per-container service probes, split out of the app factory so its size stays inside
+ * the per-function budget. Each is undefined when this facade did not wire the service, which is
+ * how the suite skips an assertion rather than failing it on a deployment shape that legitimately
+ * lacks the store.
+ */
+function containerServiceProbes(
+  container: ServerContainer,
+): Pick<
+  ConformanceApp,
+  'onboarding' | 'toolServerDispatch' | 'localModelEndpoints' | 'openRouterCatalog'
+> {
+  return {
     onboarding: () => makeOnboardingProbe(container),
+    // The tool-server (MCP) dispatch resolution over this facade's own composed
+    // capability-credential chain: the half no HTTP route can show, since credential values are
+    // write-only on the wire and the resolution happens inside a job body.
+    toolServerDispatch: () => makeToolServerDispatchProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints
       if (!svc) return undefined

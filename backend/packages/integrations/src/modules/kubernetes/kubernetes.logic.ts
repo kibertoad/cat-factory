@@ -3,8 +3,17 @@ import type {
   ProviderConfigField,
   RunnerDispatchOptions,
 } from '@cat-factory/kernel'
-import { isCloudMetadataHost, ValidationError } from '@cat-factory/kernel'
-import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import {
+  deploymentImageVariantMessage,
+  isCloudMetadataHost,
+  isPlatformImageVariant,
+  RUNNER_IMAGE_UNWIRED_REASON,
+  UnavailableError,
+  unservablePlatformImageVariant,
+  ValidationError,
+} from '@cat-factory/kernel'
+import { HARNESS_JOB_PORT, KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import { addressBridges, planEnvironmentBridges } from '../shared/environmentBridge.js'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
 // building, the per-run pod-name derivation, the pod manifest, and the readiness
@@ -18,8 +27,11 @@ import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
  */
 export const KUBERNETES_TOKEN_KEY = KUBERNETES_RUNNER_TOKEN_SECRET_KEY
 
-/** Default port the executor-harness HTTP server listens on inside the pod. */
-export const DEFAULT_HARNESS_PORT = 8080
+/**
+ * Default port the executor-harness HTTP server listens on inside the pod, re-exported from the
+ * wire contract so the pod spec, the pod-proxy URL and the image itself can't name three numbers.
+ */
+export const DEFAULT_HARNESS_PORT = HARNESS_JOB_PORT
 
 /**
  * The shared NON-SECRET flat connect-form fields common to every apiserver-backed runner
@@ -105,9 +117,18 @@ export function k8sName(value: string, prefix: string, max = 63, fallback = 'x')
   return `${prefix}${body}`
 }
 
-/** Deterministic per-RUN pod name (one pod per run; steps re-attach to it). */
-export function podName(runId: string): string {
-  return k8sName(runId, 'cf-run-', 63, 'run')
+/**
+ * Deterministic pod name for one CONTAINER KEY (kernel's `containerKeyForRef`): a run's steps
+ * share one pod, EXCEPT that a step declaring a different executor image gets its own.
+ *
+ * It takes the key rather than the run id because that is the whole identity. A run's later
+ * `ensurePod` 409s and re-attaches by design, which is right for two steps that want the same
+ * image and silently wrong for two that do not: the second would run in the first's container,
+ * on an image chosen before its variant was known. The key already qualifies the run id with
+ * the variant, and `k8sName` folds its `:` into a hyphen like any other separator.
+ */
+export function podName(containerKey: string): string {
+  return k8sName(containerKey, 'cf-run-', 63, 'run')
 }
 
 /** kube-apiserver root with any trailing slash stripped (shared by runner + env). */
@@ -198,18 +219,58 @@ export function proxyUrl(config: KubernetesRunnerConfig, name: string, path: str
 /**
  * Resolve the image variant a dispatch needs: the heavier UI image for `image:'ui'`, the
  * separate deploy-harness image for `image:'deploy'` (the container-backed Kubernetes render
- * path), else the default executor image. Each variant falls back to the default when its image
- * isn't configured, so an unconfigured `imageDeploy` keeps the pod on the executor image (which
- * lacks the k8s CLIs — the deploy harness's own preflight then fails loudly rather than the pool
- * silently mis-running an agent image).
+ * path), else the default executor image.
+ *
+ * The two unconfigured variants are NOT symmetric, because what happens next differs. An
+ * unconfigured `imageDeploy` keeps the pod on the executor image, which lacks the k8s CLIs, and
+ * the deploy harness's own preflight then fails loudly naming them. An unconfigured `imageUi`
+ * has no such backstop: the executor image runs the browser-driven tester perfectly happily
+ * right up to the point it needs a browser, which is after the checkout, the install and the
+ * model's first turns, and the report that comes back is an `abort` indistinguishable from an
+ * app that would not boot. So `ui` is REFUSED here, naming the pool setting to fill in.
  */
 export function resolveImage(
   config: KubernetesRunnerConfig,
   options?: RunnerDispatchOptions,
 ): string {
-  if (options?.image === 'ui' && config.imageUi) return config.imageUi
-  if (options?.image === 'deploy' && config.imageDeploy) return config.imageDeploy
-  return config.image
+  const declared = options?.image || 'default'
+  if (!isPlatformImageVariant(declared)) {
+    // A DEPLOYMENT's own variant. Unlike `deploy` below, which falls back to the executor image so
+    // the deploy harness's own preflight reports the missing CLIs, nothing here knows what this one
+    // carries: running the default would produce a job silently missing it.
+    const mapped = config.imageVariants?.[declared]
+    if (mapped) return mapped
+    throw new UnavailableError(
+      deploymentImageVariantMessage(declared, "the runner backend's `imageVariants`"),
+      RUNNER_IMAGE_UNWIRED_REASON,
+      { image: declared, setting: 'imageVariants' },
+    )
+  }
+  // EXHAUSTIVE over the platform's own images, so a fourth published one fails this build until
+  // the pool says which image serves it. Falling through to `config.image` is what that would
+  // otherwise do, and it is the silent failure the whole seam exists to refuse: nothing downstream
+  // can say what the variant was meant to carry.
+  switch (declared) {
+    case 'default':
+      return config.image
+    case 'ui':
+      if (config.imageUi) return config.imageUi
+      throw new UnavailableError(
+        'This step runs on the UI-tester executor image (Playwright + a browser), but this ' +
+          "runner pool configures no UI-tester image. Set the pool's `imageUi` to a published " +
+          'cat-factory-executor-ui tag. Until then, drop the `tester-ui` step from the pipeline: ' +
+          'the visual-confirmation gate still runs on screenshots a person uploads.',
+        RUNNER_IMAGE_UNWIRED_REASON,
+        { image: declared, setting: 'imageUi' },
+      )
+    case 'deploy':
+      // Deliberately NOT symmetric with `ui`: an unconfigured deploy image keeps the pod on the
+      // executor image, whose own preflight then fails loudly naming the missing k8s CLIs (see the
+      // doc above). `ui` has no such backstop, which is why only it refuses here.
+      return config.imageDeploy ?? config.image
+    default:
+      return unservablePlatformImageVariant(declared)
+  }
 }
 
 /** Resolve the pod resource block for a dispatch (per-size override, else the default). */
@@ -274,9 +335,11 @@ export function buildPodManifest(
     },
     ...(resources ? { resources } : {}),
   }
+  const hostAliases = podHostAliases(options)
   const spec: Record<string, unknown> = {
     restartPolicy: 'Never',
     containers: [container],
+    ...(hostAliases.length ? { hostAliases } : {}),
     ...(config.serviceAccountName ? { serviceAccountName: config.serviceAccountName } : {}),
     ...(config.imagePullSecretName
       ? { imagePullSecrets: [{ name: config.imagePullSecretName }] }
@@ -295,6 +358,33 @@ export function buildPodManifest(
     },
     spec,
   }
+}
+
+/**
+ * The pod's `hostAliases`: the name-to-address mappings a job needs to reach the environments it
+ * was handed, grouped by address the way the API shape wants them.
+ *
+ * The Kubernetes half of the host bridge, and the reason the bridge target is a discriminated
+ * value rather than a Docker-only literal. `host-gateway` is a Docker-family token with no
+ * Kubernetes equivalent and is dropped here; a name-to-ADDRESS mapping is native
+ * (`{ ip, hostnames[] }`) and is exactly what a remote environment whose per-environment DNS
+ * record lives in a view this cluster cannot see needs. `addressBridges` owns that split so this
+ * transport and the local one cannot disagree about what they dropped.
+ *
+ * Grouped rather than one entry per host because the API takes a list of addresses each carrying
+ * its hostnames, and two names behind one balancer are the ordinary case.
+ */
+export function podHostAliases(
+  options?: RunnerDispatchOptions,
+): { ip: string; hostnames: string[] }[] {
+  const plan = planEnvironmentBridges(options?.environments ?? [])
+  const byIp = new Map<string, string[]>()
+  for (const bridge of addressBridges(plan.bridges)) {
+    const hostnames = byIp.get(bridge.ip)
+    if (hostnames) hostnames.push(bridge.host)
+    else byIp.set(bridge.ip, [bridge.host])
+  }
+  return [...byIp.entries()].map(([ip, hostnames]) => ({ ip, hostnames }))
 }
 
 /** Coerce an arbitrary id into a valid label value (<=63 chars, alnum/._-). */
@@ -321,8 +411,14 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
   return ready?.status === 'True' ? 'ready' : 'pending'
 }
 
-/** Classify a Deployment's status JSON: rolled out, still progressing, or failed. */
-export function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
+/**
+ * Classify a Deployment's status JSON: rolled out, still progressing, or failed.
+ *
+ * Module-private on purpose: {@link reduceRolloutProgress} owns the aggregation AND the prose a
+ * caller needs, and a caller reaching for the raw per-Deployment verdict is how a note-less
+ * `provisioning` answer got re-derived beside it.
+ */
+function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
   const obj = deployment as
     | { spec?: { replicas?: number }; status?: Record<string, unknown> }
     | null
@@ -343,6 +439,122 @@ export function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
     return 'gone'
   }
   return 'pending'
+}
+
+/**
+ * One Deployment's rollout state as a DIAGNOSTIC row: the per-object verdict plus the two replica
+ * counts behind it.
+ *
+ * The one sanctioned reader of the private classifier above, and it is not the lifecycle path:
+ * a diagnosis is a table of per-object facts an investigator reconciles, which is exactly what
+ * {@link reduceRolloutProgress} reduces away on purpose. Never use this to answer "is the
+ * environment ready" (that is `reduceRolloutProgress`, note and all).
+ *
+ * `desired` comes off `spec`, which is why the counts ride along rather than being re-read at the
+ * call site: a Deployment whose ReplicaSet never created a pod (a quota or an admission webhook
+ * refusing it) carries no `status.replicas` at all, and a `0/0 ready` row reads byte-for-byte like
+ * one deliberately scaled to zero.
+ */
+export function describeDeploymentRollout(deployment: unknown): {
+  readiness: PodReadiness
+  desired: number
+  ready: number
+} {
+  const obj = deployment as
+    | { spec?: { replicas?: number }; status?: { readyReplicas?: number } }
+    | null
+    | undefined
+  return {
+    readiness: classifyDeploymentReadiness(deployment),
+    desired: typeof obj?.spec?.replicas === 'number' ? obj.spec.replicas : 1,
+    ready: typeof obj?.status?.readyReplicas === 'number' ? obj.status.readyReplicas : 0,
+  }
+}
+
+/**
+ * How many workload names a rollout note lists before it stops naming them. A note is read in a
+ * step panel and a run-failure message, so an unbounded list of a large namespace's Deployments
+ * would push the sentence that matters off the surface.
+ */
+const ROLLOUT_NOTE_NAME_CAP = 5
+
+/**
+ * One namespace's Deployments reduced to a lifecycle verdict, plus (while it is still coming up)
+ * WHICH workloads have not landed.
+ *
+ * The note exists because `provisioning` is the answer that keeps a readiness wait alive, and
+ * before it the wait could only report its own duration: the deployer's 20-minute ceiling said
+ * that it had waited 20 minutes and nothing about what it had waited on. Naming the workloads
+ * separates the two cases an operator acts on differently: one Deployment of five stuck (look at
+ * that workload) versus all five (look at the namespace, the quota, the node).
+ *
+ * The verdict itself is unchanged from the reduction this replaces: no Deployment is `ready`
+ * (nothing to roll out), one terminally-failed rollout is `failed`, anything else outstanding is
+ * `provisioning`. Both non-`ready` answers carry prose, on the same argument and through the two
+ * channels their caller has: a `provisioning` verdict says what it is WAITING ON (`note`), and a
+ * `failed` one says WHICH workload gave up (`error`). The failed half had the workload's identity
+ * in hand and dropped it, so the environment recorded the literal 'Provisioning failed' for a
+ * failure whose exact name was computed here.
+ */
+export function reduceRolloutProgress(items: readonly unknown[]): {
+  status: 'ready' | 'provisioning' | 'failed'
+  note?: string
+  error?: string
+} {
+  if (items.length === 0) return { status: 'ready' } // nothing to roll out (e.g. a static Service)
+  const pending: string[] = []
+  for (const item of items) {
+    const readiness = classifyDeploymentReadiness(item)
+    if (readiness === 'gone') {
+      return { status: 'failed', error: describeFailedRollout(deploymentName(item)) }
+    }
+    if (readiness !== 'ready') pending.push(deploymentName(item))
+  }
+  if (pending.length === 0) return { status: 'ready' }
+  return { status: 'provisioning', note: describeRolloutNote(pending, items.length) }
+}
+
+/**
+ * The account of a rollout that gave up: WHICH workload, and where its cause is readable.
+ *
+ * A terminal rollout is the one verdict here whose caller records a `lastError`, and that column
+ * falls back to the literal 'Provisioning failed' when a provider hands it nothing. Naming the
+ * Deployment is what turns the run's failure card, the Environment panel and the outcome row from
+ * "something did not happen" into one workload an operator can open.
+ */
+function describeFailedRollout(name: string): string {
+  return (
+    `the Deployment '${name}' exceeded its rollout progress deadline: its pods never became ` +
+    'available, so the cluster stopped waiting for them. That workload is where the cause is (an ' +
+    'image that cannot be pulled, a container crash-looping, a pod nothing can schedule), not the ' +
+    'namespace as a whole.'
+  )
+}
+
+/** A Deployment's own name, or a stand-in saying the payload carried none. */
+function deploymentName(item: unknown): string {
+  const name = (item as { metadata?: { name?: unknown } } | null)?.metadata?.name
+  return typeof name === 'string' && name.trim() ? name.trim() : '(unnamed)'
+}
+
+/**
+ * The rollout note: how much of the namespace is outstanding, and which parts of it.
+ *
+ * A capped list SAYS it is capped rather than trailing off, so a reader never takes the names as
+ * the whole set (the same rule every other cap here follows).
+ */
+function describeRolloutNote(pending: readonly string[], total: number): string {
+  const listed = pending.slice(0, ROLLOUT_NOTE_NAME_CAP)
+  const dropped = pending.length - listed.length
+  const names =
+    listed.map((name) => `'${name}'`).join(', ') + (dropped > 0 ? `, and ${dropped} more` : '')
+  const scope =
+    pending.length < total
+      ? `${pending.length} of ${total} Deployments`
+      : total === 1
+        ? "the namespace's only Deployment"
+        : `all ${total} Deployments`
+  return `${scope} ${pending.length === 1 ? 'is' : 'are'} still rolling out: ${names}`
 }
 
 /**
@@ -404,6 +616,15 @@ function waitingOf(cs: Record<string, unknown>): { reason?: string; message?: st
 /** Format a kubelet `reason`/`message` pair as `"<reason>: <message>"` (bare reason if no message). */
 function joinReasonMessage(reason: string, message?: string): string {
   return message ? `${reason}: ${message}` : reason
+}
+
+/**
+ * A pod-status string worth reporting, or undefined. A whitespace-only value is treated as
+ * absent: the apiserver does write `message: ""`, and reporting it verbatim yields a line that
+ * announces an account and then gives none.
+ */
+function readPodStatusText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 /**
@@ -473,6 +694,103 @@ export function classifyPodStartupFailure(pod: unknown): string | null {
  */
 export function describePodStatus(pod: unknown): string {
   return analyzePodStatus(pod).detail
+}
+
+/** The `state.terminated` / `lastState.terminated` block, narrowed to the fields worth reporting. */
+function terminatedOf(
+  cs: Record<string, unknown>,
+  key: 'state' | 'lastState',
+): { exitCode?: number; signal?: number; reason?: string; message?: string } | undefined {
+  const block = (cs[key] as { terminated?: Record<string, unknown> } | undefined)?.terminated
+  if (!block) return undefined
+  return {
+    ...(typeof block.exitCode === 'number' ? { exitCode: block.exitCode } : {}),
+    ...(typeof block.signal === 'number' ? { signal: block.signal } : {}),
+    ...(typeof block.reason === 'string' ? { reason: block.reason } : {}),
+    ...(typeof block.message === 'string' ? { message: block.message } : {}),
+  }
+}
+
+/**
+ * The POST-MORTEM of a pod whose harness stopped answering: how its containers ended, plus
+ * whatever the pod itself says about being taken away. `''` when the pod status carries nothing.
+ *
+ * Distinct from {@link describePodStatus}, which explains a pod that has not come up YET and is
+ * read while the readiness loop still hopes. This one is read after the job poll 404s, when the
+ * only remaining question is what killed a workload that was running: `state.terminated` for a
+ * container that ended and was left in place (`restartPolicy: Never`, so the pod is not
+ * recreated), `lastState.terminated` for the run BEFORE a restart, and the pod-level
+ * `reason`/`message` for the deaths the container never saw at all (a kubelet eviction under
+ * node pressure names itself only there). Finding D1: this is the block the transport had the
+ * `apiFetch` to read and never did.
+ *
+ * `OOMKilled` is the value that pays for the whole function: a memory-capped agent container is
+ * otherwise indistinguishable from an unexplained vanishing.
+ */
+export function describePodTermination(pod: unknown): string {
+  const status = statusOf(pod)
+  const lines: string[] = []
+  for (const cs of containerStatuses(status)) {
+    // `state.terminated` is how it ended NOW; `lastState.terminated` is how the previous
+    // incarnation ended. Prefer the current one, but report the previous when the container is
+    // between lives (waiting to restart), which is where a crash loop's real cause sits.
+    const terminated = terminatedOf(cs, 'state') ?? terminatedOf(cs, 'lastState')
+    if (!terminated) continue
+    const name = typeof cs.name === 'string' ? cs.name : 'container'
+    const how = [
+      terminated.reason,
+      terminated.exitCode !== undefined ? `exit code ${terminated.exitCode}` : undefined,
+      terminated.signal !== undefined ? `signal ${terminated.signal}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(', ')
+    lines.push(
+      `Container '${name}' terminated${how ? `: ${how}` : ''}` +
+        `${terminated.message ? ` (${terminated.message})` : ''}`,
+    )
+  }
+  // A pod-level reason (`Evicted`, `NodeAffinity`, `Shutdown`) is the kubelet's own account of
+  // taking the pod away, which no container status reports: it is ADDITIONAL to the lines above,
+  // never a substitute for them.
+  //
+  // The two halves are read INDEPENDENTLY. `message` is the kubelet's prose ("The node was low on
+  // resource: ephemeral-storage", a preemption notice) and the apiserver does not guarantee the
+  // machine-readable `reason` beside it; gating the prose on the code drops the only evidence a
+  // pod carried and renders it as an empty detail, which is indistinguishable from a pod that
+  // said nothing at all.
+  const reason = readPodStatusText(status?.reason)
+  const message = readPodStatusText(status?.message)
+  if (reason) lines.push(`Pod ${joinReasonMessage(reason, message)}`)
+  else if (message) lines.push(`Pod reports: ${message}`)
+  return lines.join('\n')
+}
+
+/**
+ * Whether a pod's workload EXITED CLEANLY, i.e. every container that has ended reports exit code
+ * 0 and no signal. On a runner pod, whose only workload is the executor-harness, that means the
+ * harness was SHUT DOWN while the job it was serving was still in flight, rather than crashing or
+ * being reclaimed. False for everything else: a non-zero exit, a signal, a pod nothing terminated,
+ * and a pod whose kubelet reports its OWN reason for taking it away (`Evicted`, `Shutdown`,
+ * `NodeAffinity`), which is an eviction whatever the container managed to report on the way out.
+ *
+ * `restartPolicy: Never` is what makes this readable at all: the pod object outlives the workload
+ * until `release` deletes it, so the poll that finds the job gone can still ask how it ended. A pod
+ * already deleted or garbage-collected answers false, because an absent account is not a zero (the
+ * same rule the Apple `container` runtime falls under locally).
+ */
+export function podExitedCleanly(pod: unknown): boolean {
+  const status = statusOf(pod)
+  if (readPodStatusText(status?.reason)) return false
+  let ended = 0
+  for (const cs of containerStatuses(status)) {
+    // `state.terminated` only: `lastState` is a PREVIOUS incarnation, and how an earlier life
+    // ended says nothing about the exit that just stopped serving this job.
+    const terminated = terminatedOf(cs, 'state')
+    if (!terminated) continue
+    ended += 1
+    if (terminated.exitCode !== 0 || terminated.signal !== undefined) return false
+  }
+  return ended > 0
 }
 
 /**

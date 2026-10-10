@@ -34,17 +34,20 @@ export const CLARITY_FIXTURES: SandboxFixtureDefinition[] = [
       exp('quantify', '"Slow" is not quantified — how slow, vs what baseline, and measured how?', {
         impact: 4,
         trickiness: 1,
-        matchHints: ['how slow', 'quantif', 'load time', 'response time', 'baseline', 'measured'],
+        matchHints: ['how slow', 'quantif*', 'load time', 'response time', 'baseline', 'measured'],
       }),
       exp(
         'regression-window',
         '"Fine before" — when did it regress, and what changed (deploy, data growth) around then?',
         {
           impact: 4,
-          trickiness: 3,
+          // Raised to 4: this fixture's own notes call it the higher-skill catch, and with nothing
+          // rated tricky the whole fixture scored a flat wowBonus of 1 for every answer, so it
+          // ranked a thorough triage exactly level with one that only asked for repro steps.
+          trickiness: 4,
           detail:
             'Pinning the regression window is the highest-leverage triage question and is easy to skip past.',
-          matchHints: ['when did', 'regress', 'started', 'deploy', 'recently'],
+          matchHints: ['when did', 'regress*', 'started', 'deploy', 'recently'],
         },
       ),
       exp(
@@ -88,9 +91,9 @@ export const CLARITY_FIXTURES: SandboxFixtureDefinition[] = [
           detail:
             'Separating the symptoms is the key triage move — each likely has a different root cause.',
           matchHints: [
-            'separate',
+            'separat*',
             'distinct',
-            'conflate',
+            'conflat*',
             'three different',
             'different issues',
             '2fa',
@@ -135,6 +138,139 @@ export const CLARITY_FIXTURES: SandboxFixtureDefinition[] = [
       ),
     ],
     notes: 'The symptom-conflation and the session/cookie hypothesis are the high-skill catches.',
+  },
+  {
+    // A money bug, which is the case where containment outranks diagnosis: the triage that only asks
+    // for reproduction steps leaves customers overcharged while the repro is gathered.
+    id: 'clarity-double-charge-moderate',
+    agentKind: 'clarity-review',
+    kind: 'clarity',
+    name: 'Customers charged twice (moderate)',
+    difficulty: 'moderate',
+    summary: 'A billing report whose stated symptom may not be the actual symptom.',
+    payload: {
+      block: {
+        title: 'Some customers were charged twice',
+        type: 'service',
+        description: [
+          'Support has had four tickets this week from customers saying they were charged twice for',
+          'their subscription. One of them sent a screenshot of two identical lines on their card',
+          'statement. It seems to have started around the beginning of the month. Please look into it',
+          'urgently, people are asking for refunds.',
+        ].join(' '),
+      },
+      service: {
+        stated: true,
+        frameId: 'frame-billing',
+        title: 'Billing',
+        description: 'Subscriptions, invoicing, payment capture and credits.',
+      },
+    },
+    expectations: [
+      exp(
+        'containment-first',
+        'How many customers and how much money: is it four or four hundred, and have refunds been issued or is the charge still standing?',
+        {
+          impact: 5,
+          trickiness: 3,
+          detail:
+            'The must-find. Four tickets is a lower bound on a population nobody has queried, and a ' +
+            'money bug needs its blast radius and its remediation decided before the root cause.',
+          matchHints: [
+            'how many',
+            'how much',
+            'affected',
+            'blast radius',
+            'refund',
+            'query the',
+            'total amount',
+            'still charged',
+          ],
+        },
+      ),
+      exp(
+        'identify-the-charges',
+        'Which exact charges: ids, amounts, timestamps and the subscription they belong to.',
+        {
+          impact: 5,
+          trickiness: 1,
+          matchHints: [
+            'charge id',
+            'transaction id',
+            'exact',
+            'timestamps',
+            'amounts',
+            'which charges',
+            'payment id',
+          ],
+        },
+      ),
+      exp(
+        'symptom-may-be-wrong',
+        'Two statement lines are not proof of two charges: an authorization hold beside a capture, or a card-network re-presentment, looks identical to a customer.',
+        {
+          impact: 5,
+          trickiness: 5,
+          detail:
+            'The standout catch, and the reason this report is dangerous rather than merely vague. ' +
+            'A triage that accepts "charged twice" as the symptom sends an engineer hunting a ' +
+            'duplicate-charge bug that may not exist, while the real question is whether our ledger ' +
+            'shows one charge or two.',
+          matchHints: [
+            'authorization',
+            'authoriz*',
+            'hold',
+            'pending',
+            'pre-auth',
+            'capture',
+            'only one charge',
+            'our records',
+            'ledger',
+            'actually charged twice',
+          ],
+        },
+      ),
+      exp(
+        'retry-idempotency-hypothesis',
+        'If our ledger does show two charges, the likely cause is a retried payment attempt with no idempotency key.',
+        {
+          impact: 4,
+          trickiness: 4,
+          detail:
+            'The right hypothesis to state, and one worth stating conditionally rather than as a ' +
+            'conclusion, since it only applies if the previous question comes back "yes, two".',
+          matchHints: [
+            'idempoten*',
+            'retry',
+            'retried',
+            'duplicate request',
+            'timeout',
+            'webhook',
+            'processed twice',
+          ],
+        },
+      ),
+      exp(
+        'regression-window',
+        '"Around the beginning of the month" needs pinning: what changed then, and does it coincide with the billing run?',
+        {
+          impact: 4,
+          trickiness: 3,
+          matchHints: [
+            'when exactly',
+            'what changed',
+            'deploy',
+            'billing run',
+            'renewal date',
+            'first of the month',
+            'regress*',
+          ],
+        },
+      ),
+    ],
+    notes:
+      'The fixture that rewards doubting the reported symptom. Containment is the must-find; ' +
+      'questioning whether a double charge happened at all is the catch almost nobody makes.',
   },
   {
     id: 'clarity-data-loss-complex',
@@ -202,8 +338,8 @@ export const CLARITY_FIXTURES: SandboxFixtureDefinition[] = [
           detail:
             'Data-loss bugs need a recovery/containment question, not just a fix — frequently missed under time pressure.',
           matchHints: [
-            'recover',
-            'restore',
+            'recover*',
+            'restor*',
             'version history',
             'audit',
             'how many affected',
@@ -217,7 +353,7 @@ export const CLARITY_FIXTURES: SandboxFixtureDefinition[] = [
         {
           impact: 3,
           trickiness: 2,
-          matchHints: ['not every time', 'intermittent', 'only when', 'overlap'],
+          matchHints: ['not every time', 'intermittent', 'only when', 'overlap*'],
         },
       ),
     ],

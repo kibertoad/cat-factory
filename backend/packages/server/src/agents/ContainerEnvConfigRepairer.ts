@@ -1,5 +1,4 @@
 import type {
-  AgentFailureKind,
   EnvConfigRepairer,
   EnvConfigRepairHandle,
   EnvConfigRepairRequest,
@@ -7,10 +6,12 @@ import type {
   EnvironmentProvider,
   GitHubInstallationRepository,
   ModelRef,
+  RepoProjectionRepository,
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
+import type { MintInstallationToken } from './repoTargeting.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
 
@@ -20,7 +21,7 @@ import { logger } from '../observability/logger.js'
 // ⚠️ This is NOT the "bootstrap repo" task. That flow (ContainerRepoBootstrapper)
 // reinitialises git history and force-pushes a fresh service into an EMPTY repo. This
 // flow leaves history intact: it clones an EXISTING repo at a given ref, has a coding
-// agent fix the provider's malformed/partial config file (e.g. `.kargo.yml`) in place,
+// agent fix the provider's malformed/partial config file (e.g. `.deploy.yml`) in place,
 // and pushes the fix back onto the SAME branch — no history reset, no force-push, no PR,
 // no separate target repo. It dispatches the GENERIC `coding` job with NO `bootstrap`
 // block, so the harness takes its ordinary clone→edit→push path. The two flows share
@@ -51,8 +52,19 @@ export interface ContainerEnvConfigRepairerDependencies {
   resolveTransport: ResolveRunnerTransport
   /** Resolve which GitHub installation a workspace's repos live under (clone + push). */
   installationRepository: Pick<GitHubInstallationRepository, 'getByWorkspace'>
-  /** Mints a short-lived GitHub installation token for clone + push. */
-  mintInstallationToken: (installationId: number) => Promise<string>
+  /**
+   * Mints a short-lived GitHub installation token for clone + push, scoped to the single repo
+   * being repaired. A repair has no run initiator, so it names no `initiatedBy` and always runs
+   * on the deployment credential.
+   */
+  mintInstallationToken: MintInstallationToken
+  /**
+   * The workspace's repo projection, read to turn the request's `owner`/`repo` into the numeric
+   * id the token scope is expressed in. Required rather than optional: this is the only thing
+   * standing between a repair container and an installation-wide credential, and an optional
+   * dependency is how a facade forgets to wire one without anything failing.
+   */
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
   /** Mints the signed, model-locked LLM-proxy session token the container uses. */
   sessionService: ContainerSessionService
   /** The provider whose `describeRepairAgent` supplies the repair prompt. */
@@ -118,7 +130,16 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       throw new Error('The environment provider does not support agent-based config repair.')
     }
 
-    const ghToken = await this.deps.mintInstallationToken(installation.installationId)
+    // The token is scoped to the one repo the agent clones, edits and pushes back onto. The
+    // request names it by owner/name, so the numeric id comes off the workspace's projection;
+    // a repo the projection has not caught up with yields an EMPTY scope, which widens the mint
+    // installation-wide and says so, rather than failing a repair over a stale read.
+    const repoIds = await this.resolveRepoScope(workspaceId, owner, repo)
+    const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
+      executionId: jobId,
+      workspaceId,
+      repoIds,
+    })
     const sessionToken = await this.deps.sessionService.mint({
       workspaceId,
       executionId: jobId,
@@ -137,11 +158,20 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
     // no-op is a clean non-event (the config may already be acceptable).
     const body = {
       jobId,
+      // The run's correlation ids, matching `buildCommonBody` — a repair dispatches the same
+      // `agent` kind, so its container lines join to the backend's on `executionId` like any
+      // other. As with bootstrap, the job id IS the run id here (no separate execution row),
+      // which is what `sessionService.mint` is handed above.
+      workspaceId,
+      executionId: jobId,
       mode: 'coding',
       systemPrompt,
       userPrompt: spec.prompt,
       model: this.deps.model.model,
       proxyBaseUrl: this.deps.proxyBaseUrl,
+      // This backend serves the phase-tagged completions route (see `ContainerAgentExecutor`),
+      // so this flow's calls are attributed rather than landing in the unattributed slice.
+      proxyPhasePath: true,
       sessionToken,
       ghToken,
       repo: { owner, name: repo, baseBranch: gitRef, cloneUrl },
@@ -174,16 +204,15 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       return {
         state: 'failed',
         // Prefer the transport's STRUCTURED eviction verdict, then the harness's structured
-        // `failureCause` (via the kernel's shared mapper); the error-string regex in
-        // classifyRepairFailure is the fallback only for an older producer that reports neither
-        // field (and also catches the facade-emitted eviction, for which the harness sets no
-        // cause). Both eviction kinds (`crash` / `transient`) collapse to the single `evicted`
-        // failure kind on purpose — env-config repair has no transient-vs-crash recovery budget
-        // (only the run driver's `recoverContainerEviction` splits them), so the distinction is
-        // meaningless here.
+        // `failureCause` (via the kernel's shared mapper); default to the coarse `agent` when
+        // neither is present (the watchdog-phrase string fallback is gone — current images always
+        // emit a cause). Both eviction kinds (`crash` / `transient`) collapse to the single
+        // `evicted` failure kind on purpose — env-config repair has no transient-vs-crash recovery
+        // budget (only the run driver's `recoverContainerEviction` splits them), so the
+        // distinction is meaningless here.
         failureKind: view.evicted
           ? 'evicted'
-          : (failureKindFromHarnessCause(view.failureCause) ?? classifyRepairFailure(error)),
+          : (failureKindFromHarnessCause(view.failureCause) ?? 'agent'),
         error,
         detail: view.error,
       }
@@ -210,17 +239,27 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
   async stopRepair(handle: EnvConfigRepairHandle): Promise<void> {
     await this.jobs.release(handle.workspaceId, { runId: handle.jobId, jobId: handle.jobId })
   }
-}
 
-/**
- * Classify a failed repair job's error message into an {@link AgentFailureKind} — the FALLBACK
- * when the harness reported no structured cause (the kernel's shared
- * `failureKindFromHarnessCause` wins when one is present). The transport maps an
- * evicted/crashed container (a 404 poll) to a failed view, and the harness redacts + labels
- * its watchdog kills. Everything else is an agent fault.
- */
-function classifyRepairFailure(error: string): AgentFailureKind {
-  if (/evicted or crashed/i.test(error)) return 'evicted'
-  if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
-  return 'agent'
+  /**
+   * The repo the repair token may reach, as the neutral id the mint's scope speaks in.
+   *
+   * A repair request identifies its target by `owner`/`repo` because that is what the bootstrap
+   * flow that raises it has, so the numeric id is read off the workspace's own projection. An
+   * empty result is returned rather than thrown: the projection lagging behind a just-linked repo
+   * is a reason to widen the token and report it (`buildDispatchTokenMint`), not to refuse a
+   * repair the operator asked for.
+   */
+  private async resolveRepoScope(
+    workspaceId: string,
+    owner: string,
+    repo: string,
+  ): Promise<string[]> {
+    const projected = await this.deps.repoRepository.list(workspaceId)
+    const match = projected.find(
+      (row) =>
+        row.owner.toLowerCase() === owner.toLowerCase() &&
+        row.name.toLowerCase() === repo.toLowerCase(),
+    )
+    return match ? [String(match.githubId)] : []
+  }
 }

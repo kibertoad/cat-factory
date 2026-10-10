@@ -37,10 +37,7 @@ export const kubernetesRunnerBackend: RunnerBackendProvider = {
     skeleton: () => ({ kind: 'kubernetes', kubernetes: {} }) as RunnerBackendConfig,
     valuesFromConfig: (config) =>
       'kubernetes' in config
-        ? flattenConfigValues(
-            config.kubernetes as unknown as Record<string, unknown>,
-            KUBERNETES_RUNNER_FORM_FIELDS,
-          )
+        ? flattenConfigValues(config.kubernetes, KUBERNETES_RUNNER_FORM_FIELDS)
         : {},
   },
   // Structural (`'kubernetes' in config`) narrowing, not `config.kind === 'kubernetes'`: the

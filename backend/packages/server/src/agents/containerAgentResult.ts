@@ -1,24 +1,60 @@
-import type { AgentRunResult, RunnerJobResult } from '@cat-factory/kernel'
-import { INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
-import { coerceBlueprintService, coerceInitiativePlan, coerceSpecDoc } from '@cat-factory/agents'
-import {
-  BLUEPRINTS_AGENT_KIND,
-  MERGER_AGENT_KIND,
-  ON_CALL_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
-  TESTER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
-} from '@cat-factory/orchestration'
+import type {
+  AgentJobHandle,
+  AgentJobUpdate,
+  AgentRunResult,
+  ContainerEvictionKind,
+  HarnessFailureCause,
+  RunnerJobResult,
+  RunnerJobView,
+  StreamedFollowUp,
+} from '@cat-factory/kernel'
+import { agentUsageFromHarnessCalls } from '@cat-factory/kernel'
+import { type AgentKindRegistry, summaryOr } from '@cat-factory/agents'
+import { providerOf } from './containerJobAddressing.js'
 
 /**
  * Runner-output → engine-result normalisation for {@link ContainerAgentExecutor}.
  *
- * Extracted verbatim from `ContainerAgentExecutor.ts` (no behaviour change): these are the
- * pure functions that turn a finished {@link RunnerJobResult} into the engine's
- * {@link AgentRunResult}, including the kind-aware coercions (blueprint / spec / merge /
- * on-call / test) that used to live in the bespoke harness handlers. The output boundary
- * of the executor, kept as a self-contained, independently-testable unit.
+ * These are the pure functions that turn a finished {@link RunnerJobResult} into the engine's
+ * {@link AgentRunResult}. The KIND-AWARE half (blueprint / spec / merge / on-call / test) used to
+ * be an `agentKind === …` chain here, the second of the two switches the agent-kind strangler set
+ * out to delete; it is now one registry lookup, because every built-in declares its own
+ * `mapStructuredResult` beside its dispatch shape. The output boundary of the executor, kept as a
+ * self-contained, independently-testable unit.
  */
+
+/**
+ * The engine result for a SETTLED job: {@link toRunResult}'s mapping plus the two things only
+ * the dispatch HANDLE knows, folded on here rather than at the poll site.
+ *
+ * The poll site cannot resolve a model ref, so without the handle both of these land wrong and
+ * silently: the ledger records provider "unknown" / model "", and a subscription run's tokens
+ * are filed against nobody. The inline `run()` path used to fold the model in itself, which is
+ * why this lives with the other result normalisation instead: one place, both paths.
+ *
+ * `callMetrics` is what marks a SUBSCRIPTION run. Those harnesses (Claude Code / Codex / GLM /
+ * pooled Kimi & DeepSeek) bypass the LLM proxy, so nothing else meters their tokens, and they
+ * are the only container path that emits per-call rows. Pi is proxy-metered and emits none, so
+ * its usage stays off the result and the proxy remains its sole meter with no double-count.
+ *
+ * Those same per-call rows are the only channel that kept the input CLASSES apart, so the usage
+ * is split by them: a long agent run is overwhelmingly cache reads, and pricing its whole input
+ * at the fresh rate over-stated its cost several-fold on every operator usage report.
+ */
+export function settledRunResult(
+  result: RunnerJobResult,
+  handle: AgentJobHandle,
+  registry: AgentKindRegistry,
+): AgentRunResult {
+  const runResult = toRunResult(result, handle.agentKind, registry)
+  if (handle.model) runResult.model = handle.model
+  if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
+    runResult.usage = agentUsageFromHarnessCalls(result.usage, result.callMetrics)
+    runResult.usageBilling = 'subscription'
+    runResult.usageVendor = handle.provider ?? providerOf(handle.model)
+  }
+  return runResult
+}
 
 /**
  * Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}.
@@ -27,89 +63,69 @@ import {
  * (the coder), or just `pushed` (the in-place fixers / conflict-resolver). No `model` here:
  * the proxy meters tokens and the async path doesn't carry the provider ref to the poll
  * site; `usage` is likewise omitted (metered by the proxy).
+ *
+ * The container agent's effort self-assessment (`result.effortReport`, lifted by the harness
+ * from the agent's sentinel file) is attached to EVERY mapped result — it is orthogonal to
+ * the kind-specific channels — so the engine records it on the step for run details.
  */
-export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
-  // A generic, structured `agent` (explore) job returns its parsed JSON as `custom`. A
-  // migrated built-in kind has it coerced into the well-known engine field here, KIND-AWARE
-  // — the conservative coercion that used to live in the bespoke harness handlers
-  // (blueprint/spec/merge/on-call/test) now runs backend-side, so the engine's
-  // resolvers/gates see `blueprintService`/`spec`/`mergeAssessment`/`onCallAssessment`/
-  // `testReport` exactly as before. Any other kind (a registered custom kind) surfaces the
-  // raw JSON as `custom` for its post-op to coerce/render from.
-  if (result.custom !== undefined) {
-    // Blueprinter: coerce into `blueprintService` (board reconcile + `blueprintPostOp`
-    // render/commit). A nameless/garbage tree coerces to null ⇒ left unset.
-    if (agentKind === BLUEPRINTS_AGENT_KIND) {
-      const service = coerceBlueprintService(result.custom, '')
-      return {
-        output: result.summary?.trim() || 'Service blueprint updated.',
-        ...(service ? { blueprintService: service } : {}),
-      }
-    }
-    // Spec-writer: coerce into `spec` (engine strict-validate + `specPostOp` shard/commit).
-    // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
-    // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
-    if (agentKind === SPEC_WRITER_AGENT_KIND) {
-      // A purely TECHNICAL task has no business requirements to specify: the writer signals
-      // `noBusinessSpecs` and we leave the baseline spec untouched (NO `spec` channel, so
-      // `specPostOp` commits nothing). The engine reads the flag to infer the block's
-      // `technical` label (with the spec-companion's corroboration). Checked first so a
-      // model that returned both the flag and a stray baseline echo never commits over it.
-      const custom = result.custom as Record<string, unknown> | null
-      if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
-        return {
-          output:
-            result.summary?.trim() ||
-            'No business requirements to specify — this is a technical task.',
-          noBusinessSpecs: true,
-        }
-      }
-      const spec = coerceSpecDoc(result.custom, '')
-      return {
-        output: result.summary?.trim() || 'Service specification updated.',
-        ...(spec ? { spec } : {}),
-      }
-    }
-    // Initiative planner: coerce into `initiativePlan` (the engine's strict parse +
-    // ingest into the `initiatives` entity). A structureless/garbage plan coerces to
-    // null ⇒ left unset (no ingest — the step still records its prose output).
-    if (agentKind === INITIATIVE_PLANNER_AGENT_KIND) {
-      const plan = coerceInitiativePlan(result.custom)
-      return {
-        output: result.summary?.trim() || 'Initiative plan drafted.',
-        ...(plan ? { initiativePlan: plan } : {}),
-      }
-    }
-    if (agentKind === MERGER_AGENT_KIND) {
-      return {
-        output: result.summary?.trim() || 'Pull request assessed.',
-        mergeAssessment: coerceMergeAssessment(result.custom, result.summary),
-      }
-    }
-    if (agentKind === ON_CALL_AGENT_KIND) {
-      return {
-        output: result.summary?.trim() || 'Release regression investigated.',
-        onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
-      }
-    }
-    // Tester: coerce into `testReport` (greenlight-or-loop the fixer; the conservative
-    // greenlight/blocking rule the harness `/test` handler applied now runs in
-    // `coerceTestReport`, re-applied defensively by the TesterController).
-    if (agentKind === TESTER_AGENT_KIND || agentKind === UI_TESTER_AGENT_KIND) {
-      return {
-        output: result.summary?.trim() || 'Testing complete.',
-        testReport: coerceTestReport(result.custom, result.summary),
-        // The in-container docker-compose stand-up record (local-infra tester) — forwarded so
-        // the engine can persist its captured logs on the Tester step. Harness-produced, so
-        // no coercion; the TesterController validates it defensively before persisting.
-        ...(result.infraSetup ? { infraSetup: result.infraSetup } : {}),
-      }
-    }
-    return {
-      output: result.summary?.trim() || 'Agent run complete.',
-      custom: result.custom,
-    }
+export function toRunResult(
+  result: RunnerJobResult,
+  agentKind: string | undefined,
+  registry: AgentKindRegistry,
+): AgentRunResult {
+  const mapped =
+    result.custom !== undefined
+      ? coerceCustomResult(result, agentKind, registry)
+      : mapPushOrPrResult(result)
+  // The pre-PR validation report is orthogonal to the kind-specific channels (like
+  // `effortReport`), so attach it to EVERY mapped result: on the success path it is the captured
+  // proof the checkout was green BEFORE the PR opened — the whole point of the feature. A failed
+  // job never reaches here; its report rides the `failed` update's `validationReport`.
+  const withValidation = result.validationReport
+    ? { ...mapped, validationReport: result.validationReport }
+    : mapped
+  // The bugfix reproduction proof, likewise orthogonal to the kind-specific channels. Attached on
+  // the SUCCESS path too, and for every verdict: `inconclusive` is not a failure, it is the honest
+  // statement that the reproduction could not be demonstrated — dropping it here would leave the
+  // PR report unable to tell that apart from a run where the phase never ran at all.
+  const withReproduction = result.reproductionReport
+    ? { ...withValidation, reproductionReport: result.reproductionReport }
+    : withValidation
+  return result.effortReport
+    ? { ...withReproduction, effortReport: result.effortReport }
+    : withReproduction
+}
+
+/**
+ * Coerce a structured `agent` job's parsed `custom` JSON into the engine's {@link AgentRunResult}.
+ *
+ * ONE registry lookup, no kind chain: a built-in whose reply the engine reads through a typed
+ * channel it acts on (`mergeAssessment` gates the real merge, `testReport` greenlights the run or
+ * loops the fixer, `spec` is sharded into the repo) declares that mapping on its own registration,
+ * beside the dispatch shape that produced the reply. Every other kind — a deployment's own
+ * structured explore agent, and any built-in with no engine channel — surfaces the raw JSON as
+ * `custom` for its post-op to render from. Called only when `result.custom !== undefined`.
+ */
+function coerceCustomResult(
+  result: RunnerJobResult,
+  agentKind: string | undefined,
+  registry: AgentKindRegistry,
+): AgentRunResult {
+  const mapStructured = agentKind ? registry.mapStructuredResult(agentKind) : undefined
+  if (mapStructured) return mapStructured(result)
+  return {
+    output: summaryOr(result, 'Agent run complete.'),
+    custom: result.custom,
   }
+}
+
+/**
+ * Map a finished coding/fixer job (no structured `custom`) into the engine result: a PR the run
+ * opened, an in-place push back onto the branch, or a clean no-op — carrying any peer PRs a
+ * multi-repo run opened. Extracted from {@link toRunResult} to keep each function within the
+ * complexity budget; behaviour is byte-identical.
+ */
+function mapPushOrPrResult(result: RunnerJobResult): AgentRunResult {
   // PRs a multi-repo run opened in connected services' repos (service-connections phase 3),
   // beside the own-service PR. Lifted onto `AgentRunResult.peerPullRequests` for the engine
   // to record on the block; absent for a single-repo run.
@@ -136,6 +152,9 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
         ...(result.branch ? { branch: result.branch } : {}),
       },
       ...(peerPullRequests?.length ? { peerPullRequests } : {}),
+      // A ralph iteration opens the PR on its first pass; carry its harness-computed
+      // validation verdict so the ralph loop's completion interceptor can read it.
+      ...(result.ralphVerdict ? { ralphVerdict: result.ralphVerdict } : {}),
     }
   }
   // An in-place coding job with no PR (ci-fixer / fixer / conflict-resolver): it pushed back
@@ -155,14 +174,16 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
     return {
       output: `${base}${peerNote}`,
       ...(peerPullRequests?.length ? { peerPullRequests } : {}),
+      // Later ralph iterations push to the same branch (no new PR); carry the verdict.
+      ...(result.ralphVerdict ? { ralphVerdict: result.ralphVerdict } : {}),
     }
   }
   return { output: result.summary?.trim() || 'Implementation complete.' }
 }
 
 /**
- * Map a multi-repo run's peer-PR entries (harness `{ repo, frameId?, prUrl, branch }`) into
- * the engine's `AgentRunResult.peerPullRequests` (`{ repo, frameId?, ref: PullRequestRef }`),
+ * Map a multi-repo run's peer-PR entries (harness `{ repo, frameIds?, prUrl, branch }`) into
+ * the engine's `AgentRunResult.peerPullRequests` (`{ repo, frameIds?, ref: PullRequestRef }`),
  * deriving the PR number from the URL like the own-service PR. Returns undefined when the run
  * reported none, so a single-repo run's result is byte-identical to before.
  */
@@ -172,7 +193,7 @@ function mapPeerPullRequests(
   if (!peers?.length) return undefined
   return peers.map((p) => ({
     repo: p.repo,
-    ...(p.frameId ? { frameId: p.frameId } : {}),
+    ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
     ref: {
       url: p.prUrl,
       ...(prNumberFromUrl(p.prUrl) !== undefined ? { number: prNumberFromUrl(p.prUrl) } : {}),
@@ -190,147 +211,111 @@ function prNumberFromUrl(url: string): number | undefined {
 }
 
 /**
- * Clamp a value to a 0..1 number, defaulting to `fallback` for anything that is not a
- * finite number (or a non-empty numeric string). Crucially, `null`, `''`, `false` and `[]`
- * fall back rather than coercing to `0` — `Number()` turns all of them into a finite `0`,
- * which would silently make a garbage merger score read as "trivial/safe" and defeat the
- * conservative-on-garbage default that replaces the harness's old `diffExaminable` guard.
+ * Map a `running` runner view into the engine's `running` {@link AgentJobUpdate}: the live
+ * subtask counts (so the step can surface "3/8 done"), the container's current lifecycle phase
+ * and identity/address, the harness liveness heartbeat (which keeps a quiet-but-alive run's
+ * `updated_at` fresh), and the latest pre-PR validation attempt (so the repair loop is visible
+ * WHILE it runs rather than only at the end). Pure — the executor's poll site owns the side
+ * effects (telemetry, usage attribution) and delegates the SHAPING here, alongside the terminal
+ * normalisation this file already owns.
  */
-function clamp01(value: unknown, fallback: number): number {
-  const n =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim() !== ''
-        ? Number(value)
-        : Number.NaN
-  if (!Number.isFinite(n)) return fallback
-  return Math.min(1, Math.max(0, n))
-}
-
-/** First non-empty of the agent's rationale or run summary (capped), else a stable default. */
-function coerceRationale(rationale: unknown, summary: string | undefined): string {
-  if (typeof rationale === 'string' && rationale.trim()) return rationale
-  if (summary?.trim()) return summary.slice(0, 2000)
-  return 'No rationale provided.'
+export function buildRunningUpdate(
+  view: RunnerJobView,
+  followUps: { followUps?: StreamedFollowUp[] },
+): Extract<AgentJobUpdate, { state: 'running' }> {
+  const containerMeta = {
+    ...(view.phase ? { phase: view.phase } : {}),
+    ...(view.container ? { container: view.container } : {}),
+    ...(view.backend ? { backend: view.backend } : {}),
+    ...(view.heartbeatAt ? { lastActivityAt: view.heartbeatAt } : {}),
+    // A published validation attempt is FINAL; the harness republishes a NEW attempt rather
+    // than mutating the last one, so forwarding the latest on every poll is safe.
+    ...(view.validationReport ? { validationReport: view.validationReport } : {}),
+    // Likewise for the reproduction proof: a published attempt is FINAL and the harness
+    // republishes a whole NEW one (with a fresh `at`) per repair round, so forwarding the latest
+    // on every poll is safe — and is what makes a failed verification visible while the loop runs.
+    ...(view.reproductionReport ? { reproductionReport: view.reproductionReport } : {}),
+    // The per-slice reviews of a parallel review, forwarded latest-wins for the same reason — but
+    // load-bearing rather than merely observable: this is the ONLY path by which a review's
+    // finished slices become durable BEFORE its aggregation pass returns, so a poll that drops
+    // them costs real review work. The harness republishes the whole set on each slice.
+    ...(view.sliceReviews ? { sliceReviews: view.sliceReviews } : {}),
+    // The CLI's own startup report on the tool servers this dispatch wired. Republished whole by
+    // the harness on every poll rather than drained, so forwarding the latest is safe and no
+    // single dropped poll response can be the one that loses it — which matters here more than
+    // for the reports above, since the CLI announces its servers exactly once.
+    ...(view.toolServers ? { toolServers: view.toolServers } : {}),
+  }
+  return view.progress
+    ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
+    : { state: 'running', ...followUps, ...containerMeta }
 }
 
 /**
- * Coerce a migrated `merger` agent's structured JSON into the engine's merge assessment.
- * This is the conservative coercion the harness `/merge` handler used to do: a missing or
- * garbage score defaults to 1 (severe → routes to human review rather than a silent
- * auto-merge), and the rationale falls back to the agent's summary. The harness's extra
- * container-side `diffExaminable` guard (force 1/1/1 when the base diff was unreadable) is
- * not reproducible backend-side; the conservative-on-garbage default covers the same risk.
+ * Map a settled-and-successful runner view into the engine's `done` {@link AgentJobUpdate}: the
+ * normalised run result, any final burst of streamed follow-ups the harness drained on this same
+ * poll, and the agent CLI's tool-server startup report.
+ *
+ * That last one rides the SETTLED poll and not only the running ones, which is not redundancy: a
+ * job short enough to finish between two polls is never observed `running` at all, so for exactly
+ * the runs that were quick about it this is the only poll that can carry the report. Pure, like
+ * its `running` and `failed` siblings here — the executor's poll site owns the side effects and
+ * delegates the shaping.
  */
-function coerceMergeAssessment(raw: unknown, summary: string | undefined): unknown {
-  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+export function buildDoneUpdate(
+  view: RunnerJobView,
+  result: AgentRunResult,
+  followUps: { followUps?: StreamedFollowUp[] },
+): Extract<AgentJobUpdate, { state: 'done' }> {
   return {
-    complexity: clamp01(o.complexity, 1),
-    risk: clamp01(o.risk, 1),
-    impact: clamp01(o.impact, 1),
-    rationale: coerceRationale(o.rationale, summary),
+    state: 'done',
+    result,
+    ...followUps,
+    ...(view.toolServers ? { toolServers: view.toolServers } : {}),
   }
 }
 
 /**
- * Coerce a migrated `on-call` agent's structured JSON into the engine's release-regression
- * assessment — the conservative coercion the harness `/on-call` handler used to do: a
- * missing confidence defaults to 0 (don't imply the PR is at fault without evidence) and a
- * missing recommendation defaults to `hold` (a human decides).
+ * The structured failure metadata a terminal runner view carries, forwarded so the engine
+ * classifies a failure without regex-matching `error`: the harness's `failureCause`, its
+ * extended redacted `detail`, the serving `backend`, the transport's container-eviction verdict
+ * (which the driver recovers on its own budget), and the two pre-PR verification reports — the
+ * validation one, which for a job that failed because its checks stayed red until the attempt
+ * budget was spent is the EVIDENCE behind the failure, and the reproduction proof, which a job
+ * that died for an unrelated reason after the proof ran still legitimately carries. Each is read
+ * off the terminal result first (authoritative) and falls back to the view's last live publish,
+ * so a transport that forwards no terminal body still surfaces it. Every field is absent on an
+ * older harness image.
  */
-function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unknown {
-  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const evidence = Array.isArray(o.evidence)
-    ? o.evidence.filter((e): e is string => typeof e === 'string')
-    : []
+export function buildFailureMeta(view: RunnerJobView): {
+  failureCause?: HarnessFailureCause
+  detail?: string
+  backend?: string
+  evicted?: ContainerEvictionKind
+  harnessShutdown?: true
+  validationReport?: unknown
+  reproductionReport?: unknown
+  toolServers?: unknown
+} {
+  const validationReport = view.result?.validationReport ?? view.validationReport
+  // A job that died for an UNRELATED reason after the proof ran still has a verdict worth keeping
+  // — a failed verification never fails a job by itself, so a report present here describes work
+  // that genuinely happened. Read terminal-first, view-fallback, exactly like the validation one.
+  const reproductionReport = view.result?.reproductionReport ?? view.reproductionReport
   return {
-    culpritConfidence: clamp01(o.culpritConfidence, 0),
-    recommendation:
-      o.recommendation === 'revert' || o.recommendation === 'monitor' ? o.recommendation : 'hold',
-    rationale: coerceRationale(o.rationale, summary),
-    evidence,
-  }
-}
-
-const TEST_SEVERITIES = new Set(['low', 'medium', 'high', 'critical'])
-const TEST_STATUSES = new Set(['passed', 'failed', 'skipped'])
-
-/**
- * Coerce a migrated `tester` agent's structured JSON into the engine's {@link TestReport} —
- * the conservative coercion the harness `/test` handler used to do, defaulting every field
- * safely so a malformed reply still parses (the engine strict-validates it). Crucially a
- * greenlight is honoured ONLY when no BLOCKING (high/critical) concern is open, so a model
- * that greenlights with an open blocker can't auto-pass; low/medium concerns are advisory.
- * The engine's TesterController re-applies this rule defensively.
- */
-function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
-  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const outcomes = Array.isArray(o.outcomes)
-    ? (o.outcomes as unknown[])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .map((x) => ({
-          name: typeof x.name === 'string' ? x.name : '(unnamed)',
-          status: TEST_STATUSES.has(x.status as string) ? (x.status as string) : 'skipped',
-          ...(typeof x.detail === 'string' && x.detail ? { detail: x.detail } : {}),
-        }))
-    : []
-  const concerns = Array.isArray(o.concerns)
-    ? (o.concerns as unknown[])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .map((x) => ({
-          title: typeof x.title === 'string' ? x.title : '(concern)',
-          detail: typeof x.detail === 'string' ? x.detail : '',
-          severity: TEST_SEVERITIES.has(x.severity as string) ? (x.severity as string) : 'medium',
-        }))
-    : []
-  const blocking = concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
-  const environment =
-    o.environment === 'local' || o.environment === 'ephemeral' ? o.environment : undefined
-  // The UI tester reports the screenshots it captured + uploaded (artifact ids); keep
-  // only the well-formed entries (a view name + an artifact id), passing the optionals
-  // through. Absent/empty for the API tester.
-  const screenshots = Array.isArray(o.screenshots)
-    ? (o.screenshots as unknown[])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .filter((x) => typeof x.view === 'string' && typeof x.artifactId === 'string')
-        .map((x) => ({
-          view: x.view as string,
-          artifactId: x.artifactId as string,
-          ...(typeof x.hash === 'string' && x.hash ? { hash: x.hash } : {}),
-          ...(typeof x.width === 'number' ? { width: x.width } : {}),
-          ...(typeof x.height === 'number' ? { height: x.height } : {}),
-          ...(typeof x.referenceArtifactId === 'string' && x.referenceArtifactId
-            ? { referenceArtifactId: x.referenceArtifactId }
-            : {}),
-        }))
-    : []
-  // An abort signal: the Tester reported it can't run a meaningful test at all (its env never
-  // came up, a dependency is missing). Carry the reason through and force the greenlight off —
-  // an abort is never release-ready, and the engine routes it to a human instead of the fixer.
-  // The presence of the `abort` object IS the signal: never let a blank/oversized `reason`
-  // downgrade that intent back into a (pointless) fixer loop, so fall back to a generic reason
-  // and cap it like `summary` (the reason is shown to the human + stored on the step verbatim).
-  const abortRaw = (typeof o.abort === 'object' && o.abort !== null ? o.abort : null) as Record<
-    string,
-    unknown
-  > | null
-  const abortReason = abortRaw
-    ? (typeof abortRaw.reason === 'string' && abortRaw.reason.trim()
-        ? abortRaw.reason.trim()
-        : 'the Tester could not run a meaningful test'
-      ).slice(0, 2000)
-    : undefined
-  return {
-    greenlight: o.greenlight === true && !blocking && !abortReason,
-    summary:
-      typeof o.summary === 'string' && o.summary ? o.summary : (summary?.slice(0, 2000) ?? ''),
-    tested: Array.isArray(o.tested)
-      ? (o.tested as unknown[]).filter((t): t is string => typeof t === 'string')
-      : [],
-    outcomes,
-    concerns,
-    ...(environment ? { environment } : {}),
-    ...(screenshots.length ? { screenshots } : {}),
-    ...(abortReason ? { abort: { reason: abortReason } } : {}),
+    ...(view.failureCause ? { failureCause: view.failureCause } : {}),
+    ...(view.detail ? { detail: view.detail } : {}),
+    ...(view.backend ? { backend: view.backend } : {}),
+    ...(view.evicted ? { evicted: view.evicted } : {}),
+    // Forwarded beside `evicted` and never with it: the transport reports EITHER a container it
+    // lost or a harness that was shut down under the job, and the engine recovers only the first.
+    ...(view.harnessShutdown ? { harnessShutdown: view.harnessShutdown } : {}),
+    ...(validationReport ? { validationReport } : {}),
+    ...(reproductionReport ? { reproductionReport } : {}),
+    // Read off the VIEW alone, unlike the two reports above: the observation is a fact about the
+    // CLI's startup rather than about the work, so the harness publishes it on the view and never
+    // on the terminal result. A failed run is the one that most needs it — a prompt that promised
+    // tools the CLI never started is a prime suspect for whatever went wrong.
+    ...(view.toolServers ? { toolServers: view.toolServers } : {}),
   }
 }

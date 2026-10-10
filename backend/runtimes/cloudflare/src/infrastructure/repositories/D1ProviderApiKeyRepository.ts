@@ -20,6 +20,8 @@ interface ProviderApiKeyRow {
   input_tokens: number
   output_tokens: number
   request_count: number
+  enabled: number
+  is_default: number
   deleted_at: number | null
 }
 
@@ -37,6 +39,8 @@ function rowToRecord(row: ProviderApiKeyRow): ProviderApiKeyRecord {
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
+    enabled: row.enabled !== 0,
+    isDefault: row.is_default !== 0,
     deletedAt: row.deleted_at,
   }
 }
@@ -79,7 +83,7 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
     const { results } = await this.db
       .prepare(
         `SELECT * FROM provider_api_keys
-          WHERE (${pairs}) AND provider = ? AND deleted_at IS NULL
+          WHERE (${pairs}) AND provider = ? AND deleted_at IS NULL AND enabled = 1
           ORDER BY created_at ASC`,
       )
       .bind(...binds)
@@ -95,7 +99,7 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
     const { results } = await this.db
       .prepare(
         `SELECT DISTINCT provider FROM provider_api_keys
-          WHERE (${pairs}) AND deleted_at IS NULL`,
+          WHERE (${pairs}) AND deleted_at IS NULL AND enabled = 1`,
       )
       .bind(...binds)
       .all<{ provider: string }>()
@@ -121,8 +125,8 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
       .prepare(
         `INSERT INTO provider_api_keys
           (id, scope, scope_id, provider, label, key_cipher, created_at, last_used_at,
-           window_started_at, input_tokens, output_tokens, request_count, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+           window_started_at, input_tokens, output_tokens, request_count, enabled, is_default, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .bind(
         record.id,
@@ -137,6 +141,8 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
         record.inputTokens,
         record.outputTokens,
         record.requestCount,
+        record.enabled ? 1 : 0,
+        record.isDefault ? 1 : 0,
       )
       .run()
   }
@@ -157,10 +163,11 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
     if (scopes.length === 0) return null
     const pairs = scopes.map(() => '(scope = ? AND scope_id = ?)').join(' OR ')
     // Select-and-mark in ONE statement: the winner is picked by the same policy as
-    // `chooseToken` (least rolling-window usage, then least-recently-leased — SQLite sorts
-    // NULL last_used_at first under ASC, matching "never leased first" — then oldest), and
-    // `last_used_at` is stamped in the same write. D1 serialises writes, so a concurrent
-    // lease's sub-select sees this stamp and rotates to a different key instead of double-leasing.
+    // `chooseToken` — a pinned default (is_default = 1) wins first, then least rolling-window
+    // usage, then least-recently-leased (SQLite sorts NULL last_used_at first under ASC,
+    // matching "never leased first"), then oldest. DISABLED keys are excluded. `last_used_at`
+    // is stamped in the same write. D1 serialises writes, so a concurrent lease's sub-select
+    // sees this stamp and rotates to a different key instead of double-leasing.
     const binds: (string | number)[] = [now]
     for (const s of scopes) binds.push(s.scope, s.scopeId)
     binds.push(provider, now, windowMs)
@@ -169,8 +176,9 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
         `UPDATE provider_api_keys SET last_used_at = ?
           WHERE id = (
             SELECT id FROM provider_api_keys
-             WHERE (${pairs}) AND provider = ? AND deleted_at IS NULL
+             WHERE (${pairs}) AND provider = ? AND deleted_at IS NULL AND enabled = 1
              ORDER BY
+               is_default DESC,
                (CASE WHEN window_started_at IS NULL OR ? - window_started_at >= ?
                      THEN 0 ELSE input_tokens + output_tokens END) ASC,
                last_used_at ASC,
@@ -217,6 +225,44 @@ export class D1ProviderApiKeyRepository implements ProviderApiKeyRepository {
         id,
       )
       .run()
+  }
+
+  async setEnabled(
+    scope: ApiKeyScope,
+    scopeId: string,
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE provider_api_keys SET enabled = ? WHERE id = ? AND scope = ? AND scope_id = ? AND deleted_at IS NULL',
+      )
+      .bind(enabled ? 1 : 0, id, scope, scopeId)
+      .run()
+  }
+
+  async setDefault(
+    scope: ApiKeyScope,
+    scopeId: string,
+    provider: ApiKeyProvider,
+    id: string | null,
+  ): Promise<void> {
+    // Clear the group's default first (at most one per scope+scopeId+provider), then pin the
+    // chosen row. D1 serialises writes, so the two statements settle atomically enough.
+    await this.db
+      .prepare(
+        'UPDATE provider_api_keys SET is_default = 0 WHERE scope = ? AND scope_id = ? AND provider = ? AND deleted_at IS NULL AND is_default = 1',
+      )
+      .bind(scope, scopeId, provider)
+      .run()
+    if (id !== null) {
+      await this.db
+        .prepare(
+          'UPDATE provider_api_keys SET is_default = 1 WHERE id = ? AND scope = ? AND scope_id = ? AND provider = ? AND deleted_at IS NULL',
+        )
+        .bind(id, scope, scopeId, provider)
+        .run()
+    }
   }
 
   async softDelete(scope: ApiKeyScope, scopeId: string, id: string, at: number): Promise<void> {

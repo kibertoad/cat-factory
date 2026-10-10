@@ -10,7 +10,10 @@
 // the rendered document at each heading into sections we can collapse
 // independently and link from a ToC. That split is done over the parsed DOM, so
 // it is independent of markdown-it's token internals.
-import MarkdownIt from 'markdown-it'
+// markdown-it 15 ships its own types (the retired `@types/markdown-it` stopped at 14): the
+// default export is the CONSTRUCTOR and the instance type is the same-named type export, so
+// the two need distinct local names where the old merged declaration allowed one.
+import MarkdownIt, { type MarkdownIt as MarkdownItInstance } from 'markdown-it'
 
 /**
  * Stamp every TOP-LEVEL block element with its source line range
@@ -21,7 +24,7 @@ import MarkdownIt from 'markdown-it'
  * tracked over the flat token stream) so a comment targets a whole paragraph/list/
  * heading rather than a nested fragment.
  */
-function sourceLinePlugin(md: MarkdownIt): void {
+function sourceLinePlugin(md: MarkdownItInstance): void {
   md.core.ruler.push('source_lines', (state) => {
     let depth = 0
     for (const token of state.tokens) {
@@ -76,7 +79,7 @@ const md = new MarkdownIt({
 }).use(sourceLinePlugin)
 
 const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
-const LINK_CLASS = 'text-indigo-300 underline decoration-indigo-500/40 hover:text-indigo-200'
+const LINK_CLASS = 'text-primary underline decoration-primary/40 hover:decoration-primary'
 
 // A second markdown-it instance for INLINE prose rendering (a rationale, a synthesis,
 // a summary) — the same secure config as `md` (html: false, so raw HTML is escaped and

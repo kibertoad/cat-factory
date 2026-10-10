@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -10,9 +11,14 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
-/** Params passed to a BootstrapWorkflow instance (its id is the bootstrap job id). */
+/**
+ * Params passed to a BootstrapWorkflow instance. Its INSTANCE id is the run's `driveId` (see
+ * {@link WorkflowsBootstrapRunner}), which is the run id for every drive but a monorepo run's
+ * apply phase; `jobId` here is always the RUN, because that is what the poll advances.
+ */
 export interface BootstrapWorkflowParams {
   workspaceId: string
   jobId: string
@@ -35,11 +41,15 @@ const STEP_CONFIG = {
  * `jobMaxPolls` is a backstop in case it never reports terminal.
  */
 export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflowParams> {
-  override async run(
-    event: WorkflowEvent<BootstrapWorkflowParams>,
-    step: WorkflowStep,
-  ): Promise<void> {
-    const { workspaceId, jobId } = event.payload
+  override run(event: WorkflowEvent<BootstrapWorkflowParams>, step: WorkflowStep): Promise<void> {
+    // The wake's logging bracket: settings applied for an isolate no other entry point has
+    // touched, and a drain before every durable suspension the body below reaches. The body is
+    // a method rather than a closure so `run` stays the bracket and nothing else.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: BootstrapWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, jobId } = params
     // One DI-graph assembly per wake (pure wiring over env bindings, no I/O) shared by
     // every poll in this invocation; a hibernation wake replays `run()` and rebuilds. Built
     // via `buildWorkflowRuntime` so a transient throw here can't kill the instance terminally
@@ -60,7 +70,9 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
     // (reset the counter on any good poll) rather than abandoning a healthy run.
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-      await step.sleep(`poll-wait-${p}`, pollInterval)
+      // Poll-first (matching the Node bootstrapRunner): the job was just dispatched, so
+      // the first status read runs immediately instead of after a full poll interval.
+      if (p > 0) await step.sleep(`poll-wait-${p}`, pollInterval)
       let result: BootstrapPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {
@@ -86,8 +98,8 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
         // budget + container watchdogs (not a throw-count) decide the end.
         pollReadFailures += 1
         log.warn(
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'bootstrap poll could not read job status; treating as still running and retrying',
+          { err: getErrorMessage(error), pollReadFailures },
         )
         continue
       }
@@ -97,7 +109,15 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
         return
       }
       if (result.state === 'failed') {
-        log.warn({ error: result.error }, 'bootstrap run failed')
+        log.warn('bootstrap run failed', { error: result.error })
+        return
+      }
+      if (result.state === 'awaiting_review') {
+        // The monorepo flow has parked on a human decision, which can take days. Returning ends
+        // THIS drive's instance and costs nothing: the run is not `running`, so the stale-run
+        // sweeper leaves it alone, and the review's own resume starts a fresh drive under a new
+        // instance id (which is exactly why the id is the drive key, not the run id).
+        log.info('bootstrap run parked for adoption review')
         return
       }
       // still running — loop and poll again after the next durable sleep.

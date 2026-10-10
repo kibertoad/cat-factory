@@ -2,17 +2,38 @@ import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { promisify } from 'node:util'
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerImageVariant,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import {
+  composePostMortem,
+  containerKeyForRef,
+  hostBridgeKey,
+  deploymentImageVariantMessage,
+  describeError,
+  getErrorMessage,
+  getErrorReason,
+  isPlatformImageVariant,
+  runBestEffort,
+  RUNNER_IMAGE_UNWIRED_REASON,
+  runIdFromContainerKey,
+  UnavailableError,
+  unservablePlatformImageVariant,
+} from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
+import { planEnvironmentBridges } from '@cat-factory/integrations'
+import type { HostBridge } from '@cat-factory/integrations'
 import { logger } from '@cat-factory/server'
 import {
   EVICTION_ERROR,
+  type EvictionCause,
   type HarnessEndpoint,
   type InlineJobResult,
   delay,
@@ -21,18 +42,26 @@ import {
   pollInlineJob,
   pollHarnessJob,
   postHarnessJob,
+  stopHarnessJob,
   waitForHarnessHealth,
 } from './harnessHttp.js'
 import {
   type ContainerEndpoint,
   type ContainerExec,
+  type ContainerExitState,
   type ContainerRuntimeAdapter,
   createRuntimeAdapter,
   DockerRuntimeAdapter,
+  resolveInstallId,
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
-import { harnessAllowedHosts } from './github.js'
-import { RECOMMENDED_HARNESS_IMAGE, resolveHarnessImage } from './harnessImage.js'
+import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js'
+import {
+  RECOMMENDED_HARNESS_IMAGE,
+  resolveHarnessImage,
+  resolveHarnessImageVariants,
+  resolveUiHarnessImage,
+} from './harnessImage.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
 
 const execFileAsync = promisify(execFile)
@@ -90,6 +119,27 @@ export interface LocalContainerRunnerTransportOptions {
   /** The executor-harness image ref (a GHCR pull or a locally built tag). */
   image: string
   /**
+   * The UI-TESTER image ref, for a job whose kind declares `image: 'ui'` (Playwright + a
+   * browser). Its own container, on its own image: a per-run container cannot change image
+   * mid-run, and the browser tooling is deliberately not in the image every other step pulls.
+   *
+   * Unset ⇒ such a job is REFUSED at dispatch rather than run on {@link image}, which has no
+   * browser. See `imageFor`.
+   */
+  imageUi?: string
+  /**
+   * The DEPLOYMENT's own image variants: the name one of its agent kinds declares
+   * (`AgentStepSpec.image`) mapped to the image ref a container for it runs. From
+   * `LOCAL_HARNESS_IMAGE_VARIANTS`.
+   *
+   * A map rather than more named options, because these are open-ended in a way `image` and
+   * `imageUi` are not: those two are images this repo publishes and every backend knows the
+   * meaning of, while what a deployment's own kind needs in its container is known only to that
+   * deployment. Absent ⇒ any such variant is refused at dispatch, which is the same disposition
+   * an unconfigured `imageUi` gets and for a stronger reason.
+   */
+  imageVariants?: Record<string, string>
+  /**
    * The container runtime adapter (Docker-family or Apple). Defaults to the Docker-CLI
    * adapter (`docker` binary) so existing callers/tests keep working.
    */
@@ -106,6 +156,15 @@ export interface LocalContainerRunnerTransportOptions {
   network?: string
   /** Extra `-e KEY=VALUE` env passed into the container (rarely needed). */
   env?: Record<string, string>
+  /**
+   * Extra container env resolved PER CONTAINER START rather than at construction. It carries the
+   * clone/push host allow-list, which follows the deployment's source-control credential and can
+   * therefore change while this long-lived transport is alive (a GitLab token installed from the
+   * sign-in screen must widen it for the very next job). Merged over {@link env}, which
+   * `applySettings` rewrites wholesale — the allow-list used to live in there and was silently
+   * dropped by the first settings edit.
+   */
+  resolveEnv?: () => Record<string, string>
   /** Injectable CLI exec — defaults to running the adapter's binary via execFile. */
   exec?: ContainerExec
   /** Injectable fetch — defaults to the global. */
@@ -176,6 +235,24 @@ export interface InlineContainerRequest {
 }
 
 /** A warm-pool container the transport leases to runs (lease state is in-process). */
+/**
+ * A resolved per-run container: where to reach it, plus the host bridges it was CREATED with.
+ *
+ * `bridgedHosts` is on the handle rather than re-read from the runtime because `--add-host` is not
+ * readable back off a container in any portable way, and it is optional because a handle rebuilt
+ * from the runtime after a process restart genuinely does not know (see `containerMissingBridges`,
+ * which treats not-knowing as none).
+ *
+ * Stored as {@link hostBridgeKey} strings rather than as the bridges themselves, because what this
+ * field is for is COMPARISON: a host mapped to the gateway and the same host mapped to an address
+ * are two different containers, and a key that folded them together would leave a run wedged
+ * against a stale address in a container nothing will replace.
+ */
+interface ResolvedContainer extends ContainerEndpoint {
+  containerId: string
+  bridgedHosts?: readonly string[]
+}
+
 interface PoolMember extends ContainerEndpoint {
   /** Internal member id (used only for the container name; never a run-id label). */
   id: string
@@ -195,11 +272,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   readonly backend = 'local-container'
   private readonly adapter: ContainerRuntimeAdapter
   private readonly image: string
+  private readonly imageUi: string | undefined
+  private readonly imageVariants: Record<string, string>
   private readonly sharedSecret: string
   private readonly network?: string
   // Mutable: the warm-pool sizing + checkout env are re-read live via `applySettings` when
   // the DB-backed local-mode settings change, so an edit takes effect without a restart.
   private extraEnv: Record<string, string>
+  private readonly resolveExtraEnv: (() => Record<string, string>) | undefined
   private readonly exec: ContainerExec
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
@@ -218,7 +298,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private poolIdleTtlMs: number
 
   /** runId → resolved container handle, to spare a CLI lookup on the hot poll path. */
-  private readonly cache = new Map<string, { containerId: string } & ContainerEndpoint>()
+  private readonly cache = new Map<string, ResolvedContainer>()
 
   /** Warm-pool members (only used when pooling is enabled). Leased in-process by run id. */
   private readonly members: PoolMember[] = []
@@ -240,11 +320,17 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         addHostGateway: true,
         localDind: true,
         pooling: true,
+        // Namespace this install's containers by a secret-derived id (ADR 0026 D5); the env-based
+        // factory injects an adapter, so this default only runs on a direct construction.
+        installId: resolveInstallId({ HARNESS_SHARED_SECRET: options.sharedSecret }),
       })
     this.image = options.image
+    this.imageUi = options.imageUi
+    this.imageVariants = options.imageVariants ?? {}
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
+    this.resolveExtraEnv = options.resolveEnv
     this.exec = options.exec ?? defaultExec(this.adapter.binary)
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
@@ -298,7 +384,19 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       poolIdleTtlMs: settings?.pool?.idleTtlMs,
     })
     this.extraEnv = checkoutExtraEnv(settings)
-    void this.reconcilePool().catch(() => {})
+    // Fire-and-forget: a settings change must not block on Docker. A failure leaves the pool at
+    // its previous sizing, which nothing else would report.
+    void runBestEffort(logger, 'localPool.reconcile', () => this.reconcilePool())
+  }
+
+  /**
+   * The env a container is started with: the settings-derived {@link extraEnv} plus whatever
+   * {@link LocalContainerRunnerTransportOptions.resolveEnv} answers NOW. Resolved per start so a
+   * value that follows deployment state (the clone/push host allow-list) is current for the job
+   * about to run, and so `applySettings` rewriting `extraEnv` cannot drop it.
+   */
+  private containerEnv(): Record<string, string> {
+    return { ...this.extraEnv, ...this.resolveExtraEnv?.() }
   }
 
   /** Bring the warm set in line with the current sizing: trim excess idle, then re-warm. */
@@ -322,17 +420,214 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     return this.members.some((m) => m.leasedTo === runId)
   }
 
+  /**
+   * The image a job runs on, refusing a variant this transport cannot serve.
+   *
+   * Each unservable case is refused SEPARATELY, because they need different fixes and a
+   * fall-through gave all of them the default image. A `ui` job on it has no browser, which it
+   * discovers only after the checkout, the install and the model's first turns, and then reports
+   * as an `abort` a reader cannot tell apart from an app that would not start. A `deploy` job on
+   * it has no `kubectl`, and is a mistake in a kind's registration rather than a missing pin,
+   * which is what makes it a distinct refusal here and on the Worker's `agentContainerNamespace`.
+   * A DEPLOYMENT's own variant is worse than either, because nothing here can even name what the
+   * image carried. One refused dispatch, naming what to correct, is the cheaper answer to all
+   * three.
+   *
+   * The two halves are split by `isPlatformImageVariant` and the platform half is an EXHAUSTIVE
+   * switch, so a fourth published platform image fails this build rather than falling into the
+   * deployment branch and earning a refusal that names `LOCAL_HARNESS_IMAGE_VARIANTS` for an image
+   * no operator could have put there.
+   */
+  /**
+   * Whether a local image tag is configured for `variant`, asked through the same resolver a
+   * dispatch uses so the two can never disagree. Only the unwired refusal answers `false`; any
+   * other throw propagates rather than being reported as a missing image.
+   */
+  supportsImage(variant?: RunnerImageVariant): boolean {
+    try {
+      this.imageFor({ runId: '', jobId: '', ...(variant ? { image: variant } : {}) })
+      return true
+    } catch (error) {
+      if (getErrorReason(error) === RUNNER_IMAGE_UNWIRED_REASON) return false
+      throw error
+    }
+  }
+
+  private imageFor(ref: RunnerJobRef): string {
+    const declared = ref.image || 'default'
+    if (!isPlatformImageVariant(declared)) {
+      // A DEPLOYMENT's own variant, named by one of its agent kinds and mapped here. The message
+      // is the shared one because this is the case the platform can say nothing specific about: it
+      // does not know what the image carries, only where the mapping goes.
+      const mapped = this.imageVariants[declared]
+      if (mapped) return mapped
+      throw new UnavailableError(
+        deploymentImageVariantMessage(declared, 'LOCAL_HARNESS_IMAGE_VARIANTS'),
+        RUNNER_IMAGE_UNWIRED_REASON,
+        { image: declared, variable: 'LOCAL_HARNESS_IMAGE_VARIANTS' },
+      )
+    }
+    switch (declared) {
+      case 'default':
+        return this.image
+      case 'ui':
+        // Unreachable via `createLocalContainerTransportFromEnv`, which always resolves the
+        // backend-matched UI tag: a local deployment CAN serve this variant, it just pays for the
+        // pull on first dispatch. It fires for a transport constructed without one.
+        if (this.imageUi) return this.imageUi
+        throw new UnavailableError(
+          'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
+            'transport was built without. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
+            'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
+            'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
+            'screenshots a person uploads.',
+          RUNNER_IMAGE_UNWIRED_REASON,
+          { image: declared, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+        )
+      case 'deploy':
+        throw new UnavailableError(
+          'An agent step declared the `deploy` executor image, which the agent runner path does ' +
+            'not serve: deploy jobs run through the environment-provisioning adapter and its own ' +
+            'deploy-harness transport. Correct the agent kind’s registration.',
+          RUNNER_IMAGE_UNWIRED_REASON,
+          { image: declared },
+        )
+      default:
+        return unservablePlatformImageVariant(declared)
+    }
+  }
+
+  /**
+   * The host bridges this job needs inside its container, from the environments the engine
+   * declared it is handing the job.
+   *
+   * Read off the DISPATCH OPTIONS rather than resolved here, because the environment URL is not
+   * knowable when a run's container is created: `dispatchPerRun` starts one container for the
+   * whole run at its FIRST step, and the environment does not exist until the `deployer` step
+   * several steps later. That ordering is the whole reason {@link containerMissingBridges} exists.
+   *
+   * Off the OPTIONS rather than the job body, which is the other half: the body is an untyped bag
+   * whose environment URLs sit at three depths under a wire shape the harness owns, so reading
+   * them here is one renamed field away from bridging nothing and saying nothing about it. See
+   * `RunnerDispatchOptions.environments`.
+   *
+   * Kernel's `classifyLocalMachineHostBridge` owns which names are bridged and what each is
+   * mapped to, so a real remote environment is never re-pointed at the host gateway, a `localhost`
+   * URL never costs the job its warm-pool member for an entry the container would ignore, and an
+   * address a provider stated is only ever installed when it was PROVED to carry.
+   */
+  private bridgesFor(options?: RunnerDispatchOptions): readonly HostBridge[] {
+    return planEnvironmentBridges(options?.environments ?? []).bridges
+  }
+
+  /**
+   * Say once, per dispatch, which of this job's environments NO bridge can make reachable, and
+   * which of the two causes it is (see kernel's `classifyLocalMachineHostBridge`).
+   *
+   * Reported rather than dropped because the two silent outcomes are indistinguishable and mean
+   * opposite things: a job with nothing to bridge is fine, and a job whose environment is
+   * unreachable from every container is going to spend its tester step on connection failures and
+   * conclude the environment is dead. That misreading is what this whole mechanism exists to stop,
+   * and here the platform genuinely cannot fix it, so the least it owes is to name it.
+   *
+   * One message per cause, never one message for both, because the remedies are different and a
+   * shared sentence sends an operator to the wrong one. `unusable_address` is the worse case: the
+   * platform PROVED the name does not carry and an address does, so the run record vouches for a
+   * route this container never got.
+   *
+   * At the top of {@link dispatch} because that is the one door every path enters through; the
+   * bridge computation itself is pure so the several places that ask for it do not each log.
+   */
+  private reportUnbridgeableEnvironments(options?: RunnerDispatchOptions): void {
+    const plan = planEnvironmentBridges(options?.environments ?? [])
+    for (const { url, cause } of plan.unbridgeable) {
+      if (cause === 'local_machine') {
+        logger.warn(
+          'Environment URL names this machine by an address no container can be given, so the ' +
+            'agent will not reach it. Publish the environment on a name that resolves to the ' +
+            'host (a wildcard-DNS name such as <name>.127.0.0.1.nip.io), or run this step ' +
+            'natively.',
+          { url },
+        )
+        continue
+      }
+      logger.warn(
+        'The platform reached this environment only at an address no host bridge may name ' +
+          '(loopback, link-local or vendor metadata, or a non-canonical literal), or at a URL ' +
+          'whose own host is an IP literal nothing looks up. The container gets no mapping, so ' +
+          'the agent will not reach it: publish an ordinary hostname and a routable address for ' +
+          'it.',
+        { url },
+      )
+    }
+    // A bridge this runtime cannot install is the same class of loss as one that cannot exist, and
+    // it is the one the transport would otherwise pass over in silence: `run()` takes the spec
+    // field either way, and an adapter with no `--add-host` simply never emits it.
+    if (plan.bridges.length > 0 && !this.adapter.honoursHostBridges) {
+      logger.warn(
+        `The ${this.adapter.id} runtime cannot re-point a hostname inside a container, so this ` +
+          'job will not reach the environment it was handed. Run this step natively, or use a ' +
+          'Docker-family runtime.',
+        { hosts: plan.bridges.map((bridge) => bridge.host) },
+      )
+    }
+  }
+
+  /**
+   * The bridges `resolved` was NOT built with, out of the ones this job needs.
+   *
+   * Non-empty means the existing container cannot reach the environment however healthy it is: an
+   * /etc/hosts entry is fixed at create time, so the container has to be replaced. That is a cost
+   * (the job re-clones) paid against a step that otherwise fails every single time, which is what
+   * makes it worth paying: before this, a containerized `tester-api` on a local deployment spent
+   * fourteen minutes on connection failures and then failed the run.
+   *
+   * An UNKNOWN bridge set counts as none. That is the state after a process restart, where the
+   * container outlived the in-process cache: re-creating once more is wasteful and correct, where
+   * assuming the entry is there would leave the run wedged on the same unreachable URL with no way
+   * to notice. The cost is bounded to one extra recreate, on a path that already treats replacing a
+   * container as the ordinary recovery.
+   */
+  private containerMissingBridges(
+    resolved: ResolvedContainer,
+    needed: readonly HostBridge[],
+  ): readonly string[] {
+    const present = new Set(resolved.bridgedHosts ?? [])
+    return needed.map(hostBridgeKey).filter((key) => !present.has(key))
+  }
+
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
+    // Ahead of every routing decision, because it is about the job rather than about which
+    // container serves it, and this is the one door they all enter through.
+    this.reportUnbridgeableEnvironments(options)
+    // A non-default image is always per-run, never pooled: pool members are started on ONE
+    // image and reused across runs, so a leased member is by construction the wrong container
+    // for a job that asked for a different one. Checked BEFORE the lease/cache lookups, which
+    // key off the run and would otherwise hand a `tester-ui` job the run's ordinary container.
+    if (!isDefaultImage(ref)) return this.dispatchPerRun(ref, spec, kind, options)
+    // A job needing a HOST BRIDGE is never served from the warm pool, and the reason is stronger
+    // than "a member cannot be given one". A member is started before any job exists, so it could
+    // not carry a per-job name even in principle; and a member is RE-LEASED across runs, so an
+    // /etc/hosts entry for one run's per-PR environment would outlive that run and sit in the
+    // container the next one leases. Per-run containers have neither problem, and the run hands
+    // its member back so the pool is not left holding a lease nothing will release.
+    const bridges = this.bridgesFor(options)
+    if (bridges.length > 0) {
+      if (this.hasLeasedMember(ref.runId)) await this.releasePooled(ref)
+      return this.dispatchPerRun(ref, spec, kind, options)
+    }
     // Route a run to the backend it ALREADY holds, regardless of the CURRENT pool mode
     // (settings can flip pooling on/off live): a leased pool member re-attaches to the
     // pool; an existing per-run container stays per-run. Only a BRAND-NEW run picks its
     // mode from `poolingEnabled` — so a live resize never strands an in-flight run.
     if (this.hasLeasedMember(ref.runId)) return this.dispatchPooled(ref, spec, kind)
+    // Past the guard above the container key IS the run id, so the pooled branches address
+    // the run directly.
     if (this.cache.has(ref.runId)) return this.dispatchPerRun(ref, spec, kind, options)
     if (this.poolingEnabled) return this.dispatchPooled(ref, spec, kind)
     return this.dispatchPerRun(ref, spec, kind, options)
@@ -343,20 +638,33 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
-    // The container is per-RUN: a run's first step starts it, later steps re-attach to
-    // it (resolved by the run id), and the harness keys each step's job by the per-step
-    // `ref.jobId` carried in the spec body.
-    const runId = ref.runId
-    let resolved = await this.resolve(runId)
+  ): Promise<RunnerDispatchAck | undefined> {
+    // The container is per-RUN and per IMAGE: a run's first step on a given image starts it,
+    // later steps on that image re-attach (resolved by the container key), and the harness keys
+    // each step's job by the per-step `ref.jobId` carried in the spec body. A step declaring a
+    // different image gets a second container beside the run's ordinary one, which is what the
+    // qualified key addresses.
+    const containerKey = containerKeyForRef(ref)
+    // Resolved BEFORE any container work so an unconfigured variant refuses without first
+    // removing a container or starting one.
+    const image = this.imageFor(ref)
+    const bridges = this.bridgesFor(options)
+    let resolved = await this.resolve(containerKey)
+    // A container that predates this job's environment cannot reach it: /etc/hosts is written at
+    // create time. Drop it so the branch below builds one that can. Deliberately AFTER `resolve`,
+    // whose cache entry is the only record of what the running container was built with.
+    if (resolved && this.containerMissingBridges(resolved, bridges).length > 0) {
+      this.cache.delete(containerKey)
+      resolved = undefined
+    }
     if (!resolved) {
-      // A prior attempt may have left an exited/dead container under this run (resolve()
+      // A prior attempt may have left an exited/dead container under this key (resolve()
       // returns undefined for one whose endpoint is gone). Remove any such container
       // first so it can't shadow the fresh one in later lookups.
-      await this.adapter.removeRun(this.exec, runId)
+      await this.adapter.removeRun(this.exec, containerKey)
       const containerId = await this.adapter.run(this.exec, {
-        runId,
-        image: this.image,
+        containerKey,
+        image,
         sharedSecret: this.sharedSecret,
         // The Tester stands its infra up with `docker compose` INSIDE the job container
         // (Docker-in-Docker). The container is per-RUN and created by the run's FIRST step
@@ -366,30 +674,37 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         // refuses a local-infra Tester run there (the `localDind` capability gate).
         privileged: this.privilegedTestJobs,
         network: this.network,
-        env: this.extraEnv,
+        extraHosts: bridges,
+        env: this.containerEnv(),
         instanceSize: options?.instanceSize
           ? resolveDockerResources(options.instanceSize)
           : undefined,
       })
       const endpoint = await this.waitForEndpoint(containerId)
-      resolved = { containerId, ...endpoint }
-      this.cache.set(runId, resolved)
+      resolved = { containerId, ...endpoint, bridgedHosts: bridges.map(hostBridgeKey) }
+      this.cache.set(containerKey, resolved)
       await this.waitForHealth(endpoint, containerId)
     }
 
     // POST the job to the single harness endpoint, with the kind in the body. Idempotent:
     // re-attaching to an already-running container re-POSTs, which the harness's per-id
     // registry treats as a re-attach.
-    await this.postJob(resolved, { ...spec, kind })
+    return this.postJob(resolved, { ...spec, kind })
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
-    if (this.hasLeasedMember(ref.runId)) return this.pollPooled(ref)
+    // A pooled member never serves a non-default image (dispatch routes those per-run), so the
+    // lease lookup is skipped for one: the run's leased member is a different container.
+    if (isDefaultImage(ref) && this.hasLeasedMember(ref.runId)) return this.pollPooled(ref)
 
-    const resolved = await this.resolve(ref.runId)
+    const containerKey = containerKeyForRef(ref)
+    const resolved = await this.resolve(containerKey)
     // No container for this run at all → it was evicted/reaped (or never started).
     if (!resolved) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
 
+    // One read of the container's exit state for the whole poll, shared by the verdict and the
+    // post-mortem below (see {@link onceExitState}).
+    const exitState = this.onceExitState(resolved.containerId)
     // Address the per-RUN container, but read the per-step job by its own id. A connection
     // error confirms-or-denies an eviction via the runtime; a confirmed-dead container
     // clears the cache so the next dispatch starts fresh.
@@ -402,9 +717,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       label: 'Local container',
       isDead: async () => {
         if (await this.adapter.isRunning(this.exec, resolved.containerId)) return false
-        this.cache.delete(ref.runId)
+        this.cache.delete(containerKey)
         return true
       },
+      exitedCleanly: () => this.exitedCleanly(exitState),
+      // Ignores the eviction cause on purpose: a per-RUN container serves this run and nothing
+      // else, so its output is this run's on either branch. Only the shared pool member has to
+      // ask (see {@link pooledPostMortem}).
+      postMortem: () => this.containerPostMortem(resolved.containerId, exitState),
     })
     // Surface the container's id + the (credential-free) host URL the harness is published
     // on, so the run's details can show WHICH local container the run is on and where to
@@ -422,13 +742,71 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * member instead RETURNS it to the pool (or removes a transient/over-capacity one).
    */
   async release(ref: RunnerJobRef): Promise<void> {
-    if (this.hasLeasedMember(ref.runId)) return this.releasePooled(ref)
+    if (isDefaultImage(ref) && this.hasLeasedMember(ref.runId)) return this.releasePooled(ref)
 
+    const containerKey = containerKeyForRef(ref)
     const containerId =
-      this.cache.get(ref.runId)?.containerId ?? (await this.adapter.find(this.exec, ref.runId))
-    this.cache.delete(ref.runId)
+      this.cache.get(containerKey)?.containerId ??
+      (await this.adapter.find(this.exec, containerKey))
+    this.cache.delete(containerKey)
     if (!containerId) return
     await this.adapter.remove(this.exec, containerId)
+  }
+
+  /**
+   * Stop ONE job and confirm it. Always answers `stopped`, because this transport owns the
+   * container the job runs in and can therefore always make the answer true.
+   *
+   * The graceful path asks the harness to abort that job and waits for it to settle. When that
+   * fails the container is DESTROYED, which is a confirmed stop of everything inside it and the
+   * only remaining way to get one. That escalation is what makes the pooled case safe: a member
+   * whose job could not be aborted must never return to the warm pool, since `harnessHealthy`
+   * still answers 200 for it and the next run would lease a container with a live agent and a
+   * live checkout in it: the exact collision `acquireMember`'s synchronous claim exists to
+   * prevent. Destroying it removes it from the pool as well as from the job.
+   *
+   * Deliberately NOT `release`: on the pooled path release does the opposite of stopping.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const containerKey = containerKeyForRef(ref)
+    const member = isDefaultImage(ref)
+      ? this.members.find((m) => m.leasedTo === ref.runId)
+      : undefined
+    const endpoint = member ?? (await this.resolve(containerKey))
+    // Nothing is serving this run: there is no job left to stop, which IS the stopped state.
+    if (!endpoint) return 'stopped'
+    try {
+      await stopHarnessJob({
+        fetchImpl: this.fetchImpl,
+        endpoint,
+        jobId: ref.jobId,
+        secret: this.sharedSecret,
+        timeoutMs: this.requestTimeoutMs,
+        label: 'Local container',
+      })
+      return 'stopped'
+    } catch (error) {
+      // Escalate rather than swallow. A throw from here would leave the caller reporting "could
+      // not stop" while a container it owns keeps running the agent, and (pooled) while that
+      // container stays leasable. If the teardown ALSO fails there is genuinely nothing left to
+      // try, so that error propagates with the graceful failure named as its cause.
+      logger.warn('local container job stop failed; destroying the container instead', {
+        runId: ref.runId,
+        jobId: ref.jobId,
+        ...describeError(error),
+      })
+      if (member) {
+        this.dropMember(member)
+        await this.adapter.remove(this.exec, member.containerId)
+      } else {
+        // Evict the entry for the container just destroyed, which for a non-default image is
+        // NOT the run id: `resolve` hands a cached handle back without probing liveness, so an
+        // entry left pointing at a removed container is served to the next poll as a live one.
+        this.cache.delete(containerKey)
+        await this.adapter.remove(this.exec, endpoint.containerId)
+      }
+      return 'stopped'
+    }
   }
 
   /**
@@ -459,10 +837,15 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   async reapOrphanedRuns(liveRunIds: (ids: string[]) => Promise<string[]>): Promise<number> {
     const running = await this.adapter.listRunContainers(this.exec)
     if (running.length === 0) return 0
-    const live = new Set(await liveRunIds(running.map((c) => c.runId)))
-    const orphans = running.filter((c) => !live.has(c.runId))
+    // The adapter reports CONTAINER KEYS, which for a non-default image is the run id qualified
+    // by the variant. Ask about the RUN: passing the key through would report "no such run" for
+    // every UI-tester container and sweep one out from under a live run.
+    const live = new Set(
+      await liveRunIds(running.map((c) => runIdFromContainerKey(c.containerKey))),
+    )
+    const orphans = running.filter((c) => !live.has(runIdFromContainerKey(c.containerKey)))
     for (const c of orphans) {
-      this.cache.delete(c.runId)
+      this.cache.delete(c.containerKey)
       await this.adapter.remove(this.exec, c.containerId).catch(() => undefined)
     }
     return orphans.length
@@ -546,7 +929,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const repoKey = repoKeyOf(spec)
     // Later steps of the same run re-attach to the member it already holds (idempotent).
     let member = this.members.find((m) => m.leasedTo === ref.runId)
@@ -554,11 +937,17 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (repoKey) member.repo = repoKey
     // Tell the harness to reuse its per-repo checkout (clean-sweep + fetch + switch branch)
     // rather than clone fresh — the whole point of repo-affinity pooling.
-    await this.postJob(member, { ...spec, kind, persistentCheckout: true })
+    return this.postJob(member, { ...spec, kind, persistentCheckout: true })
   }
 
-  /** POST a job body to a harness, throwing on a non-OK response. */
-  private postJob(endpoint: HarnessEndpoint, body: Record<string, unknown>): Promise<void> {
+  /**
+   * POST a job body to a harness, throwing on a non-OK response and returning the harness's
+   * capability handshake (undefined when the acceptance carried none).
+   */
+  private postJob(
+    endpoint: HarnessEndpoint,
+    body: Record<string, unknown>,
+  ): Promise<RunnerDispatchAck | undefined> {
     return postHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint,
@@ -574,8 +963,11 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (!member) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     // The member died mid-run: drop it from the pool so it isn't re-leased, and report an
     // eviction so the stale-run sweeper re-drives (a retry leases a healthy member and the
-    // harness's persistent checkout resumes the work branch). A 404 with the member still
-    // healthy keeps it leased for a re-dispatch (handled inside pollHarnessJob).
+    // harness's persistent checkout resumes the work branch). A 404 from a member that is still
+    // healthy is an eviction for THIS job only (its harness forgot it); the member stays in the
+    // pool, which is exactly why the post-mortem below has to know which branch it is on.
+    // One read of the member's exit state for the whole poll (see {@link onceExitState}).
+    const exitState = this.onceExitState(member.containerId)
     const view = await pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: member,
@@ -588,6 +980,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.dropMember(member)
         return true
       },
+      exitedCleanly: () => this.exitedCleanly(exitState),
+      // Same last chance to read the dying member as the per-run path: this is the only
+      // moment its exit state and log tail are still readable, and a pooled member is where
+      // a long coding step actually runs on a warm deployment. Without it the whole class of
+      // mid-run container deaths that pooling is meant to make cheaper were the ones that
+      // reported nothing but the bare eviction sentinel. Cause-aware, unlike the per-run
+      // path: see {@link pooledPostMortem}.
+      postMortem: (cause) => this.pooledPostMortem(member.containerId, cause, exitState),
     })
     // Same container id + host URL enrichment as the per-run path (the leased pool member
     // is just a differently-sourced container); the harness view carries the live `phase`.
@@ -650,7 +1050,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private async startMember(transient: boolean): Promise<PoolMember> {
     const id = `pool-${randomBytes(6).toString('hex')}`
     const containerId = await this.adapter.run(this.exec, {
-      runId: id,
+      containerKey: id,
       image: this.image,
       sharedSecret: this.sharedSecret,
       // Pooled members are reused across runs (incl. Tester runs), so they run privileged
@@ -658,7 +1058,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       // instance sizing is NOT applied to a reused member (it keeps host defaults).
       privileged: this.privilegedTestJobs,
       network: this.network,
-      env: this.extraEnv,
+      env: this.containerEnv(),
       pool: true,
     })
     const endpoint = await this.waitForEndpoint(containerId)
@@ -689,9 +1089,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
           // A failed pre-warm is skipped (the pool fills a member on demand instead), but
           // surface WHY: a version-handshake mismatch throws here too, and swallowing it
           // silently would hide the misconfiguration until the first real dispatch.
-          logger.warn(
-            `Local harness pool pre-warm skipped a member: ${err instanceof Error ? err.message : String(err)}`,
-          )
+          logger.warn(`Local harness pool pre-warm skipped a member: ${getErrorMessage(err)}`)
         }
       }),
     )
@@ -750,16 +1148,16 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   // --- internals ----------------------------------------------------------
 
   /** The container handle for a run from the cache, else rediscovered via the runtime. */
-  private async resolve(
-    runId: string,
-  ): Promise<({ containerId: string } & ContainerEndpoint) | undefined> {
+  private async resolve(runId: string): Promise<ResolvedContainer | undefined> {
     const cached = this.cache.get(runId)
     if (cached) return cached
     const containerId = await this.adapter.find(this.exec, runId)
     if (!containerId) return undefined
     const endpoint = await this.adapter.endpoint(this.exec, containerId)
     if (!endpoint) return undefined
-    const resolved = { containerId, ...endpoint }
+    // No `bridgedHosts`: this container outlived the cache that recorded them, and absent means
+    // UNKNOWN rather than none. `containerMissingBridges` owns what to do about that.
+    const resolved: ResolvedContainer = { containerId, ...endpoint }
     this.cache.set(runId, resolved)
     return resolved
   }
@@ -848,12 +1246,105 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     lastError?: unknown,
   ): Promise<string> {
     const parts = [`Container ${containerId} ${what}.`]
-    const reason =
-      lastError instanceof Error ? lastError.message : lastError ? String(lastError) : ''
+    const reason = lastError ? getErrorMessage(lastError) : ''
     if (reason.trim()) parts.push(`Last error: ${reason.trim()}`)
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (logs) parts.push(`Container logs:\n${logs}`)
-    return parts.join('\n')
+    // The container's own output is free text that can echo a token it was handed; this string
+    // is persisted on the run and rendered in its details, so it goes through the shared
+    // compose (scrub + cap) every transport's post-mortem does.
+    return composePostMortem(parts) ?? ''
+  }
+
+  /**
+   * A single-shot read of one container's exit state, shared by everything ONE poll asks about
+   * that container's death.
+   *
+   * The verdict (did the harness exit cleanly) and the post-mortem (how it ended, plus its log
+   * tail) are the same question asked twice, and each `exitState` call is a `docker inspect`
+   * subprocess. Reading once is not only a spawn saved: the two calls straddle whatever reaps the
+   * container, so separately they can disagree, and a poll that reports an exit code in its
+   * detail while its verdict saw nothing is a contradiction on one screen.
+   */
+  private onceExitState(containerId: string): () => Promise<ContainerExitState | undefined> {
+    let pending: Promise<ContainerExitState | undefined> | undefined
+    return () => (pending ??= this.adapter.exitState(this.exec, containerId))
+  }
+
+  /**
+   * Whether a container that has stopped serving a job exited CLEANLY (code 0), which on an
+   * image whose only workload is the harness means the harness was SHUT DOWN mid-job rather than
+   * crashing or being reclaimed. Anything else, including a runtime that reports no exit code at
+   * all, answers false and leaves the failure an eviction.
+   *
+   * A remove (`docker rm -f`, our own release path) kills with SIGKILL and reports 137, so this
+   * cannot mistake the engine's own teardown for a shutdown; a 0 means the process handled a
+   * signal and left, and the only thing in the container that does that is the harness.
+   */
+  private async exitedCleanly(
+    exitState: () => Promise<ContainerExitState | undefined>,
+  ): Promise<boolean> {
+    return (await exitState())?.code === 0
+  }
+
+  /**
+   * The post-mortem for a container that died MID-RUN (see `pollHarnessJob`'s `postMortem`):
+   * its exit state plus a tail of its own stdout/stderr. This is the only moment the logs are
+   * still readable — `release()` removes the container once the run settles — and without them
+   * a harness process that exits after minutes of work (a heap OOM, an uncaught throw) leaves
+   * nothing behind but "container evicted or crashed".
+   *
+   * Distinct from {@link startupFailure}, which explains a container that never came up: this
+   * one lands on the failure's `detail`, not its `error`, so the eviction classification and
+   * its fresh-container recovery are unaffected.
+   *
+   * Only claims the container EXITED when the runtime says so. The other eviction branch is a
+   * 404 from a container that answered the poll (its harness restarted and no longer knows the
+   * job), and asserting an exit there would put a wrong cause of death on the run.
+   */
+  private async containerPostMortem(
+    containerId: string,
+    exitState: () => Promise<ContainerExitState | undefined>,
+  ): Promise<string | undefined> {
+    const exit = await exitState()
+    const logs = (await this.adapter.logs(this.exec, containerId)).trim()
+    if (!exit && !logs) return undefined
+    const parts = [
+      exit
+        ? `Container ${containerId} exited while the job was running. Exit: ${exit.description}`
+        : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
+    ]
+    if (logs) parts.push(`Container logs:\n${logs}`)
+    // Persisted on the run and rendered in its details, so the container's own output goes
+    // through the shared compose (scrub + cap) rather than a per-transport copy of it.
+    return composePostMortem(parts)
+  }
+
+  /**
+   * The POOLED sibling of {@link containerPostMortem}, and the reason the poll reports which
+   * eviction branch it took.
+   *
+   * A per-run container serves one run, so reading it is safe on either branch. A pool member is
+   * a SHARED, long-lived backend: on the `job_unknown` branch it answered the poll, so it is
+   * alive and has simply forgotten this job, and its output right now belongs to whatever it is
+   * serving instead. Lifting a log tail off it would attach another run's work (possibly another
+   * repo's) to this run's recorded failure, which is worse than attaching nothing: the operator
+   * cannot tell it apart from a genuine tail. State the situation instead.
+   *
+   * On `unreachable` the member is confirmed gone while leased to this run, so its exit state and
+   * final output are this run's last words and the ordinary post-mortem applies.
+   */
+  private async pooledPostMortem(
+    containerId: string,
+    cause: EvictionCause,
+    exitState: () => Promise<ContainerExitState | undefined>,
+  ): Promise<string | undefined> {
+    if (cause === 'unreachable') return this.containerPostMortem(containerId, exitState)
+    return (
+      `Pool member ${containerId} answered the poll but no longer knows this job (its harness ` +
+      `restarted or reaped it). The member is still serving other runs, so its output is not ` +
+      `this run's and no log tail is attached.`
+    )
   }
 }
 
@@ -872,6 +1363,20 @@ function checkoutExtraEnv(settings?: LocalSettings): Record<string, string> {
   return env
 }
 
+/**
+ * Whether a ref runs on the DEFAULT executor image, which on this transport is the same question
+ * as "is this ref's container the run's ordinary one" (`containerKeyForRef` qualifies every other
+ * variant's key).
+ *
+ * Named once because four pooled branches ask it: a warm pool member is started on one image and
+ * re-leased across runs, so it can only ever serve this variant, and each branch spelling the test
+ * out as `containerKeyForRef(ref) === ref.runId` stated the rule by way of a coincidence and let
+ * the four drift apart.
+ */
+function isDefaultImage(ref: RunnerJobRef): boolean {
+  return !ref.image || ref.image === 'default'
+}
+
 /** The `owner/name` repo-affinity key from a dispatched job spec, when present. */
 function repoKeyOf(spec: Record<string, unknown>): string | undefined {
   const repo = spec.repo
@@ -888,10 +1393,13 @@ function repoKeyOf(spec: Record<string, unknown>): string | undefined {
  * settings panel). The image ref (`LOCAL_HARNESS_IMAGE`) is required; the runtime adapter is
  * selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack | colima | apple).
  * `settings` omitted ⇒ pooling off + harness defaults (e.g. an early boot-reap call).
+ * `credential` is the deployment's source-control credential, read per container start for the
+ * clone/push host allow-list; omitted (an early boot-reap call) ⇒ the operator-set hosts only.
  */
 export function createLocalContainerTransportFromEnv(
   env: NodeJS.ProcessEnv,
   settings?: LocalSettings,
+  credential?: () => LocalVcsCredential | undefined,
 ): LocalContainerRunnerTransport {
   // LOCAL_HARNESS_IMAGE is OPTIONAL: unset ⇒ the backend-matched RECOMMENDED_HARNESS_IMAGE, so a
   // stock deployment runs the image this build was released against (startLocal refreshes it at
@@ -899,14 +1407,25 @@ export function createLocalContainerTransportFromEnv(
   const image = resolveHarnessImage(env)
   const pool = settings?.pool
   const extraEnv = checkoutExtraEnv(settings)
-  // The harness validates every clone/push host against an allow-list defaulting to
-  // github.com. A GitLab local deployment clones a GitLab host, so forward it (plus any
-  // operator-set hosts) into the container — otherwise the harness rejects the GitLab clone
-  // URL before it can clone. No-op for a GitHub deployment with no extra hosts.
-  const allowedHosts = harnessAllowedHosts(env)
-  if (allowedHosts) extraEnv.GITHUB_ALLOWED_HOSTS = allowedHosts
+  // An entry this facade cannot use is stated HERE, at boot, rather than left to surface as a
+  // refused dispatch naming the variable the operator can already see the variant in. Boot is also
+  // the only moment the whole variable is in view, so a typo is one line to fix instead of a run to
+  // spend discovering.
+  const imageVariants = resolveHarnessImageVariants(env)
+  for (const { entry, reason } of imageVariants.rejected) {
+    logger.warn(
+      `local mode: ignoring LOCAL_HARNESS_IMAGE_VARIANTS entry "${entry}": ${reason}. Any agent ` +
+        `kind declaring that image will be refused at dispatch until the entry is corrected.`,
+    )
+  }
   return new LocalContainerRunnerTransport({
     image,
+    // Same rule as the base image, with one difference: the UI image is NOT pre-pulled at boot
+    // (it carries a browser and a JRE, so a stock local start would spend gigabytes on tooling
+    // most deployments never dispatch to). It is pulled by the runtime on the first `image: 'ui'
+    // dispatch, which is the first moment anything needs it.
+    imageUi: resolveUiHarnessImage(env),
+    imageVariants: imageVariants.variants,
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
@@ -921,6 +1440,15 @@ export function createLocalContainerTransportFromEnv(
     // nested containers without it (e.g. rootless Podman).
     privilegedTestJobs: env.LOCAL_DOCKER_PRIVILEGED_TEST_JOBS?.trim() !== 'false',
     ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
+    // The harness validates every clone/push host against an allow-list defaulting to
+    // github.com. A GitLab deployment clones a GitLab host, so forward it (plus any operator-set
+    // hosts) into the container — otherwise the harness rejects the GitLab clone URL before it
+    // can clone. Resolved per container start, because which host that is follows a credential
+    // installable while this transport is alive. No-op for a GitHub deployment with no extra hosts.
+    resolveEnv: (): Record<string, string> => {
+      const allowedHosts = harnessAllowedHosts(env, credential?.())
+      return allowedHosts ? { GITHUB_ALLOWED_HOSTS: allowedHosts } : {}
+    },
     // Warm pool (opt-in via the settings panel): keep idle harness containers ready and
     // re-lease them with repo-affinity checkout reuse. size 0 keeps the per-run behaviour.
     ...(pool

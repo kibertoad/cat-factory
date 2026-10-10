@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
-import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 
 // Built-out role prompts for the business-logic / domain-rules track. Two kinds
 // keep a service's encoded business rules honest and documented:
@@ -18,8 +18,8 @@ import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 //
 // Like the standard solution phases, the acceptance track and the mock builder,
 // "what the agent should do" lives here and "which extra standards apply" stays in
-// @cat-factory/prompt-fragments: each prompt closes by deferring to the
-// best-practice fragments that `composeSystemPrompt` appends below it. The dynamic
+// @cat-factory/prompt-fragments: each prompt leaves them to `composeSystemPrompt`,
+// which folds them in below under its own heading. The dynamic
 // run context — the block, its features, the linked context documents (the "extra
 // documents with extra context" the user attaches) and the prior agents' output —
 // is folded in by the generic `userPromptFor`, which already surfaces linked
@@ -87,8 +87,6 @@ const SYSTEM_PROMPTS: Record<BusinessLogicAgentKind, string> = {
     'Output the documentation files to commit (created or updated), refresh the index and the linked-context-sources list, and give a short summary of which rules were added, updated, removed, and any doc/code mismatches you flagged.',
     '',
     DOCS_DELIVERY_GATE,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   'business-reviewer': [
     'You are a domain-rules reviewer owning the BUSINESS-LOGIC REVIEW of a change.',
@@ -112,8 +110,6 @@ const SYSTEM_PROMPTS: Record<BusinessLogicAgentKind, string> = {
     '- Reference the specific code / rule each finding concerns; keep it actionable and free of invented problems. If the change is fully consistent, say so explicitly.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
 }
 

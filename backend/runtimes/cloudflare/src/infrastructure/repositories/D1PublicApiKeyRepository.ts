@@ -1,4 +1,5 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
+import type { PublicApiScope } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface PublicApiKeyRow {
@@ -6,7 +7,12 @@ interface PublicApiKeyRow {
   account_id: string
   workspace_id: string
   label: string
+  scope: string
   secret_hash: string
+  created_by_user_id: string | null
+  created_by_key_id: string | null
+  external_identity: string | null
+  acts_as_user_id: string | null
   created_at: number
   last_used_at: number | null
   revoked_at: number | null
@@ -18,14 +24,19 @@ function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
     accountId: row.account_id,
     workspaceId: row.workspace_id,
     label: row.label,
+    scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
+    createdByUserId: row.created_by_user_id,
+    createdByKeyId: row.created_by_key_id,
+    externalIdentity: row.external_identity,
+    actsAsUserId: row.acts_as_user_id,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
   }
 }
 
-/** D1-backed store of the inbound public-API keys (migration 0034). */
+/** D1-backed store of the inbound public-API keys (migrations 0034 + 0053 + 0054 + 0081 + 0086 + 0089). */
 export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
   private readonly db: D1Database
 
@@ -37,15 +48,20 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
     await this.db
       .prepare(
         `INSERT INTO public_api_keys
-          (id, account_id, workspace_id, label, secret_hash, created_at, last_used_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, account_id, workspace_id, label, scope, secret_hash, created_by_user_id, created_by_key_id, external_identity, acts_as_user_id, created_at, last_used_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
         record.accountId,
         record.workspaceId,
         record.label,
+        record.scope,
         record.secretHash,
+        record.createdByUserId,
+        record.createdByKeyId,
+        record.externalIdentity,
+        record.actsAsUserId,
         record.createdAt,
         record.lastUsedAt,
         record.revokedAt,
@@ -86,6 +102,17 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
         'UPDATE public_api_keys SET revoked_at = ? WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL',
       )
       .bind(at, id, workspaceId)
+      .run()
+  }
+
+  async revokeMintedBy(workspaceId: string, minterId: string, at: number): Promise<void> {
+    // One statement over the minter index, never a list-then-revoke: the set is small, but a
+    // read-then-write would let a key minted between the two reads survive the cascade.
+    await this.db
+      .prepare(
+        'UPDATE public_api_keys SET revoked_at = ? WHERE created_by_key_id = ? AND workspace_id = ? AND revoked_at IS NULL',
+      )
+      .bind(at, minterId, workspaceId)
       .run()
   }
 }

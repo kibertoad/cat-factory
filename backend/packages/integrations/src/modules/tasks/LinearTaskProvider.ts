@@ -1,11 +1,13 @@
 import {
   ValidationError,
+  type BugCandidate,
   type IssueIntakeQuery,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import {
@@ -14,6 +16,8 @@ import {
   linearAuthFromCredentials,
 } from '../shared/linear.client.js'
 import {
+  LINEAR_CANDIDATE_ISSUES_QUERY,
+  LINEAR_COMMENT_PROBE,
   LINEAR_INTAKE_ISSUES_QUERY,
   LINEAR_INTAKE_PAGE_CAP,
   LINEAR_ISSUE_CHILDREN_QUERY,
@@ -24,6 +28,8 @@ import {
   LINEAR_TASK_DESCRIPTOR,
   LINEAR_TEAMS_QUERY,
   LINEAR_VIEWER_QUERY,
+  type LinearCandidateNode,
+  type LinearCandidatePage,
   type LinearChildrenPage,
   type LinearCommentsPage,
   type LinearIntakeNode,
@@ -31,6 +37,7 @@ import {
   type LinearTeam,
   buildLinearIntakeFilter,
   linearIssueSearchHit,
+  mapLinearBugCandidates,
   mapLinearChildIds,
   mapLinearComments,
   mapLinearIntakeResults,
@@ -39,6 +46,8 @@ import {
   mapLinearTeams,
   parseLinearRef,
 } from './linear.logic.js'
+import { linearWebhookAdapter } from './webhook/adapters.js'
+import { linearWriteback } from './writeback/linear.writeback.js'
 
 // LinearTaskProvider: the task-source provider for Linear. It authenticates with a
 // personal API key against Linear's single GraphQL endpoint (via the shared
@@ -53,7 +62,24 @@ import {
 
 export class LinearTaskProvider implements TaskSourceProvider {
   readonly kind = 'linear' as const
+  /**
+   * Inbound webhook capability (verify + parse), so a linear delivery can drive intake and
+   * ticket replies without waiting for the next polling sweep. See
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`.
+   */
+  readonly webhook = linearWebhookAdapter
+  /**
+   * Outbound writeback (comment / resolve / claim), the mirror of the webhook capability above.
+   * Linear has no native close, so both state changes are transitions to a workflow state of a
+   * standard type.
+   */
+  readonly writeback = linearWriteback
   readonly descriptor = LINEAR_TASK_DESCRIPTOR
+  /**
+   * Linear has no issue-type notion at all: teams distinguish bugs with a label, which is what
+   * `buildLinearIntakeFilter` compiles and what an intake schedule has to narrow with here.
+   */
+  readonly ignoredIntakePredicates = ['issueType'] as const
 
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection {
     // The OAuth connect flow writes a `{ token }` record directly (it never calls
@@ -238,6 +264,52 @@ export class LinearTaskProvider implements TaskSourceProvider {
   }
 
   /**
+   * A Linear "board" IS a team, and {@link LinearTeam} is already the {@link TrackerBoard}
+   * shape (id / name / key), so the generic board listing is the team listing. Kept as its
+   * own method rather than aliased, because the two are the same only by coincidence of
+   * Linear's model — the ticket-filing picker and the hunt picker are free to diverge.
+   */
+  async listBoards(credentials: TaskCredentials): Promise<TrackerBoard[]> {
+    return this.listTeams(credentials)
+  }
+
+  /**
+   * Bug-hunt candidate search: the same `IssueFilter` + oldest-first walk as
+   * {@link searchIssues} (now also carrying `assignee: { null: true }`, from
+   * `query.unassignedOnly`), projecting the fields the ranking reasons over. The exclusion
+   * list is the one predicate Linear can't express on the human identifier, so the walk
+   * overscans by its size and the mapper filters — exactly as the intake does.
+   */
+  async listBugCandidates(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<BugCandidate[]> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const exclude = query.excludeExternalIds ?? []
+    const excluded = new Set(exclude.map((id) => id.toUpperCase()))
+    const filter = buildLinearIntakeFilter(query)
+    const first = Math.min(query.limit + exclude.length, 100)
+    const nodes: LinearCandidateNode[] = []
+    let after: string | undefined
+    for (let page = 0; page < LINEAR_INTAKE_PAGE_CAP; page++) {
+      const data = await client.query<LinearCandidatePage>(LINEAR_CANDIDATE_ISSUES_QUERY, {
+        filter,
+        first,
+        after,
+        comments: LINEAR_COMMENT_PROBE,
+      })
+      nodes.push(...(data.issues?.nodes ?? []))
+      const fresh = nodes.filter(
+        (n) => n.identifier && !excluded.has(n.identifier.toUpperCase()),
+      ).length
+      const pageInfo = data.issues?.pageInfo
+      if (fresh >= query.limit || !pageInfo?.hasNextPage || !pageInfo.endCursor) break
+      after = pageInfo.endCursor
+    }
+    return mapLinearBugCandidates({ issues: { nodes } }, query.limit, exclude)
+  }
+
+  /**
    * Live setup check: read `viewer` (the cheapest authenticated query) with the
    * stored key. A 401/403 from Linear's GraphQL surfaces as auth_failed/forbidden;
    * a thrown fetch (DNS/network) ⇒ unreachable. Resolves (never rejects), per the port.
@@ -267,6 +339,19 @@ export class LinearTaskProvider implements TaskSourceProvider {
       }
     } catch (err) {
       if (err instanceof LinearApiError) {
+        // BEFORE the status branches, because Linear answers an exhausted quota with HTTP 400 and
+        // a `RATELIMITED` code: reading the status alone would report a valid key as a broken
+        // request and send an operator to re-mint the one thing that was never at fault.
+        if (err.rateLimited) {
+          return {
+            source: 'linear',
+            ok: false,
+            status: 'rate_limited',
+            message:
+              'Linear is rate limiting this connection. The API key is valid and nothing needs ' +
+              'reconnecting; re-check in a few minutes.',
+          }
+        }
         if (err.status === 401) {
           return {
             source: 'linear',

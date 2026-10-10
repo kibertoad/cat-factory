@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import {
   areaStatus,
+  infraSetupAreaApplies,
   type InfraSetupSources,
   snapshotInfraSetup,
-} from '../src/modules/workspaces/WorkspaceController.js'
+} from '../src/modules/workspaces/infraSetup.js'
 
 // Unit coverage for the infra-setup snapshot projection. The cross-runtime conformance suite only
 // pins "present + valid enum" (per-area values legitimately differ by runtime); these tests pin the
 // actual detection: wired-but-unconfigured → `not_defined`, configured → `configured`, unwired →
 // `not_applicable`, that the agent-executor area only fires where a runner pool is the SOLE executor
-// (`agentExecutorRequiresRunnerPool`), and the fault-isolation that a throwing/hanging probe degrades
+// (`agentExecutorRequiresRunnerPool`) and the ephemeral-environments area only where a provider is
+// genuinely mandatory (`ephemeralEnvironmentsRequireProvider` — local docker-compose needs none),
+// and the fault-isolation that a throwing/hanging probe degrades
 // to `not_applicable` (logged) rather than 500-ing / stalling the board load.
 
 const WS = 'ws-1'
@@ -54,8 +58,7 @@ describe('areaStatus', () => {
   })
 
   it('logs the swallowed fault so a persistent misconfig stays diagnosable', async () => {
-    const warns: Array<Record<string, unknown>> = []
-    const logger = { warn: (obj: Record<string, unknown>) => warns.push(obj) }
+    const logger = createRecordingLogger()
     await areaStatus(
       true,
       async () => {
@@ -63,6 +66,7 @@ describe('areaStatus', () => {
       },
       { area: 'agentExecutor', logger },
     )
+    const warns = logger.lines.map((l) => l.fields)
     expect(warns).toHaveLength(1)
     expect(warns[0]).toMatchObject({ area: 'agentExecutor', err: 'boom' })
   })
@@ -95,6 +99,43 @@ describe('snapshotInfraSetup', () => {
     })
   })
 
+  it('ephemeralEnvironments is not_defined when a provider is required and none is registered (Worker / stock Node)', async () => {
+    const infra = await snapshotInfraSetup(
+      { environments: envSource(false), ephemeralEnvironmentsRequireProvider: true },
+      WS,
+    )
+    expect(infra.ephemeralEnvironments).toBe('not_defined')
+  })
+
+  it('ephemeralEnvironments is not_applicable when a zero-config default exists, even with no provider (local docker-compose)', async () => {
+    // Local mode on a Docker-family runtime stands the Tester's deps up with `local-compose` (no
+    // connection), so a missing provider must NOT nag — the `ephemeralEnvironmentsRequireProvider`
+    // gate keeps this `not_applicable` rather than the false-positive `not_defined`, mirroring the
+    // agent-executor gate above. The env probe is never even called.
+    let called = false
+    const infra = await snapshotInfraSetup(
+      {
+        environments: {
+          connectionService: {
+            hasConnection: async () => {
+              called = true
+              return false
+            },
+          },
+        },
+        ephemeralEnvironmentsRequireProvider: false,
+      },
+      WS,
+    )
+    expect(infra.ephemeralEnvironments).toBe('not_applicable')
+    expect(called).toBe(false)
+  })
+
+  it('ephemeralEnvironments defaults to required when the gate is unset (preserves hosted-facade nag)', async () => {
+    const infra = await snapshotInfraSetup({ environments: envSource(false) }, WS)
+    expect(infra.ephemeralEnvironments).toBe('not_defined')
+  })
+
   it('agentExecutor is not_defined when the pool is the sole executor and none is registered (remote Node)', async () => {
     const infra = await snapshotInfraSetup(
       { runners: runnerSource(false), agentExecutorRequiresRunnerPool: true },
@@ -111,6 +152,35 @@ describe('snapshotInfraSetup', () => {
     // Even a *registered* pool is not_applicable there: the pool isn't the executor of record.
     const registered = await snapshotInfraSetup({ runners: runnerSource(true) }, WS)
     expect(registered.agentExecutor).toBe('not_applicable')
+  })
+
+  it('exposes the same applicability predicate the reachability watcher probes on', () => {
+    // ONE definition, deliberately: the watcher gated only on "is the module wired", which is
+    // strictly looser than this, so a dead-but-optional runner pool raised a card and paged Slack
+    // for an area whose `not_applicable` status the snapshot fold then refused to render.
+    const optionalPool = { runners: runnerSource(true) }
+    expect(infraSetupAreaApplies(optionalPool, 'agentExecutor')).toBe(false)
+    expect(
+      infraSetupAreaApplies(
+        { ...optionalPool, agentExecutorRequiresRunnerPool: true },
+        'agentExecutor',
+      ),
+    ).toBe(true)
+    // Environments default to required, and a zero-config test-env default opts out.
+    expect(infraSetupAreaApplies({ environments: envSource(true) }, 'ephemeralEnvironments')).toBe(
+      true,
+    )
+    expect(
+      infraSetupAreaApplies(
+        { environments: envSource(true), ephemeralEnvironmentsRequireProvider: false },
+        'ephemeralEnvironments',
+      ),
+    ).toBe(false)
+    // An unwired module never applies, whatever the flag says.
+    expect(infraSetupAreaApplies({ agentExecutorRequiresRunnerPool: true }, 'agentExecutor')).toBe(
+      false,
+    )
+    expect(infraSetupAreaApplies({}, 'binaryStorage')).toBe(false)
   })
 
   it('treats a resolved artifact store as configured', async () => {

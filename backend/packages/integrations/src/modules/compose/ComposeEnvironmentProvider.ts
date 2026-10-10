@@ -9,8 +9,10 @@ import type {
   ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
   RunRepoContext,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import type { PreflightRef, RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import { getErrorMessage } from '@cat-factory/kernel'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import {
   type ComposeEnvironmentConfig,
@@ -19,6 +21,8 @@ import {
   checkoutDepthFor,
   classifyComposePs,
   composeFileDir,
+  composeProbeFailure,
+  countComposePs,
   parseComposeEnvConfig,
   parseHostPort,
   prepareComposeProject,
@@ -32,6 +36,7 @@ import {
   tailOutput,
   templateVars,
 } from './compose-environment.logic.js'
+import { planComposeLayers } from './compose-sources.js'
 import { runHealthGate, runRecipeStep } from './recipe-runner.js'
 
 // Native Docker Compose ephemeral-environment provider. It brings the PR repo's OWN
@@ -166,7 +171,12 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         status: 'failed',
         expiresAt: null,
         access: null,
-        fields: {},
+        // `null` rather than an empty bag, the same answer the Kubernetes sibling gives its
+        // no-namespace branch: nothing on the host was read, so this states nothing about the
+        // captured fields. An empty statement REPLACES them, and `project` is the one key
+        // {@link teardown} reads to find the containers, so erasing it here would leak this
+        // project's containers and volumes onto the host permanently.
+        fields: null,
       }
     }
     // `-a` so a container that's briefly recreating (or a completed one-shot) is still visible —
@@ -193,6 +203,49 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     return { status: 'torn_down' }
   }
 
+  /**
+   * Confirm the project's containers are gone, by listing them back.
+   *
+   * `compose down` is synchronous, so unlike a Kubernetes namespace there is no terminating
+   * window to wait out: any container still listed after it means the down did not take (a
+   * container with a stuck stop, a project name that never matched). `-a` is used for the same
+   * reason {@link status} uses it — a stopped-but-present container is still a container the
+   * host is holding, and an empty default `ps` would report it as reclaimed.
+   */
+  async confirmTeardown(req: EnvironmentTeardownRequest): Promise<TeardownProbe> {
+    const project = req.provisionFields.project ?? req.externalId
+    if (!project) {
+      return {
+        state: 'unknown',
+        retryable: false,
+        reason: 'No compose project recorded for this environment.',
+      }
+    }
+    const ps = await this.runtime.compose(['-p', project, 'ps', '-a', '--format', 'json'], {
+      timeoutMs: SHORT_TIMEOUT_MS,
+    })
+    if (ps.code !== 0) {
+      // The daemon could not be asked (stopped, permissions). NOT `gone`: an unreachable daemon
+      // answers nothing, and reading its silence as an empty project would confirm a teardown on
+      // a host that is not even running.
+      return {
+        state: 'unknown',
+        // The daemon may well be up again by the next sweep.
+        retryable: true,
+        reason:
+          tailOutput(ps.stderr || ps.stdout) ||
+          `Could not list compose project '${project}' to confirm teardown.`,
+      }
+    }
+    const remaining = countComposePs(ps.stdout)
+    if (remaining === 0) return { state: 'gone' }
+    return {
+      state: 'present',
+      terminating: false,
+      detail: `Compose project '${project}' still has ${remaining} container${remaining === 1 ? '' : 's'}.`,
+    }
+  }
+
   async testConnection(_req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {
     try {
       const version = await this.runtime.compose(['version', '--short'], {
@@ -201,19 +254,25 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       if (version.code !== 0) {
         return {
           ok: false,
-          message: tailOutput(version.stderr || version.stdout) || 'docker compose unavailable',
+          message: composeProbeFailure(
+            `\`docker compose version\` exited ${version.code}: the Compose v2 CLI plugin could not be run at all. Check that Docker is installed and on this host's PATH.`,
+            version.stderr || version.stdout,
+          ),
         }
       }
       // `version --short` is a client-only call and succeeds even with the daemon stopped, so it
-      // can't confirm reachability on its own. `compose ls` actually contacts the daemon — only a
-      // success there means a real provision could run.
+      // can't confirm reachability on its own. `compose ls` actually contacts the daemon, and only
+      // a success there means a real provision could run.
       const ls = await this.runtime.compose(['ls', '--format', 'json'], {
         timeoutMs: SHORT_TIMEOUT_MS,
       })
       if (ls.code !== 0) {
         return {
           ok: false,
-          message: tailOutput(ls.stderr || ls.stdout) || 'Docker daemon is not reachable',
+          message: composeProbeFailure(
+            `\`docker compose ls\` exited ${ls.code}: the Compose CLI ran but could not reach the Docker daemon. Start Docker (Docker Desktop, colima, or the \`docker\` service), and check \`DOCKER_HOST\` if it points somewhere unusual.`,
+            ls.stderr || ls.stdout,
+          ),
         }
       }
       const v = version.stdout.trim()
@@ -222,7 +281,17 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         message: v ? `Docker Compose ${v} reachable.` : 'Docker Compose reachable.',
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // A THROW here is the INVOCATION failing (no `docker` binary, the runtime adapter could not
+      // spawn it, the watchdog fired), which is a different fault from a compose command that ran
+      // and reported a problem: those are the non-zero branches above, read off stderr.
+      return {
+        ok: false,
+        message: composeProbeFailure(
+          "Could not run `docker compose` at all: check that Docker (with the Compose v2 plugin) is installed, on this host's PATH, and running.",
+          getErrorMessage(err),
+          'The invocation failed with',
+        ),
+      }
     }
   }
 
@@ -366,7 +435,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       }))
     } catch (err) {
       return {
-        error: `Could not clone the repo for build: ${err instanceof Error ? err.message : String(err)}`,
+        error: `Could not clone the repo for build: ${getErrorMessage(err)}`,
       }
     }
     const composeDir = composeFileDir(config.composePath)
@@ -460,34 +529,10 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     const project = resolveProjectName(config, inputs)
     const record = req.recordStep
 
-    // A recipe always needs a working tree (its steps + env files operate on the checkout).
-    if (
-      !this.runtime.checkout ||
-      !this.runtime.writeCheckoutFile ||
-      !this.runtime.copyCheckoutFile
-    ) {
-      return this.failed(
-        project,
-        'A stack recipe needs a Docker-capable runtime that can clone + write into a checkout (unavailable on this deployment).',
-      )
-    }
-
-    // Fail fast (before the daemon / clone) on any checkout-escaping recipe path, and on a
-    // `host-command` step that isn't opted into — the `prepareComposeProject` deterministic posture.
-    const pathIssues = recipeCheckoutPathIssues(recipe)
-    if (pathIssues.length > 0) {
-      return this.failed(
-        project,
-        `This stack recipe can't be provisioned:\n- ${pathIssues.join('\n- ')}`,
-      )
-    }
-    const hostCmdIssue = this.checkHostCommandsAllowed(recipe, config)
-    if (hostCmdIssue) return this.failed(project, hostCmdIssue)
-
-    // Re-run the machine PREREQUISITE checks (VPN / registry login / daemon / disk / mkcert / hosts /
-    // secrets) FIRST — before the daemon / clone / shared-stack work — so a failed required check
-    // fails fast with its remediation instead of a mystery deep inside a 40-image pull.
-    const preflightIssue = await this.runPreflights(req, recipe, record)
+    // Fail fast (before the daemon / clone) on runtime capability, checkout-escaping recipe paths,
+    // an un-opted `host-command` step, and the machine PREREQUISITE checks — each with its own
+    // remediation, so a failed required check fails fast instead of a mystery deep in a 40-image pull.
+    const preflightIssue = await this.preflightRecipe(req, config, recipe, record)
     if (preflightIssue) return this.failed(project, preflightIssue)
 
     const image = config.imageTemplate ? renderTemplate(config.imageTemplate, inputs) : undefined
@@ -501,20 +546,9 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     // Read + rewrite the layered compose files. `-f` order is preserved; the first file's dir is the
     // shared `--project-directory`, so every layer's relatives resolve against it (its checkout depth
     // bounds the host-escape guard). A blocking issue fails BEFORE the daemon is touched.
-    const composeFiles = resolveRecipeComposeFiles(recipe, config.composePath)
-    const baseDepth = checkoutDepthFor(composeFiles[0]!)
-    let source: { ctx: RunRepoContext; ref: string }
-    try {
-      source = await this.resolveComposeSource(req, config)
-    } catch (err) {
-      return this.failed(project, err instanceof Error ? err.message : String(err))
-    }
-    const inputsFiles: { path: string; text: string }[] = []
-    for (const path of composeFiles) {
-      const file = await source.ctx.repo.getFile(path, source.ref)
-      if (!file) return this.failed(project, `No docker-compose file found at '${path}'`)
-      inputsFiles.push({ path, text: renderTemplate(file.content, vars) })
-    }
+    const read = await this.readRecipeComposeFiles(req, config, recipe, vars)
+    if ('error' in read) return this.failed(project, read.error)
+    const { baseDepth, inputsFiles } = read
 
     // Provider-before-consumer: bring the referenced SHARED STACKS up FIRST and collect the managed
     // Docker networks they own, so the per-PR project can attach to them as `external: true` (the
@@ -547,7 +581,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     const ref = req.inputs.branch || clone.ref
     let checkoutDir: string
     try {
-      ;({ dir: checkoutDir } = await this.runtime.checkout(project, {
+      ;({ dir: checkoutDir } = await this.runtime.checkout!(project, {
         cloneUrl: clone.cloneUrl,
         ref,
         token: clone.token,
@@ -555,41 +589,159 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     } catch (err) {
       return this.failed(
         project,
-        `Could not clone the repo for the recipe: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not clone the repo for the recipe: ${getErrorMessage(err)}`,
       )
     }
-    const composeDir = composeFileDir(composeFiles[0]!)
-    const projectDir = composeDir ? `${checkoutDir}/${composeDir}` : checkoutDir
+    // `--project-directory` is the layer list's project dir (the first IN-REPO layer's directory),
+    // never the first layer's own — a materialized `inline`/`repo` layer must not move the anchor
+    // every in-repo layer's relative build contexts / binds / env_files resolve against.
+    const projectDir = read.projectDir ? `${checkoutDir}/${read.projectDir}` : checkoutDir
 
     // Materialize env-file templates (`.env.dev.local-dist` → `.env.dev.local`) BEFORE `up`, each a
     // logged step so a materialization failure is visible.
-    for (const envFile of recipe.envFiles ?? []) {
-      const started = Date.now()
-      try {
-        await this.runtime.copyCheckoutFile(project, envFile.template, envFile.target)
-        await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
-      } catch (err) {
-        const message = `Could not materialize env file '${envFile.target}': ${
-          err instanceof Error ? err.message : String(err)
-        }`
-        await this.logStep(record, `env-file: ${envFile.target}`, started, {
-          ok: false,
-          error: message,
-        })
-        await this.safeDown(project)
-        return this.failed(project, message)
-      }
-    }
+    const envFileIssue = await this.materializeRecipeEnvFiles(project, recipe, record)
+    if (envFileIssue) return this.failed(project, envFileIssue)
 
     // Write the rewritten compose files into the checkout (beside their originals) + build the `-f`s.
     const files: string[] = []
     for (const file of prepared.files) {
-      const abs = await this.runtime.writeCheckoutFile(project, file.path, file.content)
+      const abs = await this.runtime.writeCheckoutFile!(project, file.path, file.content)
       files.push('-f', abs)
     }
     const scope = ['-p', project, '--project-directory', projectDir, ...files]
 
     // Optional build (pull mode skips it); then `up -d` (no `--wait`).
+    const startIssue = await this.runComposeBuildAndUp(scope, env, config, project, record)
+    if (startIssue) return this.failed(project, startIssue)
+
+    // Ordered setup steps, then the terminal health gate. The first failure tears down + surfaces.
+    const stepsIssue = await this.runRecipeStepsAndGate(scope, env, project, recipe, record)
+    if (stepsIssue) return this.failed(project, stepsIssue)
+
+    // Resolve the preview URL from the probed service's ephemeral host port.
+    return this.resolvePreviewUrl(scope, env, config, project)
+  }
+
+  /**
+   * Fail-fast pre-daemon validation for a stack recipe: the runtime must be able to clone + write a
+   * checkout, no recipe path may escape the checkout, a `host-command` step must be opted in, and the
+   * machine PREREQUISITE checks (VPN / registry login / daemon / disk / mkcert / hosts / secrets) must
+   * pass. Returns the first blocking message (with its remediation) or null when the recipe may proceed.
+   */
+  private async preflightRecipe(
+    req: ProvisionEnvironmentRequest,
+    config: ComposeEnvironmentConfig,
+    recipe: StackRecipe,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    // A recipe always needs a working tree (its steps + env files operate on the checkout).
+    if (
+      !this.runtime.checkout ||
+      !this.runtime.writeCheckoutFile ||
+      !this.runtime.copyCheckoutFile
+    ) {
+      return 'A stack recipe needs a Docker-capable runtime that can clone + write into a checkout (unavailable on this deployment).'
+    }
+    // Fail fast on any checkout-escaping recipe path, and on a `host-command` step that isn't opted
+    // into — the `prepareComposeProject` deterministic posture.
+    const pathIssues = recipeCheckoutPathIssues(recipe)
+    if (pathIssues.length > 0) {
+      return `This stack recipe can't be provisioned:\n- ${pathIssues.join('\n- ')}`
+    }
+    const hostCmdIssue = this.checkHostCommandsAllowed(recipe, config)
+    if (hostCmdIssue) return hostCmdIssue
+    // Re-run the machine PREREQUISITE checks FIRST — before the daemon / clone / shared-stack work.
+    return this.runPreflights(req, recipe, record)
+  }
+
+  /**
+   * Read + template the layered compose files. `-f` order is preserved; the compose PROJECT
+   * DIRECTORY (the first in-repo layer's dir) bounds the host-escape guard. A layer's text comes
+   * from wherever it declares: the run's own repo (a bare path), the layer itself (`inline`), or
+   * another `owner/repo` read checkout-free through the workspace's VCS connection. Returns the
+   * templated inputs + derived `baseDepth`, or a blocking `error` (missing file / unresolvable
+   * source) — no daemon work.
+   *
+   * The primary-repo source is resolved LAZILY: a recipe made entirely of `inline` / `repo` layers
+   * must not fail for want of a co-located compose file it never asked for.
+   */
+  private async readRecipeComposeFiles(
+    req: ProvisionEnvironmentRequest,
+    config: ComposeEnvironmentConfig,
+    recipe: StackRecipe,
+    vars: Record<string, string>,
+  ): Promise<
+    | { projectDir: string; baseDepth: number; inputsFiles: { path: string; text: string }[] }
+    | { error: string }
+  > {
+    const planned = await planComposeLayers(
+      resolveRecipeComposeFiles(recipe, config.composePath),
+      req.resolveRepoFiles ? { resolveForeignRepo: (coords) => req.resolveRepoFiles!(coords) } : {},
+    )
+    if ('error' in planned) return planned
+
+    let primary: { ctx: RunRepoContext; ref: string } | null = null
+    const inputsFiles: { path: string; text: string }[] = []
+    for (const layer of planned.layers) {
+      let text = layer.content
+      if (text === undefined) {
+        if (!primary) {
+          try {
+            primary = await this.resolveComposeSource(req, config)
+          } catch (err) {
+            return { error: getErrorMessage(err) }
+          }
+        }
+        const file = await primary.ctx.repo.getFile(layer.path, primary.ref)
+        if (!file) return { error: `No docker-compose file found at '${layer.path}'` }
+        text = file.content
+      }
+      inputsFiles.push({ path: layer.path, text: renderTemplate(text, vars) })
+    }
+    return { projectDir: planned.projectDir, baseDepth: planned.baseDepth, inputsFiles }
+  }
+
+  /**
+   * Materialize the recipe's env-file templates (`.env.dev.local-dist` → `.env.dev.local`) into the
+   * checkout before `up`, each a logged step. Returns a blocking message (after tearing the project
+   * down) on the first failure, else null.
+   */
+  private async materializeRecipeEnvFiles(
+    project: string,
+    recipe: StackRecipe,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    for (const envFile of recipe.envFiles ?? []) {
+      const started = Date.now()
+      try {
+        await this.runtime.copyCheckoutFile!(project, envFile.template, envFile.target)
+        await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
+      } catch (err) {
+        const message = `Could not materialize env file '${envFile.target}': ${getErrorMessage(
+          err,
+        )}`
+        await this.logStep(record, `env-file: ${envFile.target}`, started, {
+          ok: false,
+          error: message,
+        })
+        await this.safeDown(project)
+        return message
+      }
+    }
+    return null
+  }
+
+  /**
+   * Optionally `build` (pull mode skips it) then `up -d` (no `--wait`), each a logged step. Returns a
+   * blocking message (after tearing the half-up project down) on failure, else null.
+   */
+  private async runComposeBuildAndUp(
+    scope: string[],
+    env: Record<string, string>,
+    config: ComposeEnvironmentConfig,
+    project: string,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
     if (config.build) {
       const buildStarted = Date.now()
       const build = await this.runtime.compose([...scope, 'build'], {
@@ -603,10 +755,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       })
       if (!buildOk) {
         await this.safeDown(project)
-        return this.failed(
-          project,
-          tailOutput(build.stderr || build.stdout) || 'docker compose build failed',
-        )
+        return tailOutput(build.stderr || build.stdout) || 'docker compose build failed'
       }
     }
     const upStarted = Date.now()
@@ -618,17 +767,29 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     })
     if (!upOk) {
       await this.safeDown(project)
-      return this.failed(project, tailOutput(up.stderr || up.stdout) || 'docker compose up failed')
+      return tailOutput(up.stderr || up.stdout) || 'docker compose up failed'
     }
+    return null
+  }
 
-    // Ordered setup steps, then the terminal health gate. The first failure tears down + surfaces.
+  /**
+   * Run the recipe's ordered setup steps then the terminal health gate, each a logged step. Returns a
+   * blocking message (after tearing the project down) on the first failure, else null.
+   */
+  private async runRecipeStepsAndGate(
+    scope: string[],
+    env: Record<string, string>,
+    project: string,
+    recipe: StackRecipe,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
     for (const step of recipe.setupSteps ?? []) {
       const started = Date.now()
       const result = await runRecipeStep(step, { runtime: this.runtime, scope, env, project })
       await this.logStep(record, step.name, started, result)
       if (!result.ok) {
         await this.safeDown(project)
-        return this.failed(project, `Recipe step '${step.name}' failed: ${result.error}`)
+        return `Recipe step '${step.name}' failed: ${result.error}`
       }
     }
     const gate = recipe.healthGate ?? DEFAULT_RECIPE_HEALTH_GATE
@@ -641,10 +802,21 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     await this.logStep(record, `health gate (${gate.kind})`, gateStarted, gateResult)
     if (!gateResult.ok) {
       await this.safeDown(project)
-      return this.failed(project, `Health gate did not pass: ${gateResult.error}`)
+      return `Health gate did not pass: ${gateResult.error}`
     }
+    return null
+  }
 
-    // Resolve the preview URL from the probed service's ephemeral host port.
+  /**
+   * Resolve the preview URL from the probed service's ephemeral host port. Tears the project down +
+   * returns a failed environment when the service publishes no such port, else the ready environment.
+   */
+  private async resolvePreviewUrl(
+    scope: string[],
+    env: Record<string, string>,
+    config: ComposeEnvironmentConfig,
+    project: string,
+  ): Promise<ProvisionedEnvironment> {
     const portRes = await this.runtime.compose(
       [...scope, 'port', config.service, String(config.port)],
       {

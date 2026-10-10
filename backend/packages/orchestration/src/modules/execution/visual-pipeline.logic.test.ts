@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { FRONTEND_WIREMOCK_PORT, HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '@cat-factory/contracts'
 import {
   frameAllowsVisualPipeline,
   frontendOriginsForService,
   pipelineHasVisualStep,
+  pipelineRunsVisualStep,
 } from '@cat-factory/contracts'
 
 // The pure predicates behind the slice-4c run-start gate (and the SPA's matching surface): a
@@ -45,6 +47,62 @@ describe('pipelineHasVisualStep', () => {
 
   it('is false for a backend pipeline (`tester-api`, no visual step)', () => {
     expect(pipelineHasVisualStep(pipeline(['coder', 'tester-api', 'ci', 'merger']))).toBe(false)
+  })
+
+  it('counts a CONDITIONAL visual step, which is why the frame gate cannot read it', () => {
+    // The coarse question stays coarse on purpose: run start reads it to decide whether to
+    // resolve the frontend bindings, and a frontend task's conditional `tester-ui` does run.
+    expect(pipelineHasVisualStep(pipeline(['coder', 'tester-ui']))).toBe(true)
+  })
+})
+
+describe('pipelineRunsVisualStep', () => {
+  /** The build ladder's shape: a `tester-ui` scoped to a frontend, beside its API sibling. */
+  const testerPair: Pick<Pipeline, 'agentKinds' | 'enabled' | 'stepOptions'> = {
+    agentKinds: ['coder', 'tester-api', 'tester-ui', 'merger'],
+    stepOptions: [
+      null,
+      { condition: { serviceScope: 'backend' } },
+      { condition: { serviceScope: 'frontend' } },
+      null,
+    ],
+  }
+
+  it('excuses a frontend-scoped visual step from a backend-only run', () => {
+    // The regression this predicate exists for: every build rung carries the conditional tester
+    // pair, so reading the coarse question hid the whole ladder from every non-frontend service.
+    expect(pipelineRunsVisualStep(testerPair, { frontend: false, backend: true })).toBe(false)
+  })
+
+  it('keeps it where the scope has a frontend to drive', () => {
+    expect(pipelineRunsVisualStep(testerPair, { frontend: true, backend: false })).toBe(true)
+    expect(pipelineRunsVisualStep(testerPair, { frontend: true, backend: true })).toBe(true)
+  })
+
+  it('admits every condition on an unresolvable scope, leaving the frame gate to refuse', () => {
+    // A block under no service frame: nothing to judge the condition against, so the step counts
+    // and the frame half answers — the same fail-safe direction the engine takes.
+    expect(pipelineRunsVisualStep(testerPair, { frontend: false, backend: false })).toBe(true)
+  })
+
+  it('still demands a UI for an UNCONDITIONAL visual step on a backend run', () => {
+    const p = { agentKinds: ['coder', 'visual-confirmation'] }
+    expect(pipelineRunsVisualStep(p, { frontend: false, backend: true })).toBe(true)
+  })
+
+  it('ignores a visual step disabled by default — it never dispatches', () => {
+    const p = { agentKinds: ['coder', 'tester-ui'], enabled: [true, false] }
+    expect(pipelineRunsVisualStep(p, { frontend: false, backend: true })).toBe(false)
+    // A short/absent `enabled` array means the step runs, so the guard cannot read as disabled.
+    expect(
+      pipelineRunsVisualStep(
+        { agentKinds: ['coder', 'tester-ui'], enabled: [true] },
+        {
+          frontend: false,
+          backend: true,
+        },
+      ),
+    ).toBe(true)
   })
 })
 
@@ -118,15 +176,14 @@ describe('frontendOriginsForService', () => {
   })
 
   it('sanitizes a reserved servePort to the default so the origin matches the actual served port', () => {
-    // A reserved in-container port (8080 harness job server / 8089 WireMock) is bumped to 4173 by
-    // `resolveFrontendServePort` when the app is actually served, so the CORS origin must too — a
-    // raw `servePort` would inject `localhost:8080` while the app serves on 4173 (CORS fails).
-    expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: 8080 })])).toEqual([
-      'http://localhost:4173',
-    ])
-    expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: 8089 })])).toEqual([
-      'http://localhost:4173',
-    ])
+    // A reserved in-container port (the harness's own job server, WireMock) is bumped to 4173 by
+    // `resolveFrontendServePort` when the app is actually served, so the CORS origin must too: a
+    // raw `servePort` would inject the reserved port while the app serves on 4173 (CORS fails).
+    for (const reserved of [HARNESS_JOB_PORT, FRONTEND_WIREMOCK_PORT]) {
+      expect(
+        frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: reserved })]),
+      ).toEqual(['http://localhost:4173'])
+    }
   })
 
   it('dedupes + sorts origins across multiple binding frontends', () => {

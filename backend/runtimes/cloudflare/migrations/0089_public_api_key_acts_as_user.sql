@@ -1,0 +1,18 @@
+-- The user whose PERSONAL (individual-usage) subscriptions an inbound public-API key may unlock,
+-- set at a session-authed mint when the person minting the key opted in (`actsAsSelf`). NULL for
+-- every key that did not, for every headlessly-minted key, and for every row predating the column.
+--
+-- Unlike `created_by_user_id` beside it, this one IS an authorization input, and the narrowest one
+-- that lets a headless run use an individual-usage model at all: it names whose personal credential
+-- the per-run activation may be minted from, and only on a call that also carries that user's
+-- personal password (which is never stored, here or anywhere). So this column alone spends nothing.
+--
+-- Only ever the MINTER's own id: the wire body is a boolean and the server reads the id off the
+-- session, so "mint a key onto a colleague's subscription" is unrepresentable rather than merely
+-- refused. Mirrored on Node by the `acts_as_user_id` column on the Drizzle `public_api_keys` table.
+--
+-- No index and no FK, for the reasons the sibling columns carry: nothing queries by it (both
+-- readers already hold the row), and the key is a workspace-scoped credential that must survive
+-- its user's removal — a bound key whose user is gone simply fails the unlock, loudly, at the run
+-- that needed it.
+ALTER TABLE public_api_keys ADD COLUMN acts_as_user_id TEXT;

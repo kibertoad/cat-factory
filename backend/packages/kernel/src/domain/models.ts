@@ -2,13 +2,64 @@ import {
   type ModelCost,
   type ModelFamily,
   type ModelFamilyPolicy,
+  type ModelFlavor,
   type ModelOption,
   type OpenRouterModelMeta,
   type SubscriptionVendor,
   isLocalRunner,
+  orderedModelFlavorPreference,
+  providerCachesPrompts,
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
-import { providerCachesPrompts } from './cache-policy.js'
+import { MODEL_CATALOG } from './model-catalog.js'
+import {
+  type LocalModelDeclarations,
+  resolveLocalModelModality,
+} from './local-model-declarations.js'
+
+/**
+ * Every route a catalog model can resolve to, as an ordered tuple. `satisfies` pins the
+ * tuple to the wire vocabulary in one direction (a member here that contracts doesn't
+ * know fails to compile); `model-flavors.test.ts` pins the other (a member contracts
+ * gained that is missing here would never be TRIED, which no typecheck can see, since a
+ * resolver walks this tuple rather than the union).
+ */
+export const MODEL_FLAVORS = [
+  'direct',
+  'bedrock',
+  'openrouter',
+  'cloudflare',
+  'subscription',
+] as const satisfies readonly ModelFlavor[]
+
+/**
+ * The order routes are preferred in when a model has several usable ones. A model's own
+ * provider API wins, then AWS Bedrock (a first-party, residency-guaranteed route), then
+ * the OpenRouter gateway that resells them, then the always-available Cloudflare floor,
+ * and finally the subscription harness.
+ *
+ * NOTE: the subscription position here is NOT where the design lands. "A subscription is
+ * flat-rate quota already paid for, so spending metered tokens beside it is waste" makes
+ * `subscription` the FIRST preference, but today that rule is applied on top, separately,
+ * by `ModelRouter.resolveEffectiveRef` (which alone knows whether THIS workspace/user
+ * holds a token) and by each inline call site's `inlineModelRef` degradation (which alone
+ * knows whether the caller can drive a harness at all). Moving it here means re-plumbing
+ * both, so the flip is its own slice; see
+ * `docs/initiatives/model-provider-preference.md`. Until then this tuple keeps the
+ * historical order so a Bedrock route changes nothing else about how a model resolves.
+ */
+export const DEFAULT_PROVIDER_PREFERENCE: readonly ModelFlavor[] = MODEL_FLAVORS
+
+/**
+ * The full order a resolution walks, given a preset's own preference. Re-exported from
+ * `@cat-factory/contracts` rather than reimplemented, because the PRESET EDITOR renders the same
+ * fold: a second copy here would let the picker display an order the run does not take.
+ *
+ * A preference REORDERS, it never filters — see {@link orderedModelFlavorPreference} for why that
+ * is a total order over every route rather than the caller's list. A stored entry the current build
+ * no longer knows is filtered out at the persistence boundary (`isModelFlavor`).
+ */
+export const orderedProviderPreference = orderedModelFlavorPreference
 
 // How each subscription vendor authenticates and which harness runs it. Claude
 // Code is an Anthropic-API client that honours ANTHROPIC_BASE_URL +
@@ -68,19 +119,11 @@ export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendor
   codex: { harness: 'codex', label: 'ChatGPT (Codex)', individualOnly: true },
 }
 
-// The curated catalog of LLM models a user can pick for a single block. Selection
-// persists as a stable `id` on the block (see `Block.modelId`); at run time the
-// executor resolves that id to a concrete {@link ModelRef}.
-//
-// Each model has up to four flavours: a Cloudflare Workers AI variant that is
-// always available (via the `AI` binding); a `direct` variant for models that
-// offer their own API; an `openrouter` variant reaching the same model through
-// the OpenRouter gateway; and a `subscription` variant. The effective flavour is
-// resolved per workspace by `effectiveVariant` in the precedence
-// direct → openrouter → cloudflare, so connecting an OpenRouter key (with no
-// native direct key) transparently routes the model through OpenRouter while a
-// native direct key still wins. This makes "go direct / go gateway" a zero-config
-// upgrade with an automatic Cloudflare fallback.
+// The per-flavour variant shapes a catalog entry is built from. A user picks one entry per
+// block and the selection persists as its stable `id` (see `Block.modelId`); at run time the
+// executor resolves that id to a concrete {@link ModelRef}. The entries themselves are
+// `model-catalog.ts`; how a resolution picks between an entry's flavours is documented on
+// {@link DEFAULT_PROVIDER_PREFERENCE} above and implemented by `effectiveVariant` below.
 
 export interface ModelVariant {
   ref: ModelRef
@@ -88,6 +131,25 @@ export interface ModelVariant {
   keyEnv: string
   /** Short provider label shown in the picker, e.g. `DashScope`. */
   providerLabel: string
+}
+
+/**
+ * An AWS Bedrock variant. `baseModelId` is the UNPREFIXED Bedrock id
+ * (`anthropic.claude-opus-4-8`); the id an account actually calls carries a geo/global
+ * inference prefix (`us.` / `eu.` / `global.` / …) that differs per Region, so any prefix
+ * baked in here would be wrong for every deployment but one. {@link resolveBedrockModelId}
+ * matches this base against the deployment's `BEDROCK_MODELS` allow-list and runs the
+ * matching entry verbatim, which is what lets ONE catalog be correct in every Region and
+ * why enablement is naturally per model: an id absent from that list is a model this
+ * account cannot call.
+ */
+export interface BedrockVariant {
+  /** The unprefixed Bedrock model id, matched against the allow-list. */
+  baseModelId: string
+  /** Context window at Bedrock, when known (often differs from the vendor's own API). */
+  contextTokens?: number
+  /** Whether Bedrock serves this model with image input. See {@link ModelRef.acceptsImages}. */
+  acceptsImages?: boolean
 }
 
 /**
@@ -107,7 +169,7 @@ export interface SelectableModel {
   /**
    * The coarse model FAMILY this entry belongs to, used by the account-wide allow/block
    * policy (`familyForModelId` / `isAllowedByFamilyPolicy`). Absent for gateway entries
-   * with no single family (an operator's LiteLLM route) — those are UNCLASSIFIED.
+   * with no single family (an operator's Bifrost / LiteLLM route), which are UNCLASSIFIED.
    */
   family?: ModelFamily
   /** Model-family label shown in the picker, e.g. `Qwen3`. */
@@ -118,6 +180,14 @@ export interface SelectableModel {
   cloudflare?: ModelRef
   /** Optional direct-provider variant, used when its key is configured. */
   direct?: ModelVariant
+  /**
+   * Optional AWS Bedrock variant, used when the deployment's `BEDROCK_MODELS` allow-list
+   * carries this model (see {@link BedrockVariant}). Bedrock LAGS the vendors' own APIs, so
+   * a bedrock flavour is only ever declared on an entry whose model Bedrock actually
+   * serves, never assumed equal to the direct/subscription flavour's model, which is
+   * routinely a generation ahead.
+   */
+  bedrock?: BedrockVariant
   /**
    * Optional OpenRouter gateway variant: the same logical model reached through
    * OpenRouter (`provider: 'openrouter'`, model = the OpenRouter `vendor/model`
@@ -133,268 +203,10 @@ export interface SelectableModel {
   subscription?: SubscriptionVariant
 }
 
-export const MODEL_CATALOG: SelectableModel[] = [
-  {
-    id: 'cloudflare-llama',
-    family: 'llama',
-    label: 'Llama 3.1',
-    description: "Meta's fast 8B instruct model — Cloudflare Workers AI's default.",
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/meta/llama-3.1-8b-instruct',
-      contextTokens: 7_968,
-    },
-  },
-  {
-    id: 'qwen',
-    family: 'qwen',
-    label: 'Qwen3',
-    description: "Alibaba's Qwen3 — Qwen3-30B on Cloudflare, flagship Qwen3-Max when direct.",
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/qwen/qwen3-30b-a3b-fp8',
-      contextTokens: 32_768,
-    },
-    direct: {
-      ref: { provider: 'qwen', model: 'qwen3-max' },
-      keyEnv: 'QWEN_API_KEY',
-      providerLabel: 'DashScope',
-    },
-  },
-  {
-    id: 'kimi-k2.7',
-    family: 'kimi',
-    label: 'Kimi K2.7',
-    description:
-      "Moonshot AI's latest 1T-param agentic-coding model (structured outputs), 256K context — " +
-      'on Cloudflare or pay-as-you-go through OpenRouter (billed at Moonshot rates).',
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.7-code',
-      contextTokens: 262_144,
-    },
-    openrouter: {
-      ref: { provider: 'openrouter', model: 'moonshotai/kimi-k2.7-code', contextTokens: 262_144 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'kimi',
-    family: 'kimi',
-    label: 'Kimi K2.6',
-    description:
-      "Moonshot AI's frontier-scale agentic model with a 256K context, on Cloudflare or " +
-      'direct via a Moonshot key / Kimi (Moonshot) subscription.',
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      contextTokens: 262_144,
-    },
-    direct: {
-      ref: { provider: 'moonshot', model: 'kimi-k2.6', contextTokens: 262_144 },
-      keyEnv: 'MOONSHOT_API_KEY',
-      providerLabel: 'Moonshot',
-    },
-    // Run via Claude Code against Moonshot's Anthropic-compatible endpoint on a
-    // Kimi coding-plan subscription (same 256K window, flat-rate quota).
-    subscription: {
-      ref: {
-        provider: 'moonshot',
-        model: 'kimi-k2.6',
-        harness: 'claude-code',
-        contextTokens: 262_144,
-      },
-      vendor: 'kimi',
-    },
-  },
-  {
-    id: 'kimi-k2.5',
-    family: 'kimi',
-    label: 'Kimi K2.5',
-    description:
-      "Moonshot AI's prior-generation 1T-param agentic model, 256K context (Cloudflare Workers AI).",
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.5',
-      contextTokens: 262_144,
-    },
-  },
-  {
-    id: 'deepseek',
-    family: 'deepseek',
-    label: 'DeepSeek R1',
-    description:
-      "DeepSeek's reasoning: the 80K R1 Qwen-32B distill on Cloudflare, or the flagship " +
-      'chat model (64K) when direct or via a DeepSeek coding-plan subscription.',
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
-      contextTokens: 80_000,
-    },
-    direct: {
-      ref: { provider: 'deepseek', model: 'deepseek-chat', contextTokens: 64_000 },
-      keyEnv: 'DEEPSEEK_API_KEY',
-      providerLabel: 'DeepSeek',
-    },
-    openrouter: {
-      ref: { provider: 'openrouter', model: 'deepseek/deepseek-chat', contextTokens: 64_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-    // Run via Claude Code against DeepSeek's Anthropic-compatible endpoint on a
-    // DeepSeek coding-plan subscription (full context, flat-rate quota).
-    subscription: {
-      ref: {
-        provider: 'deepseek',
-        model: 'deepseek-chat',
-        harness: 'claude-code',
-        contextTokens: 64_000,
-      },
-      vendor: 'deepseek',
-    },
-  },
-  {
-    id: 'deepseek-v4-pro',
-    family: 'deepseek',
-    label: 'DeepSeek V4 Pro',
-    description:
-      "DeepSeek's flagship V4 Pro agentic-coding model, served on Cloudflare (131K context).",
-    // A Cloudflare AI-catalog model: a `<provider>/<model>` slug (not a native `@cf/...`
-    // id) Cloudflare serves on its unified-billing run catalog via a partner (Fireworks),
-    // reached with the account's own Workers AI binding/token — no AI Gateway, no BYOK.
-    // The Worker runs it through `binding.run` directly (see WorkersAiLlmUpstream).
-    cloudflare: {
-      provider: 'workers-ai',
-      model: 'deepseek/deepseek-v4-pro',
-      contextTokens: 131_072,
-    },
-  },
-  {
-    id: 'glm',
-    family: 'glm',
-    label: 'GLM-5.2',
-    description:
-      "Z.ai's agentic-coding model: 256K context on Cloudflare, or the full 1M-token " +
-      'window via a GLM (Z.ai) subscription.',
-    cloudflare: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2', contextTokens: 262_144 },
-    // Run via Claude Code against Z.ai's Anthropic-compatible endpoint on a GLM
-    // coding-plan subscription (full 1M context, flat-rate quota).
-    subscription: {
-      ref: { provider: 'zai', model: 'glm-5.2', harness: 'claude-code', contextTokens: 1_000_000 },
-      vendor: 'glm',
-    },
-  },
-  // Subscription-only models: run in the Claude Code / Codex harness with a pooled
-  // subscription token (Claude Pro/Max, ChatGPT Plus/Pro), direct to the vendor.
-  {
-    id: 'claude-fable',
-    family: 'claude',
-    label: 'Claude Fable 5',
-    description:
-      "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
-      'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
-    openrouter: {
-      ref: { provider: 'openrouter', model: 'anthropic/claude-fable-5', contextTokens: 1_000_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-    subscription: {
-      ref: {
-        provider: 'anthropic',
-        model: 'claude-fable-5',
-        harness: 'claude-code',
-        contextTokens: 1_000_000,
-      },
-      vendor: 'claude',
-    },
-  },
-  {
-    id: 'claude-opus',
-    family: 'claude',
-    label: 'Claude Opus 4.8',
-    description:
-      "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
-      'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
-    openrouter: {
-      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-4.8', contextTokens: 1_000_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-    subscription: {
-      ref: { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' },
-      vendor: 'claude',
-    },
-  },
-  {
-    id: 'claude-sonnet',
-    family: 'claude',
-    label: 'Claude Sonnet 4.6',
-    description: "Anthropic's balanced speed/intelligence model, run via Claude Code.",
-    subscription: {
-      ref: { provider: 'anthropic', model: 'claude-sonnet-4-6', harness: 'claude-code' },
-      vendor: 'claude',
-    },
-  },
-  {
-    id: 'gpt-5.5',
-    family: 'openai',
-    label: 'GPT-5.5',
-    description:
-      "OpenAI's flagship — run via Codex on your ChatGPT subscription, or pay-as-you-go " +
-      'through OpenRouter (billed at OpenAI rates).',
-    openrouter: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 400_000 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-    subscription: {
-      ref: { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' },
-      vendor: 'codex',
-    },
-  },
-  {
-    id: 'gpt-5.4',
-    family: 'openai',
-    label: 'GPT-5.4',
-    description: "OpenAI's cost-efficient mid-tier, run via Codex on your ChatGPT subscription.",
-    subscription: {
-      ref: { provider: 'openai', model: 'gpt-5.4-codex', harness: 'codex' },
-      vendor: 'codex',
-    },
-  },
-  // Gemini 3 Pro has no Cloudflare/native-direct flavour in this deployment, so it is
-  // reached through the OpenRouter gateway (billed at Google's rates, no markup). It
-  // becomes selectable once an OpenRouter API key is connected for the workspace/user.
-  // Other vendors' OpenRouter routes are folded into their native catalog entries (see
-  // `openrouter` flavour on deepseek/gpt-5.5/claude-opus); any model not curated here is
-  // reachable via the dynamic per-workspace OpenRouter catalog (`openRouterSelectableModels`).
-  {
-    id: 'gemini',
-    family: 'gemini',
-    label: 'Gemini 3 Pro',
-    description: "Google's Gemini 3 Pro via OpenRouter — 1M-token context, billed at Google rates.",
-    openrouter: {
-      ref: { provider: 'openrouter', model: 'google/gemini-3-pro', contextTokens: 1_048_576 },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  // LiteLLM — an operator-hosted OpenAI-compatible gateway. Model names are defined by the
-  // operator's LiteLLM `config.yaml` (`model_name`), so this generic entry assumes a
-  // `gpt-4o` route; rename the model (or pin via AGENT_DEFAULT_MODEL) to match your
-  // gateway. Selectable once a LiteLLM API key is connected AND LITELLM_BASE_URL is set.
-  {
-    id: 'litellm-default',
-    label: 'LiteLLM (gateway default)',
-    description: "Your LiteLLM gateway's `gpt-4o` route — rename to match your config.yaml.",
-    direct: {
-      ref: { provider: 'litellm', model: 'gpt-4o', contextTokens: 128_000 },
-      keyEnv: 'LITELLM_API_KEY',
-      providerLabel: 'LiteLLM',
-    },
-  },
-]
+// The curated catalog itself lives in `model-catalog.ts` (data only); this module owns the
+// vocabulary it is typed against and every rule that reads it. Re-exported so the catalog has
+// one public name and existing import sites are unaffected.
+export { MODEL_CATALOG }
 
 const BY_ID = new Map(MODEL_CATALOG.map((m) => [m.id, m]))
 
@@ -417,11 +229,17 @@ const OPENROUTER_SLUG_FAMILY: Record<string, ModelFamily> = {
   'z-ai': 'glm',
   zai: 'glm',
   'meta-llama': 'llama',
+  // Meta ships under BOTH prefixes: the open-weights Llamas as `meta-llama/…` and the Muse
+  // line as a bare `meta/…`. Both are the same vendor and the same residency answer, so both
+  // land on the one Meta family this policy has (labelled "Llama (Meta)" in the picker).
+  meta: 'llama',
+  'x-ai': 'grok',
+  xai: 'grok',
 }
 
 /**
  * The coarse model family a model id belongs to for the account-wide allow/block policy,
- * or `null` when it can't be classified (an operator's LiteLLM gateway route, an
+ * or `null` when it can't be classified (an operator's self-hosted gateway route, an
  * OpenRouter slug whose vendor prefix isn't recognised, or a per-user local runner). A
  * catalog id resolves via its declared `family`; a dynamic `openrouter:<slug>` id via the
  * slug's vendor prefix.
@@ -431,8 +249,13 @@ export function familyForModelId(id: string | undefined | null): ModelFamily | n
   if (model) return model.family ?? null
   const or = parseOpenRouterModelId(id)
   if (or) {
-    const vendor = or.model.split('/', 1)[0]?.toLowerCase()
-    return vendor ? (OPENROUTER_SLUG_FAMILY[vendor] ?? null) : null
+    // The vendor prefix is everything before the FIRST slash; a slug carrying no slash at
+    // all is its own prefix, and is unclassified unless the map happens to name it. Sliced
+    // rather than split so there is no absent-element case to guard: `parseOpenRouterModelId`
+    // has already refused an empty slug, so a prefix always exists.
+    const slash = or.model.indexOf('/')
+    const vendor = (slash === -1 ? or.model : or.model.slice(0, slash)).toLowerCase()
+    return OPENROUTER_SLUG_FAMILY[vendor] ?? null
   }
   return null
 }
@@ -453,8 +276,42 @@ export function isAllowedByFamilyPolicy(
   const trusted = !!effectiveProvider && policy.trustedProviders.includes(effectiveProvider)
   if (trusted) return true
   const family = familyForModelId(id)
-  const listed = family !== null && policy.families.includes(family)
+  // UNCLASSIFIED: there is no membership to test either way, so the MODE decides on its own.
+  // A blocklist has nothing to match, an allowlist has nothing to prove.
+  if (family === null) return policy.mode === 'blocklist'
+  const listed = policy.families.includes(family)
   return policy.mode === 'blocklist' ? !listed : listed
+}
+
+/**
+ * Whether a concrete Bedrock model id addresses a catalog BASE id: it either IS the base or
+ * carries a geo/global inference prefix in front of it (`eu.anthropic.claude-opus-4-8`
+ * addresses `anthropic.claude-opus-4-8`). The ONE place that relation is defined, shared by
+ * allow-list resolution and the context-window lookup, so neither enumerates AWS's prefixes
+ * and a prefix AWS adds tomorrow needs no change here.
+ */
+function matchesBedrockBase(candidate: string, baseModelId: string): boolean {
+  return candidate === baseModelId || candidate.endsWith(`.${baseModelId}`)
+}
+
+/**
+ * The Bedrock model id THIS deployment should call for a catalog base id, or undefined when
+ * the account's allow-list (`BEDROCK_MODELS` → {@link ProviderCapabilities.bedrockModels})
+ * doesn't carry the model, which is exactly the statement "this account cannot call it", so
+ * the flavour is unusable rather than the id being guessed at.
+ *
+ * The matching entry is returned VERBATIM, so the operator's own Region-correct id is what
+ * gets called. The FIRST match in declaration order wins, which is how an operator who lists
+ * both a regional and a global inference profile for one model chooses between them.
+ */
+export function resolveBedrockModelId(
+  baseModelId: string,
+  caps: ProviderCapabilities,
+): string | undefined {
+  for (const allowed of caps.bedrockModels ?? []) {
+    if (matchesBedrockBase(allowed, baseModelId)) return allowed
+  }
+  return undefined
 }
 
 // Context window (total input + output tokens) for every concrete ref the catalog
@@ -476,6 +333,15 @@ const CONTEXT_WINDOW_BY_REF: Map<string, number> = (() => {
   return map
 })()
 
+// Bedrock windows are keyed by the catalog BASE id, not by a concrete ref: the ref a run
+// carries is the operator's PREFIXED allow-list entry, which differs per Region, so no exact
+// key could cover it. Looked up through `matchesBedrockBase` below.
+const BEDROCK_CONTEXT_BY_BASE: Map<string, number> = new Map(
+  MODEL_CATALOG.flatMap((model) =>
+    model.bedrock?.contextTokens ? [[model.bedrock.baseModelId, model.bedrock.contextTokens]] : [],
+  ),
+)
+
 /**
  * The total context window (input + output tokens) the catalog declares for a concrete
  * model ref, matched by provider + model. Returns undefined for a ref the catalog does
@@ -485,7 +351,13 @@ const CONTEXT_WINDOW_BY_REF: Map<string, number> = (() => {
  * (Workers AI error 8007 → HTTP 502) when the output floor alone fills the window.
  */
 export function contextWindowFor(ref: { provider: string; model: string }): number | undefined {
-  return CONTEXT_WINDOW_BY_REF.get(`${ref.provider}:${ref.model}`)
+  const exact = CONTEXT_WINDOW_BY_REF.get(`${ref.provider}:${ref.model}`)
+  if (exact !== undefined) return exact
+  if (ref.provider !== 'bedrock') return undefined
+  for (const [base, tokens] of BEDROCK_CONTEXT_BY_BASE) {
+    if (matchesBedrockBase(ref.model, base)) return tokens
+  }
+  return undefined
 }
 
 /**
@@ -497,10 +369,35 @@ export function contextWindowFor(ref: { provider: string; model: string }): numb
 export interface ProviderCapabilities {
   /** Direct providers (e.g. `qwen`, `openai`) with ≥1 key in the merged scope pool. */
   directProviders: Set<string>
-  /** Subscription vendors with a usable token (pool or personal). */
+  /**
+   * Subscription vendors this deployment can actually dispatch to: one with a usable token
+   * (pool or personal), OR one NATIVE LOCAL EXECUTION serves from the host's own ambient CLI
+   * login, which has no token at all ({@link isAmbientNativeVendor}). The third case is why
+   * this is not named after the credential: a member here means "a run can use this vendor",
+   * never "a credential for it was found".
+   */
   subscriptionVendors: Set<SubscriptionVendor>
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareEnabled: boolean
+  /**
+   * The Bedrock model ids this deployment may call, VERBATIM as the operator listed them in
+   * `BEDROCK_MODELS` (so each carries whatever geo/global inference prefix their Region
+   * needs). Absent/empty ⇒ no bedrock flavour is usable, which covers both "Bedrock isn't
+   * configured" and "configured but this model isn't granted": the allow-list IS the
+   * per-model enablement. ITERATION ORDER MATTERS: it is the operator's declared order,
+   * which {@link resolveBedrockModelId} uses to pick between two profiles for one model.
+   */
+  bedrockModels?: Set<string>
+  /**
+   * The order this resolution prefers a model's routes in, from the MODEL PRESET in force (its
+   * `providerPreference`). Absent/empty ⇒ {@link DEFAULT_PROVIDER_PREFERENCE}.
+   *
+   * It rides the capability set rather than a resolution parameter because every site that
+   * resolves a model already threads one, so a new call site cannot silently resolve under a
+   * different order than the one the picker displayed. It REORDERS and never filters: see
+   * {@link orderedProviderPreference}.
+   */
+  providerPreference?: readonly ModelFlavor[]
   /**
    * The dynamic local-runner model ids (`"<provider>:<model>"`, e.g. `ollama:gemma3`) the
    * resolving USER has enabled. A local model needs no pooled key — the user's configured
@@ -511,7 +408,7 @@ export interface ProviderCapabilities {
   localModels?: Set<string>
   /**
    * The OpenRouter `vendor/model` slugs the workspace has ENABLED in its dynamic
-   * catalog (e.g. `google/gemini-3-pro`). A dynamic OpenRouter model (`openrouter:<slug>`)
+   * catalog (e.g. `google/gemini-3.1-pro-preview`). A dynamic OpenRouter model (`openrouter:<slug>`)
    * is usable only when the workspace has an OpenRouter key (`openrouter ∈ directProviders`)
    * AND the slug is enabled here — so a stale pin to a since-disabled model fails the
    * start guard. Curated catalog entries with an `openrouter` flavour need only the key,
@@ -534,7 +431,7 @@ export type ModelCostResolver = (ref: ModelRef) => ModelCost | undefined
 /** The effective variant a catalog model resolves to for a given capability set. */
 interface EffectiveVariant {
   ref: ModelRef
-  flavor: 'cloudflare' | 'direct' | 'openrouter' | 'subscription'
+  flavor: ModelFlavor
   providerLabel: string
   vendor?: SubscriptionVendor
 }
@@ -548,6 +445,9 @@ function directUsable(model: SelectableModel, caps: ProviderCapabilities): boole
   // key), but it's only usable when THIS specific model is enabled — keyed by its id.
   return isLocalRunner(provider) && (caps.localModels?.has(model.id) ?? false)
 }
+function bedrockUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
+  return !!model.bedrock && !!resolveBedrockModelId(model.bedrock.baseModelId, caps)
+}
 function openRouterUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
   return !!model.openrouter && caps.directProviders.has('openrouter')
 }
@@ -559,9 +459,78 @@ function subscriptionUsable(model: SelectableModel, caps: ProviderCapabilities):
 }
 
 /**
+ * One route's arms: whether the model declares it, whether the capabilities make it usable,
+ * and how to build its variant. An exhaustive `Record<ModelFlavor, …>`, so a route added to
+ * the wire vocabulary fails to compile until every arm is handled.
+ */
+interface FlavorHandler {
+  declared: (model: SelectableModel) => boolean
+  usable: (model: SelectableModel, caps: ProviderCapabilities) => boolean
+  build: (model: SelectableModel, caps: ProviderCapabilities) => EffectiveVariant
+}
+
+const FLAVOR_HANDLERS: Record<ModelFlavor, FlavorHandler> = {
+  direct: {
+    declared: (m) => !!m.direct,
+    usable: directUsable,
+    build: (m) => ({
+      ref: m.direct!.ref,
+      flavor: 'direct',
+      providerLabel: m.direct!.providerLabel,
+    }),
+  },
+  bedrock: {
+    declared: (m) => !!m.bedrock,
+    usable: bedrockUsable,
+    build: (m, caps) => ({
+      ref: {
+        provider: 'bedrock',
+        // An unresolvable base falls back to the base id itself: this arm is reached on the
+        // best-effort walk (nothing is configured), where the caller needs SOMETHING to
+        // display and `available: false` is what says it can't be run. Returning no ref
+        // instead would make the resolver throw for a Bedrock-only entry on every
+        // deployment that hasn't configured Bedrock, which is most of them.
+        model: resolveBedrockModelId(m.bedrock!.baseModelId, caps) ?? m.bedrock!.baseModelId,
+        ...(m.bedrock!.contextTokens ? { contextTokens: m.bedrock!.contextTokens } : {}),
+        ...(m.bedrock!.acceptsImages === undefined
+          ? {}
+          : { acceptsImages: m.bedrock!.acceptsImages }),
+      },
+      flavor: 'bedrock',
+      providerLabel: 'AWS Bedrock',
+    }),
+  },
+  openrouter: {
+    declared: (m) => !!m.openrouter,
+    usable: openRouterUsable,
+    build: (m) => ({
+      ref: m.openrouter!.ref,
+      flavor: 'openrouter',
+      providerLabel: m.openrouter!.providerLabel,
+    }),
+  },
+  cloudflare: {
+    declared: (m) => !!m.cloudflare,
+    usable: cloudflareUsable,
+    build: (m) => ({ ref: m.cloudflare!, flavor: 'cloudflare', providerLabel: 'Cloudflare' }),
+  },
+  subscription: {
+    declared: (m) => !!m.subscription,
+    usable: subscriptionUsable,
+    build: (m) => ({
+      ref: m.subscription!.ref,
+      flavor: 'subscription',
+      providerLabel: SUBSCRIPTION_VENDORS[m.subscription!.vendor].label,
+      vendor: m.subscription!.vendor,
+    }),
+  },
+}
+
+/**
  * Whether a catalog model is selectable for the given capabilities — it has at least
- * one usable flavour (a configured direct key, an enabled Cloudflare lib, or a
- * connected subscription vendor). Unknown ids are not usable.
+ * one usable flavour (a configured direct key, the model in the Bedrock allow-list, an
+ * OpenRouter key, an enabled Cloudflare lib, or a connected subscription vendor).
+ * Unknown ids are not usable.
  */
 export function isModelUsable(id: string | undefined | null, caps: ProviderCapabilities): boolean {
   const model = getSelectableModel(id)
@@ -580,55 +549,56 @@ export function isModelUsable(id: string | undefined | null, caps: ProviderCapab
     }
     return false
   }
-  return (
-    directUsable(model, caps) ||
-    openRouterUsable(model, caps) ||
-    cloudflareUsable(model, caps) ||
-    subscriptionUsable(model, caps)
+  return MODEL_FLAVORS.some((flavor) => FLAVOR_HANDLERS[flavor].usable(model, caps))
+}
+
+/**
+ * The routes a catalog model DECLARES, as the provider labels an operator would recognise
+ * (`['OpenRouter', 'ChatGPT (Codex)']`). Empty for an id the catalog does not ship, whose route is
+ * whatever runner or gateway it was named for.
+ *
+ * A refusal over an unusable model owes the routes that WOULD make it usable, and only the catalog
+ * knows them. "Add an API key for the provider" is the misattribution itself for a
+ * subscription-or-gateway-only model (`gpt-5.6-sol`, `claude-opus`): that vendor sells a key no
+ * route here accepts, so an operator following the generic remedy buys one and hits the same
+ * refusal. Derived from the handlers rather than a second label table, which would drift.
+ */
+export function declaredModelRouteLabels(
+  id: string | undefined | null,
+  caps: ProviderCapabilities,
+): string[] {
+  const model = getSelectableModel(id)
+  if (!model) return []
+  return MODEL_FLAVORS.filter((flavor) => FLAVOR_HANDLERS[flavor].declared(model)).map(
+    (flavor) => FLAVOR_HANDLERS[flavor].build(model, caps).providerLabel,
   )
 }
 
-// The effective variant a model resolves to for a capability set: prefer a usable
-// direct key, else the Cloudflare lib, else a connected subscription. When NOTHING is
-// usable it still returns a best-effort ref (direct → cloudflare → subscription) so
-// callers always get a ref; selectability is reported separately by `isModelUsable`.
-// A dual-mode model's subscription flavour ("subscriptions win") is preferred
-// per-workspace by the executor + frontend, not here.
+/**
+ * The effective variant a model resolves to for a capability set: the most preferred flavour
+ * the capabilities make USABLE, else the most preferred one the model merely DECLARES, so
+ * callers always get a ref to show/run (selectability is reported separately by
+ * {@link isModelUsable}, and the start guard gates actual use).
+ *
+ * Both walks follow the SAME order, or an unconfigured deployment would show one route in
+ * the picker and run another. That order is the preset's own {@link ProviderCapabilities.providerPreference}
+ * when one is in force, else {@link DEFAULT_PROVIDER_PREFERENCE}. A dual-mode model's subscription
+ * flavour ("subscriptions win") is still preferred per-workspace by the executor + frontend rather
+ * than here; see {@link DEFAULT_PROVIDER_PREFERENCE}.
+ */
 function effectiveVariant(model: SelectableModel, caps: ProviderCapabilities): EffectiveVariant {
-  const direct = (): EffectiveVariant => ({
-    ref: model.direct!.ref,
-    flavor: 'direct',
-    providerLabel: model.direct!.providerLabel,
-  })
-  const openrouter = (): EffectiveVariant => ({
-    ref: model.openrouter!.ref,
-    flavor: 'openrouter',
-    providerLabel: model.openrouter!.providerLabel,
-  })
-  const cloudflare = (): EffectiveVariant => ({
-    ref: model.cloudflare!,
-    flavor: 'cloudflare',
-    providerLabel: 'Cloudflare',
-  })
-  const subscription = (): EffectiveVariant => ({
-    ref: model.subscription!.ref,
-    flavor: 'subscription',
-    providerLabel: SUBSCRIPTION_VENDORS[model.subscription!.vendor].label,
-    vendor: model.subscription!.vendor,
-  })
-  // Prefer a usable flavour: native direct > OpenRouter gateway > Cloudflare > subscription.
-  if (directUsable(model, caps)) return direct()
-  if (openRouterUsable(model, caps)) return openrouter()
-  if (cloudflareUsable(model, caps)) return cloudflare()
-  if (subscriptionUsable(model, caps)) return subscription()
-  // Nothing usable: a best-effort ref so the caller still has something to show/run
-  // (the guard / `available` flag gate actual use).
-  if (model.direct) return direct()
-  if (model.openrouter) return openrouter()
-  if (model.cloudflare) return cloudflare()
-  if (model.subscription) return subscription()
+  const order = orderedProviderPreference(caps.providerPreference)
+  for (const eligible of [
+    (h: FlavorHandler) => h.usable(model, caps),
+    (h: FlavorHandler) => h.declared(model),
+  ]) {
+    for (const flavor of order) {
+      const handler = FLAVOR_HANDLERS[flavor]
+      if (eligible(handler)) return handler.build(model, caps)
+    }
+  }
   throw new Error(
-    `Model '${model.id}' has no resolvable variant (no cloudflare/direct/openrouter/subscription)`,
+    `Model '${model.id}' has no resolvable variant (declares none of ${MODEL_FLAVORS.join(', ')})`,
   )
 }
 
@@ -657,7 +627,10 @@ function toOption(
     // false on a Cloudflare/Workers-AI flavour, true once a direct key upgrades the
     // same model to its caching `direct` flavour. The UI surfaces this so a user can
     // see (and act on) the hot path running cache-less.
-    cachesPrompts: providerCachesPrompts(variant.ref.provider),
+    // The MODEL is passed, not just the provider: on a gateway the provider id names the
+    // reseller and only the slug names who serves the call, so without it every OpenRouter
+    // option claimed to cache nothing (see `providerCachePolicy`).
+    cachesPrompts: providerCachesPrompts(variant.ref.provider, variant.ref.model),
     ...(variant.vendor ? { vendor: variant.vendor } : {}),
     ...(cost ? { cost } : {}),
     ...(variant.ref.contextTokens ? { contextTokens: variant.ref.contextTokens } : {}),
@@ -674,7 +647,7 @@ function toOption(
       providerLabel: SUBSCRIPTION_VENDORS[model.subscription.vendor].label,
       provider: subRef.provider,
       model: subRef.model,
-      cachesPrompts: providerCachesPrompts(subRef.provider),
+      cachesPrompts: providerCachesPrompts(subRef.provider, subRef.model),
       ...(subCost ? { cost: subCost } : {}),
       ...(subRef.contextTokens ? { contextTokens: subRef.contextTokens } : {}),
     }
@@ -720,6 +693,21 @@ const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
 })()
 
 /**
+ * Whether a ref runs on a SUBSCRIPTION harness: a vendor CLI the executor drives with a
+ * leased or ambient credential (`claude-code` / `codex`), as opposed to Pi (the platform's
+ * own agent harness, reached through the ordinary metered LLM route) or no harness at all,
+ * which Pi is also the default for.
+ *
+ * Stated once because three decisions turn on it and two of them spell it as the negation
+ * of the third. A ref carrying `harness: 'pi'` is the case the two spellings must agree
+ * about: it names a harness, so a bare truthiness test would route it down the
+ * subscription path and ask for a token no Pi run has.
+ */
+export function runsOnSubscriptionHarness(ref: ModelRef): boolean {
+  return ref.harness !== undefined && ref.harness !== 'pi'
+}
+
+/**
  * The subscription vendor a harness ref belongs to (ANY vendor — `claude` / `codex` / `glm` /
  * `kimi` / `deepseek`), or undefined for a non-subscription (Pi / absent-harness) ref. Matched
  * by the catalog's subscription refs, so it stays in step with {@link MODEL_CATALOG} rather than
@@ -729,7 +717,7 @@ const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
  * which injects the token + base URL exactly like the container coding path).
  */
 export function subscriptionVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
-  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (!runsOnSubscriptionHarness(ref)) return undefined
   return VENDOR_BY_SUBSCRIPTION_REF.get(`${ref.provider}:${ref.model}`)
 }
 
@@ -766,7 +754,7 @@ export function isAmbientNativeVendor(
  * as an inline CLI call (local ambient inline execution).
  */
 export function nativeVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
-  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (!runsOnSubscriptionHarness(ref)) return undefined
   if (ref.harness === 'codex') return 'codex'
   if (ref.harness === 'claude-code' && ref.provider === 'anthropic') return 'claude'
   return undefined
@@ -790,7 +778,7 @@ export function isModelUsableInline(
 ): boolean {
   const ref = resolveModelRef(id, caps)
   if (!ref) return false
-  if (ref.harness && ref.harness !== 'pi') return runsInline?.(ref) ?? false
+  if (runsOnSubscriptionHarness(ref)) return runsInline?.(ref) ?? false
   return isModelUsable(id, caps)
 }
 
@@ -842,7 +830,9 @@ export function personalCredentialVendorForModelId(
   const model = getSelectableModel(id)
   const sub = model?.subscription
   if (!sub || !isIndividualVendor(sub.vendor)) return null
-  const hasBase = !!model.cloudflare || !!model.direct || !!model.openrouter
+  const hasBase = MODEL_FLAVORS.some(
+    (flavor) => flavor !== 'subscription' && FLAVOR_HANDLERS[flavor].declared(model),
+  )
   if (!hasBase) return sub.vendor
   return hasPersonalSubscription(sub.vendor) ? sub.vendor : null
 }
@@ -875,31 +865,38 @@ export function effectiveCatalogWith(
   return [...MODEL_CATALOG, ...extra].map((model) => toOption(model, caps, costFor))
 }
 
-/** A user's enabled models for one local runner endpoint. */
-export interface LocalEndpointModels {
-  /** The runner provider id (e.g. `ollama`), also the `ModelRef.provider`. */
-  provider: string
+/** A user's enabled models for one local runner endpoint, with what they declared about each. */
+export interface LocalEndpointModels extends LocalModelDeclarations {
   /** The provider label shown in the picker (e.g. `Ollama`). */
   label: string
-  /** Enabled model ids on this endpoint. */
-  models: string[]
 }
 
 /**
  * Build the dynamic, per-user catalog entries for a set of configured local endpoints.
  * Each enabled model becomes a `direct`-flavour {@link SelectableModel} with a stable id
  * `"<provider>:<model>"` and no key requirement (gated by `localModels`).
+ *
+ * The model's modality rides the ref, so the picker states what a local model can be given exactly
+ * as it does for a catalog entry. Resolved through the shared two-tier rule (the user's declaration,
+ * else the recognised-family table), so the picker cannot show one answer while the run takes
+ * another; a model neither tier knows leaves `acceptsImages` absent rather than defaulting it (see
+ * `localModelDeclarationSchema` for why that third state matters).
  */
 export function localSelectableModels(endpoints: LocalEndpointModels[]): SelectableModel[] {
   const out: SelectableModel[] = []
   for (const ep of endpoints) {
-    for (const model of ep.models) {
+    for (const declared of ep.models) {
+      const acceptsImages = resolveLocalModelModality(declared.id, declared)
       out.push({
-        id: `${ep.provider}:${model}`,
-        label: model,
+        id: `${ep.provider}:${declared.id}`,
+        label: declared.id,
         description: `Local model served by ${ep.label}.`,
         direct: {
-          ref: { provider: ep.provider, model },
+          ref: {
+            provider: ep.provider,
+            model: declared.id,
+            ...(acceptsImages === undefined ? {} : { acceptsImages }),
+          },
           keyEnv: '',
           providerLabel: ep.label,
         },
@@ -986,6 +983,24 @@ export function resolveModelRef(
   // the static catalog; resolve them straight to the gateway ref.
   const or = parseOpenRouterModelId(id)
   return or ? { provider: or.provider, model: or.model } : undefined
+}
+
+/**
+ * Whether an id names a model this build could resolve at all, under ANY capability set.
+ *
+ * The existence half of {@link resolveModelRef}, and the reason it is separate: `resolveModelRef`
+ * answers "which ref serves this id HERE", which needs the deployment's capabilities and is a
+ * request-time question. Whether the id names anything is knowable from the catalog alone, so a
+ * registration that misspells one (`gemini-flash` for `gemini-flash-2`) is a BOOT fault. Left to
+ * request time it publishes as `provider_unavailable`, whose documented remedy is "configure the
+ * provider": the operator then hunts a key for a model that will never resolve.
+ */
+export function isResolvableModelId(id: string): boolean {
+  return (
+    getSelectableModel(id) !== undefined ||
+    parseLocalModelId(id) !== undefined ||
+    parseOpenRouterModelId(id) !== undefined
+  )
 }
 
 /** Every subscription vendor (the full set), for building a permissive capability set. */

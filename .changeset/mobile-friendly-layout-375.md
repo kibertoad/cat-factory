@@ -21,7 +21,9 @@ good-citizen pattern (P-1 restack / P-6 reflow); no new responsive system is int
   bootstrap-architecture forms hard-coded `grid-cols-2`, cramming two number inputs side by
   side at 375px. They now start single-column and opt into columns at a breakpoint
   (`grid-cols-1 sm:grid-cols-2`); the risk-policy 4-up grids collapse fully on phones while
-  keeping their density on wide (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`).
+  keeping their density on wide (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`). The same input
+  pairs in the Add Task modal (bug fields, doc fields, pipeline and merge policy), the
+  environment wizard's review step and the GitHub open-PR form stack on a phone too.
 
 - **Kaizen table (B3).** The grading-history table was wrapped in `overflow-hidden`, clipping
   columns on narrow screens; it now uses `overflow-x-auto` like every other table so it scrolls

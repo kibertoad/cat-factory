@@ -15,12 +15,12 @@ export default defineNuxtConfig({
   // Render as a pure client-side SPA that talks to the cat-factory backend.
   ssr: false,
 
-  // The board is a single dark-themed surface (neutral is mapped to `slate` and
-  // every component is hand-styled in slate). Pin Nuxt UI's color mode to dark so
-  // its own chrome (modals, inputs, selects, dropdowns) matches instead of
-  // following the visitor's system preference and rendering light/white overlays.
+  // Colour mode follows the visitor's system preference and the in-app appearance switcher
+  // (`AppearanceSwitcher`); `@nuxtjs/color-mode` (registered by Nuxt UI) persists the pick. Dark
+  // is the fallback for a browser that reports no preference, since the board was designed dark
+  // first. Every colour in the SPA is a theme token, so both modes render from the same markup.
   colorMode: {
-    preference: 'dark',
+    preference: 'system',
     fallback: 'dark',
   },
 
@@ -29,10 +29,36 @@ export default defineNuxtConfig({
       // Base URL of the cat-factory worker API. Defaults to the local wrangler
       // dev server; override per-environment with NUXT_PUBLIC_API_BASE.
       apiBase: 'http://localhost:8787',
+      // Interface tier the SPA starts in: 'basic' (the default) or 'advanced'.
+      // Set with NUXT_PUBLIC_UI_MODE; like `apiBase` this is baked in at build
+      // time (`ssr: false`). An empty value means "no deployment pin", so the
+      // user's own browser-stored choice decides — see `stores/uiMode.ts`.
+      uiMode: '',
     },
   },
 
-  modules: ['@nuxt/ui', '@pinia/nuxt', 'pinia-plugin-persistedstate/nuxt', '@nuxtjs/i18n'],
+  modules: [
+    '@nuxt/ui',
+    '@nuxt/fonts',
+    '@pinia/nuxt',
+    'pinia-plugin-persistedstate/nuxt',
+    '@nuxtjs/i18n',
+  ],
+
+  // The faces the BUILT-IN themes name (`utils/theme/builtins.ts`), downloaded at build time and
+  // self-hosted under `/_fonts` so no visitor's browser calls a font CDN. `global: true` emits the
+  // `@font-face` rules whether or not a stylesheet at build time names the family, because the
+  // theme plugin sets `--font-sans` / `--font-mono` at RUNTIME from the active document, which the
+  // module's CSS scan cannot see. An IMPORTED theme's font is not listed here, so it renders only if
+  // the device or the deployment provides it (the import dialog says so); a deployment that wants
+  // one adds it to this list in its own config. `theme.builtins.spec.ts` pins that every built-in
+  // font is here.
+  fonts: {
+    families: [
+      { name: 'Geist', provider: 'google', global: true },
+      { name: 'Geist Mono', provider: 'google', global: true },
+    ],
+  },
 
   // i18n lives in THIS layer's `i18n/` dir (the v9+ `restructureDir` convention).
   // @nuxtjs/i18n is layer-aware: it scans `i18n/locales/` in every layer of the
@@ -124,11 +150,16 @@ export default defineNuxtConfig({
           name: 'viewport',
           content: 'width=device-width, initial-scale=1, viewport-fit=cover',
         },
-        // Tint the mobile browser chrome / iOS Safari address bar to the board
-        // surface so the app doesn't sit under a mismatched white bar. Matches
-        // `--board-bg`. (Home-screen installability — manifest, standalone status
-        // bar, touch icons — is deferred to the initiative's E2/A5-icons follow-up.)
-        { name: 'theme-color', content: '#0b1020' },
+        // Tint the mobile browser chrome / iOS Safari address bar to the board canvas for the FIRST
+        // paint, one value per OS colour scheme (the default theme's `--app-bg-canvas`). The app's
+        // own mode and theme can differ from the OS, so the theme plugin overrides both entries
+        // with the live canvas colour once it runs: unhead dedupes a `theme-color` meta by name AND
+        // media, so the plugin's pair (same media, no key) lands on these two tags. The loading
+        // shell leaves them alone: a hand-edited tag stops matching unhead's hydration and is left
+        // behind as a duplicate. (Home-screen installability is deferred to the initiative's
+        // E2/A5-icons follow-up.)
+        { name: 'theme-color', content: '#020618', media: '(prefers-color-scheme: dark)' },
+        { name: 'theme-color', content: '#e2e8f0', media: '(prefers-color-scheme: light)' },
       ],
     },
   },

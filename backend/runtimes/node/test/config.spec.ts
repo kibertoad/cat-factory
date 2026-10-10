@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { loadNodeConfig } from '../src/config.js'
 
 // `loadNodeConfig` is the Node analogue of the Worker's `loadConfig`; the two MUST
-// derive the same AppConfig shape from env (see CLAUDE.md "keep the runtimes
+// derive the same AppConfig shape from env (see AGENTS.md "keep the runtimes
 // symmetric"). This file guards the privileged-App tier (ADR 0005): Node used to omit
 // `github.privilegedApp` entirely, which silently disabled repo provisioning on the
 // Node + local facades. Mirrors the Worker's `loadGitHubConfig` semantics.
@@ -179,9 +179,7 @@ describe('loadNodeConfig — numeric env-knob rejection warnings (A8)', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const config = loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true', JOB_MAX_POLLS: 'abc' })
     expect(config.execution.jobMaxPolls).toBe(280)
-    const jobMaxPollsWarnings = warn.mock.calls.filter(([, msg]) =>
-      typeof msg === 'string' ? msg.includes('JOB_MAX_POLLS') : false,
-    )
+    const jobMaxPollsWarnings = warn.mock.calls.filter(([msg]) => msg.includes('JOB_MAX_POLLS'))
     expect(jobMaxPollsWarnings).toHaveLength(1)
   })
 
@@ -189,8 +187,8 @@ describe('loadNodeConfig — numeric env-knob rejection warnings (A8)', () => {
     // AGENT_DEFAULT_TEMPERATURE feeds every model config (default/agentic/companion/conflict).
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true', AGENT_DEFAULT_TEMPERATURE: 'hot' })
-    const tempWarnings = warn.mock.calls.filter(([, msg]) =>
-      typeof msg === 'string' ? msg.includes('AGENT_DEFAULT_TEMPERATURE') : false,
+    const tempWarnings = warn.mock.calls.filter(([msg]) =>
+      msg.includes('AGENT_DEFAULT_TEMPERATURE'),
     )
     expect(tempWarnings).toHaveLength(1)
   })

@@ -3,6 +3,7 @@ import {
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  openAttention,
   resolveDecision,
   startRun,
   taskCard,
@@ -48,10 +49,11 @@ test.describe('human approval gate', () => {
     const resolve = card.getByTestId('task-resolve')
     await expect(resolve).toHaveText(/approve/i, { timeout: RUN_TERMINAL_TIMEOUT })
 
-    // Open the full-screen step-detail and approve in its review rail.
-    await resolve.click()
+    // Open the full-screen step-detail and approve in its review rail. Goes through the shared
+    // `openAttention` (see its note): the same button that just carried the decision remounts as
+    // "Approve", and a click landing in that remount is silently lost.
     const detail = page.getByTestId('step-detail')
-    await expect(detail).toBeVisible()
+    await openAttention(card, detail)
     await detail.getByTestId('step-approve').click()
 
     // LIVE: the gate clears and the run advances to a terminal state (coder finishes).

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   PreflightCheckId,
   PreflightHostProbes,
@@ -168,7 +169,7 @@ export class PreflightService {
       outcome = await def.run(params, this.probes)
     } catch (err) {
       // The probes are contracted to never throw, but a bug there must still yield a verdict.
-      outcome = { status: 'fail', detail: err instanceof Error ? err.message : String(err) }
+      outcome = { status: 'fail', detail: getErrorMessage(err) }
     }
     const status = resolveStatus(outcome.status, required)
     return {

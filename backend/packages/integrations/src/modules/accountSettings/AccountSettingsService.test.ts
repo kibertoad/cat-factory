@@ -7,6 +7,7 @@ import type {
   SecretCipher,
 } from '@cat-factory/kernel'
 import type { SlackOAuthSecret } from '@cat-factory/contracts'
+import { parseStoredAccountSettingsConfig } from '@cat-factory/contracts'
 import { AccountSettingsService } from './AccountSettingsService.js'
 
 // A reversible fake system cipher (matches the shape UserSecretService's tests use): the
@@ -23,6 +24,11 @@ function fakeRepo(seed: Map<string, AccountSettingsRecord> = new Map()): Account
   return {
     async getByAccount(accountId) {
       return seed.get(accountId) ?? null
+    },
+    // The non-secret half, over the same seed — so the fake cannot drift from the real repos
+    // by answering the config read from somewhere the full-row read doesn't see.
+    async getConfigByAccount(accountId) {
+      return parseStoredAccountSettingsConfig(seed.get(accountId)?.config)
     },
     async upsert(record) {
       seed.set(record.accountId, record)

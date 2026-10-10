@@ -10,11 +10,33 @@ const DEFAULTS: WorkspaceSettings = {
   taskLimitShared: null,
   taskLimitPerType: null,
   storeAgentContext: true,
+  publishPrVerificationReport: true,
   artifactRetentionDays: 14,
+  // The board's Done swimlane keeps two weeks and 20 cards. Both cap what is RENDERED; a
+  // task aged out of the lane is still on the board's data and still counted in its total.
+  doneLaneMaxItems: 20,
+  doneLaneRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
+  inputGateMode: 'standard',
+  reviewFrictionMode: 'off',
+  reviewFrictionWarnCount: 3,
+  reviewFrictionBlockCount: null,
+  reviewFrictionBlockStuckMinutes: null,
   spendCurrency: null,
   spendMonthlyLimit: null,
+  // Null means the operator has never chosen a default test-environment provisioning mechanism,
+  // which is what the setup banner nags about. Defaulting it to a type here would silence that
+  // banner on every board before the snapshot even lands.
+  defaultProvisionType: null,
+  defaultProvisionManifestId: null,
+  // On: a run authenticates as its initiator when they stored a GitHub PAT, so pushes and PRs
+  // are attributed to them. Off bounds every run to the App installation's scope.
+  allowInitiatorPat: true,
+  // The custom metadata bag: empty until someone fills a declared field in. Never null — an
+  // external-tool resolver indexes it (`ctx.metadata.gameId`) with no guard.
+  bugFishingFixPipelineId: null,
+  metadata: {},
 }
 
 /**

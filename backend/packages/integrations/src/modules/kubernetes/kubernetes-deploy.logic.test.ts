@@ -2,6 +2,7 @@ import type { KubernetesProvisionConfig, RunnerJobView } from '@cat-factory/kern
 import { describe, expect, it } from 'vitest'
 import {
   buildDeployJobSpec,
+  deployTargetsBackendNamespace,
   mapDeployOutcome,
   needsContainerRender,
   resolveHelmReleases,
@@ -250,6 +251,49 @@ describe('buildDeployJobSpec', () => {
     })
     expect(spec.setNamespace).toBeUndefined()
     expect(spec.ghToken).toBeUndefined()
+  })
+
+  it('says whether the backend’s namespace is the one the deploy lands in', () => {
+    // Anything writing into the namespace BEFORE dispatch has to ask this, and the answer is not
+    // `setNamespace`: a raw source cannot be retargeted at all, so its namespace is authoritative
+    // without anything pinning it. Only a kustomize overlay with no template picks its own, and
+    // it does so inside the container, where the backend cannot see the choice.
+    const raw = { ...baseConfig, manifestSource: { ...baseConfig.manifestSource, renderer: 'raw' } }
+    expect(deployTargetsBackendNamespace(raw as KubernetesProvisionConfig)).toBe(true)
+    expect(
+      deployTargetsBackendNamespace({
+        ...raw,
+        namespaceTemplate: undefined,
+      } as KubernetesProvisionConfig),
+    ).toBe(true)
+    expect(deployTargetsBackendNamespace(baseConfig)).toBe(true)
+    expect(
+      deployTargetsBackendNamespace({
+        ...baseConfig,
+        namespaceTemplate: undefined,
+      } as KubernetesProvisionConfig),
+    ).toBe(false)
+  })
+
+  it('derives setNamespace from that same answer, so the two cannot disagree', () => {
+    // The harness pins the namespace exactly when it is knowable here and the renderer can be
+    // told; a caller reading one and the engine acting on the other is how a credential landed
+    // in a namespace no workload used.
+    for (const namespaceTemplate of ['cf-env-{{pullNumber}}', undefined]) {
+      const config = { ...baseConfig, namespaceTemplate } as KubernetesProvisionConfig
+      const spec = buildDeployJobSpec({
+        jobId: 'job-3',
+        config,
+        vars: { pullNumber: '42', namespace: 'cf-env-42' },
+        namespace: 'cf-env-42',
+        clone: { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat' },
+        resolveSecret,
+      })
+      expect([namespaceTemplate, spec.setNamespace === true]).toEqual([
+        namespaceTemplate,
+        deployTargetsBackendNamespace(config),
+      ])
+    }
   })
 
   it('wires rolloutTimeoutSeconds when configured', () => {

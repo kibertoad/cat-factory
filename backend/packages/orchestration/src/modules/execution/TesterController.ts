@@ -20,9 +20,12 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
 function hasBlockingConcerns(report: TestReport): boolean {
@@ -93,9 +96,16 @@ export interface TesterControllerDeps {
   resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<{ ciMaxAttempts: number; maxTesterQualityIterations: number }>
   /** The async instance/block spine (container reclaim, instance persist + emit). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits the record each dispatch here is observed through, calls the executor and
+   * folds what came back: a delegation claim, or the container cold boot this used to stamp
+   * inline. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   /**
    * Inline reviewer for the test quality-control companion. When wired (and the Tester step
    * has the companion enabled), each Tester report is audited for coverage BEFORE the
@@ -148,7 +158,7 @@ export class TesterController {
     }
     if (!step.test) {
       const preset = block
-        ? await this.deps.resolveRiskPolicy(workspaceId, block)
+        ? await this.deps.resolveRiskPolicy(workspaceId, block, instance)
         : DEFAULT_RISK_POLICY
       step.test = {
         phase: 'testing',
@@ -195,15 +205,11 @@ export class TesterController {
     // An unparseable report can't gate a release — fail loudly rather than silently
     // greenlighting or looping forever.
     if (!report) {
-      return this.failTester(
-        workspaceId,
-        instance,
-        step,
-        block,
-        result.output ?? 'Tester returned an unparseable report.',
-        'Tester returned an unparseable test report.',
-        step.test.attempts,
-      )
+      return this.failTester(workspaceId, instance, step, block, {
+        output: result.output ?? 'Tester returned an unparseable report.',
+        error: 'Tester returned an unparseable test report.',
+        attempts: step.test.attempts,
+      })
     }
 
     // The FIRST testing round always loops the fixer when the report flags ANYTHING — any
@@ -242,15 +248,12 @@ export class TesterController {
       return this.dispatchFixer(workspaceId, instance, step, block, report)
     }
     // Budget spent (or no async executor to fix with): give up for human attention.
-    return this.failTester(
-      workspaceId,
-      instance,
-      step,
-      block,
-      report.summary || 'Tester withheld its greenlight.',
-      `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
-      step.test.attempts,
-    )
+    return this.failTester(workspaceId, instance, step, block, {
+      output: report.summary || 'Tester withheld its greenlight.',
+      error:
+        `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
+      attempts: step.test.attempts,
+    })
   }
 
   /**
@@ -355,25 +358,21 @@ export class TesterController {
         { agentKind: TESTER_QC_AGENT_KIND, output: qualityFeedback },
       ]
     }
-    // Surface the cold-boot window BEFORE the blocking dispatch (it blocks until the per-run
-    // container is up and accepts the job), so the Tester window shows "spinning up" then the
-    // live phase via the same `container` projection the Coder uses — true parity, instead of
-    // jumping straight to "running".
-    step.container = { status: 'starting' }
     step.subtasks = undefined
     if (step.test) step.test.phase = 'testing'
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    // The dispatch returned, so the container is up; the live phase + id/url arrive on the
-    // first poll, surfaced via the same `container` projection identically to the Coder.
-    step.container = { status: 'up' }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // Open and commit this dispatch's record before the blocking call. For a container Tester
+    // that surfaces the cold-boot window (the window shows "spinning up" then the live phase via
+    // the same `container` projection the Coder uses, instead of jumping straight to "running");
+    // for a delegated one it is the claim a replay re-attaches to.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**
@@ -412,10 +411,9 @@ export class TesterController {
     instance: ExecutionInstance,
     step: PipelineStep,
     block: Block | null,
-    output: string,
-    error: string,
-    attempts: number,
+    failure: { output: string; error: string; attempts: number },
   ): Promise<AdvanceResult> {
+    const { output, error, attempts } = failure
     step.output = output
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
@@ -521,15 +519,12 @@ export class TesterController {
     // earlier step never produced a PR) can't be auto-fixed — fail cleanly with the
     // report instead of letting the job-body builder throw out of the advance.
     if (!block.pullRequest?.branch) {
-      return this.failTester(
-        workspaceId,
-        instance,
-        step,
-        block,
-        report.summary || 'Tester withheld its greenlight.',
-        `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
-        step.test?.attempts ?? 0,
-      )
+      return this.failTester(workspaceId, instance, step, block, {
+        output: report.summary || 'Tester withheld its greenlight.',
+        error:
+          `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
+        attempts: step.test?.attempts ?? 0,
+      })
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     // Build the context AS the fixer: the hosting step's kind is the tester, so the
@@ -552,10 +547,6 @@ export class TesterController {
         { agentKind: TESTER_AGENT_KIND, output: renderReportForFixer(report) },
       ],
     }
-    // Surface the cold-boot window before the blocking dispatch, then `up` once it returns —
-    // same `container` projection the Coder uses, so the Tester window shows the fixer's
-    // container spinning up then running rather than jumping straight to "running".
-    step.container = { status: 'starting' }
     step.subtasks = undefined
     step.test = {
       phase: 'fixing',
@@ -566,17 +557,17 @@ export class TesterController {
       // appended when the fixer finishes (see recordFixerOutcome).
       ...(step.test?.attemptLog ? { attemptLog: step.test.attemptLog } : {}),
     }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    // The fixer's container is up once the dispatch returns; the live phase + id/url arrive
-    // on the first poll.
-    step.container = { status: 'up' }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // As in `dispatchTester`: the fixer's record is opened and committed before the blocking
+    // call, which for a container round is the cold-boot window and for a delegated one is the
+    // claim its replay re-attaches to.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 }

@@ -1,16 +1,20 @@
 import type { LanguageModel } from 'ai'
-import type { ConsensusRound, ConsensusSessionStatus } from '@cat-factory/kernel'
+import type { AgentTokenUsage, ConsensusRound, ConsensusSessionStatus } from '@cat-factory/kernel'
 
 // The runtime-neutral contract a consensus strategy runs against. The executor resolves
 // the participants' + synthesizer's models and supplies a `generate` function (a thin
 // wrapper over the Vercel AI SDK `generateText`, or a fake in tests), so the strategies
 // themselves are pure orchestration and fully unit-testable.
 
-/** Token usage accumulated across a strategy's LLM calls. */
-export interface ConsensusUsage {
-  inputTokens: number
-  outputTokens: number
-}
+/**
+ * Token usage accumulated across a strategy's LLM calls.
+ *
+ * Kernel's {@link AgentTokenUsage} rather than a structural twin of it, because a strategy's
+ * total becomes the step's reported usage verbatim: a local copy of the two totals silently
+ * dropped the input CLASS split on the way out, and a panel re-sending one goal prompt to
+ * several participants is exactly the shape whose input is mostly cache reads.
+ */
+export type ConsensusUsage = AgentTokenUsage
 
 /** A participant with its model resolved to a concrete handle. */
 export interface ResolvedParticipant {

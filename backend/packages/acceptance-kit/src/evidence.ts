@@ -1,0 +1,314 @@
+// What the scenarios actually assert on.
+//
+// **The rule: assert on evidence the PLATFORM computed, never on prose an agent wrote.** An
+// acceptance test that greps a coder's final reply for "fixed the off-by-one" is testing the
+// model's turn of phrase; swap the model and it goes red having found nothing wrong. The
+// verification report exists precisely because the platform derives its verdicts in code from
+// captured facts (`AGENTS.md` → "The model JUDGES; the platform COMPUTES"), so `reproduction.verdict`,
+// `environments.proof` and `ci.verdict` are stable claims about what happened, and they are what
+// this file reduces.
+//
+// Every reduction returns a `Check` rather than throwing, for one reason: a failing acceptance
+// run should print EVERY unmet claim, not the first. A `pl_build` pass that both skipped its
+// environment and failed CI is one story, and finding out about the second half on the next
+// afternoon's re-run is how a long suite wastes a day per bug.
+
+import type { PrVerificationReport } from '@cat-factory/sdk'
+
+/** One claim about a run, and what the report actually said. */
+export type Check = {
+  claim: string
+  ok: boolean
+  /** What was observed, always populated: a passing check states its evidence too. */
+  detail: string
+}
+
+export function check(claim: string, ok: boolean, detail: string): Check {
+  return { claim, ok, detail }
+}
+
+/** Throw ONE error naming every unmet claim, or return quietly. */
+export function assertChecks(context: string, checks: readonly Check[]): void {
+  const failed = checks.filter((entry) => !entry.ok)
+  if (failed.length === 0) return
+  const lines = checks.map(
+    (entry) => `  ${entry.ok ? 'ok  ' : 'FAIL'} ${entry.claim}: ${entry.detail}`,
+  )
+  throw new Error(
+    `${context}: ${failed.length} of ${checks.length} claims failed.\n${lines.join('\n')}`,
+  )
+}
+
+/**
+ * The ephemeral environment stood up, was observed, and came back down.
+ *
+ * `proof` is the platform's own composed verdict over those three legs, and `gaps` names what is
+ * missing when it is not `complete`, so this reduction reads BOTH rather than re-deriving the
+ * judgement, which would let the suite disagree with the report it is quoting.
+ *
+ * `teardown` is checked separately because `complete` deliberately does NOT mean "nothing is
+ * left standing": a deployer that declared the environment outlives the run is also complete.
+ * A suite whose pipeline carries a `disposer` asserts on it separately for that reason: an
+ * environment left standing is the mess that makes people stop running acceptance tests, and the
+ * composed verdict alone would not catch it.
+ *
+ * **Every claim here is phrased in the vocabulary of the PORT, never of one backend.** The reduction
+ * reads `PrVerificationReport`, which is provider-neutral by construction, and a suite covering its
+ * own environment backend renders these strings verbatim in its failure output: a Kubernetes noun
+ * lands on an operator whose environment is a VM behind a load balancer, or a Cloudflare Worker, and
+ * sends them looking for an object their deployment has never created.
+ */
+export function checkEphemeralEnvironment(report: PrVerificationReport): Check[] {
+  const { environments } = report
+  const ready = environments.entries.filter((entry) => entry.status === 'ready')
+  const failed = environments.entries.filter((entry) => entry.status === 'failed')
+  return [
+    check(
+      'the deployer reported on an environment at all',
+      environments.status === 'reported',
+      `status=${environments.status}${environments.note ? ` (${environments.note})` : ''}`,
+    ),
+    check(
+      'at least one environment came up',
+      ready.length > 0,
+      ready.length > 0
+        ? `${ready.length} ready: ${ready.map((entry) => entry.url ?? entry.frameId).join(', ')}`
+        : `none ready; ${failed.length} failed: ${failed.map((entry) => entry.error ?? entry.frameId).join('; ') || '(no entries)'}`,
+    ),
+    check(
+      'the platform composed a complete environment proof',
+      environments.proof === 'complete',
+      `proof=${environments.proof}` +
+        (environments.gaps.length ? `, gaps: ${environments.gaps.join('; ')}` : ''),
+    ),
+    check(
+      'the disposer reclaimed the environment and the reclaim was re-probed',
+      environments.teardown === 'confirmed',
+      `teardown=${environments.teardown}`,
+    ),
+  ]
+}
+
+/**
+ * An environment URL from this report that is still worth putting in front of a person, or null.
+ *
+ * A `ready` entry is a fact about DEPLOY time, not about now, and a settled report is history: by
+ * the time anything reads one, the run's `disposer` has been and gone. `teardown` is the platform's
+ * own verdict on what is left standing, and only `retained` says the environment was DECLARED to
+ * outlive its run. Everything else is either a confirmed reclaim or an unsettled one, and a URL
+ * that may or may not answer is worse in a bug report than no URL at all: an investigator who gets
+ * a connection refused concludes the reporter's environment is the fault and stops looking.
+ *
+ * This is the shape of the trap it exists to close. Scenario 02 asserts `teardown === 'confirmed'` for
+ * both feature runs, so every URL those reports hold is dead by construction, and reading one off
+ * a `ready` entry sent scenario 03's investigator to a host that answers nothing while the honest
+ * "reproduce locally" fallback could never fire.
+ */
+export function retainedEnvironmentUrl(report: PrVerificationReport): string | null {
+  if (report.environments.teardown !== 'retained') return null
+  const ready = report.environments.entries.find((entry) => entry.status === 'ready' && entry.url)
+  return ready?.url ?? null
+}
+
+/**
+ * An unhealthy environment was INVESTIGATED and acted on, not merely failed.
+ *
+ * The claim this reduction exists for is the negative one: before the report carried a
+ * `remediation` block, a run whose environment failed, was diagnosed, was restarted in place and
+ * then came up was indistinguishable from one that fell over with no remediation loop wired at
+ * all. There was nothing provider-neutral to assert on, so the feature was unfalsifiable from
+ * outside the deployment that ran it.
+ *
+ * Both halves are checked and neither is the other: the deploy-fixer repairs a cause a checkout
+ * edit can address and the investigation covers every cause it declines. The two are exclusive
+ * per FAILURE and not per run, though: a frame whose first failure the fixer repaired can time
+ * out on the re-provision and be investigated, and the report accumulates both onto one entry.
+ * Pass `expect` to say which this scenario is about; the default accepts either, which is what a
+ * suite covering "something was tried" wants.
+ *
+ * Deliberately NOT "the remedy worked". That is the deployer's next verdict, which
+ * {@link checkEphemeralEnvironment} already reads off `entries[].status`, and the report has no
+ * field for it on purpose: the platform never takes a model's account of its own remedy.
+ */
+export function checkEnvironmentRemediation(
+  report: PrVerificationReport,
+  expect: 'either' | 'deployFix' | 'investigation' = 'either',
+): Check[] {
+  const remediated = report.environments.entries.filter((entry) => entry.remediation)
+  const fixes = remediated.filter((entry) => entry.remediation?.deployFix)
+  const investigations = remediated.filter((entry) => entry.remediation?.investigation)
+  const wanted =
+    expect === 'deployFix' ? fixes : expect === 'investigation' ? investigations : remediated
+  const checks: Check[] = [
+    check(
+      expect === 'either'
+        ? 'the platform attempted a remediation on a frame whose provision failed'
+        : `the platform ran the ${expect === 'deployFix' ? 'deploy-fixer' : 'environment investigation'} loop`,
+      wanted.length > 0,
+      wanted.length > 0
+        ? wanted.map(describeRemediation).join('; ')
+        : `no frame carries a ${expect === 'either' ? 'remediation' : expect} record` +
+            ` (${report.environments.entries.length} frame(s) reported)`,
+    ),
+  ]
+  // A diagnosis that reached no verdict is a real outcome and a different one: the rounds ran and
+  // produced nothing to act on, which reads as a healthy provider unless it is named.
+  //
+  // Scoped to what the caller ASKED about. A `deployFix` scenario can carry an investigation too
+  // (the fixer's re-provision then timed out), and grading it on a verdict it never claimed makes
+  // the suite go red on a fact about a different loop.
+  const scrutinised = expect === 'deployFix' ? [] : investigations
+  for (const entry of scrutinised) {
+    const investigation = entry.remediation?.investigation
+    if (!investigation) continue
+    checks.push(
+      check(
+        `the investigation of \`${entry.frameId}\` settled on a fault layer`,
+        Boolean(investigation.faultLayer),
+        investigation.faultLayer
+          ? `faultLayer=${investigation.faultLayer}, asked=${investigation.action ?? 'null'}`
+          : `no verdict after ${investigation.attempts} round(s): ${investigation.failure ?? '(the report gave no reason)'}`,
+      ),
+    )
+  }
+  return checks
+}
+
+function describeRemediation(
+  entry: PrVerificationReport['environments']['entries'][number],
+): string {
+  const { deployFix, investigation } = entry.remediation ?? {}
+  const parts = [`${entry.frameId} (${entry.status})`]
+  if (deployFix) {
+    parts.push(
+      `deploy-fixer: ${deployFix.attempts} round(s) for ${deployFix.reason}` +
+        `, ${deployFix.completed} finished / ${deployFix.failed} died`,
+    )
+  }
+  if (investigation) {
+    parts.push(
+      `investigation: ${investigation.attempts} round(s)` +
+        `, fault=${investigation.faultLayer ?? 'none'}` +
+        `, ran=[${investigation.ranActions.join(', ')}]` +
+        (investigation.withheld ? `, withheld: ${investigation.withheld}` : '') +
+        (investigation.waitExtensions ? `, ceiling extended ${investigation.waitExtensions}×` : ''),
+    )
+  }
+  return parts.join(' | ')
+}
+
+/**
+ * The bugfix run proved the defect: RED on the pre-fix tree, GREEN on the pushed tree.
+ *
+ * Only `reproduced` is proof. The other two verdicts are honest outcomes the platform is
+ * designed to report rather than hide (`declared_infeasible` is an agent conceding structurally,
+ * `inconclusive` a proof that could not be run symmetrically), and neither is what this suite
+ * exists to demonstrate, so both fail the check WITH their stated reason attached rather than
+ * being flattened into "no proof".
+ */
+export function checkReproductionProof(report: PrVerificationReport): Check[] {
+  const { reproduction } = report
+  const verdict = reproduction.verdict ?? null
+  const why =
+    reproduction.reason ??
+    reproduction.note ??
+    reproduction.observation ??
+    '(the report gave no reason)'
+  return [
+    check(
+      'the run produced a reproduction section',
+      reproduction.status === 'reported',
+      `status=${reproduction.status}, attempts=${reproduction.attempts}` +
+        (reproduction.maxAttempts ? `/${reproduction.maxAttempts}` : ''),
+    ),
+    check(
+      'the reproduction verdict is `reproduced`',
+      verdict === 'reproduced',
+      verdict === 'reproduced'
+        ? `command: ${reproduction.command ?? '(none)'}`
+        : `verdict=${verdict ?? 'null'}: ${why}`,
+    ),
+    check(
+      'the pre-fix tree FAILED the reproduction (the defect was real)',
+      reproduction.base?.passed === false,
+      describePhase('base', reproduction.base),
+    ),
+    check(
+      'the pushed tree PASSED the same command (the fix works)',
+      reproduction.final?.passed === true,
+      describePhase('final', reproduction.final),
+    ),
+    check(
+      'no declared reproduction path was dropped before the proof ran',
+      (reproduction.omittedTestPaths ?? 0) === 0,
+      `testPaths=[${reproduction.testPaths.join(', ')}], omitted=${reproduction.omittedTestPaths ?? 0}`,
+    ),
+  ]
+}
+
+function describePhase(label: string, phase: PrVerificationReport['reproduction']['base']): string {
+  if (!phase) return `${label}: absent`
+  const setup = phase.setupFailed ? ', setup FAILED' : ''
+  return `${label}: passed=${phase.passed}, exit=${phase.exitCode}${setup}`
+}
+
+/** Real CI went green on the pushed head. */
+export function checkCi(report: PrVerificationReport): Check[] {
+  const { ci } = report
+  return [
+    check(
+      'the CI gate reported a verdict',
+      ci.status === 'reported',
+      `status=${ci.status}${ci.note ? ` (${ci.note})` : ''}`,
+    ),
+    check(
+      'CI passed',
+      ci.verdict === 'pass',
+      `verdict=${ci.verdict ?? 'null'}, fixerAttempts=${ci.fixerAttempts}` +
+        (ci.failingChecks.length
+          ? `, failing: ${ci.failingChecks.map((entry) => entry.name).join(', ')}`
+          : ''),
+    ),
+  ]
+}
+
+/**
+ * The run reached a merge DECISION.
+ *
+ * Deliberately not "the pull request merged": whether it does is the workspace's merge-threshold
+ * preset talking, and a deployment configured to hold everything for a person is correctly
+ * configured, not broken. What this suite is entitled to assert is that the `merger` step ran and
+ * the engine resolved its assessment into a recorded outcome: the difference between a pipeline
+ * that completed and one that fell off the end.
+ */
+export function checkMergeDecision(report: PrVerificationReport): Check[] {
+  const { merge } = report
+  return [
+    check(
+      'the merger produced a scored assessment',
+      merge.status === 'reported',
+      `status=${merge.status}${merge.note ? ` (${merge.note})` : ''}`,
+    ),
+    check(
+      'the engine resolved it into an outcome',
+      Boolean(merge.outcome),
+      `outcome=${merge.outcome ?? 'null'}, preset=${merge.presetName ?? 'null'}` +
+        (merge.reason ? `, reason=${merge.reason}` : ''),
+    ),
+  ]
+}
+
+/**
+ * Nothing in the report was silently clipped.
+ *
+ * Cheap, and it guards the assertions above rather than the run: `truncations` is how the report
+ * states that a list it shows is not the whole list, and a check reading `failingChecks` off a
+ * capped array would otherwise report a clean CI gate from a truncated tail.
+ */
+export function checkNotTruncated(report: PrVerificationReport): Check {
+  return check(
+    'the report is whole (nothing capped)',
+    report.truncations.length === 0,
+    report.truncations.join('; ') || 'no truncations',
+  )
+}

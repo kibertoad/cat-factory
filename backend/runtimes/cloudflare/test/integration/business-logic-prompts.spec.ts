@@ -1,13 +1,13 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   BUSINESS_DOCUMENTER_KIND,
-  BUSINESS_LOGIC_AGENT_KINDS,
   BUSINESS_LOGIC_DOCS_DIR,
   BUSINESS_REVIEWER_KIND,
   businessLogicSystemPrompt,
   composeSystemPrompt,
   isBusinessLogicKind,
   phaseForKind,
+  STANDARDS_SECTION_OPENER,
   systemPromptFor as _systemPromptFor,
   defaultAgentKindRegistry,
   userPromptFor as _userPromptFor,
@@ -51,7 +51,6 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 
 describe('business-logic agent prompts', () => {
   it('recognises both kinds and nothing else', () => {
-    expect(BUSINESS_LOGIC_AGENT_KINDS).toEqual(['business-documenter', 'business-reviewer'])
     expect(isBusinessLogicKind('business-documenter')).toBe(true)
     expect(isBusinessLogicKind('business-reviewer')).toBe(true)
     expect(isBusinessLogicKind('coder')).toBe(false)
@@ -124,9 +123,15 @@ describe('business-logic agent prompts', () => {
       expect(prompt).toMatch(/no business-logic documentation is available/i)
     })
 
-    it('both defer to the appended best-practice standards', () => {
-      expect(systemPromptFor(BUSINESS_DOCUMENTER_KIND)).toContain('best-practice standard')
-      expect(systemPromptFor(BUSINESS_REVIEWER_KIND)).toContain('best-practice standard')
+    it('both leave the best-practice-standards imperative to the FOLD', () => {
+      // The imperative used to close each role prompt, while the fold appends nothing when a
+      // block resolved no standards — so it pointed at a section that was never injected. The
+      // fold owns it now, which is why the assertion is at that seam.
+      for (const kind of [BUSINESS_DOCUMENTER_KIND, BUSINESS_REVIEWER_KIND]) {
+        const bare = systemPromptFor(kind)
+        expect(bare).not.toContain(STANDARDS_SECTION_OPENER)
+        expect(composeSystemPrompt(bare, [FRAGMENTS[0]!.id])).toContain(STANDARDS_SECTION_OPENER)
+      }
     })
 
     it('composes selected fragments onto the role prompt', () => {
@@ -150,6 +155,7 @@ describe('business-logic agent prompts', () => {
               {
                 title: 'Auth PRD',
                 url: 'https://example.test/prd',
+                origin: 'confluence' as const,
                 excerpt: 'Sessions expire after 30 minutes of inactivity.',
                 summary: 'Sessions expire after 30 minutes of inactivity.',
                 body: 'Sessions expire after 30 minutes of inactivity.',

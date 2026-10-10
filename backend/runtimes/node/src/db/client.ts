@@ -67,7 +67,7 @@ function makeDbClient(connectionString: string, schema?: string) {
   // graceful shutdown in start(). Log and swallow it; the pool transparently opens a
   // fresh connection on the next query.
   pool.on('error', (err) => {
-    logger.error({ err: err.message }, 'postgres idle client error')
+    logger.error('postgres idle client error', { err: err.message })
   })
   const db = drizzle({ client: pool })
   return { db, pool }

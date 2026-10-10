@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
+import AccountAuditLog from '~/components/layout/AccountAuditLog.vue'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
+import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
+import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -14,8 +17,10 @@ import SecretInput from '~/components/common/SecretInput.vue'
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
+const uiMode = useUiModeStore()
 const auth = useAuthStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 const busy = ref(false)
@@ -60,17 +65,22 @@ async function updateMemberRoles(userId: string, roles: AccountRole[]) {
   try {
     await accounts.setMemberRoles(props.accountId, userId, roles.length ? roles : ['developer'])
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.updateRoles'), e)
+    present(e, 'layout.accountTeam.errors.updateRoles')
   }
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
+/**
+ * End every session a member holds. Their roles are untouched, so nothing in the roster changes —
+ * which is why the confirmation names the person: there is no visible after-state to check.
+ */
+async function revokeSessions(userId: string, label: string) {
+  if (!(await confirmAction('revoke', label))) return
+  try {
+    await accounts.revokeMemberSessions(props.accountId, userId)
+    toast.add({ title: t('layout.accountTeam.members.sessionsRevoked'), icon: 'i-lucide-check' })
+  } catch (e) {
+    present(e, 'layout.accountTeam.errors.revokeSessions')
+  }
 }
 
 async function loadAll(accountId: string) {
@@ -80,7 +90,7 @@ async function loadAll(accountId: string) {
     if (isOrg.value) jobs.push(accounts.loadRoster(accountId))
     await Promise.all(jobs)
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.loadSettings'), e)
+    present(e, 'layout.accountTeam.errors.loadSettings')
   }
 }
 
@@ -106,7 +116,7 @@ async function createOrganization() {
     newOrgName.value = ''
     toast.add({ title: t('layout.accountTeam.org.created'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.createOrg'), e)
+    present(e, 'layout.accountTeam.errors.createOrg')
   } finally {
     busy.value = false
   }
@@ -134,7 +144,7 @@ async function sendInvite() {
       icon: 'i-lucide-mail-check',
     })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.sendInvite'), e)
+    present(e, 'layout.accountTeam.errors.sendInvite')
   } finally {
     busy.value = false
   }
@@ -146,7 +156,7 @@ async function revoke(id: string, email: string) {
     await accounts.revokeInvite(props.accountId, id)
     toastDone('revoke', email)
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.revokeInvite'), e)
+    present(e, 'layout.accountTeam.errors.revokeInvite')
   }
 }
 
@@ -167,7 +177,7 @@ async function connectEmail() {
     emailApiKey.value = ''
     toast.add({ title: t('layout.accountTeam.email.connected'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.connectEmail'), e)
+    present(e, 'layout.accountTeam.errors.connectEmail')
   } finally {
     busy.value = false
   }
@@ -181,7 +191,7 @@ async function disconnectEmail() {
     await accounts.disconnectEmail(props.accountId)
     toastDone('disconnect', noun)
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.disconnectEmail'), e)
+    present(e, 'layout.accountTeam.errors.disconnectEmail')
   } finally {
     busy.value = false
   }
@@ -191,12 +201,14 @@ async function disconnectEmail() {
 <template>
   <div class="space-y-6 text-sm">
     <!-- personal-account CTA: members/roles/invitations need an organization -->
-    <section v-if="!isOrg" class="rounded-md border border-slate-800 bg-slate-800/40 p-4">
-      <h3 class="mb-1 font-semibold text-white">{{ t('layout.accountTeam.org.ctaTitle') }}</h3>
-      <p class="mb-3 text-slate-400">
+    <section v-if="!isOrg" class="rounded-md border border-default bg-elevated/40 p-4">
+      <h3 class="mb-1 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.org.ctaTitle') }}
+      </h3>
+      <p class="mb-3 text-muted">
         {{ t('layout.accountTeam.org.ctaBody') }}
       </p>
-      <form class="flex gap-2" @submit.prevent="createOrganization">
+      <UForm class="flex gap-2" @submit="createOrganization">
         <UInput
           v-model="newOrgName"
           :placeholder="t('layout.accountTeam.org.namePlaceholder')"
@@ -205,17 +217,19 @@ async function disconnectEmail() {
         <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-plus">
           {{ t('layout.accountTeam.org.create') }}
         </UButton>
-      </form>
+      </UForm>
     </section>
 
     <!-- members -->
     <section v-if="isOrg">
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.members.title') }}</h3>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.members.title') }}
+      </h3>
       <ul class="space-y-1">
         <li
           v-for="m in accounts.members"
           :key="m.userId"
-          class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1"
+          class="flex items-center justify-between rounded-md bg-elevated/40 px-2 py-1"
         >
           <span class="truncate">{{ m.name || m.email || m.userId }}</span>
           <USelect
@@ -227,11 +241,27 @@ async function disconnectEmail() {
             class="w-44"
             @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
           />
-          <span v-else class="text-xs uppercase tracking-wide text-slate-400">
+          <!-- The roles a member HOLDS, read-only where the select would be: the row's data, not
+               a heading over it, so it keeps its own classes rather than adopting the eyebrow
+               recipe (`common/SectionLabel.vue`). -->
+          <span v-else class="text-xs uppercase tracking-wide text-muted">
             {{ m.roles.join(', ') }}
           </span>
+          <!-- Offboarding: end every session this member holds, leaving their membership and
+               roles alone. Confirmed, because it is not undoable from here (the person simply
+               signs in again) and because it is the sort of thing a mis-click should not do. -->
+          <IconButton
+            v-if="isAdmin"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-log-out"
+            :label="t('layout.accountTeam.members.revokeSessions')"
+            data-testid="revoke-member-sessions"
+            @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
+          />
         </li>
-        <li v-if="accounts.members.length === 0" class="text-slate-500">
+        <li v-if="accounts.members.length === 0" class="text-dimmed">
           {{ t('layout.accountTeam.members.empty') }}
         </li>
       </ul>
@@ -239,8 +269,10 @@ async function disconnectEmail() {
 
     <!-- invitations -->
     <section v-if="isOrg">
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.invite.title') }}</h3>
-      <form class="flex gap-2" @submit.prevent="sendInvite">
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.invite.title') }}
+      </h3>
+      <UForm class="flex gap-2" @submit="sendInvite">
         <UInput
           v-model="inviteEmail"
           type="email"
@@ -251,17 +283,18 @@ async function disconnectEmail() {
         <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-send">
           {{ t('layout.accountTeam.invite.submit') }}
         </UButton>
-      </form>
+      </UForm>
 
       <ul v-if="accounts.invitations.length" class="mt-3 space-y-1">
         <li
           v-for="inv in accounts.invitations"
           :key="inv.id"
-          class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1"
+          class="flex items-center justify-between rounded-md bg-elevated/40 px-2 py-1"
         >
           <span class="truncate">{{ inv.email }}</span>
           <span class="flex items-center gap-2 text-xs">
-            <span class="uppercase tracking-wide text-slate-400">
+            <!-- The invitation's STATE, which is what this row is about. Not an eyebrow. -->
+            <span class="uppercase tracking-wide text-muted">
               {{ invitationStatusLabel(inv.status) }}
             </span>
             <UButton
@@ -280,14 +313,14 @@ async function disconnectEmail() {
 
     <!-- email sender -->
     <section>
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.email.title') }}</h3>
-      <p v-if="!accounts.emailConfigured" class="text-slate-500">
+      <h3 class="mb-2 font-semibold text-highlighted">{{ t('layout.accountTeam.email.title') }}</h3>
+      <p v-if="!accounts.emailConfigured" class="text-dimmed">
         {{ t('layout.accountTeam.email.notEnabled') }}
       </p>
       <template v-else>
         <div
           v-if="accounts.emailConnection"
-          class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1.5"
+          class="flex items-center justify-between rounded-md bg-elevated/40 px-2 py-1.5"
         >
           <i18n-t keypath="layout.accountTeam.email.connectedAs" tag="span" scope="global">
             <template #provider>
@@ -299,7 +332,7 @@ async function disconnectEmail() {
             {{ t('layout.accountTeam.email.disconnect') }}
           </UButton>
         </div>
-        <form v-else class="space-y-2" @submit.prevent="connectEmail">
+        <UForm v-else class="space-y-2" @submit="connectEmail">
           <USelect v-model="emailProvider" :items="EMAIL_PROVIDER_ITEMS" class="w-full" />
           <UInput
             v-model="emailFrom"
@@ -315,15 +348,17 @@ async function disconnectEmail() {
           <UButton type="submit" color="primary" :loading="busy">
             {{ t('layout.accountTeam.email.connect') }}
           </UButton>
-        </form>
+        </UForm>
       </template>
     </section>
 
     <!-- account-wide provider API keys (admin-only): direct vendors + proxy gateways -->
     <section v-if="isAdmin" class="space-y-6">
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.apiKeys.title') }}</h3>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.apiKeys.title') }}
+      </h3>
       <ProvidersApiKeysSection :account-id="accountId" category="direct" />
-      <div class="border-t border-slate-800 pt-6">
+      <div class="border-t border-default pt-6">
         <ProvidersApiKeysSection :account-id="accountId" category="proxy" />
       </div>
     </section>
@@ -336,6 +371,31 @@ async function disconnectEmail() {
     <!-- account-wide model-family allow/block policy (admin-only; hosted/mothership only) -->
     <section v-if="isAdmin && modelPolicySupported">
       <AccountModelPolicySettings :account-id="accountId" />
+    </section>
+
+    <!-- per-account tuning for the platform-health alert sweep (admin-only). Not gated on
+         `modelPolicySupported`: the alert thresholds bind wherever account settings exist, and
+         a deployment that never opted the sweep in already renders the mute switch as the
+         one-way control it is. -->
+    <section v-if="isAdmin">
+      <AccountPlatformAlertSettings :account-id="accountId" />
+    </section>
+
+    <!-- account-wide floor under each board's run-credential switch (admin-only). Not gated on
+         `modelPolicySupported`: unlike a model policy this binds wherever account settings
+         exist, and a deployment that could not enforce it would be the one case where saying
+         so matters most. -->
+    <section v-if="isAdmin">
+      <AccountRunCredentialSettings :account-id="accountId" />
+    </section>
+
+    <!-- The account audit log (admin-only, ADVANCED tier). Advanced rather than basic because
+         reading who changed what is a governance task, not part of the everyday delivery loop —
+         and unlike an override field there is no default it hides, so hiding it withholds nothing
+         a basic-tier user would otherwise be acting on. The backend gates it too; this only
+         decides whether the surface exists. -->
+    <section v-if="isAdmin && uiMode.isAdvanced">
+      <AccountAuditLog :account-id="accountId" />
     </section>
   </div>
 </template>

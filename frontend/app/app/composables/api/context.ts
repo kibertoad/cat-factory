@@ -35,6 +35,8 @@ export interface ApiContext {
   sendWith: ApiSendWith
   /** `/workspaces/:id` path prefix (id encoded). */
   ws: (workspaceId: string) => string
+  /** `/accounts/:id` path prefix (id encoded) — account-scoped routes (e.g. the skill library). */
+  acct: (accountId: string) => string
   /** Prompt-fragment library prefix, resolved from the owner scope (ADR 0006 §8). */
   scope: (kind: FragmentOwnerKind, id: string) => string
   /** The ambient personal-unlock password header (individual-usage vendors). */
@@ -42,3 +44,5 @@ export interface ApiContext {
 }
 
 export type Position = { x: number; y: number }
+/** An explicit pixel size for a resizable container (a service frame or a module). */
+export type Size = { w: number; h: number }

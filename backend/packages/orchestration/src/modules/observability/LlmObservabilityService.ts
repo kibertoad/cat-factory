@@ -1,23 +1,32 @@
 import {
   type Clock,
   type IdGenerator,
-  DEFAULT_WORKSPACE_SETTINGS,
-  readCachedWorkspaceSettings,
+  type StoreAgentContextGate,
+  createStoreAgentContextGate,
+  DELEGATED_USAGE_PROVIDER,
+  noopLogger,
+  normalizeCallPhase,
+  priceRollupCells,
   redactSecrets,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import type {
   GroupCacheHandle,
+  InlineLlmCall,
+  Logger,
   HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
-  LlmCallMetricSummary,
+  LlmRollupCell,
+  LlmRateResolver,
   LlmTraceSink,
   WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { LlmMetricsExport } from '@cat-factory/contracts'
+import type { ExecutionInstance, LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
 import { buildLlmMetricsExport, computeStoredPrompt } from './observability.logic.js'
+import { buildRunTraceSpans } from './runTraceSpans.logic.js'
 
 export interface LlmObservabilityServiceDependencies {
   llmCallMetricRepository: LlmCallMetricRepository
@@ -48,11 +57,32 @@ export interface LlmObservabilityServiceDependencies {
   workspaceSettingsRepository?: WorkspaceSettingsRepository
   /**
    * The shared {@link AppCaches.workspaceSettings} slice. When wired alongside the settings
-   * repository, {@link bodiesEnabled} resolves the row through it — this read runs per
+   * repository, the shared body-capture gate resolves the row through it — this read runs per
    * recorded LLM call, so caching it (invalidated by `WorkspaceSettingsService.update`)
    * avoids a DB read per call. Absent ⇒ read live.
    */
   workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
+   * Where the trace-sink fan-out below reports a drop. Absent ⇒ `noopLogger`, which is what a
+   * unit test constructing this service standalone gets.
+   */
+  logger?: Logger
+  /**
+   * Per-1M rates for a `(provider, model)`, from the deployment's spend price table. Wired
+   * here — rather than at each of the two rollup consumers — because both must agree on what a
+   * run cost, and the store cannot answer it: a price table is configuration, not SQL.
+   *
+   * Absent ⇒ every rollup cell reports a NULL cost, which is the honest reading for a
+   * deployment with no pricing wired and is distinct from a run that cost nothing.
+   */
+  modelRates?: LlmRateResolver
+  /**
+   * ISO 4217 currency {@link LlmObservabilityServiceDependencies.modelRates} is denominated in,
+   * so a surface can LABEL the money it renders instead of assuming one. Travels with the rates
+   * because it is a property of the same table: swapping the table's currency without the label
+   * renders a correct number under the wrong symbol, which is worse than no number.
+   */
+  costCurrency?: string
 }
 
 /**
@@ -77,6 +107,24 @@ const DEFAULT_LIST_LIMIT = 1000
 const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0, promptHash: '' }
 
 /**
+ * A prompt/response/reasoning body, either already in hand or resolvable on demand.
+ *
+ * Every use of a body here sits behind the `recordPrompts` + `storeAgentContext` gate, so a
+ * deployment with prompt recording off (or a workspace that opted out) does work it then
+ * discards: serialising a prompt array and scrubbing it, per call. A producer that HOLDS the
+ * string passes it as one and nothing changes; a producer that would have to BUILD it passes
+ * the thunk and pays only when the gate opens. The inline feeder is the case that matters —
+ * it JSON-serialises the whole AI-SDK prompt, which on a judge or a reviewer carries a rubric
+ * and a diff, inside a CPU-metered isolate.
+ */
+type LlmCallBody = string | (() => string)
+
+/** Resolve a {@link LlmCallBody}. Only ever called when the body is going to be kept. */
+function resolveBody(body: LlmCallBody): string {
+  return typeof body === 'string' ? body : body()
+}
+
+/**
  * Details of one proxied LLM call, handed in by the LLM proxy. The proxy owns the
  * timing (it wraps the upstream call): {@link totalMs} is the end-to-end time it
  * spent and {@link upstreamMs} the slice waiting on the model — the difference is
@@ -95,11 +143,41 @@ export interface RecordLlmCallInput {
   provider: string
   model: string
   streaming: boolean
+  /**
+   * Which slice of the run spent this call (`agent` / `validation-repair` / …), as reported by
+   * the producer that owns the phase boundary. Normalised here through {@link normalizeCallPhase}
+   * — the label reaches this service over HTTP on both producing paths (a proxy request path, a
+   * runner pool's JSON), so neither may write the grouping key unchecked. Absent ⇒ `''`.
+   */
+  phase?: string
+  /**
+   * The call's 0-based ordinal in its job's telemetry sequence, when the producing channel has
+   * one (the harness's job-scoped `seq`). Absent/undefined ⇒ null.
+   */
+  turnIndex?: number | null
+  /**
+   * TRUE when the row carries only tokens and stands for no model call, so `calls` excludes it
+   * while every token sum keeps it. See {@link LlmCallMetric.spendOnly}. Absent ⇒ false: a
+   * producer with no shortfall concept files calls.
+   */
+  spendOnly?: boolean
+  /**
+   * The gateway's own USD cost for this call, when the provider reports one (OpenRouter with
+   * usage accounting on). Absent from every producer that does not report a cost, and absent is
+   * NOT zero: see {@link LlmCallMetric.reportedCostUsd}.
+   */
+  reportedCostUsd?: number | null
+  /** The upstream a gateway routed to; see {@link LlmCallMetric.upstreamProvider}. */
+  upstreamProvider?: string | null
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   promptTokens: number
-  cachedPromptTokens: number
+  /** Input tokens served from the provider's prefix cache. */
+  cacheReadTokens: number
+  /** Input tokens written into the provider's cache. */
+  cacheWriteTokens: number
   completionTokens: number
   totalTokens: number
   finishReason: string | null
@@ -110,10 +188,10 @@ export interface RecordLlmCallInput {
   ok: boolean
   httpStatus: number | null
   errorMessage: string | null
-  promptText: string
-  responseText: string
+  promptText: LlmCallBody
+  responseText: LlmCallBody
   /** The model's reasoning/thinking trace, when emitted on a separate channel (else ''). */
-  reasoningText: string
+  reasoningText: LlmCallBody
 }
 
 /**
@@ -131,8 +209,15 @@ export class LlmObservabilityService {
   private readonly clock: Clock
   private readonly recordPrompts: boolean
   private readonly traceSink?: LlmTraceSink
-  private readonly workspaceSettings?: WorkspaceSettingsRepository
-  private readonly workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
+   * The per-workspace `storeAgentContext` half of the double gate, built from the SHARED kernel
+   * factory the inline path also uses so the two cannot drift apart again — they already had,
+   * and the inline half was exporting the bodies of a workspace that had opted out.
+   */
+  private readonly bodiesEnabled: StoreAgentContextGate
+  private readonly log: Logger
+  private readonly modelRates: LlmRateResolver | undefined
+  private readonly costCurrency: string | undefined
 
   constructor({
     llmCallMetricRepository,
@@ -142,14 +227,36 @@ export class LlmObservabilityService {
     traceSink,
     workspaceSettingsRepository,
     workspaceSettingsCache,
+    logger,
+    modelRates,
+    costCurrency,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.recordPrompts = recordPrompts
     this.traceSink = traceSink
-    this.workspaceSettings = workspaceSettingsRepository
-    this.workspaceSettingsCache = workspaceSettingsCache
+    this.bodiesEnabled = createStoreAgentContextGate({
+      repository: workspaceSettingsRepository,
+      cache: workspaceSettingsCache,
+    })
+    this.log = (logger ?? noopLogger).child({ service: 'llmObservability' })
+    // A delegated executor's reported usage names no model the platform knows, so a price table
+    // would answer its fallback rate and present a guess as spend. Refused here so the rollups
+    // and the export, which both read this resolver, agree.
+    this.modelRates =
+      modelRates &&
+      ((provider, model) =>
+        provider === DELEGATED_USAGE_PROVIDER ? null : modelRates(provider, model))
+    this.costCurrency = costCurrency
+  }
+
+  /**
+   * The currency this service's rollup costs are denominated in, or null when nothing prices
+   * them. Read by the rollup consumers so the amount and its label come from ONE place.
+   */
+  get rollupCurrency(): string | null {
+    return this.modelRates ? (this.costCurrency ?? null) : null
   }
 
   /**
@@ -165,17 +272,28 @@ export class LlmObservabilityService {
    * still recorded.
    */
   async record(rawInput: RecordLlmCallInput): Promise<void> {
+    // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a
+    // settings source is wired) the workspace hasn't opted out via `storeAgentContext` —
+    // the same double gate the agent-context snapshot path uses. Numeric telemetry is
+    // always recorded regardless.
+    //
+    // Resolved FIRST, before the bodies are touched at all: a body may be a thunk the
+    // producer would rather not run (the inline feeder serialises the whole AI-SDK prompt),
+    // and scrubbing a body this gate is about to drop is work nobody reads either way.
+    const recordBodies = this.recordPrompts && (await this.bodiesEnabled(rawInput.workspaceId))
     // Unlike the agent-context snapshot (a structural allow-list), the prompt/response
     // bodies captured here are free text that can contain a credential the agent read or
     // echoed. Scrub known secret shapes BEFORE anything is stored, delta-chained, or
     // fanned out to the external trace sink — the redacted text is what every downstream
     // consumer sees. Done up front so the delta chain stays consistent (each tip is
     // already redacted) and Langfuse never receives a raw secret.
-    const input: RecordLlmCallInput = {
+    const scrub = (body: LlmCallBody): string =>
+      recordBodies ? (redactSecrets(resolveBody(body)) ?? '') : ''
+    const input = {
       ...rawInput,
-      promptText: redactSecrets(rawInput.promptText) ?? '',
-      responseText: redactSecrets(rawInput.responseText) ?? '',
-      reasoningText: redactSecrets(rawInput.reasoningText) ?? '',
+      promptText: scrub(rawInput.promptText),
+      responseText: scrub(rawInput.responseText),
+      reasoningText: scrub(rawInput.reasoningText),
       // errorMessage is a free-text upstream/proxy error string that is kept as diagnostic
       // metadata even when bodies are dropped (like httpStatus/finishReason) AND fanned out
       // to the trace sink — so it too must be scrubbed. An upstream 4xx/5xx message can
@@ -184,11 +302,6 @@ export class LlmObservabilityService {
       errorMessage: redactSecrets(rawInput.errorMessage),
     }
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
-    // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a
-    // settings source is wired) the workspace hasn't opted out via `storeAgentContext` —
-    // the same double gate the agent-context snapshot path uses. Numeric telemetry is
-    // always recorded regardless.
-    const recordBodies = this.recordPrompts && (await this.bodiesEnabled(input.workspaceId))
     const stored = recordBodies
       ? await this.computeStoredPromptForChain(input)
       : EMPTY_STORED_PROMPT
@@ -200,6 +313,15 @@ export class LlmObservabilityService {
       // rather than being spread in as `undefined`.
       id: input.id ?? this.idGenerator.next('llm'),
       overheadMs,
+      // Normalised to null rather than left as `undefined`: the row is persisted by two
+      // repositories whose column is nullable, and an absent key would bind as SQL NULL on one
+      // and be rejected on the other. `??` and not a truthiness test, because a genuinely free
+      // call reports 0 and that is a fact worth keeping apart from "nobody said".
+      reportedCostUsd: input.reportedCostUsd ?? null,
+      upstreamProvider: input.upstreamProvider ?? null,
+      phase: normalizeCallPhase(input.phase),
+      turnIndex: input.turnIndex ?? null,
+      spendOnly: input.spendOnly === true,
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
@@ -216,11 +338,15 @@ export class LlmObservabilityService {
     // dispatched without awaiting (like the inline feeder) so the sink's network round
     // trip never extends the metering path, and isolated so a sink failure can't break
     // local recording. The sink itself swallows + logs and bounds its own request.
-    if (this.traceSink) {
+    const traceSink = this.traceSink
+    if (traceSink) {
       const endedAt = metric.createdAt
-      try {
-        void Promise.resolve(
-          this.traceSink.recordGeneration({
+      // One `runBestEffort` covers both halves of what used to be a `try` wrapping a
+      // `.catch(() => {})`: it swallows a SYNCHRONOUS throw from the sink as well as a
+      // rejected fan-out, and names whichever one happened.
+      void runBestEffort(this.log, 'traceSink.recordGeneration', () =>
+        Promise.resolve(
+          traceSink.recordGeneration({
             workspaceId: input.workspaceId,
             executionId: input.executionId,
             agentKind: input.agentKind,
@@ -229,6 +355,8 @@ export class LlmObservabilityService {
             startedAt: Math.max(0, endedAt - input.upstreamMs),
             endedAt,
             promptTokens: input.promptTokens,
+            cacheReadTokens: input.cacheReadTokens,
+            cacheWriteTokens: input.cacheWriteTokens,
             completionTokens: input.completionTokens,
             totalTokens: input.totalTokens,
             finishReason: input.finishReason,
@@ -239,27 +367,39 @@ export class LlmObservabilityService {
             // (a thinking model that spent its budget reasoning) so the trace isn't blank.
             output: recordBodies ? input.responseText || input.reasoningText : '',
           }),
-        ).catch(() => {})
-      } catch {
-        // Swallowed: the sink itself logs; observability never breaks the proxy.
-      }
+        ),
+      )
     }
   }
 
   /**
-   * Whether prompt/response bodies may be stored for this workspace. True when no settings
-   * source is wired (defer to the deployment switch); otherwise the workspace's
-   * `storeAgentContext` toggle (defaulting on for a workspace with no saved settings).
+   * Close a settled run's external trace by emitting the PARENTS its generations and tool
+   * spans have been naming all along: the run's root span and one span per agent kind that
+   * ran. Called from the engine's single terminal hook, so a run reaching `done`/`failed` by
+   * any of its four routes lands here exactly the same way.
+   *
+   * Best-effort and never throwing, like every other fan-out from this service: a trace whose
+   * root is missing is a degraded trace, and must never be a failed run. A sink that groups by
+   * something other than span parentage (Langfuse) simply omits the method and nothing here
+   * changes for it.
+   *
+   * AWAITED, where the per-call `recordGeneration` fan-out above is deliberately not. The two
+   * are on opposite sides of the same trade: a generation is one span among thousands on the
+   * metering hot path, so its round trip must never extend that path, and losing one costs one
+   * span. These are the PARENTS every other span of the run already named, they are emitted
+   * once per run on a path that has already committed the run's state, and losing them orphans
+   * the whole trace rather than thinning it. The wait is bounded by the sink's own per-request
+   * timeout, and on the Worker it is also what keeps the export from being cut off when the
+   * isolate finishes.
    */
-  private async bodiesEnabled(workspaceId: string): Promise<boolean> {
-    if (!this.workspaceSettings) return true
-    const settings =
-      (await readCachedWorkspaceSettings(
-        this.workspaceSettingsCache,
-        this.workspaceSettings,
-        workspaceId,
-      )) ?? DEFAULT_WORKSPACE_SETTINGS
-    return settings.storeAgentContext
+  async recordRunTrace(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    const traceSink = this.traceSink
+    if (!traceSink?.recordRunSpans) return
+    const spans = buildRunTraceSpans(workspaceId, instance)
+    if (!spans) return
+    await runBestEffort(this.log, 'traceSink.recordRunSpans', () =>
+      Promise.resolve(traceSink.recordRunSpans?.(spans.run, spans.steps)),
+    )
   }
 
   /**
@@ -267,7 +407,13 @@ export class LlmObservabilityService {
    * `(workspace, execution, agentKind)` conversation (or the full array when it can't
    * be chained). Only reached when prompt recording is enabled.
    */
-  private async computeStoredPromptForChain(input: RecordLlmCallInput): Promise<StoredPrompt> {
+  private async computeStoredPromptForChain(input: {
+    workspaceId: string
+    executionId: string | null
+    agentKind: string
+    /** Already resolved and scrubbed — a chain tip must never hold an unredacted body. */
+    promptText: string
+  }): Promise<StoredPrompt> {
     const prev =
       input.executionId != null
         ? await this.repository.latestChainTip(
@@ -291,9 +437,21 @@ export class LlmObservabilityService {
     return this.repository.listByExecution(workspaceId, executionId, limit)
   }
 
-  /** Per-agent-kind aggregates for a run, for the board step rollups. */
-  summarizeByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetricSummary[]> {
-    return this.repository.summarizeByExecution(workspaceId, executionId)
+  /**
+   * Per-`(agentKind, phase)` aggregates for a run, PRICED — the board step rollups and the
+   * per-phase burn breakdown.
+   *
+   * The store groups one grain finer (it also splits by `(provider, model)`), because cost is a
+   * function of the model and can only be computed while the model is still attached. This is
+   * the ONE place that fold happens, so the board rollup and the debug overview cannot report
+   * different money for the same run.
+   */
+  async summarizeByExecution(workspaceId: string, executionId: string): Promise<LlmRollupCell[]> {
+    const cells = await this.repository.summarizeByExecution(workspaceId, executionId)
+    // No rates wired ⇒ collapse the model dimension anyway, so every consumer sees the same
+    // `(agentKind, phase)` shape regardless of whether this deployment can price it. The cost
+    // stays null, which says "not priced here" rather than "cost nothing".
+    return priceRollupCells(cells, this.modelRates)
   }
 
   /**
@@ -302,12 +460,28 @@ export class LlmObservabilityService {
    * model for analysis. Stamped with the service clock.
    */
   async exportForExecution(workspaceId: string, executionId: string): Promise<LlmMetricsExport> {
-    const calls = await this.listByExecution(workspaceId, executionId)
-    return buildLlmMetricsExport(executionId, calls, this.clock.now())
+    // ONE row past the cap, so the bundle can SAY it is a slice instead of presenting the
+    // newest 1000 calls as the whole run. A separate COUNT would be a second query for one
+    // boolean, and inferring it from `calls.length === limit` guesses wrong on the run whose
+    // call count lands exactly on the cap.
+    const fetched = await this.listByExecution(workspaceId, executionId, DEFAULT_LIST_LIMIT + 1)
+    const truncated = fetched.length > DEFAULT_LIST_LIMIT
+    const calls = truncated ? fetched.slice(0, DEFAULT_LIST_LIMIT) : fetched
+    // Priced from the SAME table the rollups use. The export costs each call individually
+    // (it holds the rows), which is strictly finer than the rollup's per-cell arithmetic and
+    // agrees with it: both price a class at its own tier. A truncated bundle prices nothing:
+    // a slice's sum quoted as a run's cost is the failure the null rule exists to prevent.
+    return buildLlmMetricsExport(executionId, calls, this.clock.now(), {
+      rates: this.modelRates,
+      truncated,
+    })
   }
 }
 
 /** The per-job payload the container executor hands a subscription-harness telemetry recorder. */
+/** Files one job's harness call metrics; what {@link makeHarnessCallRecorder} builds. */
+export type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
+
 export interface HarnessCallsRecordInput {
   workspaceId: string
   executionId: string | null
@@ -336,29 +510,59 @@ export interface HarnessCallsRecordInput {
  * prompt-delta chain (which reads the previous row's tip) stays ordered. The CLIs expose
  * no per-HTTP timing, so `totalMs`/`upstreamMs` are 0 (overhead derives 0); tool counts
  * aren't surfaced per call, so `toolCount` is 0. When a `jobId` is supplied each row is
- * minted a deterministic id (`<jobId>-hc-<index>`) so a durable-driver replay re-records
- * idempotently (duplicate ids are rejected by the store) rather than duplicating rows.
+ * minted a deterministic id (`<jobId>-hc-<seq>`) so RE-recording a call is a no-op at the
+ * store rather than a duplicate row — which covers both a durable-driver replay and the
+ * terminal write of calls the live poll drain already recorded.
+ *
+ * `seq` is the harness's job-scoped sequence number, stable across both channels a call
+ * arrives on (the per-poll drain and the terminal result list). It falls back to the position
+ * in this batch only for an older harness image that streams nothing — there the terminal list
+ * is the sole channel, so its indices are already job-scoped.
+ *
+ * A metric flagged {@link HarnessCallMetric.standsForJob} is filed with a NULL `turnIndex`: it
+ * carries the job's unattributed remainder rather than a turn, and a reader ordering a step's
+ * calls by turn must not be handed a position it never occupied. Its ID still comes from `seq`,
+ * so idempotency is unaffected — the same split `CliInlineLanguageModel` makes between its
+ * per-call rows and its one step-level row.
+ *
+ * Whether that row is also a SPEND CORRECTION rather than a call is a SECOND question, and it is
+ * read off {@link HarnessCallMetric.spendOnly} rather than re-derived from `standsForJob`: a
+ * shortfall row filed by a CLI that narrated no turns at all is the job's only record and IS its
+ * call. Deriving it here from the batch (`calls.some(c => !c.standsForJob)`) would get that wrong
+ * in the routine case, since a job's calls arrive in the BATCHES the live drain delivers them in
+ * and the terminal batch is regularly this row alone.
  */
-export function makeHarnessCallRecorder(
-  service: LlmObservabilityService,
-): (input: HarnessCallsRecordInput) => Promise<void> {
+export function makeHarnessCallRecorder(service: LlmObservabilityService): RecordHarnessCalls {
   return async ({ workspaceId, executionId, agentKind, provider, model, jobId, calls }) => {
     for (const [index, call] of calls.entries()) {
+      // `seq` is BOTH the row-id key and the turn ordinal, so they cannot drift apart: a
+      // rollup ordering a phase's calls by turn sees exactly the sequence the ids encode.
+      const turnIndex = call.seq ?? index
       await service.record({
-        ...(jobId ? { id: `${jobId}-hc-${index}` } : {}),
+        ...(jobId ? { id: `${jobId}-hc-${turnIndex}` } : {}),
         workspaceId,
         executionId,
         agentKind,
         provider,
         model: call.model ?? model,
         streaming: true,
+        // Absent on an older harness image (no phase marker at all), which normalises to the
+        // unattributed slice rather than being guessed at from the agent kind.
+        ...(call.phase !== undefined ? { phase: call.phase } : {}),
+        turnIndex: call.standsForJob ? null : turnIndex,
+        // The producer's own answer, persisted so a rollup can act on it. A NULL `turnIndex`
+        // cannot carry it: a plain inline call has one too, so a reader could not tell "no turn to
+        // report" from "no call happened". Nor can `standsForJob` stand in — see above.
+        spendOnly: call.spendOnly === true,
         messageCount: call.messageCount,
         toolCount: 0,
         requestMaxTokens: null,
         promptTokens: call.inputTokens,
-        cachedPromptTokens: call.cachedInputTokens,
+        cacheReadTokens: call.cacheReadTokens,
+        cacheWriteTokens: call.cacheWriteTokens,
         completionTokens: call.outputTokens,
-        totalTokens: call.inputTokens + call.outputTokens,
+        totalTokens:
+          call.inputTokens + call.cacheReadTokens + call.cacheWriteTokens + call.outputTokens,
         finishReason: call.finishReason,
         totalMs: 0,
         upstreamMs: 0,
@@ -371,4 +575,86 @@ export function makeHarnessCallRecorder(
       })
     }
   }
+}
+
+/**
+ * Build the instrumented model provider's `recordCall` dependency: map an INLINE (non-proxied)
+ * LLM call onto the SAME {@link LlmObservabilityService} the proxy and the subscription
+ * harnesses feed, so a judge, a consensus round, the requirements writer or an inline agent
+ * kind (`doc-researcher`, `doc-outliner`, the document interviewer) lands in `llm_call_metrics`
+ * exactly like a container call. Before this, every one of those was invisible to
+ * `ObservabilityPanel`, to a step's token rollup and to `/api/v1/debug/*` — a run made entirely
+ * of inline steps reported zero model activity no matter how many tokens it spent
+ * (`docs/initiatives/observability-logging-gaps.md`, C2 coverage half).
+ *
+ * The sibling of {@link makeHarnessCallRecorder}, and it fills the store's proxy-shaped fields
+ * the same deliberate way — with what an inline call actually knows rather than a plausible
+ * guess:
+ *
+ * - `id` is left to the service to mint. The proxy mints its own so the live activity event and
+ *   the row share one, and the harness derives one from `(jobId, seq)` so a durable replay is
+ *   idempotent. An inline call has neither: it is a single awaited SDK call inside one service
+ *   method, so there is no second channel to reconcile with and nothing to re-record.
+ * - `streaming` is the PRODUCER's answer, passed through. It was a constant `false` here while
+ *   nothing inline could stream; the instrumented provider now wraps `streamText` as well as
+ *   `generateText`, and a constant would have filed the first streamed call as a buffered one.
+ * - `phase` is left absent ⇒ the unattributed `''` slice. Phases are boundaries the HARNESS
+ *   owns inside a container run; an inline call sits outside all of them, and stamping one
+ *   would file it under a loop it never ran in.
+ * - `turnIndex` is null for a plain `generateText`, like the proxy's: there is no job-scoped
+ *   counter there either, so those rows order by `createdAt`. An inline step served by a HARNESS
+ *   CLI does have one — the CLI runs a tool loop behind the single SDK call and reports each
+ *   model call it made — and passes it, so a run's inline turns order by turn like a container
+ *   step's do.
+ * - `httpStatus` is null: the AI SDK owns the transport, so a failure arrives as an exception
+ *   whose message is already on `errorMessage` (scrubbed by the service) rather than a status.
+ * - `upstreamMs` is the whole `durationMs`, which makes the derived overhead 0 — honestly so.
+ *   Splitting transport from execution is the PROXY's observation; an inline call has no hop
+ *   between the caller and the model, so any non-zero overhead here would be fabricated.
+ *
+ * Two consequences of sharing the store with the other two producers, both already safe:
+ *
+ * - **The delta chain is keyed `(workspace, execution, agentKind)`, which an inline call can
+ *   share with a proxied or harness one** — an inline judge and a container agent under one
+ *   run and one kind. Their prompts are different shapes entirely (the AI-SDK prompt array vs
+ *   the vendor wire messages), but `computeStoredPrompt` HASH-VERIFIES the tip's prefix before
+ *   eliding it, so a cross-producer tip degrades to storing the full array rather than
+ *   corrupting a reconstruction. Interleaving costs compression, never correctness.
+ * - **The bodies are passed as THUNKS**, so a deployment with `LLM_RECORD_PROMPTS` off (or a
+ *   workspace that opted out) never pays to serialise a prompt the service is about to drop.
+ *   The gate stays in ONE place — inside `record`, which resolves it before touching a body.
+ */
+export function makeInlineCallRecorder(
+  service: LlmObservabilityService,
+): (call: InlineLlmCall) => Promise<void> {
+  return (call) =>
+    service.record({
+      workspaceId: call.workspaceId,
+      executionId: call.executionId,
+      agentKind: call.agentKind,
+      provider: call.provider,
+      model: call.model,
+      streaming: call.streaming,
+      turnIndex: call.turnIndex ?? null,
+      spendOnly: call.spendOnly === true,
+      reportedCostUsd: call.reportedCostUsd ?? null,
+      upstreamProvider: call.upstreamProvider ?? null,
+      messageCount: call.messageCount,
+      toolCount: call.toolCount,
+      requestMaxTokens: call.requestMaxTokens,
+      promptTokens: call.promptTokens,
+      cacheReadTokens: call.cacheReadTokens,
+      cacheWriteTokens: call.cacheWriteTokens,
+      completionTokens: call.completionTokens,
+      totalTokens: call.totalTokens,
+      finishReason: call.finishReason,
+      totalMs: call.durationMs,
+      upstreamMs: call.durationMs,
+      ok: call.ok,
+      httpStatus: null,
+      errorMessage: call.errorMessage,
+      promptText: call.promptText,
+      responseText: call.responseText,
+      reasoningText: call.reasoningText,
+    })
 }

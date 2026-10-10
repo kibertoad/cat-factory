@@ -156,4 +156,34 @@ export class D1UserRepository implements UserRepository {
       .all<IdentityRow>()
     return results.map(rowToIdentity)
   }
+
+  async sessionGeneration(userId: string): Promise<number | null> {
+    // Selecting the ONE column rather than reusing `get`: this runs on every authenticated
+    // request on the facade whose cache profile passes through, so it stays the narrowest read
+    // the store can serve.
+    const row = await this.db
+      .prepare('SELECT session_generation FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ session_generation: number }>()
+    return row ? row.session_generation : null
+  }
+
+  async bumpSessionGeneration(userId: string): Promise<number> {
+    // Incremented in SQL and RETURNING the new value, so two concurrent revocations cannot both
+    // read the same generation and write the same successor — and so the caller invalidating the
+    // cached read can only ever cache a number the row actually holds.
+    const row = await this.db
+      .prepare(
+        `UPDATE users SET session_generation = session_generation + 1
+           WHERE id = ? RETURNING session_generation`,
+      )
+      .bind(userId)
+      .first<{ session_generation: number }>()
+    if (!row) {
+      // A revocation that matched no row must not report success: the caller's whole purpose is
+      // to withdraw access, and "nothing to withdraw" is a state it has to hear about.
+      throw new Error(`Cannot revoke sessions for unknown user '${userId}'`)
+    }
+    return row.session_generation
+  }
 }

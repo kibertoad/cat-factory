@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
-import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import { type PersistenceRpcRequest, dispatchPersistenceCall } from '../../persistence/rpc.js'
+import { buildDispatchScope } from './dispatchScope.js'
 
 /**
  * The mothership-mode machine API: `POST /internal/persistence`.
@@ -36,11 +37,8 @@ export function persistenceController(): Hono<AppEnv> {
       )
     }
 
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    // The shared machine gate: audience-pinned verify + the revoked-node roster check.
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json(
         { ok: false, error: { code: 'forbidden', message: 'invalid machine token' } },
@@ -64,89 +62,13 @@ export function persistenceController(): Hono<AppEnv> {
       )
     }
 
-    const workspaceRepository = registry.workspaceRepository
-    const blockRepository = registry.blockRepository
-    const serviceRepository = registry.serviceRepository
-    const resolveAccountId = (workspaceId: string) =>
-      (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
-      Promise.resolve(undefined)
-
-    // The `block`/`serviceList`/`service` scope checks resolve the owning account by reading the
-    // entity (`blockRepository.findById` / `serviceRepository.listByIds`). When the request ALSO
-    // dispatches that same read, memoise it per request so the resolver's read is reused instead
-    // of issuing a second identical query. `serviceRepository.get(id)` is the single-service form:
-    // its `service` scope resolves via `listByIds([id])`, so the dispatched `get` is routed through
-    // the same memo (a single-id `listByIds` yields the same row) rather than a second point read.
-    // (For every other `serviceList` method the dispatched method differs from the resolver's read,
-    // so there is nothing to dedupe.)
-    const memoizeRead = (fn: (...args: unknown[]) => unknown) => {
-      const cache = new Map<string, Promise<unknown>>()
-      return (...args: unknown[]): Promise<unknown> => {
-        const key = JSON.stringify(args)
-        const hit = cache.get(key)
-        if (hit) return hit
-        const pending = Promise.resolve(fn(...args))
-        cache.set(key, pending)
-        return pending
-      }
-    }
-    const blockFindById = memoizeRead((blockId) => blockRepository?.findById?.(blockId as string))
-    const blockFindByIds = memoizeRead((ids) => blockRepository?.findByIds?.(ids as string[]))
-    const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
-    // For the self-keyed reads, point the dispatcher's own call at the memo so it hits the
-    // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
-    // of the registry is untouched.
-    const serviceGetViaMemo = async (id: unknown) =>
-      ((await serviceListByIds([id])) as Array<{ id: string }> | undefined)?.[0] ?? null
-    const registryForDispatch =
-      request.repo === 'blockRepository' && request.method === 'findById'
-        ? { ...registry, blockRepository: { findById: blockFindById } }
-        : request.repo === 'blockRepository' && request.method === 'findByIds'
-          ? { ...registry, blockRepository: { findByIds: blockFindByIds } }
-          : request.repo === 'serviceRepository' && request.method === 'listByIds'
-            ? { ...registry, serviceRepository: { listByIds: serviceListByIds } }
-            : request.repo === 'serviceRepository' && request.method === 'get'
-              ? { ...registry, serviceRepository: { get: serviceGetViaMemo } }
-              : registry
-
-    const result = await dispatchPersistenceCall(request, {
-      registry: registryForDispatch,
-      scope: { accountIds: payload.scope.accountIds, userId: payload.userId },
-      resolveAccountId,
-      // A block is keyed only by its id; resolve its home workspace, then that workspace's account.
-      resolveBlockAccountId: async (blockId) => {
-        const found = (await blockFindById(blockId)) as { workspaceId?: string } | null | undefined
-        const workspaceId = found?.workspaceId
-        return typeof workspaceId === 'string' ? resolveAccountId(workspaceId) : undefined
-      },
-      // The batched form: one findByIds resolves every block's home workspace, then each
-      // (deduped) workspace's account. A block absent from the read is absent from the map.
-      resolveBlockAccountIds: async (blockIds) => {
-        const found = (await blockFindByIds(blockIds)) as
-          | Array<{ workspaceId: string; block: { id: string } }>
-          | undefined
-        const accountByWorkspace = memoizeRead((workspaceId) =>
-          resolveAccountId(workspaceId as string),
-        )
-        const map = new Map<string, string | null | undefined>()
-        for (const entry of found ?? []) {
-          map.set(
-            entry.block.id,
-            (await accountByWorkspace(entry.workspaceId)) as string | null | undefined,
-          )
-        }
-        return map
-      },
-      // Services are account-owned; resolve each requested id's `accountId` for the scope check.
-      resolveServiceAccountIds: async (serviceIds) => {
-        const services = (await serviceListByIds(serviceIds)) as
-          | Array<{ id: string; accountId: string | null }>
-          | undefined
-        const map = new Map<string, string | null | undefined>()
-        for (const service of services ?? []) map.set(service.id, service.accountId)
-        return map
-      },
-    })
+    const result = await dispatchPersistenceCall(
+      request,
+      buildDispatchScope(registry, request, {
+        accountIds: payload.scope.accountIds,
+        userId: payload.userId,
+      }),
+    )
     return c.json(result.body, result.status as 200 | 400 | 403 | 404 | 409 | 422 | 428 | 500)
   })
 

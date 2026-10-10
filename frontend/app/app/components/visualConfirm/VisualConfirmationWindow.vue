@@ -8,25 +8,34 @@
 // (per-view notes + a freeform box, composed into the Tester's fixer findings), or recapture.
 // References can be dropped straight onto a pair, or uploaded for any view below.
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
-import type { VisualConfirmStepState } from '~/types/execution'
+import type { VisualConfirmDesignGapReason, VisualConfirmStepState } from '~/types/execution'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
-import { useFocusTrap } from '~/composables/useFocusTrap'
 import ImageCompare from '~/components/media/ImageCompare.vue'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 // Per-window blob cache; release the cached screenshot/reference object URLs when the window
 // goes away, so the (potentially large) blob bytes don't linger for the rest of the session.
 const blobs = useArtifactBlobs()
 onUnmounted(() => blobs.revokeAll())
 
+// `ResultWindowShell` owns Escape (and the focus trap + scroll lock + stacking); the nested
+// lightbox layers above it on the same shared overlay stack.
 const { open, blockId, instanceId, stepIndex, close } = useResultView('visual-confirm')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+const headerTitle = computed(() =>
+  block.value
+    ? t('visualConfirm.titleWithBlock', { title: block.value.title })
+    : t('visualConfirm.title'),
+)
 
 const instance = computed(() =>
   instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
@@ -53,6 +62,23 @@ const PHASE_LABEL = computed<Record<NonNullable<VisualConfirmStepState['phase']>
 const OUTCOME_LABELS = computed<Record<'completed' | 'failed', string>>(() => ({
   completed: t('visualConfirm.outcome.completed'),
   failed: t('visualConfirm.outcome.failed'),
+}))
+
+// What the task's LINKED DESIGNS contributed. Present whenever a design is linked, including
+// when everything worked: a reviewer comparing a screen against a Figma frame needs to know the
+// frame is the design's own, and one seeing no design frames needs to know whether a design is
+// linked at all. Absent ⇒ the task links none, which this panel must not invent a line about.
+const design = computed(() => vc.value?.designReferences ?? null)
+
+// Exhaustive map of the gap vocabulary → copy, literal-keyed for the same drift-guard reason as
+// the outcome labels above. Each names a DIFFERENT fix, which is why the backend keeps them apart
+// instead of collapsing them into one "no images" absence.
+const DESIGN_GAP_LABELS = computed<Record<VisualConfirmDesignGapReason, string>>(() => ({
+  partial: t('visualConfirm.design.gap.partial'),
+  failed: t('visualConfirm.design.gap.failed'),
+  none: t('visualConfirm.design.gap.none'),
+  storage_unavailable: t('visualConfirm.design.gap.storage_unavailable'),
+  not_retained: t('visualConfirm.design.gap.not_retained'),
 }))
 
 // Resolve every pair's artifacts (the gallery + the lightbox share this one cache).
@@ -94,14 +120,6 @@ function expand(artifactId: string) {
   lightboxOpen.value = true
 }
 
-// Focus management for the modal panel. While the lightbox is open it owns the trap, so the
-// window hands off (active = open && !lightbox) to avoid two Tab traps fighting.
-const dialogRoot = ref<HTMLElement | null>(null)
-useFocusTrap(
-  dialogRoot,
-  computed(() => open.value && !lightboxOpen.value),
-)
-
 // --- Request a fix: per-view notes + a freeform box, composed into one findings string. ---
 const perViewNotes = reactive<Record<string, string>>({})
 const noteOpen = reactive<Record<string, boolean>>({})
@@ -110,6 +128,24 @@ const globalFindings = ref('')
 const hasFindings = computed(
   () => globalFindings.value.trim() !== '' || pairs.value.some((p) => perViewNotes[p.view]?.trim()),
 )
+
+/**
+ * Confirm before discarding the drafted findings (UX-79). Both halves count: the per-view notes are
+ * anchored to a specific screenshot and cannot be reconstructed from memory, and the freeform box is
+ * the overall verdict. They are composed into one findings string only when Request fix is pressed,
+ * which resolves the gate and dispatches a fixer, so a stray Escape may not send them.
+ *
+ * The snapshot is exactly what Request fix WOULD send, read off `buildFindings` rather than off the
+ * note map. A recapture returns a different pair set and never prunes `perViewNotes`, so a note left
+ * behind against a view that is gone is unsendable, and reporting it here would prompt to discard
+ * something the button could not have submitted anyway.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => busy.value,
+  snapshot: () => buildFindings().structured,
+})
 
 /** Compose the per-view notes + freeform text into the fixer's findings (and a structured
  * mirror, so a future structured-findings contract is a one-line swap). */
@@ -130,6 +166,20 @@ function buildFindings(): { text: string; structured: { view?: string; note: str
   }
   return { text: blocks.join('\n\n'), structured }
 }
+
+// Degraded-basis approval guard (no capture / a fix landed after these shots): require an
+// explicit "I reviewed this another way" acknowledgement before the one-click approve.
+const ackDegraded = ref(false)
+watch(
+  () => vc.value?.degradedReason ?? null,
+  () => {
+    ackDegraded.value = false
+  },
+)
+const needsAck = computed(() => !!vc.value?.degradedReason)
+const canApprove = computed(
+  () => awaitingHuman.value && !busy.value && (!needsAck.value || ackDegraded.value),
+)
 
 async function approve() {
   if (!blockId.value || !canApprove.value) return
@@ -154,307 +204,311 @@ async function uploadFor(view: string, file: File) {
   await visualConfirm.uploadReference(blockId.value, file, view)
 }
 const uploadView = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-async function onFilePicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+// The views this run already captured, offered as suggestions on the combobox.
+const viewSuggestions = computed(() => pairs.value.map((p) => p.view))
+const pendingUpload = ref<File | null>(null)
+watch(pendingUpload, async (file) => {
   const view = uploadView.value.trim()
   // Require a view name: a reference with no view can't pair with any captured screenshot,
-  // so it would be silently orphaned. The input is also disabled until a view is entered.
+  // so it would be silently orphaned. The control is also disabled until a view is entered.
   if (!file || !blockId.value || !view) {
-    if (fileInput.value) fileInput.value.value = ''
+    pendingUpload.value = null
     return
   }
   await visualConfirm.uploadReference(blockId.value, file, view)
   uploadView.value = ''
-  if (fileInput.value) fileInput.value.value = ''
-}
-
-// Degraded-basis approval guard (no capture / a fix landed after these shots): require an
-// explicit "I reviewed this another way" acknowledgement before the one-click approve.
-const ackDegraded = ref(false)
-watch(
-  () => vc.value?.degradedReason ?? null,
-  () => {
-    ackDegraded.value = false
-  },
-)
-const needsAck = computed(() => !!vc.value?.degradedReason)
-const canApprove = computed(
-  () => awaitingHuman.value && !busy.value && (!needsAck.value || ackDegraded.value),
-)
+  // Cleared so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the other half of
+  // this: without it the native input keeps its value and the SAME file fires no change event.
+  pendingUpload.value = null
+})
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-image-play"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
+    :title="headerTitle"
+    :subtitle="phase ? PHASE_LABEL[phase] : t('visualConfirm.subtitle')"
+    width="5xl"
+    @close="requestClose"
+  >
+    <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
       <div
-        ref="dialogRoot"
-        tabindex="-1"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="t('visualConfirm.ariaLabel')"
-        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
+        v-if="!vc"
+        class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300"
-          >
-            <UIcon name="i-lucide-image-play" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{
-                block
-                  ? t('visualConfirm.titleWithBlock', { title: block.title })
-                  : t('visualConfirm.title')
-              }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">
-              {{ phase ? PHASE_LABEL[phase] : t('visualConfirm.subtitle') }}
-            </p>
-          </div>
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
+        <UIcon name="i-lucide-image-play" class="h-8 w-8 opacity-40" />
+        <p class="text-sm">{{ t('visualConfirm.notStarted') }}</p>
+      </div>
 
-        <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
-          <div
-            v-if="!vc"
-            class="flex flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
-          >
-            <UIcon name="i-lucide-image-play" class="h-8 w-8 opacity-40" />
-            <p class="text-sm">{{ t('visualConfirm.notStarted') }}</p>
-          </div>
-
-          <template v-else>
-            <p
-              v-if="vc.degradedReason"
-              class="rounded-lg border border-amber-700/40 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-300/90"
-            >
-              {{ vc.degradedReason }}
-            </p>
-
-            <p
-              v-if="working"
-              class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-300"
-            >
-              <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
-              {{ phase ? PHASE_LABEL[phase] : '' }}
-            </p>
-
-            <!-- Actual-vs-reference gallery. Keyed by `view` (the contract's unique per-pair
-                 identity) so a pair's note/expand state stays bound to its view across recaptures. -->
-            <section v-if="pairs.length" class="space-y-4">
-              <div v-for="p in pairs" :key="p.view" class="space-y-2">
-                <ImageCompare
-                  :view="p.view"
-                  :actual-id="p.actualArtifactId"
-                  :reference-id="p.referenceArtifactId"
-                  :blobs="blobs"
-                  :busy="busy"
-                  @expand="expand"
-                  @upload-reference="(file: File) => uploadFor(p.view, file)"
-                />
-                <!-- Per-view note (folded into the fixer findings) -->
-                <div v-if="awaitingHuman" class="px-1">
-                  <button
-                    class="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200"
-                    @click="noteOpen[p.view] = !noteOpen[p.view]"
-                  >
-                    <UIcon
-                      :name="noteOpen[p.view] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                      class="h-3 w-3"
-                    />
-                    {{ t('visualConfirm.noteIssue', { view: p.view }) }}
-                    <span
-                      v-if="perViewNotes[p.view]?.trim()"
-                      class="rounded-full bg-amber-500/15 px-1.5 text-[9px] text-amber-300"
-                      >{{ t('visualConfirm.noted') }}</span
-                    >
-                  </button>
-                  <textarea
-                    v-if="noteOpen[p.view]"
-                    v-model="perViewNotes[p.view]"
-                    rows="2"
-                    :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                    class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
-                  />
-                </div>
-              </div>
-            </section>
-            <p v-else class="text-[12px] italic text-slate-500">
-              {{ t('visualConfirm.noScreenshots') }}
-            </p>
-
-            <!-- Upload a reference for any view -->
-            <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('visualConfirm.upload.heading') }}
-              </h3>
-              <div class="flex flex-wrap items-center gap-2">
-                <input
-                  v-model="uploadView"
-                  list="vc-views"
-                  :placeholder="t('visualConfirm.upload.viewPlaceholder')"
-                  class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200 placeholder:text-slate-600"
-                />
-                <datalist id="vc-views">
-                  <option v-for="p in pairs" :key="p.view" :value="p.view" />
-                </datalist>
-                <input
-                  ref="fileInput"
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  :disabled="busy || !uploadView.trim()"
-                  class="text-[12px] text-slate-300 file:me-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200 disabled:opacity-40"
-                  @change="onFilePicked"
-                />
-              </div>
-              <p class="mt-1.5 text-[10px] text-slate-600">
-                {{
-                  uploadView.trim()
-                    ? t('visualConfirm.upload.tipReady')
-                    : t('visualConfirm.upload.tipNeedView')
-                }}
-              </p>
-            </section>
-
-            <!-- Request fix -->
-            <section
-              v-if="awaitingHuman"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-            >
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('visualConfirm.requestFix.heading') }}
-              </h3>
-              <textarea
-                v-model="globalFindings"
-                rows="3"
-                :placeholder="t('visualConfirm.requestFix.placeholder')"
-                class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
-              />
-              <div class="mt-2 flex items-center justify-between">
-                <span class="text-[11px] text-slate-500">
-                  {{ t('visualConfirm.requestFix.foldedHint') }}
-                </span>
-                <UButton
-                  size="sm"
-                  color="warning"
-                  icon="i-lucide-wrench"
-                  :loading="busy"
-                  :disabled="busy || !hasFindings"
-                  @click="submitFix"
-                >
-                  {{ t('visualConfirm.requestFix.send') }}
-                </UButton>
-              </div>
-            </section>
-
-            <!-- Rounds history -->
-            <section
-              v-if="vc.rounds && vc.rounds.length"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-            >
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('visualConfirm.history.heading', { count: vc.attempts }, vc.attempts) }}
-              </h3>
-              <ol class="space-y-2">
-                <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
-                  <UIcon
-                    name="i-lucide-wrench"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400"
-                  />
-                  <div class="min-w-0 flex-1">
-                    <span class="text-slate-200">{{
-                      t('visualConfirm.history.fixRequested')
-                    }}</span>
-                    <span
-                      class="ms-1.5 rounded px-1 text-[10px] uppercase"
-                      :class="
-                        r.outcome === 'completed'
-                          ? 'bg-emerald-500/15 text-emerald-300'
-                          : r.outcome === 'failed'
-                            ? 'bg-rose-500/15 text-rose-300'
-                            : 'bg-slate-500/15 text-slate-300'
-                      "
-                    >
-                      {{
-                        r.outcome
-                          ? OUTCOME_LABELS[r.outcome]
-                          : t('visualConfirm.outcome.inProgress')
-                      }}
-                    </span>
-                    <p v-if="r.findings" class="whitespace-pre-wrap leading-snug text-slate-400">
-                      {{ r.findings }}
-                    </p>
-                  </div>
-                </li>
-              </ol>
-            </section>
-          </template>
-        </div>
-
-        <footer
-          v-if="vc"
-          class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+      <template v-else>
+        <p
+          v-if="vc.degradedReason"
+          class="rounded-lg border border-app-warning-700/40 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-300/90"
         >
-          <StepRunMeta
-            v-if="step"
-            :step="step"
-            :instance-id="instanceId ?? undefined"
-            :step-number="stepIndex === null ? undefined : stepIndex + 1"
-            :total-steps="instance?.steps.length"
-            :run-failed="instance?.status === 'failed'"
-            :failure-at="instance?.failure?.occurredAt"
-          />
-          <div class="flex items-center gap-2">
-            <label
-              v-if="awaitingHuman && needsAck"
-              class="flex items-center gap-1.5 text-[11px] text-amber-300/90"
+          {{ vc.degradedReason }}
+        </p>
+
+        <!-- What the linked designs contributed. Rendered even when nothing is missing, so a
+             reference the reviewer is judging against is never anonymous. -->
+        <section
+          v-if="design"
+          class="rounded-lg border border-default bg-default/60 px-3 py-2 text-xs text-toned"
+        >
+          <p class="flex items-center gap-1.5">
+            <UIcon name="i-lucide-figma" class="h-3.5 w-3.5 shrink-0 text-app-warning-300" />
+            <span>{{
+              t('visualConfirm.design.summary', { count: design.images }, design.images)
+            }}</span>
+            <span v-if="design.dropped" class="text-dimmed">
+              {{ t('visualConfirm.design.dropped', { count: design.dropped }, design.dropped) }}
+            </span>
+          </p>
+          <!-- One line per short design, carrying both ways it can fall short: what its source
+               kept, and what this gallery's shared ceiling cut from it. A design the ceiling shut
+               out entirely reads as one with no frames unless it is named here. -->
+          <ul v-if="design.gaps?.length" class="mt-1.5 space-y-1 text-2xs text-app-warning-300/90">
+            <li v-for="gap in design.gaps" :key="`${gap.title}-${gap.reason ?? 'capped'}`">
+              {{ t('visualConfirm.design.gapLine', { title: gap.title }) }}
+              <template v-if="gap.reason">{{ DESIGN_GAP_LABELS[gap.reason] }}</template>
+              <template v-if="gap.dropped">{{
+                t('visualConfirm.design.gapDropped', { count: gap.dropped }, gap.dropped)
+              }}</template>
+            </li>
+          </ul>
+        </section>
+
+        <p
+          v-if="working"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
+        >
+          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
+          {{ phase ? PHASE_LABEL[phase] : '' }}
+        </p>
+
+        <!-- Actual-vs-reference gallery. Keyed by `view` (the contract's unique per-pair
+                 identity) so a pair's note/expand state stays bound to its view across recaptures. -->
+        <section v-if="pairs.length" class="space-y-4">
+          <div v-for="p in pairs" :key="p.view" class="space-y-2">
+            <ImageCompare
+              :view="p.view"
+              :actual-id="p.actualArtifactId"
+              :reference-id="p.referenceArtifactId"
+              :reference-origin="p.referenceOrigin"
+              :blobs="blobs"
+              :busy="busy"
+              @expand="expand"
+              @upload-reference="(file: File) => uploadFor(p.view, file)"
+            />
+            <!-- Per-view note (folded into the fixer findings) -->
+            <div v-if="awaitingHuman" class="px-1">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="flex items-center gap-1.5 p-0 text-2xs text-muted hover:bg-transparent hover:text-default"
+                @click="noteOpen[p.view] = !noteOpen[p.view]"
+              >
+                <UIcon
+                  :name="noteOpen[p.view] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  class="h-3 w-3"
+                />
+                {{ t('visualConfirm.noteIssue', { view: p.view }) }}
+                <span
+                  v-if="perViewNotes[p.view]?.trim()"
+                  class="rounded-full bg-app-warning-500/15 px-1.5 text-3xs text-app-warning-300"
+                  >{{ t('visualConfirm.noted') }}</span
+                >
+              </UButton>
+              <UTextarea
+                v-if="noteOpen[p.view]"
+                v-model="perViewNotes[p.view]"
+                :rows="2"
+                :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
+                size="xs"
+                class="mt-1 w-full"
+              />
+            </div>
+          </div>
+        </section>
+        <p v-else class="text-xs italic text-dimmed">
+          {{ t('visualConfirm.noScreenshots') }}
+        </p>
+
+        <!-- Upload a reference for any view -->
+        <section class="rounded-lg border border-default bg-default/60 p-3">
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('visualConfirm.upload.heading') }}
+          </SectionLabel>
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- The known views are suggestions, not a closed list: a reference can be uploaded
+                 for a view the run has not produced yet, which is the case this field exists for.
+                 `mode="autocomplete"` is what makes that work: the DEFAULT combobox mode writes
+                 its model only when something is SELECTED, so typing a new view name would leave
+                 `uploadView` empty and the picker beside it disabled. -->
+            <UInputMenu
+              v-model="uploadView"
+              mode="autocomplete"
+              :items="viewSuggestions"
+              size="xs"
+              :placeholder="t('visualConfirm.upload.viewPlaceholder')"
+            />
+            <!-- `reset` so the native input is cleared on every open: re-picking the SAME file
+                 after a rejected or completed upload otherwise fires no change event at all. -->
+            <!-- The trigger is our OWN button in the default slot, not `variant="button"`:
+                 that variant renders the icon alone and drops `label` on the floor, so the
+                 control reached a screen reader with no name at all. -->
+            <UFileUpload
+              v-model="pendingUpload"
+              size="xs"
+              reset
+              accept="image/png,image/jpeg"
+              :preview="false"
+              :disabled="busy || !uploadView.trim()"
+              class="w-fit"
             >
-              <input v-model="ackDegraded" type="checkbox" class="accent-amber-500" />
-              {{ t('visualConfirm.reviewedManually') }}
-            </label>
+              <template #default="{ open }">
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-upload"
+                  :disabled="busy || !uploadView.trim()"
+                  :label="t('visualConfirm.upload.choose')"
+                  @click="open()"
+                />
+              </template>
+            </UFileUpload>
+          </div>
+          <p class="mt-1.5 text-3xs text-app-600">
+            {{
+              uploadView.trim()
+                ? t('visualConfirm.upload.tipReady')
+                : t('visualConfirm.upload.tipNeedView')
+            }}
+          </p>
+        </section>
+
+        <!-- Request fix -->
+        <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-3">
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('visualConfirm.requestFix.heading') }}
+          </SectionLabel>
+          <UTextarea
+            v-model="globalFindings"
+            :rows="3"
+            :placeholder="t('visualConfirm.requestFix.placeholder')"
+            size="sm"
+            class="w-full"
+          />
+          <div class="mt-2 flex items-center justify-between">
+            <span class="text-2xs text-dimmed">
+              {{ t('visualConfirm.requestFix.foldedHint') }}
+            </span>
             <UButton
               size="sm"
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-refresh-cw"
+              color="warning"
+              icon="i-lucide-wrench"
               :loading="busy"
-              :disabled="busy || !awaitingHuman"
-              @click="recapture"
+              :disabled="busy || !hasFindings || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="submitFix"
             >
-              {{ t('visualConfirm.recapture') }}
-            </UButton>
-            <UButton
-              color="primary"
-              icon="i-lucide-circle-check"
-              :loading="busy"
-              :disabled="!canApprove"
-              @click="approve"
-            >
-              {{ t('visualConfirm.approve') }}
+              {{ t('visualConfirm.requestFix.send') }}
             </UButton>
           </div>
-        </footer>
-      </div>
+        </section>
+
+        <!-- Rounds history -->
+        <section
+          v-if="vc.rounds && vc.rounds.length"
+          class="rounded-lg border border-default bg-default/60 p-3"
+        >
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('visualConfirm.history.heading', { count: vc.attempts }, vc.attempts) }}
+          </SectionLabel>
+          <ol class="space-y-2">
+            <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-xs">
+              <UIcon name="i-lucide-wrench" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+              <div class="min-w-0 flex-1">
+                <span class="text-default">{{ t('visualConfirm.history.fixRequested') }}</span>
+                <span
+                  class="ms-1.5 rounded-sm px-1 text-3xs uppercase"
+                  :class="
+                    r.outcome === 'completed'
+                      ? 'bg-app-success-500/15 text-app-success-300'
+                      : r.outcome === 'failed'
+                        ? 'bg-app-error-500/15 text-app-error-300'
+                        : 'bg-app-500/15 text-toned'
+                  "
+                >
+                  {{
+                    r.outcome ? OUTCOME_LABELS[r.outcome] : t('visualConfirm.outcome.inProgress')
+                  }}
+                </span>
+                <p v-if="r.findings" class="whitespace-pre-wrap leading-snug text-muted">
+                  {{ r.findings }}
+                </p>
+              </div>
+            </li>
+          </ol>
+        </section>
+      </template>
     </div>
 
-    <!-- Shared zoom/pan viewer for any screenshot in the gallery. -->
-    <ArtifactLightbox
-      v-model:open="lightboxOpen"
-      v-model:index="lightboxIndex"
-      :items="lightboxItems"
-      :blobs="blobs"
-    />
-  </Teleport>
+    <footer
+      v-if="vc"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
+    >
+      <StepRunMeta
+        v-if="step"
+        :step="step"
+        :instance-id="instanceId ?? undefined"
+        :step-number="stepIndex === null ? undefined : stepIndex + 1"
+        :total-steps="instance?.steps.length"
+        :run-failed="instance?.status === 'failed'"
+        :failure-at="instance?.failure?.occurredAt"
+      />
+      <div class="flex items-center gap-2">
+        <UCheckbox
+          v-if="awaitingHuman && needsAck"
+          v-model="ackDegraded"
+          size="xs"
+          color="warning"
+          :label="t('visualConfirm.reviewedManually')"
+        />
+        <UButton
+          size="sm"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-refresh-cw"
+          :loading="busy"
+          :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"
+          :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+          @click="recapture"
+        >
+          {{ t('visualConfirm.recapture') }}
+        </UButton>
+        <UButton
+          color="primary"
+          icon="i-lucide-circle-check"
+          :loading="busy"
+          :disabled="!canApprove || !access.canExecuteRuns.value"
+          :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+          @click="approve"
+        >
+          {{ t('visualConfirm.approve') }}
+        </UButton>
+      </div>
+    </footer>
+  </ResultWindowShell>
+
+  <!-- Shared zoom/pan viewer for any screenshot in the gallery — a sibling overlay that layers
+       above this window on the shared modal stack while open. -->
+  <ArtifactLightbox
+    v-model:open="lightboxOpen"
+    v-model:index="lightboxIndex"
+    :items="lightboxItems"
+    :blobs="blobs"
+  />
 </template>

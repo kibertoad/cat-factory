@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.43.4",
+  "version": "1.163.4",
   "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container (and, in local native mode, as a host process); carries no secrets.",
   "repository": {
     "type": "git",
@@ -12,10 +12,14 @@
     "src"
   ],
   "type": "module",
-  "main": "./dist/server.js",
+  "main": "./dist/harness-server.js",
   "exports": {
-    ".": "./dist/server.js",
-    "./embed": "./src/embed.ts"
+    ".": "./dist/harness-server.js",
+    "./embed": "./src/embed.ts",
+    "./claude-call-aggregator": {
+      "types": "./dist/claude-call-aggregator.d.ts",
+      "default": "./dist/claude-call-aggregator.js"
+    }
   },
   "publishConfig": {
     "access": "public"
@@ -24,18 +28,23 @@
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
-    "start": "node dist/server.js",
+    "start": "node dist/harness-server.js",
     "test": "vitest run",
+    "test:run": "vitest run",
     "test:acceptance": "vitest run --config vitest.acceptance.config.ts",
-    "image:publish": "bash scripts/publish-image.sh"
+    "image:publish": "bash scripts/publish-image.sh",
+    "image:publish:ui": "IMAGE_NAME=cat-factory-executor-ui DOCKERFILE=Dockerfile.ui bash scripts/publish-image.sh",
+    "image:smoketest:ui": "bash scripts/smoketest-ui-image.sh"
   },
   "devDependencies": {
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "@hono/node-server": "^2.0.8",
-    "@types/node": "^26.1.1",
-    "hono": "^4.12.29",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@hono/node-server": "^2.1.3",
+    "@types/node": "^26.6.4",
+    "hono": "^4.13.13",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   }
 }

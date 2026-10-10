@@ -1,15 +1,27 @@
 import type {
   Block,
+  GateHelperJobResult,
   GateStepState,
+  PipelineStep,
   PullRequestReviewSnapshot,
   RaiseNotificationInput,
   ReviewThread,
 } from '@cat-factory/kernel'
-import { stubGateContext } from '@cat-factory/kernel'
-import { afterEach, describe, expect, it } from 'vitest'
-import { classifyHumanReview, isApproved, outstandingThreads } from './review.logic.js'
+import {
+  defaultProviderRegistry,
+  stubGateContext,
+  type ProviderRegistry,
+} from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  classifyHumanReview,
+  isApproved,
+  outstandingConversation,
+  outstandingThreads,
+  renderReviewFeedbackForFixer,
+} from './review.logic.js'
 import { humanReviewGate } from './gates.js'
-import { clearGateProviders, wirePullRequestReviewProvider } from './providers.js'
+import { wirePullRequestReviewProvider } from './providers.js'
 
 const NOW = 1_000_000_000
 const MIN = 60_000
@@ -33,14 +45,41 @@ function snapshot(over: Partial<PullRequestReviewSnapshot> = {}): PullRequestRev
     requiredApprovingReviewCount: 1,
     assignedReviewers: ['alice'],
     approvals: 0,
+    changesRequested: false,
     unresolvedThreads: [],
     comments: [],
+    reviewSummaries: [],
     ...over,
   }
 }
 
 const state = (over: Partial<GateStepState> = {}): Pick<GateStepState, 'lastAddressedCommentAt'> =>
   ({ lastAddressedCommentAt: null, ...over }) as GateStepState
+
+/** A step parked mid-gate with `handed` threads stashed for the fixer round that just ended. */
+const stepWith = (gate: Partial<GateStepState>): PipelineStep =>
+  ({
+    agentKind: 'human-review',
+    gate: { phase: 'working', attempts: 1, maxAttempts: 1, ...gate },
+  }) as unknown as PipelineStep
+
+/**
+ * One fixer round settling on the gate. The cast lives here and nowhere else: every call site
+ * would otherwise carry its own copy of it plus the four arguments the gate ignores, which is what
+ * lets a change to `GateHelperCompletionArgs` be made in one place and not four.
+ */
+const complete = async (
+  gate: ReturnType<typeof humanReviewGate>,
+  step: PipelineStep,
+  result: GateHelperJobResult,
+) =>
+  gate.onHelperComplete!({
+    workspaceId: 'ws',
+    instance: {} as never,
+    block: { id: 'b' } as never,
+    step,
+    result,
+  })
 
 describe('classifyHumanReview', () => {
   it('advances when there is no open PR', () => {
@@ -136,17 +175,294 @@ describe('classifyHumanReview', () => {
     })
     expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('advance')
   })
+
+  it('dispatches on a CHANGES_REQUESTED review SUMMARY body with no inline threads', () => {
+    // The gap: a reviewer clicks "Request changes" and types their feedback in the summary box
+    // (no inline line comments). That body arrives as a `reviewSummary`, not a thread/comment —
+    // it MUST be handed to the fixer, not silently ignored while the run waits for an approval.
+    const snap = snapshot({
+      changesRequested: true,
+      reviewSummaries: [
+        {
+          id: 'review-1',
+          author: 'alice',
+          body: 'Please add error handling.',
+          createdAt: NOW,
+          isBot: false,
+        },
+      ],
+    })
+    const v = classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW })
+    expect(v.kind).toBe('dispatch')
+    if (v.kind === 'dispatch') {
+      expect(v.instructions).toContain('Please add error handling.')
+      expect(v.latestCommentAt).toBe(NOW)
+    }
+  })
+
+  it('does NOT advance while a standing CHANGES_REQUESTED stands, even with required approvals met', () => {
+    // GitHub blocks the merge while one reviewer's standing review is CHANGES_REQUESTED, even
+    // when another reviewer's approval meets the required count. The gate must mirror that: with
+    // no actionable text it waits (never advances), so it can't sign off a PR GitHub would refuse.
+    const snap = snapshot({ approvals: 1, requiredApprovingReviewCount: 1, changesRequested: true })
+    expect(isApproved(snap)).toBe(false)
+    expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('wait')
+  })
+
+  it('ignores a review summary once the PR is approved (same rule as plain comments)', () => {
+    // A COMMENTED review's body after sign-off is post-approval chatter — no fixer churn, advance.
+    const snap = snapshot({
+      approvals: 1,
+      changesRequested: false,
+      reviewSummaries: [
+        {
+          id: 'review-1',
+          author: 'bob',
+          body: 'nice work, minor nit',
+          createdAt: NOW,
+          isBot: false,
+        },
+      ],
+    })
+    expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('advance')
+  })
+})
+
+describe('the grace window', () => {
+  it('measures from the NEWEST piece of feedback, whichever kind it is', () => {
+    // A reviewer mid-review leaves a comment after an older thread: the window restarts from the
+    // comment, or the branch is churned while they are still typing. And symmetrically for a
+    // fresh thread beside an older comment.
+    const commentLast = classifyHumanReview(
+      snapshot({
+        unresolvedThreads: [thread({ latestCommentAt: NOW - 30 * MIN })],
+        comments: [{ id: 'c1', author: 'bob', body: 'and this', createdAt: NOW, isBot: false }],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(commentLast.kind).toBe('wait')
+
+    const threadLast = classifyHumanReview(
+      snapshot({
+        unresolvedThreads: [thread({ latestCommentAt: NOW })],
+        comments: [
+          { id: 'c1', author: 'bob', body: 'and this', createdAt: NOW - 30 * MIN, isBot: false },
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(threadLast.kind).toBe('wait')
+  })
+
+  it('scans for the newest across a whole list, not just the last entry in it', () => {
+    // The provider returns threads in its own order, so the newest is routinely not the last
+    // one. A scan that took whichever entry it saw last would start the window from an OLD
+    // thread and churn the branch while the reviewer is still mid-series.
+    const threadsNewestFirst = classifyHumanReview(
+      snapshot({
+        unresolvedThreads: [
+          thread({ threadId: 't-new', latestCommentAt: NOW }),
+          thread({ threadId: 't-old', latestCommentAt: NOW - 60 * MIN }),
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(threadsNewestFirst.kind).toBe('wait')
+
+    // The same for the comment side of the scan.
+    const commentsNewestFirst = classifyHumanReview(
+      snapshot({
+        comments: [
+          { id: 'c-new', author: 'bob', body: 'and this', createdAt: NOW, isBot: false },
+          { id: 'c-old', author: 'bob', body: 'earlier', createdAt: NOW - 60 * MIN, isBot: false },
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(commentsNewestFirst.kind).toBe('wait')
+  })
+
+  it('dispatches the moment the window is exactly spent', () => {
+    const v = classifyHumanReview(
+      snapshot({ unresolvedThreads: [thread({ latestCommentAt: NOW - 10 * MIN })] }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(v.kind).toBe('dispatch')
+  })
+
+  it('advances the comment cursor to the NEWEST comment handed over, not the oldest', () => {
+    // The cursor is what stops the same comments re-triggering. Stamping the oldest would hand
+    // every comment but the first to the fixer again on the next poll.
+    const v = classifyHumanReview(
+      snapshot({
+        comments: [
+          { id: 'c1', author: 'bob', body: 'one', createdAt: NOW - 20 * MIN, isBot: false },
+          { id: 'c2', author: 'bob', body: 'two', createdAt: NOW - 15 * MIN, isBot: false },
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(v.kind).toBe('dispatch')
+    expect(v.kind === 'dispatch' && v.latestCommentAt).toBe(NOW - 15 * MIN)
+  })
+
+  it('stamps no comment cursor for a thread-only dispatch', () => {
+    const v = classifyHumanReview(
+      snapshot({ approvals: 1, unresolvedThreads: [thread()] }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(v.kind === 'dispatch' && v.latestCommentAt).toBeNull()
+  })
+})
+
+describe('outstandingConversation', () => {
+  const comment = (id: string, createdAt: number, over: Record<string, unknown> = {}) => ({
+    id,
+    author: 'bob',
+    body: id,
+    createdAt,
+    isBot: false,
+    ...over,
+  })
+
+  it('orders the merged plain comments and review summaries CHRONOLOGICALLY', () => {
+    // Two sources arrive as two separate lists, each in whatever order the provider returned
+    // them, and they are concatenated. The order is what the fixer reads as the conversation:
+    // unsorted, a reviewer's later correction ("actually, keep it") is presented above the
+    // instruction it retracts, and the agent acts on the retracted one.
+    const out = outstandingConversation(
+      snapshot({
+        comments: [comment('newest', NOW), comment('oldest', NOW - 60 * MIN)],
+        reviewSummaries: [comment('middle', NOW - 30 * MIN)],
+      }),
+      null,
+    )
+    expect(out.map((c) => c.id)).toEqual(['oldest', 'middle', 'newest'])
+  })
+
+  it('drops bots and anything at or before the addressed cursor, from BOTH sources', () => {
+    // BOTH predicates have to bite on BOTH legs, so each leg carries a bot, an at-cursor and an
+    // after-cursor entry. Seeding the summaries with a bot alone would leave the cursor
+    // unexercised there: a cursor applied to the plain comments only would keep this green
+    // while re-dispatching the review-fixer forever on a CHANGES_REQUESTED summary whose
+    // instructions a previous round had already addressed.
+    const out = outstandingConversation(
+      snapshot({
+        comments: [
+          comment('bot', NOW, { isBot: true }),
+          comment('at-cursor', NOW - 30 * MIN),
+          comment('after-cursor', NOW - 29 * MIN),
+        ],
+        reviewSummaries: [
+          comment('summary-bot', NOW, { isBot: true }),
+          comment('summary-at-cursor', NOW - 30 * MIN),
+          comment('summary-after-cursor', NOW - 28 * MIN),
+        ],
+      }),
+      NOW - 30 * MIN,
+    )
+    expect(out.map((c) => c.id)).toEqual(['after-cursor', 'summary-after-cursor'])
+  })
+
+  it('treats an absent cursor as "nothing addressed yet"', () => {
+    const before = snapshot({ comments: [comment('c1', 1)] })
+    expect(outstandingConversation(before, null).map((c) => c.id)).toEqual(['c1'])
+    expect(outstandingConversation(before, undefined).map((c) => c.id)).toEqual(['c1'])
+    expect(outstandingConversation(snapshot({ comments: [comment('c0', 0)] }), null)).toEqual([])
+  })
+})
+
+describe('renderReviewFeedbackForFixer', () => {
+  it('renders each thread with where it was left and each comment under its author', () => {
+    const rendered = renderReviewFeedbackForFixer(
+      [
+        thread({ threadId: 't1', bodyExcerpt: 'rename this' }),
+        thread({ threadId: 't2', path: 'src/b.ts', line: null, bodyExcerpt: 'file-level note' }),
+        thread({ threadId: 't3', path: null, author: '', bodyExcerpt: 'general note' }),
+      ],
+      [{ id: 'c1', author: 'bob', body: 'and please rebase', createdAt: NOW, isBot: false }],
+    )
+    expect(rendered).toBe(
+      [
+        'A human reviewer left the feedback below on this pull request.',
+        'Address every item, commit your fixes to the PR branch, and for each review thread post a',
+        'short reply noting how you addressed it so the thread can be resolved.',
+        '',
+        'Review threads:',
+        '- reviewer (src/a.ts:10): rename this',
+        '- reviewer (src/b.ts): file-level note',
+        // An unattributed thread still names a human author rather than rendering an empty one.
+        '- reviewer: general note',
+        '',
+        'Reviewer comments:',
+        '- bob: and please rebase',
+      ].join('\n'),
+    )
+  })
+
+  it('names a human author for an unattributed COMMENT too, not only a thread', () => {
+    // GitHub can return a comment with no author (a deleted account, a webhook-delivered body).
+    // Rendering `- : rebase please` reads to the fixer as a malformed line rather than as
+    // reviewer feedback, and the same fallback the thread branch uses is what stops it.
+    const rendered = renderReviewFeedbackForFixer(
+      [],
+      [{ id: 'c1', author: '', body: 'rebase please', createdAt: NOW, isBot: false }],
+    )
+    expect(rendered).toContain('- reviewer: rebase please')
+  })
+
+  it('omits a section entirely when that kind of feedback is absent', () => {
+    const threadsOnly = renderReviewFeedbackForFixer([thread()], [])
+    expect(threadsOnly).toContain('Review threads:')
+    expect(threadsOnly).not.toContain('Reviewer comments:')
+
+    const commentsOnly = renderReviewFeedbackForFixer(
+      [],
+      [{ id: 'c1', author: 'bob', body: 'rebase please', createdAt: NOW, isBot: false }],
+    )
+    expect(commentsOnly).not.toContain('Review threads:')
+    expect(commentsOnly).toContain('Reviewer comments:')
+    // No trailing blank line survives, whichever sections were rendered.
+    expect(commentsOnly).toBe(commentsOnly.trimEnd())
+    expect(threadsOnly).toBe(threadsOnly.trimEnd())
+  })
 })
 
 describe('humanReviewGate', () => {
-  afterEach(() => clearGateProviders())
+  // A fresh provider registry per test (no module global to clear); the gate reads it through
+  // `stubGateContext(overrides, providerRegistry)`.
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
 
   it('is a pass-through until a provider is wired', () => {
-    expect(humanReviewGate(stubGateContext()).wired()).toBe(false)
+    expect(humanReviewGate(stubGateContext({}, providerRegistry)).wired()).toBe(false)
+  })
+
+  it('folds the reviewer’s feedback into the fixer’s prompt as human-review prior output', () => {
+    // The probe's failure summary IS the rendered feedback, and this is the only thing that
+    // carries it across to the helper. Returning nothing here is not a smaller prompt: the
+    // fixer is dispatched onto a PR with no statement of what a human asked for, so it invents
+    // a change or pushes nothing, and either way the reviewer's threads get resolved as
+    // "addressed". It is attributed to the human-review gate, not to the fixer, because the
+    // text is the REVIEWER's words rather than a previous helper round's output.
+    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
+    expect(gate.helperPriorOutput?.('- bob: please rebase')).toEqual({
+      agentKind: 'human-review',
+      output: '- bob: please rebase',
+    })
   })
 
   it('maps dispatch to a fail probe and stashes the threads to resolve', async () => {
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({
           approvals: 1,
@@ -154,7 +470,7 @@ describe('humanReviewGate', () => {
         }),
       resolveThreads: async () => {},
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     expect(gate.wired()).toBe(true)
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
@@ -166,29 +482,16 @@ describe('humanReviewGate', () => {
     // The fixer advanced the PR head (sha-old → sha-new), so its handed threads are genuinely
     // addressed: resolve them and clear the stash.
     const resolved: string[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ headSha: 'sha-new' }),
       resolveThreads: async (_ws, _b, ids) => {
         resolved.push(...ids)
       },
     })
-    const gate = humanReviewGate(stubGateContext())
-    const step = {
-      agentKind: 'human-review',
-      gate: {
-        phase: 'working',
-        attempts: 1,
-        maxAttempts: 1,
-        headSha: 'sha-old',
-        pendingThreadIds: ['T9'],
-      },
-    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
-    await gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result: { state: 'done', result: { output: 'fixed' } },
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
     })
     expect(resolved).toEqual(['T9'])
     expect(step.gate?.pendingThreadIds).toBeNull()
@@ -200,29 +503,16 @@ describe('humanReviewGate', () => {
     // reviewer's feedback unaddressed — so leave them open and drop the stash (the next probe's
     // backoff surfaces the stall card).
     const resolved: string[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ headSha: 'sha1' }),
       resolveThreads: async (_ws, _b, ids) => {
         resolved.push(...ids)
       },
     })
-    const gate = humanReviewGate(stubGateContext())
-    const step = {
-      agentKind: 'human-review',
-      gate: {
-        phase: 'working',
-        attempts: 1,
-        maxAttempts: 1,
-        headSha: 'sha1',
-        pendingThreadIds: ['T9'],
-      },
-    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
-    await gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result: { state: 'done', result: { output: '' } },
+    const step = stepWith({ headSha: 'sha1', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: '' },
     })
     expect(resolved).toEqual([])
     expect(step.gate?.pendingThreadIds).toBeNull()
@@ -232,29 +522,16 @@ describe('humanReviewGate', () => {
     // The fixer pushed (head advanced) but the GitHub-side resolve threw transiently. Retain the
     // handed ids so the probe's reconcile retries exactly those (resolve-only) — rather than
     // clearing the stash and re-dispatching a whole fixer round for an already-fixed thread.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ headSha: 'sha-new' }),
       resolveThreads: async () => {
         throw new Error('502 from GitHub')
       },
     })
-    const gate = humanReviewGate(stubGateContext())
-    const step = {
-      agentKind: 'human-review',
-      gate: {
-        phase: 'working',
-        attempts: 1,
-        maxAttempts: 1,
-        headSha: 'sha-old',
-        pendingThreadIds: ['T9'],
-      },
-    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
-    await gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result: { state: 'done', result: { output: '' } },
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: '' },
     })
     expect(step.gate?.pendingThreadIds).toEqual(['T9'])
   })
@@ -265,7 +542,7 @@ describe('humanReviewGate', () => {
     // (resolve only, no duplicate comment), keyed STRICTLY on the handed ids — and retain it
     // while still open so the next poll retries.
     const calls: { ids: string[]; reply: string }[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({
           approvals: 1,
@@ -275,7 +552,7 @@ describe('humanReviewGate', () => {
         calls.push({ ids, reply })
       },
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = {
       phase: 'checking',
       attempts: 0,
@@ -291,13 +568,37 @@ describe('humanReviewGate', () => {
     expect(gs.pendingThreadIds).toEqual(['T7'])
   })
 
+  it('makes no resolve call at all once the handed threads have propagated as resolved', async () => {
+    // Retention is snapshot-driven: a resolve that landed but hadn't propagated is re-checked
+    // next poll, and once GitHub reports the thread closed there is nothing left to re-attempt.
+    // Calling `resolveThreads` with an empty list would be a pointless round trip per poll for
+    // the rest of the wait.
+    const calls: string[][] = []
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ approvals: 1 }),
+      resolveThreads: async (_ws, _b, ids) => {
+        calls.push(ids)
+      },
+    })
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
+    const gs = {
+      phase: 'checking',
+      attempts: 0,
+      maxAttempts: 1,
+      pendingThreadIds: ['T7'],
+    } as GateStepState
+    expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
+    expect(calls).toEqual([])
+    expect(gs.pendingThreadIds).toBeNull()
+  })
+
   it('never auto-resolves a third-party bot thread the gate did not hand the fixer', async () => {
     // A code-review bot (`coderabbitai[bot]`) leaves its own unresolved thread. It is NOT in the
     // gate's handed set, so the reconcile must leave it strictly alone — silently closing another
     // bot's open thread would hide its feedback. (It's excluded from the HUMAN outstanding set,
     // so an approved PR still advances.)
     const calls: { ids: string[]; reply: string }[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({
           approvals: 1,
@@ -314,7 +615,7 @@ describe('humanReviewGate', () => {
         calls.push({ ids, reply })
       },
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
     expect(probe.status).toBe('pass')
@@ -323,13 +624,13 @@ describe('humanReviewGate', () => {
 
   it('keeps waiting (never fails the run) when the provider read throws', async () => {
     // A transient GitHub error on a poll must not fail the indefinitely-waiting gate.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => {
         throw new Error('502 from GitHub')
       },
       resolveThreads: async () => {},
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1, headSha: 'sha1' } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
     expect(probe.status).toBe('pending')
@@ -339,18 +640,21 @@ describe('humanReviewGate', () => {
   it('raises the awaiting-approval card with the run executionId so the inbox can deep-link', async () => {
     // The card promises "request a fix here"; the inbox needs `executionId` to open the gate
     // window. The probe has no instance, but the block carries the parked run's id.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ approvals: 0 }), // assigned reviewer, not approved → awaiting
       resolveThreads: async () => {},
     })
     const raised: RaiseNotificationInput[] = []
     const gate = humanReviewGate(
-      stubGateContext({
-        clock: { now: () => NOW },
-        getBlock: async () =>
-          ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
-        raiseNotification: async (_ws, input) => void raised.push(input),
-      }),
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          getBlock: async () =>
+            ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
     )
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
@@ -363,19 +667,22 @@ describe('humanReviewGate', () => {
     // Outstanding feedback + a prior attempt at the same head sha = the fixer made no progress.
     // The gate backs off (pending) so it does not hot-loop — but it MUST raise a card so the
     // stalled loop is visible to the human instead of waiting forever in silence.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({ approvals: 1, unresolvedThreads: [thread({ threadId: 'T1' })] }),
       resolveThreads: async () => {},
     })
     const raised: RaiseNotificationInput[] = []
     const gate = humanReviewGate(
-      stubGateContext({
-        clock: { now: () => NOW },
-        getBlock: async () =>
-          ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
-        raiseNotification: async (_ws, input) => void raised.push(input),
-      }),
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          getBlock: async () =>
+            ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
     )
     const gs = {
       phase: 'checking',
@@ -394,18 +701,420 @@ describe('humanReviewGate', () => {
     // The gate caches the required-approving count and passes it back so the provider can skip
     // re-reading branch protection on every poll of an indefinite wait.
     const seen: (number | null | undefined)[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async (_ws, _b, cached) => {
         seen.push(cached)
         return snapshot({ approvals: 0, requiredApprovingReviewCount: 2 })
       },
       resolveThreads: async () => {},
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     await gate.probe('ws', 'b', gs)
     expect(gs.requiredApprovingReviewCount).toBe(2) // cached after the first probe
     await gate.probe('ws', 'b', gs)
     expect(seen).toEqual([null, 2]) // first poll reads it; second poll passes the cached value
+  })
+})
+
+describe('humanReviewGate: what the awaiting-approval card actually says', () => {
+  // Every branch below produces a DIFFERENT card for a human, and picking the wrong one sends
+  // them to the wrong action: "assign a reviewer" to someone who already approved, or "awaiting
+  // review" when a review has already happened and is blocking the merge.
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  const cardFor = async (over: Partial<PullRequestReviewSnapshot>) => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot(over),
+      resolveThreads: async () => {},
+    })
+    const raised: RaiseNotificationInput[] = []
+    const gate = humanReviewGate(
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          getBlock: async () =>
+            ({
+              id: 'b',
+              title: 'Login',
+              executionId: 'ex-1',
+              pullRequest: { url: 'https://github.com/o/r/pull/7' },
+            }) as unknown as Block,
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
+    )
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    const probe = await gate.probe('ws', 'b', gs)
+    return { card: raised[0], probe, raised }
+  }
+
+  it('asks for a reviewer only when nobody is assigned AND nobody has approved', async () => {
+    const { card } = await cardFor({ assignedReviewers: [], approvals: 0 })
+    expect(card?.title).toBe('Assign a reviewer for "Login"')
+    expect(card?.body).toContain('no assigned reviewer')
+  })
+
+  it('reports progress, not an unassigned PR, once someone has approved', async () => {
+    // A reviewer who approves is REMOVED from the requested-reviewer list, so an empty assignee
+    // list plus an approval is "needs another approval", not "nobody is looking at this".
+    const { card } = await cardFor({
+      assignedReviewers: [],
+      approvals: 1,
+      requiredApprovingReviewCount: 2,
+    })
+    expect(card?.title).toBe('"Login" is awaiting code review')
+    expect(card?.body).toContain('Awaiting 2 approval(s)')
+    expect(card?.body).toContain('(have 1)')
+  })
+
+  it('names the assigned-but-unreviewed case as awaiting review', async () => {
+    const { card } = await cardFor({ assignedReviewers: ['alice'], approvals: 0 })
+    expect(card?.title).toBe('"Login" is awaiting code review')
+    expect(card?.body).toContain('Awaiting 1 approval(s)')
+    expect(card?.body).toContain('(have 0)')
+  })
+
+  it('says a review HAPPENED when changes are requested with nothing actionable', async () => {
+    // The misleading card here would be "awaiting review": a review did happen, it blocks the
+    // merge, and it left the fixer nothing to act on.
+    const { card } = await cardFor({
+      assignedReviewers: ['alice'],
+      approvals: 0,
+      changesRequested: true,
+    })
+    expect(card?.title).toBe('Changes requested on "Login"')
+    expect(card?.body).toContain('left no actionable comment')
+    expect(card?.body).not.toContain('Awaiting')
+  })
+
+  it('carries the PR link so the card can open what it is talking about', async () => {
+    const { card } = await cardFor({ assignedReviewers: ['alice'], approvals: 0 })
+    expect(card?.payload).toEqual({ prUrl: 'https://github.com/o/r/pull/7' })
+  })
+
+  it('falls back to a generic subject when the block cannot be read', async () => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ assignedReviewers: [], approvals: 0 }),
+      resolveThreads: async () => {},
+    })
+    const raised: RaiseNotificationInput[] = []
+    const gate = humanReviewGate(
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
+    )
+    await gate.probe('ws', 'b', { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState)
+    expect(raised[0]?.title).toBe('Assign a reviewer for "this task"')
+    expect(raised[0]?.executionId).toBeNull()
+    expect(raised[0]?.payload).toEqual({})
+  })
+
+  it('raises NO card while there is outstanding feedback inside the grace window', async () => {
+    // The gate is waiting on the FIXER here, not on a person, so summoning a reviewer would be
+    // noise on every poll of the window.
+    const { raised, probe } = await cardFor({
+      approvals: 0,
+      unresolvedThreads: [thread({ latestCommentAt: NOW - MIN })],
+    })
+    expect(probe.status).toBe('pending')
+    expect(raised).toEqual([])
+  })
+
+  it('raises no card at all once the PR is approved and clean', async () => {
+    const { raised, probe } = await cardFor({ approvals: 1 })
+    expect(probe.status).toBe('pass')
+    expect(raised).toEqual([])
+  })
+})
+
+describe('humanReviewGate: the grace window and the comment cursor', () => {
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  const probeWith = async (
+    over: Partial<PullRequestReviewSnapshot>,
+    gs: GateStepState,
+  ): Promise<{ status: string }> => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot(over),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    return gate.probe('ws', 'b', gs)
+  }
+
+  it('takes the grace window from the step CONFIG ahead of the risk-policy default', async () => {
+    const comment = { unresolvedThreads: [thread({ latestCommentAt: NOW - 20 * MIN })] }
+    // A 60-minute configured window is still open at 20 minutes: keep waiting.
+    expect(
+      (
+        await probeWith(comment, {
+          phase: 'checking',
+          attempts: 0,
+          maxAttempts: 1,
+          config: { graceMinutes: 60 },
+        } as unknown as GateStepState)
+      ).status,
+    ).toBe('pending')
+    // A 5-minute one has elapsed: dispatch the fixer.
+    expect(
+      (
+        await probeWith(comment, {
+          phase: 'checking',
+          attempts: 0,
+          maxAttempts: 1,
+          config: { graceMinutes: 5 },
+        } as unknown as GateStepState)
+      ).status,
+    ).toBe('fail')
+  })
+
+  it('falls back to the per-step value when the config names none', async () => {
+    expect(
+      (
+        await probeWith({ unresolvedThreads: [thread({ latestCommentAt: NOW - 20 * MIN })] }, {
+          phase: 'checking',
+          attempts: 0,
+          maxAttempts: 1,
+          humanReviewGraceMinutes: 60,
+        } as unknown as GateStepState)
+      ).status,
+    ).toBe('pending')
+  })
+
+  it('advances the comment cursor FORWARD only, so an older comment cannot re-open it', async () => {
+    // The cursor is what stops the same conversation comment re-triggering the fixer every poll.
+    // Moving it backwards would do exactly that.
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () =>
+        snapshot({
+          approvals: 1,
+          comments: [
+            {
+              id: 'c1',
+              author: 'alice',
+              body: 'please fix',
+              isBot: false,
+              createdAt: NOW - 5 * MIN,
+            },
+          ],
+        }),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    const gs = {
+      phase: 'checking',
+      attempts: 0,
+      maxAttempts: 1,
+      lastAddressedCommentAt: NOW - MIN,
+    } as GateStepState
+    expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
+    expect(gs.lastAddressedCommentAt).toBe(NOW - MIN)
+  })
+
+  it('records the approval count each poll, for the UI’s progress read', async () => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ approvals: 1, requiredApprovingReviewCount: 3 }),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    await gate.probe('ws', 'b', gs)
+    expect(gs.lastApprovals).toBe(1)
+  })
+
+  it('does not cache a required count read off a PR that does not exist', async () => {
+    // With no head sha there is no PR to have read branch protection from, so caching the
+    // default would pin a made-up requirement for the rest of the wait.
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ headSha: null, requiredApprovingReviewCount: 5 }),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
+    expect(gs.requiredApprovingReviewCount).toBeUndefined()
+  })
+})
+
+describe('humanReviewGate: onHelperComplete, the rounds that resolve NOTHING', () => {
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  // Every case here ends the same way (the stash is dropped and NOTHING is resolved), and each
+  // arrives by a different route. Resolving on any of them posts an "addressed" reply on feedback
+  // nobody addressed, and an approved PR then advances past it.
+  it('drops the stash without resolving when the FIXER FAILED', async () => {
+    const resolved: string[] = []
+    let probed = false
+    // The head DID advance, which is what makes this case worth asserting: progress on the branch
+    // is not evidence that a failed round addressed anything, and a gate that looked only at the
+    // sha would resolve on someone else's push.
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => {
+        probed = true
+        return snapshot({ headSha: 'sha-new' })
+      },
+      resolveThreads: async (_ws, _b, ids) => void resolved.push(...ids),
+    })
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'failed',
+      error: 'the fixer crashed',
+    })
+    expect(resolved).toEqual([])
+    expect(probed).toBe(false)
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('returns early when the round was handed NO threads', async () => {
+    let probed = false
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => {
+        probed = true
+        return snapshot({ headSha: 'sha-new' })
+      },
+      resolveThreads: async () => {},
+    })
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: [] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    // Not merely harmless: the head read is a network call, and there is nothing it could inform.
+    expect(probed).toBe(false)
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('drops the stash when the review provider is no longer wired', async () => {
+    // The gate is a pass-through with no provider, so a deployment that unwired one between the
+    // dispatch and the completion has no way to confirm anything. Retaining the ids would leave
+    // the probe reconciling threads forever against a provider that is not there.
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('does NOT resolve when the head read failed, so an outage cannot hide feedback', async () => {
+    // The one case where the fixer may genuinely have pushed and we cannot tell. The safe reading
+    // of "unknown" is the one that leaves the human's threads open: a wrong guess the other way
+    // marks a reviewer's feedback addressed on the strength of a 502.
+    const resolved: string[] = []
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => {
+        throw new Error('502 from GitHub')
+      },
+      resolveThreads: async (_ws, _b, ids) => void resolved.push(...ids),
+    })
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    expect(resolved).toEqual([])
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('resolves a round whose dispatch recorded NO head, since there is nothing to compare', async () => {
+    // `headSha` is absent on a gate state written before the dispatch recorded one. The comparison
+    // is then skipped rather than treated as "unchanged": read as no-progress, a legitimate fixer
+    // round would never resolve anything and the gate would re-dispatch forever.
+    const resolved: string[] = []
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ headSha: 'sha-new' }),
+      resolveThreads: async (_ws, _b, ids) => void resolved.push(...ids),
+    })
+    const step = stepWith({ pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    expect(resolved).toEqual(['T9'])
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+})
+
+describe('humanReviewGate: onExhausted', () => {
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  // The budget is effectively unbounded, so this is a defensive path, which is exactly why it
+  // needs a test: nothing else would ever notice it raising a card with `undefined` in the title,
+  // and the whole reason it exists is to make a misconfiguration surface instead of stalling.
+  it('raises a human-review card naming the task, and fails the gate with a reason', async () => {
+    const raised: RaiseNotificationInput[] = []
+    const ctx = stubGateContext(
+      { raiseNotification: async (_ws, input) => void raised.push(input) },
+      providerRegistry,
+    )
+    const result = await humanReviewGate(ctx).onExhausted({
+      workspaceId: 'ws',
+      instance: { id: 'ex_1', pipelineName: 'Ship it' } as never,
+      block: { id: 'blk_1', title: 'Login', pullRequest: { url: 'https://host/pr/7' } } as never,
+      step: {} as never,
+      summary: undefined,
+    })
+    expect(raised[0]?.type).toBe('human_review')
+    expect(raised[0]?.title).toBe('Human review needed for "Login"')
+    expect(raised[0]?.blockId).toBe('blk_1')
+    expect(raised[0]?.executionId).toBe('ex_1')
+    expect(raised[0]?.payload).toEqual({ prUrl: 'https://host/pr/7' })
+    expect(result.error).toBe('Human review did not complete.')
+  })
+
+  it('omits the PR link from the card when the task never opened one', async () => {
+    const raised: RaiseNotificationInput[] = []
+    const ctx = stubGateContext(
+      { raiseNotification: async (_ws, input) => void raised.push(input) },
+      providerRegistry,
+    )
+    await humanReviewGate(ctx).onExhausted({
+      workspaceId: 'ws',
+      instance: { id: 'ex_1' } as never,
+      block: { id: 'blk_1', title: 'Login' } as never,
+      step: {} as never,
+      summary: undefined,
+    })
+    // An empty payload, never `{ prUrl: undefined }`: the SPA renders the key's presence as a link.
+    expect(raised[0]?.payload).toEqual({})
+    expect(Object.keys(raised[0]?.payload ?? {})).toEqual([])
   })
 })

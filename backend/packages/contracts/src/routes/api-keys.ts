@@ -1,5 +1,10 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
-import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
+import {
+  addApiKeySchema,
+  apiKeyListResultSchema,
+  apiKeySchema,
+  updateApiKeySchema,
+} from '../api-keys.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -27,11 +32,19 @@ export const addWorkspaceApiKeyContract = defineApiContract({
   responsesByStatusCode: { 201: apiKeySchema, ...errorResponses },
 })
 
+export const updateWorkspaceApiKeyContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/api-keys/${id}`,
+  requestBodySchema: updateApiKeySchema,
+  responsesByStatusCode: { 200: apiKeySchema, ...errorResponses },
+})
+
 export const removeWorkspaceApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: idParams,
   pathResolver: ({ id }) => `/api-keys/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- user-scoped (the caller's own pool, mounted at the root) -------------
@@ -49,9 +62,17 @@ export const addUserApiKeyContract = defineApiContract({
   responsesByStatusCode: { 201: apiKeySchema, ...errorResponses },
 })
 
+export const updateUserApiKeyContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/me/api-keys/${id}`,
+  requestBodySchema: updateApiKeySchema,
+  responsesByStatusCode: { 200: apiKeySchema, ...errorResponses },
+})
+
 export const removeUserApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: idParams,
   pathResolver: ({ id }) => `/me/api-keys/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

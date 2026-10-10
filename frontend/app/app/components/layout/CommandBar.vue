@@ -6,6 +6,8 @@
 // from the add-task flow.) Commands are assembled from the live stores so only
 // available actions (connected integrations, etc.) show.
 
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 interface Command {
   id: string
   label: string
@@ -23,6 +25,15 @@ const slack = useSlackStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const library = useFragmentLibraryStore()
+const access = useWorkspaceAccess()
+const uiRole = useUiRoleStore()
+
+// The static destination catalog + its RBAC/availability gating now comes from
+// the shared nav manifest (backend/docs/adr/0049-modular-vue-adoption.md, slice 1),
+// rendered here as command entries. The DYNAMIC per-connection commands below
+// (github/slack/doc/task connect + import) stay local to the palette — they vary
+// per live connection, so they are not part of the static manifest this slice.
+const { commandGroups, invoke } = useNavContributions()
 
 const open = computed({
   get: () => ui.commandBarOpen,
@@ -32,46 +43,20 @@ const open = computed({
 const query = ref('')
 const activeIndex = ref(0)
 
-const commands = computed<Command[]>(() => {
-  const list: Command[] = []
-
-  const groupCreate = t('layout.commandBar.groups.create')
-  const groupRepositories = t('layout.commandBar.groups.repositories')
+// The per-connection integration commands the manifest deliberately doesn't
+// carry: their label (connect vs manage) and set (one per document/task source)
+// depend on live connection state. Gated by `integrations.manage`, they render
+// under the palette's Integrations group.
+//
+// Also gated on the ROLE's surface, which the manifest entries get for free from `navSlotFilter`
+// (see `NavGates.fullSurface`): these are the platform-configuration half: connecting a source,
+// managing a connection, importing across the whole board. A narrowed role that happens to
+// hold `integrations.manage` would otherwise reach through the palette exactly the surfaces its
+// sidebar dropped. What it keeps is on the board: a frame's own from-ticket / from-design buttons.
+const dynamicIntegrationCommands = computed<Command[]>(() => {
+  if (!access.canManageIntegrations.value || !uiRole.fullSurface) return []
   const groupIntegrations = t('layout.commandBar.groups.integrations')
-  const groupWorkspace = t('layout.commandBar.groups.workspace')
-  const groupAccount = t('layout.commandBar.groups.account')
-
-  // ---- Create -------------------------------------------------------------
-  list.push({
-    id: 'new-pipeline',
-    label: t('layout.commandBar.cmd.newPipeline'),
-    group: groupCreate,
-    icon: 'i-lucide-workflow',
-    keywords: t('layout.commandBar.keywords.newPipeline'),
-    run: () => ui.openBuilder(),
-  })
-
-  // ---- Repositories -------------------------------------------------------
-  if (github.available) {
-    list.push({
-      id: 'add-from-repo',
-      label: t('layout.commandBar.cmd.addFromRepo'),
-      group: groupRepositories,
-      icon: 'i-lucide-folder-git-2',
-      keywords: t('layout.commandBar.keywords.addFromRepo'),
-      run: () => ui.openAddService(),
-    })
-  }
-  list.push({
-    id: 'bootstrap-repo',
-    label: t('layout.commandBar.cmd.bootstrapRepo'),
-    group: groupRepositories,
-    icon: 'i-lucide-git-branch-plus',
-    keywords: t('layout.commandBar.keywords.bootstrapRepo'),
-    run: () => ui.openBootstrap(),
-  })
-
-  // ---- Integrations -------------------------------------------------------
+  const list: Command[] = []
   if (github.available) {
     list.push({
       id: 'github',
@@ -96,6 +81,14 @@ const commands = computed<Command[]>(() => {
       run: () => ui.openSlack(),
     })
   }
+  list.push({
+    id: 'notification-settings',
+    label: t('layout.commandBar.cmd.notificationSettings'),
+    group: groupIntegrations,
+    icon: 'i-lucide-bell',
+    keywords: t('layout.commandBar.keywords.notificationSettings'),
+    run: () => ui.openNotificationSettings(),
+  })
   if (documents.available) {
     for (const src of documents.sources) {
       list.push({
@@ -116,7 +109,7 @@ const commands = computed<Command[]>(() => {
         group: groupIntegrations,
         icon: 'i-lucide-file-down',
         keywords: t('layout.commandBar.keywords.documentImport'),
-        run: () => ui.openDocumentImport(null),
+        run: () => ui.openDocumentImport(),
       })
     }
   }
@@ -142,86 +135,51 @@ const commands = computed<Command[]>(() => {
         keywords: t('layout.commandBar.keywords.taskImport'),
         run: () => ui.openTaskImport(null),
       })
+      list.push({
+        id: 'bug-hunt',
+        label: t('layout.commandBar.cmd.bugHunt'),
+        group: groupIntegrations,
+        icon: 'i-lucide-radar',
+        keywords: t('layout.commandBar.keywords.bugHunt'),
+        run: () => ui.openBugHunt(null),
+      })
     }
   }
-
-  // ---- Workspace ----------------------------------------------------------
-  if (library.available) {
-    list.push({
-      id: 'fragments',
-      label: t('layout.commandBar.cmd.fragments'),
-      group: groupWorkspace,
-      icon: 'i-lucide-book-marked',
-      keywords: t('layout.commandBar.keywords.fragments'),
-      run: () => ui.openFragmentLibrary(),
-    })
-  }
-  list.push({
-    id: 'merge-thresholds',
-    label: t('layout.commandBar.cmd.mergeThresholds'),
-    group: groupWorkspace,
-    icon: 'i-lucide-git-merge',
-    keywords: t('layout.commandBar.keywords.mergeThresholds'),
-    run: () => ui.openWorkspaceSettings('merge'),
-  })
-  list.push({
-    id: 'workspace-settings',
-    label: t('layout.commandBar.cmd.workspaceSettings'),
-    group: groupWorkspace,
-    icon: 'i-lucide-sliders-horizontal',
-    keywords: t('layout.commandBar.keywords.workspaceSettings'),
-    run: () => ui.openWorkspaceSettings(),
-  })
-  list.push({
-    id: 'model-configuration',
-    label: t('layout.commandBar.cmd.modelConfiguration'),
-    group: groupWorkspace,
-    icon: 'i-lucide-cpu',
-    keywords: t('layout.commandBar.keywords.modelConfiguration'),
-    run: () => ui.openModelConfig(),
-  })
-  list.push({
-    id: 'service-fragment-defaults',
-    label: t('layout.commandBar.cmd.serviceFragmentDefaults'),
-    group: groupWorkspace,
-    icon: 'i-lucide-book-open-check',
-    keywords: t('layout.commandBar.keywords.serviceFragmentDefaults'),
-    run: () => ui.openWorkspaceSettings('fragments'),
-  })
-  list.push({
-    id: 'account-settings',
-    label: t('layout.commandBar.cmd.accountSettings'),
-    group: groupAccount,
-    icon: 'i-lucide-settings',
-    keywords: t('layout.commandBar.keywords.accountSettings'),
-    run: () => ui.openAccountSettings(),
-  })
-  list.push({
-    id: 'local-models',
-    label: t('layout.commandBar.cmd.localModels'),
-    group: groupWorkspace,
-    icon: 'i-lucide-server',
-    keywords: t('layout.commandBar.keywords.localModels'),
-    run: () => ui.openLocalModels(),
-  })
-  list.push({
-    id: 'sandbox',
-    label: t('layout.commandBar.cmd.sandbox'),
-    group: groupWorkspace,
-    icon: 'i-lucide-flask-conical',
-    keywords: t('layout.commandBar.keywords.sandbox'),
-    run: () => ui.openSandbox(),
-  })
-  list.push({
-    id: 'keyboard-shortcuts',
-    label: t('layout.commandBar.cmd.shortcuts'),
-    group: groupWorkspace,
-    icon: 'i-lucide-keyboard',
-    keywords: t('layout.commandBar.keywords.shortcuts'),
-    run: () => ui.openShortcutsHelp(),
-  })
-
   return list
+})
+
+const commands = computed<Command[]>(() => {
+  // Flatten the reactively-gated manifest command groups (already in canonical
+  // order: create, repositories, integrations, workspace, account), splicing the
+  // dynamic per-connection commands into the Integrations group's position.
+  const staticByGroup = new Map(commandGroups.value.map((g) => [g.group, g]))
+  const asCommand = (g: (typeof commandGroups.value)[number]): Command[] =>
+    g.items.map((ci) => ({
+      id: ci.item.id,
+      // A contribution whose copy is deployment DATA (a registered external tool's title)
+      // carries a literal `label`; catalog destinations resolve their key. Running a tool's
+      // own name through `t()` would show the raw name plus a missing-key warning.
+      label: ci.item.label ?? t(ci.labelKey),
+      group: t(g.labelKey),
+      icon: ci.item.icon,
+      // The description doubles as fuzzy-match keywords for a tool, which has no keyword key.
+      keywords: ci.keywordsKey ? t(ci.keywordsKey) : ci.item.description,
+      run: () => invoke(ci.item),
+    }))
+  const groupOrEmpty = (name: (typeof commandGroups.value)[number]['group']) => {
+    const g = staticByGroup.get(name)
+    return g ? asCommand(g) : []
+  }
+  return [
+    ...groupOrEmpty('create'),
+    ...groupOrEmpty('repositories'),
+    ...groupOrEmpty('integrations'),
+    ...dynamicIntegrationCommands.value,
+    // The deployment's own applications (the `externalTools` slot, projected onto nav items).
+    ...groupOrEmpty('externalTools'),
+    ...groupOrEmpty('workspace'),
+    ...groupOrEmpty('account'),
+  ]
 })
 
 const filtered = computed<Command[]>(() => {
@@ -270,8 +228,7 @@ function onKeydown(event: KeyboardEvent) {
 
 // Reset the query each time the bar opens, and focus the input.
 const inputRef = ref<{ inputRef?: HTMLInputElement } | null>(null)
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   query.value = ''
   activeIndex.value = 0
   void documents.probe()
@@ -300,13 +257,14 @@ function indexOf(cmd: Command) {
 <template>
   <UModal v-model:open="open" :ui="{ content: 'max-w-xl' }">
     <template #content>
-      <div class="flex flex-col" @keydown="onKeydown">
-        <div class="flex items-center gap-2 border-b border-slate-800 px-3">
-          <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0 text-slate-500" />
+      <div class="flex flex-col" data-testid="command-bar" @keydown="onKeydown">
+        <div class="flex items-center gap-2 border-b border-default px-3">
+          <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0 text-dimmed" />
           <UInput
             ref="inputRef"
             v-model="query"
             variant="none"
+            data-testid="command-bar-input"
             :placeholder="t('layout.commandBar.searchPlaceholder')"
             class="w-full"
             :ui="{ base: 'py-3 text-sm' }"
@@ -315,32 +273,32 @@ function indexOf(cmd: Command) {
         </div>
 
         <div class="max-h-80 overflow-y-auto p-1.5">
-          <p v-if="filtered.length === 0" class="px-3 py-6 text-center text-sm text-slate-500">
+          <p v-if="filtered.length === 0" class="px-3 py-6 text-center text-sm text-dimmed">
             {{ t('layout.commandBar.noMatches') }}
           </p>
 
           <div v-for="group in groups" :key="group.name" class="mb-1">
-            <p
-              class="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-            >
+            <SectionLabel as="p" class="px-2 pb-1 pt-2">
               {{ group.name }}
-            </p>
-            <button
+            </SectionLabel>
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="cmd in group.items"
               :key="cmd.id"
-              type="button"
+              :data-testid="`command-${cmd.id}`"
               class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-start text-sm transition"
               :class="
                 indexOf(cmd) === activeIndex
-                  ? 'bg-slate-800 text-slate-100'
-                  : 'text-slate-300 hover:bg-slate-800/60'
+                  ? 'bg-elevated text-app-100'
+                  : 'text-toned hover:bg-elevated/60'
               "
               @mousemove="activeIndex = indexOf(cmd)"
               @click="run(cmd)"
             >
-              <UIcon :name="cmd.icon" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon :name="cmd.icon" class="h-4 w-4 shrink-0 text-muted" />
               <span class="truncate">{{ cmd.label }}</span>
-            </button>
+            </UButton>
           </div>
         </div>
       </div>

@@ -34,26 +34,90 @@ export interface Io {
   openBrowser(url: string): Promise<void>
 }
 
-/** The OS-appropriate command for opening a URL in the default browser. */
-function openCommand(url: string): { cmd: string; args: string[] } {
-  switch (process.platform) {
+/** How to spawn the OS's URL opener: the command, its argv, and Windows' verbatim-argv flag. */
+export interface OpenBrowserCommand {
+  cmd: string
+  args: string[]
+  /**
+   * Windows only: hand the joined argv to `CreateProcess` unchanged instead of re-quoting each
+   * argument for `CommandLineToArgvW`, whose rules `cmd` does not follow.
+   */
+  windowsVerbatimArguments?: boolean
+}
+
+/**
+ * The OS-appropriate command for opening a URL in the default browser.
+ *
+ * Windows goes through `cmd`, and cmd splits an UNQUOTED command line on `&` before the `start`
+ * builtin ever sees it. Every URL we open carries more than one query parameter, so this used to
+ * open the browser at everything up to the first `&` and then try to RUN each remaining parameter
+ * as a command: `cat-factory k3s` landed on a bare `?infraSetup=local-k3s` with none of the values
+ * the connect form prefills from, and the PAT links dropped their `scopes`.
+ *
+ * So the URL is quoted, which is also why `start`'s first argument is an empty quoted window title
+ * (it reads a leading quoted token as one). The quotes have to reach cmd verbatim, hence the flag.
+ *
+ * The quoting holds only while the URL carries no `"` of its own, so this SERIALIZES the input
+ * rather than trusting the caller to have done it: WHATWG serialization percent-encodes `"` in
+ * every component that can carry one and rejects it in a host, so no argument can close the quote
+ * and have cmd read the rest as a second command. Input that is not a URL at all throws, rather
+ * than reaching a shell as a command line whose meaning nobody has checked; `openBrowser` is
+ * best-effort and both call sites print the link before opening it. Inside the quotes cmd still
+ * expands a `%NAME%` reference, but the expansion is literal text there: quotes make `&` and its
+ * friends inert, and no Windows environment value can contain a `"` to close them, so the worst
+ * case is a wrong URL, never a second command.
+ *
+ * @throws {TypeError} if `url` is not a parsable absolute URL.
+ */
+export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowserCommand {
+  const href = new URL(url).href
+  switch (platform) {
     case 'darwin':
-      return { cmd: 'open', args: [url] }
+      return { cmd: 'open', args: [href] }
     case 'win32':
-      // `start` is a cmd builtin; the empty "" is the window title arg it requires.
-      return { cmd: 'cmd', args: ['/c', 'start', '', url] }
+      return {
+        cmd: 'cmd',
+        args: ['/c', 'start', '""', `"${href}"`],
+        windowsVerbatimArguments: true,
+      }
     default:
-      return { cmd: 'xdg-open', args: [url] }
+      return { cmd: 'xdg-open', args: [href] }
   }
 }
 
-/** A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. */
-function bailIfCancelled<T>(value: T | symbol): T {
-  if (isCancel(value)) {
+/**
+ * A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. The
+ * ONE seam every prompt result passes through, so it is the only place that has to know about it.
+ *
+ * It takes the prompt's WHOLE result type and subtracts the symbol arm from it, rather than being
+ * declared `(value: T | symbol): T` to have inference peel that arm off. The difference is not
+ * stylistic: clack spelled every prompt `Promise<Value | symbol>` with the WIDE `symbol` until
+ * 1.8.0 and `Promise<Value | typeof CANCEL_SYMBOL>` from 1.8.1, and a unique symbol does not
+ * match a wide `symbol` parameter slot, so on the newer spelling `T` swallowed the union whole
+ * and every call site went back to holding a symbol it thought it had been rid of. `Exclude` is
+ * indifferent to which spelling arrives, since a unique symbol is a subtype of `symbol` either
+ * way, and it is what clack's own `group()` helper uses on the same values.
+ *
+ * The guard is still TWO conditions, and the second is not redundant with `isCancel`. That
+ * predicate narrows to one UNIQUE symbol, the one belonging to the `@clack/core` instance that
+ * minted it, so two copies of `@clack/core` in the graph (a direct dependency and a transitive one
+ * on a different range) mint two, and the guard knows only its own. Letting the other through
+ * hands the symbol back as a value: `question` calls `.trim()` on it and dies with a `TypeError`
+ * where this seam exists to exit 130, and `select` returns it as a `T extends string` for the
+ * caller to branch on. Exiting on ANY symbol is right whichever copy produced it, since none of
+ * these prompts resolves to a symbol for any other reason.
+ *
+ * The assertion is what that second condition costs: control flow cannot subtract a symbol from
+ * an unresolved generic, so the narrowing TypeScript did for free under the old signature has to
+ * be stated. It is safe for exactly the reason above — the only way past both conditions is a
+ * value that is not a symbol at all.
+ */
+function bailIfCancelled<T>(value: T): Exclude<T, symbol> {
+  if (isCancel(value) || typeof value === 'symbol') {
     cancel('Cancelled.')
     process.exit(130)
   }
-  return value
+  return value as Exclude<T, symbol>
 }
 
 /** The real, console-backed {@link Io}, implemented with `@clack/prompts`. */
@@ -102,8 +166,12 @@ export function createConsoleIo(): Io {
     openBrowser(url) {
       return new Promise<void>((resolve) => {
         try {
-          const { cmd, args } = openCommand(url)
-          const child = spawn(cmd, args, { stdio: 'ignore', detached: true })
+          const { cmd, args, windowsVerbatimArguments } = openCommand(url, process.platform)
+          const child = spawn(cmd, args, {
+            stdio: 'ignore',
+            detached: true,
+            windowsVerbatimArguments,
+          })
           child.on('error', () => resolve())
           child.unref()
           resolve()

@@ -1,5 +1,6 @@
 import type { ConnectionTestResult, ProviderConfigField } from '@cat-factory/kernel'
 import { getErrorMessage } from '@cat-factory/kernel'
+import { describeGitHubPatScope, summarizeGitHubPatScope } from './githubPatScope.js'
 
 // The per-user secret KIND registry. Each kind declares the config fields the UI renders
 // (exactly one `secret: true` field — the value stored encrypted; the rest ride as
@@ -84,8 +85,11 @@ export const githubPatUserSecretKind: UserSecretKindHandler = {
       label: 'Personal access token',
       secret: true,
       required: true,
-      placeholder: 'ghp_… (scopes: repo, workflow)',
-      help: 'Runs you initiate use YOUR GitHub access (pushes, PR author, CI actor).',
+      placeholder: 'github_pat_… or ghp_…',
+      help:
+        'Runs you initiate use YOUR GitHub access (pushes, PR author, CI actor), so this token ' +
+        'is the reach of every run you start. Prefer a fine-grained token limited to this ' +
+        "deployment's repositories; test it to see what it grants.",
     },
   ],
   async testConnection(input, ctx) {
@@ -103,7 +107,18 @@ export const githubPatUserSecretKind: UserSecretKindHandler = {
         return { ok: false, message: `GitHub rejected the token (HTTP ${res.status})` }
       }
       const user = (await res.json()) as { login?: string }
-      return { ok: true, message: user.login ? `Authenticated as ${user.login}` : 'Token valid' }
+      // What the token can REACH, not just that it works. A stored PAT outranks the deployment
+      // credential on the run path and the platform cannot narrow it, so the moment someone is
+      // looking at this form is the only moment an over-broad classic token is visible at all
+      // (backend/docs/security-model.md). Reported as machine-readable warnings the SPA
+      // translates, beside the pass verdict rather than folded into it — the token IS valid.
+      const scope = describeGitHubPatScope(input.secret, res.headers.get('x-oauth-scopes'))
+      const who = user.login ? `Authenticated as ${user.login}` : 'Token valid'
+      return {
+        ok: true,
+        message: `${who} — ${summarizeGitHubPatScope(scope)}`,
+        ...(scope.warnings.length ? { warnings: scope.warnings } : {}),
+      }
     } catch (err) {
       return { ok: false, message: getErrorMessage(err) }
     }

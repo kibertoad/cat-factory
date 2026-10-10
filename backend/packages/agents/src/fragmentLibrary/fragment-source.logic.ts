@@ -1,11 +1,13 @@
+import { MAX_FRAGMENT_ID_LENGTH } from '@cat-factory/contracts'
 import type { AgentKind, BlockType } from '@cat-factory/kernel'
 import type { FragmentAppliesTo } from '@cat-factory/kernel'
+import { parseSimpleYaml, splitFrontmatter, str, strArray } from '../repoSourceSync/frontmatter.js'
 
 // Pure logic for repo-sourced fragments (ADR 0006 §4): parse one Markdown file
 // with YAML frontmatter into a fragment, plus the small helpers the sync flow
-// needs (slugging an id from a path, recognising Markdown files). No I/O lives here
-// so it is unit-testable. Staleness is a commit-sha probe (see FragmentSourceService),
-// so no directory-digest helper lives here any more.
+// needs (slugging an id from a path, recognising Markdown files). The generic
+// frontmatter split + small-YAML parse are shared with the skill library
+// (repoSourceSync/frontmatter). No I/O lives here so it is unit-testable.
 
 const BLOCK_TYPES: readonly string[] = [
   'frontend',
@@ -26,6 +28,13 @@ export interface ParsedFragmentFile {
   category?: string
   summary: string
   body: string
+  /**
+   * The file's linked SHORT version (`brief:` frontmatter), folded for implementer kinds
+   * in place of the body. Absent ⇒ a body over the size threshold is condensed
+   * automatically; teams that already keep a terse restatement of a guideline link it here
+   * rather than having one synthesized.
+   */
+  brief?: string
   tags?: string[]
   appliesTo?: FragmentAppliesTo
 }
@@ -44,6 +53,39 @@ export function slugFromPath(path: string): string {
 /** Whether a listing entry is a Markdown file we should parse. */
 export function isMarkdownFile(name: string): boolean {
   return /\.md$/i.test(name)
+}
+
+/** Digest length the truncating branch of {@link mintSourcedFragmentId} reserves: `-` + 8 hex. */
+const PATH_DIGEST_CHARS = 9
+
+/**
+ * The id a repo-sourced file gets when it declares none: `src:<sourceId>:<slug>`, namespaced so
+ * two sources cannot collide (an explicit frontmatter `id` instead SHADOWS a built-in, ADR 0006).
+ *
+ * Bounded by {@link MAX_FRAGMENT_ID_LENGTH}, which is what keeps the id the public catalog
+ * publishes one the public create can name back. A deep directory of guidelines reaches that
+ * ceiling on ordinary paths, so the over-long case truncates the slug and appends a digest of the
+ * whole of it: truncation ALONE would be the wrong shape here, because sibling files in a deep tree
+ * share their leading path and differ in the filename, which is exactly the half a prefix cut
+ * throws away. The prefix is `src:` plus a minted source id (~36 chars), so the readable head keeps
+ * the bulk of the budget.
+ */
+export function mintSourcedFragmentId(sourceId: string, path: string): string {
+  const prefix = `src:${sourceId}:`
+  const slug = slugFromPath(path)
+  if (prefix.length + slug.length <= MAX_FRAGMENT_ID_LENGTH) return prefix + slug
+  const head = slug.slice(0, MAX_FRAGMENT_ID_LENGTH - prefix.length - PATH_DIGEST_CHARS)
+  return `${prefix}${head}-${digest(slug)}`
+}
+
+/** FNV-1a/32 as 8 hex chars: a stable, dependency-free disambiguator, never a security claim. */
+function digest(value: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, '0')
 }
 
 /**
@@ -71,6 +113,8 @@ export function parseFragmentMarkdown(path: string, content: string): ParsedFrag
   }
   const id = str(fm.id)
   if (id) parsed.id = id
+  const brief = str(fm.brief)
+  if (brief) parsed.brief = brief
   const category = str(fm.category)
   if (category) parsed.category = category
   const tags = strArray(fm.tags)
@@ -80,73 +124,6 @@ export function parseFragmentMarkdown(path: string, content: string): ParsedFrag
 }
 
 // --- internals ------------------------------------------------------------
-
-function splitFrontmatter(content: string): { frontmatter: string; body: string } {
-  // Tolerate a leading BOM/whitespace before the opening fence.
-  const match = content.match(/^﻿?\s*---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
-  if (!match) return { frontmatter: '', body: content }
-  return { frontmatter: match[1] ?? '', body: match[2] ?? '' }
-}
-
-/** A deliberately small YAML subset: top-level `key: value` and one nested map. */
-function parseSimpleYaml(text: string): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  const lines = text.split(/\r?\n/)
-  let nestedKey: string | null = null
-  let nested: Record<string, unknown> | null = null
-  for (const raw of lines) {
-    if (!raw.trim() || raw.trim().startsWith('#')) continue
-    const indented = /^\s+/.test(raw)
-    const colon = raw.indexOf(':')
-    if (colon === -1) continue
-    const key = raw.slice(0, colon).trim()
-    const value = raw.slice(colon + 1).trim()
-    if (indented && nested) {
-      nested[key] = parseScalarOrArray(value)
-      continue
-    }
-    if (value === '') {
-      // Opens a nested map (e.g. `appliesTo:`).
-      nestedKey = key
-      nested = {}
-      out[key] = nested
-    } else {
-      nestedKey = null
-      nested = null
-      out[key] = parseScalarOrArray(value)
-    }
-  }
-  void nestedKey
-  return out
-}
-
-function parseScalarOrArray(value: string): unknown {
-  const inline = value.match(/^\[(.*)\]$/)
-  if (inline) {
-    return inline[1]!
-      .split(',')
-      .map((s) => unquote(s.trim()))
-      .filter((s) => s.length > 0)
-  }
-  return unquote(value)
-}
-
-function unquote(s: string): string {
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    return s.slice(1, -1)
-  }
-  return s
-}
-
-function str(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
-
-function strArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean)
-  const single = str(value)
-  return single ? [single] : []
-}
 
 function parseAppliesTo(value: unknown): FragmentAppliesTo | undefined {
   if (!value || typeof value !== 'object') return undefined

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { composeFileRefSchema } from './compose-sources.js'
 import { provisioningDetectionNoteSchema } from './environments.js'
 import { preflightRefSchema } from './preflights.js'
 import { urlString } from './primitives.js'
@@ -54,12 +55,22 @@ export const sharedStackSchema = v.object({
   id: v.string(),
   workspaceId: v.string(),
   name: stackName,
-  /** The git repo the stack is cloned from (its compose files + templates live here). */
-  cloneUrl: urlString,
+  /**
+   * The git repo the stack is cloned from (its `path` compose layers, env templates and seed
+   * dumps live here). NULL for a stack that owns no repo — one whose layers are all `inline`
+   * documents and/or `repo` references into other projects, the shape a deployment declares
+   * programmatically in code. A `path` layer, an `envFiles` entry or a `stdinFile` step REQUIRES
+   * a clone URL; the bring-up refuses without one rather than cloning nothing and failing at `up`.
+   */
+  cloneUrl: v.nullable(urlString),
   /** Branch / tag / sha to read at; absent ⇒ the repo's default branch. */
   gitRef: v.nullable(stackRef),
-  /** Ordered `-f` compose files (repo-relative). At least one. */
-  composeFiles: v.pipe(v.array(stackPathString), v.minLength(1)),
+  /**
+   * Ordered `-f` compose layers. At least one. Each entry is a bare path in the stack's own
+   * repo (the shorthand) or an explicit {@link composeSourceSchema} — an `inline` document, or a
+   * `path` in ANOTHER `owner/name` repo read checkout-free through the workspace's VCS connection.
+   */
+  composeFiles: v.pipe(v.array(composeFileRefSchema), v.minLength(1)),
   /** `COMPOSE_PROFILES` to enable for the stack. */
   composeProfiles: v.array(stackName),
   /** Committed templates materialized into their gitignored targets before `up`. */
@@ -97,9 +108,10 @@ export type SharedStack = v.InferOutput<typeof sharedStackSchema>
 /** Create a new shared stack in a workspace. */
 export const createSharedStackSchema = v.object({
   name: stackName,
-  cloneUrl: urlString,
+  /** Absent ⇒ a repo-less stack (every layer `inline` / from another repo). */
+  cloneUrl: v.optional(urlString),
   gitRef: v.optional(stackRef),
-  composeFiles: v.pipe(v.array(stackPathString), v.minLength(1)),
+  composeFiles: v.pipe(v.array(composeFileRefSchema), v.minLength(1)),
   composeProfiles: v.optional(v.array(stackName), []),
   envFiles: v.optional(v.array(recipeEnvFileSchema), []),
   managedNetworks: v.optional(v.array(stackName), []),
@@ -155,9 +167,9 @@ export type SharedStackRecommendation = v.InferOutput<typeof sharedStackRecommen
 /** Patch an existing shared stack (all fields optional). */
 export const updateSharedStackSchema = v.object({
   name: v.optional(stackName),
-  cloneUrl: v.optional(urlString),
+  cloneUrl: v.optional(v.nullable(urlString)),
   gitRef: v.optional(v.nullable(stackRef)),
-  composeFiles: v.optional(v.pipe(v.array(stackPathString), v.minLength(1))),
+  composeFiles: v.optional(v.pipe(v.array(composeFileRefSchema), v.minLength(1))),
   composeProfiles: v.optional(v.array(stackName)),
   envFiles: v.optional(v.array(recipeEnvFileSchema)),
   managedNetworks: v.optional(v.array(stackName)),

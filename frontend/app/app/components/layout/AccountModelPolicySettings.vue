@@ -17,6 +17,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // The family / region / mode / trusted-provider domains, pinned to the contract unions so a
@@ -30,6 +31,7 @@ const FAMILIES = [
   'kimi',
   'deepseek',
   'glm',
+  'grok',
 ] as const satisfies readonly ModelFamily[]
 const REGIONS = ['usa', 'europe', 'china', 'other'] as const satisfies readonly AccountRegion[]
 const MODES = ['off', 'blocklist', 'allowlist'] as const satisfies readonly ModelPolicyMode[]
@@ -46,6 +48,7 @@ const familyLabels = computed<Record<ModelFamily, string>>(() => ({
   kimi: t('settings.modelPolicy.families.kimi'),
   deepseek: t('settings.modelPolicy.families.deepseek'),
   glm: t('settings.modelPolicy.families.glm'),
+  grok: t('settings.modelPolicy.families.grok'),
 }))
 const regionLabels = computed<Record<AccountRegion, string>>(() => ({
   usa: t('settings.modelPolicy.regions.usa'),
@@ -135,11 +138,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.modelPolicy.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'settings.modelPolicy.saveFailed')
   } finally {
     saving.value = false
   }
@@ -150,23 +149,23 @@ async function save() {
   <section
     v-if="store.available !== false"
     data-testid="account-model-policy"
-    class="space-y-3 border-t border-slate-800 pt-6"
+    class="space-y-3 border-t border-default pt-6"
   >
     <div>
-      <h4 class="text-sm font-semibold text-slate-200">{{ t('settings.modelPolicy.title') }}</h4>
-      <p class="text-[11px] text-slate-400">{{ t('settings.modelPolicy.description') }}</p>
+      <h4 class="text-sm font-semibold text-default">{{ t('settings.modelPolicy.title') }}</h4>
+      <p class="text-2xs text-muted">{{ t('settings.modelPolicy.description') }}</p>
     </div>
 
     <!-- Region + apply-preset templates -->
     <div class="space-y-2">
-      <label class="text-[11px] font-medium text-slate-300">
+      <label class="text-2xs font-medium text-toned">
         {{ t('settings.modelPolicy.regionLabel') }}
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="region" :items="regionItems" value-key="value" size="sm" />
       </div>
       <div v-if="regionPresets.length" class="flex flex-wrap items-center gap-2">
-        <span class="text-[11px] text-slate-400">{{ t('settings.modelPolicy.applyPreset') }}</span>
+        <span class="text-2xs text-muted">{{ t('settings.modelPolicy.applyPreset') }}</span>
         <UButton
           v-for="preset in regionPresets"
           :key="preset.id"
@@ -184,7 +183,7 @@ async function save() {
 
     <!-- Mode -->
     <div class="space-y-2">
-      <label class="text-[11px] font-medium text-slate-300">
+      <label class="text-2xs font-medium text-toned">
         {{ t('settings.modelPolicy.modeLabel') }}
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -194,7 +193,7 @@ async function save() {
 
     <!-- Families -->
     <div v-if="mode !== 'off'" class="space-y-2">
-      <label class="text-[11px] font-medium text-slate-300">
+      <label class="text-2xs font-medium text-toned">
         {{
           mode === 'blocklist'
             ? t('settings.modelPolicy.familiesBlockLabel')
@@ -215,10 +214,10 @@ async function save() {
 
     <!-- Trusted (residency-guaranteed) routes -->
     <div v-if="mode !== 'off'" class="space-y-2">
-      <label class="text-[11px] font-medium text-slate-300">
+      <label class="text-2xs font-medium text-toned">
         {{ t('settings.modelPolicy.trustedLabel') }}
       </label>
-      <p class="text-[11px] text-slate-400">{{ t('settings.modelPolicy.trustedHint') }}</p>
+      <p class="text-2xs text-muted">{{ t('settings.modelPolicy.trustedHint') }}</p>
       <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
         <UCheckbox
           v-for="provider in TRUSTED_PROVIDERS"

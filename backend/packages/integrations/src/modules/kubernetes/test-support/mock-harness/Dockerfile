@@ -2,7 +2,7 @@
 # (KubernetesRunnerTransport.it.spec.ts). It serves the minimal `/jobs` HTTP contract the
 # transport drives through the apiserver pod-proxy. Built locally and `k3d image import`ed
 # into the test cluster; never published. See server.mjs for the routes.
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /app
 COPY server.mjs ./
 ENV PORT=8080

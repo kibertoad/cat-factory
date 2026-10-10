@@ -1,5 +1,10 @@
 import {
   ApiKeyService,
+  LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
+  PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
+  PROVIDER_API_KEYS_CIPHER_INFO,
+  PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
+  USER_SECRET_CIPHER_INFO,
   LocalModelEndpointService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
@@ -11,7 +16,10 @@ import {
 } from '@cat-factory/integrations'
 import type {
   Clock,
+  GitHubRepo,
+  GroupCacheHandle,
   LocalModelEndpointRepository,
+  Paged,
   PersonalSubscriptionRepository,
   ProviderApiKeyRepository,
   ProviderSubscriptionTokenRepository,
@@ -20,7 +28,7 @@ import type {
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { WebCryptoPersonalSecretCipher, WebCryptoSecretCipher } from '@cat-factory/server'
 import type { DrizzleDb } from './db/client.js'
-import { baseUrlForNode } from './modelProvider.js'
+import { baseUrlForNode } from './providerEndpoints.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
 import { DrizzlePublicApiKeyRepository } from './repositories/publicApiKey.js'
@@ -65,7 +73,7 @@ export function buildNodeSubscriptionService(
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:provider-subscriptions',
+      info: PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
     }),
     idGenerator,
     clock,
@@ -98,7 +106,7 @@ export function buildNodeApiKeyService(
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:provider-api-keys',
+      info: PROVIDER_API_KEYS_CIPHER_INFO,
     }),
     idGenerator,
     clock,
@@ -128,6 +136,20 @@ export function buildNodePublicApiKeyService(
 }
 
 /**
+ * Which store backs a user's locally-run endpoints on this facade: the injected local-sqlite
+ * credential seam (mothership mode, where the row must stay on the laptop) else Drizzle over the
+ * main database. Its own function because TWO callers need the same answer (the credential service
+ * below, and the ENGINE's per-dispatch read of what a user declared about a local model), and a
+ * second copy of this rule would send one of them to the wrong database in mothership mode.
+ */
+export function selectNodeLocalModelEndpointRepository(
+  db: DrizzleDb | undefined,
+  repositoryOverride?: LocalModelEndpointRepository,
+): LocalModelEndpointRepository | undefined {
+  return repositoryOverride ?? (db ? new DrizzleLocalModelEndpointRepository(db) : undefined)
+}
+
+/**
  * The per-USER locally-run model endpoints store (Ollama / LM Studio / …) for the
  * Node/local facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is
  * absent (the optional bearer key is sealed with the single system cipher). Mirror of
@@ -142,16 +164,22 @@ export function buildNodeLocalModelEndpointService(
 ): LocalModelEndpointService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
-  const localModelEndpointRepository =
-    repositoryOverride ?? (db ? new DrizzleLocalModelEndpointRepository(db) : undefined)
+  const localModelEndpointRepository = selectNodeLocalModelEndpointRepository(
+    db,
+    repositoryOverride,
+  )
   if (!localModelEndpointRepository) return undefined
   return new LocalModelEndpointService({
     localModelEndpointRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:local-model-endpoints',
+      info: LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
     }),
     clock,
+    // Loopback-only unless the operator opts into LAN reach: on a shared multi-tenant
+    // Node deployment the LAN allow-list is an internal-network SSRF grant (SEC-3).
+    // Single-tenant local mode defaults this env var on (applyLocalDefaults).
+    allowPrivateLanHosts: env.LOCAL_MODELS_ALLOW_LAN?.trim() === 'true',
   })
 }
 
@@ -165,6 +193,10 @@ export function buildNodeUserSecretService(
   db: DrizzleDb | undefined,
   clock: Clock,
   userSecretKindRegistry: UserSecretKindRegistry,
+  // The per-user viewer-repos cache (`AppCaches.viewerRepos`). When wired, a `github_pat`
+  // write/removal drops the user's cached PAT repo enumeration so the picker re-reads with the
+  // new token. Absent (no cache configured) ⇒ the enumeration self-heals on the TTL.
+  viewerReposCache?: GroupCacheHandle<Paged<GitHubRepo>>,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
@@ -172,9 +204,15 @@ export function buildNodeUserSecretService(
   if (!masterKeyBase64 || !db) return undefined
   return new UserSecretService({
     userSecretRepository: new DrizzleUserSecretRepository(db),
-    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
+    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: USER_SECRET_CIPHER_INFO }),
     clock,
     userSecretKindRegistry,
+    ...(viewerReposCache
+      ? {
+          onSecretChanged: (userId, kind) =>
+            kind === 'github_pat' ? viewerReposCache.invalidateGroup(userId) : undefined,
+        }
+      : {}),
   })
 }
 
@@ -228,7 +266,7 @@ export function buildNodePersonalSubscriptionService(
     subscriptionActivationRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:personal-subscriptions',
+      info: PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
     }),
     personalCipher: new WebCryptoPersonalSecretCipher(),
     idGenerator,

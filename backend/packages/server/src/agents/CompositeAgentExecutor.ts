@@ -6,11 +6,18 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
+  type Logger,
+  noopLogger,
+  runBestEffort,
+  type RunReclaimReport,
+  type RunReclaimTarget,
 } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
-  isContainerBackedCompanion,
+  runsDelegated,
+  runsInContainer,
 } from '@cat-factory/agents'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
@@ -34,79 +41,18 @@ import {
 // Runtime-neutral: both the Cloudflare Worker and the Node service wire this
 // composite (inline `AiAgentExecutor` + a container executor backed by a
 // per-run Cloudflare Container or an org's self-hosted runner pool).
-
-/**
- * Agent kinds that need a real checkout to operate on repo contents (clone,
- * edit/commit files, open a PR) and so run in a container rather than inline:
- * code implementation (`coder`), WireMock mock building (`mocker`), Playwright
- * end-to-end test authoring (`playwright`) and business-logic documentation
- * (`business-documenter`, which reads the code and commits the domain-rules docs).
- */
-const CONTAINER_KINDS = new Set([
-  'coder',
-  'mocker',
-  'playwright',
-  'business-documenter',
-  // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
-  // folder and commits it — a real-checkout operation, so it runs in a container.
-  'blueprints',
-  // The spec-writer clones (or creates) the implementation branch and commits the
-  // in-repo `spec/` folder onto it — a real-checkout operation, so it runs in a
-  // container. Like the blueprinter it returns a structured doc.
-  'spec-writer',
-  // The architect explores the repository (read-only) before proposing a design, so
-  // it needs a real checkout. Like `analysis` it makes no edits — the harness produces
-  // no commit and opens no PR — and returns its proposal as prose `output`.
-  'architect',
-  // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
-  // them and pushes back to the same branch — a real-checkout operation. (The `ci`
-  // step itself is NOT here: it is a special, non-agent gate handled in the engine
-  // that *dispatches* a `ci-fixer` job; only the fixer reaches this executor.)
-  'ci-fixer',
-  // The conflict-resolver clones the PR head branch, merges the base in and resolves
-  // the conflicts on the same branch — a real-checkout operation. (The `conflicts`
-  // gate itself is NOT here: like `ci` it is a non-agent engine gate that *dispatches*
-  // a `conflict-resolver` job; only the resolver reaches this executor.)
-  'conflict-resolver',
-  // The merger clones the PR head branch to assess the diff (complexity/risk/impact)
-  // before the engine decides whether to auto-merge — a real-checkout operation.
-  'merger',
-  // The tech-debt `analysis` agent clones the repo to inspect it and emit a report.
-  // It is read-only (makes no edits) so the coding-agent harness produces no commit
-  // and opens no PR — but it still needs a real checkout, so it runs in a container.
-  'analysis',
-  // The tester clones the PR branch, stands up infra (local docker-compose or an
-  // ephemeral env), runs the suite and returns a structured report — a real-checkout
-  // operation. (The tester step is also a special engine gate that loops a `fixer`
-  // on a withheld greenlight, mirroring `ci`/`ci-fixer`; the engine dispatches both
-  // jobs, which reach this executor.) `tester-api` is the general/API tester;
-  // `tester-ui` is its browser-driven, screenshot-capturing sibling (UI-tester image).
-  'tester-api',
-  'tester-ui',
-  // The fixer clones the PR head branch, applies fixes from the Tester's report and
-  // pushes back to the same branch — a real-checkout operation, like `ci-fixer`.
-  'fixer',
-  // The on-call agent clones the released PR head to correlate its diff with the
-  // Datadog regression evidence and returns a JSON assessment — a real-checkout
-  // operation (makes no commits). (The `post-release-health` gate itself is NOT here:
-  // like `ci` it is a non-agent engine gate that *dispatches* an `on-call` job; only
-  // the on-call agent reaches this executor.)
-  'on-call',
-  // The initiative analyst explores the repository (read-only) and returns a prose
-  // codebase analysis grounding the plan — a real checkout, no edits. (The
-  // `initiative-interviewer` is NOT here: it is an inline LLM engine gate, not a
-  // container agent.)
-  'initiative-analyst',
-  // The initiative planner explores the repository (read-only) to ground its
-  // multi-phase plan in the actual codebase, so it needs a real checkout. It makes
-  // no edits and returns the plan as structured JSON. (The `initiative-committer`
-  // step is NOT here: it is a non-LLM engine step handled entirely in the engine.)
-  'initiative-planner',
-])
+//
+// A THIRD arm routes a `delegated` kind to the deployment's own external executor (see
+// `DelegatedAgentExecutor`). It is keyed off the agent-kind registry exactly as the container arm
+// is, and it is the reason `pollJob` no longer hard-routes to the container: a poll rebuilds its
+// handle from the step alone, so the arm has to be re-derived from the SAME declaration the
+// dispatch routed on rather than assumed.
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
   /** The app-owned agent-kind registry: decides whether a registered custom kind needs a container. */
   private readonly registry: AgentKindRegistry
+  /** Normalised once, so the one best-effort site below can log unconditionally (AGENTS.md). */
+  private readonly log: Logger
 
   constructor(
     private readonly inline: AgentExecutor,
@@ -116,8 +62,35 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     // The app-owned agent-kind registry; defaults to the built-ins-only registry when a
     // facade doesn't inject the shared instance (tests / no custom kinds).
     registry: AgentKindRegistry = defaultAgentKindRegistry(),
+    // The deployment's external executors, or null when the facade wired none. Null is the
+    // ordinary state: the platform ships no delegated kind, so nothing reaches this arm unless a
+    // deployment registered one, and a kind that does with no executor wired fails loudly for the
+    // reason an unwired container kind does.
+    private readonly delegated: AgentExecutor | null = null,
+    logger?: Logger,
   ) {
     this.registry = registry
+    this.log = logger ?? noopLogger
+  }
+
+  /**
+   * The delegated executor for this kind, or undefined when the kind does not run on one.
+   *
+   * Refuses LOUDLY rather than falling through when a delegated kind's arm is unwired, for exactly
+   * the reason the container arm does: the fallback is an inline LLM call over an implementer's
+   * prompt, which produces confident prose and no branch, and the run then advances into a `ci`
+   * gate with nothing to check.
+   */
+  private delegatedFor(agentKind: string): AgentExecutor | undefined {
+    if (!runsDelegated(agentKind, this.registry)) return undefined
+    if (!this.delegated) {
+      throw new Error(
+        `Agent kind '${agentKind}' runs on an external (delegated) executor, and this ` +
+          'deployment wired none. Register the executor on the delegated-executor registry and ' +
+          'pass it to the facade entry point.',
+      )
+    }
+    return this.delegated
   }
 
   /**
@@ -126,16 +99,21 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
    * because a one-shot LLM call cannot operate on repo contents.
    */
   private pick(context: AgentRunContext): AgentExecutor {
+    // A DELEGATED kind's work happens in a system the deployment already runs. Asked FIRST,
+    // because the two predicates below both answer "no" for it and the inline arm is what it would
+    // otherwise fall through to: a one-shot LLM call, over a prompt written for an implementer,
+    // producing plausible text and no branch. Routed off the same registry declaration the engine
+    // reads, so what the pipeline builder labelled as leaving the platform is what leaves it.
+    const delegated = this.delegatedFor(context.agentKind)
+    if (delegated) return delegated
     // Built-in container kinds, plus any custom kind a deployment registered with
     // `requiresContainer: true` (e.g. a proprietary org package contributing a
-    // repo-operating agent), need a real checkout; everything else runs inline.
-    const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) ||
-      this.registry.requiresContainer(context.agentKind) ||
-      // Container-backed companions (reviewer / doc-reviewer) clone the producer's PR branch
-      // and review the real repository, so they need a checkout exactly like a coding kind.
-      isContainerBackedCompanion(context.agentKind)
-    if (!needsContainer) return this.inline
+    // repo-operating agent) and the container-backed companions, need a real checkout;
+    // everything else runs inline. The predicate lives in the agent CATALOG
+    // (`@cat-factory/agents`) rather than here because the engine asks the same question
+    // when it tells a kind's preOps what shape of context to prepare — an agent with no
+    // checkout must not be handed a manifest telling it to run `git diff`.
+    if (!runsInContainer(context.agentKind, this.registry)) return this.inline
     if (!this.container) {
       throw new Error(
         `Agent kind '${context.agentKind}' needs a real checkout (clone/edit/commit/PR) ` +
@@ -164,18 +142,29 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
+   * Preview what an inline dispatch will do with the kind's tool servers, forwarding to the
+   * executor that will handle its kind. Guarded like {@link resolveModel} and for the same reason:
+   * `pick` throws for an unwired container kind, and that error belongs to the dispatch rather
+   * than to a record the engine keeps beside it.
+   */
+  previewToolServers(context: AgentRunContext): Promise<DispatchToolServers | undefined> {
+    const executor = this.pick(context)
+    return executor.previewToolServers?.(context) ?? Promise.resolve(undefined)
+  }
+
+  /**
    * Whether the step runs on a flat-rate subscription (quota) model, forwarding to
    * the executor that handles its kind (only the container executor runs subscription
    * harnesses). Best-effort: an inline kind, an unwired container, or an executor
    * without the capability all report false (budget-metered, the prior behaviour).
    */
   isQuotaBased(context: AgentRunContext): Promise<boolean> {
+    // A DELEGATED step spends nothing of ours: no pooled token is leased and no proxy call is
+    // metered. Answered before the container check below, which would otherwise read its `false`
+    // as "budget-metered" and let the spend gate account for tokens nobody here can see.
+    if (runsDelegated(context.agentKind, this.registry)) return Promise.resolve(false)
     if (!this.container) return Promise.resolve(false)
-    const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) ||
-      this.registry.requiresContainer(context.agentKind) ||
-      isContainerBackedCompanion(context.agentKind)
-    if (!needsContainer) return Promise.resolve(false)
+    if (!runsInContainer(context.agentKind, this.registry)) return Promise.resolve(false)
     return this.container.isQuotaBased?.(context) ?? Promise.resolve(false)
   }
 
@@ -194,7 +183,19 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
   }
 
   pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    // Only the container executor runs async jobs, so polls route there.
+    // ROUTED, not assumed. A poll rebuilds its handle from the persisted step, and a delegated
+    // step's `delegated` record is what says the work is somewhere else. Read it here rather than
+    // hard-routing to the container, which would poll a container that was never started and
+    // settle the step against nothing.
+    if (handle.delegated) {
+      if (!this.delegated || !isAsyncAgentExecutor(this.delegated)) {
+        throw new Error(
+          `This run has work on the external executor '${handle.delegated.executor}' and this ` +
+            'deployment wired no delegated executor to poll it with.',
+        )
+      }
+      return this.delegated.pollJob(handle)
+    }
     if (!this.container || !isAsyncAgentExecutor(this.container)) {
       throw new Error('Container executor does not support async jobs')
     }
@@ -203,13 +204,41 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
 
   /**
    * Best-effort container reclaim. The engine narrows the composite (not the inner
-   * container executor) when stopping a run, so the composite must forward stopJob
+   * container executor) when stopping a run, so the composite must forward the reclaim
    * to the container — otherwise the Layer-2 reclaim silently no-ops and leaks a
    * warm instance. Delegates only when a container that supports it is wired.
+   *
+   * The two arms are INDEPENDENT resources, so the second must not be gated on the first
+   * succeeding. A container reclaim that throws (a DO/EKS API error, a runner-pool timeout: what
+   * "best-effort" here was written for) would otherwise propagate out before the delegated arm
+   * runs, and `applyDelegationCancellation` would then mark every live delegation "could not stop
+   * the external work" while the executor that COULD stop it was never asked. The external run
+   * carries on, opens its pull request and bills its tokens.
    */
-  async stopJob(handle: AgentJobHandle): Promise<void> {
-    if (this.container && isAsyncAgentExecutor(this.container) && this.container.stopJob) {
-      await this.container.stopJob(handle)
+  async reclaimRun(target: RunReclaimTarget): Promise<RunReclaimReport | void> {
+    if (this.container && isAsyncAgentExecutor(this.container) && this.container.reclaimRun) {
+      const reclaim = this.container.reclaimRun.bind(this.container)
+      await runBestEffort(this.log, 'composite.reclaimContainer', () => reclaim(target), {
+        runId: target.runId,
+      })
+    }
+    // BOTH arms, always, and the second one ANSWERS. A run can hold a container and external work
+    // at once (a delegated implementer followed by a container fixer), so reclaiming one is not
+    // reclaiming the run; and whether the external half actually stopped is a fact only its
+    // executor knows, which is what the report carries back to the record.
+    if (!target.delegations?.length) return
+    if (this.delegated && isAsyncAgentExecutor(this.delegated) && this.delegated.reclaimRun) {
+      return this.delegated.reclaimRun(target)
+    }
+    // Named rather than dropped: the run is being torn down with external work still running and
+    // nothing here able to stop it, which is precisely the state the record must not render as a
+    // clean teardown.
+    return {
+      delegations: target.delegations.map((handle) => ({
+        correlationKey: handle.correlationKey,
+        cancelled: false,
+        note: 'This deployment wired no delegated executor, so the external work was left running.',
+      })),
     }
   }
 }

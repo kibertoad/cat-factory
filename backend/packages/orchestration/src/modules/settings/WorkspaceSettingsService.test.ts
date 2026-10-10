@@ -140,3 +140,118 @@ describe('WorkspaceSettingsService cache (workspaceSettings slice)', () => {
     expect((await svc.get('ws_b')).waitingEscalationMinutes).toBe(20)
   })
 })
+
+// The workspace's default test-environment provisioning mechanism. The `custom` branch is the
+// only one carrying a second field, and the two rules below are what keep that pair coherent —
+// a mismatched pair would seed every NEW service frame with a type no handler can resolve.
+describe('WorkspaceSettingsService default provisioning', () => {
+  function service(stored = new Map<string, WorkspaceSettings>()) {
+    return new WorkspaceSettingsService({
+      workspaceSettingsRepository: fakeRepo(stored),
+      workspaceRepository: presentWorkspaceRepository,
+    })
+  }
+
+  it('starts unset, so a fresh board still owes a choice', async () => {
+    const current = await service().get('ws_a')
+    expect(current.defaultProvisionType).toBeNull()
+    expect(current.defaultProvisionManifestId).toBeNull()
+  })
+
+  it('records a built-in type', async () => {
+    const next = await service().update('ws_a', { defaultProvisionType: 'kubernetes' })
+    expect(next.defaultProvisionType).toBe('kubernetes')
+    expect(next.defaultProvisionManifestId).toBeNull()
+  })
+
+  it('records infraless as a real decision rather than treating it as unset', async () => {
+    const next = await service().update('ws_a', { defaultProvisionType: 'infraless' })
+    expect(next.defaultProvisionType).toBe('infraless')
+  })
+
+  it('records a custom type together with its manifest id', async () => {
+    const next = await service().update('ws_a', {
+      defaultProvisionType: 'custom',
+      defaultProvisionManifestId: 'acme-preview',
+    })
+    expect(next).toMatchObject({
+      defaultProvisionType: 'custom',
+      defaultProvisionManifestId: 'acme-preview',
+    })
+  })
+
+  it('refuses a custom default with no manifest id', async () => {
+    await expect(service().update('ws_a', { defaultProvisionType: 'custom' })).rejects.toThrow(
+      /custom manifest type/i,
+    )
+  })
+
+  it('clears a stale manifest id when switching away from custom', async () => {
+    const stored = new Map<string, WorkspaceSettings>()
+    const svc = service(stored)
+    await svc.update('ws_a', {
+      defaultProvisionType: 'custom',
+      defaultProvisionManifestId: 'acme-preview',
+    })
+
+    const next = await svc.update('ws_a', { defaultProvisionType: 'kubernetes' })
+
+    // Left in place, the id would silently reappear on switching back to `custom` — and it
+    // would be the id of whatever provider the board used to use, not the one shown now.
+    expect(next.defaultProvisionManifestId).toBeNull()
+    expect(stored.get('ws_a')?.defaultProvisionManifestId).toBeNull()
+  })
+
+  it('leaves an existing choice alone when a patch touches something else', async () => {
+    const svc = service()
+    await svc.update('ws_a', { defaultProvisionType: 'docker-compose' })
+
+    const next = await svc.update('ws_a', { waitingEscalationMinutes: 30 })
+
+    expect(next.defaultProvisionType).toBe('docker-compose')
+  })
+})
+
+// The custom metadata bag: values for the fields a deployment declares in its app (read by
+// external-tool URL resolvers, among others). The two rules below are what make a saved bag
+// mean exactly what the editor showed.
+describe('WorkspaceSettingsService custom metadata', () => {
+  function service(stored = new Map<string, WorkspaceSettings>()) {
+    return new WorkspaceSettingsService({
+      workspaceSettingsRepository: fakeRepo(stored),
+      workspaceRepository: presentWorkspaceRepository,
+    })
+  }
+
+  it('starts empty, so an unconfigured field reads as absent rather than blank', async () => {
+    expect((await service().get('ws_a')).metadata).toEqual({})
+  })
+
+  it('replaces the whole bag, so a field the editor cleared is gone', async () => {
+    const svc = service()
+    await svc.update('ws_a', { metadata: { gameId: 'zork', region: 'eu' } })
+
+    const next = await svc.update('ws_a', { metadata: { gameId: 'zork' } })
+
+    // A merge would keep `region` forever: the editor has no way to say "remove this key"
+    // other than by not submitting it.
+    expect(next.metadata).toEqual({ gameId: 'zork' })
+  })
+
+  it('drops a cleared value instead of storing an empty string', async () => {
+    const next = await service().update('ws_a', { metadata: { gameId: '  ', region: ' eu ' } })
+
+    // `gameId` absent (not ''), so a resolver reports the field as missing rather than
+    // building a tool URL with an empty game id; the kept value is trimmed.
+    expect(next.metadata).toEqual({ region: 'eu' })
+  })
+
+  it('leaves the stored bag alone when a patch touches something else', async () => {
+    const svc = service()
+    await svc.update('ws_a', { metadata: { gameId: 'zork' } })
+
+    const next = await svc.update('ws_a', { waitingEscalationMinutes: 30 })
+
+    expect(next.metadata).toEqual({ gameId: 'zork' })
+  })
+})

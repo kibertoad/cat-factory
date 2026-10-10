@@ -6,6 +6,7 @@ import type {
   SlackMemberMappingEntry,
   SlackNotificationSettings,
 } from '~/types/domain'
+import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -43,7 +44,8 @@ export const useSlackStore = defineStore('slack', () => {
    * is off — hide the UI. On success, capture the connection + whether OAuth is
    * available. Called on workspace change, like the GitHub probe.
    */
-  async function probe() {
+  async function runProbe() {
+    if (!workspace.workspaceId) return
     try {
       const { connection: conn, oauthEnabled: oauth } = await api.getSlackConnection(
         workspace.requireId(),
@@ -56,6 +58,9 @@ export const useSlackStore = defineStore('slack', () => {
       connection.value = null
     }
   }
+  // Single-flight the probe (app-startup initiative, item 12) so the SideBar's board-open fan-out
+  // (via `ensureProbed`) hits Slack once per board; `probe()` stays the on-demand refresh.
+  const { probe, ensureProbed } = useSingleFlightProbe(runProbe, () => workspace.workspaceId)
 
   /** Resolve the "Add to Slack" OAuth URL (only when oauthEnabled). */
   function installUrl(): Promise<string> {
@@ -130,6 +135,7 @@ export const useSlackStore = defineStore('slack', () => {
     saving,
     connected,
     probe,
+    ensureProbed,
     installUrl,
     connectWithToken,
     disconnect,

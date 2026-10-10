@@ -3,6 +3,7 @@ import {
   type ContainerExec,
   LocalContainerRunnerTransport,
 } from './LocalContainerRunnerTransport.js'
+import { HARNESS_PORT } from './runtimes/containerRuntime.js'
 
 // Unit coverage for the local container transport with the CLI + fetch injected, so it
 // runs anywhere (no daemon, no Postgres). With no adapter supplied it defaults to the
@@ -51,7 +52,7 @@ function mkTransport(opts: MkOpts): LocalContainerRunnerTransport {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('LocalContainerRunnerTransport', () => {
+describe('LocalContainerRunnerTransport — dispatch', () => {
   it('starts a labelled container, waits for health, then POSTs the job to /jobs', async () => {
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
@@ -72,7 +73,7 @@ describe('LocalContainerRunnerTransport', () => {
     const runCall = calls.find((c) => c[0] === 'run')!
     expect(runCall).toContain('--label')
     expect(runCall).toContain('cat-factory.runId=job-1')
-    expect(runCall.join(' ')).toContain('-p 127.0.0.1:0:8080')
+    expect(runCall.join(' ')).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
     expect(runCall.join(' ')).toContain('HARNESS_SHARED_SECRET=sek')
     expect(runCall).toContain('harness:test')
 
@@ -238,6 +239,32 @@ describe('LocalContainerRunnerTransport', () => {
     expect(view.state).toBe('done')
     expect(view.result?.prUrl).toBe('https://x/pr/1')
   })
+})
+
+describe('LocalContainerRunnerTransport — poll, eviction and release', () => {
+  it('forwards the harness liveness heartbeat verbatim on a running poll', async () => {
+    // Runtime symmetry with the Cloudflare container transport: local casts the harness JobView
+    // verbatim, so the harness `heartbeatAt` must ride through to `RunnerJobView.heartbeatAt` (which
+    // the executor lifts onto `lastActivityAt`) — otherwise a live-but-quiet local run looks wedged.
+    const { exec } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) {
+        return jsonResponse({ state: 'running', heartbeatAt: 1_700_000_123_456 }, 200)
+      }
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-hb', jobId: 'job-hb' }, {}, 'agent')
+    const view = await transport.poll({ runId: 'job-hb', jobId: 'job-hb' })
+    expect(view.state).toBe('running')
+    expect(view.heartbeatAt).toBe(1_700_000_123_456)
+  })
 
   it('reports an eviction when no container exists for the job', async () => {
     // ps returns nothing → the job has no container.
@@ -273,6 +300,151 @@ describe('LocalContainerRunnerTransport', () => {
     expect(view.state).toBe('failed')
     expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
+  })
+
+  it('carries the dead container exit state + logs as the eviction detail', async () => {
+    // The container is reclaimed the moment the run settles, so this poll is the last chance to
+    // read WHY the harness process went away. Without it an eviction is a dead end: the run
+    // records "container evicted or crashed" and the evidence is deleted seconds later.
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'run') return Promise.resolve({ stdout: 'container-pm\n', stderr: '' })
+      if (args[0] === 'port') return Promise.resolve({ stdout: '127.0.0.1:49170\n', stderr: '' })
+      if (args[0] === 'inspect') {
+        // `isRunning` reads `{{.State.Running}}`; `exitState` reads running+code+OOM.
+        return Promise.resolve({
+          stdout: args.includes('{{.State.Running}}') ? 'false\n' : 'false 137 true\n',
+          stderr: '',
+        })
+      }
+      if (args[0] === 'logs') return Promise.resolve({ stdout: 'agent: out of memory', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-pm', jobId: 'job-pm' }, {}, 'agent')
+    const view = await transport.poll({ runId: 'job-pm', jobId: 'job-pm' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
+    // The eviction classification is unchanged (it drives the fresh-container recovery); the
+    // post-mortem rides `detail`, which the engine records as the failure detail.
+    expect(view.error).toMatch(/container evicted or crashed/)
+    expect(view.detail).toMatch(/exit code 137/)
+    expect(view.detail).toMatch(/OOM-killed/)
+    expect(view.detail).toMatch(/agent: out of memory/)
+  })
+
+  it('reports a container that exited 0 mid-job as a shutdown, not an eviction', async () => {
+    // The incident this exists for: an agent smoke-testing the service it had just built ran a
+    // pattern kill for `node dist/server.js` and matched the harness's own PID 1. The container
+    // exited 0, which the engine could only read as "it vanished", so it spent its eviction
+    // budget re-running an agent that killed its container every time. A clean exit with a job
+    // still in flight means something STOPPED the harness, and that survives a fresh container.
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'run') return Promise.resolve({ stdout: 'container-sd\n', stderr: '' })
+      if (args[0] === 'port') return Promise.resolve({ stdout: '127.0.0.1:49171\n', stderr: '' })
+      if (args[0] === 'inspect') {
+        return Promise.resolve({
+          stdout: args.includes('{{.State.Running}}') ? 'false\n' : 'false 0 false\n',
+          stderr: '',
+        })
+      }
+      if (args[0] === 'logs') {
+        return Promise.resolve({ stdout: '{"signal":"SIGTERM","msg":"shutting down"}', stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-sd', jobId: 'job-sd' }, {}, 'agent')
+    const view = await transport.poll({ runId: 'job-sd', jobId: 'job-sd' })
+    expect(view.state).toBe('failed')
+    expect(view.harnessShutdown).toBe(true)
+    // No eviction verdict at all: that field is what funds the fresh-container recovery, and the
+    // wording must not carry the sentinel the dispatch-time check matches either.
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+    // The post-mortem still rides along: it is what names WHO shut it down.
+    expect(view.detail).toMatch(/shutting down/)
+  })
+
+  it('recreates the container when a stale one makes `docker port` exit non-zero', async () => {
+    // The real regression: `docker port` FAILS (exit 1, "no public port … published") for an
+    // exited container, and `find()` returns exited containers by design. That throw used to
+    // escape `resolve()`, skipping the remove-and-recreate below and surfacing the CLI's
+    // message as the run's cause of death.
+    let staleLookupDone = false
+    const calls: string[][] = []
+    const exec: ContainerExec = (args) => {
+      calls.push(args)
+      const sub = args[0]
+      if (sub === 'run') return Promise.resolve({ stdout: 'fresh-container\n', stderr: '' })
+      if (sub === 'ps') return Promise.resolve({ stdout: 'stale-container\n', stderr: '' })
+      if (sub === 'port') {
+        if (!staleLookupDone) {
+          staleLookupDone = true
+          return Promise.reject(
+            new Error("no public port '8080/tcp' published for stale-container"),
+          )
+        }
+        return Promise.resolve({ stdout: '127.0.0.1:49180\n', stderr: '' })
+      }
+      // The stale container is gone; `endpoint` consults liveness to tell a dead container
+      // (not ready) apart from a daemon fault against a live one (a real error).
+      if (sub === 'inspect') return Promise.resolve({ stdout: 'false\n', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-dead', jobId: 'job-dead' }, {}, 'agent')
+    expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
+    expect(calls.some((c) => c[0] === 'run')).toBe(true)
+  })
+
+  it('still reports a port lookup that fails against a RUNNING container', async () => {
+    // The other half of the contract: only a DEAD container maps to "not ready". A fault
+    // against a live one is a genuine problem, and swallowing it would replace the real cause
+    // with a bare start timeout.
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'run') return Promise.resolve({ stdout: 'live-container\n', stderr: '' })
+      if (args[0] === 'port') return Promise.reject(new Error('docker daemon connection reset'))
+      if (args[0] === 'inspect') return Promise.resolve({ stdout: 'true\n', stderr: '' })
+      if (args[0] === 'logs') return Promise.resolve({ stdout: 'still booting', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      readyTimeoutMs: 20,
+      fetchImpl: vi.fn(async () => new Response('ok', { status: 200 })) as unknown as typeof fetch,
+    })
+    await expect(transport.dispatch({ runId: 'live', jobId: 'live' }, {}, 'agent')).rejects.toThrow(
+      /did not expose its endpoint before the start timeout[\s\S]*connection reset/,
+    )
   })
 
   it('release force-removes the job container and is a no-op when absent', async () => {
@@ -368,7 +540,9 @@ describe('LocalContainerRunnerTransport', () => {
     expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
     expect(calls.some((c) => c[0] === 'run')).toBe(true)
   })
+})
 
+describe('LocalContainerRunnerTransport — reaping and start-up failures', () => {
   it('reapExited force-removes exited managed containers and returns the count', async () => {
     const calls: string[][] = []
     const exec: ContainerExec = (args) => {
@@ -493,5 +667,358 @@ describe('LocalContainerRunnerTransport', () => {
     const runCall = calls.find((c) => c[0] === 'run')!.join(' ')
     expect(runCall).toContain('HARNESS_WORKSPACE_ROOT=/ws')
     expect(runCall).toContain('HARNESS_CLEAN_KEEP=node_modules,.venv')
+  })
+})
+
+describe('LocalContainerRunnerTransport — image variants', () => {
+  /** A docker fake plus a fetch that answers health + /jobs, the shape every dispatch needs. */
+  function dispatchable() {
+    const { exec, calls } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.endsWith('/jobs')) return jsonResponse({ jobId: 'job-1', state: 'running' }, 202)
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    return { exec, calls, fetchImpl: fetchImpl as unknown as typeof fetch }
+  }
+
+  it('runs a ui job on the UI image, in its own container beside the run’s ordinary one', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'coder' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+
+    // TWO containers for one run: a per-run container cannot change image mid-run, so the
+    // browser step gets its own, addressed by the variant-qualified key.
+    const runs = calls.filter((c) => c[0] === 'run')
+    expect(runs).toHaveLength(2)
+    expect(runs[0]).toContain('harness:test')
+    expect(runs[0]).toContain('cat-factory.runId=run-1')
+    expect(runs[1]).toContain('harness-ui:test')
+    expect(runs[1]).toContain('cat-factory.runId=ui:run-1')
+  })
+
+  it('re-attaches a second ui step to the SAME ui container rather than starting another', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester-retry', image: 'ui' }, {}, 'agent')
+
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+
+  // The whole point of the variant. Serving this job the default image gives the browser-driven
+  // tester no browser, and it finds out only after the checkout, the install and the model's
+  // first turns, then reports an `abort` that reads like an app which would not start.
+  it('refuses a ui job when no UI image is configured, starting nothing', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({ image: 'harness:test', exec, fetchImpl })
+
+    await expect(
+      transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent'),
+    ).rejects.toThrow(/LOCAL_HARNESS_IMAGE_UI/)
+
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+    // Nor did it clear the way for one: a refusal must not remove a container either.
+    expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(0)
+  })
+
+  it("runs a DEPLOYMENT's own variant on the image its map names", async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageVariants: { 'pixel-tools': 'ghcr.io/acme/pixel:2' },
+      exec,
+      fetchImpl,
+    })
+
+    await transport.dispatch(
+      { runId: 'run-1', jobId: 'snapper', image: 'pixel-tools' },
+      {},
+      'agent',
+    )
+
+    const runs = calls.filter((c) => c[0] === 'run')
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toContain('ghcr.io/acme/pixel:2')
+    // Its own container for the run, keyed by the variant exactly as `ui` is: the routing is the
+    // platform's, and only the image behind the name is the deployment's.
+    expect(runs[0]).toContain('cat-factory.runId=pixel-tools:run-1')
+  })
+
+  it('refuses an unmapped deployment variant, naming the variable and starting nothing', async () => {
+    // The refusal matters MORE here than for `ui`: the platform knows what its own UI image is
+    // for and could describe what a run loses, and it knows nothing about what `pixel-tools`
+    // carried, so a fallback would produce a job silently missing it.
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({ image: 'harness:test', exec, fetchImpl })
+
+    await expect(
+      transport.dispatch({ runId: 'run-1', jobId: 'snapper', image: 'pixel-tools' }, {}, 'agent'),
+    ).rejects.toThrow(/LOCAL_HARNESS_IMAGE_VARIANTS/)
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+  })
+
+  it('refuses a deploy job on the agent path, naming the registration rather than running it', async () => {
+    // The agent runner path does not serve `deploy` — those go through the provisioning
+    // adapter's own transport — so a `deploy` ref arriving here is a mistake in a kind's
+    // registration. Falling through to the default image would start an AGENT-image container
+    // with no `kubectl` in it and no diagnosis at all, which is the opposite of what the
+    // Worker's `agentContainerNamespace` answers for the same input.
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+
+    await expect(
+      transport.dispatch({ runId: 'run-1', jobId: 'deployer', image: 'deploy' }, {}, 'agent'),
+    ).rejects.toThrow(/agent runner path does not serve/)
+
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+  })
+
+  it('evicts the CACHE ENTRY of the container it destroyed when a ui job stop escalates', async () => {
+    // `stopJob`'s fallback destroys the container it resolved, and for a `ui` ref that is NOT
+    // keyed by the run id. Deleting the run's entry instead left the ui entry pointing at a
+    // removed container — which `resolve()` hands straight back, since it never probes liveness
+    // — and evicted the ordinary container's handle for nothing.
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+    await transport.dispatch({ runId: 'run-1', jobId: 'coder' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+
+    // The graceful abort fails (the fake answers no DELETE), so the stop escalates to destroying
+    // the container — and still reports the stop it made true.
+    expect(await transport.stopJob({ runId: 'run-1', jobId: 'tester', image: 'ui' })).toBe(
+      'stopped',
+    )
+
+    // The ordinary container's handle survives: a later step re-attaches with no `docker run`.
+    calls.length = 0
+    await transport.dispatch({ runId: 'run-1', jobId: 'reviewer' }, {}, 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+
+    // The destroyed ui container's handle is gone: the next ui step starts a fresh one rather
+    // than fetching a container that no longer exists.
+    calls.length = 0
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester-2', image: 'ui' }, {}, 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+
+  it('releases the ui container for the ui ref and the ordinary one for the plain ref', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+    await transport.dispatch({ runId: 'run-1', jobId: 'coder' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+    calls.length = 0
+
+    await transport.release({ runId: 'run-1', jobId: 'tester', image: 'ui' })
+
+    // A release is per CONTAINER, and a run whose browser step finished still has agent steps to
+    // run. Asserted by what each ref does next rather than by the `rm` count: the fake hands
+    // back one container id, so counting removals cannot tell the two apart. The ordinary ref
+    // re-attaches (no new container); the released ui ref has to start one.
+    calls.length = 0
+    await transport.dispatch({ runId: 'run-1', jobId: 'reviewer' }, {}, 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester-2', image: 'ui' }, {}, 'agent')
+    const restarted = calls.filter((c) => c[0] === 'run')
+    expect(restarted).toHaveLength(1)
+    expect(restarted[0]).toContain('harness-ui:test')
+  })
+})
+
+describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () => {
+  // A containerized tester reading a loopback environment URL resolves it to its OWN empty network
+  // namespace, so the request never leaves the container. Measured, not assumed: curl in a plain
+  // container returns code 000 against `cf-acc-pr8.127.0.0.1.nip.io`, and 404 from the ingress
+  // controller with `--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway`. The run that motivated
+  // this spent fourteen minutes on the former and reported the environment as dead.
+  const ENV_URL = 'http://cf-acc-pr8.127.0.0.1.nip.io'
+  const BRIDGE = '--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway'
+  const PEER_URL = 'http://email-pr8.127.0.0.1.nip.io'
+  const PEER_BRIDGE = '--add-host=email-pr8.127.0.0.1.nip.io:host-gateway'
+
+  // The environments ride the DISPATCH OPTIONS, never the job body. The body is an untyped bag
+  // whose URLs sit three levels down under a wire shape the harness owns, and the first cut of
+  // this feature read `spec.environmentUrl` — a path the engine has never emitted (it emits
+  // `body.infra.environmentUrl`), so the bridge could not fire in production while tests that
+  // hand-wrote the spec passed. `containerAgentJobBody.spec.ts` pins the engine's half.
+  const withEnvs = (...urls: string[]) => ({ environments: urls.map((url) => ({ url })) })
+
+  function harnessFetch() {
+    return vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.endsWith('/jobs')) return jsonResponse({ jobId: 'j', state: 'running' }, 202)
+      throw new Error(`unexpected fetch ${url}`)
+    })
+  }
+
+  const runArgs = (calls: string[][]) => calls.filter((args) => args[0] === 'run')
+
+  const mk = () => {
+    const { exec, calls } = fakeDocker()
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: harnessFetch() as unknown as typeof fetch,
+    })
+    return { transport, calls }
+  }
+
+  it('adds the bridge for a loopback environment URL', async () => {
+    const { transport, calls } = mk()
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, {}, 'agent', withEnvs(ENV_URL))
+    expect(runArgs(calls)[0]).toContain(BRIDGE)
+  })
+
+  it('bridges a live PEER environment as well as the job own one', async () => {
+    // A cross-service integration test reaches the peer over the same unreachable name and fails
+    // the same way. Bridging only the run's own environment left that case broken while the
+    // feature looked complete.
+    const { transport, calls } = mk()
+    await transport.dispatch({ runId: 'r6', jobId: 'j1' }, {}, 'agent', withEnvs(ENV_URL, PEER_URL))
+    expect(runArgs(calls)[0]).toContain(BRIDGE)
+    expect(runArgs(calls)[0]).toContain(PEER_BRIDGE)
+  })
+
+  it('adds NO bridge for a remote environment URL', async () => {
+    // The harmful direction, pinned: re-pointing a real host at the host gateway would break an
+    // environment the container could already reach.
+    const { transport, calls } = mk()
+    await transport.dispatch(
+      { runId: 'r2', jobId: 'j1' },
+      {},
+      'agent',
+      withEnvs('https://pr8.staging.example.com'),
+    )
+    expect(runArgs(calls)[0]?.some((arg) => arg.startsWith('--add-host=pr8.staging'))).toBe(false)
+  })
+
+  it('adds NO bridge for a localhost environment URL, which no hosts entry can re-point', async () => {
+    // A compose environment publishes `http://localhost:<port>`, so this is the ordinary case
+    // rather than a corner. The container will not honour an appended `localhost` entry, and the
+    // frontend flow serves WireMock and the built app on localhost INSIDE the container, so a
+    // bridge that DID take would break what the job is there to drive.
+    const { transport, calls } = mk()
+    await transport.dispatch(
+      { runId: 'r7', jobId: 'j1' },
+      {},
+      'agent',
+      withEnvs('http://localhost:32768'),
+    )
+    // Asserted against `localhost` rather than any `--add-host`: the runtime already adds its own
+    // host-gateway alias, which is the very entry a job reaches the host through.
+    expect(runArgs(calls)[0]?.some((arg) => arg.startsWith('--add-host=localhost'))).toBe(false)
+  })
+
+  it('REPLACES a run container that predates the environment, so the tester can reach it', async () => {
+    // The ordering this exists for, and it is not an edge case: `dispatchPerRun` starts ONE
+    // container for the whole run at its first step, and the environment does not exist until the
+    // `deployer` step. So the container every tester re-attaches to was necessarily built before
+    // there was a host to bridge, and /etc/hosts is fixed at create time. Without the replacement
+    // the bridge would be computed correctly and never applied to the container that needs it.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r3', jobId: 'j1' }
+    // Step one: no environment yet, so no bridge.
+    await transport.dispatch(ref, {}, 'agent')
+    expect(runArgs(calls)).toHaveLength(1)
+    expect(runArgs(calls)[0]).not.toContain(BRIDGE)
+
+    // The tester step, now carrying the provisioned URL.
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(ENV_URL))
+    const runs = runArgs(calls)
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).toContain(BRIDGE)
+    // Removing whatever the old key still points at is `dispatchPerRun`'s pre-existing recreate
+    // path (the same one that clears a dead container), so it is not re-asserted here: the scripted
+    // CLI reports no container for the label, which is what a lookup would find rather than
+    // anything this test established.
+  })
+
+  it('does NOT replace the container again once it carries the bridge', async () => {
+    // Re-polls and later steps on the same URL must re-attach. A replacement per dispatch would
+    // re-clone the checkout on every step, which is a worse bug than the one being fixed.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r4', jobId: 'j1' }
+    await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL))
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(ENV_URL))
+    expect(runArgs(calls)).toHaveLength(1)
+  })
+
+  it('does NOT replace the container when the same bridges arrive in another order', async () => {
+    // The engine lists a run's peers in whatever order it resolved them, and a set that reordered
+    // between two steps would read as a different set and cost the run a re-clone for nothing.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r8', jobId: 'j1' }
+    await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL, PEER_URL))
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(PEER_URL, ENV_URL))
+    expect(runArgs(calls)).toHaveLength(1)
+  })
+
+  it('maps a remote name onto the address PROVED to carry for it', async () => {
+    // The Kargo shape: the per-environment DNS record lives in an internal view, so the name
+    // resolves nowhere while the balancer fronting it routes on the Host header perfectly well.
+    // The hosts entry keeps the name, which is what makes the ingress routing keep working.
+    const { transport, calls } = mk()
+    await transport.dispatch({ runId: 'r9', jobId: 'j1' }, {}, 'agent', {
+      environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' }],
+    })
+    expect(runArgs(calls)[0]).toContain('--add-host=pr-14.test.example.cloud:10.4.19.22')
+  })
+
+  it('REPLACES a container whose bridge points at a stale address', async () => {
+    // Same host, different target, which is a different container: the entry is fixed at create
+    // time, so a run whose environment moved balancers would otherwise stay wedged against an
+    // address nothing answers on, with nothing left to notice it.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r10', jobId: 'j1' }
+    await transport.dispatch(ref, {}, 'agent', {
+      environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' }],
+    })
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', {
+      environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.23' }],
+    })
+    const runs = runArgs(calls)
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).toContain('--add-host=pr-14.test.example.cloud:10.4.19.23')
+  })
+
+  it('leaves a bridged container alone for a later step that needs no bridge', async () => {
+    // A superset is fine: the entry is inert for a job that never resolves that name, so there is
+    // nothing to gain by tearing the container down to remove it.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r5', jobId: 'j1' }
+    await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL))
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent')
+    expect(runArgs(calls)).toHaveLength(1)
   })
 })

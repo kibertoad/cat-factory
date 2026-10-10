@@ -1,11 +1,14 @@
 import type {
   DocKind,
   DocumentLinkRole,
+  DocumentOrigin,
   DocumentRecord,
+  DocumentRef,
+  DocumentRenderStatus,
   DocumentRepository,
-  DocumentSourceKind,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
+import { chunkForIn } from './chunk'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface DocumentRow {
@@ -17,6 +20,8 @@ interface DocumentRow {
   excerpt: string
   body: string
   content_hash: string | null
+  source_version: string | null
+  render_status: string | null
   linked_block_id: string | null
   role: string | null
   doc_kind: string | null
@@ -24,16 +29,33 @@ interface DocumentRow {
   deleted_at: number | null
 }
 
+/**
+ * Group a ref list by origin so each origin becomes ONE chunked `IN` read/write rather than a
+ * statement per ref. A task attaches documents from at most a handful of origins, so this is a
+ * small, bounded number of statements. Mirrors `D1TaskRepository.listByRefs`.
+ */
+function groupRefsByOrigin(refs: readonly DocumentRef[]): Map<DocumentOrigin, string[]> {
+  const byOrigin = new Map<DocumentOrigin, string[]>()
+  for (const ref of refs) {
+    const ids = byOrigin.get(ref.source)
+    if (ids) ids.push(ref.externalId)
+    else byOrigin.set(ref.source, [ref.externalId])
+  }
+  return byOrigin
+}
+
 function rowToRecord(row: DocumentRow): DocumentRecord {
   return {
     workspaceId: row.workspace_id,
-    source: row.source as DocumentSourceKind,
+    source: row.source as DocumentOrigin,
     externalId: row.external_id,
     title: row.title,
     url: row.url,
     excerpt: row.excerpt,
     body: row.body,
     contentHash: row.content_hash ?? '',
+    sourceVersion: row.source_version,
+    renderStatus: (row.render_status as DocumentRenderStatus | null) ?? null,
     linkedBlockId: row.linked_block_id,
     role: (row.role as DocumentLinkRole | null) ?? null,
     docKind: (row.doc_kind as DocKind | null) ?? null,
@@ -55,14 +77,16 @@ export class D1DocumentRepository implements DocumentRepository {
       .prepare(
         `INSERT INTO documents
           (workspace_id, source, external_id, title, url, excerpt, body,
-           content_hash, linked_block_id, synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           content_hash, source_version, render_status, linked_block_id, synced_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
          ON CONFLICT (workspace_id, source, external_id) DO UPDATE SET
            title = excluded.title,
            url = excluded.url,
            excerpt = excluded.excerpt,
            body = excluded.body,
            content_hash = excluded.content_hash,
+           source_version = excluded.source_version,
+           render_status = excluded.render_status,
            linked_block_id = excluded.linked_block_id,
            synced_at = excluded.synced_at,
            deleted_at = NULL`,
@@ -76,6 +100,8 @@ export class D1DocumentRepository implements DocumentRepository {
         record.excerpt,
         record.body,
         record.contentHash,
+        record.sourceVersion,
+        record.renderStatus,
         record.linkedBlockId,
         record.syncedAt,
       )
@@ -84,7 +110,7 @@ export class D1DocumentRepository implements DocumentRepository {
 
   async get(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
   ): Promise<DocumentRecord | null> {
     const row = await this.db
@@ -94,6 +120,26 @@ export class D1DocumentRepository implements DocumentRepository {
       .bind(workspaceId, source, externalId)
       .first<DocumentRow>()
     return row ? rowToRecord(row) : null
+  }
+
+  async listByRefs(workspaceId: string, refs: readonly DocumentRef[]): Promise<DocumentRecord[]> {
+    if (refs.length === 0) return []
+    const out: DocumentRecord[] = []
+    for (const [source, externalIds] of groupRefsByOrigin(refs)) {
+      // Chunk the IN list to stay under D1's bound-parameter limit (the two leading params
+      // — workspace_id + source — are within chunkForIn's headroom).
+      for (const chunk of chunkForIn(externalIds)) {
+        const placeholders = chunk.map(() => '?').join(', ')
+        const { results } = await this.db
+          .prepare(
+            `SELECT * FROM documents WHERE workspace_id = ? AND source = ? AND external_id IN (${placeholders}) AND deleted_at IS NULL`,
+          )
+          .bind(workspaceId, source, ...chunk)
+          .all<DocumentRow>()
+        for (const row of results ?? []) out.push(rowToRecord(row))
+      }
+    }
+    return out
   }
 
   async listByWorkspace(workspaceId: string): Promise<DocumentRecord[]> {
@@ -117,7 +163,11 @@ export class D1DocumentRepository implements DocumentRepository {
   }
 
   async getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null> {
-    const [a, b] = urlMatchCandidates(url)
+    // A needle that normalises to nothing is not a URL, and must never be matched (see
+    // `urlMatchCandidates`).
+    const candidates = urlMatchCandidates(url)
+    if (!candidates) return null
+    const [a, b] = candidates
     const row = await this.db
       .prepare(
         'SELECT * FROM documents WHERE workspace_id = ? AND url IN (?, ?) AND deleted_at IS NULL ORDER BY synced_at DESC LIMIT 1',
@@ -129,7 +179,7 @@ export class D1DocumentRepository implements DocumentRepository {
 
   async linkBlock(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
     blockId: string | null,
   ): Promise<void> {
@@ -139,6 +189,46 @@ export class D1DocumentRepository implements DocumentRepository {
       )
       .bind(blockId, workspaceId, source, externalId)
       .run()
+  }
+
+  async detachBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    for (const chunk of chunkForIn([...blockIds])) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `UPDATE documents SET linked_block_id = NULL WHERE workspace_id = ? AND linked_block_id IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .run()
+    }
+  }
+
+  async linkBlockMany(
+    workspaceId: string,
+    refs: readonly DocumentRef[],
+    blockId: string | null,
+  ): Promise<void> {
+    if (refs.length === 0) return
+    // One statement per origin-chunk, submitted as a D1 BATCH: a task's documents attach
+    // together or not at all, so a failure part-way cannot leave the block holding a subset of
+    // the corpus it was created with (the exact half-attached state the public-API creation
+    // refuses to return). `db.batch` is D1's transaction — it is the Postgres `transaction`
+    // block's counterpart in the Drizzle mirror.
+    const statements = []
+    for (const [source, externalIds] of groupRefsByOrigin(refs)) {
+      for (const chunk of chunkForIn(externalIds)) {
+        const placeholders = chunk.map(() => '?').join(', ')
+        statements.push(
+          this.db
+            .prepare(
+              `UPDATE documents SET linked_block_id = ? WHERE workspace_id = ? AND source = ? AND external_id IN (${placeholders})`,
+            )
+            .bind(blockId, workspaceId, source, ...chunk),
+        )
+      }
+    }
+    await this.db.batch(statements)
   }
 
   async getRoleLink(
@@ -181,7 +271,7 @@ export class D1DocumentRepository implements DocumentRepository {
 
   async setRole(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
     role: DocumentLinkRole,
     docKind: DocKind,
@@ -194,11 +284,7 @@ export class D1DocumentRepository implements DocumentRepository {
       .run()
   }
 
-  async clearRole(
-    workspaceId: string,
-    source: DocumentSourceKind,
-    externalId: string,
-  ): Promise<void> {
+  async clearRole(workspaceId: string, source: DocumentOrigin, externalId: string): Promise<void> {
     await this.db
       .prepare(
         'UPDATE documents SET role = NULL, doc_kind = NULL WHERE workspace_id = ? AND source = ? AND external_id = ?',

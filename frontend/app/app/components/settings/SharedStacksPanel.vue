@@ -6,6 +6,7 @@
 // they succeed only on the local facade (elsewhere the backend returns a clear error surfaced as
 // a toast). Renders inline inside the Infrastructure window's "Shared stacks" tab.
 import { computed, reactive, ref } from 'vue'
+import { describeComposeSource, normalizeComposeFileRefs } from '@cat-factory/contracts'
 import type {
   SharedStack,
   SharedStackRecommendation,
@@ -15,6 +16,7 @@ import type {
 const { t } = useI18n()
 const store = useSharedStacksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const stacks = computed(() => store.stacks)
@@ -76,8 +78,26 @@ function tokens(value: string): string[] {
     .filter(Boolean)
 }
 
+// A stack's compose layers may be bare in-repo paths (what this form authors and what the
+// autodetect scan returns) or explicit sources — an inline document, or a file in another repo —
+// which arrive through the API / a deployment's programmatic seeds. The form edits only the
+// former; a stack carrying any of the latter shows its layers read-only and its save omits
+// `composeFiles` entirely, so editing the name or the profiles can never silently flatten a
+// declaration this form has no editor for.
+const editingStack = computed(() => stacks.value.find((s) => s.id === editingId.value) ?? null)
+const advancedLayers = computed(() =>
+  (editingStack.value?.composeFiles ?? []).some((ref) => typeof ref !== 'string'),
+)
+const layerLabels = computed(() =>
+  normalizeComposeFileRefs(editingStack.value?.composeFiles ?? []).map(describeComposeSource),
+)
+
+// A repo-LESS stack (every layer inline / from another repo) needs no clone URL, so the form
+// requires one only while the layers it can author — in-repo paths — are what is being saved.
 const canSave = computed(
-  () => form.name.trim() && form.cloneUrl.trim() && tokens(form.composeFiles).length > 0,
+  () =>
+    form.name.trim() &&
+    (advancedLayers.value || (form.cloneUrl.trim() && tokens(form.composeFiles).length > 0)),
 )
 
 function resetForm() {
@@ -97,10 +117,12 @@ function resetForm() {
 function startEdit(stack: SharedStack) {
   editingId.value = stack.id
   form.name = stack.name
-  form.cloneUrl = stack.cloneUrl
+  form.cloneUrl = stack.cloneUrl ?? ''
   form.gitRef = stack.gitRef ?? ''
   form.directory = ''
-  form.composeFiles = stack.composeFiles.join(', ')
+  // Only bare in-repo paths are editable here; a stack with richer layers renders them read-only
+  // below and keeps them untouched through the save.
+  form.composeFiles = stack.composeFiles.filter((ref) => typeof ref === 'string').join(', ')
   form.composeProfiles = stack.composeProfiles.join(', ')
   form.managedNetworks = stack.managedNetworks.join(', ')
   form.allowHostCommands = stack.allowHostCommands
@@ -148,19 +170,10 @@ async function autodetect() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.sharedStacks.detect.failed'), e)
+    present(e, 'settings.sharedStacks.detect.failed')
   } finally {
     detecting.value = false
   }
-}
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 
 /** Create a new stack, or save edits to the one being edited (same form, mode toggled by `editingId`). */
@@ -179,7 +192,17 @@ async function saveStack() {
   }
   try {
     if (editing) {
-      await store.update(editing, { ...payload, gitRef: form.gitRef.trim() || null })
+      // `composeFiles` is omitted when the stack carries layers this form can't author — the
+      // partial update preserves them, exactly as it already does for setup steps and the health
+      // gate. `cloneUrl` goes through as an explicit null when cleared, so a stack can be moved to
+      // the repo-less shape from here too.
+      const { composeFiles, ...rest } = payload
+      await store.update(editing, {
+        ...rest,
+        cloneUrl: form.cloneUrl.trim() || null,
+        gitRef: form.gitRef.trim() || null,
+        ...(advancedLayers.value ? {} : { composeFiles }),
+      })
     } else {
       await store.create(payload)
     }
@@ -192,13 +215,11 @@ async function saveStack() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(
-      t(
-        editing
-          ? 'settings.sharedStacks.toast.updateFailed'
-          : 'settings.sharedStacks.toast.createFailed',
-      ),
+    present(
       e,
+      editing
+        ? 'settings.sharedStacks.toast.updateFailed'
+        : 'settings.sharedStacks.toast.createFailed',
     )
   } finally {
     saving.value = false
@@ -212,10 +233,10 @@ async function start(stack: SharedStack) {
     // surface that as an error toast too — not only a thrown transport/unavailable error.
     const updated = await store.ensureUp(stack.id)
     if (updated.status === 'failed') {
-      notifyError(t('settings.sharedStacks.toast.startFailed'), updated.lastError ?? '')
+      present(updated.lastError ?? '', 'settings.sharedStacks.toast.startFailed')
     }
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.startFailed'), e)
+    present(e, 'settings.sharedStacks.toast.startFailed')
   } finally {
     busyId.value = null
   }
@@ -226,7 +247,7 @@ async function stop(stack: SharedStack) {
   try {
     await store.teardown(stack.id)
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.stopFailed'), e)
+    present(e, 'settings.sharedStacks.toast.stopFailed')
   } finally {
     busyId.value = null
   }
@@ -240,7 +261,7 @@ async function remove(stack: SharedStack) {
     await store.remove(stack.id)
     toastDone('remove', noun)
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.removeFailed'), e)
+    present(e, 'settings.sharedStacks.toast.removeFailed')
   } finally {
     busyId.value = null
   }
@@ -249,14 +270,14 @@ async function remove(stack: SharedStack) {
 
 <template>
   <div class="space-y-4" data-testid="shared-stacks-panel">
-    <p class="text-sm text-slate-400">{{ t('settings.sharedStacks.intro') }}</p>
+    <p class="text-sm text-muted">{{ t('settings.sharedStacks.intro') }}</p>
 
-    <section v-if="stacks.length" class="space-y-2 rounded-lg border border-slate-700 p-3">
+    <section v-if="stacks.length" class="space-y-2 rounded-lg border border-muted p-3">
       <h3 class="text-sm font-semibold">{{ t('settings.sharedStacks.list.heading') }}</h3>
       <div
         v-for="stack in stacks"
         :key="stack.id"
-        class="space-y-2 rounded-md border border-slate-800 px-3 py-2"
+        class="space-y-2 rounded-md border border-default px-3 py-2"
         :data-testid="`shared-stack-${stack.id}`"
       >
         <div class="flex items-center justify-between gap-2">
@@ -267,7 +288,7 @@ async function remove(stack: SharedStack) {
                 {{ statusLabel(stack.status) }}
               </UBadge>
             </div>
-            <p class="truncate text-[11px] text-slate-500">{{ stack.cloneUrl }}</p>
+            <p class="truncate text-2xs text-dimmed">{{ stack.cloneUrl }}</p>
             <div v-if="stack.managedNetworks.length" class="flex flex-wrap gap-1">
               <UBadge
                 v-for="net in stack.managedNetworks"
@@ -326,14 +347,11 @@ async function remove(stack: SharedStack) {
             />
           </div>
         </div>
-        <p v-if="stack.lastError" class="text-[11px] text-rose-400">{{ stack.lastError }}</p>
+        <p v-if="stack.lastError" class="text-2xs text-app-error-400">{{ stack.lastError }}</p>
       </div>
     </section>
 
-    <section
-      class="space-y-3 rounded-lg border border-slate-700 p-3"
-      data-testid="shared-stack-form"
-    >
+    <section class="space-y-3 rounded-lg border border-muted p-3" data-testid="shared-stack-form">
       <h3 class="text-sm font-semibold">
         {{
           t(editingId ? 'settings.sharedStacks.edit.heading' : 'settings.sharedStacks.add.heading')
@@ -389,12 +407,12 @@ async function remove(stack: SharedStack) {
         >
           {{ t('settings.sharedStacks.detect.button') }}
         </UButton>
-        <span class="text-[11px] text-slate-500">{{ t('settings.sharedStacks.detect.hint') }}</span>
+        <span class="text-2xs text-dimmed">{{ t('settings.sharedStacks.detect.hint') }}</span>
       </div>
 
       <p
         v-if="detectedEnvFiles.length"
-        class="text-[11px] text-slate-500"
+        class="text-2xs text-dimmed"
         data-testid="shared-stack-env-files"
       >
         {{ t('settings.sharedStacks.detect.envFiles') }}
@@ -402,6 +420,23 @@ async function remove(stack: SharedStack) {
       </p>
 
       <UFormField
+        v-if="advancedLayers"
+        :label="t('settings.sharedStacks.add.composeFiles')"
+        :help="t('settings.sharedStacks.add.composeLayersManagedHelp')"
+      >
+        <ul class="space-y-1" data-testid="shared-stack-compose-layers">
+          <li
+            v-for="(label, index) in layerLabels"
+            :key="index"
+            class="font-mono text-2xs text-dimmed"
+          >
+            {{ label }}
+          </li>
+        </ul>
+      </UFormField>
+
+      <UFormField
+        v-else
         :label="t('settings.sharedStacks.add.composeFiles')"
         :help="t('settings.sharedStacks.add.composeFilesHelp')"
       >

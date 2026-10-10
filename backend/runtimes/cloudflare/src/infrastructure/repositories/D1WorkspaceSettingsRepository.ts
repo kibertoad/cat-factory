@@ -1,5 +1,13 @@
 import type { WorkspaceSettingsRepository } from '@cat-factory/kernel'
-import type { TaskLimitMode, TaskLimitPerType, WorkspaceSettings } from '@cat-factory/contracts'
+import type {
+  InputGateMode,
+  ProvisionType,
+  ReviewFrictionMode,
+  TaskLimitMode,
+  TaskLimitPerType,
+  WorkspaceMetadata,
+  WorkspaceSettings,
+} from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 
@@ -10,11 +18,24 @@ interface WorkspaceSettingsRow {
   task_limit_shared: number | null
   task_limit_per_type: string | null
   store_agent_context: number
+  publish_pr_verification_report: number
   artifact_retention_days: number
+  done_lane_max_items: number
+  done_lane_retention_days: number | null
   kaizen_enabled: number
   delegate_agents_to_runner_pool: number
+  input_gate_mode: string
+  review_friction_mode: string
+  review_friction_warn_count: number
+  review_friction_block_count: number | null
+  review_friction_block_stuck_minutes: number | null
   spend_currency: string | null
   spend_monthly_limit: number | null
+  default_provision_type: string | null
+  default_provision_manifest_id: string | null
+  allow_initiator_pat: number
+  bug_fishing_fix_pipeline_id: string | null
+  metadata: string | null
 }
 
 function parseJson<T>(raw: string | null): T | null {
@@ -33,11 +54,26 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     taskLimitShared: row.task_limit_shared,
     taskLimitPerType: parseJson<TaskLimitPerType>(row.task_limit_per_type),
     storeAgentContext: row.store_agent_context === 1,
+    publishPrVerificationReport: row.publish_pr_verification_report === 1,
     artifactRetentionDays: row.artifact_retention_days,
+    doneLaneMaxItems: row.done_lane_max_items,
+    doneLaneRetentionDays: row.done_lane_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
+    inputGateMode: row.input_gate_mode as InputGateMode,
+    reviewFrictionMode: row.review_friction_mode as ReviewFrictionMode,
+    reviewFrictionWarnCount: row.review_friction_warn_count,
+    reviewFrictionBlockCount: row.review_friction_block_count,
+    reviewFrictionBlockStuckMinutes: row.review_friction_block_stuck_minutes,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
+    defaultProvisionType: (row.default_provision_type as ProvisionType | null) ?? null,
+    defaultProvisionManifestId: row.default_provision_manifest_id,
+    allowInitiatorPat: row.allow_initiator_pat === 1,
+    bugFishingFixPipelineId: row.bug_fishing_fix_pipeline_id,
+    // An absent (or unparseable) blob reads as "nothing filled in", never as a missing key
+    // the settings object would have to be nullable for.
+    metadata: parseJson<WorkspaceMetadata>(row.metadata) ?? {},
   }
 }
 
@@ -81,21 +117,39 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
       .prepare(
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
-            task_limit_per_type, store_agent_context, artifact_retention_days, kaizen_enabled,
-            delegate_agents_to_runner_pool, spend_currency,
-            spend_monthly_limit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            task_limit_per_type, store_agent_context, publish_pr_verification_report,
+            artifact_retention_days, done_lane_max_items, done_lane_retention_days,
+            kaizen_enabled,
+            delegate_agents_to_runner_pool, input_gate_mode, review_friction_mode,
+            review_friction_warn_count,
+            review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
+            spend_monthly_limit, default_provision_type, default_provision_manifest_id,
+            allow_initiator_pat, bug_fishing_fix_pipeline_id, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
            task_limit_shared = excluded.task_limit_shared,
            task_limit_per_type = excluded.task_limit_per_type,
            store_agent_context = excluded.store_agent_context,
+           publish_pr_verification_report = excluded.publish_pr_verification_report,
            artifact_retention_days = excluded.artifact_retention_days,
+           done_lane_max_items = excluded.done_lane_max_items,
+           done_lane_retention_days = excluded.done_lane_retention_days,
            kaizen_enabled = excluded.kaizen_enabled,
            delegate_agents_to_runner_pool = excluded.delegate_agents_to_runner_pool,
+           input_gate_mode = excluded.input_gate_mode,
+           review_friction_mode = excluded.review_friction_mode,
+           review_friction_warn_count = excluded.review_friction_warn_count,
+           review_friction_block_count = excluded.review_friction_block_count,
+           review_friction_block_stuck_minutes = excluded.review_friction_block_stuck_minutes,
            spend_currency = excluded.spend_currency,
-           spend_monthly_limit = excluded.spend_monthly_limit`,
+           spend_monthly_limit = excluded.spend_monthly_limit,
+           default_provision_type = excluded.default_provision_type,
+           default_provision_manifest_id = excluded.default_provision_manifest_id,
+           allow_initiator_pat = excluded.allow_initiator_pat,
+           bug_fishing_fix_pipeline_id = excluded.bug_fishing_fix_pipeline_id,
+           metadata = excluded.metadata`,
       )
       .bind(
         workspaceId,
@@ -104,11 +158,24 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.taskLimitShared,
         settings.taskLimitPerType ? JSON.stringify(settings.taskLimitPerType) : null,
         settings.storeAgentContext ? 1 : 0,
+        settings.publishPrVerificationReport ? 1 : 0,
         settings.artifactRetentionDays,
+        settings.doneLaneMaxItems,
+        settings.doneLaneRetentionDays,
         settings.kaizenEnabled ? 1 : 0,
         settings.delegateAgentsToRunnerPool ? 1 : 0,
+        settings.inputGateMode,
+        settings.reviewFrictionMode,
+        settings.reviewFrictionWarnCount,
+        settings.reviewFrictionBlockCount,
+        settings.reviewFrictionBlockStuckMinutes,
         settings.spendCurrency,
         settings.spendMonthlyLimit,
+        settings.defaultProvisionType,
+        settings.defaultProvisionManifestId,
+        settings.allowInitiatorPat ? 1 : 0,
+        settings.bugFishingFixPipelineId,
+        JSON.stringify(settings.metadata),
       )
       .run()
   }

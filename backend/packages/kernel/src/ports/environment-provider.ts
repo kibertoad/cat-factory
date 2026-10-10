@@ -1,12 +1,15 @@
 import type {
   ConnectionTestResult,
   EnvironmentAccessHandle,
+  EnvironmentRouteCandidate,
+  EnvironmentFailureReason,
   EnvironmentManifest,
   EnvironmentStatus,
   PreflightRef,
   PreflightResult,
   ProviderConfigField,
 } from '../domain/types.js'
+import type { EnvironmentDiagnosticsCapability } from './environment-diagnostics.js'
 import type { RunRepoContext } from './repo-files.js'
 import type { RunnerDispatchOptions, RunnerJobRef, RunnerJobView } from './runner-transport.js'
 
@@ -183,6 +186,55 @@ export interface EnvironmentTeardownRequest {
 }
 
 /**
+ * What a provider found when asked, AFTER a successful teardown, whether the environment is
+ * actually gone. A three-way answer rather than a boolean, because "I looked and it is still
+ * there" and "I cannot look" are different facts that need different people to do different
+ * things, and collapsing them is what lets an environment nobody can see be reported as
+ * reclaimed (see {@link EnvironmentProvider.confirmTeardown}).
+ *
+ *  - `gone`:    the resource is not there. This is the ONLY answer that proves a teardown.
+ *  - `present`: the resource is still there. Either the teardown destroyed nothing, or it is
+ *               mid-flight; `terminating` says which, because a namespace with finalizers
+ *               running is on its way out and an `Active` one is not.
+ *  - `unknown`: the provider could not establish either — it has no endpoint to ask, the probe
+ *               errored, or there was no addressable resource to ask about. `reason` is
+ *               surfaced verbatim to an operator, so it must name what could not be done.
+ *
+ * `retryable` on the unknown answer is what keeps a deployment's PERMANENT inability to verify
+ * (no `status:` template in the manifest, a provider with nothing to observe) from reading like a
+ * blip. The two want opposite reactions: a blip is worth re-probing on the next sweep, and a
+ * configuration fact will answer identically forever and is only ever fixed by a human editing
+ * the manifest. Without the split, an operator watching a permanently unverifiable environment
+ * waits for a confirmation that is never coming.
+ */
+export type TeardownProbe =
+  | { state: 'gone' }
+  | { state: 'present'; terminating: boolean; detail?: string }
+  | { state: 'unknown'; reason: string; retryable: boolean }
+
+/**
+ * OPTIONALLY confirm that a torn-down environment is really gone.
+ *
+ * This exists because {@link EnvironmentProvider.teardown} returning without throwing does not
+ * mean anything was destroyed. The generic manifest provider whose manifest omits a `teardown:`
+ * template calls nothing and reports `torn_down`; a Kubernetes namespace `DELETE` returns while
+ * the namespace is still `Terminating`. A platform that records the call's success as the
+ * environment's death reports reclaimed infrastructure that is still running and still billing,
+ * on the very pull request a reviewer trusts for that fact.
+ *
+ * Deliberately NOT folded into {@link EnvironmentProvider.status}: `status` answers "how is my
+ * environment doing" and every implementation is written to describe a LIVE one, so its answers
+ * for a destroyed resource are incidental — the generic provider with no `status` template
+ * returns `ready` forever, which as a teardown verdict is a confident lie in the direction that
+ * matters most. A separate method makes the question explicit and lets a provider that cannot
+ * answer it say so, rather than having an answer inferred from a call meant for something else.
+ *
+ * Absent ⇒ the provider offers no confirmation and the platform records the teardown as
+ * `unverifiable`, which is reported as such and never as a reclaim.
+ */
+export type ConfirmTeardown = (req: EnvironmentTeardownRequest) => Promise<TeardownProbe>
+
+/**
  * One STACK-RECIPE step's outcome, streamed to the provisioning log as it completes (a
  * multi-step compose bring-up — env-file materialization, `up`, `composer install`, seed
  * import, migrations, index builds, the health gate). Each entry is best-effort: a log-write
@@ -213,11 +265,51 @@ export type RecipeStepRecorder = (log: RecipeStepLog) => Promise<void>
 export interface ProvisionedEnvironment {
   externalId: string | null
   url: string | null
+  /**
+   * Where this provider states traffic for {@link url}'s host goes, in ITS preference order: an
+   * ADDRESS the platform dials as written, or a NAME it resolves when it dials.
+   *
+   * The half of addressing a URL cannot express, and the reason it is a first-class field rather
+   * than a {@link ProvisionFields} key. `fields` is free-form and a provider can already write an
+   * address there, but it buys nothing: the fields are persisted encrypted as teardown state, they
+   * are absent from `EnvironmentHandle`, and the engine projects a fixed handful of keys into agent
+   * context. An address that reaches nobody is not an address.
+   *
+   * State a `host` where a name is the STABLE identity, which is the ordinary shape of a managed
+   * load balancer: resolving it inside the response mapping pins a snapshot of a set that rotates
+   * and re-pins it on every poll. Exactly one of the two per entry, and which one is this
+   * provider's statement: the platform never reads the kind off the value's spelling.
+   *
+   * Absent (the ordinary case) means the name in `url` is the only thing anyone has to try. Stating
+   * one is a CLAIM, never a conclusion: what the platform publishes downstream is the candidate
+   * that was PROVED to carry (see `EnvironmentRouteProof`).
+   */
+  addresses?: readonly EnvironmentRouteCandidate[] | null
   status: EnvironmentStatus
   expiresAt: number | null
   access: EnvironmentAccessHandle | null
-  /** All fields the response mapping captured, for later status/teardown calls. */
-  fields: ProvisionFields
+  /**
+   * The fields THIS response's mapping captured, sealed on the row for the later status and
+   * teardown calls to interpolate.
+   *
+   * A statement REPLACES the stored bag whole, and `null` is a response that made no statement
+   * about it, which keeps whatever is stored. The same rule as {@link addresses} right above,
+   * for the same reason: a status endpoint answering a narrower shape than the create endpoint
+   * must not be able to erase the teardown state the create response supplied, and a provider
+   * that has stopped observing something must be able to stop stating it.
+   *
+   * Stating one is the ordinary case, on a poll as much as on the create. A status poll is where
+   * everything worth capturing about an asynchronous provision actually arrives: the create
+   * response is the least informative answer such a provider will ever give (no finished deploy
+   * job, no load balancers, no readiness detail), so a bag frozen at create time is a bag holding
+   * none of the facts a diagnosis needs. It is read back on the status and teardown calls, and by
+   * the environment investigation, which is the reader that made the staleness visible.
+   *
+   * Nullable rather than optional so every implementation still has to name the field and DECIDE,
+   * which is the whole distinction: a forgotten `fields` would otherwise read as "keep what is
+   * stored" on the very path (a create) that has nothing stored to keep.
+   */
+  fields: ProvisionFields | null
   /**
    * The verbatim provider error, set when a provider reports `status: 'failed'` WITHOUT
    * throwing (a deterministic rejection — quota exceeded, invalid manifest, …). Surfaced
@@ -226,6 +318,42 @@ export interface ProvisionedEnvironment {
    * (and on a throw, where the thrown error is the root cause instead).
    */
   error?: string | null
+  /**
+   * The MACHINE-READABLE cause beside {@link error}, and the non-throwing half of the
+   * classification contract in `domain/environment-failure.ts`. A provider that throws states its
+   * cause on the `DomainError`'s `details.reason`; one that reports `status: 'failed'` instead has
+   * no error to carry it, and this is where it goes.
+   *
+   * It has to be stated HERE rather than re-derived downstream. The engine reads the class to
+   * decide whether an automated fixer may be dispatched at the failure, and by the time a failed
+   * environment reaches that decision the only thing left is prose, which is exactly the evidence
+   * that is not good enough to spend a container on. So a provider that cannot classify leaves
+   * this absent, and absent means unclassified, which is never repo-fixable.
+   */
+  reason?: EnvironmentFailureReason | null
+  /**
+   * One sentence saying WHERE the environment is, for a report that is NOT a failure: the
+   * channel a provider answering `provisioning` has and {@link error} is not.
+   *
+   * `error` is read only on `failed`, and the two persistence sites null it on anything else, so
+   * before this field a provider that knew exactly why an environment was not ready yet had
+   * nowhere to put it. Within one readiness wait every poll that keeps the wait alive is a
+   * `provisioning` one, so the platform's whole account of a 20-minute wait was how long it
+   * waited. The one workaround left was to report `failed` early, purely because `failed` was the
+   * only status whose reason survived persistence: a truthful lifecycle state traded for an
+   * explainable one.
+   *
+   * Deliberately NOT `error` widened to every status. The name would then be wrong for the case
+   * it exists for, and the value is rendered: a healthy environment mid-rollout would show an
+   * operator a "last error" it does not have.
+   *
+   * It is the CURRENT account and never a log: like `error` it is re-read from the provider and
+   * rewritten on every poll, so a note a provider stops saying stops being persisted. Say what
+   * distinguishes this poll from the last one ("the deploy job has not started", "the deploy
+   * succeeded and no target is healthy yet"). Both are `provisioning`, and which one it is
+   * decides who fixes it. Absent ⇒ nothing to add, which is byte-for-byte the prior behaviour.
+   */
+  statusNote?: string | null
 }
 
 /**
@@ -256,7 +384,7 @@ export interface EnvironmentConnectionTestRequest {
 
 // ---------------------------------------------------------------------------
 // Repo lifecycle: validate / bootstrap / agent-repair the provider's config in
-// the TARGET repo (e.g. a Kargo `.kargo.yml`). Some providers (Kargo) require a
+// the TARGET repo (e.g. a `.deploy.yml`). Some providers require a
 // config file to exist in the deployed repo before they can provision. These
 // OPTIONAL capabilities let a native adapter (a) mechanically verify that file is
 // present + well-formed, (b) mechanically generate it from UI-collected variables,
@@ -285,7 +413,7 @@ export interface RepoValidationIssue {
   severity: RepoValidationSeverity
   /** Human-readable explanation, safe to surface to an operator. */
   message: string
-  /** The repo-relative path the issue concerns, when applicable (e.g. `.kargo.yml`). */
+  /** The repo-relative path the issue concerns, when applicable (e.g. `.deploy.yml`). */
   path?: string
 }
 
@@ -389,8 +517,13 @@ export interface AsyncProvisionCapability {
    * `provision()` path. The Kubernetes adapter returns a job only when the manifest source
    * needs rendering (`renderer: 'kustomize'`) or helm releases are declared; raw manifests
    * keep the in-Worker REST path.
+   *
+   * ASYNC because a provider may also have to PREPARE the target for the job it is handing
+   * over: the Kubernetes adapter creates the namespace and wires its registry pull credential
+   * here, because those are cluster writes the render container cannot make for itself without
+   * the platform's own credentials. A throw is a provision failure, exactly as an inline one is.
    */
-  buildProvisionJob(req: ProvisionEnvironmentRequest): DeployProvisionJob | null
+  buildProvisionJob(req: ProvisionEnvironmentRequest): Promise<DeployProvisionJob | null>
   /**
    * Map a finished deploy job's view (namespace, URL, status) into a
    * {@link ProvisionedEnvironment}. Called by the engine when a job built by
@@ -403,6 +536,20 @@ export interface EnvironmentProvider {
   provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment>
   status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment>
   teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }>
+  /**
+   * Positively confirm a torn-down environment is gone. Optional — absent ⇒ this provider
+   * cannot verify its own teardowns and they are recorded `unverifiable`. See
+   * {@link ConfirmTeardown} for why this is not `status()`.
+   */
+  confirmTeardown?: ConfirmTeardown
+  /**
+   * OPTIONALLY describe what is wrong with an environment, and act on it in place. Present ⇒ the
+   * platform's environment investigation is handed the provider's own account of the environment
+   * (its control-plane facts, its logs, and the reads it could not make) beside the evidence the
+   * platform holds itself; absent ⇒ the investigation runs on the platform's evidence alone, which
+   * is byte-for-byte what it would have had anyway. See {@link EnvironmentDiagnosticsCapability}.
+   */
+  diagnostics?: EnvironmentDiagnosticsCapability
   /**
    * Optional asynchronous, container-backed provisioning. Present ⇒ the provider stands
    * environments up in a deploy container ({@link AsyncProvisionCapability}); absent ⇒ it is

@@ -71,16 +71,19 @@ export function tasksApi({ send, ws }: ApiContext) {
     importTask: (workspaceId: string, source: TaskSourceKind, body: { ref: string }) =>
       send(importTaskContract, { pathPrefix: ws(workspaceId), pathParams: { source }, body }),
 
+    // `blockId` is required: it is what scopes a GitHub search to the block's service
+    // repo, and the backend refuses an unscoped one (it would reach every repository the
+    // deployment's credential can see).
     searchTaskSource: (
       workspaceId: string,
       source: TaskSourceKind,
       query: string,
-      blockId?: string,
+      blockId: string,
     ) =>
       send(searchTasksContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { source },
-        body: { query, ...(blockId ? { blockId } : {}) },
+        body: { query, blockId },
       }),
 
     linkTask: (

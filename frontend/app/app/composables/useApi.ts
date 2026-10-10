@@ -2,28 +2,46 @@ import type { FragmentOwnerKind } from '~/types/domain'
 import { createApiClient, createSend, createSendWith } from './api/client'
 import type { ApiContext } from './api/context'
 import { accountsApi } from './api/accounts'
+import { agentPromptsApi } from './api/agentPrompts'
+import { agentSettingsApi } from './api/agentSettings'
+import { taskTypeSuppressionsApi } from './api/taskTypeSuppressions'
+import { platformObservabilityApi } from './api/platformObservability'
+import { reportsApi } from './api/reports'
 import { authApi } from './api/auth'
 import { bootstrapApi } from './api/bootstrap'
 import { boardApi } from './api/board'
 import { documentsApi } from './api/documents'
 import { executionApi } from './api/execution'
 import { followUpsApi } from './api/followUps'
+import { binaryCandidatesApi } from './api/binaryCandidates'
 import { forkDecisionApi } from './api/forkDecision'
+import { inputGateApi } from './api/inputGate'
+import { judgeApi } from './api/judge'
+import { prReviewApi } from './api/prReview'
+import { bugFishingApi } from './api/bugFishing'
 import { fragmentsApi } from './api/fragments'
+import { foundationalServicesApi } from './api/foundationalServices'
+import { skillsApi } from './api/skills'
 import { githubApi } from './api/github'
+import { vcsApi } from './api/vcs'
 import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
 import { infraHandlersApi } from './api/infraHandlers'
 import { initiativeApi } from './api/initiative'
 import { docInterviewApi } from './api/docInterview'
+import { guidedReviewApi } from './api/guidedReview'
 import { visualConfirmApi } from './api/visualConfirm'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
+import { capabilityCredentialsApi } from './api/capabilityCredentials'
+import { mcpAuthorizationApi } from './api/mcpAuthorization'
+import { toolServersApi } from './api/toolServers'
 import { preflightsApi } from './api/preflights'
 import { presetsApi } from './api/presets'
+import { publicApiKeysApi } from './api/publicApiKeys'
 import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
@@ -31,13 +49,17 @@ import { recurringApi } from './api/recurring'
 import { previewApi } from './api/preview'
 import { environmentsApi } from './api/environments'
 import { releaseHealthApi } from './api/releaseHealth'
+import { validationChecksApi } from './api/validationChecks'
 import { sandboxApi } from './api/sandbox'
 import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
 import { specApi } from './api/spec'
 import { tasksApi } from './api/tasks'
+import { assistantApi } from './api/assistant'
+import { bugHuntApi } from './api/bugHunt'
 import { testSecretsApi } from './api/testSecrets'
 import { userSecretsApi } from './api/userSecrets'
+import { tutorialApi } from './api/tutorial'
 import { userSettingsApi } from './api/userSettings'
 import { workspacesApi } from './api/workspaces'
 
@@ -81,6 +103,7 @@ export function useApi() {
     password ? { 'X-Personal-Password': password } : undefined
 
   const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
+  const acct = (accountId: string) => `/accounts/${encodeURIComponent(accountId)}`
   // Prompt-fragment library routes exist at both tiers; resolve the prefix from
   // the owner scope (ADR 0006 §8).
   const scope = (kind: FragmentOwnerKind, id: string) =>
@@ -95,21 +118,31 @@ export function useApi() {
   const send = createSend(client)
   const sendWith = createSendWith(client)
 
-  const ctx: ApiContext = { http, client, send, sendWith, ws, scope, pwHeaders }
+  const ctx: ApiContext = { http, client, send, sendWith, ws, acct, scope, pwHeaders }
 
   return {
     ...authApi(ctx),
     ...fragmentsApi(ctx),
+    ...skillsApi(ctx),
     ...modelsApi(ctx),
     ...accountsApi(ctx),
+    ...platformObservabilityApi(ctx),
+    ...reportsApi(ctx),
     ...workspacesApi(ctx),
     ...boardApi(ctx),
     ...executionApi(ctx),
     ...documentsApi(ctx),
     ...tasksApi(ctx),
+    ...assistantApi(ctx),
+    ...bugHuntApi(ctx),
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
+    ...binaryCandidatesApi(ctx),
     ...forkDecisionApi(ctx),
+    ...inputGateApi(ctx),
+    ...judgeApi(ctx),
+    ...prReviewApi(ctx),
+    ...bugFishingApi(ctx),
     ...humanTestApi(ctx),
     ...visualConfirmApi(ctx),
     ...humanReviewApi(ctx),
@@ -118,24 +151,36 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...agentPromptsApi(ctx),
+    ...agentSettingsApi(ctx),
+    ...taskTypeSuppressionsApi(ctx),
     ...preflightsApi(ctx),
+    ...publicApiKeysApi(ctx),
     ...sharedStacksApi(ctx),
     ...providerConnectionsApi(ctx),
     ...infraHandlersApi(ctx),
     ...initiativeApi(ctx),
     ...docInterviewApi(ctx),
+    ...guidedReviewApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
+    ...validationChecksApi(ctx),
     ...testSecretsApi(ctx),
     ...packageRegistriesApi(ctx),
+    ...capabilityCredentialsApi(ctx),
+    ...mcpAuthorizationApi(ctx),
+    ...toolServersApi(ctx),
     ...previewApi(ctx),
     ...environmentsApi(ctx),
     ...recurringApi(ctx),
     ...sandboxApi(ctx),
+    ...foundationalServicesApi(ctx),
     ...githubApi(ctx),
+    ...vcsApi(ctx),
     ...slackApi(ctx),
     ...bootstrapApi(ctx),
     ...userSecretsApi(ctx),
+    ...tutorialApi(ctx),
     ...userSettingsApi(ctx),
   }
 }

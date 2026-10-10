@@ -107,7 +107,13 @@ export function makePreviewJobBuilder(deps: PreviewJobBuilderDependencies): Buil
     if (!repo) {
       throw new ConflictError('No connected GitHub repository was found for this frontend frame.')
     }
-    const ghToken = await deps.mintInstallationToken(repo.installationId)
+    // Scoped to the frontend frame's own repo: a preview clones one checkout and runs no agent,
+    // so it has no fan-out leg, no peer and no reference repo to widen for.
+    const ghToken = await deps.mintInstallationToken(repo.installationId, {
+      executionId: `preview-${frameId}`,
+      workspaceId,
+      repoIds: [repo.repoId],
+    })
     const origin = (deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
     const branch = await resolveBranch(config.branch, repo, workspaceId, deps.blockRepository)
 

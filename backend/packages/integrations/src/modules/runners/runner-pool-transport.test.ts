@@ -57,7 +57,7 @@ describe('RunnerPoolTransport', () => {
       },
       release: (req) => {
         calls.release.push(req)
-        return Promise.resolve()
+        return Promise.resolve('requested' as const)
       },
     }
     return { provider, calls }
@@ -108,7 +108,7 @@ describe('RunnerPoolTransport', () => {
     const provider: RunnerPoolProvider = {
       dispatch: () => Promise.reject(new RunnerPoolApiError(502, 'Runner pool post → 502: down')),
       poll: () => Promise.resolve({ state: 'running' as const }),
-      release: () => Promise.resolve(),
+      release: () => Promise.resolve('requested' as const),
     }
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
     const err = await transport
@@ -123,7 +123,7 @@ describe('RunnerPoolTransport', () => {
     const provider: RunnerPoolProvider = {
       dispatch: () => Promise.reject(new Error('network unreachable')),
       poll: () => Promise.resolve({ state: 'running' as const }),
-      release: () => Promise.resolve(),
+      release: () => Promise.resolve('requested' as const),
     }
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
     const err = await transport
@@ -135,56 +135,55 @@ describe('RunnerPoolTransport', () => {
   })
 })
 
-describe('HttpRunnerPoolProvider', () => {
-  // The provider drives the org's scheduler over the global `fetch`; intercept that real fetch
-  // with undici's MockAgent (instead of replacing `fetch` wholesale via `vi.stubGlobal`), so the
-  // real URL building, header casing and Response parsing are exercised. `disableNetConnect`
-  // makes any un-mocked request fail loudly.
-  const POOL = 'https://pool.test'
-  let agent: MockAgent
-  let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
+// Shared by every suite below: hoisted to module scope when the one long `describe` was
+// split into siblings, so each still sees the same fixtures (a module-level `beforeEach`
+// runs for every suite in the file, exactly as the in-describe one did).
+const POOL = 'https://pool.test'
+let agent: MockAgent
+let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
-  beforeEach(() => {
-    previousDispatcher = getGlobalDispatcher()
-    agent = new MockAgent()
-    agent.disableNetConnect()
-    setGlobalDispatcher(agent)
-    // Node's built-in `fetch` binds to its OWN bundled undici (v7 on Node 24), which ignores a
-    // dispatcher set on the userland `undici` package (v8) — so the MockAgent above would be
-    // silently bypassed and the provider would hit the REAL scheduler URL. Route the SUT's
-    // `fetch` through the userland undici's fetch, which honours the dispatcher we set.
-    vi.stubGlobal('fetch', undiciFetch)
-  })
+beforeEach(() => {
+  previousDispatcher = getGlobalDispatcher()
+  agent = new MockAgent()
+  agent.disableNetConnect()
+  setGlobalDispatcher(agent)
+  // Node's built-in `fetch` binds to its OWN bundled undici (v7 on Node 24), which ignores a
+  // dispatcher set on the userland `undici` package (v8) — so the MockAgent above would be
+  // silently bypassed and the provider would hit the REAL scheduler URL. Route the SUT's
+  // `fetch` through the userland undici's fetch, which honours the dispatcher we set.
+  vi.stubGlobal('fetch', undiciFetch)
+})
 
-  afterEach(async () => {
-    vi.unstubAllGlobals()
-    setGlobalDispatcher(previousDispatcher)
-    await agent.close()
-  })
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  setGlobalDispatcher(previousDispatcher)
+  await agent.close()
+})
 
-  interface SeenRequest {
-    url: string
-    headers: Record<string, string>
-    body: string
-  }
+interface SeenRequest {
+  url: string
+  headers: Record<string, string>
+  body: string
+}
 
-  /** Record requests matching path+method (reconstructing the full URL), replying with `json`. */
-  function capture(path: string, method: string, json: unknown, status = 200): SeenRequest[] {
-    const seen: SeenRequest[] = []
-    agent
-      .get(POOL)
-      .intercept({ path, method })
-      .reply(status, (opts) => {
-        seen.push({
-          url: `${POOL}${opts.path}`,
-          headers: opts.headers as Record<string, string>,
-          body: opts.body ? String(opts.body) : '',
-        })
-        return typeof json === 'string' ? json : JSON.stringify(json)
+/** Record requests matching path+method (reconstructing the full URL), replying with `json`. */
+function capture(path: string, method: string, json: unknown, status = 200): SeenRequest[] {
+  const seen: SeenRequest[] = []
+  agent
+    .get(POOL)
+    .intercept({ path, method })
+    .reply(status, (opts) => {
+      seen.push({
+        url: `${POOL}${opts.path}`,
+        headers: opts.headers as Record<string, string>,
+        body: opts.body ? String(opts.body) : '',
       })
-    return seen
-  }
+      return typeof json === 'string' ? json : JSON.stringify(json)
+    })
+  return seen
+}
 
+describe('HttpRunnerPoolProvider — dispatch templating and view mapping', () => {
   it('interpolates the dispatch body + bearer auth and forwards the job spec', async () => {
     const seen = capture('/api/jobs', 'POST', {}, 202)
     const provider = new HttpRunnerPoolProvider()
@@ -238,6 +237,306 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.prUrl).toBe('https://github.com/o/r/pull/9')
   })
 
+  it('forwards the harness liveness heartbeat when the manifest maps it', async () => {
+    // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
+    // heartbeat just like a Cloudflare container, so a live-but-quiet pool run keeps its
+    // `lastActivityAt` (and the run's `updated_at`) fresh instead of looking wedged.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      progress: { completed: 1, total: 5 },
+      heartbeatAt: 1_700_000_123_456,
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withHeartbeat: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, heartbeatPath: 'heartbeatAt' },
+    }
+    const view = await provider.poll({
+      manifest: withHeartbeat,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+    expect(view.state).toBe('running')
+    expect(view.heartbeatAt).toBe(1_700_000_123_456)
+  })
+
+  it('omits the heartbeat when the manifest maps no path (absent ⇒ no liveness signal)', async () => {
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      heartbeatAt: 1_700_000_123_456,
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.heartbeatAt).toBeUndefined()
+  })
+
+  it('maps the live bugfix reproduction proof when the manifest points at it', async () => {
+    // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
+    // verdict WHILE the repair loop runs, exactly like a Cloudflare/local container. Absent the
+    // mapping (below) a pool-backed bugfix PR would carry no reproduction section at all —
+    // indistinguishable from a run that never declared one.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      reproductionReport: {
+        status: 'reproduced',
+        command: 'npm test -- repro',
+        testPaths: ['a.test.ts'],
+        attempts: 2,
+        maxAttempts: 3,
+        base: { exitCode: 1, passed: false, outputTail: 'BOOM', durationMs: 12, timedOut: false },
+        final: { exitCode: 0, passed: true },
+        at: 1_700_000_000_000,
+      },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withProof: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, reproductionReportPath: 'reproductionReport' },
+    }
+    const view = await provider.poll({
+      manifest: withProof,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.reproductionReport?.status).toBe('reproduced')
+    expect(view.reproductionReport?.attempts).toBe(2)
+    expect(view.reproductionReport?.base).toEqual({
+      exitCode: 1,
+      passed: false,
+      outputTail: 'BOOM',
+      durationMs: 12,
+    })
+    expect(view.reproductionReport?.final?.passed).toBe(true)
+  })
+
+  it('reads an UNRECOGNISED verdict as `inconclusive`, never as proof', async () => {
+    // The status reaches a pull request as a statement about a defect. The safe reading of "I do
+    // not know what this says" is that nothing was demonstrated — a scheduler that invents a
+    // status must not be able to launder it into `reproduced`.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      reproductionReport: { status: 'totally-fine', command: 'npm test', testPaths: 'nope' },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withProof: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, reproductionReportPath: 'reproductionReport' },
+    }
+    const view = await provider.poll({
+      manifest: withProof,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.reproductionReport?.status).toBe('inconclusive')
+    // A non-array `testPaths` degrades to empty rather than failing the whole poll.
+    expect(view.reproductionReport?.testPaths).toEqual([])
+    expect(view.reproductionReport?.base).toBeUndefined()
+  })
+
+  it('injects nothing when the manifest maps no reproduction path, or the envelope is unusable', async () => {
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      reproductionReport: { status: 'reproduced', command: 'npm test' },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const unmapped = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(unmapped.reproductionReport).toBeUndefined()
+
+    // Mapped, but the envelope names no command — nothing report-shaped to coerce.
+    capture('/api/jobs/job-8', 'GET', { state: 'in_progress', reproductionReport: { status: 'x' } })
+    const withProof: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, reproductionReportPath: 'reproductionReport' },
+    }
+    const malformed = await provider.poll({
+      manifest: withProof,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(malformed.reproductionReport).toBeUndefined()
+  })
+
+  it('maps the live per-slice PR reviews when the manifest points at them', async () => {
+    // Unlike the two reports above, this channel is the ONLY thing that makes a finished slice
+    // durable before the reviewer's terminal output. Without the mapping a pool-backed review that
+    // wedges or dies has nothing for a manual resume to work from and can only be re-run from zero.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      sliceReviews: [
+        { label: 'api-correlation', status: 'completed', report: 'Found an N+1.' },
+        { label: 'infra-logging', status: 'in_progress' },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withSlices: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, sliceReviewsPath: 'sliceReviews' },
+    }
+    const view = await provider.poll({
+      manifest: withSlices,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.sliceReviews).toEqual([
+      { label: 'api-correlation', status: 'completed', report: 'Found an N+1.' },
+      { label: 'infra-logging', status: 'in_progress' },
+    ])
+  })
+
+  it('keeps the good slices beside a malformed one and never invents a `completed`', async () => {
+    // Per-entry leniency, because discarding the valid reports is the exact data loss this channel
+    // prevents. And an unrecognised status reads as `in_progress`: over-reporting `completed` would
+    // make a resume SKIP a slice nobody reviewed, while the other direction only costs a re-review.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      sliceReviews: [
+        { label: 'api', status: 'finished-ish', report: 'body' },
+        { nonsense: true },
+        { label: '   ', status: 'completed' },
+        'not an object',
+        { label: 'docs', status: 'completed', report: 42 },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withSlices: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, sliceReviewsPath: 'sliceReviews' },
+    }
+    const view = await provider.poll({
+      manifest: withSlices,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.sliceReviews).toEqual([
+      { label: 'api', status: 'in_progress', report: 'body' },
+      // A non-string report is dropped rather than coerced; the slice still counts as reviewed.
+      { label: 'docs', status: 'completed' },
+    ])
+  })
+
+  it('injects nothing when the manifest maps no slice path, or the set is empty', async () => {
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      sliceReviews: [{ label: 'api', status: 'completed' }],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const unmapped = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(unmapped.sliceReviews).toBeUndefined()
+
+    capture('/api/jobs/job-8', 'GET', { state: 'in_progress', sliceReviews: [] })
+    const withSlices: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, sliceReviewsPath: 'sliceReviews' },
+    }
+    const empty = await provider.poll({
+      manifest: withSlices,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(empty.sliceReviews).toBeUndefined()
+  })
+
+  it('maps the CLI-observed tool servers when the manifest points at them', async () => {
+    // The pool leg of the observation channel. Everything downstream pairs a row to the dispatch's
+    // own record by id alone, so what this coercion gets wrong is invisible until a step detail
+    // accuses a healthy server.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      toolServers: [
+        { id: 'slack', status: 'ready', toolCount: 4 },
+        // `0` is the most diagnostic count there is: connected, and exposing nothing.
+        { id: 'jira', status: 'ready', toolCount: 0 },
+        { id: 'sentry', status: 'failed' },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withServers: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, toolServersPath: 'toolServers' },
+    }
+    const view = await provider.poll({
+      manifest: withServers,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.toolServers).toEqual([
+      { id: 'slack', status: 'ready', toolCount: 4 },
+      { id: 'jira', status: 'ready', toolCount: 0 },
+      { id: 'sentry', status: 'failed' },
+    ])
+  })
+
+  it('trims a padded id and reads an unmappable status as unknown rather than dropping the row', async () => {
+    // The id is the ONLY key the engine pairs an observation to the dispatch's declaration by, and
+    // it pairs by exact string. A padded id that survives verbatim renders one healthy server as
+    // two faults at once: never-loaded on the wired chip, and unattributed beside it.
+    //
+    // A status this deployment cannot name stays as a row: dropping it reads as a server the CLI
+    // never loaded, which is a different fault with a different fix.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      toolServers: [
+        { id: '  slack  ', status: 'ready', toolCount: 2 },
+        { id: 'jira', status: 'reticulating' },
+        { id: '   ' },
+        { id: 42, status: 'ready' },
+        'not an object',
+        // A count that is not a usable number leaves the field absent, never 0.
+        { id: 'sentry', status: 'ready', toolCount: -1 },
+        { id: 'linear', status: 'ready', toolCount: 'many' },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withServers: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, toolServersPath: 'toolServers' },
+    }
+    const view = await provider.poll({
+      manifest: withServers,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.toolServers).toEqual([
+      { id: 'slack', status: 'ready', toolCount: 2 },
+      { id: 'jira', status: 'unknown' },
+      { id: 'sentry', status: 'ready' },
+      { id: 'linear', status: 'ready' },
+    ])
+  })
+
+  it('injects nothing when the manifest maps no tool-server path, or the set is empty', async () => {
+    // The absent-vs-empty rule this whole channel rests on: a pool that has not mapped the path
+    // must leave the record ABSENT, because an empty list reads as "the CLI loaded none of the
+    // servers the platform wired" on a run whose servers were fine.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      toolServers: [{ id: 'slack', status: 'ready' }],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const unmapped = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(unmapped.toolServers).toBeUndefined()
+
+    capture('/api/jobs/job-8', 'GET', { state: 'in_progress', toolServers: [] })
+    const withServers: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, toolServersPath: 'toolServers' },
+    }
+    const empty = await provider.poll({
+      manifest: withServers,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(empty.toolServers).toBeUndefined()
+  })
+})
+
+describe('HttpRunnerPoolProvider — failure, eviction and result mapping', () => {
   it('forwards the harness failureCause + detail on a failed view when the manifest maps them', async () => {
     // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
     // STRUCTURED cause/detail just like a Cloudflare container, so the engine classifies the
@@ -261,6 +560,55 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.state).toBe('failed')
     expect(view.failureCause).toBe('inactivity-timeout')
     expect(view.detail).toBe('Phase timings: clone=2s, agent=600s.')
+  })
+
+  for (const status of [404, 410]) {
+    it(`reports a job the scheduler no longer knows (${status}) as an EVICTION, not a poll fault`, async () => {
+      // A pool member dying mid-job leaves the scheduler 404ing (or 410ing) its id. Without this
+      // mapping the throw counts against the engine's poll-failure tolerance and the run dies
+      // `timeout` without ever trying a fresh member; the structured `evicted` field is what
+      // engages the engine's re-dispatch recovery.
+      capture('/api/jobs/job-7', 'GET', { message: 'no such job' }, status)
+      const provider = new HttpRunnerPoolProvider()
+      const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+      expect(view.state).toBe('failed')
+      expect(view.evicted).toBe('crash')
+      expect(view.error).toContain('container evicted or crashed')
+      // The status LEADS, and the scheduler's own account rides `detail`: a 404 also covers a
+      // mistyped poll path and a scheduler that 404s an unauthorized read, and an operator
+      // handed a bare "container evicted or crashed" has nothing to act on. The detail carries
+      // the provider's fix-it remedy (its error message), which names where to correct it.
+      expect(view.error).toContain(`Runner pool poll → ${status}`)
+      expect(view.detail).toContain('Settings')
+    })
+  }
+
+  it('still throws on a non-404 poll fault (a broken scheduler is not an eviction)', async () => {
+    // A 500 says the SCHEDULER is unwell, not that the job is gone: re-dispatching onto a
+    // fresh member would be wrong, so it stays a throw for the poll-failure tolerance to bound.
+    capture('/api/jobs/job-7', 'GET', { message: 'upstream exploded' }, 500)
+    const provider = new HttpRunnerPoolProvider()
+    await expect(
+      provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' }),
+    ).rejects.toBeInstanceOf(RunnerPoolApiError)
+  })
+
+  it('tags a reclaimed-runner status as an eviction so a fresh member is tried', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'preempted' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
+    // No `errorPath` value in the response, so the provider explains the loss itself.
+    expect(view.error).toContain('preempted')
+  })
+
+  it('leaves `evicted` unset on an ordinary job failure', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'errored', error: 'tests failed' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBeUndefined()
   })
 
   it('leaves failureCause/detail unset when the manifest does not map them (older pool)', async () => {
@@ -345,7 +693,8 @@ describe('HttpRunnerPoolProvider', () => {
       responseText: 'hi',
       reasoningText: '',
       inputTokens: 120,
-      cachedInputTokens: 20,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 10,
       outputTokens: 30,
       finishReason: 'end_turn',
     }
@@ -371,6 +720,42 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.callMetrics).toEqual([good])
   })
 
+  it('keeps call telemetry from a harness image that predates the cache-class split', async () => {
+    // A pool runs whatever harness image its WORKSPACE pinned, so an image older than the
+    // fresh/read/write split is a normal operating state, not a malformed envelope. Its
+    // entries carry no cache fields; requiring them would fail every entry and drop ALL of
+    // that pool's telemetry silently — the run would report zero model calls rather than
+    // "cache breakdown unknown". The call, its tokens and its bodies must survive, with the
+    // split it never measured reading as 0.
+    const legacy = {
+      model: 'claude-opus-4-8',
+      promptText: '[{"role":"user","content":"u"}]',
+      messageCount: 1,
+      responseText: 'hi',
+      reasoningText: '',
+      inputTokens: 120,
+      outputTokens: 30,
+      finishReason: 'end_turn',
+    }
+    capture('/api/jobs/job-9b', 'GET', {
+      state: 'succeeded',
+      result: { summary: 'coded', callMetrics: [legacy] },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withResult: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, resultPath: 'result' },
+    }
+    const view = await provider.poll({
+      manifest: withResult,
+      jobId: 'job-9b',
+      resolveSecret: () => 't',
+    })
+    expect(view.result?.callMetrics).toEqual([
+      { ...legacy, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    ])
+  })
+
   // D2: every runner-pool failure carries the UI-first remedy naming where the pool is
   // configured/re-tested — while PRESERVING the raw `<method> → <status>` diagnostic ahead of it.
   it('appends the UI-first remedy to every RunnerPoolApiError while preserving the raw detail', () => {
@@ -383,5 +768,75 @@ describe('HttpRunnerPoolProvider', () => {
     expect(new RunnerPoolApiError(500, "Missing secret 'API_TOKEN'").message).toContain(
       'Settings → Self-hosted runner pool',
     )
+  })
+})
+
+describe('HttpRunnerPoolProvider and the harness capability handshake', () => {
+  /** The manifest a pool that PROXIES `POST /jobs` verbatim would author: one mapped path. */
+  const mapped: RunnerPoolManifest = {
+    ...manifest,
+    response: { ...manifest.response, dispatchCapabilitiesPath: 'capabilities' },
+  }
+
+  const dispatch = (m: RunnerPoolManifest) =>
+    new HttpRunnerPoolProvider().dispatch({
+      manifest: m,
+      jobId: 'job-7',
+      spec: {},
+      resolveSecret: () => 'secret-token',
+    })
+
+  it('reads the handshake when the manifest says where it is', async () => {
+    capture('/api/jobs', 'POST', { id: 'job-7', capabilities: ['mcpServers', 'skills'] }, 202)
+    expect(await dispatch(mapped)).toEqual({ capabilities: ['mcpServers', 'skills'] })
+  })
+
+  it('reads a NESTED path, since a scheduler wraps the harness body where it likes', async () => {
+    capture('/api/jobs', 'POST', { runner: { ack: { capabilities: ['skills'] } } }, 202)
+    expect(
+      await dispatch({
+        ...manifest,
+        response: { ...manifest.response, dispatchCapabilitiesPath: 'runner.ack.capabilities' },
+      }),
+    ).toEqual({ capabilities: ['skills'] })
+  })
+
+  it("IGNORES a scheduler's own `capabilities` when the manifest maps nothing", async () => {
+    // The regression this mapping exists for. `capabilities` is an ordinary word for a scheduler
+    // to use about its own runners, and reading one of those as the harness\'s answer narrows to
+    // an EMPTY list, which downstream is `unsupported`: a hard refusal of every capability
+    // dispatch against a perfectly current image. Unmapped must mean "could not tell".
+    capture('/api/jobs', 'POST', { id: 'job-7', capabilities: ['gpu', 'docker'] }, 202)
+    expect(await dispatch(manifest)).toBeUndefined()
+  })
+
+  it('answers undefined when the mapped path holds nothing usable', async () => {
+    // A pool that mapped the path against a scheduler that later changed shape must degrade to
+    // "could not tell", never to an empty list.
+    capture('/api/jobs', 'POST', { id: 'job-7' }, 202)
+    expect(await dispatch(mapped)).toBeUndefined()
+  })
+})
+
+describe('HttpRunnerPoolProvider.release reports whether it cancelled anything', () => {
+  it('is `requested` when the manifest declares a release template', async () => {
+    // The strongest honest answer: the scheduler took the call, and nothing this side of the
+    // pool\'s control plane can see whether the runner obeyed.
+    const seen = capture('/api/jobs/job-7', 'DELETE', {}, 200)
+    const provider = new HttpRunnerPoolProvider()
+    expect(await provider.release({ manifest, jobId: 'job-7', resolveSecret: () => 't' })).toBe(
+      'requested',
+    )
+    expect(seen).toHaveLength(1)
+  })
+
+  it('is `unsupported` when it declares none, rather than a silent success', async () => {
+    // This same call is the pool\'s only CANCEL. A void return here read as a stopped job, which
+    // is how a refused blind run kept working against the repository with nobody told.
+    const { release: _release, ...noRelease } = manifest
+    const provider = new HttpRunnerPoolProvider()
+    expect(
+      await provider.release({ manifest: noRelease, jobId: 'job-7', resolveSecret: () => 't' }),
+    ).toBe('unsupported')
   })
 })

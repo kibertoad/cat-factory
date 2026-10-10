@@ -80,8 +80,13 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     return allSettled(session) && answeredCount(session) === 0
   }
 
+  /**
+   * Write one block+stage session into the cache, IN PLACE: per-key, never a whole-record clone.
+   * `sessions` is a deep reactive ref, so replacing the record retriggered every consumer keyed on
+   * an UNCHANGED key; assigning the key retriggers only the session that actually changed.
+   */
   function store(session: BrainstormSession) {
-    sessions.value = { ...sessions.value, [key(session.blockId, session.stage)]: session }
+    sessions.value[key(session.blockId, session.stage)] = session
   }
 
   /** Patch the cache from a live `brainstorm` stream event (newest wins per block+stage). */
@@ -122,7 +127,9 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       try {
         const session = await api.getBrainstorm(workspace.requireId(), blockId, stage)
         available.value = true
-        sessions.value = { ...sessions.value, [k]: session }
+        // By key like `store()`, and directly because a load resolving to "none exists" caches a
+        // null the getter reads as "fetched, absent".
+        sessions.value[k] = session
       } catch {
         available.value = false
       } finally {

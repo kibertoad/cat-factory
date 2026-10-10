@@ -124,8 +124,7 @@ export class ForkDecisionController {
       // Re-arm the SAME step so the driver re-enters and dispatches the Coder (Phase B).
       this.deps.stepGraph.resetStepForRerun(step)
       this.deps.stepGraph.startStep(step)
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
+      await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
       return { kind: 'continue' }
     }
 

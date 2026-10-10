@@ -1,7 +1,10 @@
 import {
   type Clock,
   type CommitFilesResult,
+  type CreateReviewInput,
+  type CreateReviewResult,
   type GitHubBranch,
+  type GitHubChangedFile,
   type GitHubCheckRun,
   type GitHubClient,
   type GitHubCodeSearchHit,
@@ -11,11 +14,13 @@ import {
   type GitHubIssueSearchHit,
   type GitHubSubIssue,
   type GitHubPullRequest,
+  type OpenedPullRequest,
   type GitHubPullRequestReview,
   type GitHubPullRequestComment,
   type GitHubReviewThread,
   type GitHubRepo,
   type GitHubRepoRef,
+  type BranchProtectionSummary,
   type IdGenerator,
   type InstallationMeta,
   type InstallationSummary,
@@ -28,12 +33,50 @@ import {
   type RepoContentEntry,
   type RepoEntry,
   type RepoFileContent,
+  type RepoTreeListing,
   describeVcsApiError,
+  runBestEffort,
   VCS_DOC_URLS,
 } from '@cat-factory/kernel'
 import { githubProjection as gp } from '@cat-factory/integrations'
+import { logger } from '../observability/logger.js'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
+import { postPrReview } from './reviewPosting.js'
+import { probeBranchProtection, readRequiredApprovingReviewCount } from './branchProtection.js'
+import {
+  type ContentsRequest,
+  readDirectory,
+  readFileContent,
+  readRootEntries,
+  readLatestCommitSha,
+  readTree,
+} from './repoContents.js'
+import { getRepoForToken, listReposForToken } from './viewerTokenReads.js'
+import {
+  listPrReviewThreads,
+  replyToPrReviewThread,
+  resolvePrReviewThread,
+  type GitHubGraphQlFn,
+} from './reviewThreads.js'
+import { searchCode, searchIssues } from './searchApi.js'
+import {
+  ACCEPT,
+  API_VERSION,
+  GitHubApiError,
+  PER_PAGE,
+  USER_AGENT,
+  githubApiStatus,
+  numHeader,
+  parseGitHubTime,
+  parseIssueHtmlUrl,
+  parseNextLink,
+  walkPages,
+} from './githubHttpHelpers.js'
+
+// Re-exported so every existing importer keeps resolving it from the client it is thrown by;
+// the class itself moved to `githubHttpHelpers.ts` (see its doc).
+export { GitHubApiError } from './githubHttpHelpers.js'
 
 // Thin `fetch`-based GitHubClient: the only place that talks to the GitHub REST
 // API. It authenticates via the App (installation tokens for repo calls, the app
@@ -43,31 +86,6 @@ import type { AppTokenSource } from './GitHubAppRegistry.js'
 // deliberately avoided — Web Crypto + fetch cover everything we need without the
 // bundle weight (see backend/docs/adr/0001-github-app-integration.md).
 
-/** Shape of the `reviewThreads` GraphQL query response (one page). */
-interface ReviewThreadsQueryData {
-  repository?: {
-    pullRequest?: {
-      reviewThreads?: {
-        nodes?: {
-          id: string
-          isResolved: boolean
-          path: string | null
-          line: number | null
-          comments?: {
-            nodes?: { author?: { login?: string }; body?: string; createdAt?: string }[]
-          }
-        }[]
-        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null }
-      }
-    }
-  }
-}
-
-const USER_AGENT = 'cat-factory'
-const API_VERSION = '2022-11-28'
-const ACCEPT = 'application/vnd.github+json'
-const PER_PAGE = 100
-const MAX_PAGES = 10
 /** Neutral default colour for a label we create on the fly (GitHub requires a colour). */
 const DEFAULT_LABEL_COLOR = 'ededed'
 
@@ -154,25 +172,15 @@ interface GhIssueCommentPayload {
   user?: { login?: string } | null
 }
 
-/** The slice of a `/search/issues` item `searchIssues` reads. */
-interface GhSearchIssueItem {
-  number?: number
-  title?: string
-  state?: string
-  html_url?: string
-  /** Present (and truthy) only on pull requests, which we filter out. */
-  pull_request?: unknown
-}
-
-/** The slice of a `/search/code` item `searchCode` reads. */
-interface GhSearchCodeItem {
-  path?: string
-  html_url?: string
-  repository?: { name?: string; owner?: { login?: string } }
-}
-
 export class FetchGitHubClient implements GitHubClient {
   constructor(private readonly deps: FetchGitHubClientDependencies) {}
+
+  /**
+   * `graphql` as a plain delegate, for the extracted review-thread helpers (a private method
+   * can't be handed over directly). The REST half passes `request` the same way.
+   */
+  private readonly graphqlFn: GitHubGraphQlFn = (installationId, query, variables) =>
+    this.graphql(installationId, query, variables)
 
   // ---- installation-level (app JWT) --------------------------------------
 
@@ -234,24 +242,27 @@ export class FetchGitHubClient implements GitHubClient {
 
   async listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>> {
     const syncedAt = this.deps.clock.now()
-    const items = await this.paginate<GitHubRepo>(
+    // Paged rather than flattened: a wide installation exceeds the page cap, and the callers that
+    // SHOW this list (the picker, the public available-repos read) have to say so rather than let a
+    // repository beyond the window read as one the installation was never granted.
+    return walkPages<GitHubRepo>(
       `/installation/repositories?per_page=${PER_PAGE}`,
-      { installationId },
+      (url) => this.request(url, { installationId }),
       (json) => {
         const repos = (json as { repositories?: gp.GhRepoPayload[] }).repositories ?? []
         return repos.map((r) => gp.toRepoProjection(r, installationId, syncedAt))
       },
     )
-    return { items }
   }
 
   async searchInstallationRepos(
     installationId: number,
     query: string,
     opts: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number } = {},
-  ): Promise<GitHubRepo[]> {
+  ): Promise<Paged<GitHubRepo>> {
     const trimmed = query.trim()
-    if (!trimmed) return []
+    // An empty query asks nothing, so it omitted nothing either.
+    if (!trimmed) return { items: [], truncated: false }
     const syncedAt = this.deps.clock.now()
     const per = Math.min(Math.max(opts.limit ?? 50, 1), 100)
     // Without an account to scope it to, `/search/repositories` would run UNSCOPED across
@@ -260,8 +271,11 @@ export class FetchGitHubClient implements GitHubClient {
     // installation's own bounded repo listing, so a missing account can't leak the search.
     if (!opts.owner) {
       const q = trimmed.toLowerCase()
-      const { items } = await this.listInstallationRepos(installationId)
-      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)).slice(0, per)
+      const { items, truncated } = await this.listInstallationRepos(installationId)
+      const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+      // Truncated by EITHER cap: the enumeration this filters may have stopped before the
+      // match existed, which no count of the results could reveal.
+      return { items: matched.slice(0, per), truncated: truncated === true || matched.length > per }
     }
     // Match the typed text against the repo NAME (accepting an `owner/name` paste by
     // matching only the name segment), scoped to the installation's account so results stay
@@ -275,8 +289,11 @@ export class FetchGitHubClient implements GitHubClient {
     const { json } = await this.request(`/search/repositories?q=${q}&per_page=${per}`, {
       installationId,
     })
-    const items = (json as { items?: gp.GhRepoPayload[] } | null)?.items ?? []
-    return items.map((r) => gp.toRepoProjection(r, installationId, syncedAt))
+    const found = (json as { items?: gp.GhRepoPayload[]; total_count?: number } | null) ?? {}
+    const items = (found.items ?? []).map((r) => gp.toRepoProjection(r, installationId, syncedAt))
+    // GitHub reports the full match count, so this leg knows exactly what it left behind
+    // rather than inferring it from a page that happens to be full.
+    return { items, truncated: (found.total_count ?? items.length) > items.length }
   }
 
   // ---- reads --------------------------------------------------------------
@@ -299,79 +316,18 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
-  async listReposForToken(token: string): Promise<Paged<GitHubRepo>> {
-    // The PAT analogue of `/installation/repositories` (App-only): enumerate the repos the
-    // token can reach. Flagged `linkedVia:'user_pat'` — personal, not App-reachable. The
-    // installation id is a placeholder here (the picker dedups by github id); the link flow
-    // attributes the row to the workspace's real installation.
-    const syncedAt = this.deps.clock.now()
-    const items: GitHubRepo[] = []
-    let url: string | undefined =
-      `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
-    let page = 0
-    for (; url && page < MAX_PAGES; page++) {
-      const { json, next } = await this.requestWithToken(url, token)
-      const repos = (json as gp.GhRepoPayload[] | null) ?? []
-      for (const r of repos) {
-        items.push({ ...gp.toRepoProjection(r, 0, syncedAt), linkedVia: 'user_pat' })
-      }
-      url = next
-    }
-    // A `next` link still present at the page cap means the token reaches more repos than we
-    // enumerated — flag it so the access-cache refresh records additively rather than replacing
-    // (a truncated REPLACE would drop reachable repos and fail-closed-redact the user's own frames).
-    return { items, truncated: Boolean(url) }
-  }
-
-  async getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {
-    try {
-      const { json } = await this.requestWithToken(`/repositories/${repoGithubId}`, token)
-      return {
-        ...gp.toRepoProjection(json as gp.GhRepoPayload, 0, this.deps.clock.now()),
-        linkedVia: 'user_pat',
-      }
-    } catch (err) {
-      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return null
-      throw err
-    }
-  }
-
   /**
-   * A minimal authenticated GET using an explicit personal access token instead of the
-   * installation/App registry — the only place the client talks to GitHub with a
-   * caller-supplied bearer. Used by the PAT-scoped repo reads above; never mints or caches.
+   * Repo reads authenticated with the CALLER's personal access token rather than this client's
+   * installation credential (the personal-PAT repo picker). Thin delegates: the reads live in
+   * `viewerTokenReads.ts`, because nothing about them mints, caches or rate-limit-accounts the
+   * way the rest of this client does.
    */
-  private async requestWithToken(
-    pathOrUrl: string,
-    token: string,
-  ): Promise<{ json: unknown; next?: string }> {
-    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.deps.apiBase}${pathOrUrl}`
-    const res = await fetch(url, {
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: ACCEPT,
-        'user-agent': USER_AGENT,
-        'x-github-api-version': API_VERSION,
-      },
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      const resetSec = numHeader(res, 'x-ratelimit-reset')
-      throw new GitHubApiError(
-        res.status,
-        describeVcsApiError({
-          provider: 'github',
-          status: res.status,
-          method: 'GET',
-          url,
-          body: text.slice(0, 300),
-          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
-          resetAt: resetSec === null ? null : resetSec * 1000,
-        }),
-      )
-    }
-    const json = res.status === 204 ? null : await res.json().catch(() => null)
-    return { json, next: parseNextLink(res.headers.get('link')) }
+  listReposForToken(token: string): Promise<Paged<GitHubRepo>> {
+    return listReposForToken(this.deps, token)
+  }
+
+  getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {
+    return getRepoForToken(this.deps, token, repoGithubId)
   }
 
   async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {
@@ -462,22 +418,12 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  // The four repository-CONTENTS reads are thin delegates over `repoContents.ts` (extracted along
+  // the same seam as `reviewPosting.ts` and `branchProtection.ts`, since this file is at its size
+  // budget). What lives there is the classification they share: which statuses are ANSWERS here, and
+  // the two facts this endpoint states as something it is not.
   async listRootEntries(installationId: number, ref: GitHubRepoRef): Promise<RepoEntry[]> {
-    let json: unknown
-    try {
-      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/`, {
-        installationId,
-      }))
-    } catch (err) {
-      // An empty repository has no default branch, so the contents endpoint 404s.
-      // That's the signal we want — treat it as "no entries", not an error.
-      if (err instanceof GitHubApiError && err.status === 404) return []
-      throw err
-    }
-    const entries = Array.isArray(json)
-      ? (json as Array<{ path?: string; name?: string; type?: string }>)
-      : []
-    return entries.map((e) => ({ path: e.path ?? e.name ?? '', type: e.type ?? 'file' }))
+    return readRootEntries(this.contentsRequest(), installationId, ref)
   }
 
   async listDirectory(
@@ -486,28 +432,15 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoContentEntry[]> {
-    const clean = path.replace(/^\/+|\/+$/g, '')
-    const query = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : ''
-    let json: unknown
-    try {
-      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/${clean}${query}`, {
-        installationId,
-      }))
-    } catch (err) {
-      // Missing path / empty repo → no entries (mirrors listRootEntries).
-      if (err instanceof GitHubApiError && err.status === 404) return []
-      throw err
-    }
-    // A directory returns an array; a single file returns an object — coerce both.
-    const arr = Array.isArray(json) ? json : [json]
-    return (arr as Array<{ path?: string; name?: string; type?: string; sha?: string }>).map(
-      (e) => ({
-        path: e.path ?? e.name ?? '',
-        name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
-        type: e.type ?? 'file',
-        sha: e.sha ?? '',
-      }),
-    )
+    return readDirectory(this.contentsRequest(), installationId, ref, path, gitRef)
+  }
+
+  async listTree(
+    installationId: number,
+    ref: GitHubRepoRef,
+    gitRef?: string,
+  ): Promise<RepoTreeListing> {
+    return readTree(this.contentsRequest(), installationId, ref, gitRef)
   }
 
   async getFileContent(
@@ -516,21 +449,12 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoFileContent | null> {
-    const clean = path.replace(/^\/+/, '')
-    const query = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : ''
-    let json: unknown
-    try {
-      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/${clean}${query}`, {
-        installationId,
-      }))
-    } catch (err) {
-      if (err instanceof GitHubApiError && err.status === 404) return null
-      throw err
-    }
-    const file = json as { type?: string; content?: string; encoding?: string; sha?: string }
-    if (file.type !== 'file' || typeof file.content !== 'string') return null
-    const content = file.encoding === 'base64' ? decodeBase64Utf8(file.content) : file.content
-    return { content, sha: file.sha ?? '' }
+    return readFileContent(this.contentsRequest(), installationId, ref, path, gitRef)
+  }
+
+  /** This client's authenticated GET, as the narrow callback the contents reads take. */
+  private contentsRequest(): ContentsRequest {
+    return (path, opts) => this.request(path, opts)
   }
 
   async latestCommitSha(
@@ -539,25 +463,7 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<string | null> {
-    const clean = path.replace(/^\/+|\/+$/g, '')
-    const params = new URLSearchParams({ per_page: '1' })
-    if (clean) params.set('path', clean)
-    // The commits list endpoint does not accept `HEAD`; omitting `sha` defaults to the
-    // repo's default branch, which is exactly what a `HEAD`/absent gitRef means here.
-    if (gitRef && gitRef !== 'HEAD') params.set('sha', gitRef)
-    let json: unknown
-    try {
-      ;({ json } = await this.request(
-        `/repos/${ref.owner}/${ref.repo}/commits?${params.toString()}`,
-        { installationId },
-      ))
-    } catch (err) {
-      // Empty repo / missing path / unknown ref → no commit to pin against.
-      if (err instanceof GitHubApiError && err.status === 404) return null
-      throw err
-    }
-    const commits = Array.isArray(json) ? (json as Array<{ sha?: string }>) : []
-    return commits[0]?.sha ?? null
+    return readLatestCommitSha(this.contentsRequest(), installationId, ref, path, gitRef)
   }
 
   async listPullRequests(
@@ -670,6 +576,8 @@ export class FetchGitHubClient implements GitHubClient {
     )
   }
 
+  // The two `/search/*` endpoints live in `searchApi.ts` (a cohesive extraction like
+  // `reviewPosting.ts`); these stay as thin delegates over the shared `request` executor.
   async searchIssues(
     installationId: number,
     query: string,
@@ -677,35 +585,14 @@ export class FetchGitHubClient implements GitHubClient {
     order?: 'created-asc',
     page = 1,
   ): Promise<GitHubIssueSearchHit[]> {
-    const q = encodeURIComponent(`${query} is:issue`)
-    const per = Math.min(Math.max(limit, 1), 100)
-    // Oldest-first (issue intake) rides the search API's sort/order params — the
-    // in-query `sort:` syntax is a web-UI affordance the REST API doesn't honor.
-    const sort = order === 'created-asc' ? '&sort=created&order=asc' : ''
-    const pageParam = page > 1 ? `&page=${page}` : ''
-    const { json } = await this.request(
-      `/search/issues?q=${q}&per_page=${per}${sort}${pageParam}`,
-      {
-        installationId,
-      },
+    return searchIssues(
+      (path, opts) => this.request(path, opts),
+      installationId,
+      query,
+      limit,
+      order,
+      page,
     )
-    const items = ((json as { items?: GhSearchIssueItem[] } | null)?.items ?? []).filter(
-      (i) => !i.pull_request,
-    )
-    const hits: GitHubIssueSearchHit[] = []
-    for (const item of items) {
-      const parts = parseIssueHtmlUrl(item.html_url ?? '')
-      if (!parts) continue
-      hits.push({
-        owner: parts.owner,
-        repo: parts.repo,
-        number: item.number ?? parts.number,
-        title: item.title ?? '(untitled)',
-        state: item.state ?? '',
-        url: item.html_url ?? '',
-      })
-    }
-    return hits.slice(0, limit)
   }
 
   async searchCode(
@@ -713,26 +600,7 @@ export class FetchGitHubClient implements GitHubClient {
     query: string,
     limit = 20,
   ): Promise<GitHubCodeSearchHit[]> {
-    const per = Math.min(Math.max(limit, 1), 100)
-    const { json } = await this.request(
-      `/search/code?q=${encodeURIComponent(query)}&per_page=${per}`,
-      { installationId },
-    )
-    const items = (json as { items?: GhSearchCodeItem[] } | null)?.items ?? []
-    const hits: GitHubCodeSearchHit[] = []
-    for (const item of items) {
-      const owner = item.repository?.owner?.login
-      const repo = item.repository?.name
-      const path = item.path
-      if (!owner || !repo || !path) continue
-      hits.push({
-        owner,
-        repo,
-        path,
-        url: item.html_url ?? `https://github.com/${owner}/${repo}/blob/HEAD/${path}`,
-      })
-    }
-    return hits.slice(0, limit)
+    return searchCode((path, opts) => this.request(path, opts), installationId, query, limit)
   }
 
   async listCommits(
@@ -796,12 +664,14 @@ export class FetchGitHubClient implements GitHubClient {
           json as {
             user?: { login?: string }
             state?: string
+            body?: string | null
             submitted_at?: string | null
             commit_id?: string | null
           }[]
         ).map((r) => ({
           author: r.user?.login ?? '',
           state: r.state ?? '',
+          body: r.body ?? '',
           submittedAt: parseGitHubTime(r.submitted_at),
           commitId: r.commit_id ?? null,
         })),
@@ -828,6 +698,18 @@ export class FetchGitHubClient implements GitHubClient {
     )
   }
 
+  async listChangedFiles(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]> {
+    return this.paginate<GitHubChangedFile>(
+      `/repos/${ref.owner}/${ref.repo}/pulls/${number}/files?per_page=${PER_PAGE}`,
+      { installationId },
+      (json) => (json as gp.GhChangedFilePayload[]).map(gp.toChangedFileProjection),
+    )
+  }
+
   async getRequiredApprovingReviewCount(
     installationId: number,
     ref: GitHubRepoRef,
@@ -836,107 +718,139 @@ export class FetchGitHubClient implements GitHubClient {
     // PR-scoped rule (GitLab) needs is accepted by the port but unused here.
     _number?: number,
   ): Promise<number> {
-    try {
-      const { json } = await this.request(
-        `/repos/${ref.owner}/${ref.repo}/branches/${encodeURIComponent(branch)}/protection/required_pull_request_reviews`,
-        { installationId },
-      )
-      const count = (json as { required_approving_review_count?: number })
-        .required_approving_review_count
-      return typeof count === 'number' ? count : 1
-    } catch (error) {
-      // No protection rule, or the App lacks admin access to read it — both common. Default to 1.
-      if (error instanceof GitHubApiError && (error.status === 404 || error.status === 403))
-        return 1
-      throw error
-    }
+    return readRequiredApprovingReviewCount(
+      this.protectionRequest(installationId),
+      githubApiStatus,
+      ref,
+      branch,
+    )
   }
 
-  async getPullRequestBaseRef(
+  /**
+   * A branch's protection posture — the backing read for the security preflight. A thin
+   * delegate: the probe itself lives in `branchProtection.ts` (extracted along the same seam as
+   * `reviewPosting.ts`, since this file is at its size budget), bound to this installation's
+   * authenticated GET. Never throws; see the probe's own doc for why.
+   */
+  async getBranchProtection(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<BranchProtectionSummary> {
+    return probeBranchProtection(
+      this.protectionRequest(installationId),
+      githubApiStatus,
+      ref,
+      branch,
+    )
+  }
+
+  /** This installation's authenticated GET, as the narrow callback the probe helpers take. */
+  private protectionRequest(installationId: number) {
+    return (path: string) => this.request(path, { installationId })
+  }
+
+  /**
+   * `GET /pulls/{n}` — the one read every single-PR accessor below is a projection of. A 404 (the
+   * repo has no such PR: never opened, or hard-deleted) answers null; ANY other failure throws, so
+   * a caller can tell "this PR does not exist" from "the provider could not answer". That
+   * distinction is what makes {@link getPullRequest} usable as an existence check.
+   */
+  private async readPullRequest(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
-  ): Promise<string | null> {
+  ): Promise<gp.GhPullPayload | null> {
     try {
       const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
         installationId,
       })
-      return (json as { base?: { ref?: string } }).base?.ref ?? null
+      return json as gp.GhPullPayload
     } catch (error) {
-      // A deleted/missing PR (404) just means "no base to gate against" — fall back to the
-      // caller's default. Other errors propagate (the gate's probe maps them to "keep waiting").
       if (error instanceof GitHubApiError && error.status === 404) return null
       throw error
     }
   }
 
-  async listReviewThreads(
+  // A missing PR degrades differently per caller, but always to null: no base to gate against
+  // (the human-review gate falls back to its default), no head branch to push to (the deep-review
+  // "fix" reports it unresolvable rather than cloning the wrong ref), no head sha to compare
+  // against (the drift check skips).
+  async getPullRequestBaseRef(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.readPullRequest(installationId, ref, number))?.base?.ref ?? null
+  }
+
+  async getPullRequestHeadRef(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.readPullRequest(installationId, ref, number))?.head?.ref ?? null
+  }
+
+  async getPullRequestHeadSha(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.readPullRequest(installationId, ref, number))?.head?.sha ?? null
+  }
+
+  async getPullRequest(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null> {
+    const payload = await this.readPullRequest(installationId, ref, number)
+    return payload ? this.toOpenedPullRequest(payload) : null
+  }
+
+  // The GraphQL review-thread reads/writes live in `reviewThreads.ts` (the sibling of
+  // `reviewPosting.ts`, the REST half); these stay thin delegates over the shared executor.
+  listReviewThreads(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
   ): Promise<GitHubReviewThread[]> {
-    // `comments(last:50)` reads the NEWEST 50 comments per thread (oldest→newest within the
-    // window), so the last node is the true latest — the caller derives the thread's
-    // isBot/latestCommentAt from it. `first:50` would misclassify a thread with >50 comments (a
-    // human re-open as comment #51+ would be invisible and a stale bot reply read as "latest"),
-    // wrongly dropping a re-opened long thread from the outstanding set.
-    const query = `query($owner:String!,$repo:String!,$number:Int!,$cursor:String){
-      repository(owner:$owner,name:$repo){
-        pullRequest(number:$number){
-          reviewThreads(first:100,after:$cursor){
-            nodes{ id isResolved path line comments(last:50){ nodes{ author{login} body createdAt } } }
-            pageInfo{ hasNextPage endCursor }
-          }
-        }
-      }
-    }`
-    const threads: GitHubReviewThread[] = []
-    let cursor: string | null = null
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const data: ReviewThreadsQueryData = await this.graphql<ReviewThreadsQueryData>(
-        installationId,
-        query,
-        { owner: ref.owner, repo: ref.repo, number, cursor },
-      )
-      const conn = data.repository?.pullRequest?.reviewThreads
-      for (const node of conn?.nodes ?? []) {
-        threads.push({
-          id: node.id,
-          isResolved: node.isResolved,
-          path: node.path ?? null,
-          line: node.line ?? null,
-          comments: (node.comments?.nodes ?? []).map((c) => ({
-            author: c.author?.login ?? '',
-            body: c.body ?? '',
-            createdAt: parseGitHubTime(c.createdAt),
-          })),
-        })
-      }
-      if (!conn?.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break
-      cursor = conn.pageInfo.endCursor
-    }
-    return threads
+    return listPrReviewThreads(this.graphqlFn, installationId, ref, number)
   }
 
-  async replyToReviewThread(
+  replyToReviewThread(
     installationId: number,
     _ref: GitHubRepoRef,
     threadId: string,
     body: string,
   ): Promise<void> {
-    const mutation = `mutation($threadId:ID!,$body:String!){
-      addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId,body:$body}){ comment{ id } }
-    }`
-    await this.graphql(installationId, mutation, { threadId, body })
+    return replyToPrReviewThread(this.graphqlFn, installationId, threadId, body)
   }
 
-  async resolveReviewThread(
+  resolveReviewThread(
     installationId: number,
     _ref: GitHubRepoRef,
     threadId: string,
   ): Promise<void> {
-    const mutation = `mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ id } } }`
-    await this.graphql(installationId, mutation, { threadId })
+    return resolvePrReviewThread(this.graphqlFn, installationId, threadId)
+  }
+
+  createReview(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<CreateReviewResult> {
+    // The per-comment posting + partial-success reporting lives in `reviewPosting.ts`; this stays
+    // a thin transport delegate (see the deep-review "post" resolution).
+    return postPrReview(
+      (path, opts) => this.request(path, opts),
+      installationId,
+      ref,
+      number,
+      input,
+    )
   }
 
   // ---- writes -------------------------------------------------------------
@@ -1020,14 +934,54 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
-    const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls`, {
-      installationId,
-      method: 'POST',
-      body: input,
-    })
+  ): Promise<OpenedPullRequest> {
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls`, {
+        installationId,
+        method: 'POST',
+        body: input,
+      })
+      return this.toOpenedPullRequest(json)
+    } catch (err) {
+      // Idempotency (see the RepoFiles/GitHubClient port doc): re-opening a PR for a head/base
+      // that already has an open one is a 422 from GitHub ("A pull request already exists"). A
+      // durable-driver replay of a committing post-op (e.g. the `spike` findings PR) hits this,
+      // so treat it as a success: look up and return the existing open PR instead of failing.
+      if (!(err instanceof GitHubApiError) || err.status !== 422) throw err
+      const existing = await this.findOpenPullRequest(installationId, ref, input.head, input.base)
+      if (!existing) throw err
+      return existing
+    }
+  }
+
+  /** Map a `/pulls` create/list payload to the {@link OpenedPullRequest} (projection + web url). */
+  private toOpenedPullRequest(json: unknown): OpenedPullRequest {
     const p = json as gp.GhPullPayload
-    return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
+    // The projection drops `html_url` (not a sync field); the create/list response carries it, so
+    // surface it as the `OpenedPullRequest.url` a post-op records on the block.
+    return {
+      ...gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now()),
+      url: (json as { html_url?: string }).html_url ?? '',
+      crossRepository: gp.pullIsCrossRepository(p),
+    }
+  }
+
+  /** The open PR matching `head`/`base` (for {@link openPullRequest}'s idempotent replay), or null. */
+  private async findOpenPullRequest(
+    installationId: number,
+    ref: GitHubRepoRef,
+    head: string,
+    base: string,
+  ): Promise<OpenedPullRequest | null> {
+    // GitHub filters `head` by `owner:branch`; the work branch lives on the target repo itself.
+    const headFilter = head.includes(':') ? head : `${ref.owner}:${head}`
+    const { json } = await this.request(
+      `/repos/${ref.owner}/${ref.repo}/pulls?state=open&head=${encodeURIComponent(headFilter)}` +
+        `&base=${encodeURIComponent(base)}&per_page=1`,
+      { installationId },
+    )
+    const first = (json as gp.GhPullPayload[] | null)?.[0]
+    return first ? this.toOpenedPullRequest(first) : null
   }
 
   async createIssue(
@@ -1057,6 +1011,18 @@ export class FetchGitHubClient implements GitHubClient {
     })
     const p = json as gp.GhPullPayload
     return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
+  }
+
+  /** The PR's current description, for the verification report's read-splice-write upsert. */
+  async getPullRequestBody(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+      installationId,
+    })
+    return ((json ?? {}) as { body?: string | null }).body ?? null
   }
 
   async getPullRequestMergeability(
@@ -1225,17 +1191,8 @@ export class FetchGitHubClient implements GitHubClient {
     map: (json: unknown) => T[],
     stop?: (page: T[]) => boolean,
   ): Promise<T[]> {
-    const all: T[] = []
-    let url: string | undefined = path
-    for (let page = 0; url && page < MAX_PAGES; page++) {
-      const response: GitHubResponse = await this.request(url, opts)
-      if (response.status === 304) break
-      const mapped = map(response.json)
-      all.push(...mapped)
-      if (stop?.(mapped)) break
-      url = response.next
-    }
-    return all
+    const { items } = await walkPages(path, (url) => this.request(url, opts), map, stop)
+    return items
   }
 
   private async request(pathOrUrl: string, opts: RequestOptions): Promise<GitHubResponse> {
@@ -1270,6 +1227,8 @@ export class FetchGitHubClient implements GitHubClient {
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       const resetSec = numHeader(res, 'x-ratelimit-reset')
+      const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
+      const body = text.slice(0, 300)
       throw new GitHubApiError(
         res.status,
         describeVcsApiError({
@@ -1277,10 +1236,12 @@ export class FetchGitHubClient implements GitHubClient {
           status: res.status,
           method: opts.method ?? 'GET',
           url,
-          body: text.slice(0, 300),
-          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          body,
+          rateLimited,
           resetAt: resetSec === null ? null : resetSec * 1000,
         }),
+        rateLimited,
+        body,
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
@@ -1307,55 +1268,11 @@ export class FetchGitHubClient implements GitHubClient {
       observedAt: this.deps.clock.now(),
     }
     // Best-effort: rate-limit accounting must never fail the actual call.
-    await this.deps.rateLimitRepository.record(snapshot).catch(() => {})
+    await runBestEffort(
+      logger,
+      'github.recordRateLimit',
+      () => this.deps.rateLimitRepository.record(snapshot),
+      { installationId, resource: snapshot.resource },
+    )
   }
-}
-
-/** Carries the HTTP status so callers/queue can decide whether to retry. */
-export class GitHubApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'GitHubApiError'
-  }
-}
-
-/** Derive `{owner, repo, number}` from an issue's `html_url`, or null if it doesn't match. */
-function parseIssueHtmlUrl(url: string): { owner: string; repo: string; number: number } | null {
-  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/)
-  if (!m) return null
-  return { owner: m[1]!, repo: m[2]!, number: Number(m[3]) }
-}
-
-/** Decode the contents API's base64 (whitespace-laden) payload to a UTF-8 string. */
-function decodeBase64Utf8(value: string): string {
-  const binary = atob(value.replace(/\s+/g, ''))
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder().decode(bytes)
-}
-
-/** Parse a GitHub ISO-8601 timestamp to epoch ms, or 0 when absent/unparseable. */
-function parseGitHubTime(value: string | null | undefined): number {
-  if (!value) return 0
-  const ms = Date.parse(value)
-  return Number.isFinite(ms) ? ms : 0
-}
-
-function numHeader(res: Response, name: string): number | null {
-  const raw = res.headers.get(name)
-  if (raw === null) return null
-  const n = Number(raw)
-  return Number.isFinite(n) ? n : null
-}
-
-function parseNextLink(link: string | null): string | undefined {
-  if (!link) return undefined
-  for (const part of link.split(',')) {
-    const match = part.match(/<([^>]+)>\s*;\s*rel="next"/)
-    if (match) return match[1]
-  }
-  return undefined
 }

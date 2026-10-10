@@ -1,6 +1,6 @@
 # @cat-factory/provider-s3
 
-Opt-in **AWS S3** (or S3-compatible) blob backend for cat-factory's binary artifacts —
+Opt-in **AWS S3** (or S3-compatible) blob backend for cat-factory's binary artifacts:
 implements the kernel `BinaryBlobBackend` port over an S3 bucket.
 
 ## Why this is its own package
@@ -10,14 +10,18 @@ the **bytes** can go anywhere (Cloudflare R2, the local filesystem, Postgres, or
 the heavy `@aws-sdk/client-s3`, so it ships as its own opt-in package that only a deployment
 choosing S3 depends on. Even then, the SDK is imported **lazily on first I/O**, not at module
 load: a facade statically imports `S3BinaryBlobBackend` to wire its container, but a deployment
-that ends up running the `db`/`fs`/no blob backend never pays the SDK's load cost — the SDK is
+that ends up running the `db`/`fs`/no blob backend never pays the SDK's load cost; the SDK is
 pulled in only when an S3 `put`/`get`/`delete` actually executes.
+
+A store the platform does NOT ship is the same port with one more step: register it on your
+deployment's `BinaryStoreRegistry` so an account can select it. See
+[`backend/docs/custom-binary-stores.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-binary-stores.md).
 
 ## Enabling it
 
 The package exports one class:
 
-- `S3BinaryBlobBackend` — a `BinaryBlobBackend` (`put` / `get` / `delete`) constructed from an
+- `S3BinaryBlobBackend`: a `BinaryBlobBackend` (`put` / `get` / `delete`) constructed from an
   `S3BinaryBlobBackendConfig`.
 
 ### Node / local facade
@@ -40,7 +44,7 @@ case 's3':
 An account picks the S3 backend (and supplies region / bucket + credentials) in the
 **content-storage settings UI**; the facade builds the backend from that config. Omitting
 `credentials` is intentional and falls back to the **ambient AWS credential chain** (instance
-role, `AWS_*` env) — the right behaviour for a deployment running on AWS with an attached role.
+role, `AWS_*` env): the right behaviour for a deployment running on AWS with an attached role.
 (The UI requires explicit keys, so the keyless path is only reached by config written through
 another channel.)
 
@@ -69,6 +73,6 @@ artifact's storage key.
 ## Related
 
 Part of cat-factory's opt-in **AWS stack** alongside
-[`@cat-factory/provider-bedrock`](../provider-bedrock) (LLM models) and
-[`@cat-factory/eks`](../eks) (runner + environment backends). Each is independent and registers
-into its own seam — mix in only what you use.
+[`@cat-factory/provider-bedrock`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/provider-bedrock) (LLM models) and
+[`@cat-factory/eks`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/eks) (runner + environment backends). Each is independent and registers
+into its own seam: mix in only what you use.

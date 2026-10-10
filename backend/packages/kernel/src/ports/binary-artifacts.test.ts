@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { createRecordingLogger, type Logger } from './logging.js'
 import type {
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
   BinaryBlobBackend,
+  DocumentArtifactRef,
 } from './binary-artifacts.js'
 import { createBinaryArtifactStore } from './binary-artifacts.js'
 
@@ -32,15 +34,63 @@ class FakeMetadataStore implements BinaryArtifactMetadataStore {
   listByBlock(): Promise<BinaryArtifactRecord[]> {
     return Promise.resolve([])
   }
+  countByBlock(): Promise<number> {
+    return Promise.resolve(0)
+  }
+  listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]> {
+    return Promise.resolve(
+      [...this.rows.values()].filter(
+        (r) =>
+          r.workspaceId === workspaceId &&
+          r.document?.source === document.source &&
+          r.document.externalId === document.externalId,
+      ),
+    )
+  }
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]> {
+    return Promise.resolve(
+      [...this.rows.values()].filter((r) =>
+        documents.some(
+          (document) =>
+            r.workspaceId === workspaceId &&
+            r.document?.source === document.source &&
+            r.document.externalId === document.externalId,
+        ),
+      ),
+    )
+  }
+  deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {
+    let n = 0
+    for (const id of ids) {
+      const row = this.rows.get(id)
+      if (row?.workspaceId !== workspaceId) continue
+      this.rows.delete(id)
+      n += 1
+    }
+    return Promise.resolve(n)
+  }
   delete(_workspaceId: string, id: string): Promise<void> {
     this.rows.delete(id)
     return Promise.resolve()
   }
+  // Both halves carry the port's document-keyed exemption (the window is `Infinity` here, since
+  // these tests are about the reclaim rather than the cutoff), so a fixture that mixed run debris
+  // with a document's renders could not read as if the sweep took both.
   listOlderThan(workspaceId: string): Promise<BinaryArtifactRecord[]> {
-    return this.listByWorkspace(workspaceId)
+    return Promise.resolve(
+      [...this.rows.values()].filter((r) => r.workspaceId === workspaceId && !r.document),
+    )
   }
-  deleteOlderThan(workspaceId: string): Promise<number> {
-    return this.deleteByWorkspace(workspaceId)
+  async deleteOlderThan(workspaceId: string): Promise<number> {
+    const doomed = await this.listOlderThan(workspaceId)
+    for (const r of doomed) this.rows.delete(r.id)
+    return doomed.length
   }
   listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {
     return Promise.resolve([...this.rows.values()].filter((r) => r.workspaceId === workspaceId))
@@ -77,14 +127,14 @@ class FlakyBlobBackend implements BinaryBlobBackend {
   }
 }
 
-const deps = (metadata: FakeMetadataStore, blob: BinaryBlobBackend, logger?: unknown) => {
+const deps = (metadata: FakeMetadataStore, blob: BinaryBlobBackend, logger?: Logger) => {
   let seq = 0
   return {
     metadata,
     blob,
     idGenerator: { next: (p: string) => `${p}-${(seq += 1)}` },
     clock: { now: () => 1000 },
-    ...(logger ? { logger: logger as { warn(o: Record<string, unknown>, m?: string): void } } : {}),
+    ...(logger ? { logger } : {}),
   }
 }
 
@@ -103,7 +153,7 @@ describe('createBinaryArtifactStore reclaim (fail-safe partial-failure branch)',
     const metadata = new FakeMetadataStore()
     // Fail the SECOND artifact's blob (key is `${workspaceId}/${id}`, id = `art-2`).
     const blob = new FlakyBlobBackend(new Set(['ws/art-2']))
-    const logger = { warn: vi.fn() }
+    const logger = createRecordingLogger()
     const store = createBinaryArtifactStore(deps(metadata, blob, logger))
 
     const a = await store.store({ meta: meta('ws', 1), blob: png(1) })
@@ -123,14 +173,14 @@ describe('createBinaryArtifactStore reclaim (fail-safe partial-failure branch)',
       expect(blob.blobs.has(rec.storageKey)).toBe(false)
     }
     // The residual leak is surfaced, not silent.
-    expect(logger.warn).toHaveBeenCalledTimes(1)
-    expect(logger.warn.mock.calls[0]?.[0]).toMatchObject({ workspaceId: 'ws', failed: 1, total: 3 })
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
+    expect(logger.lines[0]?.fields).toMatchObject({ workspaceId: 'ws', failed: 1, total: 3 })
   })
 
   it('takes the bulk fast path (no per-row deletes, no warning) when every blob deletes', async () => {
     const metadata = new FakeMetadataStore()
     const blob = new FlakyBlobBackend(new Set())
-    const logger = { warn: vi.fn() }
+    const logger = createRecordingLogger()
     const store = createBinaryArtifactStore(deps(metadata, blob, logger))
     await store.store({ meta: meta('ws', 1), blob: png(1) })
     await store.store({ meta: meta('ws', 2), blob: png(2) })
@@ -138,7 +188,7 @@ describe('createBinaryArtifactStore reclaim (fail-safe partial-failure branch)',
     expect(await store.deleteByWorkspace('ws')).toBe(2)
     expect(metadata.rows.size).toBe(0)
     expect(blob.blobs.size).toBe(0)
-    expect(logger.warn).not.toHaveBeenCalled()
+    expect(logger.lines).toHaveLength(0)
   })
 
   it('pruneOlderThan shares the same partial-failure fail-safe', async () => {

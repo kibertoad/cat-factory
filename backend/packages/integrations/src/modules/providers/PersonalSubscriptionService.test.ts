@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { CredentialRequiredError } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  runActivationScope,
+  userActivationScope,
+} from '@cat-factory/kernel'
 import type {
+  ActivationScopeId,
   PersonalSecretCipher,
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
@@ -43,7 +48,10 @@ class FakeSubs implements PersonalSubscriptionRepository {
   async getByUserVendor(userId: string, vendor: SubscriptionVendor) {
     return this.live().find((r) => r.userId === userId && r.vendor === vendor) ?? null
   }
+  /** Counted, so "one read for the whole vendor sweep" is assertable rather than assumed. */
+  listByUserCalls = 0
   async listByUser(userId: string) {
+    this.listByUserCalls += 1
     return this.live().filter((r) => r.userId === userId)
   }
   async upsert(record: PersonalSubscriptionRecord) {
@@ -72,29 +80,24 @@ class FakeSubs implements PersonalSubscriptionRepository {
 
 class FakeActs implements SubscriptionActivationRepository {
   rows: SubscriptionActivationRecord[] = []
-  async get(executionId: string, userId: string, vendor: SubscriptionVendor, now: number) {
+  async get(scopeId: ActivationScopeId, userId: string, vendor: SubscriptionVendor, now: number) {
     return (
       this.rows.find(
         (r) =>
-          r.executionId === executionId &&
-          r.userId === userId &&
-          r.vendor === vendor &&
-          r.expiresAt > now,
+          r.scopeId === scopeId && r.userId === userId && r.vendor === vendor && r.expiresAt > now,
       ) ?? null
     )
   }
   async upsert(record: SubscriptionActivationRecord) {
     const i = this.rows.findIndex(
       (r) =>
-        r.executionId === record.executionId &&
-        r.userId === record.userId &&
-        r.vendor === record.vendor,
+        r.scopeId === record.scopeId && r.userId === record.userId && r.vendor === record.vendor,
     )
     if (i >= 0) this.rows[i] = { ...record }
     else this.rows.push({ ...record })
   }
-  async deleteByExecution(executionId: string) {
-    this.rows = this.rows.filter((r) => r.executionId !== executionId)
+  async deleteByScope(scopeId: ActivationScopeId) {
+    this.rows = this.rows.filter((r) => r.scopeId !== scopeId)
   }
   async deleteExpired(now: number) {
     const before = this.rows.length
@@ -150,11 +153,13 @@ describe('PersonalSubscriptionService', () => {
       password: 'longpassword',
     })
 
-    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
-    const leased = await svc.leaseForRun('exec_1', 'usr_7', 'claude')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+    const leased = await svc.lease(runActivationScope('exec_1'), 'usr_7', 'claude')
     expect(leased).toEqual({ vendor: 'claude', secret: 'TOKEN' })
 
-    await expect(svc.leaseForRun('exec_other', 'usr_7', 'claude')).rejects.toMatchObject({
+    await expect(
+      svc.lease(runActivationScope('exec_other'), 'usr_7', 'claude'),
+    ).rejects.toMatchObject({
       code: 'credential_required',
       details: { vendor: 'claude', reason: 'password_required' },
     })
@@ -169,7 +174,7 @@ describe('PersonalSubscriptionService', () => {
       password: 'rightpassword',
     })
     await expect(
-      svc.activateForRun('exec_1', 'usr_7', 'claude', 'wrongpassword!!'),
+      svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'wrongpassword!!'),
     ).rejects.toMatchObject({ details: { reason: 'wrong_password' } })
   })
 
@@ -183,25 +188,68 @@ describe('PersonalSubscriptionService', () => {
       expiresAt: 9_000, // already past
     })
     await expect(
-      svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword'),
+      svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword'),
     ).rejects.toMatchObject({
       details: { reason: 'subscription_expired' },
     })
+    // And it is not reported as CONFIGURED either, by either question. A lapsed credential that
+    // still answered "wired" put the model in the catalog as selectable and had the run refused at
+    // its first dispatch, naming the model where the subscription is what needs renewing.
+    expect(await svc.has('usr_7', 'claude')).toBe(false)
+    expect([...(await svc.liveVendors('usr_7'))]).toEqual([])
+  })
+
+  it('answers every vendor in one read, and only for the user asked about', async () => {
+    // The whole vendor sweep is one question with one answer: the capability resolver and
+    // `GET /api/v1/models` both want the SET, and five single-row lookups is five round trips on a
+    // read the catalog and every run start take.
+    const { svc, subs } = makeService()
+    for (const vendor of ['claude', 'codex'] as const) {
+      await svc.store('usr_7', { vendor, label: 'm', token: 'T', password: 'longpassword' })
+    }
+    await svc.store('usr_8', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    const reads = subs.listByUserCalls
+    expect([...(await svc.liveVendors('usr_7'))].sort()).toEqual(['claude', 'codex'])
+    expect(subs.listByUserCalls - reads).toBe(1)
+    expect([...(await svc.liveVendors('usr_9'))]).toEqual([])
   })
 
   it('clears a run and sweeps expired activations', async () => {
     const { svc, acts } = makeService()
     await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
-    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
     expect(acts.rows).toHaveLength(1)
 
-    await svc.clearRun('exec_1')
+    await svc.clearScope(runActivationScope('exec_1'))
     expect(acts.rows).toHaveLength(0)
 
     // A directly-inserted stale activation is swept.
-    await svc.activateForRun('exec_2', 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_2'), 'usr_7', 'claude', 'longpassword')
     acts.rows[0]!.expiresAt = 0
     expect(await svc.sweepExpiredActivations()).toBe(1)
+  })
+
+  it('calls an activation FRESH only while over half its life is left', async () => {
+    // The threshold an interaction reads to decide whether re-minting is necessary at all. It lives
+    // here because only this service knows the TTL it mints against, and it is what keeps a headless
+    // driver answering a run's parks from paying the unlock's 210k PBKDF2 iterations once per call.
+    let now = 1000
+    const { svc } = makeService(() => now)
+    await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+    expect(await svc.hasFreshActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(true)
+
+    // Just past halfway: still LIVE, so a dispatch would work — and deliberately no longer fresh,
+    // because the point is to re-mint while a caller is present rather than at the edge of expiry.
+    now += DEFAULT_ACTIVATION_TTL_MS / 2 + 1
+    expect(await svc.hasFreshActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(
+      false,
+    )
+    expect(await svc.hasActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(true)
+
+    // And past the TTL it is neither.
+    now += DEFAULT_ACTIVATION_TTL_MS
+    expect(await svc.hasActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(false)
   })
 
   it('computes expiry/renewal status and lists expiring subscriptions', async () => {
@@ -256,5 +304,29 @@ describe('PersonalSubscriptionService', () => {
       password: 'separatepassword',
     })
     expect(other.vendor).toBe('glm')
+  })
+
+  it('revokes the user-scope activations when the credential is removed', async () => {
+    // The activation is a SECOND copy of the token, re-encrypted with the system key alone, so
+    // deleting the subscription does not revoke it. Left behind, a disconnected subscription stays
+    // leasable from the run-less surfaces for the rest of the ~12h TTL.
+    const { svc } = makeService()
+    await svc.store('usr_7', {
+      vendor: 'claude',
+      label: 'mine',
+      token: 'T',
+      password: 'longpassword',
+    })
+    await svc.activate(userActivationScope('usr_7'), 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+
+    await svc.remove('usr_7', 'claude')
+
+    await expect(svc.lease(userActivationScope('usr_7'), 'usr_7', 'claude')).rejects.toBeInstanceOf(
+      CredentialRequiredError,
+    )
+    // The RUN's copy stays: consent there was given for one run, whose dispatches are already in
+    // flight, and the run settling clears it.
+    expect((await svc.lease(runActivationScope('exec_1'), 'usr_7', 'claude')).secret).toBe('T')
   })
 })

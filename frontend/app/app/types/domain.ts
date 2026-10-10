@@ -40,6 +40,7 @@ export type {
   ResolvedFrontendBinding,
   EnvironmentHandle,
   EnvironmentTestRun,
+  EnvironmentTestMode,
   EnvironmentTestStage,
   EnvironmentTestStatus,
   ServiceConnection,
@@ -55,20 +56,55 @@ export type {
   TestConcern,
   TestOutcome,
   TestReport,
+  RequirementVerdict,
+  RequirementVerdictStatus,
   TestScreenshot,
   AgentKind,
   AgentCategory,
+  AgentTier,
   CustomAgentKind,
+  AgentKindVariant,
+  CustomTaskType,
+  TaskTypePresentation,
+  TaskTypeFieldDescriptor,
+  TaskTypeFieldOption,
+  // One row of the workspace's operation-suppression screen: a registered custom task type plus
+  // whether THIS board hides it (`backend/docs/reusable-operations.md`).
+  TaskTypeSuppression,
+  // The shared descriptor-driven form vocabulary (`contracts/src/form-fields.ts`): one field
+  // shape and one filled-value bag behind both the initiative-preset form and a custom task
+  // type's per-case form, so `DescriptorFields.vue` renders either.
+  DescriptorField,
+  DescriptorFieldValue,
+  DescriptorFieldValues,
+  // Per-step GATE configuration: who may resolve a human approval gate, how many of them, and
+  // the parameters the step's registered gate declares (`contracts/src/gate-config.ts`).
+  GateApproverPolicy,
+  GateConfigForm,
+  StepGateConfig,
   Pipeline,
+  PipelinePurpose,
   SpendStatus,
   BudgetCaps,
   Workspace,
+  WorkspaceListItem,
   WorkspaceSnapshot,
+  WorkspaceRole,
+  WorkspacePermission,
+  WorkspaceAccessMode,
+  WorkspaceAccess,
+  WorkspaceMember,
   TaskLimitMode,
+  InputGateMode,
+  ReviewFrictionMode,
   WorkspaceSettings,
+  WorkspaceMetadata,
   UpdateWorkspaceSettingsInput,
   UserSettings,
   UpdateUserSettingsInput,
+  TutorialProgress,
+  UpdateTutorialProgressInput,
+  RecordTutorialEventInput,
   InfraSetup,
   InfraSetupStatus,
   InfraSetupArea,
@@ -82,12 +118,16 @@ export type {
   PreviewStatus,
 } from '@cat-factory/contracts'
 
-import type { AgentCategory, AgentKind } from '@cat-factory/contracts'
+import type { AgentCategory, AgentKind, AgentTier, PipelinePurpose } from '@cat-factory/contracts'
 
 // The document-kind list + the per-kind field descriptors are runtime values (used to render
 // the picker and the conditional per-kind inputs), so they are re-exported as values — the
 // single source of truth lives in the contracts package.
 export { DOC_KINDS, DOC_KIND_FIELDS } from '@cat-factory/contracts'
+
+// The assistant's prompt cap is a runtime value too: the box states the limit and refuses a
+// submission over it, and the wire schema holds the same number.
+export { ASSISTANT_PROMPT_MAX } from '@cat-factory/contracts'
 
 /** A draggable agent definition shown in the agent palette. Frontend-only. */
 export interface AgentArchetype {
@@ -101,12 +141,78 @@ export interface AgentArchetype {
   /** Palette category this archetype is grouped under. Absent ⇒ ungrouped/system kind. */
   category?: AgentCategory
   /**
+   * The pipeline PURPOSES the palette offers this kind to, WITHIN the ones its {@link category}
+   * already admits (`purposeSuggestsAgentKind`). Absent ⇒ the category alone decides, which is
+   * the normal case: declare this only to opt OUT of a purpose the category would admit.
+   */
+  purposes?: readonly PipelinePurpose[]
+  /**
+   * How specialist this kind is — the tier the palette / model-preset override list filter on
+   * (`basic` shows only basic kinds, `intermediate` adds those, `advanced` shows everything).
+   * Absent ⇒ `DEFAULT_AGENT_TIER`, which is how an unclassified deployment kind behaves.
+   */
+  tier?: AgentTier
+  /**
    * Optional id of a DEDICATED result window this agent's step opens instead of the
-   * generic prose step-detail panel. Resolved through the result-view registry
-   * (`STEP_RESULT_VIEWS`) so any agent can declare a bespoke visualization without the
-   * renderer hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
+   * generic prose step-detail panel. Resolved through the modular `resultViews` slot
+   * registry (`~/modular/result-views`, read by `StepResultViewHost`) so any agent —
+   * built-in or a consumer's — can declare a bespoke visualization without the renderer
+   * hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
    */
   resultView?: string
+  /**
+   * The kind carries the `binary-output` trait: its deliverable is binary artifacts stored
+   * through a foundational service, so a step of this kind REQUIRES a `stepOptions.binaryOutput`
+   * selection and is refused at pipeline save and at run start without one. Projected onto the
+   * snapshot as `CustomAgentKind.binaryOutput` — the only trait with a UI consequence, and the
+   * only way the builder can know which steps must offer the storage picker. Absent ⇒ false,
+   * which is every built-in kind.
+   */
+  binaryOutput?: boolean
+  /**
+   * The registered EXTERNAL executor this kind's work runs on, when it runs on one at all.
+   *
+   * Carried onto the archetype for the reason {@link binaryOutput} is: the pipeline builder and
+   * every run view resolve a step's meta through `agentKindMeta`, not through the snapshot, so a
+   * fact a card has to state cannot live only on the wire entry. What it states is the thing a
+   * person composing a pipeline most needs to see (which of these steps leaves the platform),
+   * and what a run view needs to explain a step with no token usage beside it.
+   *
+   * `label` is absent when the kind declares a delegated surface whose executor THIS build no
+   * longer registers, which is a real state (a deployment can stop registering one while runs that
+   * used it are still on the board) and renders as the id rather than as a normal step.
+   */
+  delegatedExecutor?: {
+    id: string
+    label?: string
+    description?: string
+    telemetry?: 'not-reported' | 'self-reported'
+  }
+  /**
+   * The platform dispatches this kind for a flow of its own, so the builder palette never offers
+   * it as a placeable block (`narrowAgentPalette` drops it). It still resolves through
+   * `agentKindMeta`, because a run of it has to RENDER. Absent ⇒ an ordinary palette block.
+   */
+  internal?: boolean
+}
+
+/**
+ * Display metadata for a task TYPE (the card badge + create-task picker), resolved through the
+ * `taskTypeMeta` read-model. A BUILT-IN type carries an i18n {@link labelKey}; a CUSTOM
+ * (deployment-registered) type carries a literal {@link label} from the wire presentation. The
+ * renderer resolves the display string as `labelKey ? t(labelKey) : label`. Frontend-only.
+ */
+export interface TaskTypeMeta {
+  /** The task type id this meta describes. */
+  taskType: string
+  /** iconify name (lucide). */
+  icon: string
+  /** tailwind-ish accent token used across the card badge / picker. */
+  color: string
+  /** i18n key for a BUILT-IN type's label; absent for a custom type. */
+  labelKey?: string
+  /** Literal label for a CUSTOM type (from the wire presentation); absent for a built-in. */
+  label?: string
 }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:
@@ -133,11 +239,16 @@ export interface AuthUser {
 export type * from './execution'
 export type * from './models'
 export type * from './fragments'
+export type * from './skills'
+export type * from './foundationalServices'
 export type * from './documents'
 export type * from './tasks'
+export type * from './assistant'
+export type * from './bugHunt'
 export type * from './bootstrap'
 export type * from './envConfigRepair'
 export type * from './github'
+export type * from './vcs'
 export type * from './accounts'
 export type * from './notifications'
 export type * from './slack'
@@ -147,3 +258,4 @@ export type * from './recurring'
 export type * from './tracker'
 export type * from './initiative'
 export type * from './doc-interview'
+export type * from './guided-review'

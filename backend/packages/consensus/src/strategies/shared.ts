@@ -1,6 +1,7 @@
 import { generateText } from 'ai'
-import { catFactoryObservability } from '@cat-factory/kernel'
+import { catFactoryObservability, sumAgentTokenUsage } from '@cat-factory/kernel'
 import type { ConsensusContribution } from '@cat-factory/kernel'
+import { agentUsageFromModelUsage } from '@cat-factory/agents'
 import type {
   ConsensusUsage,
   GenerateArgs,
@@ -27,23 +28,32 @@ export const defaultGenerate: GenerateFn = async (args: GenerateArgs): Promise<G
       executionId: args.tags.executionId,
     }),
   })
-  return {
-    text: text.trim(),
-    usage: { inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0 },
-  }
+  return { text: text.trim(), usage: agentUsageFromModelUsage(usage) }
 }
 
-const ZERO_USAGE: ConsensusUsage = { inputTokens: 0, outputTokens: 0 }
-
-function addUsage(a: ConsensusUsage, b: ConsensusUsage): ConsensusUsage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-  }
-}
-
+/**
+ * The strategy's total across its calls. Kernel's fold, so the rule for an aggregate's input
+ * CLASS split is stated once for the companion repair retry and the consensus rounds alike:
+ * each part keeps its own split, and a part whose provider reported none folds in as fresh.
+ *
+ * A panel is the aggregate that rule was written for. Its parts are DIFFERENT MODELS behind
+ * different providers, and not all of them report cache details (`workers-ai-provider` reports
+ * none), so an all-or-nothing split would let one such participant re-price the whole panel's
+ * input at the fresh rate: the several-fold over-charge classed pricing exists to remove, on
+ * the shape that re-sends one goal prompt to every participant and is therefore mostly cache
+ * reads. Nothing here may re-state that rule locally; a strategy folds through kernel.
+ *
+ * The identity is `undefined` rather than a zeroed usage: a strategy that made no priced call
+ * has nothing to say about its classes, and a zero split would assert it cached nothing. Only
+ * the final total is coerced to a zero, since a strategy's declared usage is not optional.
+ */
 export function sumUsage(parts: ConsensusUsage[]): ConsensusUsage {
-  return parts.reduce(addUsage, ZERO_USAGE)
+  return (
+    parts.reduce<ConsensusUsage | undefined>(
+      (total, part) => sumAgentTokenUsage(total, part),
+      undefined,
+    ) ?? { inputTokens: 0, outputTokens: 0 }
+  )
 }
 
 /** Stable anonymous label for a participant index, so peers can't anchor on identity. */

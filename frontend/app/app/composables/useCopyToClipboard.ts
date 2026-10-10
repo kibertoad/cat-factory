@@ -9,7 +9,13 @@
 import { useClipboard } from '@vueuse/core'
 
 export function useCopyToClipboard() {
-  const { t } = useI18n()
+  // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which requires an
+  // active component instance. This composable is reached from the failure-toast funnel, which is
+  // itself instantiated in STORE setup (`stores/execution.ts`, `stores/board.ts`), and a Pinia
+  // setup store runs its body on the first `useStore()` anywhere, which is not necessarily a
+  // component. `useI18n()` there throws `MUST_BE_CALL_SETUP_TOP`, and a throw in a store body takes
+  // the whole app to Nuxt's error page. Same reason, and the same fix, as `usePipelineErrorToast`.
+  const { t } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
   const toast = useToast()
   const { copy: writeClipboard, isSupported } = useClipboard()
 
@@ -25,5 +31,21 @@ export function useCopyToClipboard() {
     }
   }
 
-  return { copy, isSupported }
+  /**
+   * A ready-made toast action that copies `text` (through {@link copy}, so it shows the
+   * same "Copied" / "Copy failed" feedback). Drop it into a toast's `actions` so any
+   * error/warning toast can offer a one-click "Copy details" — the message + context the
+   * user would otherwise have to retype into a bug report.
+   */
+  function copyAction(text: string, label?: string) {
+    return {
+      label: label ?? t('common.copyDetails'),
+      icon: 'i-lucide-clipboard',
+      onClick: () => {
+        void copy(text)
+      },
+    }
+  }
+
+  return { copy, copyAction, isSupported }
 }

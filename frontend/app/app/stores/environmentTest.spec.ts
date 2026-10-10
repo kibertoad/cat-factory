@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { EnvironmentTestRun } from '~/types/domain'
 import { useEnvironmentTestStore } from '~/stores/environmentTest'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
+import { useWorkspaceStore } from '~/stores/workspace'
 
 // The store resolves `useApi()` at setup; override the inert global stub from
 // `test/setup.ts` with a per-suite mock so the hydrate reconcile point-read is observable.
-const apiMock = { getEnvironmentTest: vi.fn() }
+const apiMock = { getEnvironmentTest: vi.fn(), startEnvironmentTest: vi.fn() }
 vi.stubGlobal('useApi', () => apiMock)
 
 /** Minimal EnvironmentTestRun factory — only the fields the store's reconcile logic touches. */
@@ -13,17 +15,60 @@ function run(id: string, over: Partial<EnvironmentTestRun> = {}): EnvironmentTes
     id,
     workspaceId: 'ws_test',
     blockId: `blk_${id}`,
+    mode: 'provision',
     status: 'running',
     stage: 'provisioning',
     branch: null,
     envUrl: null,
     error: null,
     failedStage: null,
+    probe: null,
+    probeProgress: null,
     createdAt: 1,
     updatedAt: 1,
     ...over,
   }
 }
+
+describe('environmentTest store: starting a run that may need a personal credential', () => {
+  let store: ReturnType<typeof useEnvironmentTestStore>
+  let withCredential: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws_test'
+    // The gate's contract, stubbed on the real store: run the action with the cached password, and
+    // resolve `false` when the person cancels the unlock prompt.
+    withCredential = vi.fn(async (action: (password?: string) => Promise<void>) => {
+      await action('cached-password')
+      return true
+    })
+    usePersonalSubscriptionsStore().withCredential = withCredential as unknown as ReturnType<
+      typeof usePersonalSubscriptionsStore
+    >['withCredential']
+    apiMock.startEnvironmentTest = vi.fn(async () => run('envtest_1', { mode: 'agent-probe' }))
+    store = useEnvironmentTestStore()
+  })
+
+  it('rides the unlock password, so a preset-resolved Claude dry run can lease it', async () => {
+    // Ungated, an `agent-probe` start 428s and the person is never asked for anything: the
+    // failure they see is a dry run that provisioned an environment and then could not open a
+    // credential nobody unlocked.
+    const started = await store.start('blk_1', 'agent-probe')
+    expect(apiMock.startEnvironmentTest).toHaveBeenCalledWith(
+      'ws_test',
+      'blk_1',
+      'agent-probe',
+      'cached-password',
+    )
+    expect(started?.id).toBe('envtest_1')
+    expect(store.runById('envtest_1')).toBeTruthy()
+  })
+
+  it('reports a cancelled unlock as no run, so the caller stops waiting for one', async () => {
+    withCredential.mockImplementation(async () => false)
+    expect(await store.start('blk_1', 'agent-probe')).toBeNull()
+  })
+})
 
 describe('environmentTest store — monotonic run reconcile', () => {
   let store: ReturnType<typeof useEnvironmentTestStore>
@@ -41,7 +86,7 @@ describe('environmentTest store — monotonic run reconcile', () => {
     // as `running` (older updatedAt) — it must NOT clobber the terminal state (terminal runs
     // emit nothing further, so the inspector would be stuck on "testing" forever).
     store.hydrate([run('r1', { status: 'running', updatedAt: 2 })], 'ws_test')
-    expect(store.runForBlock('blk_r1')!.status).toBe('failed')
+    expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('failed')
   })
 
   it('hydrate does NOT drop a live-added run the stale snapshot never saw', () => {
@@ -49,7 +94,7 @@ describe('environmentTest store — monotonic run reconcile', () => {
     // inspector still shows must survive a full refresh.
     store.upsert(run('r1', { status: 'succeeded', stage: 'done', updatedAt: 5 }))
     store.hydrate([], 'ws_test')
-    expect(store.runForBlock('blk_r1')!.status).toBe('succeeded')
+    expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('succeeded')
   })
 
   it('hydrate point-reads a preserved RUNNING run the snapshot omitted (finished offline)', async () => {
@@ -62,7 +107,9 @@ describe('environmentTest store — monotonic run reconcile', () => {
     )
     store.hydrate([], 'ws_test')
     expect(apiMock.getEnvironmentTest).toHaveBeenCalledWith('ws_test', 'r1')
-    await vi.waitFor(() => expect(store.runForBlock('blk_r1')!.status).toBe('succeeded'))
+    await vi.waitFor(() =>
+      expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('succeeded'),
+    )
   })
 
   it('a STALE point-read cannot regress a run a live event advanced meanwhile', async () => {
@@ -74,7 +121,42 @@ describe('environmentTest store — monotonic run reconcile', () => {
     store.upsert(run('r1', { status: 'failed', failedStage: 'tearing_down', updatedAt: 8 }))
     await vi.waitFor(() => expect(apiMock.getEnvironmentTest).toHaveBeenCalled())
     await Promise.resolve()
-    expect(store.runForBlock('blk_r1')!.status).toBe('failed')
+    expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('failed')
+  })
+
+  /**
+   * Overlapping refreshes preserve the same still-running run, so the point-read is deduped. It
+   * must be deduped with a QUEUED FOLLOW-UP rather than dropped: the outstanding read may have been
+   * issued before the run reached terminal, and it is the later ask that would observe the outcome.
+   * Nothing asks a third time (terminal runs emit no event and the snapshot omits them), so a
+   * dropped ask leaves the inspector on "testing" for the rest of the session.
+   */
+  it('re-reads once when a hydrate asks again while a point-read is still out', async () => {
+    store.upsert(run('r1', { status: 'running', updatedAt: 5 }))
+    let releaseFirst!: () => void
+    const held = new Promise<void>((r) => (releaseFirst = r))
+    apiMock.getEnvironmentTest = vi
+      .fn()
+      // Issued before the run reached terminal, so it can only ever answer `running`.
+      .mockImplementationOnce(async () => {
+        await held
+        return run('r1', { status: 'running', updatedAt: 6 })
+      })
+      // The queued follow-up: the read that picks up the outcome.
+      .mockImplementationOnce(async () =>
+        run('r1', { status: 'succeeded', stage: 'done', updatedAt: 9 }),
+      )
+
+    store.hydrate([], 'ws_test')
+    store.hydrate([], 'ws_test')
+    // Deduped while the first read is out: the second hydrate did not issue its own.
+    expect(apiMock.getEnvironmentTest).toHaveBeenCalledTimes(1)
+
+    releaseFirst()
+    await vi.waitFor(() =>
+      expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('succeeded'),
+    )
+    expect(apiMock.getEnvironmentTest).toHaveBeenCalledTimes(2)
   })
 
   it('hydrate DROPS a cached run from a different workspace (board switch starts clean)', () => {
@@ -89,15 +171,35 @@ describe('environmentTest store — monotonic run reconcile', () => {
       [run('r1', { status: 'running', stage: 'tearing_down', updatedAt: 9 })],
       'ws_test',
     )
-    expect(store.runForBlock('blk_r1')!.stage).toBe('tearing_down')
+    expect(store.runForBlock('blk_r1', 'provision')!.stage).toBe('tearing_down')
   })
 
   it('upsert ignores an older/out-of-order write but applies newer/equal', () => {
     store.upsert(run('r1', { status: 'failed', updatedAt: 5 }))
     // e.g. a `start()` response resolving AFTER the fast-failing run's terminal event landed.
     store.upsert(run('r1', { status: 'running', stage: 'creating_branch', updatedAt: 3 }))
-    expect(store.runForBlock('blk_r1')!.status).toBe('failed')
+    expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('failed')
     store.upsert(run('r1', { status: 'succeeded', stage: 'done', updatedAt: 5 }))
-    expect(store.runForBlock('blk_r1')!.status).toBe('succeeded')
+    expect(store.runForBlock('blk_r1', 'provision')!.status).toBe('succeeded')
+  })
+
+  /**
+   * The two self-tests render side by side in the inspector, each with its own status line, so a
+   * per-block read has to be per MODE too. Unscoped, whichever ran more recently would report
+   * under both controls, and a developer would act on the wrong one.
+   */
+  it('runForBlock scopes to the mode, so the two self-tests never report each other', () => {
+    store.upsert(run('r1', { blockId: 'blk_frame', mode: 'provision', status: 'succeeded' }))
+    store.upsert(
+      run('r2', {
+        blockId: 'blk_frame',
+        mode: 'agent-probe',
+        status: 'failed',
+        failedStage: 'probing',
+        updatedAt: 9,
+      }),
+    )
+    expect(store.runForBlock('blk_frame', 'provision')!.id).toBe('r1')
+    expect(store.runForBlock('blk_frame', 'agent-probe')!.id).toBe('r2')
   })
 })

@@ -6,6 +6,7 @@ import {
   RECOMMENDED_HARNESS_IMAGE,
   refreshHarnessImage,
   resolveHarnessImage,
+  resolveHarnessImageVariants,
   resolveRefreshMode,
 } from './harnessImage.js'
 
@@ -17,6 +18,64 @@ describe('resolveHarnessImage', () => {
 
   it('lets an explicit value win (trimmed)', () => {
     expect(resolveHarnessImage({ LOCAL_HARNESS_IMAGE: '  my/image:1  ' })).toBe('my/image:1')
+  })
+})
+
+describe('resolveHarnessImageVariants', () => {
+  it('maps a deployment’s own variants, trimming around both halves', () => {
+    expect(
+      resolveHarnessImageVariants({
+        LOCAL_HARNESS_IMAGE_VARIANTS:
+          ' pixel-tools = ghcr.io/acme/pixel:2 , fonts=ghcr.io/acme/f:1',
+      }),
+    ).toEqual({
+      variants: { 'pixel-tools': 'ghcr.io/acme/pixel:2', fonts: 'ghcr.io/acme/f:1' },
+      rejected: [],
+    })
+  })
+
+  it('holds a name to the SAME slug rule a declaration is held to, and says which it dropped', () => {
+    // The spellings below cannot be declared: `checkAgentImageVariants` refuses them at boot and a
+    // Kubernetes pool's schema refuses them on the wire. Accepted here they entered the map, matched
+    // nothing, and the dispatch was refused naming the variable the operator had already set them
+    // in. Not case-folded onto the legal spelling for the same reason: a declaration is refused in
+    // that spelling, so folding would make this variable the one place it appears to work.
+    const resolved = resolveHarnessImageVariants({
+      LOCAL_HARNESS_IMAGE_VARIANTS: 'Pixel-Tools=a/b:1,pixel_tools=a/b:2,ok-name=a/b:3',
+    })
+    expect(resolved.variants).toEqual({ 'ok-name': 'a/b:3' })
+    expect(resolved.rejected.map((r) => r.entry)).toEqual([
+      'Pixel-Tools=a/b:1',
+      'pixel_tools=a/b:2',
+    ])
+    for (const rejection of resolved.rejected) expect(rejection.reason).toContain('lower-kebab')
+  })
+
+  it('drops an entry that names no image and REPORTS it, rather than defaulting one', () => {
+    // Inventing a ref would put the job on an image nobody chose, so the entry is dropped; the
+    // report is what keeps "dropped" from reading as "lost".
+    const resolved = resolveHarnessImageVariants({
+      LOCAL_HARNESS_IMAGE_VARIANTS: 'pixel-tools=,=a/b:1,no-separator,fonts=a/b:2',
+    })
+    expect(resolved.variants).toEqual({ fonts: 'a/b:2' })
+    expect(resolved.rejected).toHaveLength(3)
+  })
+
+  it('ignores a platform variant here WITHOUT calling it an error', () => {
+    // `ui` and `default` have their own variables. An operator setting one here has said the same
+    // thing twice, not something wrong, so it is skipped silently while a bad NAME is reported.
+    const resolved = resolveHarnessImageVariants({
+      LOCAL_HARNESS_IMAGE_VARIANTS: 'ui=a/b:1,default=a/b:2,deploy=a/b:3',
+    })
+    expect(resolved).toEqual({ variants: {}, rejected: [] })
+  })
+
+  it('is empty for an unset or blank variable', () => {
+    expect(resolveHarnessImageVariants({})).toEqual({ variants: {}, rejected: [] })
+    expect(resolveHarnessImageVariants({ LOCAL_HARNESS_IMAGE_VARIANTS: '  ' })).toEqual({
+      variants: {},
+      rejected: [],
+    })
   })
 })
 

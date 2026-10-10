@@ -1,4 +1,5 @@
 import type {
+  ActivationScopeId,
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
   SubscriptionActivationRecord,
@@ -146,7 +147,7 @@ export class D1PersonalSubscriptionRepository implements PersonalSubscriptionRep
 
 interface SubscriptionActivationRow {
   id: string
-  execution_id: string
+  scope_id: string
   user_id: string
   vendor: string
   token_cipher: string
@@ -157,7 +158,7 @@ interface SubscriptionActivationRow {
 function toActivation(row: SubscriptionActivationRow): SubscriptionActivationRecord {
   return {
     id: row.id,
-    executionId: row.execution_id,
+    scopeId: row.scope_id as ActivationScopeId,
     userId: row.user_id,
     vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
       table: 'subscription_activations',
@@ -170,7 +171,7 @@ function toActivation(row: SubscriptionActivationRow): SubscriptionActivationRec
   }
 }
 
-/** D1-backed store of per-run personal-credential activations (migration 0039). */
+/** D1-backed store of scoped personal-credential activations (migration 0039). */
 export class D1SubscriptionActivationRepository implements SubscriptionActivationRepository {
   private readonly db: D1Database
   constructor({ db }: { db: D1Database }) {
@@ -178,7 +179,7 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
   }
 
   async get(
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
     now: number,
@@ -186,9 +187,9 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
     const row = await this.db
       .prepare(
         `SELECT * FROM subscription_activations
-          WHERE execution_id = ? AND user_id = ? AND vendor = ? AND expires_at > ?`,
+          WHERE scope_id = ? AND user_id = ? AND vendor = ? AND expires_at > ?`,
       )
-      .bind(executionId, userId, vendor, now)
+      .bind(scopeId, userId, vendor, now)
       .first<SubscriptionActivationRow>()
     return row ? toActivation(row) : null
   }
@@ -197,16 +198,16 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
     await this.db
       .prepare(
         `INSERT INTO subscription_activations
-           (id, execution_id, user_id, vendor, token_cipher, created_at, expires_at)
+           (id, scope_id, user_id, vendor, token_cipher, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (execution_id, user_id, vendor) DO UPDATE SET
+         ON CONFLICT (scope_id, user_id, vendor) DO UPDATE SET
            token_cipher = excluded.token_cipher,
            created_at = excluded.created_at,
            expires_at = excluded.expires_at`,
       )
       .bind(
         record.id,
-        record.executionId,
+        record.scopeId,
         record.userId,
         record.vendor,
         record.tokenCipher,
@@ -216,10 +217,10 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
       .run()
   }
 
-  async deleteByExecution(executionId: string): Promise<void> {
+  async deleteByScope(scopeId: ActivationScopeId): Promise<void> {
     await this.db
-      .prepare('DELETE FROM subscription_activations WHERE execution_id = ?')
-      .bind(executionId)
+      .prepare('DELETE FROM subscription_activations WHERE scope_id = ?')
+      .bind(scopeId)
       .run()
   }
 

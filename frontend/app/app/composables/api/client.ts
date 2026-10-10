@@ -72,6 +72,31 @@ export function createApiClient(): WretchInstance {
 }
 
 /**
+ * Drop query keys whose value is `undefined`, so an omitted optional param is absent from the
+ * query string instead of present-but-empty.
+ *
+ * `sendByApiContract` serialises with `fast-querystring`, and `stringify({ blockId: undefined })`
+ * is `'blockId='`. Request validation does not catch it, because `v.optional(...)` accepts
+ * `undefined` and the key only becomes empty on the way out. The server then validates the parsed
+ * `''`, so any optional param carrying a `minLength(1)` rejects the whole request with a 400. That
+ * is what made an unscoped `listTasks()` uncallable. Params with no length check are luckier but
+ * still wrong: the handler reads `''` where it asked for absence.
+ *
+ * Stripping at this one chokepoint fixes every contract at once, which is the point. Writing
+ * `queryParams: { foo }` for an optional `foo` is the obvious thing to write and it should work,
+ * rather than each call site remembering to spread the key in conditionally.
+ */
+export function withoutUndefinedQueryParams<T extends ApiContract>(
+  params: SendParams<T>,
+): SendParams<T> {
+  const query = (params as { queryParams?: Record<string, unknown> }).queryParams
+  if (!query) return params
+  const present = Object.entries(query).filter(([, value]) => value !== undefined)
+  if (present.length === Object.keys(query).length) return params
+  return { ...params, queryParams: Object.fromEntries(present) }
+}
+
+/**
  * Send a contract request and unwrap to the success body (or throw the typed error).
  * The public signature preserves per-contract inference for callers; inside,
  * sendByApiContract's deeply-conditional result type can't be proven equal to
@@ -82,7 +107,7 @@ export async function sendContract<T extends ApiContract>(
   contract: T,
   params: SendParams<T>,
 ): Promise<SuccessBodyOf<T>> {
-  const outcome = await sendByApiContract(client, contract, params)
+  const outcome = await sendByApiContract(client, contract, withoutUndefinedQueryParams(params))
   if (outcome.error) {
     const error = outcome.error
     // A contract-declared non-2xx is reported as a plain `{ statusCode, headers, body }`
@@ -93,7 +118,12 @@ export async function sendContract<T extends ApiContract>(
     const { statusCode, body } = error as { statusCode: number; body: unknown }
     throw new ApiError(statusCode, body)
   }
-  return outcome.result!.body as SuccessBodyOf<T>
+  // The success arm is read through the same widening as the error arm above. Since
+  // `@toad-contracts/core@1`, a success entry expands to one union member per declared media
+  // type, so on an unresolved `T` the member type stays a deferred conditional and even reading
+  // `.body` off it is unprovable, not just assigning it to `SuccessBodyOf<T>`.
+  const { body } = outcome.result! as { body: unknown }
+  return body as SuccessBodyOf<T>
 }
 
 /** Curry {@link sendContract} over a client into the throw-on-error {@link ApiSend}. */

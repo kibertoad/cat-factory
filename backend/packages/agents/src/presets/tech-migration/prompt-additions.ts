@@ -31,10 +31,12 @@ import { MIGRATION_PHASE_IDS } from './phases.js'
 
 /**
  * Interviewer steering: the migration form already froze the enumerable facts (which migration,
- * from/to tech, stored-proc policy, compat posture, coverage bar, docs dir), so the interview digs
- * into the fuzzy, judgment-dependent facts a form cannot capture — the ones that actually change how
- * the migration must be planned. Complements the generic T3 "build on the seeded form" line with the
- * migration-specific probing agenda.
+ * from/to tech, stored-proc policy, compat posture, coverage bar, docs dir) and — since the analyst
+ * now runs ahead of the interviewer in `pl_initiative` — the blast zone has already been read off
+ * the repository. So the interview digs into the fuzzy, judgment-dependent facts NEITHER a form nor
+ * the code can supply: the ones that actually change how the migration must be planned. Complements
+ * the generic T3 "build on the seeded form" line, and the generic "never ask about the current state
+ * of the code" rule in the interviewer's own system prompt, with the migration-specific agenda.
  */
 export const MIGRATION_INTERVIEWER_PROMPT_ADDITION = [
   'This initiative is a TECHNOLOGICAL MIGRATION — swapping a load-bearing technology (a database ' +
@@ -43,17 +45,20 @@ export const MIGRATION_INTERVIEWER_PROMPT_ADDITION = [
     'technology, the stored-procedure policy, the compatibility posture, the coverage bar, the docs ' +
     'location). Treat every one of those seeded answers as SETTLED — never re-ask what the form covers.',
   '',
-  'Spend your questions on the fuzzy, judgment-dependent facts a form cannot capture, because they ' +
-    'shape the plan:',
+  'The blast zone has already been read off the repository for you — the touchpoints, their ' +
+    'existing test coverage and the operational surface (scheduled jobs, ops tooling, monitoring, ' +
+    'CI) are in the codebase analysis above. Never ask the stakeholder to enumerate or confirm any ' +
+    'of it. Spend your questions on the fuzzy, judgment-dependent facts neither the form nor the ' +
+    'code can supply, because they shape the plan:',
   '- Downtime / cutover tolerance: is a maintenance window acceptable, or must the switch be online?',
-  '- Data-migration constraints: data volume, backfill and rehearsal needs, point-in-time ' +
-    'correctness, and any records that cannot be recreated.',
+  '- Data-migration constraints: backfill and rehearsal expectations, point-in-time correctness, ' +
+    'and any records that cannot be recreated.',
   '- Compatibility posture, when the form left it unset: how long must the old and new technologies ' +
     'run side by side (big-bang vs dual-run vs adapter layer), and what forces that choice?',
-  '- The observable behaviour that must NOT change, and where silent drift is most likely.',
+  '- Which observable behaviours must NOT change, and which the business would accept changing.',
   '- Rollback expectations, and who owns the decision to abort a cutover mid-flight.',
-  '- Operational reach: scheduled jobs, ops tooling, monitoring and CI that touch the technology ' +
-    'being swapped.',
+  '- Commitments outside the repository: deadlines, downstream consumers, contractual or ' +
+    'compliance obligations riding on the technology being swapped.',
   '',
   'Keep each batch small and high-leverage. Converge as soon as the migration methodology (blast ' +
     'zone → coverage → transition → delivery → decommission) can be planned unambiguously.',

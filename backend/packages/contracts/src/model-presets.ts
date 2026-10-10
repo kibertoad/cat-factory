@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { modelFlavorSchema } from './entities.js'
 
 // ---------------------------------------------------------------------------
 // Model presets: a named, per-workspace set of model→agent mappings. A preset
@@ -42,6 +43,17 @@ export const modelPresetSchema = v.object({
    * before versioning existed (treated as 0).
    */
   version: v.optional(v.number()),
+  /**
+   * The order this preset's runs prefer a model's routes in, most preferred first. A preference
+   * REORDERS, it never filters: routes the list omits are appended in the default order and tried
+   * last, so a preset naming three flavours cannot make a model whose only route is the fourth
+   * unresolvable. Absent ⇒ the deployment's default order.
+   *
+   * Per PRESET rather than per deployment because it is a per-workload choice: the same workspace
+   * legitimately wants a compliance preset pinned to a residency-guaranteed route (AWS Bedrock)
+   * and an everyday preset riding a flat-rate subscription.
+   */
+  providerPreference: v.optional(v.array(modelFlavorSchema)),
   createdAt: v.number(),
 })
 export type ModelPreset = v.InferOutput<typeof modelPresetSchema>
@@ -53,6 +65,17 @@ const modelIdSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(1
 // Overrides: agent kinds are an open set (custom agents are allowed), so keys aren't
 // checked against a closed list; both keys and values are trimmed non-empty strings.
 const overridesSchema = v.record(v.pipe(v.string(), v.trim(), v.minLength(1)), modelIdSchema)
+// The route preference is an ORDER, so a repeated flavour has no meaning: it would be ambiguous to
+// read back in the editor and ambiguous to walk. Refused at the write boundary rather than
+// silently deduped, since the caller stated two positions for one route and only they know which
+// they meant. An EMPTY list is accepted and is how a preset goes back to the default order.
+const providerPreferenceSchema = v.pipe(
+  v.array(modelFlavorSchema),
+  v.check(
+    (flavors) => new Set(flavors).size === flavors.length,
+    'providerPreference must not repeat a route',
+  ),
+)
 
 /** Create a new model preset in a workspace. */
 export const createModelPresetSchema = v.object({
@@ -61,6 +84,8 @@ export const createModelPresetSchema = v.object({
   overrides: v.optional(overridesSchema, {}),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
+  /** Route preference for this preset's runs; omitted/empty ⇒ the default order. */
+  providerPreference: v.optional(providerPreferenceSchema),
 })
 export type CreateModelPresetInput = v.InferOutput<typeof createModelPresetSchema>
 
@@ -70,5 +95,10 @@ export const updateModelPresetSchema = v.object({
   baseModelId: v.optional(modelIdSchema),
   overrides: v.optional(overridesSchema),
   isDefault: v.optional(v.boolean()),
+  /**
+   * Replaces the whole order. An EMPTY array resets the preset to the default order, which is
+   * why "reset" needs no separate route: absent means "leave it alone", `[]` means "clear it".
+   */
+  providerPreference: v.optional(providerPreferenceSchema),
 })
 export type UpdateModelPresetInput = v.InferOutput<typeof updateModelPresetSchema>

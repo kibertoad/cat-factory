@@ -87,3 +87,148 @@ describe('resolveWorkspaceCapabilities — model policy', () => {
     expect(read).not.toHaveBeenCalled()
   })
 })
+
+// A vendor NATIVE local execution serves from the host's own `claude`/`codex` login has no
+// credential in either store, so a resolver that consulted only those two called it unconfigured
+// on the very machine that could run it — while the personal-credential gate, reading the same
+// allow-list, had already decided it needs no unlock. These pin the two halves to one answer.
+describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
+  const stores = {
+    subscriptions: {
+      liveVendors: async () => new Set(),
+    } as unknown as CapabilityServices['subscriptions'],
+    personalSubscriptions: {
+      liveVendors: async () => new Set(),
+      list: async () => [],
+    } as unknown as CapabilityServices['personalSubscriptions'],
+  }
+
+  it('admits an allow-listed native vendor with no token and no user', async () => {
+    const caps = await resolveWorkspaceCapabilities(
+      { ...stores, nativeAmbientAuth: ['claude-code'] },
+      'ws-1',
+    )
+    expect([...caps.subscriptionVendors]).toEqual(['claude'])
+  })
+
+  it('does not consult either credential store for one', async () => {
+    const pooled = vi.fn(async () => new Set<never>())
+    const personal = vi.fn(async () => new Set<never>())
+    const caps = await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          liveVendors: pooled,
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors: personal,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+        nativeAmbientAuth: ['claude-code', 'codex'],
+      },
+      'ws-1',
+      'usr-1',
+    )
+    expect(caps.subscriptionVendors.has('claude')).toBe(true)
+    expect(caps.subscriptionVendors.has('codex')).toBe(true)
+    // Both stores now answer every vendor in ONE read, so "was it consulted for THIS one" is not a
+    // question either call log can answer. What is still assertable, and is the property that
+    // matters, is that each is read at most once per resolution rather than once per vendor. The
+    // ambient short-circuit is still visible here: the two allow-listed vendors are admitted
+    // whatever the stores hold.
+    expect(pooled.mock.calls.length).toBeLessThanOrEqual(1)
+    expect(personal.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+
+  it('reads each credential store once for the whole vendor sweep, not once per vendor', async () => {
+    const pooled = vi.fn(async () => new Set<never>())
+    const personal = vi.fn(async () => new Set<never>())
+    await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          liveVendors: pooled,
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors: personal,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+      },
+      'ws-1',
+      'usr-1',
+    )
+    expect(personal).toHaveBeenCalledTimes(1)
+    expect(personal).toHaveBeenCalledWith('usr-1')
+    // The pooled store is keyed by WORKSPACE, not by the resolving user: its tokens belong to the
+    // board, which is exactly why a system token can see them and why they are not `personalSubscription`.
+    expect(pooled).toHaveBeenCalledTimes(1)
+    expect(pooled).toHaveBeenCalledWith('ws-1')
+  })
+
+  it('does not read the personal store at all for a resolution with no user', async () => {
+    // The case a public-API SYSTEM token takes, and the reason `available` stays false for it: a
+    // personal credential belongs to a person, and there is none here to attribute one to.
+    const liveVendors = vi.fn(async () => new Set<never>())
+    const caps = await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          liveVendors: async () => new Set(),
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+      },
+      'ws-1',
+    )
+    expect(liveVendors).not.toHaveBeenCalled()
+    expect([...caps.subscriptionVendors]).toEqual([])
+  })
+
+  it('leaves a vendor that merely REUSES the claude-code harness to its own credential', async () => {
+    // GLM carries its own `baseUrl`, which ambient auth would drop — so it leases normally and is
+    // NOT admitted by the allow-list. Same rule `isAmbientNativeVendor` states for the executor.
+    const caps = await resolveWorkspaceCapabilities(
+      { ...stores, nativeAmbientAuth: ['claude-code'] },
+      'ws-1',
+    )
+    expect(caps.subscriptionVendors.has('glm')).toBe(false)
+  })
+
+  it('admits nothing when native mode is off (every other facade)', async () => {
+    const caps = await resolveWorkspaceCapabilities({ ...stores }, 'ws-1')
+    expect([...caps.subscriptionVendors]).toEqual([])
+  })
+})
+
+describe('resolveWorkspaceCapabilities: locally-run models', () => {
+  // The enabled-model set is what `isModelUsable` asks about a `"<provider>:<model>"` pin, so it
+  // has to carry the model IDS. Each enabled model arrives as a DECLARATION object (the id plus
+  // what the user declared about it), and reading the id off it is the whole assertion: keying on
+  // the object instead produced `ollama:[object Object]`, which typechecks, and greys out every
+  // locally-run model in the picker while refusing every run pinned to one.
+  const capabilitiesFor = async () => [
+    {
+      provider: 'ollama' as const,
+      label: 'Ollama',
+      models: [{ id: 'gemma4:12b', acceptsImages: true }, { id: 'my-finetune' }],
+    },
+  ]
+
+  it('keys the enabled set on the declared model id', async () => {
+    const services: CapabilityServices = {
+      localModelEndpoints: {
+        capabilitiesFor,
+      } as unknown as CapabilityServices['localModelEndpoints'],
+    }
+    const caps = await resolveWorkspaceCapabilities(services, 'ws-1', 'user-1')
+    expect([...(caps.localModels ?? [])]).toEqual(['ollama:gemma4:12b', 'ollama:my-finetune'])
+  })
+
+  it('reads no endpoints for an unauthenticated caller (a runner is per-user)', async () => {
+    const probe = vi.fn(capabilitiesFor)
+    const services: CapabilityServices = {
+      localModelEndpoints: {
+        capabilitiesFor: probe,
+      } as unknown as CapabilityServices['localModelEndpoints'],
+    }
+    const caps = await resolveWorkspaceCapabilities(services, 'ws-1')
+    expect(caps.localModels?.size).toBe(0)
+    expect(probe).not.toHaveBeenCalled()
+  })
+})

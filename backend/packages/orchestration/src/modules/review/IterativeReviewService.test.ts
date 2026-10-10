@@ -55,26 +55,60 @@ const ITEMS_ONE_HIGH = JSON.stringify({
   ],
 })
 
+/** Two findings, so two writers can settle DIFFERENT items and race each other's whole-row write. */
+const ITEMS_TWO_HIGH = JSON.stringify({
+  items: [
+    { category: 'gap', severity: 'high', title: 'Missing edge case', detail: 'What if empty?' },
+    { category: 'question', severity: 'high', title: 'Retention?', detail: 'How long is it kept?' },
+  ],
+})
+
 interface Stored {
   id: string
   blockId: string
+  /** The optimistic-concurrency token the real stores keep; the fake bumps it on every CAS. */
+  rev: number
 }
 
-function fakeRepo<T extends Stored>() {
+/**
+ * An in-memory review store with FAITHFUL optimistic-concurrency semantics: reads hand back a
+ * COPY (so a caller's in-memory edits aren't already in the store), and `compareAndSwap` writes
+ * only while the stored `rev` still matches the one the caller read. That is what makes the
+ * service's reload-and-re-apply path testable at all — a fake that shared the stored object
+ * would pass no matter how the service wrote.
+ *
+ * `onBeforeCas` runs just before each CAS attempt, so a test can stage a COMPETING writer landing
+ * inside the window between the service's read and its write.
+ */
+function fakeRepo<T extends Stored>(onBeforeCas?: (review: T) => void) {
   const byId = new Map<string, T>()
+  // A JSON round-trip, not `structuredClone`: a review is plain JSON, and this package's
+  // lib target has no `structuredClone`.
+  const copy = (review: T): T => JSON.parse(JSON.stringify(review)) as T
   return {
     byId,
     async get(_ws: string, id: string): Promise<T | null> {
-      return byId.get(id) ?? null
+      const stored = byId.get(id)
+      return stored ? copy(stored) : null
     },
     async getByBlock(_ws: string, blockId: string): Promise<T | null> {
-      return [...byId.values()].find((r) => r.blockId === blockId) ?? null
+      const stored = [...byId.values()].find((r) => r.blockId === blockId)
+      return stored ? copy(stored) : null
     },
-    async upsert(_ws: string, review: T): Promise<void> {
-      byId.set(review.id, review)
+    async compareAndSwap(_ws: string, review: T): Promise<boolean> {
+      onBeforeCas?.(review)
+      const stored = byId.get(review.id)
+      if (!stored || stored.rev !== review.rev) return false
+      review.rev = stored.rev + 1
+      byId.set(review.id, copy(review))
+      return true
     },
-    async deleteByBlock(_ws: string, blockId: string): Promise<void> {
-      for (const [k, v] of byId) if (v.blockId === blockId) byId.delete(k)
+    // Models the block's UNIQUE constraint: the block holds one review, and publishing a fresh
+    // one takes the predecessor's place rather than landing beside it.
+    async replaceForBlock(_ws: string, review: T): Promise<void> {
+      for (const [k, v] of byId) if (v.blockId === review.blockId) byId.delete(k)
+      review.rev = 0
+      byId.set(review.id, copy(review))
     },
   }
 }
@@ -108,7 +142,11 @@ beforeEach(() => {
 
 describe('IterativeReviewService (via RequirementReviewService)', () => {
   function makeService() {
-    const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
     const svc = new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
     return { svc }
   }
@@ -120,7 +158,11 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
       harness: 'claude-code',
     }
     function serviceWith(extra: Record<string, unknown>) {
-      const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+      const requirementReviewRepository = fakeRepo<{
+        id: string
+        blockId: string
+        rev: number
+      }>() as never
       return new RequirementReviewService({
         ...baseDeps(),
         requirementReviewRepository,
@@ -185,11 +227,57 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
     const review = await svc.review(WS, BLOCK.id, {})
     await expect(svc.incorporate(WS, review.id, {})).rejects.toThrow(/before incorporating/)
   })
+
+  // Race-audit 2.5. A review is ONE JSON blob holding every finding, so a whole-row write from a
+  // stale read silently drops whatever another writer settled meanwhile — and since incorporation
+  // refuses to run while any finding is still `open`, a lost dismissal wedges the loop on a
+  // phantom open item. The mutation must reload and re-apply on the winner's snapshot instead.
+  it('re-applies an answer that lost a race instead of clobbering the winner', async () => {
+    let competing: (() => void) | null = null
+    const repo = fakeRepo<{ id: string; blockId: string; rev: number }>(() => {
+      // Exactly once, land a COMPETING write in the window between the service's read and its
+      // CAS — the second person in the review window dismissing the OTHER finding.
+      competing?.()
+      competing = null
+    })
+    const svc = new RequirementReviewService({
+      ...baseDeps(),
+      requirementReviewRepository: repo as never,
+    })
+
+    script.push({ text: ITEMS_TWO_HIGH })
+    const review = await svc.review(WS, BLOCK.id, {})
+    const [first, second] = review.items
+    competing = () => {
+      const stored = repo.byId.get(review.id) as unknown as {
+        items: { id: string; status: string }[]
+        rev: number
+      }
+      const item = stored.items.find((i) => i.id === second!.id)!
+      item.status = 'dismissed'
+      stored.rev += 1
+    }
+
+    const after = await svc.replyToItem(WS, review.id, first!.id, 'It returns an empty file.')
+
+    // Both survive: the answer landed, and the concurrent dismissal was NOT reverted.
+    expect(after.items.find((i) => i.id === first!.id)?.reply).toBe('It returns an empty file.')
+    expect(after.items.find((i) => i.id === first!.id)?.status).toBe('answered')
+    expect(after.items.find((i) => i.id === second!.id)?.status).toBe('dismissed')
+    // …so incorporation is no longer blocked on a finding that was in fact settled.
+    script.push({ text: '# Standardized requirements\n...' })
+    const { review: merged } = await svc.incorporate(WS, review.id, {})
+    expect(merged.status).toBe('merged')
+  })
 })
 
 describe('RequirementReviewService recommendations (Requirement Writer, async)', () => {
   function makeService() {
-    const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
     return new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
   }
 
@@ -401,7 +489,11 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
 describe('IterativeReviewService (via ClarityReviewService)', () => {
   it('persists to its own document field (clarifiedReport) and threads the investigation', async () => {
-    const clarityReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    const clarityReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
     const svc = new ClarityReviewService({ ...baseDeps(), clarityReviewRepository })
 
     script.push({ text: ITEMS_ONE_HIGH })
@@ -419,5 +511,128 @@ describe('IterativeReviewService (via ClarityReviewService)', () => {
     expect(merged.clarifiedReport).toBe('# Clarified bug report')
     // The requirements field does not exist on a clarity review.
     expect((merged as Record<string, unknown>).incorporatedRequirements).toBeUndefined()
+  })
+})
+
+// The inline review kinds run as bare `generateText` calls, so they never pass through
+// `systemPromptFor` — the seam that applies a workspace prompt override AND re-appends what an
+// override must not delete. These pin both halves of the replacement seam: an edited prompt IS sent,
+// and the platform-enforced directives survive it.
+describe('per-workspace prompt overrides (inline review kinds)', () => {
+  function serviceWith(
+    resolveSystemPromptOverride?: (ws: string, kind: string) => Promise<string | undefined>,
+  ) {
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
+    return new RequirementReviewService({
+      ...baseDeps(),
+      requirementReviewRepository,
+      ...(resolveSystemPromptOverride ? { resolveSystemPromptOverride } : {}),
+    })
+  }
+
+  /** The system prompt of the Nth `generateText` call, as the SDK serialized it. */
+  function systemOf(callIndex: number): string {
+    const messages = JSON.parse(script.calls[callIndex]!) as {
+      role: string
+      content: unknown
+    }[]
+    const system = messages.find((m) => m.role === 'system')
+    return typeof system?.content === 'string' ? system.content : JSON.stringify(system?.content)
+  }
+
+  it('sends the shipped prompt when the workspace edited nothing', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith().review(WS, 'blk_1')
+    expect(systemOf(0)).toContain('meticulous product / requirements analyst')
+  })
+
+  it('sends the workspace override in place of the shipped role', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith(async () => 'You are a laconic reviewer.').review(WS, 'blk_1')
+    const system = systemOf(0)
+    expect(system).toContain('You are a laconic reviewer.')
+    expect(system).not.toContain('meticulous product / requirements analyst')
+  })
+
+  it('keeps the engine-enforced directives an override must not delete', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith(async () => 'Say whatever you like.').review(WS, 'blk_1')
+    const system = systemOf(0)
+    // The JSON contract this service parses, the flow-wide scope boundary, and the rule against
+    // inventing a product — all re-appended on top of whatever the workspace saved.
+    expect(system).toContain('Respond with ONLY a JSON object')
+    expect(system).toContain('THIS STAGE SETTLES PRODUCT AND BUSINESS REQUIREMENTS ONLY')
+    expect(system).toContain('THE SYSTEM UNDER DISCUSSION IS ONLY WHAT THE CONTEXT NAMES')
+  })
+
+  it('treats a reverted (blank) override as no override', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith(async () => '   ').review(WS, 'blk_1')
+    expect(systemOf(0)).toContain('meticulous product / requirements analyst')
+  })
+
+  it('resolves the override per KIND, so the reviewer and the rework editor differ', async () => {
+    const asked: string[] = []
+    const svc = serviceWith(async (_ws, kind) => {
+      asked.push(kind)
+      return kind === 'requirements-rework' ? 'You are a terse editor.' : undefined
+    })
+    script.push({ text: JSON.stringify({ items: [] }) })
+    const review = await svc.review(WS, 'blk_1')
+    script.push({ text: '# Add export — Requirements' })
+    await svc.incorporate(WS, review.id, {})
+    expect(asked).toContain('requirements-review')
+    expect(asked).toContain('requirements-rework')
+    expect(systemOf(0)).toContain('meticulous product / requirements analyst')
+    expect(systemOf(1)).toContain('You are a terse editor.')
+    expect(systemOf(1)).toContain('Respond with ONLY the revised requirements in Markdown')
+  })
+})
+
+// The inline reviewers have no checkout, so the owning service is their only way to know what
+// software is under discussion (see `product-context.ts`).
+describe('product identity in the reviewed subject', () => {
+  it('states that no system was resolved when the block sits under no service frame', async () => {
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
+    const svc = new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
+    script.push({ text: JSON.stringify({ items: [] }) })
+    await svc.review(WS, 'blk_1')
+    // BLOCK is a parentless task, so the ancestry walk resolves it to itself — not a service.
+    expect(script.calls[0]).toContain('NOT STATED')
+  })
+
+  it("names the block's enclosing service frame when there is one", async () => {
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
+    const frame = {
+      id: 'blk_frame',
+      level: 'frame',
+      title: 'billing-api',
+      description: 'Invoicing and payment collection.',
+    } as unknown as Block
+    const task = { ...BLOCK, level: 'task', parentId: 'blk_frame' } as unknown as Block
+    const svc = new RequirementReviewService({
+      ...baseDeps(),
+      blockRepository: {
+        get: async (_ws: string, id: string) => (id === 'blk_frame' ? frame : task),
+      } as never,
+      requirementReviewRepository,
+    })
+    script.push({ text: JSON.stringify({ items: [] }) })
+    await svc.review(WS, 'blk_1')
+    expect(script.calls[0]).toContain('billing-api')
+    expect(script.calls[0]).toContain('Invoicing and payment collection.')
+    expect(script.calls[0]).not.toContain('NOT STATED')
   })
 })

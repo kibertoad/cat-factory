@@ -1,4 +1,5 @@
 import type {
+  ActivationScopeId,
   Clock,
   IdGenerator,
   PersonalSecretCipher,
@@ -9,7 +10,12 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { CredentialRequiredError, isIndividualVendor, ValidationError } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  isIndividualVendor,
+  userActivationScope,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -40,6 +46,14 @@ import type {
 export const DEFAULT_ACTIVATION_TTL_MS = 12 * 60 * 60 * 1000
 /** Surface "renew your subscription" once it expires within this horizon (~7 days). */
 export const DEFAULT_RENEW_WARNING_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * HKDF domain tag for the SYSTEM layer sealing a personal subscription (the password-derived
+ * layer is separate, keyed by `PersonalSecretCipher`). Both facades build their
+ * `WebCryptoSecretCipher` from this constant: the tag derives the key, so a facade spelling it
+ * differently seals credentials its sibling cannot unseal.
+ */
+export const PERSONAL_SUBSCRIPTIONS_CIPHER_INFO = 'cat-factory:personal-subscriptions'
 
 export interface PersonalSubscriptionServiceDependencies {
   personalSubscriptionRepository: PersonalSubscriptionRepository
@@ -147,14 +161,52 @@ export class PersonalSubscriptionService {
     return rows.map((r) => this.toStatus(r, now))
   }
 
-  /** Whether the user has a live personal credential for the vendor. */
-  async has(userId: string, vendor: SubscriptionVendor): Promise<boolean> {
-    return (await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)) !== null
+  /**
+   * Every vendor the user holds a LIVE personal credential for, in ONE read.
+   *
+   * The set rather than a per-vendor question, because both callers ask about the whole vendor
+   * vocabulary at once: the capability resolver folds it into a workspace's catalog, and the public
+   * `GET /api/v1/models` reports it per row. Asking {@link has} five times in a loop is five round
+   * trips on a hot read for an answer one `listByUser` already carries.
+   *
+   * LIVE excludes an expired credential, which is the same rule {@link unlock} refuses on. A lapsed
+   * subscription that still reported as configured made the catalog promise a dispatch the run
+   * would then be refused for, naming the model rather than the subscription as the problem.
+   */
+  async liveVendors(userId: string): Promise<Set<SubscriptionVendor>> {
+    const now = this.deps.clock.now()
+    const rows = await this.deps.personalSubscriptionRepository.listByUser(userId)
+    return new Set(
+      rows.filter((r) => r.expiresAt === null || r.expiresAt > now).map((r) => r.vendor),
+    )
   }
 
-  /** Remove the user's personal credential for a vendor. */
+  /** Whether the user has a live personal credential for the vendor. */
+  async has(userId: string, vendor: SubscriptionVendor): Promise<boolean> {
+    const record = await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)
+    return (
+      record !== null && (record.expiresAt === null || record.expiresAt > this.deps.clock.now())
+    )
+  }
+
+  /**
+   * Remove the user's personal credential for a vendor, and drop the USER-scope activations it
+   * could still be leased through.
+   *
+   * The activation is a separate copy of the same token, re-encrypted with the system key alone,
+   * so soft-deleting the subscription does not revoke it: without this, disconnecting a
+   * subscription would leave it usable from the run-less surfaces for the rest of the ~12h TTL,
+   * with nothing but the sweep to reclaim it.
+   *
+   * The whole user scope goes, not the vendor's row alone. A user's credentials share ONE
+   * password, so removing one is usually the first half of re-sealing them all, and a re-mint
+   * costs the next request that carries the password nothing but the derivation it would have
+   * paid anyway. RUN activations are deliberately left: consent there was given for a specific
+   * run whose dispatches are already in flight, and the run settling clears them itself.
+   */
   async remove(userId: string, vendor: SubscriptionVendor): Promise<void> {
     await this.deps.personalSubscriptionRepository.softDelete(userId, vendor, this.deps.clock.now())
+    await this.clearScope(userActivationScope(userId))
   }
 
   /**
@@ -198,13 +250,16 @@ export class PersonalSubscriptionService {
   }
 
   /**
-   * Mint a per-run activation: unlock the credential with the password, re-encrypt the
-   * raw token with the system key only, and store it scoped to the run with a TTL so
-   * every (async) step of that run can use it without the password. Idempotent —
-   * replaces any prior activation for the run+user+vendor.
+   * Mint an activation for a SCOPE: unlock the credential with the password, re-encrypt the raw
+   * token with the system key only, and store it under `scopeId` with a TTL so work that outlives
+   * the request can use it without the password. Idempotent: replaces any prior activation for the
+   * scope+user+vendor.
+   *
+   * The scope decides who may lease it and when it goes away, never this method: a run's
+   * activation dies with the run, a user's on its TTL. See {@link ActivationScopeId}.
    */
-  async activateForRun(
-    executionId: string,
+  async activate(
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
     password: string,
@@ -214,7 +269,7 @@ export class PersonalSubscriptionService {
     const tokenCipher = await this.deps.secretCipher.encrypt(token)
     const record: SubscriptionActivationRecord = {
       id: this.deps.idGenerator.next('act'),
-      executionId,
+      scopeId,
       userId,
       vendor,
       tokenCipher,
@@ -226,25 +281,29 @@ export class PersonalSubscriptionService {
   }
 
   /**
-   * Lease the run's activated token for a step. Throws a {@link CredentialRequiredError}
-   * (`password_required`) when the run has no live activation — the dispatch path turns
-   * that into a clear, retriable failure (the user re-enters their password on retry).
+   * Lease the scope's activated token. Throws a {@link CredentialRequiredError}
+   * (`password_required`) when the scope has no live activation; every caller turns that into a
+   * clear, retriable failure the user answers by re-entering their password.
+   *
+   * The message names no scope KIND on purpose. The remedy is identical either way, and the two
+   * spellings ("this run has no credential" for a turn nobody started a run for) mislead in
+   * exactly the situation a person is already confused in.
    */
-  async leaseForRun(
-    executionId: string,
+  async lease(
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
   ): Promise<LeasedPersonalToken> {
     const now = this.deps.clock.now()
     const activation = await this.deps.subscriptionActivationRepository.get(
-      executionId,
+      scopeId,
       userId,
       vendor,
       now,
     )
     if (!activation) {
       throw new CredentialRequiredError(
-        `This run has no active ${vendor} credential; re-enter your personal password to continue.`,
+        `No active ${vendor} credential; enter your personal password to continue.`,
         { vendor, reason: 'password_required' },
       )
     }
@@ -252,25 +311,55 @@ export class PersonalSubscriptionService {
     return { vendor, secret }
   }
 
-  /** Whether the run currently has a live activation for the user+vendor. */
+  /**
+   * Whether the scope has an activation for the user+vendor that is still live `minRemainingMs`
+   * from now (default: right now, i.e. plain liveness).
+   *
+   * The horizon is what makes this answerable as "may an interaction leave this alone?" rather
+   * than only "is it live?". An activation with two minutes left is live and will not survive the
+   * step the caller is about to dispatch, so treating it as good enough would push the failure into
+   * the run, which is the opposite of what the interaction gate exists for.
+   */
   async hasActivation(
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
+    minRemainingMs = 0,
   ): Promise<boolean> {
     return (
       (await this.deps.subscriptionActivationRepository.get(
-        executionId,
+        scopeId,
         userId,
         vendor,
-        this.deps.clock.now(),
+        this.deps.clock.now() + minRemainingMs,
       )) !== null
     )
   }
 
-  /** Delete every activation for a finished run (called when a run terminates). */
-  async clearRun(executionId: string): Promise<void> {
-    await this.deps.subscriptionActivationRepository.deleteByExecution(executionId)
+  /**
+   * Whether the scope's activation for this vendor is FRESH ENOUGH that an interaction need not
+   * re-mint it — more than half its lifetime still to run.
+   *
+   * The rule lives here because only this service knows the TTL it mints against, and it exists
+   * because re-minting is not cheap: {@link unlock} derives the password's key with 210k PBKDF2
+   * iterations, which the cipher's own header describes as a once-per-unlock cost. A human
+   * clicking through a parked run pays it once and nobody notices; a headless driver answering
+   * eight follow-ups in a loop pays it eight times in a row, which on a CPU-metered runtime is a
+   * killed request rather than a slow one. Halving the TTL keeps the guarantee the re-mint is for
+   * (the next dispatch has a comfortable credential) while making the cost proportional to the
+   * time the run has been tended rather than to the number of times it was poked.
+   */
+  async hasFreshActivation(
+    scopeId: ActivationScopeId,
+    userId: string,
+    vendor: SubscriptionVendor,
+  ): Promise<boolean> {
+    return this.hasActivation(scopeId, userId, vendor, this.activationTtlMs / 2)
+  }
+
+  /** Delete every activation for a settled scope (a removed credential; a run that terminated). */
+  async clearScope(scopeId: ActivationScopeId): Promise<void> {
+    await this.deps.subscriptionActivationRepository.deleteByScope(scopeId)
   }
 
   /** Delete activations whose TTL has passed. Returns the count (for the sweep log). */

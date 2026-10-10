@@ -17,7 +17,7 @@ describe('spend safeguards', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: 'pl_quick', // two steps
+      pipelineId: 'pl_simple',
     })
     await app.drive(wsId)
 
@@ -39,7 +39,7 @@ describe('spend safeguards', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
-      pipelineId: 'pl_quick', // multi-step, ungated (pl_full now has approval gates)
+      pipelineId: 'pl_simple', // multi-step and unconditional: no gate, no estimate-gated skip
     })
     const ticked = await app.drive(wsId)
 
@@ -62,7 +62,7 @@ describe('spend safeguards', () => {
     const wsId = workspace.id
 
     await pausingApp.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
-      pipelineId: 'pl_quick',
+      pipelineId: 'pl_simple',
     })
     await pausingApp.drive(wsId)
 

@@ -12,11 +12,10 @@ import { useBoardStore } from '~/stores/board'
  */
 export const useRecurringPipelinesStore = defineStore('recurringPipelines', () => {
   const api = useApi()
-  const toast = useToast()
-  // Resolve translations through the Nuxt app's global i18n instance — a store runs outside a
-  // component `setup`, so `useI18n()` is unavailable (see the board store for the same pattern).
-  const nuxtApp = useNuxtApp()
-  const tr = (key: string): string => (nuxtApp.$i18n as { t: (k: string) => string }).t(key)
+  // The failure funnel resolves its own translations through the Nuxt app's global i18n instance,
+  // which is what a store (running outside a component `setup`) needs, so this store no longer
+  // carries a `tr` bridge or a raw toast handle of its own.
+  const { present } = usePipelineErrorToast()
 
   const schedules = ref<PipelineSchedule[]>([])
   /** Lazily-loaded run history, keyed by schedule id. */
@@ -33,9 +32,23 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     return map
   })
 
+  /**
+   * Schedules indexed by the block they reuse. Indexed rather than scanned because `byBlock` is
+   * read from a computed on every mounted task card: a `find` there is O(cards x schedules) on
+   * every change, the same shape the execution store's `byBlockLive` index replaced.
+   *
+   * First wins, matching the `find` this replaced: a block backs at most one schedule, so a second
+   * row for it is transient state a refresh resolves, not a choice to make here.
+   */
+  const scheduleByBlock = computed(() => {
+    const map = new Map<string, PipelineSchedule>()
+    for (const s of schedules.value) if (!map.has(s.blockId)) map.set(s.blockId, s)
+    return map
+  })
+
   /** The schedule whose reused block is `blockId`, if any. */
   function byBlock(blockId: string): PipelineSchedule | undefined {
-    return schedules.value.find((s) => s.blockId === blockId)
+    return scheduleByBlock.value.get(blockId)
   }
 
   async function create(input: Parameters<typeof api.createRecurringPipeline>[1]) {
@@ -71,12 +84,7 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     } catch (e) {
       schedules.value = prevSchedules
       if (blockSnap) board.reattach(blockSnap)
-      toast.add({
-        title: tr('board.toast.recurringDeleteFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.recurringDeleteFailed')
     }
   }
 

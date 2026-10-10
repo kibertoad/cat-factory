@@ -27,7 +27,7 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const settings = useWorkspaceSettingsStore()
 const providerConnections = useProviderConnectionsStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 type BackendKind = ExecutionBackendKind | TestEnvBackendKind
 // A radio item: the built-in facade runtime, one per registered backend kind (built-in +
@@ -199,6 +199,16 @@ const items = computed<PickerItem[]>(() => {
   return out
 })
 
+// The same list in the shape URadioGroup reads. `desc` is optional on a PickerItem and an empty
+// string renders an empty description line, so it is dropped rather than passed through blank.
+const backendItems = computed(() =>
+  items.value.map((item) => ({
+    value: item.id,
+    label: item.label,
+    ...(item.desc ? { description: item.desc } : {}),
+  })),
+)
+
 // The active-line label: prefer the registered connection's concrete kind over the generic
 // "delegated" label so "Active: Kubernetes cluster" reads truthfully.
 const activeLabel = computed(() => {
@@ -223,12 +233,7 @@ async function setDelegate(value: boolean) {
     // Only reachable on the execution axis (`writable` is false for testEnv now).
     await settings.update({ delegateAgentsToRunnerPool: value })
   } catch (e) {
-    toast.add({
-      title: t('settings.infrastructure.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.infrastructure.updateFailed')
   } finally {
     saving.value = false
   }
@@ -272,33 +277,23 @@ const labelKey = computed(() =>
 </script>
 
 <template>
-  <section v-if="cap" class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-    <h3 class="text-sm font-semibold text-slate-200">{{ t(labelKey) }}</h3>
+  <section v-if="cap" class="space-y-2 rounded-lg border border-muted bg-default/40 p-3">
+    <h3 class="text-sm font-semibold text-default">{{ t(labelKey) }}</h3>
 
     <!-- Off-local: the active backend is deployment/registration-driven; state it plainly. -->
-    <p v-if="!writable" class="text-sm text-slate-300" :data-testid="`${axis}-backend-active`">
+    <p v-if="!writable" class="text-sm text-toned" :data-testid="`${axis}-backend-active`">
       {{ t('settings.infrastructure.active', { backend: activeLabel }) }}
     </p>
 
-    <div class="space-y-1.5" :data-testid="`${axis}-backend-options`">
-      <label v-for="item in items" :key="item.id" class="flex cursor-pointer items-start gap-2">
-        <input
-          type="radio"
-          class="mt-1"
-          :value="item.id"
-          :checked="item.id === selected"
-          :disabled="saving"
-          :data-testid="`${axis}-backend-${item.id}`"
-          @change="select(item.id)"
-        />
-        <span class="min-w-0">
-          <span class="text-sm text-slate-200">{{ item.label }}</span>
-          <span v-if="item.desc" class="block text-[11px] text-slate-400">{{ item.desc }}</span>
-        </span>
-      </label>
-    </div>
+    <URadioGroup
+      :model-value="selected"
+      :items="backendItems"
+      :disabled="saving"
+      :data-testid="`${axis}-backend-options`"
+      @update:model-value="select(String($event))"
+    />
 
-    <p v-if="showRegisterHint" class="text-[11px] text-amber-300/80">
+    <p v-if="showRegisterHint" class="text-2xs text-app-warning-300/80">
       {{ t('settings.infrastructure.registerHint') }}
     </p>
 

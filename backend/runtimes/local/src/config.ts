@@ -186,7 +186,7 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // Inbound-auth secret injected into every agent container and sent on each harness call.
     // REQUIRED and must be stable: the local runner transports otherwise mint a RANDOM
     // per-process value, so after a restart polls against a container still running from before
-    // fail auth — the run flaps instead of re-attaching (docs/race-condition-audit-2026-07.md).
+    // fail auth — the run flaps instead of re-attaching (docs/internal/race-condition-audit-2026-07.md).
     // Generate with `pnpm secrets` in deploy/local.
     HARNESS_SHARED_SECRET: requireStableSecret(env, 'HARNESS_SHARED_SECRET'),
     // The harness (inside the container) posts to `${PUBLIC_URL}/v1`; the runtime's host
@@ -208,6 +208,12 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ENVIRONMENTS_ALLOW_URL_HOSTS:
       env.ENVIRONMENTS_ALLOW_URL_HOSTS?.trim() ||
       'localhost,127.0.0.1,host.docker.internal,.localhost,.local,.nip.io,.sslip.io',
+    // Local mode is single-tenant by definition, so a locally-run model on the
+    // developer's own LAN (an LM Studio box, a homelab Ollama host) is the intended
+    // reach: default the runner-host policy's LAN opt-in ON. Hosted facades keep the
+    // strict loopback-only default, where the LAN allow-list would be an
+    // internal-network SSRF grant on a shared deployment (SEC-3).
+    LOCAL_MODELS_ALLOW_LAN: env.LOCAL_MODELS_ALLOW_LAN?.trim() || 'true',
   }
 }
 

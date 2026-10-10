@@ -128,6 +128,7 @@ export function buildLocalEnv(input: LocalEnvInput): string {
     },
     ...reachabilityEntries(input.containerRuntime),
     ...executionModeEntries(input),
+    ...deployRunnerEntries(),
     ...commonOptionalEntries(input.provider),
     {
       comment: [
@@ -220,6 +221,54 @@ function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
 }
 
 /**
+ * The Kubernetes test-environment DEPLOY RUNNER, all commented out (deploy is unused by default).
+ * A Kubernetes-backed test environment (local k3s/k3d/kind, configured in the UI or via
+ * `cat-factory k3s`) needs a deploy runner to render + apply its manifests; the UI connection says
+ * WHERE to deploy, these say WHAT runs it. There is NO default MODE, and none is written active —
+ * but `container` mode now works with no other variable (the deploy-harness image resolves
+ * automatically, like the executor image), so enabling deploy is a one-line uncomment. We document
+ * both modes and steer to `container`. Mirrors `deploy/local/.env.example`.
+ */
+function deployRunnerEntries(): EnvEntry[] {
+  return [
+    {
+      comment: [
+        'Kubernetes test environments — the DEPLOY RUNNER (optional, unused by default). A test',
+        'environment backed by Kubernetes (local k3s/k3d/kind, set up in the UI under Integrations >',
+        '"Test environments" or with `cat-factory k3s`) needs a deploy runner to render + apply its',
+        'manifests with kubectl/kustomize/helm — WITHOUT one, standing it up fails with "no deploy',
+        'runner wired". That connection says WHERE to deploy; these say WHAT runs the deploy. Pick a',
+        'mode explicitly (no default). Leave unset (the common case) if you do not stand Kubernetes',
+        'test environments up.',
+        '  container — RECOMMENDED, works out of the box: the deploy-harness IMAGE runs one container',
+        '              per job on LOCAL_CONTAINER_RUNTIME. The image is resolved automatically to the',
+        '              version this backend supports — no other variable needed. Just uncomment this.',
+        '  native    — a HOST PROCESS using your OWN installed kubectl/kustomize/helm (no Docker);',
+        '              requires LOCAL_DEPLOY_HARNESS_ENTRY (boot FAILS if set without it). Runs with',
+        '              your full cluster + file access.',
+      ],
+      key: '# LOCAL_DEPLOY_RUNTIME',
+      value: 'container',
+    },
+    {
+      comment: [
+        'Required only when LOCAL_DEPLOY_RUNTIME=native (the deploy-harness server entry).',
+      ],
+      key: '# LOCAL_DEPLOY_HARNESS_ENTRY',
+      value: '',
+    },
+    {
+      comment: [
+        'Escape hatch only: pin a custom/older deploy-harness image or a private-registry mirror.',
+        'Leave unset to use the backend-matched default (recommended).',
+      ],
+      key: '# LOCAL_DEPLOY_IMAGE',
+      value: 'ghcr.io/kibertoad/cat-factory-deploy:<version>',
+    },
+  ]
+}
+
+/**
  * Commonly-useful optional settings, all commented out so a developer can toggle them in place
  * instead of hunting the docs. NOTE: these are shown with the value you'd set to change the
  * behaviour, which is NOT always the default — the auth pair below is on by default in local
@@ -256,6 +305,31 @@ function commonOptionalEntries(provider: VcsProvider): EnvEntry[] {
     },
     { key: '# LANGFUSE_PUBLIC_KEY', value: '' },
     { key: '# LANGFUSE_SECRET_KEY', value: '' },
+    {
+      comment: [
+        'Export every LLM call (traces + metrics) to an OpenTelemetry OTLP/HTTP backend',
+        '(Grafana, Honeycomb, an OTel Collector, …). OFF by default; the value shown ENABLES',
+        'it (also needs the endpoint below). Composes alongside Langfuse.',
+      ],
+      key: '# OTEL_ENABLED',
+      value: 'true',
+    },
+    { key: '# OTEL_EXPORTER_OTLP_ENDPOINT', value: 'http://localhost:4318' },
+    {
+      comment: ['Optional OTLP auth headers: comma-separated key=value pairs.'],
+      key: '# OTEL_EXPORTER_OTLP_HEADERS',
+      value: '',
+    },
+    { key: '# OTEL_SERVICE_NAME', value: 'cat-factory' },
+    {
+      comment: [
+        "Also export the platform's own structured LOG lines to the same OTLP endpoint, so",
+        'logs sit beside the traces they correlate with. A further opt-in on top of',
+        'OTEL_ENABLED; LOG_LEVEL governs what is exported.',
+      ],
+      key: '# OTEL_LOGS',
+      value: 'true',
+    },
     {
       comment: [
         'Post board notifications to Slack (connect the workspace in the UI). OFF by default;',

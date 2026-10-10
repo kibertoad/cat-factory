@@ -116,39 +116,44 @@ export async function runBenchmark(opts: RunOptions): Promise<CandidateResult[]>
           }
         }
 
-        if (task === 'requirement-review') {
-          for (const fx of REQUIREMENT_REVIEW_FIXTURES.filter((f) => accept(f.id))) {
-            await runOne(fx.id, requirementsLogic.renderRequirements(fx.context), () =>
-              runRequirementReview({
-                fixture: fx as RequirementReviewFixture,
-                modelRef: ref,
-                prompt,
-                deps,
-              }),
-            )
-          }
-        } else if (task === 'code-review') {
-          for (const fx of CODE_REVIEW_FIXTURES.filter((f) => accept(f.id))) {
-            const input = fx.context.priorOutputs.map((p) => p.output).join('\n\n')
-            await runOne(fx.id, input, () =>
-              runCodeReview({ fixture: fx as CodeReviewFixture, modelRef: ref, prompt, deps }),
-            )
-          }
-        } else {
-          for (const fx of IMPLEMENTATION_FIXTURES.filter((f) => accept(f.id))) {
-            const endpoint = resolvePiEndpoint(ref, candidate.endpoint, env)
-            const input = `Repo: ${fx.repo.owner}/${fx.repo.name}@${fx.repo.baseBranch}\nTask: ${fx.task}`
-            await runOne(fx.id, input, () =>
-              runImplementation({
-                fixture: fx as ImplementationFixture,
-                modelRef: ref,
-                prompt,
-                endpoint,
-                deps,
-              }),
-            )
+        // Dispatch the task's fixtures through `runOne`. Extracted so the per-task fixture
+        // loops don't nest under the three model/prompt loops above (keeps max-depth ≤ 4).
+        const runTaskFixtures = async (): Promise<void> => {
+          if (task === 'requirement-review') {
+            for (const fx of REQUIREMENT_REVIEW_FIXTURES.filter((f) => accept(f.id))) {
+              await runOne(fx.id, requirementsLogic.renderRequirements(fx.context), () =>
+                runRequirementReview({
+                  fixture: fx as RequirementReviewFixture,
+                  modelRef: ref,
+                  prompt,
+                  deps,
+                }),
+              )
+            }
+          } else if (task === 'code-review') {
+            for (const fx of CODE_REVIEW_FIXTURES.filter((f) => accept(f.id))) {
+              const input = fx.context.priorOutputs.map((p) => p.output).join('\n\n')
+              await runOne(fx.id, input, () =>
+                runCodeReview({ fixture: fx as CodeReviewFixture, modelRef: ref, prompt, deps }),
+              )
+            }
+          } else {
+            for (const fx of IMPLEMENTATION_FIXTURES.filter((f) => accept(f.id))) {
+              const endpoint = resolvePiEndpoint(ref, candidate.endpoint, env)
+              const input = `Repo: ${fx.repo.owner}/${fx.repo.name}@${fx.repo.baseBranch}\nTask: ${fx.task}`
+              await runOne(fx.id, input, () =>
+                runImplementation({
+                  fixture: fx as ImplementationFixture,
+                  modelRef: ref,
+                  prompt,
+                  endpoint,
+                  deps,
+                }),
+              )
+            }
           }
         }
+        await runTaskFixtures()
       }
     }
   }

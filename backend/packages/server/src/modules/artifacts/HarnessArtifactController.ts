@@ -1,15 +1,20 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { bearerToken } from '../../auth/middleware.js'
-import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
 import {
   MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
+  blobResponseBody,
+  blobResponseHeaders,
   exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
+import type { BinaryArtifactStore } from '@cat-factory/kernel'
+import { NotFoundError } from '@cat-factory/kernel'
+import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
+import { requireHarnessSession } from './harnessSession.js'
 
 /**
  * Cap on how many screenshots a single run may upload. A `tester-ui` run captures one shot per
@@ -18,6 +23,40 @@ import {
  * count is read back from the store per ingest (cheap, indexed by execution).
  */
 const MAX_SCREENSHOTS_PER_RUN = 100
+
+/** One run's capture set, as {@link reserveArtifactSlot} / {@link reclaimArtifactOverflow} see it. */
+function runCap(store: BinaryArtifactStore, workspaceId: string, executionId: string) {
+  return {
+    limit: MAX_SCREENSHOTS_PER_RUN,
+    count: () => store.countByExecution(workspaceId, executionId),
+    list: () => store.listByExecution(workspaceId, executionId),
+    remove: (id: string) => store.delete(workspaceId, id),
+  }
+}
+
+/** The one refusal both cap checks answer with, so the pre-check and the reconcile cannot differ. */
+function refuseFullRun<E extends AppEnv>(c: Context<E>, executionId: string) {
+  logger.warn('artifact ingest: per-run screenshot limit reached', {
+    scope: 'artifactIngest',
+    executionId,
+    limit: MAX_SCREENSHOTS_PER_RUN,
+  })
+  return c.json({ error: { code: 'too_many', message: 'Per-run screenshot limit reached' } }, 429)
+}
+
+/**
+ * Resolve the stored content type for an uploaded screenshot. Screenshots are always PNGs, so a
+ * typeless upload defaults to PNG; a declared type is gated through the shared image allow-list.
+ * Returns the normalized content type, or `null` for a recognised non-image type (which the caller
+ * rejects with 415 rather than storing mislabelled).
+ */
+function resolveScreenshotContentType(declaredType: string | undefined): string | null {
+  const trimmed = declaredType?.trim()
+  if (!trimmed) {
+    return 'image/png'
+  }
+  return normalizeImageContentType(trimmed)
+}
 
 /**
  * The in-container screenshot ingest endpoint for the UI tester (`tester-ui`). It lives on
@@ -42,42 +81,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
         c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
     }),
     async (c) => {
-      const container = c.get('container')
-      const resolveStore = container.resolveBinaryArtifactStore
-      if (!resolveStore) {
-        return c.json(
-          { error: { code: 'unavailable', message: 'Artifact storage not configured' } },
-          503,
-        )
-      }
-      const secret = container.config.auth.sessionSecret
-      if (!secret) {
-        logger.error({ scope: 'artifactIngest' }, 'artifact ingest: session secret not configured')
-        return c.json(
-          { error: { code: 'unavailable', message: 'Artifact ingest not configured' } },
-          503,
-        )
-      }
-      const sessions = new ContainerSessionService({ secret })
-      const session = await sessions.verify(bearerToken(c))
-      if (!session) {
-        logger.warn(
-          { scope: 'artifactIngest' },
-          'artifact ingest: invalid or expired session token',
-        )
-        return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired token' } }, 401)
-      }
-
-      // The store is the run's ACCOUNT's configured backend, resolved from the token's
-      // workspace (never the request body) — so a container can only write to its own
-      // account's storage. Null ⇒ the account configured no storage.
-      const store = await resolveStore(session.workspaceId)
-      if (!store) {
-        return c.json(
-          { error: { code: 'unavailable', message: 'Artifact storage not configured' } },
-          503,
-        )
-      }
+      const { session, store } = await requireHarnessSession(c, 'artifactIngest')
 
       // Refuse a grossly oversized body from Content-Length before it is buffered into memory; the
       // exact per-file ceiling is still enforced after parsing below.
@@ -86,20 +90,14 @@ export function harnessArtifactController(): Hono<AppEnv> {
       }
 
       // Per-run upload ceiling (fast-path): a runaway/compromised container can't fill the store
-      // with unbounded screenshots scoped to its run. This pre-check rejects the steady-state case
+      // with unbounded screenshots scoped to its run. The shared cap rejects the steady-state case
       // cheaply via an indexed COUNT (no row materialise); concurrent ingests that race past it are
       // caught by the post-insert reconcile below, so the effective ceiling holds even without a
       // DB-level atomic counter.
-      const existingCount = await store.countByExecution(session.workspaceId, session.executionId)
-      if (existingCount >= MAX_SCREENSHOTS_PER_RUN) {
-        logger.warn(
-          { scope: 'artifactIngest', executionId: session.executionId, count: existingCount },
-          'artifact ingest: per-run screenshot limit reached',
-        )
-        return c.json(
-          { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
-          429,
-        )
+      const cap = runCap(store, session.workspaceId, session.executionId)
+      const priorCount = await reserveArtifactSlot(cap)
+      if (priorCount === null) {
+        return refuseFullRun(c, session.executionId)
       }
 
       let form: FormData
@@ -116,24 +114,17 @@ export function harnessArtifactController(): Hono<AppEnv> {
       // recognised non-image type rather than silently storing it mislabelled — keeping this path's
       // content-type posture aligned with the workspace upload endpoint (both gate on the shared
       // image allow-list in imageArtifacts.ts).
-      const declaredType = file.type?.trim()
-      let contentType: string
-      if (!declaredType) {
-        contentType = 'image/png'
-      } else {
-        const normalized = normalizeImageContentType(declaredType)
-        if (!normalized) {
-          return c.json(
-            {
-              error: {
-                code: 'unsupported_media',
-                message: 'Only raster image screenshots are accepted',
-              },
+      const contentType = resolveScreenshotContentType(file.type)
+      if (!contentType) {
+        return c.json(
+          {
+            error: {
+              code: 'unsupported_media',
+              message: 'Only raster image screenshots are accepted',
             },
-            415,
-          )
-        }
-        contentType = normalized
+          },
+          415,
+        )
       }
       const bytes = new Uint8Array(await file.arrayBuffer())
       if (bytes.byteLength > MAX_UPLOAD_BYTES) {
@@ -153,35 +144,48 @@ export function harnessArtifactController(): Hono<AppEnv> {
         },
         blob: bytes,
       })
-      // Reconcile the cap against concurrent inserts: the pre-check is check-then-act, so a burst
-      // of parallel ingests can each pass it before any row lands. We only need to run this
-      // (which materialises the run's rows to find the overflow tail) when the insert COULD have
-      // crossed the cap — i.e. the pre-check count was already at the edge. Steady-state uploads
-      // far below the cap skip it entirely, so the common path is one COUNT + one insert.
-      if (existingCount + 1 >= MAX_SCREENSHOTS_PER_RUN) {
-        // listByExecution is oldest-first, so anything at index >= the cap is overflow; if THIS
-        // record is in that tail, roll it back (delete its row + bytes) and reject. The oldest
-        // `MAX_SCREENSHOTS_PER_RUN` always survive, so the store is bounded to exactly the cap per
-        // run without dropping legitimate earlier shots.
-        const after = await store.listByExecution(session.workspaceId, session.executionId)
-        if (after.length > MAX_SCREENSHOTS_PER_RUN) {
-          const overflow = new Set(after.slice(MAX_SCREENSHOTS_PER_RUN).map((r) => r.id))
-          if (overflow.has(record.id)) {
-            await store.delete(session.workspaceId, record.id)
-            logger.warn(
-              { scope: 'artifactIngest', executionId: session.executionId, count: after.length },
-              'artifact ingest: per-run screenshot limit reached (post-insert reconcile)',
-            )
-            return c.json(
-              { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
-              429,
-            )
-          }
-        }
+      // Check-then-act, so a burst of parallel ingests can each pass the pre-check before any row
+      // lands; the reconcile rolls THIS record back when it is the one that overflowed, leaving the
+      // oldest `MAX_SCREENSHOTS_PER_RUN` untouched.
+      if (await reclaimArtifactOverflow(cap, priorCount, record.id)) {
+        return refuseFullRun(c, session.executionId)
       }
       return c.json({ artifactId: record.id }, 201)
     },
   )
+
+  // Stream one REFERENCE design image back into a container: the other direction of the ingest
+  // seam above, and what turns the manifest in a capturing job's body into the files under
+  // `.cat-context/reference-screenshots/`. Same auth (the run's own container session token),
+  // same store resolution (from the token's workspace, never the request).
+  //
+  // Two things bound what this can serve. It is scoped to the token's WORKSPACE, so a container
+  // can never read another board's designs; and it serves only `kind:'reference'`, so this route
+  // cannot become a way for one run to read another run's captured SCREENSHOTS, which is the
+  // asymmetry that matters, since references are design material the run was handed on purpose
+  // while a screenshot is another run's output. Anything outside that is a 404 rather than a 403:
+  // a container has no business learning which artifact ids exist.
+  app.get('/v1/artifacts/reference/:id', async (c) => {
+    const { session, store } = await requireHarnessSession(c, 'artifactReference')
+    const id = c.req.param('id')
+    const got = await store.getBlobWithMetadata(session.workspaceId, id)
+    // Same two REASONS the public blob route separates, for the same reason: "not yours (or not a
+    // reference)" is something to stop asking for, where a metadata row that outlived its bytes is
+    // a storage fault. The harness reports either as a reference it could not fetch.
+    if (!got || got.record.kind !== 'reference') {
+      throw new NotFoundError('Artifact', id, { reason: 'artifact_not_found' })
+    }
+    if (!got.bytes) {
+      throw new NotFoundError('Artifact', id, { reason: 'artifact_blob_missing' })
+    }
+    // Same headers as the workspace-scoped serve path: the content type is clamped to the image
+    // allow-list and `nosniff` is sent, so bytes stored before a tightening can never be served
+    // as active content.
+    return new Response(blobResponseBody(got.bytes), {
+      status: 200,
+      headers: blobResponseHeaders(got.record.contentType),
+    })
+  })
 
   return app
 }

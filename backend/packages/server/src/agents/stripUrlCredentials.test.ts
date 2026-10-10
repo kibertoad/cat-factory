@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stripUrlCredentials } from './ContainerAgentExecutor.js'
+import { stripUrlCredentials } from './agentContextRecord.js'
 
 // The agent-context observability snapshot promises "never a credential-bearing URL".
 // Injected-doc URLs and a tester's ephemeral environmentUrl are operator-supplied, so the

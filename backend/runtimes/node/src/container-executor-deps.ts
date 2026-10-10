@@ -1,0 +1,918 @@
+// Container-agent-executor wiring for the Node facade, extracted out of `container.ts` so the
+// composition root stays within the file-size budget. These are the seams `buildNodeContainer`
+// (and the local facade / tests) compose: the runner-pool transport resolver, the
+// provisioning-log wrapper, the container agent executor + repo bootstrapper + env-config
+// repairer, the GitHub-issue filer, and the shared external trace-sink builder. Pure functions
+// over explicit deps — no shared mutable state beyond the per-config trace-sink memo.
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import { resolveAgentConfig, isProxyableProvider } from '@cat-factory/agents'
+import {
+  HttpRunnerPoolProvider,
+  RunnerPoolConnectionService,
+  LoggingRunnerTransport,
+  PersonalSubscriptionService,
+  ProviderSubscriptionService,
+  createGitHubIssueViaToken,
+} from '@cat-factory/integrations'
+import type {
+  EnvironmentBackendRegistry,
+  ProvisioningLogRecorder,
+  RunnerBackendRegistry,
+} from '@cat-factory/integrations'
+import {
+  composeTraceSinks,
+  isAmbientNativeVendor,
+  runActivationScope,
+  SUBSCRIPTION_VENDORS,
+} from '@cat-factory/kernel'
+import type {
+  AgentExecutor,
+  BlockRepository,
+  Clock,
+  HarnessKind,
+  LocalModelDeclarations,
+  ModelFlavor,
+  SubscriptionVendor,
+  GitHubClient,
+  GitHubInstallationRepository,
+  ProvisioningSubsystem,
+  RepoProjectionRepository,
+  RunnerPoolConnectionRepository,
+  RunnerPoolProvider,
+  StoreAgentContextGate,
+  SubscriptionQuotaTarget,
+  TestSecretEntry,
+  McpOAuthTokenSource,
+  ToolSecretResolver,
+  WebSearchAvailability,
+} from '@cat-factory/kernel'
+import {
+  AgentContextObservabilityService,
+  type CoreDependencies,
+  type RecordHarnessCalls,
+  type ToolCallsRecordInput,
+} from '@cat-factory/orchestration'
+import { createLangfuseSink } from '@cat-factory/observability-langfuse'
+import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
+import {
+  type AppConfig,
+  type DispatchTokenMintDependencies,
+  type JobPackageRegistrySpec,
+  type MintInstallationToken,
+  type ResolveRepoOrigin,
+  type ResolveRepoTarget,
+  type ResolveRepoTargets,
+  type ResolveRunnerTransport,
+  ContainerAgentExecutor,
+  ContainerEnvConfigRepairer,
+  ContainerEnvironmentProbeAgent,
+  type ContainerEnvironmentProbeAgentDependencies,
+  ContainerGuidedReviewInvestigator,
+  ContainerJobAuthResolver,
+  type ContainerJobAccountingDeps,
+  type ContainerJobAuthDependencies,
+  ContainerRepoBootstrapper,
+  ContainerSessionService,
+  buildSingleKindModelResolver,
+  GitHubAppRegistry,
+  type ResolveRunInitiatorToken,
+  WebCryptoSecretCipher,
+  DOCS,
+  ENV_VARS_ANCHORS,
+  SITE_DOCS,
+  buildDispatchTokenMint,
+  engineVcsProvider,
+  ensureWorkBranchViaRest,
+  logger,
+  noRunnerBackendAvailableError,
+  resolveUrlSafetyPolicy,
+  operationalMetrics,
+} from '@cat-factory/server'
+
+// HKDF domain tag separating runner-pool scheduler secrets from any other use of
+// the same master key (mirrors the Worker's `cat-factory:runners`).
+export const RUNNERS_CIPHER_INFO = 'cat-factory:runners'
+
+// Memoised per config so both trace-sink wiring sites (the container executor here and the
+// core/inline sinks in `buildNodeContainer`) share ONE instance — the OTel SDK sink owns
+// batch processors/exporters, so it must be built once per config, not per wiring site.
+const traceSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
+
+/**
+ * Build the opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — composed into
+ * the single sink slot; the observability service then fans every recorded LLM call out to
+ * whichever are wired. Memoised per config so both wiring sites share one instance.
+ *
+ * Langfuse uses the fetch-based sink (identical to the Worker). OpenTelemetry uses the
+ * OFFICIAL `@opentelemetry/*` SDK exporter (`createNodeOtelSink`) — the Node counterpart of
+ * the Worker's fetch OTLP exporter, kept conformant by the shared mapping layer + tests.
+ */
+export function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
+  if (traceSinkCache.has(config)) return traceSinkCache.get(config)
+  const langfuse =
+    !config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey
+      ? undefined
+      : createLangfuseSink({
+          publicKey: config.langfuse.publicKey,
+          secretKey: config.langfuse.secretKey,
+          baseUrl: config.langfuse.baseUrl,
+          logger,
+        })
+  const otel =
+    !config.otel.enabled || !config.otel.endpoint
+      ? undefined
+      : createNodeOtelSink({
+          endpoint: config.otel.endpoint,
+          headers: config.otel.headers,
+          serviceName: config.otel.serviceName,
+          logger,
+        })
+  const sink = composeTraceSinks([langfuse, otel])
+  traceSinkCache.set(config, sink)
+  return sink
+}
+
+export function buildNodeResolveTransport(
+  config: AppConfig,
+  // The port, not the Drizzle concrete: in mothership mode the local facade passes a remote
+  // (RPC-backed) connection repo, and the service layer only ever uses the port methods.
+  runnerPoolConnectionRepository: RunnerPoolConnectionRepository,
+  workspaceRepository: CoreDependencies['workspaceRepository'],
+  clock: Clock,
+  // The app-owned runner-backend registry the service resolves a stored `kind` through.
+  runnerBackendRegistry: RunnerBackendRegistry,
+  // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
+  // tests). NOT the custom-kind seam — a bespoke runner backend is registered by reference
+  // into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
+  injectedPoolProvider?: RunnerPoolProvider,
+): ResolveRunnerTransport | null {
+  if (!config.runners.enabled || !config.runners.encryptionKey) return null
+  const urlPolicy = resolveUrlSafetyPolicy(config.runners)
+  const runnerService = new RunnerPoolConnectionService({
+    runnerPoolConnectionRepository,
+    workspaceRepository,
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: config.runners.encryptionKey,
+      info: RUNNERS_CIPHER_INFO,
+    }),
+    clock,
+    logger,
+    runnerBackendRegistry,
+    ...(urlPolicy ? { urlPolicy } : {}),
+    runnerPoolProvider:
+      injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
+  })
+  return async (workspaceId) => {
+    if (workspaceId) {
+      const resolved = await runnerService.resolve(workspaceId)
+      if (resolved) return resolved.transport
+    }
+    // The shared factory throws a ConflictError carrying the machine reason (see its doc): a clean
+    // 409 synchronously, and classifyDispatchFailure lifts the reason onto the run's AgentFailure on
+    // the async dispatch path (SPA shows "Agent backend not configured", not "container failed to
+    // start"). The Node facade has no per-run container backend, so the remedy points only at the
+    // self-hosted runner pool / Kubernetes.
+    throw noRunnerBackendAvailableError(workspaceId)
+  }
+}
+
+/**
+ * Wrap a transport resolver so every dispatch/release/poll-failure appends a
+ * provisioning-log event. A no-op when there's no resolver. `subsystem` tags the
+ * rows (a self-hosted pool vs a per-run container) so the logs drawer can filter.
+ */
+export function withProvisioningLog(
+  resolve: ResolveRunnerTransport | null,
+  recorder: ProvisioningLogRecorder,
+  subsystem: ProvisioningSubsystem,
+): ResolveRunnerTransport | null {
+  if (!resolve) return null
+  // Closure-owned so it survives each (per-resolution) wrapper: a terminal `failed`
+  // job re-polled by a replay/re-drive logs its poll-failure only once.
+  const loggedPollFailures = new Set<string>()
+  return async (workspaceId) => {
+    const inner = await resolve(workspaceId)
+    return new LoggingRunnerTransport({
+      inner,
+      recorder,
+      workspaceId: workspaceId ?? '',
+      subsystem,
+      loggedPollFailures,
+    })
+  }
+}
+
+/**
+ * Which of the container-executor prerequisites are missing, as the human labels the boot
+ * warning names. Empty ⇒ all three are present. `PUBLIC_URL` is this service's externally
+ * reachable base backing the LLM proxy, `AUTH_SESSION_SECRET` signs the harness↔proxy tokens,
+ * and a runner backend is what a dispatch is handed to. Pure so the "name exactly what's
+ * missing" logic is unit-tested (error-message coverage A5).
+ */
+export function missingContainerExecutorPrereqs(input: {
+  publicUrl: string | undefined
+  sessionSecret: string | undefined
+  hasRunnerBackend: boolean
+}): string[] {
+  const missing: string[] = []
+  if (!input.publicUrl) missing.push('PUBLIC_URL')
+  if (!input.sessionSecret) missing.push('AUTH_SESSION_SECRET (>= 32 chars)')
+  if (!input.hasRunnerBackend) missing.push('a runner backend (self-hosted runner pool)')
+  return missing
+}
+
+/**
+ * Build the container agent executor (repo-operating steps: coder, mocker,
+ * playwright, blueprints, ci-fixer, conflict-resolver, merger) when its
+ * prerequisites are configured: a token source for the push/clone token, the public
+ * URL backing the LLM proxy, the session secret to sign proxy tokens, and a runner
+ * backend. Returns null when any is missing, so the composite fails those kinds
+ * loudly rather than running them as useless one-shot LLM calls.
+ *
+ * The token source is pluggable: a sibling facade may pass `mintInstallationToken`
+ * (e.g. a static PAT for local mode), otherwise it is minted via the GitHub App
+ * registry (which additionally requires the App private key + `github.enabled`).
+ */
+export interface NodeContainerExecutorDeps {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  appRegistry: GitHubAppRegistry | undefined
+  resolveRepoTarget: ResolveRepoTarget
+  resolveRepoTargets: ResolveRepoTargets
+  resolveTransport: ResolveRunnerTransport | null
+  resolveWorkspaceModelDefault: (
+    workspaceId: string,
+    agentKind: string,
+    modelPresetId?: string,
+  ) => Promise<string | undefined>
+  agentKindRegistry: AgentKindRegistry
+  /**
+   * Replaces the App-registry mint (a static PAT in local mode, the mothership delegation client
+   * in mothership mode). Receives the dispatch's `repositoryIds` scope; an override that cannot
+   * narrow ignores it.
+   */
+  mintInstallationTokenOverride?: DispatchTokenMintDependencies['mint']
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+  /**
+   * "Does THIS run act with its initiator's own GitHub token?" — the shared decision built at
+   * the composition root (so the workspace's `allowInitiatorPat` switch binds this path and
+   * the engine's GitHub client identically) and handed here rather than re-composed, since
+   * re-composing it needs a settings repository this module has no `db` to build in
+   * mothership mode. Absent ⇒ no per-user secret store is wired and the mint always uses the
+   * deployment credential.
+   */
+  resolveRunInitiatorToken?: ResolveRunInitiatorToken
+  agentContextObservability?: AgentContextObservabilityService
+  resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>
+  resolveRepoOrigin?: ResolveRepoOrigin
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
+  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+  /**
+   * Resolve the credentials a registered capability declared: a tool server's (MCP) and a
+   * generative binary integration's alike. The whole composed CHAIN, from the composition root's
+   * `buildToolSecretChain` (the per-workspace store in front of {@link
+   * NodeContainerExecutorDeps.env}, or a deployment's own resolver, which replaces it).
+   *
+   * It sits beside {@link resolveTestSecrets} rather than being built here because it is the same
+   * KIND of thing: a deployment concern the composition root owns. It was the one credential seam
+   * with no such field, which made `ToolSecretResolver` a port with exactly one reachable
+   * implementation, an indirection buying nothing a direct `env[key]` would not have bought. It is
+   * built at the root rather than here because the credential CHECKLIST has to describe what was
+   * composed, and this builder returns an executor with no way to say.
+   *
+   * REQUIRED, and deliberately so: it once carried a bare deployment-environment default for a
+   * caller assembling this executor without that root, and the default failed OPEN. A dropped link
+   * in the facade plumbing (every neighbour here is optional) would have silently stopped
+   * consulting the per-workspace store and resolved every tenant off this node's own environment,
+   * which is the exact leak the store exists to prevent, with nothing thrown and nothing logged. A
+   * standalone caller composes one `buildToolSecretChain` call instead and gets the honest chain
+   * plus the description the credential checklist renders.
+   */
+  resolveToolSecrets: ToolSecretResolver
+  /**
+   * Mint the ACCESS TOKEN an OAuth-authenticated remote tool server needs. Built at the
+   * composition root beside {@link resolveToolSecrets}, from the sealed grant store and that same
+   * credential chain (the chain is what resolves the OAuth CLIENT SECRET).
+   *
+   * OPTIONAL where its neighbour is required, and the asymmetry is real rather than an oversight:
+   * the credential chain always exists (a deployment with nothing configured still has an
+   * environment to read), while the grant store needs `ENCRYPTION_KEY` and genuinely may not.
+   * Absent, a dispatch states an OAuth server to its agent as `oauth_not_connected`, which is the
+   * true description of a deployment with nowhere to keep a grant — so this default fails CLOSED,
+   * which is what makes it safe to be optional.
+   */
+  resolveToolServerOAuth?: McpOAuthTokenSource
+  recordHarnessCalls?: RecordHarnessCalls
+  /** The tool-call trajectory drain's two halves; see `@cat-factory/server`'s `toolTrajectory.ts`. */
+  recordToolCalls?: (input: ToolCallsRecordInput) => Promise<void>
+  toolBodyGate?: StoreAgentContextGate
+  recordSubscriptionQuotaUsage?: (
+    target: SubscriptionQuotaTarget,
+    usage: { inputTokens: number; outputTokens: number },
+  ) => Promise<void>
+}
+
+export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): AgentExecutor | null {
+  const {
+    env,
+    config,
+    appRegistry,
+    resolveRepoTarget,
+    resolveRepoTargets,
+    resolveTransport,
+    resolveWorkspaceModelDefault,
+    agentKindRegistry,
+    mintInstallationTokenOverride,
+    subscriptions,
+    personalSubscriptions,
+    resolveAccountId,
+    resolveRunInitiatorToken,
+    agentContextObservability,
+    resolveWebSearchAvailability,
+    resolveRepoOrigin,
+    resolvePackageRegistries,
+    resolveTestSecrets,
+    resolveToolSecrets,
+    resolveToolServerOAuth,
+    recordHarnessCalls,
+    recordToolCalls,
+    toolBodyGate,
+    recordSubscriptionQuotaUsage,
+  } = deps
+  // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
+  // is this service's externally reachable base (the runner pool / local container
+  // must be able to reach it). Pi posts to `${PUBLIC_URL}/v1/chat/completions`.
+  const publicUrl = env.PUBLIC_URL?.trim()
+  const sessionSecret = config.auth.sessionSecret
+
+  if (!publicUrl || !sessionSecret || !resolveTransport) {
+    // The executor is disabled but the service still boots "healthy" — repo-operating steps
+    // (coder/mocker/tester/blueprints/ci-fixer/conflict-resolver/merger) then fail only at
+    // dispatch, deep in a request, with no boot signal. Emit a greppable line naming exactly
+    // which prerequisite is missing so the gap is visible up front (error-message coverage A5).
+    const missing = missingContainerExecutorPrereqs({
+      publicUrl,
+      sessionSecret,
+      hasRunnerBackend: !!resolveTransport,
+    })
+    logger.warn(
+      `container agent steps are DISABLED: missing ${missing.join(', ')}. Repo-operating steps ` +
+        `(coder/mocker/tester/merger/…) will fail at dispatch until configured. See ` +
+        `${DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking)}.`,
+      { missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking) },
+    )
+    return null
+  }
+
+  // Token source: an explicit override (e.g. a static PAT in local mode) wins; else
+  // the GitHub App registry mints a per-installation token (when the App is configured). Only
+  // the App mint can be narrowed to a run's repos; an override carries whatever the human who
+  // created it granted, so it ignores the scope.
+  const baseMint: DispatchTokenMintDependencies['mint'] | undefined =
+    mintInstallationTokenOverride ??
+    (appRegistry ? (id, opts) => appRegistry.installationToken(id, opts) : undefined)
+  if (!baseMint) {
+    // Every other prerequisite is set but there is no GitHub token source, so the harness
+    // could never clone/push. Name the fix (App creds) rather than disabling silently (A5).
+    logger.warn(
+      `container agent steps are DISABLED: no GitHub token source — set GITHUB_APP_ID + ` +
+        `GITHUB_APP_PRIVATE_KEY so the harness can mint a push/clone token. Repo-operating steps ` +
+        `will fail at dispatch until configured. See ${SITE_DOCS.githubApp}.`,
+      { missing: ['GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY'], docsUrl: SITE_DOCS.githubApp },
+    )
+    return null
+  }
+  // The dispatch's clone/push credential: the run initiator's per-user PAT when stored AND
+  // permitted (so pushes/PRs are attributed to them), else the base mint narrowed to the repos
+  // this one run resolved. Both decisions live in the SHARED `buildDispatchTokenMint` so this
+  // facade and the Worker cannot drift on either.
+  const mintInstallationToken: MintInstallationToken = buildDispatchTokenMint({
+    mint: baseMint,
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
+    logger,
+    operationalMetrics,
+  })
+
+  return new ContainerAgentExecutor({
+    resolveTransport,
+    // Counts the seam's operational faults (dispatch failures, container evictions) beside the
+    // per-job log lines. Wired on both facades — an absent collector would report zero of them.
+    operationalMetrics,
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+    resolveWorkspaceModelDefault,
+    resolveRepoTarget,
+    // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
+    // change out across the task's own repo + each connected involved-service repo.
+    resolveRepoTargets,
+    mintInstallationToken,
+    // Ensure the shared per-task work branch up front so every agent (including the
+    // read-only architect) operates on the same branch — idempotent, best-effort. Writers
+    // create it from base; read-only agents only probe (`options.create`).
+    ensureWorkBranch: async (repo, branch, options) =>
+      ensureWorkBranchViaRest({
+        ...(config.github.apiBase ? { apiBase: config.github.apiBase } : {}),
+        token: await mintInstallationToken(repo.installationId),
+        owner: repo.owner,
+        name: repo.name,
+        baseBranch: repo.baseBranch,
+        branch,
+        create: options.create,
+      }),
+    // The credential channels every container dispatch shares (the pooled lease, the personal
+    // lease, the ambient-CLI predicate) from ONE composition, since the single-job flows beside
+    // this executor resolve their auth through the same resolver.
+    ...buildNodeJobAuthDeps({
+      config,
+      sessionSecret,
+      publicUrl,
+      subscriptions,
+      personalSubscriptions,
+      resolveAccountId,
+    }),
+    // Pool-token usage attribution for usage-aware rotation. Beside the lease rather than in it:
+    // it is what a SETTLED job reports back, not what a dispatch is opened with.
+    ...(subscriptions
+      ? {
+          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
+        }
+      : {}),
+    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
+    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
+    ...(recordHarnessCalls ? { recordHarnessCalls } : {}),
+    // The tool-call trajectory: persisted rows plus the body gate both it and the trace sinks
+    // are governed by. An absent gate withholds every body, which the rows then SAY.
+    ...(recordToolCalls ? { recordToolCalls } : {}),
+    ...(toolBodyGate ? { toolBodyGate } : {}),
+    // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
+    // run's tokens into the rolling windows, for BOTH pooled and personal runs.
+    ...(recordSubscriptionQuotaUsage ? { recordSubscriptionQuotaUsage } : {}),
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (resolved per run — see the
+    // call site), so the tool is never advertised to a run where it would just fail.
+    ...(resolveWebSearchAvailability ? { resolveWebSearchAvailability } : {}),
+    // Decrypt the workspace's private-registry entries onto the job body (rendered by
+    // the harness into ~/.npmrc), so private dependencies resolve on install.
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
+    // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
+    // band — injected as container env vars by the harness, never in the prompt/telemetry).
+    ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
+    // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
+    // integration) declared. The composition root composed the whole chain and passes it whole:
+    // there is no default here to fall back to, because the only one available (this node's
+    // environment alone) would drop the per-workspace store without saying so.
+    resolveToolSecrets,
+    // Mint an OAuth-authenticated remote tool server's access token, refreshing it when the stored
+    // one is spent. Absent ⇒ this deployment has no grant store, and the server is stated as
+    // unavailable rather than dispatched without its Authorization header.
+    ...(resolveToolServerOAuth ? { resolveToolServerOAuth } : {}),
+    logger,
+    githubApiBase: config.github.apiBase,
+    // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
+    // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒
+    // the default github.com origin.
+    ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
+    // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
+    // grouped under the run trace — the same sink the LLM proxy fans generations to.
+    // (Langfuse nests them as children; the OTLP exporter groups them by shared trace id.)
+    llmTraceSink: buildTraceSink(config),
+    // Record the complete provided context per dispatch (best-effort, gated in the sink).
+    ...(agentContextObservability ? { agentContextObservability } : {}),
+    agentKindRegistry,
+  })
+}
+
+/**
+ * What a bootstrap dispatch records, beside what it does: the provided-context snapshot and the
+ * two destinations a poll's drained tool calls reach. Spelled off the bootstrapper's own
+ * constructor so adding a sink there fails to compile here rather than silently going unwired
+ * on a facade.
+ */
+export type BootstrapObservabilityDeps = Pick<
+  ConstructorParameters<typeof ContainerRepoBootstrapper>[0],
+  'agentContextObservability' | 'recordToolCalls' | 'toolBodyGate' | 'llmTraceSink'
+>
+
+/**
+ * Build the repo bootstrapper (the "bootstrap repo" container dispatch) when its
+ * prerequisites are configured, mirroring the Worker's `selectRepoBootstrapper` and
+ * the container-executor prerequisites: a resolvable runner transport, the public URL
+ * + session secret backing the LLM proxy, a token source, and a GitHub client.
+ * Returns undefined otherwise (the bootstrap module then has no runner and the service
+ * reports a clean dispatch failure). A bootstrap run files its telemetry under its own
+ * `repo-bootstrapper` kind while resolving its MODEL through `architect`'s routing, so a
+ * deployment that pinned a model for its architect keeps getting it here. The promoted
+ * `ContainerRepoBootstrapper` dispatches through the same shared runner seam the container
+ * executor uses, so on Node it runs against the self-hosted pool and on local against the
+ * per-job Docker container.
+ */
+export function selectNodeRepoBootstrapper(deps: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  bootstrapJobRepository: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['bootstrapJobRepository']
+  repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
+  repoProjectionCache?: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['repoProjectionCache']
+  githubClient: GitHubClient | undefined
+  mintInstallationToken: MintInstallationToken | undefined
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
+  /**
+   * The same telemetry sinks the container EXECUTOR files through, so a bootstrap run's
+   * provided context and tool-call trajectory are readable exactly like an execution's. Built
+   * once by the composition root and handed to both, which is what keeps the executor's body
+   * gate and this one from being two different answers to the same question.
+   */
+  observability?: BootstrapObservabilityDeps
+}): ContainerRepoBootstrapper | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  if (
+    !deps.resolveTransport ||
+    !publicUrl ||
+    !sessionSecret ||
+    !deps.githubClient ||
+    !deps.mintInstallationToken
+  ) {
+    return undefined
+  }
+  return new ContainerRepoBootstrapper({
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    bootstrapJobRepository: deps.bootstrapJobRepository,
+    repoRepository: deps.repoRepository,
+    ...(deps.repoProjectionCache ? { repoProjectionCache: deps.repoProjectionCache } : {}),
+    githubClient: deps.githubClient,
+    // Which provider that client speaks, derived through the SAME rule the clone URL and the
+    // engine's own client follow (`engineVcsProvider`), so the bootstrapper cannot end up asking
+    // a GitHub client about a GitLab workspace's template and reporting its 404 as a wrong entry.
+    clientProvider: engineVcsProvider(deps.config),
+    mintInstallationToken: deps.mintInstallationToken,
+    sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,
+    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    githubApiBase: deps.config.github.apiBase,
+    // The scaffolder installs dependencies too — forward the workspace's
+    // private-registry entries exactly as the implementation executor does.
+    ...(deps.resolvePackageRegistries
+      ? { resolvePackageRegistries: deps.resolvePackageRegistries }
+      : {}),
+    ...deps.observability,
+  })
+}
+
+/**
+ * Build the live ENVIRONMENT-PROVIDER CONFIG REPAIR agent (PR #416 increment 2) when its
+ * prerequisites are met — the same container prerequisites as the bootstrapper PLUS a
+ * registered backend that supports agent repair (`describeRepairAgent`). The stock manifest
+ * provider has no repair support, so this stays undefined there; it wires only when a custom
+ * backend registered into the env-backend registry implements repair (so local inherits it
+ * too). NOT the repo bootstrapper: an ordinary clone→edit→push coding job, no history reset.
+ */
+export function selectNodeEnvConfigRepairer(deps: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  /** The workspace's repo projection: turns the request's owner/repo into the token's scope. */
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
+  mintInstallationToken: MintInstallationToken | undefined
+  override: CoreDependencies['environmentProvider']
+  environmentBackendRegistry: EnvironmentBackendRegistry
+}): ContainerEnvConfigRepairer | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  // Prefer the internal override (the conformance suite's fake repair provider), else scan
+  // the env-backend registry for the first repair-capable backend. Built-ins don't support
+  // repair, so this is undefined on a stock deployment; a third-party backend wires it.
+  const repairUrlPolicy = resolveUrlSafetyPolicy(deps.config.environments)
+  const environmentProvider = !deps.resolveTransport
+    ? undefined
+    : (deps.override ??
+      deps.environmentBackendRegistry.findRepairCapable(
+        repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {},
+      ))
+  if (
+    !deps.resolveTransport ||
+    !publicUrl ||
+    !sessionSecret ||
+    !deps.mintInstallationToken ||
+    !environmentProvider ||
+    typeof environmentProvider.describeRepairAgent !== 'function'
+  ) {
+    return undefined
+  }
+  // A config fix is coding work, so it follows the `coder` kind's routing. The repair runs on
+  // the Pi harness over the LLM proxy, so the routed model MUST be proxyable. Surface a
+  // misconfiguration HERE (at wiring) rather than letting every repair dispatch throw deep in a
+  // request: if `coder` is routed to a non-proxyable model (e.g. an individual subscription
+  // vendor), leave the fallback unwired — bootstrap then returns the validation issues, exactly
+  // as it does when no provider supports repair.
+  const model = resolveAgentConfig(deps.config.agents.routing, 'coder').ref
+  if (!isProxyableProvider(model.provider)) {
+    logger.warn(
+      'env-config repair: the coder routing model is not proxyable by the LLM proxy; ' +
+        'the agent config-repair fallback is disabled.',
+      { provider: model.provider },
+    )
+    return undefined
+  }
+  return new ContainerEnvConfigRepairer({
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    repoRepository: deps.repoRepository,
+    mintInstallationToken: deps.mintInstallationToken,
+    sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    environmentProvider,
+    model,
+    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    githubApiBase: deps.config.github.apiBase,
+  })
+}
+
+/** Files a GitHub issue for a service frame, or null when none can be resolved. */
+type GitHubIssueFiler = (request: {
+  workspaceId: string
+  frameId: string
+  title: string
+  body: string
+}) => Promise<{ externalId: string; url: string } | null>
+
+/**
+ * Build the GitHub-issue tracker filer for the tech-debt pipeline when the GitHub
+ * App is configured. It resolves the service's repo from the workspace's
+ * `github_repos` projection and mints a short-lived token from that workspace's OWN
+ * App installation (per-tenant) — the same infra the container executor uses — then
+ * files the issue via the token. Returns undefined when the App isn't configured (the
+ * GitHub tracker then passes through). A run whose service isn't linked to a repo
+ * resolves to null (a clean pass-through, not a run failure).
+ */
+export function buildNodeGitHubIssueFiler(
+  config: AppConfig,
+  registry: GitHubAppRegistry | undefined,
+  resolveRepoTarget: ResolveRepoTarget,
+): GitHubIssueFiler | undefined {
+  if (!registry) return undefined
+
+  return async (request) => {
+    let repo: Awaited<ReturnType<typeof resolveRepoTarget>>
+    try {
+      repo = await resolveRepoTarget(request.workspaceId, request.frameId)
+    } catch {
+      // The service isn't linked to a repo — nothing to file against; pass through.
+      return null
+    }
+    if (!repo) return null
+    const token = await registry.installationToken(repo.installationId)
+    const issue = await createGitHubIssueViaToken({
+      fetchImpl: fetch,
+      token,
+      owner: repo.owner,
+      repo: repo.name,
+      title: request.title,
+      body: request.body,
+      apiBase: config.github.apiBase,
+    })
+    return { externalId: `${repo.owner}/${repo.name}#${issue.number}`, url: issue.url }
+  }
+}
+
+/**
+ * The credential channels EVERY container dispatch on this facade shares, as one composition:
+ * the proxy session signer and its base URL, the pooled subscription lease, the run-initiator's
+ * personal lease, and the native ambient-CLI predicate.
+ *
+ * One builder because there is now more than one dispatcher (the step executor and the single-job
+ * flows beside it), and the ambient predicate in particular must not be re-derived per call site:
+ * it has to keep matching the personal-credential gate's own `isAmbientNativeVendor` decision, or
+ * a flow gates a credential it will not lease (or leases one nobody unlocked).
+ *
+ * The two `has*` predicates ride along because they are the same question asked at ROUTING time
+ * ("does this workspace/user hold a subscription for the vendor, so a dual-mode model should
+ * switch to it?"), and a dispatcher that resolved the model with one answer and the credential
+ * with another would lease for a vendor its own routing did not pick.
+ *
+ * `resolveAccountId` is part of it for a blunter reason: the proxy session token carries the SCOPE
+ * the spend gate reads, and `isOverBudget` only checks the ACCOUNT tier when the token names an
+ * account. A dispatcher that composed its own auth without it kept spending for an account that
+ * had blown its monthly budget, while the same models were refused for pipeline steps. And an
+ * unsigned scope reads as a caller with no account, not as a caller who forgot one.
+ */
+export function buildNodeJobAuthDeps(deps: {
+  config: AppConfig
+  sessionSecret: string
+  publicUrl: string
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+}): ContainerJobAuthDependencies & {
+  hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
+} {
+  const { config, subscriptions, personalSubscriptions } = deps
+  return {
+    sessionService: new ContainerSessionService({ secret: deps.sessionSecret }),
+    proxyBaseUrl: `${deps.publicUrl.replace(/\/+$/, '')}/v1`,
+    ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
+    // The subscription harnesses (Claude Code / Codex) lease a pooled token; absent ⇒ those
+    // harnesses are unavailable and a subscription-only model fails loudly at dispatch.
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          hasSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
+    // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
+    // personal credential; absent ⇒ such models fail loudly at dispatch.
+    ...(personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (
+            executionId: string,
+            userId: string,
+            vendor: SubscriptionVendor,
+          ) => personalSubscriptions.lease(runActivationScope(executionId), userId, vendor),
+          // Route a dual-mode individual model (GLM) to the initiator's own subscription
+          // when they have one; otherwise dispatch keeps it on the Cloudflare base.
+          hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
+            personalSubscriptions.has(userId, vendor),
+        }
+      : {}),
+    // Native local execution (local facade, opt-in): run subscription-harness agents with
+    // the developer's OWN installed CLI + ambient login instead of leasing a credential.
+    // Ambient auth applies ONLY when the resolved harness is in the allow-list AND the
+    // vendor is that CLI's NATIVE vendor (no Anthropic-compatible base URL of its own:
+    // `claude` / `codex`). A non-native vendor reusing the `claude-code` harness
+    // (GLM/Kimi/DeepSeek carries its own `baseUrl`) is leased normally, since otherwise ambient
+    // auth would silently drop that base URL and run the step on the developer's own
+    // Anthropic login instead of the pinned vendor.
+    ...(config.nativeAmbientAuth && config.nativeAmbientAuth.length > 0
+      ? {
+          // The allow-list + no-`baseUrl` check is the shared `isAmbientNativeVendor`
+          // predicate (so this can't drift from the personal-credential gate); the extra
+          // `harness === h` guard ensures the RESOLVED harness matches the vendor's own.
+          nativeAmbientAuth: (h: HarnessKind, vendor: SubscriptionVendor | undefined) =>
+            vendor !== undefined &&
+            SUBSCRIPTION_VENDORS[vendor].harness === h &&
+            isAmbientNativeVendor(config.nativeAmbientAuth, vendor),
+        }
+      : {}),
+  }
+}
+
+/**
+ * Build the environment AGENT DRY RUN prober for the Node family, gated on the same container
+ * prerequisites as the env-config repairer beside it: a runner transport, the proxy's public URL,
+ * a session secret and a dispatch mint. Absent any of them the self-test still runs in
+ * `provision` mode and `startTest` refuses `agent-probe` with a 409 that names the gap.
+ *
+ * The MODEL is resolved per dispatch, not here: the prober runs whatever the WORKSPACE's model
+ * preset names for its kind (`environment-prober-api` / `-ui`), with the frame's own pin ahead of
+ * it and the deployment's env routing behind it: the precedence a pipeline step already gets.
+ * Wiring cannot answer that, and the version that tried made a per-deployment guess and called it
+ * a routing decision: a workspace running everything on its Claude preset had its dry run
+ * dispatched at this facade's Qwen default, which the LLM proxy refused for having no key, while
+ * the subscription that WOULD have served it was never asked for. A subscription harness is
+ * therefore supported here rather than refused at wiring, and the auth deps below are the same
+ * ones the step executor uses. Mirror of the Worker's `selectEnvironmentProbeAgent`.
+ */
+export function selectNodeEnvironmentProbeAgent(
+  deps: NodeSingleJobDispatchInput & {
+    /**
+     * The frame's sealed test credentials. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there
+     * are none, which is what puts the gap in its report rather than in its guesswork.
+     */
+    resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+  },
+): ContainerEnvironmentProbeAgent | undefined {
+  const shared = buildNodeSingleJobDispatch(deps)
+  if (!shared) return undefined
+  return new ContainerEnvironmentProbeAgent({
+    ...shared,
+    ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),
+  })
+}
+
+/**
+ * Build the container behind a DEEP guided-review answer, on the prober's prerequisites and the
+ * same per-dispatch model and credential resolution. Absent ⇒ a deep question settles as
+ * `depth_unavailable`. Mirror of the Worker's `selectGuidedReviewInvestigator`.
+ */
+export function selectNodeGuidedReviewInvestigator(
+  deps: NodeSingleJobDispatchInput & { agentKindRegistry: AgentKindRegistry },
+): ContainerGuidedReviewInvestigator | undefined {
+  const shared = buildNodeSingleJobDispatch(deps)
+  if (!shared) return undefined
+  return new ContainerGuidedReviewInvestigator({
+    ...shared,
+    agentKindRegistry: deps.agentKindRegistry,
+  })
+}
+
+/** What a standalone (non-pipeline) container dispatch is built from on the Node family. */
+export interface NodeSingleJobDispatchInput {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
+  /** The frame's own model pin + preset, read per dispatch by the shared single-job resolution. */
+  blockRepository: Pick<BlockRepository, 'get'>
+  mintInstallationToken: MintInstallationToken | undefined
+  /** The workspace's per-kind model default, from the preset in force. */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+    modelPresetId?: string,
+  ) => Promise<string | undefined>
+  /** That same preset's route order, so the prober walks the routes the preset ranked. */
+  resolvePresetProviderPreference?: (
+    workspaceId: string,
+    modelPresetId?: string,
+  ) => Promise<readonly ModelFlavor[] | undefined>
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  /**
+   * The workspace's owning account, signed into the proxy session token so the ACCOUNT-tier spend
+   * gate applies to a dry run exactly as it does to a step. Unsigned, `isOverBudget` reads the
+   * token as a caller with no account and skips that tier entirely.
+   */
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+  /**
+   * The initiator's local-runner declarations, so a preset naming an Ollama/LM Studio model
+   * resolves here to exactly the ref a pipeline step on the same frame would get.
+   */
+  resolveLocalModelDeclarations?: (
+    userId: string,
+  ) => Promise<readonly LocalModelDeclarations[] | undefined>
+  /**
+   * Where a SETTLED dry run's tokens are recorded. Required in practice for a
+   * subscription-routed prober: it talks to the vendor direct, so the LLM proxy meters none of it
+   * and this is the only path its burn reaches `llm_call_metrics`, the leased token's rotation
+   * counters and the modeled quota cycle. The step executor's own recorders, handed here rather
+   * than rebuilt.
+   */
+  accounting?: ContainerJobAccountingDeps
+  /** Where the container clones from, so a GitLab deployment probes its own instance. */
+  resolveRepoOrigin: ResolveRepoOrigin
+}
+
+/** The dispatch half every standalone container flow shares: transport, model, credential, spend. */
+export function buildNodeSingleJobDispatch(
+  deps: NodeSingleJobDispatchInput,
+): Omit<ContainerEnvironmentProbeAgentDependencies, 'resolveTestSecrets'> | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  if (!deps.resolveTransport || !publicUrl || !sessionSecret || !deps.mintInstallationToken) {
+    return undefined
+  }
+  const authDeps = buildNodeJobAuthDeps({
+    config: deps.config,
+    sessionSecret,
+    publicUrl,
+    ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
+    ...(deps.personalSubscriptions ? { personalSubscriptions: deps.personalSubscriptions } : {}),
+    ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
+  })
+  return {
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    repoRepository: deps.repoRepository,
+    mintInstallationToken: deps.mintInstallationToken,
+    // The step precedence, asked under the dispatching flow's own kind. The two `has*` predicates
+    // come off the SAME auth composition the lease below uses, so routing and leasing cannot
+    // disagree about which vendor this dispatch is on.
+    resolveModel: buildSingleKindModelResolver({
+      agentRouting: deps.config.agents.routing,
+      resolveBlockModel: deps.config.agents.resolveBlockModel,
+      blockRepository: deps.blockRepository,
+      ...(deps.resolveWorkspaceModelDefault
+        ? { resolveWorkspaceModelDefault: deps.resolveWorkspaceModelDefault }
+        : {}),
+      ...(deps.resolvePresetProviderPreference
+        ? { resolvePresetProviderPreference: deps.resolvePresetProviderPreference }
+        : {}),
+      ...(deps.resolveLocalModelDeclarations
+        ? { resolveLocalModelDeclarations: deps.resolveLocalModelDeclarations }
+        : {}),
+      ...(authDeps.hasSubscriptionToken
+        ? { hasSubscriptionToken: authDeps.hasSubscriptionToken }
+        : {}),
+      ...(authDeps.hasPersonalSubscription
+        ? { hasPersonalSubscription: authDeps.hasPersonalSubscription }
+        : {}),
+    }),
+    auth: new ContainerJobAuthResolver(authDeps),
+    ...(deps.accounting ? { accounting: deps.accounting } : {}),
+    resolveRepoOrigin: deps.resolveRepoOrigin,
+    ...(deps.config.github.apiBase ? { githubApiBase: deps.config.github.apiBase } : {}),
+  }
+}

@@ -12,19 +12,23 @@ import type { MergePrEntry } from '@cat-factory/kernel'
  * design's specified deterministic fallback for a cyclic connection graph ("primary … then frame
  * id order"), so a cycle can't deadlock the sequence.
  *
+ * A peer PR opened in a monorepo carries SEVERAL frames, so its sort key is the least of them:
+ * a function of the SET, which keeps the order stable no matter what order the fan-out resolved
+ * those frames in, and identical to the old key for the single-frame peers that dominate.
+ *
  * (A full graph-topological order across a multi-hop provider chain, or a task that sits on a
  * PROVIDER rather than the consumer, is a future refinement; the peers-then-own rule is correct
  * for the star topology that dominates and deterministic for every other.)
  *
  * The own-service entry is the one with no `repo` (see `allPullRequests`: own carries neither
- * `repo` nor `frameId`; peers always carry `repo`). Returns the entries unchanged when there is
+ * `repo` nor `frameIds`; peers always carry `repo`). Returns the entries unchanged when there is
  * 0 or 1 PR (nothing to order).
  */
 export function orderPrsForMerge(entries: MergePrEntry[]): MergePrEntry[] {
   if (entries.length <= 1) return entries
+  const key = (e: MergePrEntry): string =>
+    (e.frameIds?.length ? [...e.frameIds].sort()[0] : undefined) ?? e.repo ?? ''
   const own = entries.filter((e) => !e.repo)
-  const peers = entries
-    .filter((e) => e.repo)
-    .sort((a, b) => (a.frameId ?? a.repo ?? '').localeCompare(b.frameId ?? b.repo ?? ''))
+  const peers = entries.filter((e) => e.repo).sort((a, b) => key(a).localeCompare(key(b)))
   return [...peers, ...own]
 }

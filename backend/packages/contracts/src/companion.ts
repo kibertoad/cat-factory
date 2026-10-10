@@ -1,24 +1,49 @@
 import * as v from 'valibot'
-import { stepReviewCommentSchema } from './entities.js'
+import { stepReviewCommentSchema } from './step-decisions.js'
+import { fragmentAdherenceSchema } from './fragment-adherence.js'
 
 // ---------------------------------------------------------------------------
 // Companion-agent wire contracts. A companion agent reviews the outcome of an
 // immediately-preceding producer step (e.g. an architect design, a spec's
 // acceptance scenarios, or a coder's change), challenges its quality and
-// completeness, and returns a single overall quality rating in 0..1 plus
-// actionable feedback. The execution engine compares the rating against the
-// step's configured threshold (default 0.8): at or above it the run proceeds to
-// the human gate / next step; below it the producer step is re-run with the
-// companion's feedback folded in, and once the rework budget is exhausted the step
-// parks on a human iteration-cap gate (one more round / proceed anyway / stop & reset)
-// instead of failing.
+// completeness, and returns its findings as severity-graded `comments` plus a
+// single overall quality rating in 0..1.
+//
+// TWO things decide whether the run moves on, and the engine reads them in this
+// order (kernel's `disposeCompanionVerdict`):
+//
+//  1. Any `blocker`-severity comment holds the step, WHATEVER the rating. A rating
+//     is one number over a whole deliverable, so a review that found something
+//     genuinely unshippable could still average above the bar; a graded finding is
+//     the reviewer saying which points that number must not absorb.
+//  2. Otherwise the rating is compared against the step's configured threshold
+//     (default 0.8): at or above it the run proceeds to the human gate / next step.
+//
+// Either way of not passing re-runs the producer with the companion's feedback
+// folded in, and once the rework budget is exhausted the step parks on a human
+// iteration-cap gate (one more round / proceed anyway / stop & reset) instead of
+// failing. An unattended risk policy may answer that park when the loop merely ran
+// out of rounds, never when a blocker is still open.
 // ---------------------------------------------------------------------------
 
 /** The default quality bar a companion's rating must reach for the run to proceed. */
 export const DEFAULT_COMPANION_THRESHOLD = 0.8
 
-/** The default number of automatic rework attempts before a companion parks for a human. */
-export const DEFAULT_COMPANION_MAX_ATTEMPTS = 3
+/**
+ * The default number of automatic rework attempts before a companion parks for a human.
+ *
+ * Raised from the 3 the engine hard-coded before any of this was policy. A rework round is not
+ * priced like the other budgets around it: a judge bounce or a reviewer pass buys another
+ * JUDGEMENT, while a companion round buys WORK, because the producer re-runs against the findings
+ * and whatever it last wrote is what the cap accepts. The round that gets cut is therefore the one
+ * that would have improved the artifact, and it is cut at the point the loop is still finding real
+ * defects. Every shipped preset inherits this, the unattended one deliberately included (see
+ * kernel's `RISK_POLICY_SEEDS`), so there is ONE number to move rather than a policy per posture.
+ *
+ * It is a floor, not a ceiling: a workspace that wants fewer sets `companionMaxReworks` (0 means
+ * "do not spend model calls looping", and is still not permission to accept an open `blocker`).
+ */
+export const DEFAULT_COMPANION_MAX_ATTEMPTS = 4
 
 /**
  * A companion agent's structured assessment of the producer step's output. `rating`
@@ -43,16 +68,18 @@ export const companionAssessmentSchema = v.object({
    * `noBusinessSpecs` signal — to infer the block's `technical` label.
    */
   technicalCorroborated: v.optional(v.boolean()),
+  /**
+   * A code reviewer's per-best-practice-standard adherence report: for each best-practice
+   * fragment folded into its prompt, a 1..10 rating of how well the reviewed change adheres
+   * and the issues that standard surfaced (see {@link fragmentAdherenceSchema}). Only the
+   * code `reviewer` companion sets it; the other companions omit it. Empty/absent when no
+   * best-practice standards were reachable for the run.
+   */
+  fragmentAdherence: v.optional(fragmentAdherenceSchema),
 })
 export type CompanionAssessment = v.InferOutput<typeof companionAssessmentSchema>
 
 /** Parse-or-throw a companion assessment payload the model returned (the engine validates it). */
 export function parseCompanionAssessment(value: unknown): CompanionAssessment {
   return v.parse(companionAssessmentSchema, value)
-}
-
-/** Non-throwing variant: returns the parsed assessment or `undefined` when invalid. */
-export function safeParseCompanionAssessment(value: unknown): CompanionAssessment | undefined {
-  const result = v.safeParse(companionAssessmentSchema, value)
-  return result.success ? result.output : undefined
 }

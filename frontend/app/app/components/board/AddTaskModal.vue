@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Create a new task on the board. The user names the task and writes its
-// description themselves — there are no auto-generated placeholder titles. The
-// task lands in `planned` state; it is never launched here. The user starts a
-// pipeline on it explicitly (and can keep editing it until they do).
+// description themselves (a REVIEW task is the one exception — it shows neither Title
+// nor Description: the target PR IS the subject, so the title is derived from the PR
+// reference and any notes go in the dedicated "Review focus" field). The task lands in
+// `planned` state; it is never launched here. The user starts a pipeline on it
+// explicitly (and can keep editing it until they do).
 //
 // The form also shows ungated "Context documents" / "Context issues" sections
 // (mirroring the task inspector): an inline search picker (ContextDocumentPicker /
@@ -13,18 +15,48 @@
 // (see useContextLinking) — the same context the agents see for every step of the run.
 import type {
   CreateTaskType,
+  DescriptorFieldValues,
   DocKind,
   DocKindFieldKey,
   TaskSourceKind,
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
-import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
-import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
-import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
+import {
+  BUG_FISHING_DEFAULT_PASS_BUDGET,
+  BUG_FISHING_MAX_PASS_BUDGET,
+  BUG_FISHING_PHASES,
+} from '@cat-factory/contracts'
+import { resolveComponentRegistry } from '@modular-vue/core'
+import { useReactiveSlots } from '@modular-vue/runtime'
+import type { AppSlots, ResultViewContribution } from '~/modular/slots'
+import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
+import DescriptorFields from '~/components/common/DescriptorFields.vue'
+import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
+import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
+import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
+import { parseConflict } from '~/composables/usePipelineErrorToast'
+import { apiErrorEnvelope } from '~/composables/api/errors'
+import type { ReviewTargetReason } from '@cat-factory/contracts'
+import {
+  defaultBuildPipelineId,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/contracts'
+import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
+import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const ui = useUiStore()
+// Interface tier. In BASIC mode this form asks for the task itself (type, title,
+// description, per-type fields, context, the pipeline) and hides the OVERRIDES: the run
+// knobs with a workspace-level default (merge policy, model preset), the per-task deviation
+// from the service's best-practice fragments, and the technical/business hint the engine
+// infers on its own. Hidden, never disabled — each one falls back to exactly the value it
+// would have shown, so a basic-mode task behaves identically, it just asks less. The
+// inspector's `TaskRunSettings` applies the same split after creation.
+const uiMode = useUiModeStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
@@ -32,17 +64,14 @@ const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
+const fragments = useFragmentsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
-const { linkPending } = useContextLinking()
+const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
 
-const open = computed({
-  get: () => ui.addTaskContainerId !== null,
-  set: (v: boolean) => {
-    if (!v) void requestClose()
-  },
-})
+const open = computed(() => ui.addTaskContainerId !== null)
 
 const container = computed(() =>
   ui.addTaskContainerId ? board.getBlock(ui.addTaskContainerId) : undefined,
@@ -74,8 +103,20 @@ const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string
   const all: { value: TaskTypeChoice; label: string; icon: string }[] = [
     { value: 'feature', label: t('board.addTask.types.feature'), icon: 'i-lucide-sparkles' },
     { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
+    {
+      value: 'bug-fishing',
+      label: t('board.addTask.types.bugFishing'),
+      icon: 'i-lucide-fish',
+    },
     { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
     { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
+    {
+      value: 'review',
+      label: t('board.addTask.types.review'),
+      icon: 'i-lucide-clipboard-check',
+    },
+    { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
+    { value: 'media', label: t('board.addTask.types.media'), icon: 'i-lucide-image-plus' },
     { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
   ]
   // A document repository only accepts document/spike tasks (see BoardService.addTask).
@@ -97,12 +138,119 @@ const isRecurring = computed(() => taskType.value === 'recurring')
 const severity = ref<'low' | 'medium' | 'high' | 'critical' | ''>('')
 const stepsToReproduce = ref('')
 const timeboxHours = ref<number | undefined>(undefined)
+// Bug-fishing expedition: which ANGLES to fish (empty ⇒ every shipped angle, the intended
+// default — an expedition exists to cover ground nobody thought to look at, so narrowing it is
+// the deliberate act) plus an optional focus folded into every angle's prompt.
+const fishingPhaseIds = ref<string[]>([])
+function toggleFishingPhase(id: string, checked: boolean) {
+  fishingPhaseIds.value = checked
+    ? [...fishingPhaseIds.value, id]
+    : fishingPhaseIds.value.filter((x) => x !== id)
+}
+const fishingFocus = ref('')
+/** Held as a string because the input is a text field; parsed at submit, blank ⇒ the default. */
+const fishingMaxPasses = ref('')
+// Spike research criteria — folded into the spike agent's prompt (see the backend `spike` kind).
+const spikeResearchQuestion = ref('')
+const spikeSuccessCriteria = ref('')
+const spikeOptionsToCompare = ref('')
+// Optional in-repo path the findings document is committed to (else `docs/research/<slug>.md`);
+// shares the `taskTypeFields.targetPath` field + its safe-`.md`-path validation with `document`.
+const spikeTargetPath = ref('')
 // `DOC_KINDS` (and the `DocKind` type) are owned by the contracts package — re-exported via
 // `~/types/domain` — so the picker and the create payload can't drift from the backend list.
 const docKind = ref<DocKind | ''>('')
 const docAudience = ref('')
 const docTargetPath = ref('')
 const docOutlineHints = ref('')
+// Review-task fields: the target PR (entered as a full URL or a bare #number) + optional
+// review focus. The single input is parsed into the contract's `prUrl`/`prNumber` fields.
+const reviewPrRef = ref('')
+const reviewFocus = ref('')
+// Specialist review playbooks queued onto the review, in the order the reviewer applies them.
+// Offered from the account catalog's `review` group only (see ReviewSkillQueue).
+const reviewSkillIds = ref<string[]>([])
+
+// Best-practice prompt fragments the user pins on the task up front (folded into its agents
+// on top of the service-level standards, exactly like the inspector's picker). Chosen from the
+// resolved catalog, filtered to the enclosing frame's block type ("appropriate scope").
+const fragmentIds = ref<string[]>([])
+const isReview = computed(() => taskType.value === 'review')
+
+// Custom (deployment-registered) task types — the frontend-extension-mechanism slice B twin of
+// custom agent kinds. The task-types store merges CODE-shipped (`taskTypes` slot) + BACKEND
+// (snapshot `customTaskTypes`) into one catalog; the picker offers them alongside the built-ins.
+// A document repo only accepts document/spike (server-rejected otherwise), so custom types are
+// hidden there — mirroring the built-in `isDocRepo` filter.
+const taskTypesStore = useTaskTypesStore()
+const customTaskTypes = computed(() => (isDocRepo.value ? [] : taskTypesStore.customTaskTypes))
+const selectedCustomType = computed(() =>
+  customTaskTypes.value.find((tt) => tt.taskType === taskType.value),
+)
+// Descriptor-field values for a selected custom type (or a bespoke form panel's own bag), folded
+// into `taskTypeFields.custom` on submit. Re-seeded to the descriptor's own defaults when the type
+// changes / the modal reopens (its fields differ per type, so a carried-over bag would be foreign).
+const customFieldValues = ref<DescriptorFieldValues>({})
+// A bespoke create-form section paired to the custom type's `formPanel` id via the
+// `taskTypeFormPanels` slot; shown INSTEAD of the descriptor fields. Unpaired ⇒ descriptor fields
+// (degrade, never crash) — the same pairing shape as the result-view windows.
+const appSlots = useReactiveSlots<AppSlots>()
+const formPanelRegistry = computed(() =>
+  resolveComponentRegistry((appSlots.value.taskTypeFormPanels ?? []) as ResultViewContribution[]),
+)
+const customFormPanel = computed(() => {
+  const id = selectedCustomType.value?.formPanel
+  return id ? (formPanelRegistry.value.get(id) ?? null) : null
+})
+// Client-side mirror of the server's creation check (the SAME shared function `BoardService` runs),
+// so the submit button reflects an invalid form: a missing required answer, a value outside its
+// declared options, an over-long string. Only the descriptor path is checked up front, since a
+// bespoke `formPanel` owns its own validation and the platform cannot read its required semantics.
+// The per-field path error is rendered inline by `DescriptorFields`.
+const customFieldProblems = computed(() => {
+  const custom = selectedCustomType.value
+  if (!custom || customFormPanel.value) return []
+  return validateDescriptorFields(custom.fields ?? [], customFieldValues.value)
+})
+// The type picker, laid out as rows (see `buildTaskTypePickerRows`): the built-in choices (i18n
+// labels) first, then the deployment's registered types under their declared `presentation.category`
+// captions, so a catalog of reusable operations reads as sections instead of one wall of buttons.
+// Only the leftovers row's heading is CHROME, so it is the one caption the layer supplies.
+const typeRows = computed(() =>
+  buildTaskTypePickerRows(TASK_TYPES.value, customTaskTypes.value, {
+    other: t('board.addTask.typeOther'),
+  }),
+)
+
+// Parse the PR-reference input into the contract fields: a bare positive integer (optionally
+// `#`-prefixed) becomes `prNumber` (a PR on the service's linked repo); anything else is taken
+// as a full URL (`prUrl`). Returns undefined when blank or unparseable — the caller uses that
+// to require a target on a review task.
+function parseReviewPrRef(raw: string): Pick<TaskTypeFields, 'prUrl' | 'prNumber'> | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  const bareNumber = /^#?(\d+)$/.exec(trimmed)
+  if (bareNumber) {
+    const n = Number(bareNumber[1])
+    return Number.isSafeInteger(n) && n >= 1 ? { prNumber: n } : undefined
+  }
+  return { prUrl: trimmed }
+}
+
+// A review task doesn't require a title (the PR reference IS the subject), so when the user
+// leaves it blank we derive a concise one from the parsed PR ref — `owner/repo#123` from a
+// GitHub-style URL, else `#number`, else a bare label — so the board card still reads sensibly.
+function deriveReviewTitle(raw: string): string {
+  const parsed = parseReviewPrRef(raw)
+  if (parsed?.prNumber)
+    return t('board.addTask.review.derivedTitle', { ref: `#${parsed.prNumber}` })
+  if (parsed?.prUrl) {
+    const m = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(parsed.prUrl)
+    const refLabel = m ? `${m[1]}/${m[2]}#${m[3]}` : parsed.prUrl
+    return t('board.addTask.review.derivedTitle', { ref: refLabel })
+  }
+  return t('board.addTask.review.derivedTitleFallback')
+}
 // Per-kind specific fields (see DOC_KIND_FIELDS). Held in one keyed record; only the fields
 // for the selected kind are shown and submitted, so a value from a previously-selected kind is
 // never sent. The catalog keys below keep the labels/placeholders i18n and drift-guarded.
@@ -139,6 +287,69 @@ const DOC_FIELD_PLACEHOLDER_KEYS: Record<DocKindFieldKey, string> = {
 }
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 
+// A CUSTOM (deployment-registered) task type: fold the collected values into the sparse
+// `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim, minus blank
+// entries); the descriptor path sends the SANITIZED subset (declared, currently-visible fields), so
+// a stale answer on a since-hidden `showWhen` field never reaches the wire. The renderer already
+// keeps each value in its contract shape, so nothing needs coercing here.
+function buildCustomTypeFields(): TaskTypeFields | undefined {
+  const custom = selectedCustomType.value
+  if (!custom) return undefined
+  let bag: DescriptorFieldValues
+  if (customFormPanel.value) {
+    bag = {}
+    for (const [key, value] of Object.entries(customFieldValues.value)) {
+      if (value !== undefined && value !== '') bag[key] = value
+    }
+  } else {
+    bag = sanitizeDescriptorFields(custom.fields ?? [], customFieldValues.value)
+  }
+  return Object.keys(bag).length ? { custom: bag } : undefined
+}
+
+/**
+ * The bug-fishing expedition's creation fields. Both NARROW a hunt that otherwise covers every
+ * angle, so both are omitted when they narrow nothing: an empty selection and "every angle" are
+ * the same run, and storing the full catalog would freeze today's angle list onto a task that
+ * runs next quarter.
+ *
+ * Its own function rather than another arm of {@link buildTypeFields}, whose per-type chain is at
+ * its complexity ceiling — a budget is a split trigger, not a number to raise.
+ */
+/**
+ * The typed pass budget, or undefined when the field is blank.
+ *
+ * `null` is the third answer: something was typed that is not a budget. Kept distinct from blank
+ * so {@link fishingMaxPassesProblem} can refuse it HERE, where the person can see which field is
+ * wrong, rather than letting the create call come back as a generic 422 whose only detail is a
+ * valibot path.
+ */
+const fishingMaxPassesValue = computed<number | null | undefined>(() => {
+  const raw = fishingMaxPasses.value.trim()
+  if (!raw) return undefined
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed)) return null
+  return parsed >= 1 && parsed <= BUG_FISHING_MAX_PASS_BUDGET ? parsed : null
+})
+
+/** The message shown under the pass-budget field, or null when it is fine. */
+const fishingMaxPassesProblem = computed(() =>
+  fishingMaxPassesValue.value === null
+    ? t('board.addTask.bugFishingFields.maxPasses.problem', { max: BUG_FISHING_MAX_PASS_BUDGET })
+    : null,
+)
+
+function buildBugFishingFields(): TaskTypeFields | undefined {
+  const f: TaskTypeFields = {}
+  if (fishingPhaseIds.value.length && fishingPhaseIds.value.length < BUG_FISHING_PHASES.length) {
+    f.fishingPhaseIds = [...fishingPhaseIds.value]
+  }
+  if (fishingFocus.value.trim()) f.fishingFocus = fishingFocus.value.trim()
+  const maxPasses = fishingMaxPassesValue.value
+  if (typeof maxPasses === 'number') f.fishingMaxPasses = maxPasses
+  return Object.keys(f).length ? f : undefined
+}
+
 function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'bug') {
     const f: TaskTypeFields = {}
@@ -146,14 +357,23 @@ function buildTypeFields(): TaskTypeFields | undefined {
     if (stepsToReproduce.value.trim()) f.stepsToReproduce = stepsToReproduce.value.trim()
     return Object.keys(f).length ? f : undefined
   }
+  if (taskType.value === 'bug-fishing') return buildBugFishingFields()
   if (taskType.value === 'spike') {
+    const f: TaskTypeFields = {}
     // `v-model.number` on a cleared number input yields '' (not undefined), which would
     // serialise as a non-number and 400 the create — so require a finite number here.
-    return typeof timeboxHours.value === 'number' &&
+    if (
+      typeof timeboxHours.value === 'number' &&
       Number.isFinite(timeboxHours.value) &&
       timeboxHours.value >= 0
-      ? { timeboxHours: timeboxHours.value }
-      : undefined
+    ) {
+      f.timeboxHours = timeboxHours.value
+    }
+    if (spikeResearchQuestion.value.trim()) f.researchQuestion = spikeResearchQuestion.value.trim()
+    if (spikeSuccessCriteria.value.trim()) f.successCriteria = spikeSuccessCriteria.value.trim()
+    if (spikeOptionsToCompare.value.trim()) f.optionsToCompare = spikeOptionsToCompare.value.trim()
+    if (spikeTargetPath.value.trim()) f.targetPath = spikeTargetPath.value.trim()
+    return Object.keys(f).length ? f : undefined
   }
   if (taskType.value === 'document') {
     const f: TaskTypeFields = {}
@@ -168,7 +388,13 @@ function buildTypeFields(): TaskTypeFields | undefined {
     }
     return Object.keys(f).length ? f : undefined
   }
-  return undefined
+  if (taskType.value === 'review') {
+    const f: TaskTypeFields = { ...parseReviewPrRef(reviewPrRef.value) }
+    if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
+    if (reviewSkillIds.value.length) f.reviewSkillIds = [...reviewSkillIds.value]
+    return Object.keys(f).length ? f : undefined
+  }
+  return buildCustomTypeFields()
 }
 
 // For a recurring task, the schedule attaches to the service frame: the container itself
@@ -185,33 +411,13 @@ const riskPolicyId = ref('')
 const modelPresetId = ref('')
 const pipelineId = ref('')
 
+// The "pick nothing" row names the default policy it resolves to; the picker's detail pane
+// explains what that policy does, so the row itself stays a bare name.
 const defaultPresetLabel = computed(() =>
   riskPolicies.defaultPreset
-    ? t('board.addTask.defaultPreset', {
-        name: riskPolicies.defaultPreset.name,
-        thresholds: riskPolicySummary(riskPolicies.defaultPreset),
-      })
+    ? t('board.addTask.defaultPreset', { name: riskPolicies.defaultPreset.name })
     : t('board.addTask.workspaceDefault'),
 )
-const presetMenu = computed(() => [
-  [
-    {
-      label: defaultPresetLabel.value,
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => (riskPolicyId.value = ''),
-    },
-    ...riskPolicies.presets.map((p) => ({
-      label: riskPolicyOptionLabel(p),
-      icon: 'i-lucide-git-merge',
-      onSelect: () => (riskPolicyId.value = p.id),
-    })),
-  ],
-])
-const selectedPresetLabel = computed(() => {
-  if (!riskPolicyId.value) return defaultPresetLabel.value
-  const picked = riskPolicies.presets.find((p) => p.id === riskPolicyId.value)
-  return picked ? riskPolicyOptionLabel(picked) : t('board.addTask.workspaceDefault')
-})
 
 // Model preset: which model each agent runs on. Empty = workspace default preset.
 const defaultModelPresetLabel = computed(() =>
@@ -241,29 +447,95 @@ const selectedModelPresetLabel = computed(() => {
   )
 })
 
-// Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
-// UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
-// hide `'recurring'`-only pipelines: a one-off task start of one is refused at run start.
+// ---- best-practice prompt fragments (pinned at creation) -------------------
+// The pool the shared <FragmentSelector> offers: fragments appropriate to the enclosing frame's
+// block type (the "scope"). Falls back to `service` before a frame resolves so the catalog is
+// still browsable.
+const fragmentPool = computed(() => fragments.forBlockType(frame.value?.type ?? 'service'))
+
+// Hide UI-testing pipelines when the target frame has no UI for them to reach — a step scoped to
+// a frontend service excuses itself, so this only drops an UNCONDITIONAL one (see utils/pipeline
+// + the backend gate). Also hide `'recurring'`-only pipelines (a one-off task start of one is
+// refused at run start) and every pipeline whose purpose doesn't match the chosen task type (a doc
+// task authors a doc, a review task reviews a PR, a `bug` task ships code and may reach for a
+// bugfix preset, and a `feature` gets that set minus the bugfix ones, which have no defect report
+// to investigate). `blockLevel: 'task'` is passed literally because this modal only ever creates a
+// task leaf, which also drops the three planning presets the backend would refuse.
+// Re-filters as the chosen task type changes.
 const selectablePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => pipelineAllowedForManualStart(p, frame.value, board.blocks)),
+  pipelines.pipelines.filter((p) =>
+    pipelineAllowedForManualStart(p, frame.value, board.blocks, taskType.value, 'task'),
+  ),
 )
-const pipelineMenu = computed(() => [
-  [
-    {
-      label: t('board.addTask.chooseAtRunTime'),
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => (pipelineId.value = ''),
-    },
-    ...selectablePipelines.value.map((p) => ({
-      label: p.name,
-      icon: 'i-lucide-workflow',
-      onSelect: () => (pipelineId.value = p.id),
-    })),
-  ],
-])
-const selectedPipelineLabel = computed(
-  () => pipelines.getPipeline(pipelineId.value)?.name ?? t('board.addTask.chooseAtRunTime'),
-)
+// Some task types want their type-default pipeline surfaced in the modal up front, so picking the
+// type auto-selects it (the user can still change it among the still-offered pipelines). This is a
+// DELIBERATE SUBSET of the backend `defaultPipelineIdForTaskType` — only the types whose default
+// must appear in the form BEFORE creation:
+//   - `ralph` needs its preset so the per-task validation command + iteration budget the `ralph`
+//     agent contributes surface for editing ("choose at run time" would be a dead end);
+//   - a `document` task defaults to `pl_document`, a `review` task to `pl_review` and a `media`
+//     task to `pl_media` so their purpose-narrowed picker (the `purpose` gate hides every pipeline
+//     of another purpose) is never rendered empty.
+// The other typed default (spike) carries no up-front config and doesn't narrow its picker, so the
+// modal leaves `pipelineId` unset and `BoardService` applies the backend type-default at creation.
+// Keep these ids in step with the backend helper. The test for membership is the NARROWING, not the
+// config: a type whose picker `pipelineAllowedForTaskType` reduces to one purpose has to name its
+// default here, because every fallback below is a BUILD-purpose pipeline the narrowed picker then
+// rejects, leaving the form open on an empty selection.
+const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
+  ralph: 'pl_ralph',
+  document: 'pl_document',
+  review: 'pl_review',
+  media: 'pl_media',
+  'bug-fishing': 'pl_bug_fishing',
+}
+/**
+ * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the
+ * built-in map — and for an ordinary IMPLEMENTATION task (feature / bug / chore, which the map
+ * deliberately does not name), the build rung this interface mode defaults to. Basic mode gets the
+ * fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that rule so the
+ * create form and the task card's plain "Start" cannot disagree about it. Empty when the resolved
+ * preset is not in this workspace's library (an older seed, or a retired rung) or when the picker
+ * would not OFFER it for `type`.
+ *
+ * That second check is why it re-runs the picker's own predicate rather than scanning the whole
+ * library: a workspace whose declared interactive default is a bugfix preset would otherwise open a
+ * `feature` form on a selection with no matching row, and create the task pinned to a pipeline the
+ * same screen says is not allowed for its type. Parameterised by `type` rather than reading
+ * `selectablePipelines`, so the answer cannot depend on whether the watcher fires before or after
+ * the ref it filters on has settled.
+ *
+ * ONE definition, read by both the type watcher and the open-reset. They used to compute it
+ * separately, the reset consulting `DEFAULT_PIPELINE_FOR_TYPE` alone and falling to `''` for every
+ * implementation type — so which default a `feature` opened with depended on whether the previous
+ * session had left the modal on a DIFFERENT type: same type ⇒ the watcher never fired and the
+ * picker opened empty, different type ⇒ it fired (asynchronously, after the reset) and filled it in.
+ */
+function defaultPipelineIdFor(type: TaskTypeChoice): string {
+  const custom = customTaskTypes.value.find((tt) => tt.taskType === type)
+  const preset =
+    custom?.defaultPipelineId ??
+    DEFAULT_PIPELINE_FOR_TYPE[type] ??
+    // The workspace's own declared in-app default, ahead of the interface-mode rung, so this form
+    // and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
+    pipelines.declaredDefaultId('interactive') ??
+    defaultBuildPipelineId(uiMode.isAdvanced)
+  const resolved = pipelines.pipelines.find((p) => p.id === preset)
+  const offered =
+    !!resolved && pipelineAllowedForManualStart(resolved, frame.value, board.blocks, type, 'task')
+  return offered ? preset : ''
+}
+
+watch(taskType, (next) => {
+  const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
+  // A custom type owns a fresh field bag on every switch (its descriptors differ per type), seeded
+  // to whatever defaults the new type declares.
+  customFieldValues.value = descriptorFieldDefaults(custom?.fields ?? [])
+  // An unresolvable preset leaves the current selection alone rather than blanking it: a type
+  // switch is an edit to a form the user is already filling in, not a reset.
+  const preset = defaultPipelineIdFor(next)
+  if (preset) pipelineId.value = preset
+})
 
 // Task-level agent config contributed by the selected pipeline's agents (e.g. the
 // Tester's environment). Editable up front; persisted on the task and frozen once
@@ -281,12 +553,6 @@ function setConfig(id: string, value: string) {
 // import flow), committed once the block exists (see add() → linkPending).
 const pendingContext = ref<PendingContext[]>([])
 
-// The Context documents / Context issues sections mirror the task inspector but are
-// always shown (ungated): when the relevant integration isn't connected the Attach
-// button is disabled with a tooltip rather than the section being hidden.
-const docsConnected = computed(() => documents.available && documents.anyConnected)
-const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
-const pendingDocs = computed(() => pendingContext.value.filter((c) => c.kind === 'document'))
 const pendingIssues = computed(() => pendingContext.value.filter((c) => c.kind === 'task'))
 
 // Linked issues whose body is in hand, surfaced read-only above the description so the
@@ -305,8 +571,13 @@ const resolvingIssueBodies = ref(false)
 // A staged issue picked from search results carries no body yet (`needsImport`, and the
 // search result has no description). Resolve it once the form opens — from the local cache
 // when already imported, else by importing it (idempotent; we'd import on add anyway) — so
-// its description can be shown read-only and folded into the task. Best-effort: a failure
-// just leaves that issue without a preview, still linked on add.
+// its description can be shown read-only and folded into the task.
+//
+// Non-fatal (the form still opens), but NOT silent: an issue this cannot read is the very issue
+// that will block the submit, since the fetch moved ahead of the create. Recording the cause on the
+// item is what turns that into a warning the author sees NOW, on a chip they can remove, instead of
+// a create refused seconds later for a reason nothing on the form ever mentioned. A tracker
+// reference has no `parseRef`-style pre-flight to ask, so this attempt IS its pre-flight.
 async function resolvePendingIssueBodies() {
   const unresolved = pendingContext.value.filter(
     (c) => c.kind === 'task' && !(c.description ?? '').trim(),
@@ -315,6 +586,7 @@ async function resolvePendingIssueBodies() {
   resolvingIssueBodies.value = true
   try {
     const resolved: Record<string, string> = {}
+    const failed: Record<string, string> = {}
     for (const item of unresolved) {
       const source = item.source as TaskSourceKind
       const cached = tasks.tasks.find(
@@ -328,15 +600,16 @@ async function resolvePendingIssueBodies() {
       try {
         const imported = await tasks.importTask(source, item.externalId)
         if ((imported.description ?? '').trim()) resolved[contextKey(item)] = imported.description
-      } catch {
-        // Unreadable/forbidden issue — skip the preview; it still links on add.
+      } catch (e) {
+        failed[contextKey(item)] = e instanceof Error ? e.message : String(e)
       }
     }
-    if (Object.keys(resolved).length) {
-      // The issue is now imported, so it links directly on add (needsImport → false).
+    if (Object.keys(resolved).length || Object.keys(failed).length) {
       pendingContext.value = pendingContext.value.map((c) => {
-        const body = resolved[contextKey(c)]
-        return body ? { ...c, description: body, needsImport: false } : c
+        const key = contextKey(c)
+        // The issue is now imported, so it links directly on add (needsImport → false).
+        if (resolved[key]) return { ...c, description: resolved[key], needsImport: false }
+        return failed[key] ? { ...c, unreadable: failed[key] } : c
       })
     }
   } finally {
@@ -344,28 +617,9 @@ async function resolvePendingIssueBodies() {
   }
 }
 
-function addPending(item: PendingContext) {
-  if (pendingContext.value.some((c) => contextKey(c) === contextKey(item))) return
-  pendingContext.value = [...pendingContext.value, item]
-}
-function removePending(item: PendingContext) {
-  pendingContext.value = pendingContext.value.filter((c) => contextKey(c) !== contextKey(item))
-}
-
-// Context documents and issues are both picked through an inline search picker
-// (ContextDocumentPicker / ContextIssuePicker) rather than a dropdown that opens a
-// second modal — stacked page-level modals don't interact here, which is why the
-// old "Import a page…" / "Import an issue…" entries appeared to open something but
-// nothing was clickable. The "Attach" button toggles the relevant picker open.
-const showDocPicker = ref(false)
-const chosenDocKeys = computed(() => pendingDocs.value.map(contextKey))
-const showIssuePicker = ref(false)
-const chosenIssueKeys = computed(() => pendingIssues.value.map(contextKey))
-
 // Reset the form whenever the modal opens for a (new) container, and refresh the
 // imported docs/issues so the quick-pick list is current.
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   title.value = ''
   description.value = ''
   saving.value = false
@@ -377,19 +631,41 @@ watch(open, (isOpen) => {
   severity.value = ''
   stepsToReproduce.value = ''
   timeboxHours.value = undefined
+  fishingPhaseIds.value = []
+  fishingFocus.value = ''
+  fishingMaxPasses.value = ''
+  spikeResearchQuestion.value = ''
+  spikeSuccessCriteria.value = ''
+  spikeOptionsToCompare.value = ''
+  spikeTargetPath.value = ''
   docKind.value = ''
   docAudience.value = ''
   docTargetPath.value = ''
   docOutlineHints.value = ''
+  reviewPrRef.value = ''
+  reviewFocus.value = ''
+  reviewSkillIds.value = []
+  // Empty rather than default-seeded: `taskType` was just reset to a BUILT-IN above, which
+  // declares no descriptor fields. Picking a custom type from here runs the `taskType` watcher,
+  // and that is the one place the new type's declared defaults are seeded.
+  customFieldValues.value = {}
+  // Pre-seed the best-practice fragments from the enclosing service's standards, so a new task
+  // ships with its service's fragments already selected (and freely add/removable here). The task
+  // OWNS this selection from creation — the engine folds exactly these, without re-unioning the
+  // service's set, so removing one here actually drops it for this task.
+  fragmentIds.value = [...(frame.value?.serviceFragmentIds ?? [])]
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
   modelPresetId.value = ''
-  pipelineId.value = ''
+  // Seed the pipeline from the (possibly doc-repo-forced) task type's default, so a document repo
+  // opens with `pl_document` pre-selected and an ordinary feature with its build rung. Computed
+  // through the shared helper rather than relying on the `taskType` watcher above having run: that
+  // watcher fires only when the type actually CHANGED (and asynchronously, after this block), so
+  // reopening the modal on the type it was last left on would otherwise open the picker empty.
+  pipelineId.value = defaultPipelineIdFor(taskType.value)
   agentConfigValues.value = {}
   pendingContext.value = []
-  showDocPicker.value = false
-  showIssuePicker.value = false
   // Seed from a prefill when opened from another surface (e.g. "create task from
   // issue" sets the title + stages the issue as linked context). Pipeline / preset
   // are intentionally left at their defaults so the user confirms them here.
@@ -401,6 +677,8 @@ watch(open, (isOpen) => {
   }
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
+  // Load the best-practice fragment catalog so the picker is populated (no-op while current).
+  fragments.ensureLoaded().catch(() => {})
   // Fetch any staged search-hit issue's body so its description shows read-only below.
   resolvePendingIssueBodies().catch(() => {})
 })
@@ -420,6 +698,10 @@ const { requestClose } = useUnsavedGuard({
     severity: severity.value,
     stepsToReproduce: stepsToReproduce.value.trim(),
     timeboxHours: timeboxHours.value ?? null,
+    spikeResearchQuestion: spikeResearchQuestion.value.trim(),
+    spikeSuccessCriteria: spikeSuccessCriteria.value.trim(),
+    spikeOptionsToCompare: spikeOptionsToCompare.value.trim(),
+    spikeTargetPath: spikeTargetPath.value.trim(),
     docKind: docKind.value,
     docAudience: docAudience.value.trim(),
     docTargetPath: docTargetPath.value.trim(),
@@ -429,19 +711,49 @@ const { requestClose } = useUnsavedGuard({
     modelPresetId: modelPresetId.value,
     pipelineId: pipelineId.value,
     agentConfig: { ...agentConfigValues.value },
+    fragmentIds: [...fragmentIds.value],
     context: pendingContext.value.map(contextKey),
   }),
 })
 
+// The template's v-model binding: dismissal (Escape / backdrop) routes through the guard.
+// Declared after the guard so the setter's `requestClose` reference is never in its TDZ.
+const modalOpen = computed({
+  get: () => open.value,
+  set: (v: boolean) => {
+    if (!v) void requestClose()
+  },
+})
+
 // A recurring task only needs a target frame (its details are filled in the schedule
-// modal); every other type needs a title.
-const canAdd = computed(() =>
-  isRecurring.value ? recurringFrameId.value !== null : title.value.trim().length > 0,
-)
+// modal); every other type needs a title. A review task additionally needs a target PR.
+// The Ralph loop's completion criterion (its `ralph.validationCommand` agent-config id). The
+// loop is meaningless without it, so the create form requires it up front — the backend also
+// refuses to start a Ralph run without one (a 422), this just fails fast in the UI.
+const RALPH_VALIDATION_COMMAND_ID = 'ralph.validationCommand'
+
+const canAdd = computed(() => {
+  if (isRecurring.value) return recurringFrameId.value !== null
+  // A review task doesn't require a title (the PR reference is the subject — we derive one),
+  // so it only needs a valid target PR. Every other type still requires a title.
+  if (isReview.value) return parseReviewPrRef(reviewPrRef.value) !== undefined
+  if (title.value.trim().length === 0) return false
+  if (
+    taskType.value === 'ralph' &&
+    configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
+  )
+    return false
+  // A custom type's collected form must satisfy its descriptor (the same rule the server enforces).
+  if (customFieldProblems.value.length > 0) return false
+  // The pass budget is bounded by `taskTypeFieldsSchema`, so a value outside it is refused at
+  // creation whatever this form does. Refusing it here is what turns that into a message beside
+  // the field rather than a generic failure toast.
+  if (taskType.value === 'bug-fishing' && fishingMaxPassesProblem.value) return false
+  return true
+})
 
 async function add() {
-  const containerId = ui.addTaskContainerId
-  if (!containerId || !canAdd.value) return
+  if (!canAdd.value) return
   // Recurring tasks are created via a schedule on the service frame — hand off to the
   // existing recurring-pipeline modal (which carries the cadence + prompt).
   if (isRecurring.value) {
@@ -451,8 +763,37 @@ async function add() {
     ui.openAddRecurring(frameId)
     return
   }
+  await submitCreate(false)
+}
+
+/**
+ * Create the task, optionally acknowledging review-debt friction. A `review_debt_*` 409 opens the
+ * friction dialog instead of a bare error toast: the soft `warn` tier's dialog can retry via
+ * `submitCreate(true)` (the `onConfirm`), while a hard `blocked` tier only offers "Go review".
+ */
+async function submitCreate(acknowledgeReviewDebt: boolean) {
+  const containerId = ui.addTaskContainerId
+  if (!containerId) return
+  // Entry guard (UX-78). `saving` gates the form's own Add button, but the friction dialog's
+  // "Create anyway" is a SECOND entry point into this same function, and the first await below is
+  // a network round-trip per staged attachment — long enough for a second click to file a second
+  // task and start a second pipeline run. The dialog also disables its button; this is the
+  // authoritative half, since it holds for any future caller.
+  if (saving.value) return
   saving.value = true
   try {
+    // Attachments are fetched BEFORE the task is written. A page that moved, a token without
+    // access or a source that is down is a correction the user can still make with the form in
+    // front of them; the same failure after the create leaves a task carrying context it never
+    // got, reported by a toast over a closed dialog.
+    const { resolved, failures } = await resolvePending(pendingContext.value)
+    pendingContext.value = resolved
+    if (failures.length) {
+      presentLinkFailures(failures, undefined, {
+        title: (count) => t('board.addTask.contextFailed', { count }, count),
+      })
+      return
+    }
     const typeFields = buildTypeFields()
     // The saved description includes each linked issue's body (shown read-only above)
     // followed by the user's own notes, so the original issue description is part of the
@@ -461,78 +802,193 @@ async function add() {
     const fullDescription =
       [...linkedIssueBodies.value.map((b) => b.body), notes].filter(Boolean).join('\n\n') ||
       undefined
-    const block = await board.addTask(containerId, title.value.trim(), fullDescription, {
+    // A review task's title is optional; when blank we derive one from the PR reference so the
+    // board card still reads sensibly (the backend also folds the PR ref into the description).
+    const effectiveTitle =
+      title.value.trim() || (isReview.value ? deriveReviewTitle(reviewPrRef.value) : '')
+    const block = await board.addTask(containerId, effectiveTitle, fullDescription, {
       taskType: taskType.value as CreateTaskType,
       ...(typeFields ? { taskTypeFields: typeFields } : {}),
-      ...(riskPolicyId.value ? { riskPolicyId: riskPolicyId.value } : {}),
+      // A review task merges nothing, so its risk (merge) policy is meaningless — never send it.
+      ...(riskPolicyId.value && !isReview.value ? { riskPolicyId: riskPolicyId.value } : {}),
       ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
       ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
       ...(Object.keys(agentConfigValues.value).length
         ? { agentConfig: agentConfigValues.value }
         : {}),
+      // Always send the (service-seeded, then user-edited) selection — including an empty list,
+      // which means "the user cleared the inherited picks" and must be honoured rather than
+      // re-seeded from the service. The task owns its fragments from here.
+      fragmentIds: [...fragmentIds.value],
       ...(technical.value ? { technical: true } : {}),
+      ...(acknowledgeReviewDebt ? { acknowledgeReviewDebt: true } : {}),
     })
     if (block) {
-      const failed = await linkPending(block.id, pendingContext.value)
-      if (failed > 0) {
-        toast.add({
-          title: t('board.addTask.linkFailed', { count: failed }, failed),
-          icon: 'i-lucide-triangle-alert',
-          color: 'warning',
-        })
-      }
+      // Everything reachable was fetched above, so what can still fail here is the LINK itself
+      // (a doc another task already holds). Surfaced with its specific cause plus a one-click
+      // "Copy details" for a bug report, and after the create because the task is already sound.
+      presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
     }
+    ui.closeReviewFriction()
     ui.closeAddTask()
   } catch (e) {
-    toast.add({
-      title: t('board.addTask.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    const conflict = parseConflict(e)
+    if (conflict?.reason === 'review_debt_warn' || conflict?.reason === 'review_debt_blocked') {
+      openReviewFrictionDialog(conflict)
+      return
+    }
+    const refusal = createRefusalMessage(e)
+    if (refusal) {
+      toast.add({
+        title: t('board.addTask.addFailedTitle'),
+        description: refusal,
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    } else present(e, 'board.addTask.addFailedTitle')
   } finally {
     saving.value = false
   }
 }
+
+// The backend validates a review task's target PR against the service's repo before creating
+// anything, and refuses with a machine-readable reason. Map it to translated copy here (the
+// backend does not localize prose); an unrecognised failure keeps the raw message.
+// Exhaustive over the closed union, so a new reason fails the typecheck rather than silently
+// falling through to an English sentence from the server.
+// Each message names what the user got wrong, so a detail the backend didn't send would leave a
+// hole in the sentence: those cases return null and the server's own prose is shown instead.
+const REVIEW_TARGET_MESSAGES: Record<
+  ReviewTargetReason,
+  (details: Record<string, unknown>) => string | null
+> = {
+  review_pr_not_found: (d) =>
+    typeof d.prNumber === 'number'
+      ? t('board.addTask.review.prNotFound', { number: d.prNumber })
+      : null,
+  review_pr_repo_mismatch: (d) =>
+    typeof d.expected === 'string'
+      ? t('board.addTask.review.prRepoMismatch', { repo: d.expected })
+      : null,
+}
+
+/**
+ * Translated copy for a machine-readable creation refusal, or null to fall back to the server's
+ * own English prose. Two reasons are recognised: a review task's unresolvable target PR, and a
+ * custom type's collected values contradicting its descriptor.
+ *
+ * The second one is reachable here even though `canAdd` mirrors the same check client-side, and
+ * that is the whole point of the server-side check: the descriptor can be re-registered while this
+ * dialog sits open, so the form the user filled is not the form the server now validates against.
+ * The individual problems stay out of the copy: they are backend English naming field keys, so
+ * what the user is told is the ONE thing they can act on (reopen the dialog).
+ */
+function createRefusalMessage(error: unknown): string | null {
+  const details = (apiErrorEnvelope(error)?.details ?? {}) as Record<string, unknown>
+  const reason = details.reason
+  if (typeof reason !== 'string') return null
+  if (reason === 'task_type_fields_invalid') return t('board.addTask.customFieldsInvalid')
+  return REVIEW_TARGET_MESSAGES[reason as ReviewTargetReason]?.(details) ?? null
+}
+
+/** Turn a parsed review-debt friction 409 into the dialog context (see ReviewFrictionDialog.vue). */
+function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseConflict>>) {
+  const details = conflict.details
+  const rawDebt = Array.isArray(details.debt) ? details.debt : []
+  const debt = rawDebt.map((d) => {
+    const row = (d ?? {}) as { blockId?: unknown; title?: unknown; waitingMinutes?: unknown }
+    return {
+      blockId: typeof row.blockId === 'string' ? row.blockId : '',
+      title: typeof row.title === 'string' ? row.title : null,
+      waitingMinutes: typeof row.waitingMinutes === 'number' ? row.waitingMinutes : 0,
+    }
+  })
+  const isWarn = conflict.reason === 'review_debt_warn'
+  ui.openReviewFriction({
+    kind: isWarn ? 'warn' : 'blocked',
+    reason:
+      details.friction === 'count' || details.friction === 'stuck' ? details.friction : undefined,
+    threshold: typeof details.threshold === 'number' ? details.threshold : null,
+    debt,
+    onConfirm: isWarn ? () => void submitCreate(true) : null,
+    // A getter, not a snapshot: the dialog reads it inside a computed so its button spins and
+    // locks for as long as the retry actually runs (UX-78).
+    pending: () => saving.value,
+  })
+}
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('board.addTask.title')">
+  <UModal v-model:open="modalOpen" :title="t('board.addTask.title')">
     <template #body>
       <div class="space-y-4" data-testid="add-task-modal">
-        <p v-if="container" class="text-xs text-slate-400">
+        <p v-if="container" class="text-xs text-muted">
           <i18n-t keypath="board.addTask.newTaskIn" tag="span" scope="global">
             <template #container>
-              <span class="font-medium text-slate-200">{{ container.title }}</span>
+              <span class="font-medium text-default">{{ container.title }}</span>
             </template>
           </i18n-t>
         </p>
 
         <UFormField :label="t('board.addTask.typeLabel')">
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="ty in TASK_TYPES"
-              :key="ty.value"
-              :color="taskType === ty.value ? 'primary' : 'neutral'"
-              :variant="taskType === ty.value ? 'soft' : 'ghost'"
-              :icon="ty.icon"
-              size="xs"
-              @click="
-                () => {
-                  taskType = ty.value
-                }
-              "
+          <!-- One row per picker group: the built-ins uncaptioned, then a caption per registered
+               category, then the leftovers. Category captions are deployment-authored English
+               rendered verbatim (as are the custom labels and their hover descriptions); only the
+               leftovers heading is chrome, so only it is i18n. The row gap must stay WIDER than a
+               caption's `mb-1`, or a heading sits equidistant between the group above it and its
+               own buttons and the grouping stops reading. -->
+          <div class="space-y-3">
+            <div
+              v-for="row in typeRows"
+              :key="row.id"
+              data-testid="task-type-row"
+              :data-task-type-row="row.id"
             >
-              {{ ty.label }}
-            </UButton>
+              <SectionLabel
+                v-if="row.caption"
+                as="p"
+                class="mb-1 px-1"
+                data-testid="task-type-category"
+              >
+                {{ row.caption }}
+              </SectionLabel>
+              <div class="flex flex-wrap gap-1">
+                <UButton
+                  v-for="ty in row.choices"
+                  :key="ty.value"
+                  :color="taskType === ty.value ? 'primary' : 'neutral'"
+                  :variant="taskType === ty.value ? 'soft' : 'ghost'"
+                  :icon="ty.icon"
+                  size="xs"
+                  :title="ty.description"
+                  :data-testid="`task-type-${ty.value}`"
+                  @click="
+                    () => {
+                      taskType = ty.value
+                    }
+                  "
+                >
+                  {{ ty.label }}
+                </UButton>
+              </div>
+            </div>
           </div>
+
+          <!-- What the selected operation is for, in the deployment's own words, in the field's OWN
+               help slot (the `:help` seam every other field here uses) rather than a paragraph
+               beside it fighting the modal's spacing. The hover title above helps you choose; this
+               states the choice you made, which is the half a touch device can reach. Built-in
+               types carry no description (their labels are localized and their meaning is fixed),
+               so only a custom type is described here. -->
+          <template v-if="selectedCustomType?.presentation.description" #help>
+            <span data-testid="task-type-description">
+              {{ selectedCustomType.presentation.description }}
+            </span>
+          </template>
         </UFormField>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
-        <div
-          v-if="isRecurring"
-          class="rounded-lg border border-slate-800 p-3 text-[11px] text-slate-400"
-        >
+        <div v-if="isRecurring" class="rounded-lg border border-default p-3 text-2xs text-muted">
           <template v-if="recurringFrameId">
             {{ t('board.addTask.recurringWithFrame') }}
           </template>
@@ -542,7 +998,10 @@ async function add() {
         </div>
 
         <template v-if="!isRecurring">
-          <UFormField :label="t('board.addTask.titleField')" required>
+          <!-- A review task shows neither Title nor Description: the target PR is the
+               subject (the title is derived from the PR reference), and any notes go in
+               the dedicated "Review focus" field below. -->
+          <UFormField v-if="!isReview" :label="t('board.addTask.titleField')" required>
             <UInput
               v-model="title"
               data-testid="add-task-title"
@@ -553,60 +1012,63 @@ async function add() {
             />
           </UFormField>
 
-          <!-- Linked issue description(s), read-only: shown so the user sees the original
-               issue description is included in the task. It's folded into the saved
-               description (before their notes) on add. -->
-          <UFormField
-            v-for="issue in linkedIssueBodies"
-            :key="issue.key"
-            :label="t('board.addTask.issueIncluded', { title: issue.title })"
-          >
-            <UTextarea
-              :model-value="issue.body"
-              :rows="4"
-              autoresize
-              readonly
-              class="w-full"
-              :ui="{ base: 'cursor-default text-slate-300' }"
-            />
-          </UFormField>
-          <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
-            {{ t('board.addTask.loadingIssue') }}
-          </p>
+          <template v-if="!isReview">
+            <!-- Linked issue description(s), read-only: shown so the user sees the original
+                 issue description is included in the task. It's folded into the saved
+                 description (before their notes) on add. -->
+            <UFormField
+              v-for="issue in linkedIssueBodies"
+              :key="issue.key"
+              :label="t('board.addTask.issueIncluded', { title: issue.title })"
+            >
+              <UTextarea
+                :model-value="issue.body"
+                :rows="4"
+                autoresize
+                readonly
+                class="w-full"
+                :ui="{ base: 'cursor-default text-toned' }"
+              />
+            </UFormField>
+            <p v-if="resolvingIssueBodies" class="text-2xs text-dimmed">
+              {{ t('board.addTask.loadingIssue') }}
+            </p>
 
-          <UFormField
-            :label="
-              hasLinkedIssueBody
-                ? t('board.addTask.additionalNotes')
-                : t('board.addTask.description')
-            "
-          >
-            <UTextarea
-              v-model="description"
-              :rows="4"
-              autoresize
-              :placeholder="
+            <UFormField
+              :label="
                 hasLinkedIssueBody
-                  ? t('board.addTask.notesPlaceholder')
-                  : t('board.addTask.descriptionPlaceholder')
+                  ? t('board.addTask.additionalNotes')
+                  : t('board.addTask.description')
               "
-              class="w-full"
-            />
-          </UFormField>
+            >
+              <UTextarea
+                v-model="description"
+                :rows="4"
+                autoresize
+                :placeholder="
+                  hasLinkedIssueBody
+                    ? t('board.addTask.notesPlaceholder')
+                    : t('board.addTask.descriptionPlaceholder')
+                "
+                class="w-full"
+                data-testid="add-task-description"
+              />
+            </UFormField>
+          </template>
 
-          <UCheckbox v-model="technical" name="technical">
+          <UCheckbox v-if="uiMode.isAdvanced" v-model="technical" name="technical">
             <template #label>
-              <span class="text-sm text-slate-200">{{ t('board.addTask.technical') }}</span>
+              <span class="text-sm text-default">{{ t('board.addTask.technical') }}</span>
             </template>
             <template #description>
-              <span class="text-[11px] text-slate-500">
+              <span class="text-2xs text-dimmed">
                 {{ t('board.addTask.technicalHint') }}
               </span>
             </template>
           </UCheckbox>
 
           <!-- Per-type fields. -->
-          <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
+          <div v-if="taskType === 'bug'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <UFormField :label="t('board.addTask.severity')">
               <div class="flex flex-wrap gap-1">
                 <UButton
@@ -626,7 +1088,7 @@ async function add() {
                 </UButton>
               </div>
             </UFormField>
-            <UFormField :label="t('board.addTask.stepsToReproduce')" class="col-span-2">
+            <UFormField :label="t('board.addTask.stepsToReproduce')" class="sm:col-span-2">
               <UTextarea
                 v-model="stepsToReproduce"
                 :rows="2"
@@ -637,15 +1099,125 @@ async function add() {
             </UFormField>
           </div>
 
-          <UFormField v-else-if="taskType === 'spike'" :label="t('board.addTask.timebox')">
-            <UInput
-              v-model.number="timeboxHours"
-              type="number"
-              min="0"
-              :placeholder="t('board.addTask.timeboxPlaceholder')"
-              class="w-full"
-            />
-          </UFormField>
+          <!-- Bug-fishing expedition. Both fields NARROW a hunt that otherwise covers every
+               angle, which is why neither is required and why the angle list is rendered as
+               opt-OUT checkboxes rather than an empty multi-select: leaving it alone has to
+               mean "fish everything", not "fish nothing". -->
+          <div v-else-if="taskType === 'bug-fishing'" class="space-y-3">
+            <UFormField
+              :label="t('board.addTask.bugFishingFields.angles.label')"
+              :hint="t('board.addTask.optional')"
+              :description="t('board.addTask.bugFishingFields.angles.hint')"
+            >
+              <div class="grid gap-1.5 sm:grid-cols-2">
+                <!-- Each angle keeps its own test hook, so the boolean is derived from the id
+                     list rather than bound through a checkbox group. -->
+                <UCheckbox
+                  v-for="phase in BUG_FISHING_PHASES"
+                  :key="phase.id"
+                  size="xs"
+                  :model-value="fishingPhaseIds.includes(phase.id)"
+                  :label="phase.title"
+                  :description="phase.goal"
+                  class="rounded-md px-1.5 py-1 hover:bg-elevated/40"
+                  :data-testid="`add-task-fishing-angle-${phase.id}`"
+                  @update:model-value="toggleFishingPhase(phase.id, $event === true)"
+                />
+              </div>
+              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-2xs text-dimmed">
+                {{ t('board.addTask.bugFishingFields.angles.allSelected') }}
+              </p>
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.bugFishingFields.focus.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="fishingFocus"
+                :rows="2"
+                autoresize
+                :placeholder="t('board.addTask.bugFishingFields.focus.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <!-- An OVERRIDE, so it is hidden at the basic tier and what remains is exactly the
+                 shipped default it would have shown. It bites only on a codebase large enough to
+                 be split into territories, where the plan is territories x angles. -->
+            <UFormField
+              v-if="uiMode.isAdvanced"
+              :label="t('board.addTask.bugFishingFields.maxPasses.label')"
+              :hint="t('board.addTask.optional')"
+              :description="
+                t('board.addTask.bugFishingFields.maxPasses.hint', {
+                  count: BUG_FISHING_DEFAULT_PASS_BUDGET,
+                })
+              "
+              :error="fishingMaxPassesProblem ?? undefined"
+            >
+              <UInput
+                v-model="fishingMaxPasses"
+                type="number"
+                :min="1"
+                :max="BUG_FISHING_MAX_PASS_BUDGET"
+                :step="1"
+                :placeholder="String(BUG_FISHING_DEFAULT_PASS_BUDGET)"
+                data-testid="add-task-fishing-max-passes"
+              />
+            </UFormField>
+          </div>
+
+          <div v-else-if="taskType === 'spike'" class="space-y-3">
+            <UFormField :label="t('board.addTask.timebox')">
+              <UInput
+                v-model.number="timeboxHours"
+                type="number"
+                min="0"
+                :placeholder="t('board.addTask.timeboxPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.spikeFields.researchQuestion.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UInput
+                v-model="spikeResearchQuestion"
+                :placeholder="t('board.addTask.spikeFields.researchQuestion.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.spikeFields.successCriteria.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="spikeSuccessCriteria"
+                :rows="2"
+                autoresize
+                :placeholder="t('board.addTask.spikeFields.successCriteria.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.spikeFields.optionsToCompare.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="spikeOptionsToCompare"
+                :rows="2"
+                autoresize
+                :placeholder="t('board.addTask.spikeFields.optionsToCompare.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField :label="t('board.addTask.targetPath')" :hint="t('board.addTask.optional')">
+              <UInput
+                v-model="spikeTargetPath"
+                :placeholder="t('board.addTask.targetPathPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
 
           <div v-else-if="taskType === 'document'" class="space-y-3">
             <UFormField :label="t('board.addTask.documentKind')">
@@ -667,7 +1239,7 @@ async function add() {
                 </UButton>
               </div>
             </UFormField>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <UFormField :label="t('board.addTask.audience')" :hint="t('board.addTask.optional')">
                 <UInput
                   v-model="docAudience"
@@ -720,38 +1292,89 @@ async function add() {
             </UFormField>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
+          <div v-else-if="taskType === 'review'" class="space-y-3">
+            <UFormField
+              :label="t('board.addTask.review.prUrl')"
+              :hint="t('board.addTask.review.prUrlHint')"
+              required
+            >
+              <UInput
+                v-model="reviewPrRef"
+                placeholder="https://github.com/owner/repo/pull/123"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.review.focus')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="reviewFocus"
+                :rows="2"
+                :placeholder="t('board.addTask.review.focusPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <!-- The team's specialist review playbooks, applied on top of the reviewer's standing
+                 role. Always shown (not advanced-only): queueing a security or performance pass is
+                 a per-review judgement a reviewer makes, not a platform setting. -->
+            <ReviewSkillQueue v-model="reviewSkillIds" />
+          </div>
+
+          <!-- A CUSTOM (deployment-registered) task type: a bespoke create-form section when its
+               `formPanel` is paired to the `taskTypeFormPanels` slot, else the descriptor-driven
+               `fields` the type declares, rendered by the SHARED renderer the initiative-preset form
+               uses. None of the built-in `v-if` branches above match a namespaced custom type, so
+               this renders on its own. -->
+          <div v-if="selectedCustomType" class="space-y-3" data-testid="custom-task-fields">
+            <component
+              :is="customFormPanel"
+              v-if="customFormPanel"
+              :task-type="selectedCustomType"
+              :model-value="customFieldValues"
+              @update:model-value="customFieldValues = $event"
+            />
+            <DescriptorFields
+              v-else
+              v-model="customFieldValues"
+              :fields="selectedCustomType.fields ?? []"
+              testid-prefix="custom-field"
+            />
+          </div>
+
+          <!-- One column in basic mode, where the pipeline picker is the only survivor and a
+               two-column grid would leave it stranded beside an empty cell. -->
+          <div
+            class="grid gap-3"
+            :class="uiMode.isAdvanced ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'"
+          >
             <UFormField :label="t('board.addTask.pipeline')">
-              <UDropdownMenu :items="pipelineMenu" class="w-full">
-                <UButton
-                  color="neutral"
-                  variant="subtle"
-                  size="sm"
-                  icon="i-lucide-workflow"
-                  trailing-icon="i-lucide-chevron-down"
-                  class="w-full justify-between"
-                >
-                  {{ selectedPipelineLabel }}
-                </UButton>
-              </UDropdownMenu>
+              <PipelinePicker
+                :model-value="pipelineId"
+                :options="selectablePipelines"
+                :none-label="t('board.addTask.chooseAtRunTime')"
+                trigger-class="w-full justify-between"
+                @update:model-value="pipelineId = $event"
+              />
             </UFormField>
 
-            <UFormField :label="t('board.addTask.mergePolicy')">
-              <UDropdownMenu :items="presetMenu" class="w-full">
-                <UButton
-                  color="neutral"
-                  variant="subtle"
-                  size="sm"
-                  icon="i-lucide-git-merge"
-                  trailing-icon="i-lucide-chevron-down"
-                  class="w-full justify-between"
-                >
-                  {{ selectedPresetLabel }}
-                </UButton>
-              </UDropdownMenu>
+            <!-- A review task merges nothing, so its risk (merge) policy is meaningless — omit it.
+                 Basic mode leaves it (and the model preset below) on the workspace default. -->
+            <UFormField
+              v-if="!isReview && uiMode.isAdvanced"
+              :label="t('board.addTask.mergePolicy')"
+            >
+              <RiskPolicyPicker
+                :model-value="riskPolicyId"
+                :options="riskPolicies.presets"
+                :default-policy="riskPolicies.defaultPreset"
+                :none-label="defaultPresetLabel"
+                trigger-class="w-full justify-between"
+                @update:model-value="riskPolicyId = $event"
+              />
             </UFormField>
 
-            <UFormField :label="t('board.addTask.modelPreset')">
+            <UFormField v-if="uiMode.isAdvanced" :label="t('board.addTask.modelPreset')">
               <UDropdownMenu :items="modelPresetMenu" class="w-full">
                 <UButton
                   color="neutral"
@@ -768,12 +1391,12 @@ async function add() {
           </div>
 
           <div v-if="configDescriptors.length" class="space-y-3">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="span">
               {{ t('board.addTask.agentConfiguration') }}
-            </span>
+            </SectionLabel>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
-              <div class="text-[11px] text-slate-400">{{ d.label }}</div>
-              <div class="flex flex-wrap gap-1">
+              <div class="text-2xs text-muted">{{ d.label }}</div>
+              <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
                 <UButton
                   v-for="opt in d.options"
                   :key="opt.value"
@@ -785,162 +1408,45 @@ async function add() {
                   {{ opt.label }}
                 </UButton>
               </div>
-              <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
-            </div>
-          </div>
-
-          <!-- Context documents (ungated; Attach disabled until a source is connected). -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('board.addTask.contextDocuments') }}
-              </span>
-              <UButton
-                v-if="docsConnected"
-                color="neutral"
-                variant="soft"
-                size="xs"
-                :icon="showDocPicker ? 'i-lucide-x' : 'i-lucide-plus'"
-                @click="
-                  () => {
-                    showDocPicker = !showDocPicker
-                  }
-                "
-              >
-                {{ showDocPicker ? t('board.addTask.done') : t('board.addTask.attach') }}
-              </UButton>
-              <UButton
+              <UInput
                 v-else
-                color="neutral"
-                variant="soft"
+                :model-value="configValue(d.id, d.default)"
+                :type="d.type === 'number' ? 'number' : 'text'"
+                :placeholder="d.placeholder"
                 size="xs"
-                icon="i-lucide-plus"
-                disabled
-                :title="
-                  documents.available
-                    ? t('board.addTask.attachDocDisabledConnect')
-                    : t('board.addTask.attachDocDisabledEnable')
-                "
-              >
-                {{ t('board.addTask.attach') }}
-              </UButton>
+                :data-testid="`agent-config-${d.id}`"
+                @update:model-value="(v: string | number) => setConfig(d.id, String(v))"
+              />
+              <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
             </div>
-            <ContextDocumentPicker
-              v-if="showDocPicker && docsConnected"
-              :chosen-keys="chosenDocKeys"
-              @pick="addPending"
-            />
-            <div v-if="pendingDocs.length" class="space-y-1">
-              <div
-                v-for="item in pendingDocs"
-                :key="contextKey(item)"
-                class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
-              >
-                <UIcon
-                  :name="item.icon ?? 'i-lucide-file-text'"
-                  class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-                />
-                <span class="truncate">{{ item.title }}</span>
-                <UBadge
-                  v-if="item.needsImport"
-                  color="neutral"
-                  variant="soft"
-                  size="xs"
-                  class="ms-1 shrink-0"
-                >
-                  {{ t('board.addTask.importsOnAdd') }}
-                </UBadge>
-                <button
-                  type="button"
-                  class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
-                  @click="removePending(item)"
-                >
-                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-            <p v-else class="text-[11px] text-slate-500">
-              {{ t('board.addTask.noDocsHint') }}
-            </p>
           </div>
 
-          <!-- Context issues (ungated; Attach disabled until a tracker is connected). -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('board.addTask.contextIssues') }}
-              </span>
-              <UButton
-                v-if="issuesConnected"
-                color="neutral"
-                variant="soft"
-                size="xs"
-                :icon="showIssuePicker ? 'i-lucide-x' : 'i-lucide-plus'"
-                @click="
-                  () => {
-                    showIssuePicker = !showIssuePicker
-                  }
-                "
-              >
-                {{ showIssuePicker ? t('board.addTask.done') : t('board.addTask.attach') }}
-              </UButton>
-              <UButton
-                v-else
-                color="neutral"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-plus"
-                disabled
-                :title="
-                  tasks.available
-                    ? t('board.addTask.attachIssueDisabledConnect')
-                    : t('board.addTask.attachIssueDisabledEnable')
-                "
-              >
-                {{ t('board.addTask.attach') }}
-              </UButton>
-            </div>
-            <ContextIssuePicker
-              v-if="showIssuePicker && issuesConnected"
-              :chosen-keys="chosenIssueKeys"
-              :scope-block-id="ui.addTaskContainerId ?? undefined"
-              @pick="addPending"
+          <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type.
+               Pre-seeded from the enclosing service's standards; the task owns them from here.
+               Hidden in basic mode: `fragmentIds` still carries the service-seeded selection, so
+               the task ships with its service's standards either way — advanced mode is what
+               lets you deviate from them per task. -->
+          <div v-if="uiMode.isAdvanced" class="space-y-2">
+            <FragmentSelector
+              v-model="fragmentIds"
+              :pool="fragmentPool"
+              :label="t('board.addTask.bestPractices')"
+              :empty-text="t('board.addTask.bestPracticesHint')"
             />
-            <div v-if="pendingIssues.length" class="space-y-1">
-              <div
-                v-for="item in pendingIssues"
-                :key="contextKey(item)"
-                class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
-              >
-                <UIcon
-                  :name="item.icon ?? 'i-lucide-square-check'"
-                  class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-                />
-                <span class="truncate">{{ item.title }}</span>
-                <UBadge
-                  v-if="item.needsImport"
-                  color="neutral"
-                  variant="soft"
-                  size="xs"
-                  class="ms-1 shrink-0"
-                >
-                  {{ t('board.addTask.importsOnAdd') }}
-                </UBadge>
-                <button
-                  type="button"
-                  class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
-                  @click="removePending(item)"
-                >
-                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-            <p v-else class="text-[11px] text-slate-500">
-              {{ t('board.addTask.noIssuesHint') }}
-            </p>
           </div>
 
-          <p class="text-[11px] text-slate-500">
+          <!-- Context documents + issues, staged here and linked once the task exists.
+               Shared with the initiative create modal (ContextAttachmentFields). -->
+          <ContextAttachmentFields
+            v-if="ui.addTaskContainerId"
+            v-model="pendingContext"
+            :scope-block-id="ui.addTaskContainerId"
+            :description="description"
+            :docs-hint="t('board.addTask.noDocsHint')"
+            :issues-hint="t('board.addTask.noIssuesHint')"
+          />
+
+          <p class="text-2xs text-dimmed">
             {{ t('board.addTask.plannedHint') }}
           </p>
         </template>

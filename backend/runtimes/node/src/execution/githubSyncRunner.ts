@@ -1,4 +1,5 @@
-import type { GitHubModule } from '@cat-factory/orchestration'
+import { getErrorMessage, NotFoundError } from '@cat-factory/kernel'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type {
   GitHubBackfillScheduler,
   GitHubWebhookIngest,
@@ -33,6 +34,8 @@ export type GitHubSyncJob =
   | { kind: 'webhook'; eventName: string; payload: unknown }
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
   | { kind: 'backfill'; installationId: number }
+  | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
+  | { kind: 'foundational-source-resync'; sourceId: string }
 
 // Retry a handful of times with backoff so a transient failure (a momentary DB blip, a
 // rate-limited GitHub read) is redriven rather than dropped — the durable analogue of the
@@ -96,6 +99,24 @@ export class PgBossGitHubWebhookIngest implements GitHubWebhookIngest {
     )
     return true
   }
+
+  async queueSkillResync(accountId: string, sourceId: string): Promise<boolean> {
+    await this.boss.send(
+      GITHUB_SYNC_QUEUE,
+      { kind: 'skill-source-resync', accountId, sourceId },
+      sendOptions(),
+    )
+    return true
+  }
+
+  async queueFoundationalResync(sourceId: string): Promise<boolean> {
+    await this.boss.send(
+      GITHUB_SYNC_QUEUE,
+      { kind: 'foundational-source-resync', sourceId },
+      sendOptions(),
+    )
+    return true
+  }
 }
 
 /**
@@ -104,17 +125,70 @@ export class PgBossGitHubWebhookIngest implements GitHubWebhookIngest {
  * logic lives in the shared `GitHubSyncService` / `WebhookService`; this just routes the
  * kind, exactly as the inline controller path does.
  */
-export async function applyGitHubSyncJob(github: GitHubModule, job: GitHubSyncJob): Promise<void> {
+export async function applyGitHubSyncJob(
+  container: ServerContainer,
+  job: GitHubSyncJob,
+): Promise<void> {
+  const github = container.github
   switch (job.kind) {
     case 'webhook':
-      await github.webhookService.handle(job.eventName, job.payload)
+      if (github) await github.webhookService.handle(job.eventName, job.payload)
       return
     case 'resync-repo':
-      await github.syncService.syncRepoById(job.workspaceId, job.repoGithubId)
+      if (github) await github.syncService.syncRepoById(job.workspaceId, job.repoGithubId)
       return
     case 'backfill':
-      await github.syncService.backfillInstallation(job.installationId)
+      if (github) await github.syncService.backfillInstallation(job.installationId)
       return
+    case 'skill-source-resync':
+      await applySkillSourceResync(container, job.accountId, job.sourceId)
+      return
+    case 'foundational-source-resync':
+      await applyFoundationalSourceResync(container, job.sourceId)
+      return
+  }
+}
+
+/**
+ * Resync one skill source (the push-webhook freshness fan-out, slice 4). The skill-library
+ * module is a distinct optional dependency from the GitHub module — absent (skills unconfigured,
+ * or a mothership node whose skill repos aren't RPC-surfaced) ⇒ nothing to do, drop the job. A
+ * source unlinked between enqueue and processing surfaces as a `NotFoundError`; that is terminal,
+ * not transient, so swallow it rather than retrying forever. Any other error propagates so
+ * pg-boss retries a genuinely transient GitHub/DB failure.
+ */
+async function applySkillSourceResync(
+  container: ServerContainer,
+  accountId: string,
+  sourceId: string,
+): Promise<void> {
+  const sourceService = container.skillLibrary?.sourceService
+  if (!sourceService) return
+  try {
+    await sourceService.sync(accountId, sourceId)
+  } catch (error) {
+    if (error instanceof NotFoundError) return
+    throw error
+  }
+}
+
+/**
+ * Resync one foundational-service source — the same fan-out as {@link applySkillSourceResync},
+ * over its own optional module, and with the same terminal-vs-transient split. Keyed on the
+ * source id alone: `syncById` resolves the owning tier off the stored row, so a copy of the
+ * owner on the queue could only ever contradict it.
+ */
+async function applyFoundationalSourceResync(
+  container: ServerContainer,
+  sourceId: string,
+): Promise<void> {
+  const sourceService = container.foundationalServices?.sourceService
+  if (!sourceService) return
+  try {
+    await sourceService.syncById(sourceId)
+  } catch (error) {
+    if (error instanceof NotFoundError) return
+    throw error
   }
 }
 
@@ -135,21 +209,24 @@ export async function startGitHubSyncWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
-  await boss.createQueue(GITHUB_SYNC_QUEUE)
+  await createQueueWithDeadLetter(boss, GITHUB_SYNC_QUEUE)
   await boss.work<GitHubSyncJob>(
     GITHUB_SYNC_QUEUE,
     { localConcurrency: concurrency },
     async (jobs: Job<GitHubSyncJob>[]) => {
       for (const job of jobs) {
-        const github = container.github
-        if (!github) continue // GitHub not configured here; complete (drop), don't retry forever.
+        // Each kind's module is resolved (and gracefully skipped when unwired) inside
+        // `applyGitHubSyncJob`: a webhook/resync needs `github`, a skill-source-resync needs
+        // `skillLibrary` — either can be absent independently, so we no longer gate the whole
+        // batch on the GitHub module. An unwired module completes (drops) the job rather than
+        // retrying forever, mirroring the Worker consumer's `ack()`.
         try {
-          await applyGitHubSyncJob(github, job.data)
+          await applyGitHubSyncJob(container, job.data)
         } catch (error) {
-          log.error(
-            { kind: job.data.kind, err: error instanceof Error ? error.message : String(error) },
-            'github sync job failed',
-          )
+          log.error('github sync job failed', {
+            kind: job.data.kind,
+            err: getErrorMessage(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

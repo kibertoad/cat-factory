@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import type { AgentRouting } from '@cat-factory/agents'
+import { type AgentRouting, STANDARDS_SECTION_OPENER } from '@cat-factory/agents'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import {
   ContainerAgentExecutor,
   type RepoTarget,
   type ResolveRunnerTransport,
 } from '../../src/infrastructure/ai/ContainerAgentExecutor'
+import { fixedContainerNamespace } from '../../src/infrastructure/containers/CloudflareContainerTransport'
 import { CloudflareContainerTransport } from '../../src/infrastructure/containers/CloudflareContainerTransport'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
 import type { ExecutionContainer } from '../../src/infrastructure/containers/ExecutionContainer'
@@ -22,7 +23,7 @@ interface Dispatched {
 
 /** Wrap a fake Durable Object namespace as the executor's transport resolver. */
 function resolveTo(ns: DurableObjectNamespace<ExecutionContainer>): ResolveRunnerTransport {
-  const transport = new CloudflareContainerTransport(ns)
+  const transport = new CloudflareContainerTransport(fixedContainerNamespace(ns))
   return () => Promise.resolve(transport)
 }
 
@@ -55,7 +56,13 @@ const routing = (provider: string, model: string): AgentRouting => ({
   byKind: {},
 })
 
-const repo: RepoTarget = { installationId: 7, owner: 'octo', name: 'app', baseBranch: 'main' }
+const repo: RepoTarget = {
+  installationId: 7,
+  repoId: '7001',
+  owner: 'octo',
+  name: 'app',
+  baseBranch: 'main',
+}
 
 function context(): AgentRunContext {
   return {
@@ -119,8 +126,11 @@ describe('ContainerAgentExecutor', () => {
     expect(body.model).toBe('qwen3-max')
     expect(body.proxyBaseUrl).toBe('https://worker.example/v1')
     expect((body.repo as Record<string, unknown>).cloneUrl).toBe('https://github.com/octo/app.git')
-    // The selected fragment was folded into the system prompt handed to Pi.
-    expect(body.systemPrompt as string).toContain('Follow these standards')
+    // The selected fragment was folded into the system prompt handed to Pi. The fold owns the
+    // imperative opener (it is no longer the track prompt's closing line), so both the opener and
+    // the fragment's own delimited block are evidence that the fold ran on this dispatch.
+    expect(body.systemPrompt as string).toContain(STANDARDS_SECTION_OPENER)
+    expect(body.systemPrompt as string).toContain('<best-practice-standard id="node.performance"')
     // The session token is model-locked to what the executor resolved.
     const session = await new ContainerSessionService({ secret: 'secret' }).verify(
       body.sessionToken as string,
@@ -256,6 +266,42 @@ describe('ContainerAgentExecutor', () => {
       container: { id: 'ex-1' },
       // …and the backend it served the job on (stamped by the shared job client from
       // CloudflareContainerTransport.backend), recorded in the run diagnostics.
+      backend: 'cloudflare-container',
+    })
+  })
+
+  it('forwards the harness liveness heartbeat as lastActivityAt from a running poll', async () => {
+    // The full transport→executor hop for the observable heartbeat: the harness JobView carries
+    // `heartbeatAt`, CloudflareContainerTransport casts that view VERBATIM, and pollJob must lift
+    // it onto the running update as `lastActivityAt` (which the engine then persists throttled).
+    // Distinct from `progress`: a quiet-but-alive job advances the heartbeat without ticking its
+    // todo counts, so assert the heartbeat rides through even with no progress attached.
+    const runningWithHeartbeat = {
+      idFromName: (name: string) => ({ toString: () => name }),
+      get: () => ({
+        fetch: () =>
+          Promise.resolve(
+            new Response(JSON.stringify({ state: 'running', heartbeatAt: 1_700_000_123_456 })),
+          ),
+      }),
+    } as unknown as DurableObjectNamespace<ExecutionContainer>
+
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: resolveTo(runningWithHeartbeat),
+      agentRouting: routing('qwen', 'qwen3-max'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+
+    const update = await executor.pollJob({ jobId: 'ex-1' })
+    expect(update).toEqual({
+      state: 'running',
+      // No `subtasks` key: a heartbeat-only poll (quiet phase) forwards liveness without progress.
+      lastActivityAt: 1_700_000_123_456,
+      container: { id: 'ex-1' },
       backend: 'cloudflare-container',
     })
   })

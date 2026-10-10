@@ -84,11 +84,13 @@ async function driveToCheckpointPause(page: Page, request: APIRequestContext, wo
   const card = page.getByTestId('initiative-card')
   await expect(card).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-  // Start the generic full-interview planning pipeline. The fake inline interviewer converges on
-  // its first pass → analyst → planner returns the plan → the run PARKS at the planner human gate.
+  // Start the generic full-interview planning pipeline. The analyst analyses the repo → the fake
+  // inline interviewer converges on its first pass → planner returns the plan → the run PARKS at
+  // the planner human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
-  // Approve the parked planner gate over REST (no SPA affordance exposes it for an initiative block).
+  // Approve the parked planner gate over REST. The gate has a UI path of its own
+  // (`initiative-plan-review.spec`); here it is a trigger on the way to the checkpoint.
   let approval: Awaited<ReturnType<typeof findParkedApproval>> = null
   await expect
     .poll(
@@ -116,7 +118,7 @@ async function driveToCheckpointPause(page: Page, request: APIRequestContext, wo
 }
 
 test.describe('initiative phase checkpoint', () => {
-  // Each spec drives a full planning run (interviewer → analyst → planner → gate → committer) then a
+  // Each spec drives a full planning run (analyst → interviewer → planner → gate → committer) then a
   // loop wave to the pause — many durable pg-boss steps — so give it the slow budget.
   test.slow()
 
@@ -131,11 +133,40 @@ test.describe('initiative phase checkpoint', () => {
     // Open the tracker: the checkpoint pause banner explains the wait, and the phase-one header shows
     // the "awaiting review" checkpoint badge — the review surface the human acts from.
     await card.getByTestId('initiative-open-tracker').click()
-    await expect(page.getByTestId('initiative-tracker-window')).toBeVisible({
-      timeout: LIVE_TIMEOUT,
-    })
+    const trackerDialog = page.getByTestId('initiative-tracker-window')
+    await expect(trackerDialog).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('initiative-checkpoint-pause')).toBeVisible()
     await expect(page.getByTestId('initiative-phase-checkpoint-phase-one')).toBeVisible()
+
+    // Slice 5 of the modular-vue adoption: the (block-keyed) tracker now renders in the shared
+    // `ResultWindowShell`. Its progress/status chips land in the shell's `#header-extras` slot,
+    // and it closes on the shell-owned Escape — the behaviour that had to keep working once
+    // `useResultView` stopped registering its own per-window Escape listener (the slice-5 final
+    // cleanup). Prove the header-extras render, Escape-close the window, and reopen it, then act
+    // on the still-live checkpoint.
+    await expect(trackerDialog.getByTestId('initiative-progress')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(trackerDialog).toBeHidden()
+    await card.getByTestId('initiative-open-tracker').click()
+    await expect(trackerDialog).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('initiative-checkpoint-pause')).toBeVisible()
+
+    // Re-arm the one-shot decision gate BEFORE resuming, so phase two's spawned run PARKS at its
+    // first step. This is what makes the card assertion below deterministic rather than a race the
+    // timeout can never win: a `done` task deliberately stops rendering as a work card (it moves
+    // to the frame's Done swimlane, collapsed by default), and this pipeline's
+    // fake agents settle in milliseconds with `confidence: 1` ⇒ auto-merge ⇒ `done`. On a loaded
+    // machine the whole phase-two run therefore reached `done` BEFORE the browser painted its card,
+    // so the card never appeared and never would — the wait then burned its full budget on an
+    // element that had already been removed. Parking the run keeps the block non-terminal, making
+    // its card a stable observable instead of a frame or two of transient state.
+    //
+    // This is the suite's ONE mid-life profile write, and it works because a `/fake-profile` write
+    // RE-ARMS the workspace's fakes (see `FakeProfileRegistry`) — the per-workspace fake executor is
+    // otherwise built once, on the workspace's FIRST agent call, and would have read this profile
+    // never. The workspace is quiescent here (phase one settled, the initiative is paused at the
+    // checkpoint), which is what makes re-arming safe: no async job of its own is mid-poll.
+    await setFakeProfile(request, workspaceId, { decisionOnSteps: [0] })
 
     // Resume (GO) from the banner. The loop clears the checkpoint and advances to phase two.
     await page.getByTestId('initiative-checkpoint-resume').click()

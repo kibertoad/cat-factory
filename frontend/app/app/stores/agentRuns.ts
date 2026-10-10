@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
+  AdoptionReviewInput,
   AgentFailure,
   AgentRunKind,
   BootstrapJob,
@@ -9,6 +10,7 @@ import type {
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
+import { useUpsertList } from '~/composables/useUpsertList'
 
 /**
  * A coarse, per-block view of the current "agent run" against a block, regardless
@@ -62,9 +64,15 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
    * Env-config-repair runs for this workspace, newest-first. These have NO board block —
    * they're surfaced only on the infrastructure-providers window (looked up by the
    * `repairJobId` the `bootstrapRepo` response returned), so they're held separately and
-   * NOT merged into {@link byBlock}.
+   * NOT merged into {@link byBlock}. Unlike the bootstrap list this is a PLAIN find-by-id
+   * upsert (no `updatedAt` monotonic guard), so it routes through the shared
+   * {@link useUpsertList} helper (the last plain-upsert holdout, refactoring candidate #3).
    */
-  const envConfigRepairJobs = ref<EnvConfigRepairJob[]>([])
+  const {
+    items: envConfigRepairJobs,
+    upsert: upsertEnvConfigRepair,
+    get: envConfigRepairById,
+  } = useUpsertList<EnvConfigRepairJob>({ key: (j) => j.id, prepend: true })
 
   /**
    * Reconcile the cached bootstrap runs with a server snapshot for `workspaceId`. A snapshot is
@@ -96,25 +104,9 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
     bootstrapJobs.value = [...reconciled, ...preserved].sort((a, b) => b.createdAt - a.createdAt)
   }
 
-  /** Replace the cached env-config-repair runs with a server snapshot. */
+  /** Replace the cached env-config-repair runs with a server snapshot (newest-first). */
   function hydrateEnvConfigRepair(jobs: EnvConfigRepairJob[]) {
     envConfigRepairJobs.value = [...jobs].sort((a, b) => b.createdAt - a.createdAt)
-  }
-
-  /**
-   * Patch an env-config-repair run from a real-time `env-config-repair` event (or after
-   * launching one): replace it in place by id, else prepend it. Keeps the infra window's
-   * "repairing…" indicator reactive to live progress / outcome without a refetch.
-   */
-  function upsertEnvConfigRepair(job: EnvConfigRepairJob) {
-    const i = envConfigRepairJobs.value.findIndex((j) => j.id === job.id)
-    if (i >= 0) envConfigRepairJobs.value[i] = job
-    else envConfigRepairJobs.value.unshift(job)
-  }
-
-  /** Look up a single env-config-repair run by id (the infra window tracks one by `repairJobId`). */
-  function envConfigRepairById(id: string): EnvConfigRepairJob | undefined {
-    return envConfigRepairJobs.value.find((j) => j.id === id)
   }
 
   /**
@@ -167,6 +159,46 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
   })
 
   /**
+   * One bootstrap run by its RUN id.
+   *
+   * The counterpart to `execution.getInstance`, and it exists for the same surfaces: anything
+   * that holds a run id and needs the run WHOLE rather than the coarse {@link byBlock} summary:
+   * the observability panel's header, and the step list a card renders. A retry mints a NEW id,
+   * so unlike the block-keyed reads below this one needs nothing of the list's ordering.
+   */
+  function bootstrapById(runId: string | null | undefined): BootstrapJob | undefined {
+    return runId ? bootstrapJobs.value.find((job) => job.id === runId) : undefined
+  }
+
+  /**
+   * The parked monorepo bootstrap for a block, when it is waiting on an adoption review.
+   *
+   * Read off the stored run rather than off `byBlock`, because the review needs the PLAN and
+   * `byBlock` is deliberately the coarse cross-flow summary (status + failure + progress) that a
+   * card renders. Newest-first, so a retried run's park wins over a stale one's.
+   */
+  function awaitingReview(blockId: string): BootstrapJob | undefined {
+    return bootstrapJobs.value.find(
+      (job) => job.blockId === blockId && job.status === 'awaiting_review',
+    )
+  }
+
+  /**
+   * Settle a parked monorepo bootstrap's adoption decisions and resume the run.
+   *
+   * The returned job is patched in immediately (it comes back `running`/`apply`), so the board
+   * card flips out of "waiting for you" on the response rather than on the next event: the
+   * reviewer just acted, and a card that still says it is waiting for them is the one state this
+   * whole surface cannot afford to show.
+   */
+  async function submitAdoptionReview(jobId: string, input: AdoptionReviewInput) {
+    const workspaceId = useWorkspaceStore().requireId()
+    const job = await api.submitAdoptionReview(workspaceId, jobId, input)
+    upsertBootstrap(job)
+    return job
+  }
+
+  /**
    * Retry a failed run (bootstrap or execution) via the unified endpoint, then
    * refresh the snapshot so both stores rehydrate — the card flips from failed
    * back to "working…" as a fresh run is dispatched server-side.
@@ -201,6 +233,9 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
 
   return {
     bootstrapJobs,
+    bootstrapById,
+    awaitingReview,
+    submitAdoptionReview,
     hydrate,
     upsertBootstrap,
     envConfigRepairJobs,

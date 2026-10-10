@@ -147,3 +147,50 @@ describe('LinearTaskProvider.search exact-ref match', () => {
     expect(results.map((r) => r.externalId)).toEqual(['ENG-7'])
   })
 })
+
+describe('LinearTaskProvider.diagnose', () => {
+  it('reports an exhausted quota as rate_limited rather than as a broken connection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              errors: [{ message: 'rate limited', extensions: { code: 'RATELIMITED' } }],
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    )
+
+    const verdict = await new LinearTaskProvider().diagnose({
+      workspaceId: 'ws-1',
+      credentials: creds,
+    })
+
+    // Linear spends its quota into an HTTP 400, which every status-keyed classifier reads as "you
+    // sent something wrong". The key is valid and the fix is to wait, so neither `auth_failed` nor
+    // the generic `error` says the true thing.
+    expect(verdict).toMatchObject({ source: 'linear', ok: false, status: 'rate_limited' })
+  })
+
+  it('still reports a rejected key as auth_failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ errors: [{ message: 'unauthorized' }] }), {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+
+    const verdict = await new LinearTaskProvider().diagnose({
+      workspaceId: 'ws-1',
+      credentials: creds,
+    })
+
+    expect(verdict).toMatchObject({ status: 'auth_failed' })
+  })
+})

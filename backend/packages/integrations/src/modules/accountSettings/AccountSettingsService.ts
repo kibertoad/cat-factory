@@ -7,7 +7,6 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import type {
-  AccountSettingsConfig,
   AccountSettingsSecrets,
   AccountSettingsSummary,
   AccountSettingsView,
@@ -17,7 +16,8 @@ import type {
 import {
   DEFAULT_ACCOUNT_SETTINGS_CONFIG,
   accountSettingsSummary,
-  parseAccountSettingsConfig,
+  contentStorageBackendSchema,
+  parseStoredAccountSettingsConfig,
   parseAccountSettingsSecrets,
 } from '@cat-factory/contracts'
 import * as environmentsLogic from '../environments/environments.logic.js'
@@ -26,6 +26,7 @@ import * as environmentsLogic from '../environments/environments.logic.js'
 const DISABLED_CONTENT_STORAGE_CAPABILITY: ContentStorageCapability = {
   supportedBackends: ['off'],
   defaultBackend: 'off',
+  customStores: [],
 }
 
 /** HKDF domain tag separating the grouped account-settings secret blob from other ciphers. */
@@ -89,12 +90,13 @@ export class AccountSettingsService {
   /** Load + decrypt an account's resolved settings from the repository (the cache miss path). */
   private async load(accountId: string): Promise<ResolvedAccountSettings> {
     const record = await this.repo.getByAccount(accountId)
-    const config = record ? parseConfig(record.config) : DEFAULT_ACCOUNT_SETTINGS_CONFIG
+    const config = parseStoredAccountSettingsConfig(record?.config)
     const secrets = record?.secretsCipher ? await this.openSecrets(record.secretsCipher) : {}
     return {
       config,
       ...(secrets.slackOAuth ? { slackOAuth: secrets.slackOAuth } : {}),
       ...(secrets.linearOAuth ? { linearOAuth: secrets.linearOAuth } : {}),
+      ...(secrets.figmaOAuth ? { figmaOAuth: secrets.figmaOAuth } : {}),
       ...(secrets.webSearch ? { webSearch: secrets.webSearch } : {}),
       ...(config.contentStorage ? { contentStorage: config.contentStorage } : {}),
       ...(secrets.s3 ? { s3Credentials: secrets.s3 } : {}),
@@ -117,7 +119,7 @@ export class AccountSettingsService {
       }
     }
     return {
-      config: parseConfig(record.config),
+      config: parseStoredAccountSettingsConfig(record.config),
       summary: parseSummary(record.summary),
       contentStorageCapability: this.contentStorageCapability,
     }
@@ -132,9 +134,9 @@ export class AccountSettingsService {
     const now = this.clock.now()
     const existing = await this.repo.getByAccount(accountId)
     const config = input.config
-      ? parseConfig(JSON.stringify(input.config))
+      ? parseStoredAccountSettingsConfig(JSON.stringify(input.config))
       : existing
-        ? parseConfig(existing.config)
+        ? parseStoredAccountSettingsConfig(existing.config)
         : DEFAULT_ACCOUNT_SETTINGS_CONFIG
     // Decrypt the stored blob STRICTLY before re-sealing: if it can't be opened (e.g. the
     // encryption key changed) refuse rather than silently dropping the un-edited group(s) on
@@ -153,7 +155,7 @@ export class AccountSettingsService {
           allowHosts: [],
         })
       }
-      for (const key of ['slackOAuth', 'linearOAuth', 'webSearch', 's3'] as const) {
+      for (const key of ['slackOAuth', 'linearOAuth', 'figmaOAuth', 'webSearch', 's3'] as const) {
         if (!(key in input.secrets)) continue
         const value = input.secrets[key]
         if (value == null) delete merged[key]
@@ -161,7 +163,7 @@ export class AccountSettingsService {
       }
     }
     const hasSecrets = Boolean(
-      merged.slackOAuth || merged.linearOAuth || merged.webSearch || merged.s3,
+      merged.slackOAuth || merged.linearOAuth || merged.figmaOAuth || merged.webSearch || merged.s3,
     )
     const summary = accountSettingsSummary(merged, config)
     await this.repo.upsert({
@@ -198,16 +200,10 @@ export class AccountSettingsService {
   }
 }
 
-/** Parse + default a stored config blob, tolerating a malformed/empty value. */
-function parseConfig(raw: string): AccountSettingsConfig {
-  try {
-    return parseAccountSettingsConfig(JSON.parse(raw))
-  } catch {
-    return DEFAULT_ACCOUNT_SETTINGS_CONFIG
-  }
-}
-
-const CONTENT_STORAGE_BACKENDS = new Set(['off', 'fs', 's3', 'r2', 'db'])
+// Derived from the picklist itself rather than restated: this set is the tolerant read path's
+// only guard, and a hand-copied copy of a closed vocabulary silently drops whichever member the
+// copy is missing (a `custom` selection would have parsed back as "no backend recorded").
+const CONTENT_STORAGE_BACKENDS = new Set<string>(contentStorageBackendSchema.options)
 
 /** Parse the stored non-secret summary, tolerating a malformed/empty/legacy value. */
 function parseSummary(raw: string): AccountSettingsSummary {
@@ -223,12 +219,14 @@ function parseSummary(raw: string): AccountSettingsSummary {
       return {
         slackOAuthConfigured: Boolean(o.slackOAuthConfigured),
         linearOAuthConfigured: Boolean(o.linearOAuthConfigured),
+        figmaOAuthConfigured: Boolean(o.figmaOAuthConfigured),
         webSearch: o.webSearch === 'brave' || o.webSearch === 'searxng' ? o.webSearch : null,
         contentStorage: {
           backend,
           bucket: typeof cs.bucket === 'string' ? cs.bucket : null,
           basePath: typeof cs.basePath === 'string' ? cs.basePath : null,
           s3CredentialsConfigured: Boolean(cs.s3CredentialsConfigured),
+          customStoreId: typeof cs.customStoreId === 'string' ? cs.customStoreId : null,
         },
       }
     }

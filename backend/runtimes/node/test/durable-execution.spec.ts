@@ -68,6 +68,7 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
         jobPollFailureTolerance: 6,
         ciPollIntervalMs: 50,
         ciMaxPolls: 40,
+        advanceTimeoutMs: 0,
       },
       logger,
     )
@@ -99,7 +100,7 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
     const start = await call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_simple' },
     )
     expect(start.status).toBe(201)
     expect(start.body.status).toBe('running')
@@ -118,7 +119,14 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
     expect(exec?.status).toBe('done')
     expect(exec?.steps.every((s) => s.state === 'done')).toBe(true)
     // The coder step could only have reached `done` by the durable driver polling its
-    // async job to completion (startJob → awaiting_job → pollJob → done).
-    expect(exec?.steps.find((s) => s.agentKind === 'coder')?.output).toContain('[coder]')
+    // async job to completion (startJob → awaiting_job → pollJob → done), and the prose it
+    // captured is the proof. The SNAPSHOT withholds that prose (`projectExecutionForBoard`
+    // serves a lean projection of every run), so read the run WHOLE through the by-id
+    // endpoint the step-detail readers use, which is the only place the prose is served.
+    const { body: whole } = await call<ExecutionInstance>(
+      'GET',
+      `/workspaces/${wsId}/executions/${exec!.id}`,
+    )
+    expect(whole.steps.find((s) => s.agentKind === 'coder')?.output).toContain('[coder]')
   }, 30_000)
 })

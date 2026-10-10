@@ -1,4 +1,4 @@
-import type { SecretCipher } from '@cat-factory/kernel'
+import { type SecretCipher, SecretDecryptError } from '@cat-factory/kernel'
 import { base64url, base64urlToBytes } from './encoding.js'
 
 // Authenticated encryption of credentials at rest, on Web Crypto (AES-256-GCM)
@@ -75,7 +75,8 @@ export class WebCryptoSecretCipher implements SecretCipher {
       iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
       ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
     } catch (e) {
-      throw new Error(
+      throw new SecretDecryptError(
+        'corrupt',
         'A stored secret is not a valid encryption envelope: it is truncated or corrupted, ' +
           'or was written by a different encryption scheme/version — most likely a truncated ' +
           'database column, or a value copied between environments. Re-enter the affected ' +
@@ -93,8 +94,10 @@ export class WebCryptoSecretCipher implements SecretCipher {
       // credential sealed under the previous key is now unrecoverable. The raw Web Crypto
       // failure is the opaque DOMException "The operation failed for an operation-specific
       // reason", which surfaced verbatim as a run/request failure with no clue to the cause.
-      // Rethrow an actionable message (preserving the original as `cause`).
-      throw new Error(
+      // Rethrow an actionable, TYPED message (preserving the original as `cause`) so the
+      // D6.2 drift sweep can bucket this as `key-mismatch` without parsing the text.
+      throw new SecretDecryptError(
+        'key-mismatch',
         'A stored secret could not be decrypted: the encryption key (ENCRYPTION_KEY) does not ' +
           'match the one it was sealed under — it was most likely rotated or regenerated. ' +
           'Restore the original key, or re-enter the affected credential to re-seal it under the current key.',

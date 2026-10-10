@@ -7,6 +7,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
 } from '../domain/types.js'
 
@@ -25,6 +26,52 @@ import type {
 export interface GitHubRepoRef {
   owner: string
   repo: string
+}
+
+/**
+ * Whether a branch is protected on the host. THREE states, not two: `unknown` is a real answer
+ * and must never render as `unprotected` — the whole point of the preflight is to tell an
+ * operator which repositories are exposed, and a probe that could not reach the host would
+ * otherwise manufacture an all-clear or a false alarm depending on which way you collapse it.
+ */
+export type BranchProtectionState = 'protected' | 'unprotected' | 'unknown'
+
+/**
+ * Why a protection state could not be determined. Kept apart because they need different
+ * fixes: a missing branch is a stale projection, a refusal is a credential problem, and an
+ * error is transient.
+ */
+export type BranchProtectionUnknownReason = 'branch_not_found' | 'forbidden' | 'error'
+
+/**
+ * The protection rule's contents, readable only by a credential with admin access to the repo
+ * — which a minimally-scoped App installation deliberately does NOT have. So this is optional
+ * beside a state that is always answerable, rather than the state itself.
+ */
+export interface BranchProtectionDetail {
+  /** Whether a pull request is required before merging (direct pushes refused). */
+  requiresPullRequest: boolean
+  /** Approving reviews required before merge; 0 when a PR is required but no reviews are. */
+  requiredApprovingReviewCount: number
+  /** Status checks that must pass, by context name. Empty ⇒ none required. */
+  requiredStatusChecks: string[]
+  /** Whether force pushes are still permitted onto the protected branch. */
+  allowsForcePush: boolean
+}
+
+/** A branch's protection posture, as much of it as the run credential could actually read. */
+export interface BranchProtectionSummary {
+  state: BranchProtectionState
+  /** Set only for `unknown`. */
+  reason?: BranchProtectionUnknownReason
+  /** Set only when the credential could read the rule (see {@link BranchProtectionDetail}). */
+  detail?: BranchProtectionDetail
+  /**
+   * Set on a `protected` branch whose rule could NOT be read, naming why. "Protected, contents
+   * unknown" is a different operator situation from "protected, and here is the rule" — the
+   * first cannot tell you whether the protection actually requires a pull request.
+   */
+  detailUnavailable?: 'forbidden' | 'error'
 }
 
 /** A page of results plus the conditional-request ETag and a rate-limit reading. */
@@ -86,12 +133,49 @@ export interface RepoContentEntry {
   type: string
   /** Blob sha (file) or tree sha (dir) — powers the cheap "changed?" check. */
   sha: string
+  /**
+   * Byte size of a file entry, when the source exposes it (the GitHub contents API
+   * does). Undefined for directories or a source that doesn't report it. Used by the
+   * skill library to bound what a run materialises from a source's resource files.
+   */
+  size?: number
+}
+
+/**
+ * A whole-tree listing plus the one fact a caller cannot recover from the entries: whether the
+ * provider CUT the listing short.
+ *
+ * Carried beside the entries rather than left implicit because the two readings are opposite and
+ * a bare array cannot tell them apart. A file-search box treats a truncated tree as a best-effort
+ * index and loses nothing; a caller building a MANIFEST from it (which files exist, so which were
+ * never read) would state a partial tree as the whole codebase, and every "no pass read this
+ * directory" conclusion drawn from it would be a claim about files the read never saw.
+ */
+export interface RepoTreeListing {
+  entries: RepoContentEntry[]
+  /**
+   * True when the provider returned only part of the tree (GitHub's git-trees `truncated` flag;
+   * a GitLab sweep that hit its page ceiling). A caller that needs exhaustiveness must say so
+   * rather than assume it.
+   */
+  truncated: boolean
 }
 
 /** A single file's decoded UTF-8 content plus its blob sha. */
 export interface RepoFileContent {
   content: string
   sha: string
+  /**
+   * True when the file's bytes were NOT valid UTF-8, so `content` is the replacement-character
+   * rendering rather than the file: a PNG, a tarball or a Latin-1 source file decodes to U+FFFD.
+   *
+   * Reported rather than left for a consumer to infer, because the two readings need opposite
+   * handling and only the consumer knows which it is doing: a pre-op folding a file into a prompt
+   * wants the best available text, while a read whose job is byte-exact grading has to refuse rather
+   * than hand back mojibake labelled as the file's content. Optional, so a test double or a client
+   * that cannot tell says nothing rather than asserting the bytes were clean.
+   */
+  lossy?: boolean
 }
 
 /** A single comment on an issue, as returned by {@link GitHubClient.getIssue}. */
@@ -110,6 +194,13 @@ export interface GitHubPullRequestReview {
   author: string
   /** Review verdict: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING'. */
   state: string
+  /**
+   * The review's top-level summary body (the text a reviewer types into GitHub's
+   * "Request changes" / "Comment" box), or '' when the review carried none. This is the
+   * feedback a reviewer leaves WITHOUT inline line comments, so the `human-review` gate must
+   * read it to act on a change request that has no review threads (see {@link ReviewThread}).
+   */
+  body: string
   /** Epoch ms when the review was submitted (0 when unknown). */
   submittedAt: number
   /** The commit sha the review targeted, or null. */
@@ -138,6 +229,91 @@ export interface GitHubReviewThreadComment {
   body: string
   /** Epoch ms when the comment was created (0 when unknown). */
   createdAt: number
+}
+
+/**
+ * One inline comment to post via {@link GitHubClient.createReview}: anchored to a `path` +
+ * `line` on the given `side` of the PR diff (`RIGHT` = the head, the default; `LEFT` = a
+ * base/removed line). A finding with no resolvable line is folded into the review's overall
+ * `body` instead of becoming an inline comment.
+ */
+export interface CreateReviewComment {
+  path: string
+  line: number
+  side?: 'LEFT' | 'RIGHT'
+  body: string
+}
+
+/**
+ * A pull-request review to submit via {@link GitHubClient.createReview}. The PR-deep-review
+ * "post" resolution carries the human-selected findings as inline `comments` and summarises any
+ * unanchored ones in `body`. Each inline comment is posted INDIVIDUALLY (not as one atomic
+ * batched review) so one un-anchorable comment can't reject the whole set — the implementation
+ * reports per-comment success/failure in {@link CreateReviewResult}.
+ */
+export interface CreateReviewInput {
+  /** Overall review body (Markdown): the summary + any findings that couldn't be anchored inline. */
+  body?: string
+  /** The review action. The deep-review flow uses `COMMENT` (advisory, non-blocking). */
+  event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
+  /** Inline comments anchored to a path+line on the PR diff. May be empty (a body-only review). */
+  comments: CreateReviewComment[]
+}
+
+/** Outcome of posting ONE inline review comment (index-aligned with {@link CreateReviewInput.comments}). */
+export interface ReviewCommentOutcome {
+  /** Whether the comment posted. */
+  posted: boolean
+  /** The failure reason when `posted` is false (the VCS error message). */
+  error?: string
+}
+
+/**
+ * The result of {@link GitHubClient.createReview}: per-inline-comment outcomes plus whether the
+ * summary/body comment posted. Because comments are posted individually, a partial success is a
+ * normal, reportable outcome — the caller records which findings landed and surfaces the rest for
+ * a retry, rather than treating the whole post as all-or-nothing. The client does NOT throw for
+ * an individual comment/body failure; it records it here. It throws only when it can't even begin
+ * (e.g. the PR head can't be resolved), which the caller reports as an all-failed attempt.
+ */
+export interface CreateReviewResult {
+  /** Per inline comment, index-aligned with {@link CreateReviewInput.comments}. */
+  comments: ReviewCommentOutcome[]
+  /** Whether the body/summary comment posted; null when {@link CreateReviewInput.body} was empty. */
+  bodyPosted: boolean | null
+  /** The error posting the body/summary comment, when it failed. */
+  bodyError?: string
+}
+
+/**
+ * One file changed by a pull request, from `GET /repos/{o}/{r}/pulls/{n}/files`. The
+ * PR-review slicer/reviewer consume these: the slicer reads only the CHEAP fields
+ * (`path`, `additions`, `deletions`, `status`) to group files into cohesive slices,
+ * while a per-slice reviewer reads the `patch` for the files in its slice.
+ */
+export interface GitHubChangedFile {
+  /** Repo-relative path of the file on the PR head. */
+  path: string
+  /** For a rename, the file's path on the base (else null). */
+  previousPath: string | null
+  /** GitHub's change status: added / modified / removed / renamed / copied / changed / unchanged. */
+  status: string
+  /**
+   * Lines added, or NULL when the provider did not report them for this file — which is a
+   * different fact from a real `0` and must never be rendered as one. GitHub always reports a
+   * count (`0` for a binary file it cannot line-count, which is honest); GitLab reports none at
+   * all and its adapter derives them from the hunk, so a file whose hunk GitLab withheld as
+   * `too_large` genuinely has no count to give. A reader that folds `null` to `0` tells the
+   * reviewer a 5000-line file changed nothing.
+   */
+  additions: number | null
+  /** Lines removed, or null on the same terms as {@link GitHubChangedFile.additions}. */
+  deletions: number | null
+  /**
+   * The unified-diff hunk for this file, or null when GitHub omits it (binary files, or a
+   * diff too large to inline). The reviewer treats a null patch as "read the file bodies instead".
+   */
+  patch: string | null
 }
 
 /** A general (conversation) comment on a pull request, from the issue-comments API. */
@@ -204,6 +380,71 @@ export interface GitHubIssueSearchHit {
   state: string
   /** Canonical web URL (GitHub `html_url`). */
   url: string
+  // ---- Fields the search response already carries, read only by the bug hunt's candidate
+  // listing (which needs the report itself to rate impact vs effort, and must get it from
+  // the SAME call — a per-candidate detail fetch would be one round trip per open bug).
+  // All optional: an adapter that projects a different backend onto this shape (the
+  // GitLab-backed client) simply omits them, and the ranking then reads an empty report
+  // and rates it as too vague rather than reporting anything false. ----
+  /** Issue body (GitHub Markdown), when the adapter surfaces it. */
+  body?: string
+  /** Issue labels, when the adapter surfaces them. */
+  labels?: string[]
+  /** ISO-8601 creation timestamp, when the adapter surfaces it. */
+  createdAt?: string
+  /** Number of comments on the issue, when the adapter surfaces it. */
+  commentCount?: number
+  /** Assignee login, or null when unassigned; undefined when the adapter doesn't report it. */
+  assignee?: string | null
+}
+
+/**
+ * The predicates a project-scoped issue search may push into the vendor request (see
+ * {@link GitHubClient.searchProjectIssues}). Every field is a filter the vendor evaluates;
+ * nothing here is post-filtered by the caller, so a predicate a vendor cannot express is a
+ * predicate the adapter must refuse rather than silently ignore.
+ */
+export interface ProjectIssueQuery {
+  /** Free text matched against the issue title/body; absent ⇒ every issue in scope. */
+  text?: string
+  /**
+   * Narrow what {@link text} is matched against. `'title'` restricts it to the title, which is
+   * what an intake predicate asking for a title fragment means; absent ⇒ the vendor's default
+   * (title AND description on GitLab), which is the right reading for a picker's free-text box.
+   *
+   * Its own field rather than a convention on {@link text}, because the two readings differ in
+   * what they RETURN, not in how they are spelled: an issue whose body happens to mention the
+   * fragment is a legitimate picker hit and is not the issue an intake schedule was configured
+   * to pick up and start a pipeline on.
+   */
+  textIn?: 'title'
+  /** Labels that must ALL be present. */
+  labels?: string[]
+  /** Restrict to open issues. Absent ⇒ any state. */
+  openOnly?: boolean
+  /** Restrict to issues with no assignee. */
+  unassignedOnly?: boolean
+  /** `created-asc` sorts oldest-first (the issue-intake pickup order); absent ⇒ vendor default. */
+  order?: 'created-asc'
+  /** Max hits to return. */
+  limit: number
+  /** 1-based result page, for a caller walking past a run of ineligible hits. */
+  page?: number
+}
+
+/**
+ * One page of a project-scoped issue search, plus whether the vendor said there is another.
+ *
+ * `hasMore` is on the response rather than inferred by the caller because the obvious inference
+ * is wrong: "fewer hits came back than I asked for, so that was the last page" assumes the vendor
+ * honoured `limit`, and GitLab's `max_page_size` is an INSTANCE setting an administrator can lower
+ * below it. On such an instance every page is short, so a caller reading a short page as the end
+ * stops after the first one and reports a board it never finished walking as exhausted. The
+ * adapter already has the honest answer (`Link: rel="next"`) and would otherwise discard it.
+ */
+export interface ProjectIssuePage {
+  hits: GitHubIssueSearchHit[]
+  hasMore: boolean
 }
 
 /** A single hit from code-searching an installation's repos for a file. */
@@ -263,12 +504,18 @@ export interface GitHubClient {
    * the exact case-insensitive substring match over their bounded listing. When no
    * `opts.owner` scope is available the GitHub-App adapter also falls back to that
    * substring match rather than an unscoped global search.
+   *
+   * `Paged` for the `truncated` flag alone: EVERY adapter here caps something (the result
+   * count, or the bounded listing it filters), so a caller publishing these rows has to be
+   * able to say the answer is a prefix. Returning a bare array put that judgement on the
+   * consumer, which can only guess it from the row count and so cannot see a listing that
+   * truncated before the filter ran.
    */
   searchInstallationRepos(
     installationId: number,
     query: string,
     opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
-  ): Promise<GitHubRepo[]>
+  ): Promise<Paged<GitHubRepo>>
 
   // ---- reads --------------------------------------------------------------
   getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo>
@@ -339,6 +586,15 @@ export interface GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoContentEntry[]>
+  /**
+   * List a repository's ENTIRE tree on a ref in as few calls as possible (the git
+   * trees API, recursive), so a caller can search files by path without walking the
+   * tree directory-by-directory (an N+1 of contents reads). Returns every entry with
+   * its full, repo-root-relative `path` and `type` (`file`/`dir`), plus whether the
+   * provider TRUNCATED the listing. `{ entries: [], truncated: false }` for an empty
+   * repo / unknown ref.
+   */
+  listTree(installationId: number, ref: GitHubRepoRef, gitRef?: string): Promise<RepoTreeListing>
   /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
   getFileContent(
     installationId: number,
@@ -410,6 +666,23 @@ export interface GitHubClient {
     page?: number,
   ): Promise<GitHubIssueSearchHit[]>
   /**
+   * Predicate-search the issues of ONE repository/project, with every predicate pushed into
+   * the vendor request. Optional: a provider whose issue search takes free text with an
+   * in-query scope qualifier (GitHub) omits it and uses {@link GitHubClient.searchIssues}.
+   *
+   * It exists because a vendor can express the scope only OUT of the query text: GitLab's
+   * global `/search?scope=issues` has no repository qualifier at all, so folding a repo
+   * scope into the search string would match it as prose and return whatever the credential
+   * can reach. The repository is therefore an ARGUMENT here, not a qualifier a caller could
+   * forget to build, for the same reason the task-source port makes its repo scope a required
+   * parameter rather than an optional narrowing.
+   */
+  searchProjectIssues?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<ProjectIssuePage>
+  /**
    * Code-search files visible to the installation. `query` is the raw GitHub
    * code-search text and MUST already carry an `org:`/`user:`/`repo:` scope
    * qualifier (GitHub's code-search API rejects unscoped queries); the caller
@@ -471,6 +744,22 @@ export interface GitHubClient {
     number?: number,
   ): Promise<number>
   /**
+   * A branch's protection posture — the backing read for the branch-protection preflight
+   * (`backend/docs/security-model.md`, operator checklist item 1). Branch protection on the
+   * host is the ONLY control over a stolen `Contents: write` token, covering both a direct
+   * push and a merge-API call, and nothing in-product used to tell an operator it was missing.
+   *
+   * Deliberately answers a THREE-state summary rather than a boolean, and never throws: an
+   * unreachable host is `unknown`, which the surface reports as its own state. Optional (see
+   * {@link listRequestedReviewers}); a provider that omits it makes the preflight report the
+   * capability as unavailable rather than guessing every repo is fine.
+   */
+  getBranchProtection?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<BranchProtectionSummary>
+  /**
    * The branch a PR actually targets (`pulls/{n}.base.ref`), or null when the PR can't be
    * read. The `human-review` gate reads branch protection against THIS branch — not the repo
    * default — so a PR into a stricter protected branch (e.g. a release branch requiring 2
@@ -482,6 +771,59 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     number: number,
   ): Promise<string | null>
+  /**
+   * A pull request by number — the projection plus its web `url` — or null when the repo has NO
+   * such PR (a 404). Any other read failure THROWS, so a caller can tell "this PR does not exist"
+   * apart from "the provider could not answer": the review-task create validation refuses only on
+   * the former, and never turns a provider blip into a false "no such PR".
+   *
+   * Optional (see {@link getPullRequestBaseRef}); a provider that can't read a PR omits it and the
+   * validation passes through rather than guessing.
+   */
+  getPullRequest?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null>
+  /**
+   * The source (head) branch of a PR (`pulls/{n}.head.ref`), or null when the PR can't be read.
+   * The PR-deep-review "fix" resolution reads this to point the Fixer's clone/push at the
+   * reviewed PR's head branch (a `review` task carries only the PR number, never an own work
+   * branch). Optional (see {@link getPullRequestBaseRef}); a provider that can't read it omits
+   * it and the fix resolution reports the PR branch is unresolvable rather than pushing blind.
+   */
+  getPullRequestHeadRef?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
+   * The head commit SHA of a PR (`pulls/{n}.head.sha`), or null when the PR can't be read. The
+   * PR-deep-review captures this the moment the review is dispatched (the "reviewed at" marker)
+   * and re-reads it at `post` time: a change means the branch moved since the review, so the
+   * findings' frozen line numbers are no longer trustworthy anchors. Reads `head.sha` directly
+   * off the PR (so it is correct for a fork PR, unlike a `branchHeadSha` on the base repo).
+   * Optional (see {@link getPullRequestHeadRef}); a provider that can't read it omits it and the
+   * drift check is simply skipped.
+   */
+  getPullRequestHeadSha?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
+   * List the files a PR changed (`GET /repos/{o}/{r}/pulls/{n}/files`, paginated & fully
+   * drained). The PR-deep-review slicer partitions these into cohesive slices from the cheap
+   * fields, and the per-slice reviewer reads the `patch`. Optional (see
+   * {@link listRequestedReviewers}); a provider that can't enumerate a PR's files omits it and
+   * the review step passes through. Note GitHub caps this endpoint at 3000 files, so a
+   * pathologically huge PR is truncated at that ceiling.
+   */
+  listChangedFiles?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]>
   /**
    * List a PR's review threads via GraphQL (`pullRequest.reviewThreads`), with each thread's
    * resolved state, anchor and comments — the precise "addressed?" signal the REST review-
@@ -509,6 +851,19 @@ export interface GitHubClient {
    * addressed the thread.
    */
   resolveReviewThread?(installationId: number, ref: GitHubRepoRef, threadId: string): Promise<void>
+  /**
+   * Publish the PR-deep-review "post" resolution's human-selected findings on the reviewed PR:
+   * each inline comment INDIVIDUALLY (so one un-anchorable line can't reject the rest) plus the
+   * summary as a general comment, returning a per-comment {@link CreateReviewResult}. Optional
+   * (see {@link listRequestedReviewers}); a provider that can't post inline review comments omits
+   * it and the "post" resolution reports it unsupported instead of silently dropping findings.
+   */
+  createReview?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<CreateReviewResult>
 
   // ---- writes -------------------------------------------------------------
   createBranch(
@@ -559,13 +914,26 @@ export interface GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest>
+  ): Promise<OpenedPullRequest>
   updatePullRequest(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
     patch: { title?: string; body?: string; state?: 'open' | 'closed'; base?: string },
   ): Promise<GitHubPullRequest>
+  /**
+   * Read a PR's current description/body verbatim (`null` when the PR has none, or can't be
+   * read). The read half of the engine's verification-report upsert: the report is a
+   * marker-delimited region of the PR body, so the publisher MUST splice against the body as
+   * it is right now — writing a body composed from anything else would clobber a concurrent
+   * human edit. Deliberately NOT part of the {@link GitHubPullRequest} projection, which is a
+   * sync cursor and never carries prose.
+   */
+  getPullRequestBody(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
   /**
    * Read a PR's lazily-computed mergeability. GitHub computes `mergeable` /
    * `mergeable_state` asynchronously, so `mergeable` is `null` until it is ready;
@@ -596,6 +964,28 @@ export interface GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     issueOrPrNumber: number,
+    body: string,
+  ): Promise<void>
+  /**
+   * Add a comment to an ISSUE specifically, by its issue number.
+   *
+   * It exists because {@link GitHubClient.comment} is the same call as this one ONLY on GitHub,
+   * where issues and pull requests share one number space and one comment API. They are NOT the
+   * same anywhere else: a GitLab issue and a merge request have separate `iid` spaces and separate
+   * notes endpoints, so the neutral `comment(number)` has to pick one, and it picks the merge
+   * request (that is what the gates use it for). An issue writeback routed through it would
+   * therefore land on whatever MR happens to carry the same number: a comment on a stranger's
+   * work that still reads as delivered.
+   *
+   * Optional, and a caller does NOT probe for it: whether a vendor separates the two is a fact
+   * about the vendor, so the SOURCE declares which method carries its issue comments (see the
+   * repo-backed writeback adapter in `@cat-factory/integrations`) and a client that declares
+   * `dedicated` and lacks this method is refused rather than silently falling back.
+   */
+  commentOnIssue?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
     body: string,
   ): Promise<void>
   /**

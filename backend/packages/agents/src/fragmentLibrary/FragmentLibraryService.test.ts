@@ -9,11 +9,10 @@ import type {
   PromptFragmentRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  clearRegisteredPromptFragments,
-  registerPromptFragment,
-} from '@cat-factory/prompt-fragments'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { registryPromptFragmentSource } from '@cat-factory/kernel'
+import type { PromptFragmentRegistry } from '@cat-factory/kernel'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { FragmentLibraryService } from './FragmentLibraryService.js'
 
 // Unit coverage for the document-backed ("living") fragment path: createFromDocument
@@ -79,6 +78,9 @@ class FakeFragmentRepo implements PromptFragmentRepository {
   }
   async listBySource(sourceId: string) {
     return [...this.rows.values()].filter((r) => r.sourceId === sourceId)
+  }
+  async softDeleteBySource(sourceId: string, at: number) {
+    for (const r of this.rows.values()) if (r.sourceId === sourceId) r.deletedAt = at
   }
 }
 
@@ -190,7 +192,7 @@ describe('FragmentLibraryService — document-backed fragments', () => {
 
     // A run in workspace 'wsB' (no connection of its own) resolves the fragment.
     const bodies = await svc.resolveBodiesForRun('wsB', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'ACCOUNT-V2' }])
+    expect(bodies).toEqual([{ id: created.id, title: 'Doc', body: 'ACCOUNT-V2' }])
     // Re-read through the linked 'wsA', NOT the run's 'wsB'.
     expect(resolver.vias).toEqual(['wsA'])
   })
@@ -213,9 +215,9 @@ describe('FragmentLibraryService — document-backed fragments', () => {
     resolver.calls = 0
 
     const first = await svc.resolveBodiesForRun('ws1', [created.id])
-    expect(first).toEqual([{ id: created.id, body: 'BODY-V2' }])
+    expect(first).toEqual([{ id: created.id, title: 'Doc', body: 'BODY-V2' }])
     const second = await svc.resolveBodiesForRun('ws1', [created.id])
-    expect(second).toEqual([{ id: created.id, body: 'BODY-V2' }])
+    expect(second).toEqual([{ id: created.id, title: 'Doc', body: 'BODY-V2' }])
     // Fetched once on the miss; the second read probed the version (unchanged) and
     // reused the cached body instead of re-fetching the whole page.
     expect(resolver.calls).toBe(1)
@@ -324,7 +326,7 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       documentBodyCache: fakeBodyCache(),
     })
     const bodies = await svc2.resolveBodiesForRun('ws1', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'CACHED' }])
+    expect(bodies).toEqual([{ id: created.id, title: 'Doc', body: 'CACHED' }])
     expect(down.calls).toBe(1) // it tried the live fetch, then degraded
   })
 
@@ -370,17 +372,21 @@ describe('FragmentLibraryService — document-backed fragments', () => {
 describe('FragmentLibraryService — built-in tier, suppression and registered fragments', () => {
   let repo: FakeFragmentRepo
   let svc: FragmentLibraryService
+  let registry: PromptFragmentRegistry
 
   beforeEach(() => {
     repo = new FakeFragmentRepo()
+    // A FRESH registry per test, carrying the shipped catalog. What was a module global cleared in
+    // an `afterEach` is now an instance that cannot outlive its test, so a registration leaking
+    // into a sibling is not a thing that can happen.
+    registry = promptFragmentRegistryWithBuiltins()
     svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock: fakeClock(),
+      promptFragmentSource: registryPromptFragmentSource(registry),
     })
   })
-
-  afterEach(() => clearRegisteredPromptFragments())
 
   it('drops a tier-tombstoned built-in from a run resolution (suppression sticks)', async () => {
     // Pinned before the workspace suppressed it — the stale selection must NOT
@@ -395,7 +401,7 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   })
 
   it('serves a deployment-registered OVERRIDE of a built-in id to runs and the catalog', async () => {
-    registerPromptFragment({
+    registry.register({
       id: 'node.performance',
       version: '2.0.0',
       title: 'Our perf rules',
@@ -404,7 +410,9 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
       body: 'OVERRIDDEN-PERF-BODY',
     })
     const bodies = await svc.resolveBodiesForRun('ws1', ['node.performance'])
-    expect(bodies).toEqual([{ id: 'node.performance', body: 'OVERRIDDEN-PERF-BODY' }])
+    expect(bodies).toEqual([
+      { id: 'node.performance', title: 'Our perf rules', body: 'OVERRIDDEN-PERF-BODY' },
+    ])
 
     const catalog = await svc.resolvedCatalog('ws1')
     const entry = catalog.find((f) => f.id === 'node.performance')
@@ -413,7 +421,7 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   })
 
   it('folds a registered EXTRA fragment into the catalog, tier-shadowable and tombstonable', async () => {
-    registerPromptFragment({
+    registry.register({
       id: 'org.review-standard',
       version: '1.0.0',
       title: 'Org review standard',
@@ -422,7 +430,9 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
       body: 'ORG-BODY',
     })
     const bodies = await svc.resolveBodiesForRun('ws1', ['org.review-standard'])
-    expect(bodies).toEqual([{ id: 'org.review-standard', body: 'ORG-BODY' }])
+    expect(bodies).toEqual([
+      { id: 'org.review-standard', title: 'Org review standard', body: 'ORG-BODY' },
+    ])
     const catalog = await svc.resolvedCatalog('ws1')
     expect(catalog.find((f) => f.id === 'org.review-standard')?.tier).toBe('builtin')
 
@@ -431,7 +441,60 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
     expect(await svc.resolveBodiesForRun('ws1', ['org.review-standard'])).toEqual([])
   })
 
+  // The prompt composer folds a fragment's condensed `brief` for implementer kinds. The brief must
+  // therefore be resolved ALONGSIDE the winning body, never re-looked-up by id downstream: a
+  // workspace/account row overriding a built-in id supplies no brief (managed rows have no such
+  // column), so the override's own full body is what gets folded. Re-resolving by id would paste
+  // the built-in's condensed text over the tenant's standard for exactly the kinds it targets.
+  it('resolves the built-in brief, and NO brief for a tenant row overriding that id', async () => {
+    const builtin = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(builtin[0]?.brief).toBeTruthy()
+
+    await svc.create('workspace', 'ws1', {
+      id: 'node.performance',
+      title: 'Our perf rules',
+      summary: 'House performance guidance.',
+      body: 'TENANT-PERF-BODY',
+    })
+
+    const overridden = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(overridden[0]?.body).toBe('TENANT-PERF-BODY')
+    expect(overridden[0]?.brief).toBeUndefined()
+  })
+
   it('drops an id the catalog does not know at all', async () => {
     expect(await svc.resolveBodiesForRun('ws1', ['gone.stale-id'])).toEqual([])
+  })
+
+  it('passes the RUN through to the brief service, and only on a brief dispatch', async () => {
+    // A generated brief is a model call on the run path, and its attribution rides this hop:
+    // AgentContextBuilder → here → FragmentBriefService → the generator's `ModelScope`. Dropping
+    // the id anywhere along it files the call under a null execution id — present in the store,
+    // absent from the step's rollup — so each hop is asserted rather than assumed.
+    const calls: { workspaceId: string; executionId?: string }[] = []
+    const briefService = {
+      resolveBriefs: (workspaceId: string, _c: unknown, opts?: { executionId?: string }) => {
+        calls.push({ workspaceId, ...(opts?.executionId ? { executionId: opts.executionId } : {}) })
+        return Promise.resolve(new Map<string, string>())
+      },
+    } as unknown as ConstructorParameters<typeof FragmentLibraryService>[0]['briefService']
+    const withBriefs = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock: fakeClock(),
+      ...(briefService ? { briefService } : {}),
+    })
+
+    await withBriefs.resolveBodiesForRun('ws1', ['node.performance'], {
+      verbosity: 'brief',
+      executionId: 'exec_1',
+    })
+    // `full` verbosity discards a condensation, so it must not pay for one at all.
+    await withBriefs.resolveBodiesForRun('ws1', ['node.performance'], {
+      verbosity: 'full',
+      executionId: 'exec_2',
+    })
+
+    expect(calls).toEqual([{ workspaceId: 'ws1', executionId: 'exec_1' }])
   })
 })

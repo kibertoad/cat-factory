@@ -1,5 +1,697 @@
 # @cat-factory/deploy-harness
 
+## 0.8.4
+
+### Patch Changes
+
+- ffe4356: Update the runner image to Pi 1.1.0, Claude Code 2.1.295 and Codex 0.162.0, the latest npm releases
+  taken without the 24-hour age threshold, and the Pi extensions `rpiv-todo` / `rpiv-web-tools` to
+  2.12.0 inside it. The executor and UI image pins move to 1.163.3. The deploy image moves to 0.8.3
+  because the dependency refresh raised its `@types/node` floor.
+
+## 0.8.2
+
+### Patch Changes
+
+- e84b0d5: Runner image: take Pi to `0.99.1`, Claude Code to `2.1.285` and Codex to `0.159.0`, and the two Pi
+  extensions (`rpiv-todo`, `rpiv-web-tools`) to `2.11.0`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window, so each is its
+  newest published release. Every flag the harness passes to each CLI is still accepted (checked
+  against the installed binaries). Codex `0.159.0` is the release that serves `gpt-6.1-sol`, which is
+  now its floor. The Pi extensions do not take the exemption: `2.11.0` is eight days old.
+  
+  Pi `0.99` ships a built-in MCP client, and the image now wires a Pi run's tool servers into it: see
+  the `@cat-factory/kernel` changeset. The image reports the new `piMcpServers` body capability for
+  that, but only after asking the installed binary for its version at startup, so an image built with
+  `PI_VERSION` overridden below `0.99.0` refuses those runs instead of running them blind.
+  
+  **Pi now runs against a config directory made for each pass** (`PI_CODING_AGENT_DIR`), seeded with
+  the extensions the image installed and removed after the pass, instead of the home-global
+  `~/.pi/agent`. The composed `AGENTS.md`, `models.json` and the tool-server `mcp.json` live there, so
+  no job's Pi state outlives it on a warm-pool container. The tool-server credentials are written into
+  that owner-only file with Pi's own literal escapes, and never into Pi's environment, which every
+  process Pi starts inherits.
+  
+  **Pi now runs with `--no-approve` instead of `--approve`.** The checkout is untrusted, and a trusted
+  project has Pi load its `.pi/` resources: its own `mcp.json` (servers started beside the declared
+  ones), extensions, skills, prompts and `SYSTEM.md`. A repository that relied on committed `.pi/`
+  resources or `.agents/skills` for Pi runs no longer has them applied; its `AGENTS.md` is still read.
+  
+  **Embedding API break (`@cat-factory/executor-harness/embed`):** `runPi`, `writeAgentsContext` and
+  `writePiModelsConfig` take a required `agentDir`, created with the newly exported
+  `createPiAgentDir`. The benchmark and smoketest harnesses moved to it and no longer rewrite
+  `process.env.HOME`.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+  
+  The deploy image moves to `cat-factory-deploy:0.8.1` for the same reason: the dependency refresh
+  raised its `@types/node` floor, which is one of its declared sources.
+
+## 0.8.0
+
+### Minor Changes
+
+- 30d08c7: Take the agent CLIs at their newest, correct the one under-metering price row, and refresh the
+  dependency tree.
+  
+  **Re-verified every catalog route against its serving provider, and the catalog needed nothing.**
+  Anthropic, OpenAI, Google, xAI, DeepSeek, Moonshot, Z.ai, Alibaba and Cloudflare Workers AI were
+  each read fresh. Every model this catalog selects is still served under the id it names, and every
+  frontier launch since the last sweep is already here, so the honest result is no entry added and
+  none retired. Claude Mythos 5.1 stays out for the reason it always has: invitation-only through
+  Project Glasswing, with no public route to declare. What is new elsewhere is a cheaper or smaller
+  tier of something already carried (Gemini 3.5 Flash-Lite, GPT-5.4, Grok 4.3, a `-highspeed`
+  variant of Kimi K2.7 Code, `@cf/qwen/qwen3.8-27b` and `@cf/openai/gpt-oss-20b` on Workers AI), and
+  a tier nothing here would route to does not earn a catalog entry.
+  
+  **One price row was metering below what it bills.** `check-openrouter-pins.mjs` reported
+  `openrouter:z-ai/glm-5.2` as the single understated pin: the gateway's blend for that slug has
+  finished converging on Z.ai's own $1.40 / $4.40 list, which the previous note predicted and the
+  numbers had not followed. Understatement is the one direction a budget gate may not sit in, so the
+  fresh classes move up to the figures every other GLM-5.2 row already carried. Its named cache rate
+  is dropped rather than re-pinned, because the gateway's $0.14/M now IS the 0.1x floor the new input
+  rate derives, and the retired 0.21 pin was written against a $0.26/M blend that no longer exists.
+  Nothing else moved: 29 of 30 pinned slugs are at or above their live rate, which is the margin the
+  table is for.
+  
+  **Several notes were making claims that had stopped being true**, and in a table where a wrong
+  figure looks exactly like a right one, the reasoning is what the next reader checks the figure
+  against. Kimi K2.5 has left the Workers AI model index (its row stays, for recorded spend, but it
+  no longer "runs on Workers AI"). DeepSeek now documents `deepseek-v4-flash` as retired with the
+  legacy name served by `deepseek-flash`, so that row's justification narrows to the historical one.
+  Z.ai's GLM-5.3 Flash launch promotion has lapsed, so the row's list price is simply the price. The
+  Gemini Flash rate is Google's own discount to 2026-12-31, not the undiscounted rate the note
+  claimed, which makes it the one row deliberately below a published number and worth saying so.
+  OpenRouter now publishes a cache rate on both Muse Spark slugs, so the reason neither names one
+  moves to the half of that argument that still holds, which is about this platform, not about Meta.
+  The DeepSeek and Kimi gateway-blend observations are restamped with this sweep's read.
+  
+  **Agent CLIs.** Claude Code moves to 2.1.274, ahead of the 24h age window, as the Dockerfile's
+  standing note allows for those three pins alone. Pi holds at 0.85.1 and Codex at 0.154.0, both
+  already newest (Codex 0.155.0 is alpha-only). The two Pi extensions move to 2.10.1, which does NOT
+  take that exemption and has aged past the window. The `node:26-trixie-slim` digest is unchanged:
+  the tag still resolves to the pinned one. Both harness images bump.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution and a dedupe; no package
+  changed major and no name was dropped. Four holds were re-verified at HEAD rather than assumed, and
+  all four still bind: `@cloudflare/vitest-pool-workers@0.22.0` is newest and pins wrangler 4.124.0
+  exactly, which keeps wrangler, workerd, miniflare and `@cloudflare/workers-types` where they are and
+  keeps vitest on 4.x (the pool peers `^4.1.0`, so vitest 5 cannot be taken); drizzle stays on its
+  1.0.0-rc line; the frontend stays on TypeScript 6 for `vue-tsc`. Three Docker GitHub Actions move to
+  their newest aged releases.
+  
+  One bump was a source change rather than a number. `@clack/prompts` 1.8.1 respells every prompt's
+  result from `Promise<Value | symbol>` to `Promise<Value | typeof CANCEL_SYMBOL>`, and the CLI's
+  `bailIfCancelled` was declared `(value: T | symbol): T` so that inference would peel the symbol arm
+  off. A unique symbol does not match a wide `symbol` parameter slot, so under the new spelling `T`
+  swallowed the union whole and four call sites went back to holding a symbol they thought they had
+  been rid of — a typecheck failure here, but the same shape that reaches `.trim()` at runtime when it
+  is not. The helper now takes the whole result type and returns `Exclude<T, symbol>`, which is
+  indifferent to which spelling a future release uses and is what clack's own `group()` does with the
+  same values.
+
+## 0.6.9
+
+### Patch Changes
+
+- 9f8cabc: Re-point the DeepSeek Flash route at the model DeepSeek actually serves, take the agent CLIs at
+  their newest, and refresh the dependency tree.
+  
+  **A retired model behind a live alias.** DeepSeek retired V4-Flash and V4-Flash-Vision-Exp on
+  2026-09-10 and made `deepseek-flash` the canonical, unversioned name for V4.1-Flash. The old
+  `deepseek-v4-flash` id still resolves, but only as a TEMPORARY compatibility alias onto the new
+  model, which is the quietest shape this catalog's failures take: nothing throws and nothing fails
+  to dispatch, so the picker went on saying "DeepSeek V4 Flash" while a different model answered, at
+  a rate the spend table did not carry, and the route dies outright whenever the alias is withdrawn.
+  All three DeepSeek-served arms of the `deepseek` entry (direct, subscription, and the OpenRouter
+  one, which must name the same model or the entry straddles two) now name the live model. The entry
+  keeps its `deepseek` id: that id is what a workspace persists against a block, and this is the same
+  slot following the vendor's own successor, so re-minting it would invalidate every stored pick to
+  say nothing new. `acceptsImages` is new on both refs and is a real capability gain rather than a
+  correction, since V4.1-Flash folds the vision line back into the main model.
+  
+  Two adjacent claims were re-read rather than trusted. The 2026-09-10 release note said
+  `deepseek-v4-pro` would route to V4.1-Flash from 2026-09-14, which would have silently demoted that
+  entry to a cheaper, weaker model; DeepSeek has since decided to keep serving V4 Pro with billing
+  unchanged, so it is untouched. And OpenRouter still serves a separate `deepseek/deepseek-v4-flash`
+  at a fifth of the price, which this entry deliberately does not keep: it is the retired build, and
+  an entry whose direct and gateway arms named different models is the neighbouring-version trap the
+  catalog header bans. Both retired price keys stay in the table so historical spend rows keep
+  costing correctly.
+  
+  **No other catalog gap.** Every frontier launch since the last sweep was checked against its
+  serving provider and is already here: Claude Fable 5.1, Gemini 3.8 Flash, Muse Spark 1.3 and GPT-6
+  Astra. Claude Mythos 5.1 stays out on purpose. It is the same model as Fable 5.1 at identical
+  pricing, offered by invitation only through Project Glasswing with no public route on any provider
+  this platform reaches, so an entry could only be a re-badge that `effectiveVariant` would pick and
+  then fail to dispatch. "Astra Pro" stays out for the reason recorded last time, re-checked here:
+  OpenRouter mints a slug for it, but reasoning effort is a parameter on the single `gpt-6-astra` id.
+  
+  **Agent CLIs at their newest**, ahead of the 24h `minimumReleaseAge` window, as the Dockerfile's
+  standing note allows for those three pins alone: Claude Code 2.1.265 to 2.1.270 and Codex 0.153.4
+  to 0.154.0 (still above the 0.153.0 floor `gpt-6-astra` needs). Pi holds at 0.85.1, already newest.
+  The two Pi extensions do NOT take that exemption and hold at 2.9.0: 2.10.0 published three hours
+  before this change and has not aged past the window. Both harness images move to the newest
+  `node:26-trixie-slim` digest that has (node 26.8.2), and the executor image tag rolls to 1.158.0
+  with the deploy image at 0.6.8.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, 31 resolved names moved, no
+  package name dropped. `pg-boss` 12.31.0 brings `rrule-temporal` and `temporal-spec` in as new
+  transitive deps, the only additions. A `pnpm dedupe` follows the bump because the partial
+  re-resolution left `@types/node` resolved at two patch versions. Four holds are unchanged and were
+  re-verified at HEAD rather than assumed: `vitest` at 4.1.11 and `wrangler` at 4.124.0
+  (`@cloudflare/vitest-pool-workers` 0.22.0 is still newest, peers `vitest: ^4.1.0` and pins that
+  wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date, which
+  that pool pins), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 reaches for
+  `typescript/lib/tsc`, absent from TS 7's exports map). pnpm moves 11.24.0 to 11.26.0, staying on
+  its major. WireMock holds at 3.13.1, still its newest non-prerelease. Actions: `setup-java` v6.0.0
+  to v6.0.1 and `zizmor-action` v0.6.3 to v0.6.4; every other pinned action is already newest.
+
+## 0.6.7
+
+### Patch Changes
+
+- 333b967: Meter every two-band model in the band its prompt actually lands in, check the cache classes the
+  table DERIVES, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Six rows were metering a long-context request at half its input rate.** OpenAI bills a request
+  whose prompt reaches 272,000 input tokens entirely at roughly double the short rate, with no
+  blending, and Gemini 3.1 Pro does the same at 200,000 tokens. Every OpenAI row and the Gemini Pro
+  row carried the SHORT band, so a long-prompt run metered at half its input and around 60% of its
+  output. The catalog gives all six entries a window over a million tokens, so a container agent
+  re-sending a large checkout crosses that threshold as ordinary behaviour, not as an edge case.
+  
+  **`ModelPrice` now carries both bands, and the meter picks between them.** A two-band row states
+  its base rates plus a `longBand` (rates, cache tiers and the threshold), `bandFor` selects on the
+  request's total input, and both metering entry points already hold that count: `estimateCost` gets
+  `inputTokens`, and `estimateClassedCost` sums the three input classes, because a vendor's threshold
+  is stated against the whole request and a 300K prompt served mostly from cache crosses it all the
+  same. Ten OpenAI rows, Gemini 3.1 Pro and the three Grok 4.6 rows carry a band, and each band's
+  cache tiers derive from that band's own input rate. A caller that cannot see the prompt size, which
+  is the telemetry rollup's rate resolver, still gets the DEARER band: of the two answers open to it,
+  only that one keeps a budget safe.
+  
+  Pricing the whole row at the long band instead is worse in both directions the figure is read. A
+  short-prompt run meters at roughly double its cost, which on inline judges and estimators is the
+  majority of calls and trips a workspace ceiling at half its real spend. The same rows are also the
+  picker's informational list price, rendered with no band annotation, so GPT-6 Astra would read
+  18.4/69 beside Claude Fable 5 at 9.2/46 while both bill $10/$50 at ordinary prompt lengths.
+  `modelCostResolver` stays on the base band for that reason, and the split between `priceFor` (the
+  list price a human compares) and `ratesFor` (the rate a budget meters) is now stated at both.
+  
+  The DYNAMIC per-workspace OpenRouter overlay still folds a model's bands to their maximum
+  (`dearestRate`), because which band applies depends on the prompt actually sent and a catalog
+  refresh has none to read. So enabling a two-band model in a workspace catalog meters its short
+  requests conservatively where the curated row prices each band exactly; carrying the threshold
+  through the catalog metadata is what would close that.
+  
+  **A DERIVED cache rate can understate the live one, and nothing was checking it.** A row names a
+  cache rate only where the vendor departs from the `CACHE_*_MULTIPLIER` floor, and
+  `check-openrouter-pins.mjs` skipped every unnamed class on the grounds that a derived figure has no
+  pin to have drifted. The derived figure is still what the budget meters with, and it follows OUR
+  input rate rather than the vendor's cache rate: `openrouter:z-ai/glm-5.3` was metering cache reads
+  at 54% of the live rate while the report said "nothing to do", on the class a container agent's
+  re-sent prefix lands in every turn. That row now names its rate, and the check compares the
+  EFFECTIVE rate for four classes rather than the pinned numbers for three.
+  
+  Three things keep that from becoming noise. A cache class is compared only where a hit can actually
+  land on the route, read out of the contracts `GATEWAY_PREFIX_POLICY` rather than restated, and the
+  gate covers a NAMED rate as well as a derived one: a figure no hit reaches is inert however it was
+  obtained, which is what `pricing.test.ts` already records for the two Alibaba slugs. The live side
+  is read band for band, so a row priced correctly in both bands reports nothing rather than flagging
+  its short band on every run. And the pinned THRESHOLD is checked as well, against the lowest
+  `min_prompt_tokens` the route publishes: pinned above the live one, every request between the two
+  meters in a band the vendor has stopped charging.
+  
+  Three parser fixes came with it, each of which silenced a comparison rather than breaking one. The
+  policy-map and price-row readers count braces and skip comments and strings, where a `[^}]*` match
+  ends the policy map at the `{@link}` reference sitting between its entries (leaving every vendor
+  declared below that line invisible) and would end a price row at its nested band's closing brace.
+  The cache-WRITE class reads `input_cache_write_1h` as a fallback, the order `cacheWriteRate`
+  applies on the dynamic path, so a route publishing only the long TTL is compared instead of passing
+  by default. And a non-array `overrides` is treated as no bands rather than thrown on, because a
+  throw exits 1, which is this script's reserved signal for a pinned route that was withdrawn.
+  
+  `openrouter:moonshotai/kimi-k2.7-code` is re-pinned from $0.674 / $3.40 to the $0.71 / $3.50 the
+  gateway's blend reads today, and its named cache read to 0.18: 0.17 sat under the 0.1748 the
+  conversion gives by more than the checker's rounding tolerance. The two Workers AI Kimi rows that
+  round the same vendor figures are corrected with it. The DeepSeek alias rows are re-stamped and
+  deliberately not moved: both now sit above their live rate, and Pro has swung $0.556 to $1.60 to
+  $0.946 across three reads in a fortnight, so chasing that blend down would spend the table's margin
+  on noise.
+  
+  **Every other rate was re-read and is unchanged**, against each vendor's own list rather than
+  inferred: Anthropic, the twelve Workers AI partner rows, Z.ai, Moonshot K3 and K2.6, DeepSeek's
+  peak bands, xAI, Qwen3.8 Max and Flash. Two prose corrections came out of it. Gemini 3.7 Flash's
+  half-rate promotion has lapsed on the gateway, so the row's deliberate over-count against it no
+  longer describes anything, and all three Flash routes now serve at the list price the rows carry.
+  Qwen3.8 Max is confirmed flat across its whole 1M window, unlike most of the Qwen line.
+  
+  **No major model is missing.** Everything shipped between 2026-09-01 and 2026-09-04 is already in
+  the catalog, and every one of the 27 curated OpenRouter routes is still served at the context
+  window it declares. Three re-checked and still not added: GPT-6 Astra Pro carries the same
+  $10 / $50 short band, the same $20 / $75 long band and the same 1,050,000-token window as
+  `gpt-6-astra`, and OpenAI's pricing page lists no row for it, so an entry could only re-badge a
+  model already here; Claude Mythos 5.1 is limited-availability; and Mercury 2.5, the one text model
+  the gateway has gained since, is a new vendor family rather than a frontier route.
+  
+  Pi holds at 0.85.1, Codex at 0.153.4 and both Pi extensions at 2.9.0, each already newest. Claude
+  Code goes 2.1.263 to 2.1.265, taking its newest release ahead of the 24h age window as the
+  Dockerfile's standing note allows. Playwright holds at 1.63.0 and WireMock at 3.13.1, both still
+  newest stable. `node:26-trixie-slim` still resolves to the pinned digest, so no base image moved.
+  The executor image tag rolls to 1.156.0, and the DEPLOY image tag to 0.6.6: the dependency refresh
+  reaches the deploy harness's own `@types/node` range, which is an image source, and republishing
+  over a live tag does not roll a deployment out.
+  
+  Dependency refresh: direct ranges plus a lockfile re-resolution, 75 resolved names moved, no
+  package name added or dropped, and three names that had two copies now have one. `@clack/prompts`
+  1.8.0 needed one source change: `isCancel` narrows to a UNIQUE symbol while the prompts still
+  return the wide `symbol`, so control flow cannot subtract one from the other. The CLI's single
+  cancel seam supplies the second half itself (`isCancel(value) || typeof value === 'symbol'`), which
+  narrows to `T` with no assertion and also exits cleanly on a cancel symbol minted by a second copy
+  of `@clack/core`, where an assertion would hand that symbol back to a caller about to call `.trim()`
+  on it. Four holds are unchanged and were re-verified at HEAD:
+  vitest at 4.1.11 and wrangler at 4.124.0 (vitest-pool-workers 0.22.0 is still newest, peers
+  `vitest: ^4.1.0` and pins that wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the
+  resolved workerd's date), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 is still newest and
+  calls `require.resolve('typescript/lib/tsc')`, absent from TS 7's exports map). Actions:
+  changesets/action v2.1.1 to v2.1.2, the only one that moved.
+
+## 0.6.5
+
+### Patch Changes
+
+- 5c50d30: Cleanup pass with no behaviour change: deletes exports nothing consumed (dead constants, parse
+  wrappers, alias schemas, pass-through re-exports and the Worker's compat-shim modules left over
+  from the `@cat-factory/server` extraction), drops the `export` keyword from module-local symbols,
+  folds duplicated private helpers onto one owner (base64, `scrub`, `sleep`, `withFlag`, the
+  per-row busy guard), and removes tests that asserted a constant against its own literal or
+  re-implemented the code under test. The SPA's unreachable palette drop handler goes with it.
+  
+  Internal-surface break, flagged per the compatibility rules: the removed barrel exports
+  (`DEFAULT_CI_MAX_ATTEMPTS`, `STANDARD_PHASES`, `isTestingKind`, `isBugFishingPhaseId`,
+  `SEALED_SECRET_SOURCE_NAMES`, `TelemetryReadResults`, `LinearFetchLike`, `ENVIRONMENT_BLOCK_TYPE`,
+  the contracts `parse*`/`safeParse*` one-liners and the `initiativePreset*`/`taskTypeFieldOption`
+  schema aliases) had no consumer in this repository; a downstream import of one of them fails at
+  typecheck and should read the underlying helper directly.
+
+## 0.6.3
+
+### Patch Changes
+
+- cd220f2: Add five catalog models, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Five new curated models.** Claude Fable 5.1, Gemini 3.8 Flash, a pinned Qwen3.8-Max-0902
+  snapshot, and Meta's Muse Spark 1.3 in both of its commercial tiers. Every route was checked
+  against the serving provider's live catalogue before it was declared, which is what decided three
+  of the shapes:
+  
+  - **Claude Fable 5.1** is the first Claude entry carrying subscription, OpenRouter and Bedrock arms
+    at once. Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch day rather than a
+    generation behind, so the flavour is declared against a verified route. Its OpenRouter slug is
+    DOTTED (`anthropic/claude-fable-5.1`) where the API id is dashed; the two genuinely disagree and
+    normalising either spelling yields a dead id.
+  - **Qwen3.8-Max-0902** is DashScope-only. OpenRouter serves the undated alias and publishes no dated
+    slug, and a flavour declared before its route exists is picked by `effectiveVariant` and then
+    fails at dispatch. It is a separate entry rather than a repoint of `qwen3.8-max` for the reason
+    `claude-opus-4-8` is separate: a block pinned to a snapshot must keep getting that build.
+  - **Muse Spark 1.3 ships as TWO entries**, standard and contributor. They are the same model on the
+    same route and differ only in what Meta may do with the traffic: the contributor tier costs a
+    twelfth on input in exchange for Meta training on the prompts and completions. That is a choice
+    an operator has to make with the price in front of them, and one entry could only make it
+    silently, so the two prices sit in separate rows and the SPA's "enable recommended" set omits the
+    contributor slug.
+  
+  `meta` joins the OpenRouter vendor-prefix family map beside `meta-llama`, so an account that blocks
+  the Meta family blocks Muse Spark too rather than leaving it unclassified.
+  
+  **The bare `bedrock` price row moved up a tier**, from ~$5/$30 to ~$10/$50 per 1M. A Bedrock ref
+  carries the account's own geo prefix, so `priceFor` can only ever match the bare provider key, and
+  that row is deliberately set to the frontier tier the catalog can select there. Fable 5.1 moved that
+  ceiling; leaving the row behind would have metered every Fable-5.1-on-Bedrock run at half its cost.
+  
+  **Both runner image tags roll**: the executor to 1.150.0 for the CLI bumps, and the deploy image
+  to 0.6.2 because the dependency round moved `@types/node` in its `package.json`, which the image
+  builds from. A dep bump inside a harness IS an image-source change, and republishing over a live
+  tag does not roll a deployment out.
+  
+  **Agent CLIs at their newest, ahead of the age window**, as the Dockerfile's standing note allows
+  for exactly these pins: Claude Code 2.1.252 -> 2.1.260 and Codex 0.152.0 -> 0.153.2. Pi is already
+  at its newest (0.84.4). Both Pi extensions move 2.8.0 -> 2.9.0 and have aged past the window, so
+  they take the ordinary route.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits under the `minimumReleaseAge` gate. 68 resolved
+  names move and the re-resolve adds and drops nothing, leaving 1388 names on both sides. Direct:
+  the `@ai-sdk/*` line (`amazon-bedrock@^5.0.73`, `anthropic@^4.0.49`, `openai@^4.0.57`,
+  `openai-compatible@^3.0.43`, `provider@^4.0.10`), `ai@^7.0.91`, `@aws-sdk/client-s3@^3.1125.0`, the
+  `@opentelemetry/*` set (`0.222.0` exporters, `2.11.0` SDK), `@types/node@^26.4.1`,
+  `happy-dom@^20.13.2`, `knip@^6.34.0`, `oxfmt@^0.66.0`, `oxlint@^1.81.0`, `undici@^8.10.1`. The AI
+  SDK family stays inside the `ai@^7` + `@ai-sdk/*@^4` majors that pair with `workers-ai-provider`.
+  
+  Three holds, each for a reason rather than for the age window:
+  
+  - **TypeScript stays at 6.0.3 on the frontend** while the backend is already on 7.0.2. TS 7 was
+    tried and reverted: `vue-tsc@3.3.11` resolves `typescript/lib/tsc`, which TS 7 no longer exports,
+    so the typecheck dies with `ERR_PACKAGE_PATH_NOT_EXPORTED` before reading a single file. vue-tsc
+    is the real gate for `.vue`, so the frontend moves when vue-tsc does.
+  - **wrangler holds at 4.124.0 and `@cloudflare/workers-types` at 5.20260815.1** for the fifth round
+    running. `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins wrangler
+    exactly; the types version IS the workerd date that pin resolves.
+  - **`@types/node@26.4.0` and `undici@8.10.0` keep a second resolved copy** beside the new ones, held
+    by upstream ranges (`@types/pg`, `happy-dom`, `nuxt`, `unifont`) rather than by anything here.
+  
+  Also re-pins `openrouter:deepseek/deepseek-v4-flash`, the one row `check-openrouter-pins.mjs`
+  reported as metering BELOW the live rate. The alias drifted up ~9% since the 2026-09-01 read, and a
+  budget gate is allowed to be early but never short.
+
+## 0.6.1
+
+### Patch Changes
+
+- 4b41767: Refresh the dependency tree, the runner base image and the agent CLIs.
+  
+  **Direct ranges plus a lockfile re-resolution from an empty tree**, so transitives move to the
+  newest release each declared range already admits, under the `minimumReleaseAge` gate:
+  
+  - **Direct**: `@aws-sdk/client-s3@^3.1119.0 → ^3.1120.0`, `happy-dom@^20.11.8 → ^20.11.12`,
+    `markdown-it@^15.0.0 → ^15.0.1`, `p-map@^7.0.6 → ^7.0.7`.
+  - **Transitives the re-resolve moved**, 39 resolved names in total: `rollup@4.63.0 → 4.63.1` with
+    its 24 platform binaries, `terser@5.51.1 → 5.51.2`, `@jridgewell/sourcemap-codec@1.5.5 → 1.6.0`,
+    `devalue@5.9.1 → 5.9.2`, `fastq@1.20.1 → 1.20.2`, `json-rpc-2.0@1.7.1 → 1.7.2`, and the
+    browserslist data set (`baseline-browser-mapping`, `electron-to-chromium`, `node-releases`,
+    `update-browserslist-db`).
+  
+  This is a narrow round because the previous one landed a day earlier, and the tree shows it: the
+  re-resolve adds and drops nothing, leaving 1389 resolved names on both sides. Everything held back
+  is held by the age window rather than by a compatibility decision, and each will be takeable next
+  round: `ai@7.0.84`, `@ai-sdk/anthropic@4.0.45`, `@ai-sdk/openai@4.0.51`,
+  `@ai-sdk/amazon-bedrock@5.0.67`, `knip@6.33.0`, `pg-boss@12.28.1` and `fastq@1.20.3` were all
+  published inside the last 24 hours. The Java SDK moves nothing: jackson, junit, jspecify and every
+  build plugin are already at their newest on Maven Central.
+  
+  **The `node:26-trixie-slim` digest both runner Dockerfiles pin moves to `sha256:c0753125`**
+  (Node 26.8.1), the build held back at 14h old last round and now 37h old. `searxng` in the local
+  compose stack stays at `2026.8.22-9fea41204`: the newer `2026.8.28-a30b2d474` is 23h old, an hour
+  short of the window, so it is the first thing to take next round.
+  
+  **Pi `0.84.3 → 0.84.4` and Claude Code `2.1.250 → 2.1.251` take their newest releases** ahead of
+  the age window, as the Dockerfile's standing note about the three agent CLIs allows. Codex
+  (`0.150.1`) and both Pi extensions (`2.7.1`) are already at their newest and have aged past the
+  window. Both image tags roll (executor `1.143.0`, deploy `0.6.0`) because republishing over a live
+  tag does not roll a deployment out.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately do not move for the fourth round running:
+  `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins `wrangler@4.124.0`
+  exactly, and the types version IS the workerd date that pin resolves. `drizzle-orm` and
+  `drizzle-kit` stay at `1.0.0-rc.4` for a different reason: the only newer publishes are per-commit
+  `1.0.0-rc.5-<sha>` snapshots, not a release to pin against.
+
+## 0.5.1
+
+### Patch Changes
+
+- be0b953: Refresh the dependency tree, the base images and the agent CLIs.
+  
+  **Direct ranges plus a lockfile re-resolution from an empty tree**, so transitives move to the newest
+  release each declared range already admits, under the `minimumReleaseAge` gate:
+  
+  - **Runtime**: the `ai` / `@ai-sdk/*` line takes its first aged releases since it was held back last
+    round (`ai@^7.0.77 → ^7.0.83`, `@ai-sdk/anthropic@^4.0.41 → ^4.0.44`,
+    `@ai-sdk/openai@^4.0.46 → ^4.0.50`, `@ai-sdk/openai-compatible@^3.0.35 → ^3.0.39`,
+    `@ai-sdk/provider@^4.0.7 → ^4.0.8`, `@ai-sdk/amazon-bedrock@^5.0.61 → ^5.0.66`), staying on the
+    majors `workers-ai-provider` pairs with. Also `hono@^4.13.4 → ^4.13.5`,
+    `@aws-sdk/client-s3@^3.1116.0 → ^3.1119.0` and `vue@3.5.41 → 3.5.42` with the whole pinned
+    `@vue/*` override family moved in lockstep.
+  - **Tooling**: `@types/node@^26.2.0 → ^26.4.0`, `turbo@^2.10.11 → ^2.10.12`, `knip@^6.32.2 → ^6.32.3`,
+    `happy-dom@^20.11.6 → ^20.11.8`.
+  - **Java SDK**: `jackson-databind 2.22.1 → 2.22.2`, `junit-jupiter 6.1.2 → 6.1.3`, and the build
+    plugins (compiler 3.15.0, source 3.4.0, javadoc 3.12.0, gpg 3.2.8, central-publishing 0.11.0).
+  - **Transitives the re-resolve moved**, among ~180: `eslint@10.6.0 → 10.9.1`,
+    `@tiptap/*@3.24.0/3.30.0 → 3.30.5`, `rollup@4.62.5 → 4.63.0`, `rolldown@1.2.5 → 1.2.6`,
+    `terser@5.50.0 → 5.51.1`, `@ai-sdk/gateway@4.0.62 → 4.0.67`, `@ai-sdk/provider-utils@5.0.29 →
+  5.0.32`, `@inquirer/*`, `@intlify/*` and `vue-i18n` to 11.4.10, `cssnano@8.0.8 → 8.0.10`.
+  
+  **The re-resolve also drops ~22 packages that were in the tree only through lockfile inertia**:
+  `@vitejs/devtools-kit`, `tsx`, `@parcel/watcher` (with its platform packages), `devframe`,
+  `@devframes/*`, `@json-render/core`, `zigpty` and `node-addon-api`. Every one of them occupies an
+  OPTIONAL peer slot, which pnpm does not auto-install; they survived because each partial install
+  preferred what the previous tree already held. Resolving from a deleted `node_modules` as well as a
+  deleted lockfile is what surfaces that, and it is also what collapses the duplicate `h3` and `srvx`
+  copies. `@parcel/watcher-wasm` still serves the watcher slot, so this costs dev-time niceties at
+  most.
+  
+  **The base image both runner Dockerfiles pin by digest moves to `sha256:5758d367…`** (Node 26.7.0),
+  the build held back at 17h old last round and now 74h old. The newer `26.8.1` digest is 14h old and
+  is held on the same rule. `searxng` in the local compose stack takes `2026.8.22-9fea41204`.
+  
+  **Claude Code `2.1.246 → 2.1.250` and Codex `0.150.0 → 0.150.1` take their newest releases** ahead of
+  the age window, as the Dockerfile's standing note about the three agent CLIs allows. Pi (`0.84.3`)
+  and both Pi extensions (`2.7.1`) are already at their newest and have aged past the window, so they
+  need no exemption. Both image tags roll (executor `1.142.0`, deploy `0.5.0`) because republishing
+  over a live tag does not roll a deployment out.
+  
+  **`wrangler` and `@cloudflare/workers-types` deliberately do not move**, for the third round running:
+  `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins `wrangler@4.124.0`
+  exactly, and the types version IS the workerd date that pin resolves (`1.20260815.1`). They move
+  together on the next pool bump.
+  
+  **Held back, all inside the 24h window when this was cut**: `@aws-sdk/client-s3@3.1120.0` (12h),
+  `happy-dom@20.11.12` (16h), `vue-router@5.3.0` (18h), `wrangler@4.127.0` (23h) and
+  `@cloudflare/workers-types@5.20260828.1` (4h, and blocked by workerd besides). Held on the
+  compatible-major rule: `pnpm@12.0.0` and `typescript@7` for the frontend, which is on `^6.0.3`
+  because that is the line Nuxt's build graph resolves.
+
+## 0.4.0
+
+### Minor Changes
+
+- e1f6325: Move the harness job server off `:8080`, so a tester grades the product rather than the platform.
+  
+  The harness is PID 1 of the job container and shares its network namespace with everything the
+  agent starts, and it held 8080: the most common default for a containerised HTTP service. A
+  service under test started on its own documented default died with `EADDRINUSE`, and a health
+  check aimed at 8080 got a 200 back from the harness, whose body begins `{"status":"ok"}`. Every
+  ordinary health assertion passes against that, so a step could report green on a service that
+  never ran.
+  
+  Both images (executor and deploy) now bind `27182`, and the four backend copies of the number
+  collapse onto one `HARNESS_JOB_PORT` in `@cat-factory/contracts`, pinned to each harness's own
+  literal by a conformity test. The environment inventory the harness states to every agent now
+  names the port it holds and says a reply from it is not evidence, which stays true for a
+  deployment that overrides `PORT`.
+  
+  Moving the number is not on its own the fix, because the harness exports the port it holds as
+  `PORT` and the agent's own processes inherited it: a service written as `listen(process.env.PORT)`
+  would have been aimed straight back at the one address in the namespace it cannot have. `PORT`
+  joins `NODE_ENV` on the short list of harness variables stripped from everything spawned into the
+  checkout, so the collision is closed rather than relocated.
+  
+  Two things now hold the port in one place per job. Every facade STATES the port the container must
+  bind rather than leaving it to the image: the Kubernetes pod spec already did, and the local
+  container adapters and the Cloudflare container class now do too. A deployment pins its own
+  mirrored image tag, so without that the published port and the served one were joined only by the
+  image happening to agree, and a tag from before this change would answer nothing and surface as a
+  container that never became ready (rather than as the version handshake naming the skew, which
+  needs a reachable harness to run at all). And the frontend stand-up refuses a serve port equal to
+  the port the harness is listening on, read from the live process rather than predicted from the
+  shared constant, which is what covers a deployment whose `PORT` the constant does not name.
+  
+  Breaking for a deployment that pins the harness port itself: a runner pool's pod spec, a
+  `NetworkPolicy`, or a `harnessPort` runner-backend setting written against 8080 must move with the
+  image tag. **A pool left on `harnessPort: 8080` keeps dispatching, which is the trap rather than
+  the relief**: the harness then holds 8080 inside every job container, exactly the collision this
+  change removes, and a `frontend` frame is free to be configured to serve there because the shared
+  guard now reserves 27182. The stand-up refusal above is what makes that land as a named infra gap
+  instead of a green grade against the platform, but the pool setting is still the thing to clear.
+
+## 0.2.16
+
+### Patch Changes
+
+- 0cfa7a2: Refresh the dependency tree, the pinned GitHub Actions and the Docker images, and move the three bundled agent CLIs.
+  
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits):
+  
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.68 → ^7.0.77`,
+    `@ai-sdk/anthropic@^4.0.39 → ^4.0.41`, `@ai-sdk/openai@^4.0.43 → ^4.0.46`,
+    `@ai-sdk/openai-compatible@^3.0.31 → ^3.0.35`, `@ai-sdk/amazon-bedrock@^5.0.58 → ^5.0.61`.
+  - **Runtime deps**: `jose@^6.2.9 → ^6.2.10`, `pg-boss@^12.27.0 → ^12.28.0`,
+    `capnweb@^0.11.1 → ^0.12.0`, `@aws-sdk/client-s3@^3.1113.0 → ^3.1116.0`,
+    `@cloudflare/workers-types@^5.20260819.1 → ^5.20260823.1`.
+  - **Frontend**: `@nuxt/ui@^4.10.0 → ^4.11.0`, `happy-dom@^20.11.2 → ^20.11.6`,
+    `vue-tsc@^3.3.10 → ^3.3.11`. The frontend's `typescript@^6.0.3` is deliberately unchanged:
+    `vue-tsc` still resolves `typescript/lib/tsc`, a subpath TypeScript 7's exports map does not
+    expose, so the SPA stays on 6 until `vue-tsc` supports the Go port.
+  - **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` (its only breaking change is dropping Node 20;
+    CI runs 26) and pnpm `11.22.0 → 11.23.0`.
+  
+  **Changesets moves as a coupled major**: `@changesets/cli@^2.31.1 → ^3.0.1` plus
+  `changesets/action@v1.9.0 → v2.1.1`, which refuse each other's majors. Two behaviour changes had to
+  be pinned back to what this repo already relied on: `.changeset/config.json` now sets
+  `privatePackages: { version: true, tag: false }`, because v3 stopped versioning private packages by
+  default and `@cat-factory/executor-harness`'s version IS the runner image tag; and `release.yml`
+  takes the renamed inputs (`version-script`, `publish-script`, `pr-title`, `commit-message`), the
+  `pr-number` output, and the token through the `github-token` input, which v2 no longer accepts from
+  the environment. v2 pushes the release branch and tags through the GitHub API, so that job's
+  checkout no longer persists git credentials.
+  
+  **Held back, all inside the ~24h `minimumReleaseAge` window when this was cut**: `@types/node@26.3.0`,
+  `hono@4.13.4`, `oxlint@1.80.0`, `oxfmt@0.65.0`, `ai@7.0.78`, `@ai-sdk/openai-compatible@3.0.36`,
+  `@aws-sdk/client-s3@3.1117.0`. `pg-boss@12.28.0` was ~20 minutes short of the same window and was
+  taken anyway, so it is listed in `minimumReleaseAgeExclude` — the ONE third-party entry there, added
+  deliberately with a PRUNE ME note, since it has already aged past the gate and removing the line is
+  now a no-op re-resolve.
+  
+  **`wrangler` is now pinned by override**, not merely ranged. `@cloudflare/vitest-pool-workers@0.22.0`
+  pins `wrangler` (and through it `workerd` and `miniflare`) EXACTLY, so any in-range refresh floats our
+  caret ahead of the pool's pin and the tree gains a SECOND workerd — not just ~100MB of duplicated
+  platform binary per arch, but a runtime the Worker suite proves that is a different build from the one
+  `wrangler deploy` ships. The override holds it at whatever pool-workers pins, exactly as the three
+  esbuild pins beside it already do, and moves when that package moves.
+  
+  **Stryker 10 pulled Babel 8 into a tree whose Nuxt half is on Babel 7**, and the three Babel plugins
+  Nuxt declares as OPTIONAL PEERS were then filled from the 8.x line while still being handed
+  `@babel/core@7`. A Babel 8 plugin's `declare()` asserts the core major and throws, so
+  `pnpm-workspace.yaml` scopes those three names back to 7.x for their Nuxt parents.
+  
+  **The three agent CLIs the executor image bundles** move together and are all taken at their newest
+  release, ahead of the release-age window: Pi `0.84.2 → 0.84.3`, Claude Code `2.1.237 → 2.1.243`,
+  Codex `0.148.0 → 0.149.1`. That exemption is an explicit call re-made at each bump, and the
+  Dockerfile now says so for all three rather than for Claude Code alone. Pi's two extensions take the
+  ordinary aged pick, `2.6.2 → 2.7.0`. The UI image moves `pnpm 11.22.0 → 11.23.0` to match the
+  workspace; its Playwright (1.62.1), Yarn (4.18.0), `serve` (14.2.6) and WireMock (3.13.1) pins are
+  already current, as are the deploy image's kubectl `v1.36.4` / kustomize `v5.8.1` / helm `v4.2.4` and
+  both images' `node:26-trixie-slim` digest.
+  
+  The executor image tag therefore rolls to `1.130.0` (base + UI): republishing over a live tag does
+  not roll a deployment out. The deploy image is unchanged and stays at `0.2.15`.
+  
+  **Pinned GitHub Actions**: `actions/checkout v7.0.0 → v7.0.1`, `actions/setup-node v6.4.0 → v7.0.0`,
+  `actions/setup-java v5.7.0 → v6.0.0` (both majors are ESM rewrites with no change to the inputs used
+  here), `docker/build-push-action v7.2.0 → v7.3.0`, `docker/login-action v4.2.0 → v4.6.0`,
+  `docker/setup-buildx-action v4.1.0 → v4.3.0`, `docker/setup-qemu-action v4.1.0 → v4.2.0`,
+  `dorny/paths-filter v4.0.1 → v4.0.3`, `pnpm/action-setup v6.0.9 → v6.0.10`,
+  `rharkor/caching-for-turbo v2.5.0 → v2.5.1`, and `zizmorcore/zizmor-action v0.5.7 → v0.6.2`, which
+  raises the default zizmor from 1.26.1 to 1.29.0.
+
+## 0.2.15
+
+### Patch Changes
+
+- 3db0d43: Refresh the whole dependency tree, re-roll both runner images, and move the three bundled agent CLIs.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.64 → ^7.0.68`,
+    `@ai-sdk/anthropic@^4.0.38 → ^4.0.39`, `@ai-sdk/openai@^4.0.41 → ^4.0.43`,
+    `@ai-sdk/openai-compatible@^3.0.30 → ^3.0.31`, `@ai-sdk/amazon-bedrock@^5.0.55 → ^5.0.58`.
+  - **Runtime deps**: `hono@^4.13.1 → ^4.13.3`, `@hono/node-server@^2.1.0 → ^2.1.1`,
+    `jose@^6.2.8 → ^6.2.9`, `capnweb@^0.11.0 → ^0.11.1`, `@aws-sdk/client-s3@^3.1109.0 → ^3.1113.0`.
+  - **Tooling**: `wrangler@^4.122.0 → ^4.124.0`,
+    `@cloudflare/workers-types@^5.20260812.1 → ^5.20260819.1` (which is what wrangler 4.124 now
+    peer-requires), `@cloudflare/vitest-pool-workers@^0.21.2 → ^0.22.0`, `vitest@^4.1.10 → ^4.1.11`,
+    `@vitest/coverage-v8@^4.1.10 → ^4.1.11`, `oxlint@^1.78.0 → ^1.79.0`, `oxfmt@^0.63.0 → ^0.64.0`,
+    `publint@^0.3.23 → ^0.3.24`, `turbo@^2.10.9 → ^2.10.11`, `vue-tsc@^3.3.9 → ^3.3.10`,
+    `@types/pg@^8.21.0 → ^8.23.1`, pnpm `11.21.0 → 11.22.0`.
+
+  **The three agent CLIs the executor image bundles** move together: Pi `0.84.1 → 0.84.2`, Codex
+  `0.147.0 → 0.148.0`, Claude Code `2.1.231 → 2.1.237`. The Claude Code pin is taken at its newest
+  release, ahead of the 24h `minimumReleaseAge` window, which is the explicit call that pin's own note
+  asks to re-make on every bump. Pi's two extensions move in lockstep as their monorepo publishes
+  them, `2.4.0 → 2.6.2`.
+
+  **The UI-tester image** aligns its Playwright with the one the e2e suite drives (`1.61.1 → 1.62.1`),
+  and moves `@yarnpkg/cli-dist@4.10.3 → 4.18.0` and `serve@14.2.5 → 14.2.6`. **The deploy image** takes
+  `kubectl v1.36.3 → v1.36.4` and `helm v4.2.3 → v4.2.4`; kustomize is already current at `v5.8.1`.
+
+  Both image tags therefore move in this change (`cat-factory-executor:1.127.0`,
+  `cat-factory-executor-ui:1.127.0`, `cat-factory-deploy:0.2.14`): republishing over a live tag does
+  not roll a deployment out.
+
+  No `minimumReleaseAgeExclude` entries were added and none were needed: every registry bump above
+  already clears the gate. Five packages had a newer release the gate still withholds
+  (`@ai-sdk/*`, `ai@7.0.70`, `happy-dom@20.11.6`, `@aws-sdk/client-s3@3.1114.0`,
+  `@cloudflare/workers-types@5.20260820.1`), so each lands one release short of the registry's head.
+  `drizzle-orm`/`drizzle-kit` stay on `1.0.0-rc.4`: the only newer builds are commit-suffixed
+  snapshots, not a released `rc.5`. Majors available but deliberately not taken here, each being its
+  own change: `@changesets/cli@3`, `@stryker-mutator/*@10`, and TypeScript 7 for the two frontend
+  packages still on 6.
+
+## 0.2.13
+
+### Patch Changes
+
+- 3036af7: Rebuild both per-run container images: the shared `node:26-trixie-slim` base moves to the current
+  index digest, and the executor image's three bundled agent CLIs move to Pi 0.84.1, Claude Code
+  2.1.226 and Codex 0.147.0. The Pi todo/web-tools extensions are already on their newest release
+  (2.4.0), so they stay put.
+
+  Both image tags are bumped in this change (`cat-factory-executor:1.105.0`,
+  `cat-factory-deploy:0.2.12`): republishing over a live tag does not roll a deployment out.
+
+## 0.2.11
+
+### Patch Changes
+
+- 7cf3e70: Refresh the dependency tree and re-roll both runner images.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the newest
+  release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.47 → ^7.0.51`,
+    `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.27 → ^4.0.29`, `@ai-sdk/openai-compatible@^3.0.20 → ^3.0.22`,
+    `@ai-sdk/provider@^4.0.4 → ^4.0.5`, `@ai-sdk/amazon-bedrock@^5.0.40 → ^5.0.42`.
+  - **Runtime deps**: `hono@^4.12.33 → ^4.13.0`, `@hono/node-server@^2.0.12 → ^2.1.0`,
+    `pg-boss@^12.26.4 → ^12.27.0`, `undici@^8.9.0 → ^8.10.0`, `ws@^8.21.1 → ^8.21.2`,
+    `@aws-sdk/client-s3@^3.1101.0 → ^3.1102.0`, `nuxt@^4.5.0 → ^4.5.1`.
+  - **Tooling**: `oxlint@^1.76.0 → ^1.77.0`, `oxfmt@^0.61.0 → ^0.62.0`, `publint@^0.3.22 → ^0.3.23`,
+    `vitest@^4.1.8 → ^4.1.10`, `@cloudflare/workers-types@^5.20260801.1 → ^5.20260804.1`.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.92.1, `@cat-factory/deploy-harness` 0.2.10, with
+  all six pinned tags synced):
+
+  - Executor: Claude Code `2.1.220 → 2.1.221`, and the two lockstep Pi extensions
+    `rpiv-todo`/`rpiv-web-tools` `2.3.1 → 2.4.0`. Pi stays at `0.83.0` and Codex at `0.146.0`, both
+    already the latest. Claude Code `2.1.222` exists but was published inside the release-age window, so
+    `2.1.221` is the newest version the supply-chain rule admits.
+  - Deploy: `kubectl v1.36.3`, `helm v4.2.3` and `kustomize v5.8.1` are all already the latest, so the
+    image moves only for the base re-pin below.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest.
+
+  No `minimumReleaseAgeExclude` entries were added: every version above already satisfies the gate.
+
+  **Majors**: none were available this sweep except `typescript@6 → 7` for the frontend, which stays on 6
+  for the same reason as last time. `vue-tsc@3.3.9` still resolves its compiler through
+  `require.resolve('typescript/lib/tsc')`, and TypeScript 7's `exports` map publishes no such entry, so
+  the frontend typecheck would fail to resolve at all.
+
+## 0.2.8
+
+### Patch Changes
+
+- bc77cac: Bump the container-harness build toolchains to TypeScript 7.
+
+  The executor-harness and deploy-harness were the last packages still building on
+  TypeScript 6 (`^6.0.3`), and their Docker build stages compiled `dist/` with an even
+  older standalone `typescript@^5.6.0` / `@types/node@^22.0.0`. Both are now aligned with
+  the rest of the monorepo: the package `devDependency` moves to `7.0.2` and each
+  Dockerfile build stage to `typescript@^7.0.0` / `@types/node@^26.0.0` (matching the
+  runtime `node:26` base), so the published images are actually compiled on TS 7 rather
+  than only local dev. The other harness deps (`hono`, `@hono/node-server`, `@types/node`,
+  `vitest`) were already on the repo-consistent latest ranges.
+
+  Editing the harness `package.json` + `Dockerfile` re-tags the runner images, so
+  `@cat-factory/executor-harness` bumps 1.43.6 -> 1.43.7, `@cat-factory/deploy-harness`
+  0.2.6 -> 0.2.7, and all six image-tag pins are synced to match: the
+  `deploy/backend/{package.json,wrangler.toml}` refs plus `RECOMMENDED_HARNESS_IMAGE` and
+  `RECOMMENDED_DEPLOY_IMAGE` in `@cat-factory/local-server`. The lockfile was also deduped
+  to drop redundant duplicate entries.
+
 ## 0.2.5
 
 ### Patch Changes

@@ -7,6 +7,11 @@ import { useLocaleStore } from '~/stores/locale'
 // the user menu. The list is data-driven from the i18n config (`useI18n().locales`), so
 // adding a locale in nuxt.config.ts surfaces it here automatically. Selecting one switches
 // the live locale AND persists the choice (the locale store) so it survives a reload.
+//
+// `collapsed` renders the icon-only rail variant (the sidebar's collapsed state); the
+// dropdown itself is unchanged, so the picker stays fully usable from the rail.
+withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
+
 const { t, locale, locales, setLocale } = useI18n()
 const localeStore = useLocaleStore()
 
@@ -35,20 +40,23 @@ const items = computed<DropdownMenuItem[][]>(() => [
 
 <template>
   <UDropdownMenu :items="items" :content="{ side: 'top', align: 'start' }">
-    <button
-      type="button"
+    <UButton
+      color="neutral"
+      variant="ghost"
       data-testid="language-switcher"
       :aria-label="t('language.switcher')"
-      class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-start transition hover:bg-slate-800/60"
+      :title="collapsed ? `${t('language.switcher')}: ${current}` : undefined"
+      class="flex w-full items-center gap-2 rounded-lg border border-default bg-default/60 p-2 text-start transition hover:bg-elevated/60"
+      :class="collapsed ? 'justify-center' : ''"
     >
-      <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-slate-400" />
-      <div class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-slate-500">
+      <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-muted" />
+      <div v-if="!collapsed" class="min-w-0 flex-1">
+        <div class="truncate text-2xs uppercase tracking-wide text-muted">
           {{ t('language.switcher') }}
         </div>
-        <div class="truncate text-xs font-medium text-white">{{ current }}</div>
+        <div class="truncate text-xs font-medium text-highlighted">{{ current }}</div>
       </div>
-      <UIcon name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-slate-500" />
-    </button>
+      <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />
+    </UButton>
   </UDropdownMenu>
 </template>

@@ -39,7 +39,7 @@ function draftFixture(): InitiativePlanDraft {
       { id: 'del1', phaseId: P.delivery, title: 'Swap the orders repository' },
       { id: 'ver1', phaseId: P.verifyDecommission, title: 'Verify parity and remove MSSQL' },
     ],
-    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_quick' },
+    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_simple' },
   })
 }
 

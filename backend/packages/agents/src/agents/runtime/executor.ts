@@ -1,9 +1,28 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
-import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
+import type {
+  AgentContextRecorder,
+  DesignImageDelivery,
+  Logger,
+  ModelFlavor,
+  ModelProvider,
+  ModelProviderResolver,
+  ModelRef,
+  ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
+import {
+  agentRunScopeSubject,
+  noopLogger,
+  resolveDesignImageDelivery,
+  resolveInlineScope,
+} from '@cat-factory/kernel'
+import { recordInlineAgentContext } from './inline-context-record.js'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
+import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
+import { agentUsageFromModelUsage } from '../../providers/cache.js'
+import { usageBillingFields } from '../../providers/usage-attribution.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
 import { composeBlockSystemPrompt } from './fragments.js'
 import {
@@ -11,6 +30,11 @@ import {
   providerWebSearchTools,
   webResearchGuidanceFor,
 } from './web-search.js'
+import {
+  type LoadedDesignImage,
+  foldLoadedDesignImages,
+  loadDesignImages,
+} from './design-images.js'
 
 export interface AiAgentExecutorDependencies {
   /**
@@ -32,7 +56,10 @@ export interface AiAgentExecutorDependencies {
    * worker supplies it; absent/unknown ids return undefined to fall back to the
    * agent routing. Defaults to "no per-block override".
    */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  resolveBlockModel?: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve the workspace's per-agent-kind default model id, consulted when the
    * block pins no usable model. Optional: absent → the env routing for the kind is
@@ -64,6 +91,31 @@ export interface AiAgentExecutorDependencies {
    * (built-ins only) when a facade doesn't inject one.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The account's binary-artifact store, for reading the bytes of the design pictures the engine
+   * resolved for this dispatch. Only ever called when the resolved model accepts images AND the
+   * context carries a set, so a deployment with no storage (which resolves no set in the first
+   * place) never reaches it.
+   *
+   * Optional because an inline executor is servable without it: the run then keeps the textual
+   * design description, and its prompt SAYS the pictures could not be delivered rather than
+   * pretending the task had none.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The agent-context observability sink, so an inline dispatch records the complete context it
+   * gave its agent exactly as a container dispatch does.
+   *
+   * REQUIRED as a key while nullable as a value, like `CoreDependencies.logger`: a facade that
+   * retains no telemetry passes `undefined` and says so in code, but one that simply forgot fails
+   * to typecheck. The bug this closes was a pure wiring omission — the container executor was given
+   * a recorder and the inline one was not, so the snapshot table held container kinds only and the
+   * one reader that notices blamed a disabled switch — and an optional key is exactly what let that
+   * omission compile. See `inline-context-record.ts`.
+   */
+  agentContextRecorder: AgentContextRecorder | undefined
+  /** Where a dropped snapshot reports itself. Absent ⇒ `noopLogger`. */
+  logger?: Logger
 }
 
 /**
@@ -77,7 +129,10 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly modelProviderResolver?: ModelProviderResolver
   private readonly modelProvider?: ModelProvider
   private readonly agentRouting: AgentRouting
-  private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  private readonly resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   private readonly resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
@@ -86,6 +141,9 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly runsInline?: (ref: ModelRef) => boolean
   private readonly webSearch?: InlineWebSearchOptions
   private readonly agentKindRegistry: AgentKindRegistry
+  private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  private readonly agentContextRecorder?: AgentContextRecorder
+  private readonly log: Logger
 
   constructor({
     modelProviderResolver,
@@ -96,6 +154,9 @@ export class AiAgentExecutor implements AgentExecutor {
     runsInline,
     webSearch,
     agentKindRegistry,
+    resolveBinaryArtifactStore,
+    agentContextRecorder,
+    logger,
   }: AiAgentExecutorDependencies) {
     if (!modelProviderResolver && !modelProvider) {
       throw new Error('AiAgentExecutor requires a modelProviderResolver or a modelProvider')
@@ -108,25 +169,82 @@ export class AiAgentExecutor implements AgentExecutor {
     this.runsInline = runsInline
     this.webSearch = webSearch
     this.agentKindRegistry = agentKindRegistry ?? defaultAgentKindRegistry()
+    this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
+    this.agentContextRecorder = agentContextRecorder
+    this.log = (logger ?? noopLogger).child({ scope: 'inlineAgentExecutor' })
+  }
+
+  /**
+   * Settle what this inline call can do with the task's design pictures, and load the bytes when it
+   * can carry them.
+   *
+   * An ordinary inline call carries them as MESSAGE PARTS whatever harness the ref names:
+   * `harness: 'pi'` describes how a CONTAINER dispatch of that model is served, and here this
+   * executor composes the model message itself.
+   *
+   * The ambient inline path (`runsInline`) carries them by NEITHER route, which is why it is a
+   * refusal rather than a second carrier. The deployment serves the ref by driving its CLI as a
+   * host subprocess: `CliInlineLanguageModel` flattens the prompt to system + user TEXT on stdin,
+   * so an image part is dropped on the way out, and there is no checkout to write a file into
+   * either. Reading the container answer for the same CLI (`claude-code` opens image files) is what
+   * once left this path claiming `channel: 'files'` for a directory nothing ever wrote.
+   */
+  private async resolveDesignImages(
+    context: AgentRunContext,
+    ref: ModelRef,
+  ): Promise<{
+    context: Pick<AgentRunContext, 'designImages' | 'designImageDelivery'>
+    images: LoadedDesignImage[]
+  }> {
+    const set = context.designImages
+    if (!set?.files.length) return { context: {}, images: [] }
+    const delivery: DesignImageDelivery = this.runsInline?.(ref)
+      ? { attached: false, reason: 'inline_harness_text_only' }
+      : resolveDesignImageDelivery({ channel: 'message' }, ref)
+    if (!delivery.attached)
+      return { context: { designImages: set, designImageDelivery: delivery }, images: [] }
+    const resolveStore = this.resolveBinaryArtifactStore
+    if (!resolveStore || !context.workspaceId) {
+      // The set exists and this executor has no way to read its bytes: a facade that resolved
+      // pictures and wired no store. Reported as the transfer failure it is, never as an
+      // attachment of nothing.
+      return {
+        context: {
+          designImages: set,
+          designImageDelivery: { attached: false, reason: 'transfer_failed' },
+        },
+        images: [],
+      }
+    }
+    const loaded = await loadDesignImages(resolveStore, context.workspaceId, set)
+    return { context: foldLoadedDesignImages(set, loaded, delivery), images: loaded.images }
   }
 
   /** Resolve the model provider for a run's scope (per-scope DB pool, else the static one). */
   private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
     if (this.modelProviderResolver && context.workspaceId) {
-      return this.modelProviderResolver.forScope({
-        workspaceId: context.workspaceId,
-        userId: context.initiatedByUserId,
-        // The run this inline call belongs to, so a facade that serves a subscription ref
-        // inline through a leased per-run activation (the container inline backend) can lease
-        // the initiator's credential — the inline analogue of the container executor's lease.
-        executionId: context.executionId,
-      })
+      // The run this inline call belongs to, so a facade that serves a subscription ref inline
+      // through a leased per-run activation (the container inline backend) can lease the
+      // initiator's credential: the inline analogue of the container executor's lease. The fold
+      // is kernel's, shared with the consensus executor, so the two cannot come to different
+      // answers about which pool one step's participants draw on.
+      return this.modelProviderResolver.forScope(
+        await resolveInlineScope(
+          agentRunScopeSubject({
+            workspaceId: context.workspaceId,
+            ...(context.executionId ? { executionId: context.executionId } : {}),
+            ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+          }),
+        ),
+      )
     }
     if (this.modelProvider) return this.modelProvider
     if (this.modelProviderResolver) {
-      // No workspace scope (rare): lease from no scope — only the opt-in registries
+      // No workspace scope (rare): lease from no scope, so only the opt-in registries
       // (Cloudflare/Bedrock) can resolve.
-      return this.modelProviderResolver.forScope({ workspaceId: context.workspaceId ?? '' })
+      return this.modelProviderResolver.forScope(
+        await resolveInlineScope({ kind: 'workspace', workspaceId: context.workspaceId ?? '' }),
+      )
     }
     throw new Error('AiAgentExecutor: no model provider available')
   }
@@ -153,6 +271,15 @@ export class AiAgentExecutor implements AgentExecutor {
         blockModelId: context.block.modelId,
         modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
+        // The preset's route order, resolved once per dispatch by the engine. Read off the
+        // CONTEXT so this inline path and the container/consensus paths agree on the provider.
+        ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
+        // And what the initiator declared about their own local models, for the same reason: this
+        // path attaches design images as message parts, so it is one of the two readers of the
+        // modality the fold puts on the ref.
+        ...(context.localModelDeclarations
+          ? { localModelDeclarations: context.localModelDeclarations }
+          : {}),
       },
     )
   }
@@ -174,8 +301,34 @@ export class AiAgentExecutor implements AgentExecutor {
 
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.
-    const baseSystem = config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)
-    const composed = composeBlockSystemPrompt(baseSystem, context.block)
+    // The workspace's own prompt for this kind (resolved once per dispatch by the engine)
+    // replaces the shipped track prompt; `systemPromptFor` still layers the engine-enforced
+    // directives on top. It wins over the deployment-wide `AGENT_ROUTING` system prompt: the
+    // workspace's edit is the more specific of the two.
+    // The delivered `.cat-context/` paths ride along so trait guidance naming one of those files
+    // stays silent when this dispatch injected none: an inline call folds the same files into the
+    // USER prompt, so the presence question is identical to the container path's.
+    const delivery = traitDeliveryFor(context)
+    const baseSystem = context.systemPromptOverride
+      ? systemPromptFor(
+          context.agentKind,
+          this.agentKindRegistry,
+          context.systemPromptOverride,
+          delivery,
+        )
+      : (config.system ??
+        systemPromptFor(context.agentKind, this.agentKindRegistry, undefined, delivery))
+    const composed = composeBlockSystemPrompt(
+      baseSystem,
+      context.block,
+      this.agentKindRegistry.standardsDelivery(context.agentKind),
+      // An inline call has no filesystem, so a `context-files` kind's standards were never
+      // really delivered as files: fold them into the SYSTEM prompt here, at this kind's
+      // verbosity. `userPromptFor` correspondingly leaves the standards files out of its own
+      // fold, so each standard reaches the model exactly once and at the right length.
+      false,
+      standardsVerbosityFor(context.agentKind, this.agentKindRegistry),
+    )
 
     // Provider-hosted web search for the allow-listed design/research kinds, when
     // enabled AND the resolved provider has one. The usage nudge is appended only
@@ -191,12 +344,56 @@ export class AiAgentExecutor implements AgentExecutor {
       ? `${composed}${webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, { fetch: false })}`
       : composed
 
+    // The task's design pictures: whether this model can be shown them, and their bytes when it
+    // can. Resolved BEFORE the prompt, because the prompt states what became of them.
+    const design = await this.resolveDesignImages(context, ref)
+    const promptContext: AgentRunContext = { ...context, ...design.context }
+    const userPrompt = userPromptFor(promptContext, this.agentKindRegistry)
+
+    // The complete provided context, filed exactly as the container executor files its own at
+    // dispatch: this is the one point where the fully composed prompts and the folded fragment
+    // bodies exist as one unit. Requires the run ids to file under; an executor invoked outside a
+    // run (the benchmark harness) has none and records nothing.
+    if (context.workspaceId && context.executionId) {
+      await recordInlineAgentContext(this.agentContextRecorder, this.log, {
+        context,
+        ref,
+        systemPrompt: system,
+        userPrompt,
+        workspaceId: context.workspaceId,
+        executionId: context.executionId,
+        harness: this.runsInline?.(ref) ? (ref.harness ?? null) : null,
+      })
+    }
+
     const { text, usage } = await generateText({
       model,
       system,
-      prompt: userPromptFor(context, this.agentKindRegistry),
+      // One user message carrying the prompt plus an image part per delivered picture, in the order
+      // the prompt names them. A plain `prompt` string whenever there is nothing to attach, so
+      // every run that carries no design is byte-identical on the wire to what it was before.
+      ...(design.images.length
+        ? {
+            messages: [
+              {
+                role: 'user' as const,
+                content: [
+                  { type: 'text' as const, text: userPrompt },
+                  ...design.images.map((image) => ({
+                    type: 'image' as const,
+                    image: image.data,
+                    mediaType: image.mediaType,
+                  })),
+                ],
+              },
+            ],
+          }
+        : { prompt: userPrompt }),
       temperature: config.temperature,
-      maxOutputTokens: config.maxOutputTokens,
+      // The engine resolves the effective ceiling once per dispatch (step option > workspace
+      // setting > this deployment default), so every executor path agrees on the budget. Absent
+      // ⇒ the deployment routing default for the kind.
+      maxOutputTokens: context.maxOutputTokens ?? config.maxOutputTokens,
       ...(tools ? { tools } : {}),
       // Tag the call so an instrumented provider can group it under its run's trace
       // (a no-op when no trace sink is wired; ignored by every model provider).
@@ -210,12 +407,19 @@ export class AiAgentExecutor implements AgentExecutor {
     return {
       output: text.trim(),
       model: `${ref.provider}:${ref.model}`,
-      // Report metered tokens so the spend safeguard can price this call. The
-      // AI SDK leaves either field undefined when a provider omits it.
-      usage: {
-        inputTokens: usage.inputTokens ?? 0,
-        outputTokens: usage.outputTokens ?? 0,
-      },
+      // Report the tokens so the spend safeguard can price this call, carrying the input
+      // CLASS split where the provider reported one — an inline step on a warm prefix cache is
+      // mostly cache reads, and metering those at the fresh rate charged a workspace budget
+      // several times what the call cost. The AI SDK leaves either total undefined when a
+      // provider omits it, and says nothing about caching for the providers that do none.
+      usage: agentUsageFromModelUsage(usage),
+      // How the call is BILLED, read off the model the provider chain returned rather than
+      // assumed from this being the inline path. A deployment that serves an inline step
+      // through a subscription harness (the local facade's ambient claude/codex CLI, or a
+      // container on a leased subscription token) spent no per-token money, and defaulting to
+      // metered here filed a run's companion and research steps as spend while the
+      // containerised steps of the SAME run, on the SAME credential, filed as subscription.
+      ...usageBillingFields([model]),
     }
   }
 }

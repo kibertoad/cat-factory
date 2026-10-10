@@ -1,11 +1,13 @@
 import type { VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import { VcsIdentityError } from '@cat-factory/kernel'
 import { GITLAB_PUBLIC_API_BASE } from './tokenSource.js'
 
 // Resolves a GitLab PAT to its account via `GET /api/v4/user` — the GitLab analogue of
 // the GitHub resolver, keyed on the numeric user id so a GitLab PAT login lands on its own
 // `(provider='gitlab', subject=<id>)` identity, never colliding with a GitHub one. Used by
-// the local-mode `/auth/pat` flow; authenticates with the raw PAT via the `PRIVATE-TOKEN`
-// header (the same header `FetchGitLabClient` uses).
+// the local-mode `/auth/pat` flow (this platform's own route, not a GitLab path: GitLab's own
+// equivalents are `GET /personal_access_tokens/self` and `/self/associations`); authenticates with
+// the raw PAT via the `PRIVATE-TOKEN` header (the same header `FetchGitLabClient` uses).
 
 interface GitLabUserResponse {
   id?: number
@@ -55,7 +57,10 @@ export class GitLabIdentityResolver implements VcsIdentityResolver {
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new Error(`GitLab /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+      throw new VcsIdentityError(
+        `GitLab /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
+        res.status,
+      )
     }
     const user = (await res.json()) as GitLabUserResponse
     if (user.id == null || !user.username) {

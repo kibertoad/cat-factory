@@ -9,12 +9,14 @@ import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -131,13 +133,25 @@ async function add() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('providers.vendorCredentials.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.vendorCredentials.toast.connectFailed')
   } finally {
     busy.value = false
+  }
+}
+
+async function toggleEnabled(cred: { id: string }, enabled: boolean) {
+  try {
+    await creds.update(cred.id, { enabled })
+  } catch (e) {
+    present(e, 'providers.vendorCredentials.toast.updateFailed')
+  }
+}
+
+async function toggleDefault(cred: { id: string; isDefault: boolean }) {
+  try {
+    await creds.update(cred.id, { isDefault: !cred.isDefault })
+  } catch (e) {
+    present(e, 'providers.vendorCredentials.toast.updateFailed')
   }
 }
 
@@ -153,11 +167,7 @@ async function remove(cred: { id: string; label: string }) {
   try {
     await creds.remove(cred.id)
   } catch (e) {
-    toast.add({
-      title: t('providers.vendorCredentials.toast.removeFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.vendorCredentials.toast.removeFailed')
   }
 }
 
@@ -185,7 +195,29 @@ function vendorLabel(v: SubscriptionVendor): string {
         <!-- Workspace pool (commercial coding-plan subscriptions) -->
         <template #pool>
           <div class="space-y-5">
-            <p class="text-sm text-slate-400">
+            <!-- The pool is the modal's default tab, but most individual developers arrive
+                 looking for their OWN Claude / ChatGPT / GLM plan, which lives on the
+                 `personal` tab — point them there before they read a pool form that can't
+                 take their credential. -->
+            <div
+              class="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5"
+            >
+              <UIcon name="i-lucide-user" class="h-5 w-5 shrink-0 text-primary" />
+              <p class="min-w-0 flex-1 text-sm text-toned">
+                {{ t('providers.vendorCredentials.personalCallout.text') }}
+              </p>
+              <UButton
+                size="xs"
+                color="primary"
+                variant="subtle"
+                class="shrink-0"
+                @click="activeTab = 'personal'"
+              >
+                {{ t('providers.vendorCredentials.personalCallout.cta') }}
+              </UButton>
+            </div>
+
+            <p class="text-sm text-muted">
               {{ t('providers.vendorCredentials.poolIntro') }}
             </p>
 
@@ -202,7 +234,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- guided steps -->
             <ol
-              class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
+              class="list-decimal space-y-1.5 rounded-lg border border-muted bg-default/60 p-4 ps-8 text-sm text-toned"
             >
               <li v-for="(step, i) in steps" :key="i">{{ step }}</li>
             </ol>
@@ -236,20 +268,24 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- connected pool -->
             <div v-if="creds.credentials.length" class="space-y-2">
-              <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SectionLabel as="h4">
                 {{
                   t('providers.vendorCredentials.connected', { count: creds.credentials.length })
                 }}
-              </h4>
+              </SectionLabel>
               <div
                 v-for="c in creds.credentials"
                 :key="c.id"
-                class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+                class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
+                :class="{ 'opacity-55': !c.enabled }"
               >
                 <div>
-                  <span class="font-medium text-slate-200">{{ c.label }}</span>
-                  <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(c.vendor) }}</span>
-                  <div class="text-[11px] tabular-nums text-slate-500">
+                  <span class="font-medium text-default">{{ c.label }}</span>
+                  <span class="ms-2 text-xs text-dimmed">{{ vendorLabel(c.vendor) }}</span>
+                  <UBadge v-if="!c.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
+                    {{ t('providers.vendorCredentials.disabledBadge') }}
+                  </UBadge>
+                  <div class="text-2xs tabular-nums text-dimmed">
                     {{
                       t(
                         'providers.vendorCredentials.usage',
@@ -262,13 +298,34 @@ function vendorLabel(v: SubscriptionVendor): string {
                     }}
                   </div>
                 </div>
-                <UButton
-                  icon="i-lucide-trash-2"
-                  color="error"
-                  variant="ghost"
-                  size="xs"
-                  @click="remove(c)"
-                />
+                <div class="flex items-center gap-2">
+                  <UButton
+                    :icon="c.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
+                    :color="c.isDefault ? 'primary' : 'neutral'"
+                    :variant="c.isDefault ? 'subtle' : 'ghost'"
+                    size="xs"
+                    @click="toggleDefault(c)"
+                  >
+                    {{
+                      c.isDefault
+                        ? t('providers.vendorCredentials.defaultBadge')
+                        : t('providers.vendorCredentials.pinDefault')
+                    }}
+                  </UButton>
+                  <USwitch
+                    :model-value="c.enabled"
+                    size="sm"
+                    :aria-label="t('providers.vendorCredentials.enableToggle')"
+                    @update:model-value="(v: boolean) => toggleEnabled(c, v)"
+                  />
+                  <UButton
+                    icon="i-lucide-trash-2"
+                    color="error"
+                    variant="ghost"
+                    size="xs"
+                    @click="remove(c)"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -279,7 +336,7 @@ function vendorLabel(v: SubscriptionVendor): string {
           <ProvidersApiKeysSection category="direct" />
         </template>
 
-        <!-- Proxies / gateways (OpenRouter, LiteLLM): intermediaries that front many vendors -->
+        <!-- Proxies / gateways (OpenRouter, Bifrost, LiteLLM): front many vendors behind one key -->
         <template #proxy>
           <ProvidersApiKeysSection category="proxy" />
         </template>

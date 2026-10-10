@@ -52,6 +52,21 @@ export interface EnvironmentConnectionRecord {
   deletedAt: number | null
 }
 
+/**
+ * Idempotently ensures a deployment's pre-declared environment handlers (rows in
+ * `environment_connections`) exist for a workspace. A deployment (via a custom environment adapter) declares
+ * its handler seeds in config; the server ensures each is registered for every existing workspace
+ * at boot AND for each newly-created workspace — so a service's provision type resolves a handler
+ * WITHOUT a human filling the Infrastructure → Test environments form. Idempotent (a seed already
+ * present is skipped) and per-seed fault-tolerant (a bad seed is logged + skipped, never thrown).
+ *
+ * Kept intentionally free of integrations knowledge — the port speaks only `workspaceId`; the
+ * concrete seeder (built over `EnvironmentConnectionService`) lives in `@cat-factory/integrations`.
+ */
+export interface EnvironmentHandlerSeeder {
+  ensureForWorkspace(workspaceId: string): Promise<void>
+}
+
 export interface EnvironmentConnectionRepository {
   /** Every live handler the workspace has registered (batched — no per-type point reads). */
   listByWorkspace(workspaceId: string): Promise<EnvironmentConnectionRecord[]>
@@ -176,7 +191,57 @@ export interface EnvironmentRecord {
   createdAt: number
   expiresAt: number | null
   lastError: string | null
+  /**
+   * The provider's own account of a NON-terminal state: why this environment is not ready yet.
+   *
+   * A sibling of `lastError` rather than a widening of it, because the two are read by different
+   * readers for opposite reasons and only one of them is a fault. Persisted on every provision and
+   * every poll REGARDLESS of status (where `lastError` is written only on `failed`), which is what
+   * makes it reachable during a readiness wait. See `ProvisionedEnvironment.statusNote`.
+   */
+  statusNote: string | null
   deletedAt: number | null
+  /**
+   * The serialized {@link EnvironmentReachability}: the addresses the provider stated for this
+   * environment's URL host, plus what dialling them proved. Null when the provider states none and
+   * nothing has probed, and for rows written before the column existed.
+   *
+   * A JSON STRING rather than a parsed object because a record mirrors its row one field per
+   * column, and both facades would otherwise need their own parse of the same blob: two
+   * implementations of one validator is how a D1 row and a Postgres row come to disagree about
+   * what they hold. The single parse lives in `recordToHandle`.
+   *
+   * Stored in the CLEAR, unlike its neighbours. `access_cipher` holds credentials and
+   * `provision_fields_cipher` holds whatever a provider captured, which may be anything; a list of
+   * addresses for a host already published in plaintext beside it is neither.
+   */
+  reachability: string | null
+  /**
+   * When the provider last ANSWERED a status poll for this environment, and how many answers have
+   * been recorded.
+   *
+   * The trail a poll that did not fail used to leave nowhere. The provisioning log records a poll
+   * that THROWS and a poll that transitions the environment to `failed`, so a readiness wait that
+   * polled cleanly for four minutes left two log rows a second apart at the create and nothing
+   * afterwards. Nothing in the data then distinguished "nothing polled" from "polling is not
+   * logged", and the environment investigation read that absence as the absence of polling and
+   * said so as established fact. A row per poll is the wrong shape at a ten-second cadence; this
+   * pair is what makes the claim CHECKABLE.
+   *
+   * **An ANSWER, not a success.** A poll the provider answered with `status: 'failed'` counts here
+   * too: the pair exists to say how much polling HAPPENED, which is the claim a reader gets wrong,
+   * and nothing about how much of it went well. Reading it as a success count would hand an
+   * investigation "22 successful polls" for an environment that failed all 22, which is the same
+   * class of over-claim the pair was added to remove. A poll that THREW is not counted, because it
+   * has a provisioning-log row of its own naming the cause.
+   *
+   * `pollCount` is a FLOOR rather than a ledger: it is written from the count the poll read at its
+   * start, so two polls racing each other can cost it an increment. `lastPolledAt` is exact,
+   * because a lost race there still leaves the later of the two stamps. Null / 0 means no answered
+   * poll is RECORDED, which is what a reader may conclude and no more.
+   */
+  lastPolledAt: number | null
+  pollCount: number
   /** The service's declared provision type this env was stood up for; null for legacy rows. */
   provisionType: string | null
   /** The resolved engine that handled the provisioning; null for legacy rows. */
@@ -193,6 +258,10 @@ export type EnvironmentRecordPatch = Partial<
     | 'provisionFieldsCipher'
     | 'expiresAt'
     | 'lastError'
+    | 'statusNote'
+    | 'reachability'
+    | 'lastPolledAt'
+    | 'pollCount'
     | 'provisionType'
     | 'engine'
   >

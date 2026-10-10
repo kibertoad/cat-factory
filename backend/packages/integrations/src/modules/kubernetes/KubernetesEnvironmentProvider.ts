@@ -6,8 +6,13 @@ import type {
   EnvironmentManifest,
   EnvironmentProvider,
   EnvironmentStatus,
+  EnvironmentDiagnosis,
+  EnvironmentDiagnosticsCapability,
+  EnvironmentRemediationOutcome,
+  EnvironmentRemediationRequest,
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
+  KubernetesConnectionConfig,
   KubernetesEnvironmentConfig,
   KubernetesProvisionConfig,
   ProviderConfigField,
@@ -17,30 +22,70 @@ import type {
   RunnerJobView,
   RunRepoContext,
   SecretResolver,
+  TeardownProbe,
+} from '@cat-factory/kernel'
+import {
+  connectionFailureResult,
+  describeConnectionFailure,
+  describeUnfilledConfigPlaceholders,
+  environmentFailure,
+  getErrorMessage,
+  unresolvedPlaceholders,
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
+  describeKubernetesEnvironment,
+  KUBERNETES_REMEDIATIONS,
+  restartKubernetesWorkloads,
+} from './kubernetes-diagnostics.js'
+import {
+  classifyApplyFailure,
+  KUBERNETES_CONFIG_PLACEHOLDERS,
+} from './environment-failure.logic.js'
+import {
   apiBase,
   apiServerConnectionFailureMessage,
-  classifyDeploymentReadiness,
+  reduceRolloutProgress,
 } from './kubernetes.logic.js'
 import {
   buildDeployJobSpec,
+  deployTargetsBackendNamespace,
   mapDeployOutcome,
   needsContainerRender,
 } from './kubernetes-deploy.logic.js'
 import {
+  apiServerHostname,
+  buildPullSecret,
+  buildServiceAccountPullSecretPatch,
+  describeRegistryAuthSkip,
+  describeRegistryAuthVerdict,
+  isLocalThrowawayCluster,
+  REGISTRY_AUTH_FIELD_MANAGER,
+  registryAuthImageCandidates,
+  registriesNamedByImages,
+  resolveRegistryAuth,
+  serviceAccountsNeedingOwnPatch,
+  withPullSecretOnServiceAccounts,
+} from './kubernetes-registry-auth.logic.js'
+import {
+  classifyIngressAdmission,
   deriveUrl,
+  describeUnreachableIngressHost,
   extractGatewayAddress,
   extractGatewayListenerHost,
   extractHttpRouteHost,
   extractLoadBalancerAddress,
   firstListItem,
   httpRouteParentRef,
+  type IngressAdmission,
+  ingressClassesUrl,
   isManifestFile,
+  readIngressAdmissionFacts,
+  readIngressClassCatalog,
   type KubernetesResource,
   namespaceUrl,
   parseKubernetesEnvConfig,
+  parseKubernetesEnvConnection,
   parseManifests,
   renderTemplate,
   resolveNamespace,
@@ -64,7 +109,29 @@ const GATEWAY_API_VERSION = 'gateway.networking.k8s.io/v1'
 
 const APPLY_TIMEOUT_MS = 30_000
 const READ_TIMEOUT_MS = 30_000
-const FIELD_MANAGER = 'cat-factory'
+/**
+ * Field manager for the manifest applies. Exported so the registry-auth writes can be pinned as
+ * using a DIFFERENT one: an apply is a manager's complete desired state, so sharing it would have
+ * the next manifest apply declare the pull Secret and its account patches gone.
+ */
+export const FIELD_MANAGER = 'cat-factory'
+
+/**
+ * The `status.phase` of a namespace read (`Active` / `Terminating`), or null when the body
+ * could not be parsed. Null is NOT read as either phase by the caller: a namespace that answered
+ * a GET is present whatever its body says, and only the terminating/active split is unknown.
+ */
+async function namespacePhase(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { status?: { phase?: unknown } }
+    const phase = body?.status?.phase
+    return typeof phase === 'string' ? phase : null
+  } catch {
+    // silent-catch-ok: an unparseable body only costs the Active/Terminating detail; the caller
+    // already knows the namespace is present because the read succeeded.
+    return null
+  }
+}
 
 export interface KubernetesEnvironmentProviderOptions {
   /** Reserved for future URL-policy-aware behaviour; unused today. */
@@ -85,12 +152,28 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   }
 
   /**
+   * Parse only what it takes to REACH the cluster, for the paths that reclaim rather than build.
+   *
+   * Separate from {@link parseConfig} so a stored config whose PROVISIONING half stopped matching
+   * the contract can still be torn down: a manifest source or URL derivation that no longer
+   * validates has to stop a provision, and must not be what leaves a namespace running forever
+   * with nothing able to delete it. Overridable alongside `parseConfig` so a subclass whose
+   * connection carries more (the EKS provider's AWS coordinates) narrows this the same way.
+   */
+  protected parseConnection(manifest: EnvironmentManifest): KubernetesConnectionConfig {
+    return parseKubernetesEnvConnection(manifest)
+  }
+
+  /**
    * Build the apiserver client for a request. Overridable so a subclass can inject a different
    * auth scheme (the EKS provider passes a SigV4/STS token minter) WITHOUT touching any of the
    * provisioning/status/teardown logic, which stays auth-agnostic.
+   *
+   * Takes the CONNECTION shape, not the full config: the reclaim paths only ever parse that much,
+   * and the provisioning paths pass a full config, which is one.
    */
   protected makeClient(
-    config: KubernetesEnvironmentConfig,
+    config: KubernetesConnectionConfig,
     resolveSecret: SecretResolver,
   ): KubernetesApiClient {
     return new KubernetesApiClient(config, resolveSecret)
@@ -106,14 +189,82 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     finalizeProvision: (view, req) => this.finalizeProvision(view, req),
   }
 
+  /**
+   * What the apiserver can say about a namespace that never became usable, and the one thing the
+   * platform can ask it to do about it.
+   *
+   * Grouped as the optional capability rather than folded into `status()`, which reduces the whole
+   * cluster's answer to one word because a readiness judgement needs one word. The per-pod terminal
+   * reasons `analyzePodStatus` extracts have always been available and have never reached a reader:
+   * an `ImagePullBackOff` arrives at the run as a generic timeout, and the difference between "the
+   * image does not exist" and "we waited twenty minutes" is the whole diagnosis.
+   */
+  readonly diagnostics = {
+    describe: async (req: EnvironmentStatusRequest): Promise<EnvironmentDiagnosis> => {
+      // The CONNECTION, like every other path that reaches an existing cluster rather than
+      // building in one: diagnosing a namespace needs the apiserver and nothing else, and parsing
+      // the provisioning half would refuse to look at exactly the environments whose stored
+      // `manifestSource` or `url` no longer validates. That is the failure class this could name
+      // outright, and it would instead degrade to platform-only evidence.
+      const config = this.parseConnection(req.manifest)
+      const namespace = req.provisionFields.namespace ?? req.externalId
+      if (!namespace) {
+        return {
+          facts: [],
+          gaps: [
+            {
+              read: 'namespace',
+              reason:
+                'No namespace was recorded for this environment, so the provision failed before ' +
+                'anything was created in the cluster.',
+              permanent: true,
+            },
+          ],
+        }
+      }
+      return describeKubernetesEnvironment({
+        client: this.makeClient(config, req.resolveSecret),
+        config,
+        namespace,
+      })
+    },
+    supportedActions: KUBERNETES_REMEDIATIONS,
+    remediate: async (
+      req: EnvironmentRemediationRequest,
+    ): Promise<EnvironmentRemediationOutcome> => {
+      // Same reason as `describe` above: rolling a Deployment reaches the cluster, it does not
+      // build in one.
+      const config = this.parseConnection(req.manifest)
+      const namespace = req.provisionFields.namespace ?? req.externalId
+      if (!namespace) {
+        return { applied: false, detail: 'no namespace was recorded for this environment' }
+      }
+      return restartKubernetesWorkloads({
+        client: this.makeClient(config, req.resolveSecret),
+        config,
+        namespace,
+      })
+    },
+  } satisfies EnvironmentDiagnosticsCapability
+
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
     const config = this.parseConfig(req.manifest)
     const client = this.makeClient(config, req.resolveSecret)
     const { namespace, vars } = this.provisionContext(config, req.inputs)
+    this.assertReachableUrl(config, vars)
 
     await this.ensureNamespace(client, config, namespace)
 
     const texts = await this.readManifests(req, config)
+    // Refuse BEFORE applying when a placeholder this CONNECTION was meant to fill has no value:
+    // rendering it to the empty string and applying anyway produces an apiserver rejection that
+    // describes the RESULT and blames the file, which is how a correct `image: "{{image}}"` was
+    // reported as a Deployment missing a required image. A run-supplied key that renders empty is
+    // NOT a refusal: it is the documented lenient substitution, and which keys those are is the
+    // scope rule `describeUnfilledConfigPlaceholders` owns.
+    const missing = unresolvedPlaceholders(texts.join('\n'), vars, KUBERNETES_CONFIG_PLACEHOLDERS)
+    const refusal = describeUnfilledConfigPlaceholders(missing)
+    if (refusal) throw environmentFailure(refusal, 'config_incomplete')
     const resources: KubernetesResource[] = []
     for (const text of texts) {
       resources.push(...parseManifests(text, vars, namespace, req.inputs.blockId, config.labels))
@@ -121,7 +272,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     if (resources.length === 0) {
       throw new Error('No Kubernetes manifests were found at the configured source path')
     }
-    for (const resource of resources) {
+    // Before the workloads, never after, and the reason is stricter than "pods start quickly":
+    // the ServiceAccount admission controller copies an account's `imagePullSecrets` onto a pod
+    // when the pod is CREATED, so an account patched after its Deployment applied does not reach
+    // the pods already admitted. The accounts are read off the parsed resources, and the
+    // manifests come back with the secret folded into the ServiceAccounts they declare, so this
+    // has to sit between the parse and the apply.
+    const toApply = await this.ensureRegistryAuth(client, config, namespace, resources, req, vars)
+    for (const resource of toApply) {
       await this.apply(client, config, namespace, resource)
     }
 
@@ -146,30 +304,94 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const config = this.parseConfig(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) {
+      // Nothing to read a status FROM, and it says that rather than leaving the caller to record
+      // its generic fallback: an environment with no namespace on it is a provision that never
+      // got far enough to make one, which is a different thing from a namespace that failed.
       return {
         externalId: null,
         url: null,
         status: 'failed',
         expiresAt: null,
         access: null,
-        fields: {},
+        // `null` rather than an empty bag: nothing in the cluster was read, so this answer states
+        // nothing about the captured fields, and an empty statement would REPLACE (erase) whatever
+        // the provision managed to capture about a namespace that is already unfindable.
+        fields: null,
+        error:
+          'this environment record carries no namespace, so there is nothing in the cluster to ' +
+          'read its status from: the provision never got as far as creating one.',
       }
     }
     const client = this.makeClient(config, req.resolveSecret)
-    const status = await this.deploymentStatus(client, config, namespace)
+    const rollout = await this.deploymentStatus(client, config, namespace)
     const url = await this.resolveLiveUrl(client, config, namespace, req.provisionFields)
+    // Only once the WORKLOAD is otherwise ready, and only for a URL derived from a host template.
+    // Both narrowings matter. Grading earlier would race a controller that has not looked at a
+    // just-applied Ingress yet, and a status-backed source already waits on the live address, so
+    // it cannot publish a host the cluster never assigned. A template source can: it is config
+    // text, and this is the one check that asks the cluster whether it agrees.
+    if (rollout.status === 'ready' && config.url.source === 'ingressTemplate') {
+      const admission = await this.ingressAdmission(client, config, namespace)
+      if (admission.status === 'unrouted') {
+        return {
+          externalId: namespace,
+          url,
+          status: 'failed',
+          expiresAt: null,
+          access: null,
+          fields: req.provisionFields,
+          // Reported rather than thrown, which is what `ProvisionedEnvironment.error` is for: this
+          // is a deterministic rejection the provider is not surprised by. `config_incomplete` is
+          // the same class PR #2075 gave the sibling refusal (an environment URL that cannot reach
+          // this cluster), and it is the right disposition twice over: the manifests are not
+          // fixable evidence here, and `manifest_invalid` would spend a container inviting an agent
+          // to guess a class name off a cluster catalog it cannot see.
+          error: `The environment URL cannot be served: ${admission.problem}`,
+          reason: 'config_incomplete',
+        }
+      }
+      // `pending` withholds `ready` rather than failing: nothing has claimed the Ingress YET, and
+      // the provision's own deadline is what turns a route that never arrives into a `timeout`.
+      // It says which pending this is, because that deadline used to report a bare twenty-minute
+      // wait on an environment whose workload had been healthy for nineteen of them, and the
+      // reader has to know the hold-up is the ROUTE and not the app.
+      if (admission.status === 'pending') {
+        return {
+          externalId: namespace,
+          url,
+          status: 'provisioning',
+          expiresAt: null,
+          access: null,
+          fields: req.provisionFields,
+          statusNote: `the workload is ready but the environment URL is not routed yet: ${admission.detail}`,
+        }
+      }
+      // `unknown` falls through to publish exactly as before. That is the deliberate disposition
+      // for a check this cluster will not answer (the ServiceAccount may hold no cluster-scoped
+      // `ingressclasses` grant): a capability that cannot run is a PASS-THROUGH, byte-for-byte the
+      // prior behaviour, never a refusal built on an answer nobody gave.
+    }
     return {
       externalId: namespace,
       url,
-      status,
+      status: rollout.status,
       expiresAt: null,
       access: null,
       fields: req.provisionFields,
+      // Present only while the rollout is outstanding, and re-derived from THIS read every poll,
+      // so it can never outlive the state it describes.
+      ...(rollout.note ? { statusNote: rollout.note } : {}),
+      // The other half of the same rule, for the verdict that is a fault: without it a rollout
+      // that gave up on a NAMED workload was persisted as the generic 'Provisioning failed'
+      // fallback, which is the defect the note exists to fix, one status over.
+      ...(rollout.error ? { error: rollout.error } : {}),
     }
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }> {
-    const config = this.parseConfig(req.manifest)
+    // The CONNECTION, not the full config: deleting a namespace needs the apiserver and nothing
+    // the provisioning half of the config describes (see {@link parseConnection}).
+    const config = this.parseConnection(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) return { status: 'torn_down' }
     const client = this.makeClient(config, req.resolveSecret)
@@ -188,13 +410,82 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     return { status: 'torn_down' }
   }
 
+  /**
+   * Confirm the namespace this environment lived in is gone, by reading it back.
+   *
+   * A namespace `DELETE` is asynchronous: the apiserver accepts it immediately and the namespace
+   * sits in `Terminating` until its finalizers drain, which for a workload holding a PVC or a
+   * webhook can be minutes. So the teardown call returning is genuinely not the environment being
+   * gone, and this is the read that settles it: a 404 is the proof, an `Active` namespace means
+   * the delete did nothing, and `Terminating` is reported as still-present-but-on-its-way rather
+   * than as either, so a caller can re-probe instead of concluding.
+   */
+  async confirmTeardown(req: EnvironmentTeardownRequest): Promise<TeardownProbe> {
+    const namespace = req.provisionFields.namespace ?? req.externalId
+    // No namespace was ever recorded, so there is nothing to look for. Deliberately NOT reported
+    // as `gone`: nothing was observed, and a provision that failed before it created a namespace
+    // is indistinguishable here from a record that lost its external id.
+    if (!namespace) {
+      // Permanent: no later probe invents an id the record never had.
+      return {
+        state: 'unknown',
+        retryable: false,
+        reason: 'No namespace recorded for this environment.',
+      }
+    }
+    let config: KubernetesConnectionConfig
+    try {
+      // Same narrow read as `teardown` — the probe reads the namespace back off the apiserver, so
+      // it is answerable for exactly the configs a teardown is.
+      config = this.parseConnection(req.manifest)
+    } catch (err) {
+      // A manifest whose apiserver coordinates no longer parse is fixed by editing it, not by
+      // re-probing.
+      return {
+        state: 'unknown',
+        retryable: false,
+        reason: getErrorMessage(err),
+      }
+    }
+    const client = this.makeClient(config, req.resolveSecret)
+    let res: Response
+    try {
+      res = await client.fetch('GET', namespaceUrl(config, namespace), undefined, READ_TIMEOUT_MS)
+    } catch (err) {
+      return {
+        state: 'unknown',
+        retryable: true,
+        // The DETAIL only, deliberately without the hint: the hints are written for the connect
+        // form's Test button ("…then test again"), and this reason is read on a disposal card by
+        // someone who is not testing a connection. What they need is the exact transport failure.
+        reason: `Could not read namespace '${namespace}': ${describeConnectionFailure(err).detail}`,
+      }
+    }
+    if (res.status === 404) return { state: 'gone' }
+    if (!res.ok) {
+      // A 401/403 is the apiserver refusing the read, not an answer about the namespace. Reporting
+      // it as `gone` would turn an expired token into a clean teardown proof on every run.
+      return {
+        state: 'unknown',
+        retryable: true,
+        reason: `Could not read namespace '${namespace}' (HTTP ${res.status}): ${await safeText(res)}`,
+      }
+    }
+    const phase = await namespacePhase(res)
+    return {
+      state: 'present',
+      terminating: phase === 'Terminating',
+      ...(phase ? { detail: `Namespace '${namespace}' is ${phase}.` } : {}),
+    }
+  }
+
   async testConnection(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {
     if (!req.manifest) return { ok: false, message: 'Expected a Kubernetes environment manifest.' }
     let config: KubernetesEnvironmentConfig
     try {
       config = this.parseConfig(req.manifest)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
     const client = this.makeClient(config, req.resolveSecret)
     try {
@@ -212,7 +503,13 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         }),
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // The apiserver never answered, so there is no status to map: the failure is the thrown
+      // transport error, whose real cause hangs off `.cause` and reads as a bare "fetch failed"
+      // if taken at face value.
+      return connectionFailureResult(err, {
+        subject: 'the Kubernetes apiserver',
+        target: apiBase(config),
+      })
     }
   }
 
@@ -230,7 +527,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
    * synchronous REST `provision()` path (raw manifests, no helm/images/secret-injections).
    * Throws when rendering is required but the engine supplied no deploy inputs (a wiring bug).
    */
-  private buildProvisionJob(req: ProvisionEnvironmentRequest): DeployProvisionJob | null {
+  private async buildProvisionJob(
+    req: ProvisionEnvironmentRequest,
+  ): Promise<DeployProvisionJob | null> {
     const config: KubernetesProvisionConfig = this.parseConfig(req.manifest)
     if (!needsContainerRender(config)) return null
     const deploy = req.deploy
@@ -241,6 +540,17 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       )
     }
     const { namespace, vars } = this.provisionContext(config, req.inputs)
+    this.assertReachableUrl(config, vars)
+    // Prepare the namespace + its pull credential over the apiserver BEFORE handing the job over,
+    // so both render paths behave the same way about private registries. Creating the namespace
+    // early is idempotent (the deploy container applies into it either way), and it is what makes
+    // a Secret placeable at all: there is nowhere to put one until it exists.
+    //
+    // No resources are passed, and that is the honest limit of this path: the manifests are
+    // rendered inside the container, so the ServiceAccounts they declare cannot be enumerated
+    // here and only `default` is attached. The recorded step says so rather than implying the
+    // same coverage the raw path gets.
+    await this.prepareRegistryAuth(config, namespace, req, vars)
     const spec = buildDeployJobSpec({
       jobId: deploy.ref.jobId,
       config,
@@ -251,7 +561,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     })
     return {
       ref: deploy.ref,
-      spec: spec as unknown as Record<string, unknown>,
+      spec,
       kind: 'deploy',
       options: { image: 'deploy' },
     }
@@ -271,6 +581,30 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
    * optional rendered image) in one place, so `provision()`, `buildProvisionJob()`, and
    * `finalizeProvision()` derive them identically.
    */
+  /**
+   * Refuse, before anything is created, a configuration whose environment URL would not reach
+   * this cluster.
+   *
+   * Both provisioning paths call it as their FIRST act after resolving the vars, and the ordering
+   * is the point. The namespace is half of what mis-resolves, so the grade cannot happen until
+   * `provisionContext` has run; every apiserver write happens after it, so a refusal leaves
+   * nothing behind. It used to sit at the end of `provision()`, past the namespace, past the
+   * registry pull Secret holding the run's VCS credential and past every applied workload, and a
+   * failed provision records no `externalId` for `teardown()` to read: each refused run leaked a
+   * live namespace nothing could reclaim.
+   *
+   * `config_incomplete` is the reason because the fix is a person editing the workspace's
+   * connection, and the one thing an automated fixer must not do here is touch the checkout: the
+   * manifests are correct.
+   */
+  private assertReachableUrl(
+    config: KubernetesProvisionConfig,
+    vars: Record<string, string>,
+  ): void {
+    const unreachable = describeUnreachableIngressHost(config.url, vars)
+    if (unreachable) throw environmentFailure(unreachable, 'config_incomplete')
+  }
+
   private provisionContext(
     config: KubernetesProvisionConfig,
     inputs: Record<string, string>,
@@ -301,14 +635,187 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     )
   }
 
+  /**
+   * The container-render path's half of the registry wiring: ensure the namespace exists, then
+   * run the same best-effort credential wiring the inline path runs, with no manifests to read.
+   *
+   * The namespace has to be created here because the credential needs somewhere to live and the
+   * render container holds no platform credential to make a Secret with. That write is only
+   * correct where the backend's namespace is the one the deploy lands in
+   * ({@link deployTargetsBackendNamespace}): a kustomize overlay that picks its own namespace is
+   * resolved inside the container, so pre-creating here would leave an empty namespace nothing
+   * tears down and a credential no pod reads, under a log line claiming success.
+   *
+   * Everything after the gate sits inside the best-effort envelope, the namespace create
+   * included: an apiserver blip or a service account without namespace-create RBAC must cost the
+   * convenience, never a provision that used to succeed without any of this (the deploy
+   * container creates the namespace itself either way).
+   */
+  private async prepareRegistryAuth(
+    config: KubernetesProvisionConfig,
+    namespace: string,
+    req: ProvisionEnvironmentRequest,
+    vars: Record<string, string>,
+  ): Promise<void> {
+    // The cluster gate is asked first, and by the method that owns it: on a remote cluster the
+    // namespace question never arises, and reporting the overlay's namespace as the reason would
+    // name a configuration detail in place of the actual one.
+    if (isLocalThrowawayCluster(config) && !deployTargetsBackendNamespace(config)) {
+      await this.recordRegistryAuth(req, Date.now(), {
+        outcome: 'success',
+        detail: describeRegistryAuthSkip({ kind: 'namespace-not-derivable' }),
+      })
+      return
+    }
+    await this.ensureRegistryAuth(null, config, namespace, [], req, vars)
+  }
+
+  /**
+   * Give the per-PR namespace a registry pull credential, on a THROWAWAY local cluster only.
+   *
+   * Why this exists: the namespace is minted seconds before the manifests are applied, so no
+   * pull secret can be waiting in it, and a scaffolded service's image lands in its VCS host's
+   * registry, private until somebody makes it public. The credential that fixes it is already
+   * resolved for the clone, so the whole thing needs no configuration and no operator step.
+   *
+   * Three properties hold it together. It is gated on the apiserver naming THIS MACHINE (see
+   * {@link isLocalThrowawayCluster}), because pushing a git credential into every per-PR
+   * namespace is right for a cluster running here and is not a decision to make implicitly
+   * against a shared one. It only ever fires when the image's registry is one the clone
+   * credential plausibly covers. And it is BEST-EFFORT: a deployment whose packages are already
+   * public pulls fine without it, so a refused write (missing RBAC on a hand-rolled
+   * ServiceAccount) is reported and stepped over rather than failing a provision that would
+   * otherwise have succeeded.
+   *
+   * Every path through it records a `registry-auth` step, the skips included. An unauthenticated
+   * pull is the normal case and is ALSO what a private package looks like right up until the
+   * kubelet 403s, so a silent skip is the one outcome that leaves a reader unable to tell which
+   * happened. `client` is null where the caller has none yet (the container-render path), so the
+   * apiserver client is built inside the envelope with everything else.
+   *
+   * @param resources the parsed manifests, MUTATED-BY-COPY through the returned array: the
+   *   caller applies what comes back, not what it passed in.
+   */
+  private async ensureRegistryAuth(
+    client: KubernetesApiClient | null,
+    config: KubernetesProvisionConfig,
+    namespace: string,
+    resources: KubernetesResource[],
+    req: ProvisionEnvironmentRequest,
+    vars: Record<string, string>,
+  ): Promise<KubernetesResource[]> {
+    const startedAt = Date.now()
+    if (!isLocalThrowawayCluster(config)) {
+      await this.recordRegistryAuth(req, startedAt, {
+        outcome: 'success',
+        detail: describeRegistryAuthSkip({
+          kind: 'not-local-cluster',
+          apiServerHost: apiServerHostname(config),
+        }),
+      })
+      return resources
+    }
+    try {
+      // The clone thunk mints a short-lived token, so it is only pulled once an image is known
+      // to name a registry a credential could cover: the port documents the thunk as lazy
+      // precisely so a provision that needs no checkout never pays the mint.
+      const images = registryAuthImageCandidates(config, vars)
+      const clone = registriesNamedByImages(images).length > 0 ? await req.clone?.() : undefined
+      const verdict = resolveRegistryAuth({
+        images,
+        clone,
+        ...(req.inputs.repoOwner !== undefined ? { repoOwner: req.inputs.repoOwner } : {}),
+      })
+      if (verdict.kind !== 'wired') {
+        await this.recordRegistryAuth(req, startedAt, {
+          outcome: 'success',
+          detail: describeRegistryAuthVerdict(verdict),
+        })
+        return resources
+      }
+      const api = client ?? this.makeClient(config, req.resolveSecret)
+      if (!client) await this.ensureNamespace(api, config, namespace)
+      await this.applyResource(api, config, namespace, buildPullSecret(namespace, verdict.auths), {
+        fieldManager: REGISTRY_AUTH_FIELD_MANAGER,
+      })
+      // Two disjoint halves, and the split is what keeps the secret attached. An account the
+      // manifests declare takes the entry inside their OWN body, because `imagePullSecrets` is
+      // an atomic list that one field manager owns whole. Everything else is patched here.
+      const patchedAccounts = serviceAccountsNeedingOwnPatch(resources)
+      for (const account of patchedAccounts) {
+        await this.applyResource(
+          api,
+          config,
+          namespace,
+          buildServiceAccountPullSecretPatch(account, namespace),
+          { fieldManager: REGISTRY_AUTH_FIELD_MANAGER },
+        )
+      }
+      const withSecret = withPullSecretOnServiceAccounts(resources)
+      await this.recordRegistryAuth(req, startedAt, {
+        outcome: 'success',
+        detail: describeRegistryAuthVerdict(verdict, {
+          auths: verdict.auths,
+          patchedAccounts,
+          declaredAccounts: resources
+            .filter((r) => r.kind === 'ServiceAccount' && r.metadata.name)
+            .map((r) => r.metadata.name!),
+          manifestsVisible: resources.length > 0,
+        }),
+      })
+      return withSecret
+    } catch (error) {
+      // Best-effort by design (see above), so the cause is REPORTED and the provision continues
+      // with the manifests exactly as they were.
+      await this.recordRegistryAuth(req, startedAt, {
+        outcome: 'failure',
+        error: getErrorMessage(error),
+        detail: 'The environment will still provision; a private image will fail to pull.',
+      })
+      return resources
+    }
+  }
+
+  /** Stream one registry-auth verdict to the provisioning log, when a sink is wired. */
+  private async recordRegistryAuth(
+    req: ProvisionEnvironmentRequest,
+    startedAt: number,
+    log: { outcome: 'success' | 'failure'; detail: string; error?: string },
+  ): Promise<void> {
+    await req.recordStep?.({
+      name: 'registry-auth',
+      outcome: log.outcome,
+      durationMs: Date.now() - startedAt,
+      detail: log.detail,
+      ...(log.error ? { error: log.error } : {}),
+    })
+  }
+
   private async apply(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
     namespace: string,
     resource: KubernetesResource,
   ): Promise<void> {
+    return this.applyResource(client, config, namespace, resource)
+  }
+
+  /**
+   * Server-side apply one resource. The field manager is a parameter because the pull-secret
+   * writes MUST NOT share the manifests' one: an apply is a manager's complete desired state, so
+   * a later manifest apply of the same ServiceAccount under the same manager would take the
+   * `imagePullSecrets` it does not mention straight back off again.
+   */
+  private async applyResource(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+    resource: KubernetesResource,
+    options?: { fieldManager?: string },
+  ): Promise<void> {
     const name = resource.metadata.name!
-    const url = `${resourceUrl(config, resource.apiVersion, resource.kind, namespace, name)}?fieldManager=${FIELD_MANAGER}&force=true`
+    const manager = options?.fieldManager ?? FIELD_MANAGER
+    const url = `${resourceUrl(config, resource.apiVersion, resource.kind, namespace, name)}?fieldManager=${manager}&force=true`
     // Server-side apply with the `apply-patch+yaml` content type and a JSON body. JSON is a
     // subset of YAML, so the apiserver parses the JSON payload fine — and this is the content
     // type every apiserver since 1.22 accepts (the `apply-patch+json` media type only exists
@@ -322,25 +829,50 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       'application/apply-patch+yaml',
     )
     if (!res.ok) {
-      throw new Error(
-        `Failed to apply ${resource.kind}/${name} (HTTP ${res.status}): ${await safeText(res)}`,
+      const body = await safeText(res)
+      // Classified, not just reported. The verbatim apiserver text is what a person reads, and
+      // the `reason` is what decides whether an automated fixer may be dispatched at this
+      // failure at all: only a document the apiserver rejected on its own merits is something a
+      // checkout edit can address. See `classifyApplyFailure`.
+      throw environmentFailure(
+        `Failed to apply ${resource.kind}/${name} (HTTP ${res.status}): ${body}`,
+        classifyApplyFailure(res.status, body),
       )
     }
   }
 
-  /** Aggregate the namespace's Deployments into one lifecycle verdict. */
+  /**
+   * Aggregate the namespace's Deployments into one lifecycle verdict, plus the note that says
+   * what a `provisioning` verdict is waiting on ({@link reduceRolloutProgress}).
+   *
+   * The note is the whole reason this returns a pair rather than a bare status: `provisioning` is
+   * what keeps the deployer's readiness wait alive, and it is persisted as the environment's
+   * `statusNote`, so the run states which workloads have not landed instead of only how long it
+   * has been waiting for them.
+   */
   private async deploymentStatus(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
     namespace: string,
-  ): Promise<EnvironmentStatus> {
+  ): Promise<{ status: EnvironmentStatus; note?: string; error?: string }> {
     const res = await client.fetch(
       'GET',
       resourceUrl(config, 'apps/v1', 'Deployment', namespace),
       undefined,
       READ_TIMEOUT_MS,
     )
-    if (res.status === 404) return 'failed'
+    // A 404 on the namespace's own collection means the namespace is gone. It SAYS so, because
+    // the alternative is what the caller records with nothing to record: the literal
+    // 'Provisioning failed' on an environment that was in fact deleted out from under the run.
+    if (res.status === 404) {
+      return {
+        status: 'failed',
+        error:
+          `namespace '${namespace}' no longer exists: the apiserver answered 404 for its ` +
+          'Deployment list, so whatever stood this environment up has been deleted (a TTL ' +
+          'reclaim, a manual cleanup, or a provision that never created it).',
+      }
+    }
     // A credential / permission error (the apiserver rejecting the token, or the
     // ServiceAccount lacking RBAC to read Deployments) will NEVER self-heal — so surface it as a
     // hard failure (the caller's `refreshStatus` logs it to the provisioning log and the gate
@@ -352,17 +884,48 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
           `ServiceAccount token and its RBAC: ${await safeText(res)}`,
       )
     }
-    if (!res.ok) return 'provisioning'
-    const body = (await res.json()) as { items?: unknown[] }
-    const items = Array.isArray(body.items) ? body.items : []
-    if (items.length === 0) return 'ready' // nothing to roll out (e.g. a static Service)
-    let anyPending = false
-    for (const item of items) {
-      const readiness = classifyDeploymentReadiness(item)
-      if (readiness === 'gone') return 'failed'
-      if (readiness !== 'ready') anyPending = true
+    // A transient read failure keeps polling, but it SAYS SO: an environment held at
+    // `provisioning` because the platform cannot read the cluster is a different thing from one
+    // held there because a workload is slow, and until this note existed the two were the same
+    // silence for up to twenty minutes.
+    if (!res.ok) {
+      return {
+        status: 'provisioning',
+        note: `the Deployment status read is failing (HTTP ${res.status}); still polling`,
+      }
     }
-    return anyPending ? 'provisioning' : 'ready'
+    const body = (await res.json()) as { items?: unknown[] }
+    return reduceRolloutProgress(Array.isArray(body.items) ? body.items : [])
+  }
+
+  /**
+   * Whether anything in the cluster will serve the host an `ingressTemplate` URL names: the
+   * namespace's Ingresses graded against the cluster's own `IngressClass` catalog. The reduction
+   * is {@link classifyIngressAdmission}, which owns what this may and may not fail on.
+   *
+   * The catalog read is cluster-scoped, and the ServiceAccount's ClusterRole may not cover it. A
+   * refusal or an unreadable payload therefore becomes `read: false`, which grades to `unknown` and
+   * changes nothing: a 403 mistaken for an empty catalog would fail every environment on a working
+   * cluster. `cat-factory k3s` grants `ingressclasses` so a cluster it provisions can answer.
+   */
+  private async ingressAdmission(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+  ): Promise<IngressAdmission> {
+    const ingressList = await this.getJson(
+      client,
+      resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace),
+    )
+    const items = (ingressList as { items?: unknown } | null)?.items
+    if (!Array.isArray(items)) {
+      return { status: 'unknown', detail: `could not list Ingresses in namespace ${namespace}` }
+    }
+    const catalogBody = await this.getJson(client, ingressClassesUrl(config))
+    return classifyIngressAdmission(
+      items.map(readIngressAdmissionFacts),
+      readIngressClassCatalog(catalogBody),
+    )
   }
 
   /** Resolve the live URL, reading the status host/address for status-backed sources. */

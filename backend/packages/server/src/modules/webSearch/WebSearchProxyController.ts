@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { makeWaitUntil } from '../../http/waitUntil.js'
@@ -39,8 +40,11 @@ export function webSearchProxyController(): Hono<AppEnv> {
 
     const secret = config.auth.sessionSecret
     if (!secret) {
-      logger.error({ scope: 'webSearchProxy' }, 'web-search proxy: session secret not configured')
-      return c.json({ error: { message: 'Web search proxy is not configured' } }, 503)
+      logger.error('web-search proxy: session secret not configured', { scope: 'webSearchProxy' })
+      return c.json(
+        { error: { code: 'unavailable', message: 'Web search proxy is not configured' } },
+        503,
+      )
     }
 
     // Same model-locked container token the LLM proxy verifies: only our own per-run
@@ -48,8 +52,11 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const sessions = new ContainerSessionService({ secret })
     const session = await sessions.verify(bearer(c.req.header('authorization')))
     if (!session) {
-      logger.warn({ scope: 'webSearchProxy' }, 'web-search proxy: invalid or expired session token')
-      return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
+      logger.warn('web-search proxy: invalid or expired session token', { scope: 'webSearchProxy' })
+      return c.json(
+        { error: { code: 'unauthorized', message: 'Invalid or expired session token' } },
+        401,
+      )
     }
 
     // Resolve the search upstream from the run's account settings (web-search keys live in
@@ -78,11 +85,11 @@ export function webSearchProxyController(): Hono<AppEnv> {
         userId: session.userId,
       })
     ) {
-      logger.warn(
-        { scope: 'webSearchProxy', workspaceId: session.workspaceId },
-        'web-search proxy: spend budget exhausted — refusing search',
-      )
-      return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
+      logger.warn('web-search proxy: spend budget exhausted — refusing search', {
+        scope: 'webSearchProxy',
+        workspaceId: session.workspaceId,
+      })
+      return c.json({ error: { code: 'spend_exhausted', message: 'Spend budget exhausted' } }, 402)
     }
 
     const query = (c.req.query('q') ?? '').trim()
@@ -104,32 +111,41 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const waitUntil = makeWaitUntil(c)
     const recordSearch = (resultCount: number): void => {
       if (!searchQueryObservability) return
+      // Swallowed: observability never breaks a search — but a sink that rejects every write
+      // leaves the run's search history simply absent, which reads as "the agent searched for
+      // nothing" rather than "we failed to record it".
       waitUntil(
-        searchQueryObservability
-          .record({
+        runBestEffort(
+          log,
+          'webSearch.recordQuery',
+          () =>
+            searchQueryObservability.record({
+              workspaceId: session.workspaceId,
+              executionId: session.executionId,
+              agentKind: session.agentKind,
+              provider: upstream.provider,
+              query,
+              resultCount,
+            }),
+          {
             workspaceId: session.workspaceId,
             executionId: session.executionId,
-            agentKind: session.agentKind,
             provider: upstream.provider,
-            query,
-            resultCount,
-          })
-          .catch(() => {
-            // Swallowed: observability never breaks a search.
-          }),
+          },
+        ),
       )
     }
 
     try {
       const { results } = await upstream.search(query)
-      log.info({ resultCount: results.length }, 'web-search proxy: served search')
+      log.info('web-search proxy: served search', { resultCount: results.length })
       recordSearch(results.length)
       // Shape the response as SearXNG's `format=json` payload so the extension reads
       // `results[].{url,title,content}` unchanged.
       return c.json({ query, number_of_results: results.length, results })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      log.error({ err: message }, 'web-search proxy: upstream search failed')
+      const message = getErrorMessage(err)
+      log.error('web-search proxy: upstream search failed', { err: message })
       recordSearch(0)
       // SearXNG-shaped empty result on failure so the agent degrades gracefully
       // (no results) instead of the tool hard-erroring mid-run.

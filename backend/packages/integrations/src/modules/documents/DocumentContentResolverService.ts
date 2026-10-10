@@ -32,7 +32,7 @@ export class DocumentContentResolverService implements DocumentContentResolver {
     externalId: string,
   ): Promise<DocumentContent> {
     const { provider, credentials } = await this.resolve(workspaceId, source)
-    return provider.fetchDocument(credentials, externalId)
+    return provider.fetchDocument(credentials, externalId, workspaceId)
   }
 
   async probeVersion(
@@ -41,7 +41,7 @@ export class DocumentContentResolverService implements DocumentContentResolver {
     externalId: string,
   ): Promise<string> {
     const { provider, credentials } = await this.resolve(workspaceId, source)
-    return provider.probeVersion(credentials, externalId)
+    return provider.probeVersion(credentials, externalId, workspaceId)
   }
 
   /** Resolve the provider + this workspace's connection credentials for a source. */

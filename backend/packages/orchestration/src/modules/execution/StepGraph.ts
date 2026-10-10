@@ -1,5 +1,8 @@
 import type { Clock, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionTargets } from '@cat-factory/agents'
+import { restartDeployFixState, restartEnvironmentInvestigationState } from './deployer.logic.js'
+import { restartRalphState } from './ralph.logic.js'
 
 /**
  * The pure, synchronous step/cursor mutators of the execution engine — the dependency-free
@@ -16,12 +19,30 @@ import { companionTargets } from '@cat-factory/agents'
  * pulling in the whole persistence/emission surface.
  */
 export class StepGraph {
-  constructor(private readonly clock: Clock) {}
+  constructor(
+    private readonly clock: Clock,
+    /**
+     * The app-owned agent-kind registry, so a DEPLOYMENT-registered companion's targets are
+     * found by the same producer search the built-ins use. Optional because a unit test
+     * exercising the pure step mutators has no registry to give and needs none: the built-in
+     * catalog answers for every built-in companion.
+     */
+    private readonly agentKindRegistry?: AgentKindRegistry,
+  ) {}
 
   /** Transition a step into `working`, stamping its start time once, and resume its clock. */
   startStep(step: PipelineStep): void {
     step.state = 'working'
-    if (step.startedAt == null) step.startedAt = this.clock.now()
+    if (step.startedAt == null) {
+      step.startedAt = this.clock.now()
+      // A FRESH attempt, which is the one moment the two cross-attempt facts advance: this
+      // guard is false when the step merely re-enters `working` after a pause, so neither is
+      // inflated by a human approving. `firstStartedAt` is stamped once and outlives every
+      // reset (see its contract doc); `attempts` counts the starts a later reader would
+      // otherwise have to infer from a failure trail that a clean re-run leaves empty.
+      step.firstStartedAt ??= step.startedAt
+      step.attempts = (step.attempts ?? 0) + 1
+    }
     // (Re)entering `working` means the step is no longer parked on a human: resume
     // its duration clock (see {@link pauseStepForInput}).
     step.pausedAt = null
@@ -63,15 +84,52 @@ export class StepGraph {
     step.state = 'pending'
     step.startedAt = null
     step.finishedAt = null
+    // `firstStartedAt`, `attempts` and `dispatches` are deliberately NOT cleared: they
+    // are the record that this step ran BEFORE, which is exactly what a reset destroys
+    // everywhere else. The external trace needs them to give a re-run step a parent span that
+    // still contains the children of its earlier attempts.
     step.pausedAt = null
     step.jobId = undefined
     step.approval = null
     step.subtasks = undefined
+    // Drop the prior run's liveness heartbeat so a re-run doesn't briefly render a stale
+    // "active Ns ago" before its first fresh poll re-stamps it.
+    step.lastActivityAt = null
     step.progress = 0
     step.output = undefined
     // Drop the prior run's structured output too, so a re-run that produces no `custom`
     // doesn't leave stale JSON for the `generic-structured` result view to render.
     step.custom = undefined
+    // Drop the prior run's reproduction proof: it describes a tree that no longer exists, and —
+    // unlike the validation report, which a re-run always re-produces when checks are configured
+    // — this one can legitimately go present → absent (a looped-back `repro-test` step has its
+    // `custom` cleared above, so the re-dispatch resolves no spec and nothing overwrites it).
+    step.reproduction = undefined
+    // Drop the previous dispatch's tool-server (MCP) resolution, so a re-armed step stops naming
+    // servers nothing has asked for yet. The record is attempt-scoped by construction (one harness,
+    // one secret resolver, one set of OAuth grants), and `stepToolServersSchema` is where its
+    // absence is defined: clearing here is what makes "re-armed, not yet re-dispatched" one of the
+    // cases that definition names, alongside the counters above, which keep answering "did this
+    // step run before".
+    //
+    // Safe to clear because it is the ONE field `recordDispatchAttribution` pins that no
+    // settle-time path consumes. `model`, `subscriptionTokenId` and `initiatedByUserId` ARE read
+    // back when the job's usage lands, which is why they are guarded on presence there and why
+    // clearing them here would put every re-run's `token_usage` row back to provider "unknown".
+    // `skillVersions` and `promptRevision` need no line at all: both are assigned UNCONDITIONALLY
+    // at dispatch (to `undefined` when there is nothing to pin), so they self-clear. This field
+    // cannot, because only a CONTAINER re-dispatch rewrites it. Without this line the stale record
+    // survives a step left sitting `pending`, one re-dispatched INLINE (whose handle carries no
+    // resolution, so the guard in `recordDispatchAttribution` would preserve the container round's),
+    // and one whose run is abandoned before it redispatches at all.
+    step.toolServers = undefined
+    // The DELEGATED retry budget, which is per run of the step and not per step. Its contract doc
+    // says exactly why it is its own counter rather than a read of `delegated.attempts.length`
+    // (the attempt log is deliberately kept across a human re-run, being the evidence for why the
+    // step is being run again), and leaving it set is the very failure that reasoning describes: a
+    // step re-run after one recovered external failure would spend its first retryable verdict on
+    // a budget the previous run used up, and fail the run as `delegated_failed` instead.
+    step.delegatedRetries = undefined
     step.rework = undefined
     // Clear the live container handle + the deployer fan-out state, so a re-run of a `deployer`
     // step re-provisions from scratch (a stale `deployEnvs` would otherwise let it skip straight to
@@ -82,6 +140,27 @@ export class StepGraph {
     step.deployFrameId = undefined
     step.deployProvisioning = undefined
     step.deployPrimaryFrameId = undefined
+    // A stale readiness wait would park the re-run on the SUPERSEDED environment's id — polling,
+    // and then reporting on, an environment this attempt never provisioned.
+    step.deployWait = undefined
+    // Re-arm BOTH remediation loops for a fresh provisioning cycle, keeping the rounds already on
+    // the record: the counters are per cycle and the attempt log is per RUN, because the run's
+    // verification report reduces it. Dropping the whole of `deployFix` (what this used to do)
+    // made a frame the fixer had machine-edited before a loop-back report as one nothing was ever
+    // attempted on; leaving `environmentInvestigation` untouched (what this used to do) sent the
+    // re-run's first failure straight to "the budget is spent", explained by the SUPERSEDED
+    // environment's verdict. Why each field survives or goes: `deployer.logic.ts`.
+    step.deployFix = restartDeployFixState(step.deployFix)
+    step.environmentInvestigation = restartEnvironmentInvestigationState(
+      step.environmentInvestigation,
+    )
+    // Re-seed a `ralph` step's loop state: unlike the fields above it must NOT be dropped (a
+    // ralph step with no state dispatches with no completion command and silently degrades to a
+    // one-shot coder), but keeping it as-is is just as wrong — a spent `attempts` would send the
+    // re-run's very first verdict straight to `exhausted`. Keep the frozen config, zero the
+    // counters; a non-ralph step is untouched.
+    const ralph = restartRalphState(step.ralph)
+    if (ralph) step.ralph = ralph
   }
 
   /**
@@ -119,6 +198,13 @@ export class StepGraph {
    * work instead of re-attaching to its evicted job), the producer is handed the
    * `rework` feedback + started, and the instance cursor is moved back to the producer.
    * Shared by the automatic companion loop and the human "request changes" path.
+   *
+   * It also CLEARS the companion flags that record how a loop ENDED (`exceeded`, `stalled`,
+   * `capSettledByPolicy`), because this is the one funnel every re-arm goes through and the loop
+   * demonstrably has not ended. Left set, each would go on making a false claim about a run that
+   * went on to converge: that a person is still being waited on, that the producer stopped
+   * responding, that policy waved the run past the bar. The next cycle recomputes all three from
+   * its own evidence, so re-arming them costs nothing if the condition persists.
    */
   rerunProducerThrough(
     instance: ExecutionInstance,
@@ -128,6 +214,12 @@ export class StepGraph {
   ): void {
     for (let i = producerIndex; i <= companionIndex; i++) {
       this.resetStepForRerun(instance.steps[i]!)
+    }
+    const companion = instance.steps[companionIndex]?.companion
+    if (companion) {
+      companion.exceeded = undefined
+      companion.stalled = undefined
+      companion.capSettledByPolicy = undefined
     }
     const producer = instance.steps[producerIndex]!
     producer.rework = rework
@@ -142,7 +234,10 @@ export class StepGraph {
    * extra-round resolution.
    */
   companionProducerIndex(instance: ExecutionInstance, companionIndex: number): number {
-    const targets = companionTargets(instance.steps[companionIndex]!.agentKind)
+    const targets = companionTargets(
+      instance.steps[companionIndex]!.agentKind,
+      this.agentKindRegistry,
+    )
     for (let i = companionIndex - 1; i >= 0; i--) {
       if (targets.includes(instance.steps[i]!.agentKind)) return i
     }

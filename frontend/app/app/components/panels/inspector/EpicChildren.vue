@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The epic inspector body: the full tree of member tasks (which may live under different
 // services/modules), grouped service → module → task. Each task row selects it. Membership
@@ -52,34 +53,31 @@ const groups = computed(() => {
     default-open
   >
     <template #actions>
-      <span class="text-[11px] text-slate-500">{{
+      <span class="text-2xs text-dimmed">{{
         t('inspector.epicChildren.doneCount', { done, total: members.length })
       }}</span>
     </template>
 
-    <div v-if="members.length === 0" class="text-[11px] text-slate-500">
+    <div v-if="members.length === 0" class="text-2xs text-dimmed">
       {{ t('inspector.epicChildren.empty') }}
     </div>
 
     <div v-else class="space-y-2">
-      <div
-        v-for="(group, gi) in groups"
-        :key="gi"
-        class="rounded-md border border-slate-700/60 p-2"
-      >
-        <div class="mb-1 flex items-center gap-1 text-[11px] font-medium text-slate-300">
-          <UIcon name="i-lucide-box" class="h-3 w-3 text-slate-500" />
+      <div v-for="(group, gi) in groups" :key="gi" class="rounded-md border border-muted/60 p-2">
+        <div class="mb-1 flex items-center gap-1 text-2xs font-medium text-toned">
+          <UIcon name="i-lucide-box" class="h-3 w-3 text-dimmed" />
           {{ group.service?.title ?? t('inspector.epicChildren.unassigned') }}
         </div>
         <div v-for="(mod, mi) in [...group.modules.values()]" :key="mi" class="ps-1">
-          <div v-if="mod.module" class="text-[10px] uppercase tracking-wide text-slate-500">
+          <SectionLabel v-if="mod.module">
             {{ mod.module.title }}
-          </div>
-          <button
+          </SectionLabel>
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-for="task in mod.tasks"
             :key="task.id"
-            type="button"
-            class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-start text-xs text-slate-200 hover:bg-slate-800"
+            class="flex w-full items-center gap-1.5 rounded-sm px-1 py-0.5 text-start text-xs text-default hover:bg-elevated"
             @click="ui.select(task.id)"
           >
             <span
@@ -87,10 +85,10 @@ const groups = computed(() => {
               :style="{ backgroundColor: STATUS_META[task.status].color }"
             />
             <span class="truncate">{{ task.title }}</span>
-            <span class="ms-auto shrink-0 text-[10px] text-slate-500">
+            <span class="ms-auto shrink-0 text-3xs text-dimmed">
               {{ STATUS_META[task.status].label }}
             </span>
-          </button>
+          </UButton>
         </div>
       </div>
     </div>

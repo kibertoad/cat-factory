@@ -1,21 +1,28 @@
 import {
+  type BugCandidate,
   ConflictError,
-  ValidationError,
+  getErrorMessage,
   type GitHubClient,
   type GitHubInstallation,
   type GitHubInstallationRepository,
+  type GitHubIssueSearchHit,
   type IssueIntakeQuery,
+  type NormalizedTaskConnection,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchRepoScope,
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
-  type NormalizedTaskConnection,
+  type TaskSourceWritebackAdapter,
+  ValidationError,
 } from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
 import * as githubIssuesLogic from './github-issues.logic.js'
 import { httpStatusOf } from './tasks.logic.js'
+import { githubIssuesWebhookAdapter } from './webhook/adapters.js'
+import { createRepoIssueWriteback } from './writeback/repo-issue.writeback.js'
 
 // GitHubIssuesProvider: the task-source provider for GitHub issues. Unlike Jira,
 // it stores NO per-workspace credentials — it reuses the workspace's installed
@@ -27,7 +34,7 @@ import { httpStatusOf } from './tasks.logic.js'
 //
 // Runtime-neutral: it depends only on the kernel ports (GitHubClient,
 // GitHubInstallationRepository) and the shared pure logic, so both the Cloudflare
-// and the Node facade wire the SAME class (see CLAUDE.md "Keep the runtimes
+// and the Node facade wire the SAME class (see AGENTS.md "Keep the runtimes
 // symmetric").
 
 export interface GitHubIssuesProviderDependencies {
@@ -42,9 +49,38 @@ const INTAKE_MAX_PAGES = 5
 
 export class GitHubIssuesProvider implements TaskSourceProvider {
   readonly kind = 'github' as const
+  /**
+   * Inbound webhook capability (verify + parse), so a github delivery can drive intake and
+   * ticket replies without waiting for the next polling sweep. See
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`.
+   */
+  readonly webhook = githubIssuesWebhookAdapter
   readonly descriptor = GITHUB_ISSUES_DESCRIPTOR
+  /**
+   * Repo-backed: an `owner/repo#number` id names its repository, so this source's search
+   * requires a scope and its imported rows narrow to one. See the kernel port.
+   */
+  readonly repoScope = { matches: githubIssuesLogic.githubIssueInRepoScope }
+  /**
+   * Outbound writeback (comment / close / in-progress label), the mirror of the webhook
+   * capability above. Built in the constructor because it reads through the SAME client and
+   * installation repository the source's reads do, which is the point of the capability living
+   * on the provider: the facade no longer hands the writeback service a second, parallel set of
+   * GitHub seams that could resolve a different installation than an import did.
+   */
+  readonly writeback: TaskSourceWritebackAdapter
 
-  constructor(private readonly deps: GitHubIssuesProviderDependencies) {}
+  constructor(private readonly deps: GitHubIssuesProviderDependencies) {
+    this.writeback = createRepoIssueWriteback({
+      client: deps.githubClient,
+      installations: deps.installations,
+      parseExternalId: githubIssuesLogic.parseGitHubIssueExternalId,
+      provider: 'github',
+      label: 'GitHub',
+      // One number space, one comment API: `comment` IS the issue comment on GitHub.
+      issueComments: 'shared-with-pull-requests',
+    })
+  }
 
   /**
    * GitHub issues piggyback on the installed GitHub App, so there is nothing to
@@ -103,25 +139,36 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
   }
 
   /**
-   * Search issues visible to *this workspace's* GitHub App installation. The
-   * installation token only sees its own account's repos, so scoping to the
-   * workspace's installation keeps results from leaking across tenants — a
-   * deployment may host many installations, but a workspace owns exactly one.
-   * Credentials are unused (the App authenticates), matching `fetchTask`.
+   * Search issues in ONE repository: the one linked to the service frame the search runs
+   * from. `scope` is therefore REQUIRED, and a `null` one is refused rather than widened —
+   * GitHub's `/search/issues` carries no scope of its own, so an unscoped query returns
+   * whatever the credential can reach, which for a PAT-backed deployment is every public
+   * repository on GitHub. The port makes the ARGUMENT mandatory so a caller cannot reach
+   * this by forgetting it; the throw below is what answers a caller that passed the
+   * repo-less `null` a Jira search legitimately passes. Credentials are unused (the App/PAT
+   * authenticates out-of-band), matching `fetchTask`.
    *
-   * When a `scope` is supplied (the search runs from a service linked to a repo)
-   * the query is narrowed to `repo:owner/name` so hits never leak in from sibling
-   * repos, AND input that names one specific issue — a pasted issue URL or a bare
-   * issue number against the scoped repo — is resolved to that exact issue and
-   * surfaced FIRST, rather than fuzzy-matched. A miss on the exact lookup (e.g. a
-   * number with no such issue) falls through to the text search instead of failing.
+   * Within the scope, input that names one specific issue — a pasted issue URL, the
+   * `owner/repo#n` shorthand, or a bare issue number — is resolved to that exact issue and
+   * surfaced FIRST rather than fuzzy-matched. A reference naming ANOTHER repository is not
+   * resolved here at all (see `detectExactGitHubIssueRef`): it stays linkable as an explicit
+   * reference through the import path, but it is never dressed up as a search hit. A miss on
+   * the exact lookup (e.g. a number with no such issue) falls through to the text search
+   * instead of failing.
    */
   async search(
     _credentials: TaskCredentials,
     query: string,
     workspaceId: string,
-    scope?: TaskSearchRepoScope,
+    scope: TaskSearchRepoScope | null,
   ): Promise<TaskSearchResult[]> {
+    if (!scope) {
+      throw new ValidationError(
+        'A GitHub issue search must be scoped to a repository. Run it from a service frame ' +
+          'linked to a repo, or paste the issue URL to link one directly.',
+        { reason: 'repo_scope_required' satisfies TaskSourceReadReason },
+      )
+    }
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) return []
     const out: TaskSearchResult[] = []
@@ -138,12 +185,13 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       }
     }
 
-    const searchText = githubIssuesLogic.buildGitHubIssueSearchQuery(query, scope)
-    const hits = searchText
-      ? await this.deps.githubClient
-          .searchIssues(installation.installationId, searchText, 20)
-          .catch(() => [])
-      : []
+    const hits = await this.deps.githubClient
+      .searchIssues(
+        installation.installationId,
+        githubIssuesLogic.buildGitHubIssueSearchQuery(query, scope),
+        20,
+      )
+      .catch(() => [])
     for (const hit of hits) {
       const externalId = githubIssuesLogic.githubIssueExternalId(hit)
       if (seen.has(externalId)) continue
@@ -174,6 +222,33 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     query: IssueIntakeQuery,
     workspaceId: string,
   ): Promise<TaskSearchResult[]> {
+    const hits = await this.walkIntakeHits(query, workspaceId)
+    return hits.map((hit) => ({
+      source: 'github',
+      externalId: githubIssuesLogic.githubIssueExternalId(hit),
+      title: hit.title,
+      url: hit.url,
+      status: hit.state,
+      excerpt: '',
+    }))
+  }
+
+  /**
+   * The oldest-first page walk BOTH intake reads ride, returning the eligible hits so each
+   * caller only supplies its own projection ({@link TaskSearchResult} for the recurring
+   * intake, {@link BugCandidate} for a hunt).
+   *
+   * Shared rather than copied because every rule in here is one the two must agree on, and a
+   * second copy is how they stop agreeing — the unassigned guard below landed in one of them
+   * only. The walk: compile the predicates into one search text, overscan by the exclusion
+   * count (the one predicate GitHub search can't express, and the excluded issues ARE the
+   * oldest so they cluster at the front), and page through — bounded — so a first page that is
+   * entirely excluded can't starve the result while eligible issues exist beyond it.
+   */
+  private async walkIntakeHits(
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<GitHubIssueSearchHit[]> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) return []
     // Owner/repo are case-insensitive on GitHub, so normalize both sides — otherwise an
@@ -181,12 +256,8 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     // slips past the filter and is re-picked.
     const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toLowerCase()))
     const searchText = githubIssuesLogic.buildGitHubIntakeQuery(query)
-    // Oldest-first, and the already-worked (excluded) issues ARE the oldest, so they
-    // cluster at the front. The exclusion list is the one predicate GitHub search can't
-    // express, so overscan by its size — and page through (bounded) so a first page that
-    // is entirely excluded can't starve the result while eligible issues exist beyond it.
     const per = Math.min(query.limit + excluded.size, 100)
-    const out: TaskSearchResult[] = []
+    const out: GitHubIssueSearchHit[] = []
     for (let page = 1; page <= INTAKE_MAX_PAGES && out.length < query.limit; page++) {
       const hits = await this.deps.githubClient.searchIssues(
         installation.installationId,
@@ -198,19 +269,31 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       for (const hit of hits) {
         const externalId = githubIssuesLogic.githubIssueExternalId(hit)
         if (excluded.has(externalId.toLowerCase())) continue
-        out.push({
-          source: 'github',
-          externalId,
-          title: hit.title,
-          url: hit.url,
-          status: hit.state,
-          excerpt: '',
-        })
+        // Defence in depth on the unassigned predicate: `no:assignee` is what actually
+        // narrows the search, but an adapter that reports an assignee while ignoring the
+        // qualifier would otherwise offer up somebody else's in-flight work as free to take.
+        if (query.unassignedOnly && hit.assignee) continue
+        out.push(hit)
         if (out.length >= query.limit) break
       }
       if (hits.length < per) break // a short page is the last page — stop paging
     }
     return out
+  }
+
+  /**
+   * Bug-hunt candidate search: the SAME repo-scoped walk as {@link searchIssues} (now also
+   * carrying `no:assignee`, from `query.unassignedOnly`), projected onto the richer candidate
+   * shape. GitHub's search response already carries the body, labels, age and comment count,
+   * so no per-candidate detail fetch is needed — the whole board scan is one request per page.
+   */
+  async listBugCandidates(
+    _credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<BugCandidate[]> {
+    const hits = await this.walkIntakeHits(query, workspaceId)
+    return hits.map(githubIssuesLogic.githubHitToBugCandidate)
   }
 
   /**
@@ -352,7 +435,7 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     return {
       ...base,
       status: 'error',
-      message: `GitHub returned ${status} while ${whileDoing}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `GitHub returned ${status} while ${whileDoing}: ${getErrorMessage(err)}`,
     }
   }
 

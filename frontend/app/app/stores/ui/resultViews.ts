@@ -1,0 +1,234 @@
+import { ref } from 'vue'
+import { useExecutionStore } from '~/stores/execution'
+import { agentKindMeta } from '~/utils/catalog'
+import { dedicatedParkView } from '~/utils/pipelineRender'
+import { createRunStepOpeners } from './runStepOpeners'
+
+/**
+ * The step-inspection / result-view slice of the UI store: the dedicated result-view overlay
+ * (`resultView`, driven by the universal `dispatchStepView` seam), the generic step-detail
+ * panel (`stepDetail`), the LLM per-call observability panel, and the Kaizen screen — plus the
+ * open/close actions every board + inspector entry point uses. Split out of the modal + nav
+ * state per refactoring candidate #4; the `dispatchStepView`/`ui.resultView` seam is preserved
+ * intact, so adding a bespoke window for a new agent is still just declaring `resultView` +
+ * registering a component. Composed into {@link useUiStore} with the same public names.
+ */
+export function createUiResultViews() {
+  // Dedicated result-view overlay: a step whose agent kind declares a bespoke
+  // visualization (via the archetype's `resultView`) opens here instead of the generic
+  // prose step-detail panel. `view` is the registry id (e.g. 'requirements-review');
+  // `blockId` is always set; `instanceId`/`stepIndex` are present on the pipeline path and
+  // null for an off-path open (e.g. the inspector's pre-start requirements review).
+  const resultView = ref<{
+    view: string
+    blockId: string
+    instanceId: string | null
+    stepIndex: number | null
+    // The brainstorm dialogue stage, set only when `view === 'brainstorm'` (its two agent
+    // kinds share one window). Derived from the step's agent kind on the pipeline path, or
+    // passed explicitly on an off-path open.
+    stage?: 'requirements' | 'architecture'
+  } | null>(null)
+
+  // Agent step-detail overlay: which pipeline step (a run instance + step index)
+  // a human is inspecting, or null when closed. The overlay resolves the step
+  // from the execution store so it stays live; it shows the step's metadata
+  // (model, state, progress, subtasks, …) and — when the agent produced prose —
+  // a reader for it (ToC + collapsible sections).
+  const stepDetail = ref<{ instanceId: string; stepIndex: number } | null>(null)
+
+  // LLM observability panel: which run (execution instance) a human is inspecting
+  // the per-call model activity for, or null when closed. The panel loads the full
+  // per-call detail from the observability store on open.
+  const observabilityInstanceId = ref<string | null>(null)
+
+  // The Kaizen screen (grading history + verified-combo library), a full-panel overlay
+  // opened from the sidebar. Distinct from the per-run grading status shown in run details.
+  const kaizenScreenOpen = ref(false)
+
+  /**
+   * Open a pending approval gate in the conclusions reader (approval mode). Resolves
+   * the step index from the gate id so every board/inspector entry point can keep
+   * passing the approval id it already has.
+   */
+  function openApprovalDetail(instanceId: string, approvalId: string) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    const idx = instance?.steps.findIndex((s) => s.approval?.id === approvalId) ?? -1
+    if (idx >= 0) dispatchStepView(instanceId, idx)
+  }
+
+  /**
+   * Open a pipeline step: route it to its agent kind's DEDICATED result window when the
+   * archetype declares one (the universal `resultView` seam), else the generic prose
+   * step-detail panel. This is the single dispatch every board/inspector entry point uses,
+   * so adding a bespoke window for a new agent is just declaring `resultView` + registering
+   * a component — no caller changes.
+   */
+  function dispatchStepView(instanceId: string, stepIndex: number) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    const step = instance?.steps[stepIndex]
+    // A step that actually ran the consensus mechanism opens the dedicated Consensus
+    // Session window, regardless of its kind's normal result view — consensus is an
+    // execution MODE on a kind, not a kind, so it can't be a static archetype `resultView`.
+    // A step carrying a PR deep-review parks with BOTH a pending approval and
+    // `prReview.status`, so the generic approval button funnels here; route it to the
+    // findings-selection window regardless of catalog/manifest state (mirrors consensus).
+    // Likewise a coder parked on the implementation-fork choice or on undecided follow-up
+    // items: those parks ride `step.approval` too, but the generic approve resolver refuses
+    // them server-side, so the step must open the window that CAN resolve it.
+    const park = step ? dedicatedParkView(step, instance) : null
+    const view = step?.consensus?.enabled
+      ? 'consensus-session'
+      : step?.prReview
+        ? 'pr-review'
+        : step
+          ? (park ?? agentKindMeta(step.agentKind).resultView)
+          : undefined
+    // The PRE-DISPATCH INPUT GATE is the one dedicated park with no window of its own: it is
+    // answered by an inline notice, which the generic step detail renders. Routing to the
+    // step's usual result view instead would open a window about work that has not run.
+    if (park === 'input-gate') {
+      stepDetail.value = { instanceId, stepIndex }
+      return
+    }
+    if (view && instance) {
+      // The brainstorm window is shared by both stages; carry which one from the step's kind.
+      const stage =
+        view === 'brainstorm'
+          ? step?.agentKind === 'architecture-brainstorm'
+            ? 'architecture'
+            : 'requirements'
+          : undefined
+      resultView.value = {
+        view,
+        blockId: instance.blockId,
+        instanceId,
+        stepIndex,
+        ...(stage ? { stage } : {}),
+      }
+      return
+    }
+    stepDetail.value = { instanceId, stepIndex }
+  }
+
+  /**
+   * Open a task's NON-CODE OUTCOME summary — what the run changed in product terms, with the
+   * evidence behind it, and the diff one click away. BLOCK-keyed rather than run-keyed because a
+   * merged task keeps its pull request long after its run instance is gone, and that task is
+   * exactly the one somebody comes back to read. The run rides along when there is one, which is
+   * where every piece of evidence comes from; `stepIndex` stays null because the summary is
+   * composed from the WHOLE run and there is no step for it to be about.
+   */
+  function openOutcome(blockId: string, instanceId: string | null = null) {
+    resultView.value = { view: 'outcome', blockId, instanceId, stepIndex: null }
+  }
+
+  /**
+   * Open the outcome summary from a caller that knows the RUN: the `outcome` deep link.
+   *
+   * The run id is a LOOKUP here, not the key — the window is block-keyed (above) — so a link
+   * naming its block opens on it even when the store never hydrated that run, which is the
+   * normal state of following a link into a task that finished long ago. Falling back to the
+   * run's own `blockId` keeps a link that carries only `run=` working. Only a link that
+   * resolves neither is a silent no-op, matching the run-step openers.
+   */
+  function openRunOutcome(instanceId: string, blockId: string | null = null) {
+    const resolved = blockId ?? useExecutionStore().getInstance(instanceId)?.blockId ?? null
+    if (resolved) openOutcome(resolved, instanceId)
+  }
+
+  function openRequirementReview(blockId: string) {
+    resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
+  }
+  function openClarityReview(blockId: string) {
+    resultView.value = { view: 'clarity-review', blockId, instanceId: null, stepIndex: null }
+  }
+  function openBrainstorm(blockId: string, stage: 'requirements' | 'architecture') {
+    resultView.value = { view: 'brainstorm', blockId, instanceId: null, stepIndex: null, stage }
+  }
+  // Open the service-spec window for a service frame (the inspector's "View Requirements").
+  function openServiceSpec(blockId: string) {
+    resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
+  }
+  // Open the initiative tracker window for an initiative block (board card / inspector).
+  function openInitiativeTracker(blockId: string) {
+    resultView.value = { view: 'initiative-tracker', blockId, instanceId: null, stepIndex: null }
+  }
+  // Open the interactive-planning Q&A window for an initiative block (inspector / card,
+  // when the interviewer has parked the planning run with pending questions).
+  function openInitiativePlanning(blockId: string) {
+    resultView.value = { view: 'initiative-planning', blockId, instanceId: null, stepIndex: null }
+  }
+  // The run-scoped openers (a caller that knows only the RUN, so the step index has to be
+  // resolved) live in a sibling module: they share one shape and one hazard, and lifting them out
+  // keeps this factory inside its per-function line budget. Their two seams are bound here.
+  const {
+    openFollowUps,
+    openForkDecision,
+    openBinaryCandidates,
+    openPrReview,
+    openBugFishing,
+    openTestEvidence,
+  } = createRunStepOpeners({
+    dispatchStepView: (instanceId, stepIndex) => dispatchStepView(instanceId, stepIndex),
+    setResultView: (view, instance, stepIndex) => {
+      resultView.value = { view, blockId: instance.blockId, instanceId: instance.id, stepIndex }
+    },
+  })
+
+  function closeResultView() {
+    resultView.value = null
+  }
+  // Kept name for the requirements window's close handler.
+  const closeRequirementReview = closeResultView
+  function openStepDetail(instanceId: string, stepIndex: number) {
+    dispatchStepView(instanceId, stepIndex)
+  }
+  function closeStepDetail() {
+    stepDetail.value = null
+  }
+  function openObservability(instanceId: string) {
+    observabilityInstanceId.value = instanceId
+  }
+  function closeObservability() {
+    observabilityInstanceId.value = null
+  }
+  function openKaizen() {
+    kaizenScreenOpen.value = true
+  }
+  function closeKaizen() {
+    kaizenScreenOpen.value = false
+  }
+
+  return {
+    resultView,
+    stepDetail,
+    observabilityInstanceId,
+    kaizenScreenOpen,
+    openApprovalDetail,
+    openRequirementReview,
+    openClarityReview,
+    openBrainstorm,
+    openServiceSpec,
+    openInitiativeTracker,
+    openInitiativePlanning,
+    openFollowUps,
+    openForkDecision,
+    openBinaryCandidates,
+    openPrReview,
+    openBugFishing,
+    openTestEvidence,
+    openOutcome,
+    openRunOutcome,
+    closeResultView,
+    closeRequirementReview,
+    openStepDetail,
+    closeStepDetail,
+    openObservability,
+    closeObservability,
+    openKaizen,
+    closeKaizen,
+  }
+}

@@ -6,7 +6,7 @@ import type {
   PreviewRef,
   PreviewTransport,
 } from '@cat-factory/kernel'
-import { PREVIEW_PROVISION_TYPE } from '@cat-factory/kernel'
+import { getErrorMessage, PREVIEW_PROVISION_TYPE } from '@cat-factory/kernel'
 import type { PreviewState } from '@cat-factory/contracts'
 
 // The browsable frontend PREVIEW service (slice 5c of the frontend-preview initiative). It is
@@ -78,12 +78,22 @@ export class PreviewService {
       status: 'provisioning',
       accessCipher: null,
       provisionFieldsCipher: null,
+      // A browsable preview is reached through the transport's own published origin, never through
+      // a provider-published name, so there is no route for anyone to prove.
+      reachability: null,
       createdAt: now,
       // A preview has no TTL — it lives until an explicit stop, so it is never swept by the
       // expiry cron (which keys off `expiresAt`).
       expiresAt: null,
       lastError: null,
+      // A preview has no provider to poll for a non-terminal account: the transport either
+      // serves it or reports it failed, so there is never a note to carry.
+      statusNote: null,
       deletedAt: null,
+      // Nor a provider to poll at all: a preview is never refreshed through `refreshStatus`, so
+      // the poll marker stays at its never-polled value for the row's whole life.
+      lastPolledAt: null,
+      pollCount: 0,
       provisionType: PREVIEW_PROVISION_TYPE,
       engine: PREVIEW_PROVISION_TYPE,
     }
@@ -93,7 +103,7 @@ export class PreviewService {
     try {
       await this.deps.previewTransport.start(ref, plan.spec, plan.servePort)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = getErrorMessage(err)
       await this.deps.environmentRegistryRepository.update(workspaceId, id, {
         status: 'failed',
         lastError: message,

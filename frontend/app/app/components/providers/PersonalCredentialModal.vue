@@ -4,13 +4,14 @@
 // personalSubscriptions store's `pending` state, which is set when the server replies 428
 // credential_required. On submit it transparently retries the gated action and caches the
 // password. The copy follows the pending vendor (Claude / GLM / ChatGPT-Codex).
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const personal = usePersonalSubscriptionsStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const password = ref('')
 const busy = ref(false)
@@ -44,8 +45,8 @@ const vendorLabel = computed(() => {
   }
 })
 
-watch(open, (isOpen) => {
-  if (isOpen) password.value = ''
+onModalOpen(open, () => {
+  password.value = ''
 })
 
 const title = computed(() => {
@@ -73,11 +74,7 @@ async function submit() {
     })
   } catch (e) {
     // A fresh 428 (e.g. still-wrong password) re-arms `pending`, keeping the modal open.
-    toast.add({
-      title: t('providers.personalCredential.toast.startFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.personalCredential.toast.startFailed')
   } finally {
     busy.value = false
   }
@@ -85,7 +82,9 @@ async function submit() {
 
 function goConnect() {
   personal.dismissPending()
-  ui.openVendorCredentials()
+  // Deep-link onto the personal tab: this CTA promises the individual-subscription connect
+  // form, and the modal's default tab is the (unrelated) workspace pool.
+  ui.openVendorCredentials('personal')
 }
 </script>
 
@@ -94,7 +93,7 @@ function goConnect() {
     <template #body>
       <div class="space-y-4">
         <template v-if="needsConnect">
-          <p class="text-sm text-slate-400">
+          <p class="text-sm text-muted">
             {{ t('providers.personalCredential.connectBody', { vendor: vendorLabel }) }}
           </p>
           <div class="flex justify-end gap-2">
@@ -116,7 +115,7 @@ function goConnect() {
         </template>
 
         <template v-else>
-          <p class="text-sm text-slate-400">
+          <p class="text-sm text-muted">
             {{ t('providers.personalCredential.passwordBody', { vendor: vendorLabel }) }}
           </p>
           <UFormField :label="t('providers.personalCredential.passwordField')">

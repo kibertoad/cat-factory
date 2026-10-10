@@ -10,7 +10,21 @@
  * every spend rollup — a quota plan costs nothing per token, so letting one into the
  * budget gate would wrongly pause runs. See the usage-and-quota-tracking initiative.
  */
-export type UsageBilling = 'metered' | 'subscription'
+export const ALL_USAGE_BILLING = ['metered', 'subscription'] as const
+
+export type UsageBilling = (typeof ALL_USAGE_BILLING)[number]
+
+/**
+ * Whether `value` is a member of the closed {@link UsageBilling} vocabulary.
+ *
+ * Derived from {@link ALL_USAGE_BILLING} rather than restating the members, so adding one
+ * cannot leave a reader silently rejecting it. For narrowing a billing kind that reached the
+ * engine from OUTSIDE the type system: a marker read off a resolved model, which any provider
+ * package (including one this repo does not own) may declare.
+ */
+export function isUsageBilling(value: unknown): value is UsageBilling {
+  return (ALL_USAGE_BILLING as readonly unknown[]).includes(value)
+}
 
 /**
  * One usage-report row: aggregated token usage for one `(billing, vendor, provider,
@@ -62,10 +76,31 @@ export interface TokenUsageRecord {
    * (flat-rate quota harness usage, counted for reporting but excluded from spend).
    */
   billing: UsageBilling
-  /** The subscription vendor for a subscription row (claude/codex/glm/kimi/deepseek); null for metered. */
+  /**
+   * The vendor whose credential served the call, on a subscription row; null for a metered
+   * one, which belongs to no subscription. NEVER blank on a subscription row: the usage
+   * report groups by it, so an empty vendor is a row that cannot be attributed to the plan
+   * that paid for it. `SpendService.record` is what makes that total.
+   */
   vendor: string | null
   /** When the call was metered (epoch ms). */
   createdAt: number
+}
+
+/**
+ * One scope's METERED spend over a window, as the spend FORECAST reads it.
+ *
+ * Narrower than {@link TokenUsageTotals} (no token counts: a burn rate is money per day) and
+ * wider in the one way that matters: it carries when the window's evidence actually starts.
+ * Without `firstSeenAt` a rate has to divide by the nominal window, so a workspace that began
+ * spending two hours ago reads as 1/84th of its real pace: the runaway the forecast exists to
+ * catch is precisely the one it would report as calm.
+ */
+export interface ScopedSpendWindow {
+  /** Summed `cost_estimate` of the scope's metered rows in the window. */
+  costEstimate: number
+  /** Epoch ms of the OLDEST metered row in the window (never null for a present entry). */
+  firstSeenAt: number
 }
 
 /** Aggregated usage over a time window, used to evaluate the budget. */
@@ -109,6 +144,26 @@ export interface TokenUsageRepository {
    * `user_id` column. Subscription rows are excluded.
    */
   totalsSinceForUser(userId: string, epochMs: number): Promise<TokenUsageTotals>
+  /**
+   * Metered spend per WORKSPACE since `epochMs` (inclusive), for the given workspaces, as ONE
+   * chunked `GROUP BY`, the batched form of {@link totalsSinceForWorkspace}. The spend-forecast
+   * sweep needs both a period-to-date and a trailing-window figure for every workspace in the
+   * deployment on each pass; a point read per workspace would be exactly the N+1 the aggregate
+   * ban exists for, run every few minutes across every tenant.
+   *
+   * Keyed by workspace id, and a workspace with no metered rows in the window is ABSENT from the
+   * map rather than present as a zero: the caller distinguishes "spent nothing" from "not asked
+   * about", and skipping the silent majority is what keeps the sweep's steady state cheap.
+   */
+  meteredSpendByWorkspaceSince(
+    workspaceIds: string[],
+    epochMs: number,
+  ): Promise<Map<string, ScopedSpendWindow>>
+  /** The same, per ACCOUNT, off the denormalized `account_id` column (the account budget tier). */
+  meteredSpendByAccountSince(
+    accountIds: string[],
+    epochMs: number,
+  ): Promise<Map<string, ScopedSpendWindow>>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many
    * were removed. The budget query only reads the current period, so pruning old

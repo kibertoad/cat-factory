@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -10,6 +11,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
 /** Params passed to an EnvironmentTestWorkflow instance (its id is the self-test run id). */
@@ -36,11 +38,16 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
   Env,
   EnvironmentTestWorkflowParams
 > {
-  override async run(
+  override run(
     event: WorkflowEvent<EnvironmentTestWorkflowParams>,
     step: WorkflowStep,
   ): Promise<void> {
-    const { workspaceId, jobId } = event.payload
+    // See BootstrapWorkflow: `run` is the wake's logging bracket, `drive` is the body.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: EnvironmentTestWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, jobId } = params
     const { container, execConfig } = await buildWorkflowRuntime(
       () => ({ container: buildContainer(this.env), execConfig: loadConfig(this.env).execution }),
       step,
@@ -55,7 +62,9 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
     // (`sweepStuckEnvTests`, cron) instead of resumed.
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-      await step.sleep(`poll-wait-${p}`, pollInterval)
+      // Poll-first (matching the Node envTestRunner): the run was just started, so the
+      // first poll runs immediately instead of after a full poll interval.
+      if (p > 0) await step.sleep(`poll-wait-${p}`, pollInterval)
       let result: EnvironmentTestPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {
@@ -68,8 +77,8 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
       } catch (error) {
         pollReadFailures += 1
         log.warn(
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'env-test poll could not advance the run; treating as still running and retrying',
+          { err: getErrorMessage(error), pollReadFailures },
         )
         continue
       }
@@ -79,7 +88,7 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
         return
       }
       if (result.state === 'failed') {
-        log.warn({ error: result.error }, 'env-test run failed')
+        log.warn('env-test run failed', { error: result.error })
         return
       }
       // still running — loop and advance again after the next durable sleep.

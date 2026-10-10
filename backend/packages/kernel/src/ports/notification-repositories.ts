@@ -18,6 +18,54 @@ export interface NotificationRepository {
     blockId: string,
     type: NotificationType,
   ): Promise<Notification | null>
+  /**
+   * Every open notification on ONE block, newest first, of ANY type.
+   *
+   * The narrow read behind "does this block already have a card telling the human something is
+   * waiting". The engine used to answer that by pulling the workspace's WHOLE open inbox (each
+   * row's `body` + `payload` JSON) on every run-state transition and filtering in JS, which grows
+   * with the workspace's un-actioned inbox rather than with the block. `type` is deliberately not
+   * a parameter here: the caller asks whether ANY card points at the block, so narrowing to one
+   * type would raise a duplicate beside a card of a different type. Served by the existing
+   * `(workspace_id, block_id, type, status)` index on its leading columns.
+   */
+  listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]>
+  /**
+   * The open, BLOCK-LESS notification of `type` for a workspace (`block_id IS NULL`), if any.
+   * The block-less analogue of {@link findOpenByBlock}: it de-duplicates deployment/workspace-
+   * wide cards that aren't about any one block (today `platform_health`) so a periodic sweep
+   * re-raising the same card reuses the existing open row instead of stacking a new one each
+   * pass. Newest first; block-SCOPED cards of the same type are never returned.
+   */
+  findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null>
+  /**
+   * BATCHED {@link findOpenByType}: the open, block-less card of `type` for EACH of
+   * `workspaceIds` that has one, as a `Map<workspaceId, Notification>` (newest per workspace;
+   * workspaces with none are simply absent). The platform-health sweep enumerates every
+   * workspace and would otherwise `findOpenByType` per workspace inside the loop — an N+1 that
+   * runs every couple of minutes across the whole deployment. One chunked-`IN` read here lets
+   * the sweep skip the point-read for the (steady-state common) healthy workspaces that hold no
+   * card, mirroring `WorkspaceSettingsRepository.listByWorkspaceIds` in the escalation sweep.
+   * Empty input → empty map.
+   */
+  listOpenByType(workspaceIds: string[], type: NotificationType): Promise<Map<string, Notification>>
+  /**
+   * The batched {@link listOpenByType}, but the newest block-less card of `type` per workspace
+   * REGARDLESS OF STATUS, including one a human already dismissed or acted on.
+   *
+   * That difference is the whole point, and it belongs to alerts whose condition PERSISTS. A
+   * spend threshold, once crossed, stays crossed for the rest of the month, so a sweep that
+   * read only OPEN cards would see nothing the moment someone dismissed theirs and raise a
+   * fresh one on the next pass, every few minutes, for weeks. Reading the last card the sweep
+   * WROTE (not the last one still on the board) is what makes "notify once per crossing"
+   * true across replicas without a second store: the card row IS the notified-state record.
+   *
+   * Empty input → empty map; workspaces with no card of that type are absent.
+   */
+  listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>>
   /** Create or replace a notification (keyed by id). Used for status transitions
    * (dismiss/act/escalate) and block-less cards. */
   upsert(workspaceId: string, notification: Notification): Promise<void>
@@ -54,6 +102,24 @@ export interface NotificationRepository {
    * re-deliver each for the real-time inbox re-render. Nothing matches → empty array.
    */
   escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]>
+  /**
+   * Dismiss EVERY open, block-less notification of `type` for a workspace in ONE statement,
+   * returning the dismissed rows so the caller can re-deliver each for the real-time inbox
+   * re-render. Nothing open → empty array.
+   *
+   * Plural on purpose. A block-less card has no unique index to lean on: the partial index that
+   * makes the block-scoped raise atomic exempts them, because NULLs are distinct in a unique
+   * index, so `raise` still de-dupes them with a read-before-write and two sweeps racing on one
+   * workspace can leave two open rows. A clear that settled only the newest would leave the other
+   * open forever, and the escalation sweep would later flip it red for a condition that has since
+   * cleared: the exact lingering-stale-alert failure the clear exists to prevent. Settling the
+   * whole set is therefore both the clear AND the heal, and costs one indexed write either way.
+   */
+  dismissOpenByType(
+    workspaceId: string,
+    type: NotificationType,
+    resolvedAt: number,
+  ): Promise<Notification[]>
   /**
    * Prune resolved notifications (status `acted`/`dismissed`) whose `resolvedAt` is at or
    * before `cutoff`, across all workspaces, returning the number of rows removed. The

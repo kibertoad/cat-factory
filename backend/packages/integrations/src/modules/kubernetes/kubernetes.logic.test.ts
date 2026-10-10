@@ -1,12 +1,16 @@
 import type { KubernetesRunnerConfig } from '@cat-factory/kernel'
+import { containerKeyForRef } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   apiServerConnectionFailureMessage,
+  DEFAULT_HARNESS_PORT,
   assertApiServerUrlSafe,
   buildPodManifest,
   classifyPodReadiness,
   classifyPodStartupFailure,
   describePodStatus,
+  describePodTermination,
+  podExitedCleanly,
   podName,
   proxyUrl,
   resolveImage,
@@ -29,12 +33,23 @@ describe('podName', () => {
     expect(name.length).toBeLessThanOrEqual(63)
     expect(name.startsWith('cf-run-')).toBe(true)
   })
+
+  it('gives a VARIANT its own pod, so a later step cannot re-attach to the wrong image', () => {
+    // It takes the container KEY, not the run id: a run's second `ensurePod` 409s and re-attaches
+    // by design, which is right for two steps that want the same image and silently wrong for two
+    // that do not. Keyed on the run alone, a `tester-ui` step landed in the pod an earlier coder
+    // step created on the base image, and Playwright was simply absent.
+    expect(podName(containerKeyForRef({ runId: 'exec_1', jobId: 'j' }))).toBe('cf-run-exec-1')
+    expect(podName(containerKeyForRef({ runId: 'exec_1', jobId: 'j', image: 'ui' }))).toBe(
+      'cf-run-ui-exec-1',
+    )
+  })
 })
 
 describe('proxyUrl', () => {
   it('targets the apiserver pod-proxy subresource with a LITERAL name:port colon', () => {
     expect(proxyUrl(config, 'cf-run-1', '/jobs/abc')).toBe(
-      'https://k8s.example:6443/api/v1/namespaces/cat-factory/pods/cf-run-1:8080/proxy/jobs/abc',
+      `https://k8s.example:6443/api/v1/namespaces/cat-factory/pods/cf-run-1:${DEFAULT_HARNESS_PORT}/proxy/jobs/abc`,
     )
   })
   it('honours a custom harness port', () => {
@@ -130,6 +145,146 @@ describe('describePodStatus', () => {
   })
 })
 
+describe('describePodTermination', () => {
+  it('names the container, its reason and its exit code', () => {
+    expect(
+      describePodTermination({
+        status: {
+          phase: 'Failed',
+          containerStatuses: [
+            { name: 'executor', state: { terminated: { reason: 'OOMKilled', exitCode: 137 } } },
+          ],
+        },
+      }),
+    ).toBe("Container 'executor' terminated: OOMKilled, exit code 137")
+  })
+
+  it('falls back to the PREVIOUS incarnation for a container between lives', () => {
+    // A container waiting to restart has no `state.terminated`; the cause of the crash loop is
+    // in `lastState`, which is the field the transport never read (finding D1).
+    expect(
+      describePodTermination({
+        status: {
+          containerStatuses: [
+            {
+              name: 'executor',
+              state: { waiting: { reason: 'CrashLoopBackOff' } },
+              lastState: { terminated: { exitCode: 1, message: 'harness boot failed' } },
+            },
+          ],
+        },
+      }),
+    ).toBe("Container 'executor' terminated: exit code 1 (harness boot failed)")
+  })
+
+  it('adds the pod-level reason, which no container status reports', () => {
+    // A kubelet eviction under node pressure takes the pod away without the container ever
+    // seeing it, so this line is ADDITIONAL to the container's own account, not a substitute.
+    const described = describePodTermination({
+      status: {
+        phase: 'Failed',
+        reason: 'Evicted',
+        message: 'The node was low on resource: memory.',
+        containerStatuses: [
+          { name: 'executor', state: { terminated: { reason: 'Error', exitCode: 137 } } },
+        ],
+      },
+    })
+
+    expect(described).toContain("Container 'executor' terminated")
+    expect(described).toContain('Pod Evicted: The node was low on resource: memory.')
+  })
+
+  it("reports the kubelet's prose when it came with no machine-readable reason", () => {
+    // The apiserver does not guarantee `reason` beside `message`, and the message is the
+    // evidence: a preemption notice, a disk-pressure eviction. Gating the prose on the code
+    // renders an evidence-carrying pod as an EMPTY detail, which is indistinguishable from a pod
+    // that vanished saying nothing at all, and the transport reports those two differently on purpose.
+    expect(
+      describePodTermination({
+        status: { phase: 'Failed', message: 'Pod was preempted by a higher-priority pod.' },
+      }),
+    ).toBe('Pod reports: Pod was preempted by a higher-priority pod.')
+  })
+
+  it('returns empty string when the status says nothing about a termination', () => {
+    expect(describePodTermination({ status: { phase: 'Running' } })).toBe('')
+    expect(describePodTermination(null)).toBe('')
+    // A blank message is nothing said, not an account: reporting it verbatim would announce a
+    // pod-level explanation and then give none.
+    expect(describePodTermination({ status: { phase: 'Failed', message: '   ' } })).toBe('')
+  })
+})
+
+describe('podExitedCleanly', () => {
+  // The distinction the local and Cloudflare transports already draw, read off the one field a
+  // pod exposes it in. A runner pod's only workload is the harness, so a container that ended 0
+  // with the job still in flight is a harness something STOPPED: the engine fails that run at
+  // once instead of spending its crash budget re-running the agent into whatever stopped it.
+  it('reads a clean exit as the harness having been shut down', () => {
+    expect(
+      podExitedCleanly({
+        status: {
+          phase: 'Succeeded',
+          containerStatuses: [
+            { name: 'executor', state: { terminated: { reason: 'Completed', exitCode: 0 } } },
+          ],
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it('refuses a non-zero exit and a signal death alike', () => {
+    expect(
+      podExitedCleanly({
+        status: { containerStatuses: [{ state: { terminated: { exitCode: 137 } } }] },
+      }),
+    ).toBe(false)
+    // Exit code 0 WITH a signal is the kubelet killing a container that was mid-shutdown; the
+    // zero is then an artefact of how it died, not an account of it leaving.
+    expect(
+      podExitedCleanly({
+        status: { containerStatuses: [{ state: { terminated: { exitCode: 0, signal: 15 } } }] },
+      }),
+    ).toBe(false)
+  })
+
+  it('lets the kubelet overrule the container: a pod TAKEN AWAY is an eviction', () => {
+    // A pod-level reason is the kubelet's own account of removing the pod, which no container
+    // status reports. Whatever the workload managed to exit with on the way out, this is a loss
+    // the engine should answer with a fresh pod rather than by failing the run.
+    expect(
+      podExitedCleanly({
+        status: {
+          phase: 'Failed',
+          reason: 'Evicted',
+          containerStatuses: [{ state: { terminated: { exitCode: 0 } } }],
+        },
+      }),
+    ).toBe(false)
+  })
+
+  it('answers false when nothing terminated, so an unreadable pod is never a shutdown', () => {
+    // Absent is not zero: a pod already deleted or garbage-collected, or one still running,
+    // says nothing about how the workload ended and must stay an eviction.
+    expect(podExitedCleanly({ status: { phase: 'Running' } })).toBe(false)
+    expect(podExitedCleanly(null)).toBe(false)
+    // A previous incarnation's clean exit is not this one's: `lastState` is deliberately unread.
+    expect(
+      podExitedCleanly({
+        status: {
+          containerStatuses: [
+            {
+              state: { waiting: { reason: 'CrashLoopBackOff' } },
+              lastState: { terminated: { exitCode: 0 } },
+            },
+          ],
+        },
+      }),
+    ).toBe(false)
+  })
+})
+
 describe('assertApiServerUrlSafe', () => {
   it('accepts a private cluster apiserver (unlike the strict manifest policy)', () => {
     expect(() => assertApiServerUrlSafe('https://10.0.0.1:6443')).not.toThrow()
@@ -153,8 +308,37 @@ describe('assertApiServerUrlSafe', () => {
 describe('resolveImage / resolveResources', () => {
   it('uses the UI image only when asked and configured', () => {
     expect(resolveImage(config)).toBe(config.image)
-    expect(resolveImage(config, { image: 'ui' })).toBe(config.image)
     expect(resolveImage({ ...config, imageUi: 'ui-img' }, { image: 'ui' })).toBe('ui-img')
+  })
+  // The pool used to fall back to the plain executor image here. Nothing downstream notices:
+  // the browser-driven tester runs happily until it needs a browser, which is after the
+  // checkout, the install and the model's first turns, and reports an `abort` that reads like
+  // an app which would not boot. The refusal is the only signal that names the real cause.
+  it('refuses a ui dispatch when no UI image is configured, rather than serving the default', () => {
+    expect(() => resolveImage(config, { image: 'ui' })).toThrow(/imageUi/)
+  })
+  // The deploy variant keeps its fallback on purpose: the deploy harness preflights for its own
+  // CLIs and fails loudly naming them, so the pod reaching the executor image is already
+  // reported. Pinned so the two are not "harmonised" into one rule by a later reader.
+  it('still falls back to the default image for an unconfigured deploy variant', () => {
+    expect(resolveImage(config, { image: 'deploy' })).toBe(config.image)
+  })
+
+  it("serves a DEPLOYMENT's own variant from the image map", () => {
+    const withVariant = { ...config, imageVariants: { 'pixel-tools': 'ghcr.io/acme/pixel:2' } }
+    expect(resolveImage(withVariant, { image: 'pixel-tools' })).toBe('ghcr.io/acme/pixel:2')
+    // The platform's own names keep their own settings: a map entry cannot repoint them, and the
+    // schema refuses one, so this only pins that the lookup does not reach for them either.
+    expect(resolveImage(withVariant, { image: 'default' })).toBe(config.image)
+  })
+
+  it('refuses an unmapped deployment variant, where `deploy` falls back', () => {
+    // The opposite disposition from the `deploy` case above, and deliberately: the platform knows
+    // what the deploy image carries, so the harness's own preflight reports the missing CLIs.
+    // Nothing here knows what `pixel-tools` carried, so running the default would produce a job
+    // silently missing it and a step reporting no cause.
+    expect(() => resolveImage(config, { image: 'pixel-tools' })).toThrow(/pixel-tools/)
+    expect(() => resolveImage(config, { image: 'pixel-tools' })).toThrow(/imageVariants/)
   })
   it('prefers a per-size override over the default for BOTH requests and limits', () => {
     const sized: KubernetesRunnerConfig = {
@@ -195,11 +379,36 @@ describe('buildPodManifest', () => {
     expect(pod.metadata.labels['cat-factory.runId']).toBe('run-1')
     expect(pod.spec.restartPolicy).toBe('Never')
     expect(pod.spec.containers[0]!.image).toBe(config.image)
-    expect(pod.spec.containers[0]!.ports).toEqual([{ containerPort: 8080 }])
+    expect(pod.spec.containers[0]!.ports).toEqual([{ containerPort: DEFAULT_HARNESS_PORT }])
     // The readiness probe gates the pod's `Ready` condition on the harness actually serving.
     expect(pod.spec.containers[0]!.readinessProbe).toMatchObject({
-      httpGet: { path: '/health', port: 8080 },
+      httpGet: { path: '/health', port: DEFAULT_HARNESS_PORT },
     })
+  })
+
+  it('carries a `hostAliases` entry for every environment reached by ADDRESS, grouped by address', () => {
+    // Name-to-address is native here (`{ ip, hostnames[] }`), which is why the bridge target is a
+    // discriminated value rather than a Docker-only literal: this runtime can honour half of it.
+    const pod = buildPodManifest(config, 'run-1', 'cf-run-1', {
+      environments: [
+        { url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' },
+        { url: 'https://api.pr-14.test.example.cloud', address: '10.4.19.22' },
+        { url: 'https://pr-15.test.example.cloud', address: '10.4.19.23' },
+      ],
+    }) as { spec: { hostAliases?: unknown } }
+    expect(pod.spec.hostAliases).toEqual([
+      { ip: '10.4.19.22', hostnames: ['api.pr-14.test.example.cloud', 'pr-14.test.example.cloud'] },
+      { ip: '10.4.19.23', hostnames: ['pr-15.test.example.cloud'] },
+    ])
+  })
+
+  it('omits `hostAliases` for a host-gateway bridge, which has no Kubernetes equivalent', () => {
+    // Dropping it is correct and dropping it SILENTLY is what `addressBridges` exists to stop
+    // each transport deciding for itself: `host-gateway` is a Docker-family token.
+    const pod = buildPodManifest(config, 'run-1', 'cf-run-1', {
+      environments: [{ url: 'http://cf-acc-pr8.127.0.0.1.nip.io' }],
+    }) as { spec: { hostAliases?: unknown } }
+    expect(pod.spec.hostAliases).toBeUndefined()
   })
 })
 

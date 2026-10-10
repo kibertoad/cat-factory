@@ -11,7 +11,11 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
+    // The supervise suite is also an `*.it.spec.ts` but needs a BUILD rather than a CLUSTER, so it
+    // has its own config (`vitest.supervise.config.ts`) and runs in the cluster-free lane. Excluded
+    // here so a Kubernetes change doesn't run it a second time.
     include: ['src/**/*.it.spec.ts'],
+    exclude: ['src/supervise.it.spec.ts'],
     testTimeout: 180_000,
     hookTimeout: 180_000,
     // One shared cluster, one provisioned namespace — run serially to keep the mutating

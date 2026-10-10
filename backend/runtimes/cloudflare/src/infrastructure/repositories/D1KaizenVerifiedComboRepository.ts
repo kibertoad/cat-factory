@@ -1,6 +1,7 @@
 import type { KaizenVerifiedComboRepository } from '@cat-factory/kernel'
 import type { KaizenVerifiedCombo } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface KaizenVerifiedComboRow {
   workspace_id: string
@@ -46,6 +47,23 @@ export class D1KaizenVerifiedComboRepository implements KaizenVerifiedComboRepos
       .bind(workspaceId, comboKey)
       .first<KaizenVerifiedComboRow>()
     return row ? rowToCombo(row) : null
+  }
+
+  async listByKeys(workspaceId: string, comboKeys: string[]): Promise<KaizenVerifiedCombo[]> {
+    const wanted = [...new Set(comboKeys)]
+    if (wanted.length === 0) return []
+    const out: KaizenVerifiedCombo[] = []
+    for (const chunk of chunkForIn(wanted)) {
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM kaizen_verified_combos
+             WHERE workspace_id = ? AND combo_key IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .all<KaizenVerifiedComboRow>()
+      out.push(...(results ?? []).map(rowToCombo))
+    }
+    return out
   }
 
   async upsert(workspaceId: string, combo: KaizenVerifiedCombo): Promise<void> {

@@ -1,4 +1,4 @@
-# Agent Architecture Board — Backend
+# Agent Architecture Board: Backend
 
 Backend for the [`cat-factory`](../README.md) frontend. Split into a
 **framework-agnostic core** and a **Cloudflare Worker facade**, as separate
@@ -8,18 +8,18 @@ packages, following the infrastructure/domain layering and module grouping of
 The Worker exposes one HTTP + WebSocket API over a Cloudflare **D1** database;
 core holds all domain logic behind ports; long-running coding work runs in
 per-run Cloudflare **Containers** (or a self-hosted runner pool). Most
-integrations are **opt-in** — they assemble only when their config is present, so
+integrations are **opt-in**: they assemble only when their config is present, so
 a minimal deployment is just boards + pipelines.
 
 > For the end-to-end runtime flows (execution + events, bootstrap, blueprints,
 > requirements review, the board/repo-linkage model) read
-> [`../CLAUDE.md`](../CLAUDE.md). This README is the package-level map.
+> [`../AGENTS.md`](../AGENTS.md). This README is the package-level map.
 
 ## Table of contents
 
 - [Packages](#packages) · [Layering](#layering-per-the-templates-architecture-doc)
-- [Domain modules](#domain-modules) — what each core module does
-- [Agents](#agents-vercel-ai-sdk) — the executors and the engine
+- [Domain modules](#domain-modules): what each core module does
+- [Agents](#agents-vercel-ai-sdk): the executors and the engine
 - [Execution & real-time events](#execution--real-time-events)
 - [Spend safeguards](#spend-safeguards)
 - [Accounts & tenancy](#accounts--tenancy)
@@ -38,8 +38,8 @@ a minimal deployment is just boards + pipelines.
 ## Packages
 
 The **complete** package/runtime/deployment catalog (every published library, runtime facade,
-internal package, and example deployment) is the layout tables in the
-[root README](../README.md#repository-layout). The table below is the domain-layer summary; the
+internal package, and example deployment) is the layout tables in
+[`docs/repository-layout.md`](../docs/repository-layout.md). The table below is the domain-layer summary; the
 rows after it list the opt-in libraries and the runtime facades so this doc stays self-contained.
 
 | Package                                                                                             | Role                                                                                                            |
@@ -69,17 +69,17 @@ bootstrap CLI).
 
 ### Layering (per the template's architecture doc)
 
-- **API layer** — `worker/src/modules/*/?*Controller.ts` (Hono routes), grouped by module.
-- **Domain layer** — `orchestration/src/modules/*` services (+ the other domain packages) and
+- **API layer**: `worker/src/modules/*/?*Controller.ts` (Hono routes), grouped by module.
+- **Domain layer**: `orchestration/src/modules/*` services (+ the other domain packages) and
   `kernel/src/domain` models/logic. `kernel/src/ports` defines the repository **ports**; the
   domain depends on no concrete adapter.
-- **Infrastructure layer** — `worker/src/infrastructure/*`: D1 repositories implementing the
+- **Infrastructure layer**: `worker/src/infrastructure/*`: D1 repositories implementing the
   ports, the AI model provider, runtime adapters, config, and the DI composition root
   (`container.ts`). Services use constructor injection of a single `dependencies` object.
 
 ## Domain modules
 
-The domain lives in `core/src/modules/*` — each is a small service (or cluster of
+The domain lives in `core/src/modules/*`: each is a small service (or cluster of
 services) over ports, assembled in `core/src/container.ts`. The Worker mounts a
 matching controller per module in `worker/src/modules/*`.
 
@@ -87,11 +87,11 @@ matching controller per module in `worker/src/modules/*`.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `workspaces`                         | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from.                     |
 | `accounts`                           | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph.                               |
-| `board`                              | Block mutations — frames/modules/tasks CRUD, reparenting, dependency edges.                                                                |
+| `board`                              | Block mutations: frames/modules/tasks CRUD, reparenting, dependency edges.                                                                 |
 | `pipelines`                          | Saved, reusable agent-kind sequences (the pipeline palette).                                                                               |
 | `agents`                             | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`.                                                                  |
 | `execution`                          | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
-| `spend`                              | Token metering + org-wide monthly budget enforcement.                                                                                      |
+| `spend`                              | Token metering + tiered monthly budget enforcement (workspace / account / user).                                                           |
 | `bootstrap`                          | Reference architectures + the async repo-bootstrap task.                                                                                   |
 | `blueprints` _(pipeline agent step)_ | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles it onto the board (via `BoardScanService`).                  |
 | `requirements`                       | Stateless reviewer agent over a block's collected requirements.                                                                            |
@@ -113,19 +113,19 @@ wired in `worker/src/infrastructure/container.ts`.
 
 Each pipeline step is performed by an `AgentExecutor` (a port). Implementations:
 
-- **`AiAgentExecutor`** (core) — real work through the Vercel AI SDK (`generateText`). The model
+- **`AiAgentExecutor`** (core): real work through the Vercel AI SDK (`generateText`). The model
   is chosen per agent kind via `AgentRouting` ("which LLM, with what config, for what"),
   configured from Worker env vars (`AGENT_DEFAULT_PROVIDER/MODEL`, `AGENT_MODELS` JSON overrides).
   Concrete models are resolved by `CloudflareModelProvider` (Workers AI / OpenAI / Anthropic, plus
   the direct DashScope / DeepSeek / Moonshot providers). A block may also pick a specific model
   (`Block.modelId`) from the catalog in `kernel/src/domain/models.ts`; each model runs on Cloudflare
   Workers AI by default and switches to its direct provider API when that key is configured.
-- **`ContainerAgentExecutor`** (worker) — runs the repo-operating steps (`coder`, `mocker`,
+- **`ContainerAgentExecutor`** (worker): runs the repo-operating steps (`coder`, `mocker`,
   `playwright`) in a per-run Cloudflare Container (the Pi coding-agent harness) that clones the
   repo, implements the block and opens a PR. Always composed with the inline executor by
   `CompositeAgentExecutor`; its prerequisites are mandatory and the Worker fails to start
-  without them (there is no opt-out flag — container implementation is always on).
-- **`FakeAgentExecutor`** (worker tests) — deterministic; used by the integration tests.
+  without them (there is no opt-out flag: container implementation is always on).
+- **`FakeAgentExecutor`** (worker tests): deterministic; used by the integration tests.
 
 The engine itself (`ExecutionService`) is deterministic: `advanceInstance` moves one run forward
 by exactly one agent-performed step. In production the durable Cloudflare Workflows driver calls
@@ -135,7 +135,7 @@ it in a loop (see "Execution & real-time events" below); the integration tests c
 
 Runs are driven **durably and server-side**: starting a pipeline creates one Cloudflare Workflows
 instance per run (`ExecutionWorkflow`, addressed by execution id), which loops calling
-`advanceInstance` — one retriable, checkpointed step at a time — and parks on `waitForEvent` while
+`advanceInstance` (one retriable, checkpointed step at a time) and parks on `waitForEvent` while
 a human decision is outstanding. Progress no longer depends on a browser being open. A cron
 "sweeper" re-drives any run whose Workflows instance died (eviction, a missed event).
 
@@ -151,20 +151,22 @@ the `WORKSPACE_EVENTS` binding is absent the engine simply pushes nothing.
 
 Every LLM call's token usage (input + output) is metered into a `token_usage` ledger (D1) by
 the `SpendService`. Each call is priced into a single currency via a configurable price table
-and summed over the current calendar month — the budget is **org-wide**, across all workspaces.
-Before each agent step the engine checks `SpendService.isOverBudget()`; when the month's spend
-reaches the limit it **pauses** the run (execution status `paused`) instead of incurring more
-cost. The current status (`tokens`, `costSpent`, `costLimit`, `exceeded`) is attached to every
+and summed over the current calendar month. The budget is **tiered**
+([ADR 0020](./docs/adr/0020-tiered-spend-budgets.md)): before each agent step the engine checks
+`SpendService.isOverBudget()`, which always gates the workspace's own usage against the
+workspace's monthly limit and, when an account-wide or per-user limit is set, gates those tiers
+against their own usage totals too. When any applicable tier reaches its limit the run
+**pauses** (execution status `paused`) instead of incurring more cost. The current status (`tokens`, `costSpent`, `costLimit`, `exceeded`) is attached to every
 workspace snapshot, and the frontend shows a large warning and a "Resume anyway" action
 (`POST /workspaces/:ws/spend/resume`) when the budget is exceeded. Paused runs also resume
 automatically once the period rolls over.
 
-Configured **per workspace in the UI** (Workspace settings → Budget; the `workspace_settings`
-row): a monthly limit (default ~100) and currency (default `EUR`). The built-in per-model
-price table is fixed (not operator-overridable). The budget is **per-workspace** — `SpendService` resolves each workspace's
-effective pricing and gates on its OWN usage. A limit of `0` is the deliberate "no PAID spend"
+The workspace tier is configured **per workspace in the UI** (Workspace settings → Budget; the
+`workspace_settings` row): a monthly limit (default ~100) and currency (default `EUR`).
+`SpendService` resolves each workspace's effective pricing from that row; the built-in
+per-model price table is fixed (not operator-overridable). A limit of `0` is the deliberate "no PAID spend"
 setting: metered runs are refused (a clear error up front, not a silent pause), but local-runner
-models and connected subscriptions — which incur no metered cost — keep running. The container
+models and connected subscriptions, which incur no metered cost, keep running. The container
 executor reports no usage directly (its LLM proxy meters tokens itself, to avoid double-counting),
 and test fakes report none.
 
@@ -174,7 +176,7 @@ A signed-in user (authenticated by **"Login with GitHub"**, see
 [`docs/auth.md`](./docs/auth.md)) acts within an **account**: their personal
 account, plus any GitHub **orgs** they belong to. An account **owns many
 workspaces** (boards), so a team shares the org's boards while keeping personal
-ones separate. Visibility is by GitHub membership — switching the active account
+ones separate. Visibility is by GitHub membership: switching the active account
 re-scopes the board list. Account-bound things (the GitHub installation, the
 account tier of the prompt-fragment library) are inherited by every workspace
 under that account; a workspace can refine them. Schema in migration
@@ -191,9 +193,25 @@ the core `github` module and worker adapters are wired only when a GitHub App is
 configured. See [`docs/github-integration.md`](./docs/github-integration.md),
 [`docs/github-operations.md`](./docs/github-operations.md), and
 [`docs/adr/0001-github-app-integration.md`](./docs/adr/0001-github-app-integration.md).
+What actually stops a prompt-injected or hallucinating agent from landing malicious
+code is documented layer by layer in
+[`docs/security-model.md`](./docs/security-model.md): token scoping, the push path,
+merge gating, and the operator hardening checklist (branch protection, merge presets). Two of that checklist's items
+are now backed in-product: `allowInitiatorPat` decides whether a run may authenticate
+as its initiator's own personal token rather than the App installation; enforced at
+every mint site through one shared decision, at two tiers (an account-wide floor a
+board admin cannot lift, and the board's own switch beneath it), and
+`GET /workspaces/:ws/github/branch-protection` probes each linked repository's default
+branch for host-side protection across BOTH classic branch protection and rulesets,
+reporting `unknown` as its own state rather than collapsing an unreachable repo into
+either verdict. Neither narrows personal-token support: both floors ship permissive,
+because a PAT is the right credential for someone adopting cat-factory alone inside an
+org that has not. The doc's operator checklist names GitHub's own org-level PAT
+controls first, where the deployment serves a whole org.
 
-Auth uses Web Crypto (`crypto.subtle`) — a thin `fetch` `GitHubClient`, no Octokit:
-an RS256 app JWT mints short-lived installation tokens (cached in D1), and webhook
+Auth uses Web Crypto (`crypto.subtle`): a thin `fetch` `GitHubClient`, no Octokit:
+an RS256 app JWT mints short-lived installation tokens (cached in memory per
+isolate/process, deliberately never persisted; see `GitHubAppAuth`), and webhook
 deliveries are HMAC-verified over the raw body before a fast `202` ack. New schema is
 in migration `0004_github_projections.sql`. Configure via `GITHUB_APP_ID/SLUG` vars
 and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
@@ -206,9 +224,8 @@ in by installing the privileged App; `GitHubAppRegistry` routes every token mint
 by the installation's owning `appId`, and `GitHubConnection.canCreateRepos`
 drives whether the bootstrap modal creates the repo directly or delegates to
 GitHub's new-repo page. See
-[ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md) (`GITHUB_PRIVILEGED_APP_ID`
-
-- `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
+[ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md) (`GITHUB_PRIVILEGED_APP_ID` +
+`GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
 
 ## Document & task sources (optional)
 
@@ -218,12 +235,12 @@ Both integrations are **source-agnostic** (one provider port per source kind) an
 **opt-in**, with per-workspace credentials stored **encrypted** in D1 (no source
 secrets in `wrangler.toml`).
 
-- **Document sources** (`documents` module, migration `0012_document_sources.sql`)
-  — import a page, **plan** it into `services → modules → tasks` (LLM or a
+- **Document sources** (`documents` module, migration `0012_document_sources.sql`):
+  import a page, **plan** it into `services → modules → tasks` (LLM or a
   deterministic heading parser), **spawn** that structure onto the board, or link
   it to a task. Ships Confluence Cloud + Notion providers. See
   [`docs/document-sources.md`](./docs/document-sources.md).
-- **Task sources** (`tasks` module, migration `0014_task_sources.sql`) — connect
+- **Task sources** (`tasks` module, migration `0014_task_sources.sql`): connect
   an issue tracker (Jira / Linear / GitHub Issues), import issues, and link them
   to blocks so agents see the tracker context during execution.
 
@@ -231,16 +248,16 @@ secrets in `wrangler.toml`).
 
 A **stateless, synchronous** reviewer agent (`requirements` module,
 `RequirementReviewService`, migration `0021_requirement_reviews.sql`) inspects a
-block's _collected requirements_ — its description plus any linked PRD/RFC docs
-and tracker issues — and raises a list of review items
+block's _collected requirements_ (its description plus any linked PRD/RFC docs
+and tracker issues) and raises a list of review items
 (gaps / clarifications / assumptions / risks / questions), each with a
 category/severity. A human replies to or dismisses each; once all are settled,
 `incorporate()` rewrites the block description. Unlike execution/bootstrap this
-flow uses **no container and no durable driver** — it calls the `ModelProvider`
+flow uses **no container and no durable driver**: it calls the `ModelProvider`
 port inline (like the document planner) and returns the updated entity, which the
 SPA patches directly. One live review per block; the model resolves exactly like
 an agent step (a block's pinned model wins, else the routing default, falling back
-to Workers AI). Full flow in [`../CLAUDE.md`](../CLAUDE.md).
+to Workers AI). Full flow in [`../AGENTS.md`](../AGENTS.md).
 
 ## Service blueprints
 
@@ -252,8 +269,8 @@ add missing, refresh descriptions, **never delete**) via `BoardScanService`. It
 reuses the whole execution engine, runs on the prior `coder` step's PR branch when
 present (else the repo default branch), and is also kicked off after a successful
 bootstrap to seed the initial map. There is **no** standalone "scan repository"
-command — repository decomposition is always this pipeline agent. Full flow in
-[`../CLAUDE.md`](../CLAUDE.md).
+command: repository decomposition is always this pipeline agent. Full flow in
+[`../AGENTS.md`](../AGENTS.md).
 
 ## Ephemeral environments + the Deployer agent (optional)
 
@@ -264,10 +281,10 @@ Valibot-validated **manifest** describing its management API as HTTP request
 templates for provision/status/teardown, an auth scheme (none / api-key / bearer /
 basic / OAuth2 client-credentials / custom headers), and a dot-path mapping from its
 arbitrary response onto a canonical environment handle. A single generic
-`HttpEnvironmentProvider` interprets any manifest — no presets, no per-org code.
+`HttpEnvironmentProvider` interprets any manifest, no presets, no per-org code.
 
 The `deployer` step is executed **deterministically by the engine** (it calls the
-provider directly — no LLM, no token spend); the resulting handle is persisted in a
+provider directly, no LLM, no token spend); the resulting handle is persisted in a
 registry keyed by block and injected into downstream steps' `AgentRunContext`, so a
 `tester` step discovers the live URL and how to authenticate. Like GitHub/Confluence
 it is **opt-in** (the core `environments` module and worker adapters wire only when
@@ -276,7 +293,7 @@ configured).
 Per-tenant provider credentials are supplied at registration and stored **encrypted
 at rest** in D1 (AES-256-GCM via `SecretCipher`, per-record salt + IV, HKDF-derived
 key); the manifest references them by logical key only. The env secret is the
-shared `ENCRYPTION_KEY` master, which is already required service-wide — so the module
+shared `ENCRYPTION_KEY` master, which is already required service-wide, so the module
 is always available and there is no separate enable flag; a pipeline uses it only when a
 workspace connects a provider and includes a `deployer`/`tester` step. New schema is in
 migration `0008_environments.sql`. The HTTP `manifest` backend is one of several
@@ -295,14 +312,14 @@ The built-in tier ships as code in
 [`@cat-factory/prompt-fragments`](./packages/prompt-fragments/README.md); on top
 of it the `fragmentLibrary` module (migration `0020_prompt_fragments.sql`) adds a
 **tenant-scoped, editable** catalog. A resolved catalog is the merge of three
-tiers — **built-in ∪ account ∪ workspace** — later tiers overriding earlier ones
+tiers (**built-in ∪ account ∪ workspace**), later tiers overriding earlier ones
 by stable `id` (and a tombstone row suppresses one). Fragments can be
 hand-authored or **sourced from a repo** (Markdown + YAML frontmatter), tracked
 with a sync cursor (`source_sha`) so "check for changes" is a cheap comparison.
 
 At run time a `FragmentSelector` picks the **relevant** subset for the PR/diff at
 hand (LLM-picked from summaries, with a deterministic `tags`/`appliesTo`
-fallback), unioned with any ids the user pinned on the block — so reviews are
+fallback), unioned with any ids the user pinned on the block, so reviews are
 sharper and cheaper. `composeSystemPrompt` is unchanged. Opt-in via
 `PROMPT_LIBRARY_ENABLED` (selector mode `PROMPT_LIBRARY_SELECTOR = llm |
 deterministic`); when off, the static built-in catalog and the manual
@@ -320,7 +337,7 @@ release templates + auth + response dot-paths). The `runners` module
 (migration `0013_runner_pools.sql`) stores the manifest plus a per-tenant secret
 bundle **encrypted at rest** (AES-256-GCM under the shared `ENCRYPTION_KEY`); the
 `HttpRunnerPoolProvider` dispatches jobs there instead. Rollout is per-workspace
-and reversible — workspaces without a registered pool fall back to Cloudflare
+and reversible: workspaces without a registered pool fall back to Cloudflare
 Containers. Opt-in via `RUNNERS_ENABLED`. Operator playbook in
 [`docs/runner-pool-integration.md`](./docs/runner-pool-integration.md);
 rationale in [ADR 0004](./docs/adr/0004-self-hosted-runner-pool.md).
@@ -336,11 +353,11 @@ database (`cat_factory`, bound as `DB`). Migrations are plain SQL under
 `wrangler d1 migrations apply`. The model has grown from `0001_init.sql` (core
 boards/blocks/pipelines/executions) through, notably:
 
-- `0003_token_usage`, `0006_storage_retention` — spend ledger + retention.
-- `0004_github_projections`, `0019_github_installation_app` — GitHub projections + two-app tiering.
-- `0008_environments`, `0012_document_sources`, `0013_runner_pools`, `0014_task_sources` — the opt-in integrations.
-- `0010_bootstrap` (+ `0017_bootstrap_board`, `0018_bootstrap_failure`), `0017_accounts`, `0019_agent_runs` — bootstrap, tenancy, and the unified `agent_runs` table.
-- `0020_prompt_fragments`, `0021_requirement_reviews` — the prompt-fragment library and requirements review.
+- `0003_token_usage`, `0006_storage_retention`: spend ledger + retention.
+- `0004_github_projections`, `0019_github_installation_app`: GitHub projections + two-app tiering.
+- `0008_environments`, `0012_document_sources`, `0013_runner_pools`, `0014_task_sources`: the opt-in integrations.
+- `0010_bootstrap` (+ `0017_bootstrap_board`, `0018_bootstrap_failure`), `0017_accounts`, `0019_agent_runs`: bootstrap, tenancy, and the unified `agent_runs` table.
+- `0020_prompt_fragments`, `0021_requirement_reviews`: the prompt-fragment library and requirements review.
 
 Agent runs for **both** container flows (task `execution` and repo `bootstrap`)
 share one kind-scoped `agent_runs` table, so failure + retry surface uniformly
@@ -406,7 +423,7 @@ PUT    /workspaces/:ws/github/repos/:repoId/pulls/:n/merge    merge a pull reque
 POST   /workspaces/:ws/github/repos/:repoId/issues/:n/comments  comment on an issue/PR
 
 # Ephemeral environments (available wherever the encryption key is set)
-# Per-service provisioning model — see docs/per-service-provisioning.md
+# Per-service provisioning model - see docs/per-service-provisioning.md
 GET    /workspaces/:ws/environments/handlers                    per-type handler bundle + custom-type catalog
 POST   /workspaces/:ws/environments/handlers                    register/replace a per-type handler (config + secrets)
 PATCH  /workspaces/:ws/environments/handlers/:type/secrets      rotate a handler's secret bundle (?manifestId for custom)
@@ -436,7 +453,7 @@ GET    /accounts/:id/workspaces                              boards owned by an 
 POST   /workspaces/:ws/agent-runs/:id/retry                  retry a failed run (resolves kind)
 POST   /workspaces/:ws/agent-runs/:id/stop                   stop a run (reclaims its container)
 
-# Requirements review (stateless, synchronous — no container)
+# Requirements review (stateless, synchronous - no container)
 GET    /blocks/:blockId/requirement-review                   current review for a block (or null)
 POST   /blocks/:blockId/requirement-review                   run a new review (replaces the prior one)
 POST   /requirement-reviews/:id/items/:itemId/reply          answer an item
@@ -448,6 +465,7 @@ GET    /workspaces/:ws/bootstrap/reference-architectures     list reference arch
 POST   /workspaces/:ws/bootstrap/reference-architectures     CRUD reference architectures
 POST   /workspaces/:ws/bootstrap/jobs                         start a bootstrap run (returns a running job)
 GET    /workspaces/:ws/bootstrap/jobs/:id                     poll a bootstrap job
+POST   /workspaces/:ws/bootstrap/jobs/:id/adoption-review     settle a parked monorepo run's adoption plan
 
 # Document sources (always on; requires the shared ENCRYPTION_KEY at boot)
 GET    /workspaces/:ws/documents/sources                     connected document sources
@@ -481,6 +499,15 @@ PUT    /workspaces/:ws/runner-pool/connection/secrets        rotate the secret b
 DELETE /workspaces/:ws/runner-pool/connection                unregister
 ```
 
+The routes above are the session-authed surface the SPA drives. There is also a
+**key-authenticated public API** under `/api/v1` for external systems (tasks,
+runs, SSE streams, parked decisions, notifications, usage, plus a signed
+outbound webhook), with keys minted per workspace under
+`/workspaces/:ws/public-api-keys`. Setup guide + full endpoint reference:
+[`docs/public-api.md`](./docs/public-api.md); generated OpenAPI spec:
+[`../docs/openapi.json`](../docs/openapi.json); design record:
+[ADR 0030](./docs/adr/0030-public-api-surface.md).
+
 ## Develop & test
 
 ```bash
@@ -490,19 +517,19 @@ pnpm install
 pnpm --filter @cat-factory/worker db:migrate:local
 pnpm dev
 
-# integration tests — real workerd + real local D1 (no mocking of infra)
+# integration tests - real workerd + real local D1 (no mocking of infra)
 pnpm test
 ```
 
-Integration tests run via `@cloudflare/vitest-pool-workers` inside the same runtime Wrangler uses,
+Integration tests run via `@cloudflare/vitest-plugin` inside the same runtime Wrangler uses,
 against a real local D1 database with the real migrations applied. Only the LLM is faked
 (deterministically); the storage and HTTP stack are real.
 
 #### Kubernetes integration tests (k3d)
 
 The native Kubernetes runner + environment backends have an integration suite that drives
-them against a **real** Kubernetes apiserver — a [k3d](https://k3d.io) (k3s-in-Docker)
-cluster — so the apiserver behaviours the unit tests only mock (pod-proxy round-trip,
+them against a **real** Kubernetes apiserver: a [k3d](https://k3d.io) (k3s-in-Docker)
+cluster, so the apiserver behaviours the unit tests only mock (pod-proxy round-trip,
 server-side apply, the k3s ServiceLB-assigned URL, real `404`/`409` semantics) are validated
 for real. The suite **self-skips** when the `K8S_IT_*` cluster env is unset, so a normal
 `pnpm test` run is unaffected. To run it locally:
@@ -540,7 +567,7 @@ pnpm --filter @cat-factory/integrations run test:integration
 k3d cluster delete cf-it
 ```
 
-In CI this is the **`Test k8s (k3d)`** job — a required check, but **gated** on a paths
+In CI this is the **`Test k8s (k3d)`** job: a required check, but **gated** on a paths
 filter so the cluster spins up only when code under `modules/kubernetes/` (or the contracts /
 ports that define the backends) changes; an unrelated PR skips it.
 
@@ -548,11 +575,11 @@ ports that define the backends) changes; an unrelated PR skips it.
 
 This package is a **library**; it carries no production config. Deployment is
 driven from the example **deployment** package
-[`deploy/backend`](../../deploy/backend), which re-exports this library's handler
+[`deploy/backend`](../deploy/backend), which re-exports this library's handler
 and holds the `wrangler.toml`, the per-deployment `[vars]`, and the secrets. The
 end-to-end walkthrough (deploy order, migrations, the reference URLs) lives in the
-[top-level README → Deployment](../README.md#deployment) and
-[`deploy/backend/README.md`](../../deploy/backend/README.md). **This section is the
+[Deploy to Cloudflare](https://www.catfactory.ai/deploy/cloudflare.html) guide and
+[`deploy/backend/README.md`](../deploy/backend/README.md). **This section is the
 configuration reference**: what every var/secret does and how to turn each opt-in
 feature on. The canonical, fully-commented list of bindings + vars is the typed
 `Env` in [`runtimes/cloudflare/src/infrastructure/env.ts`](./runtimes/cloudflare/src/infrastructure/env.ts).
@@ -566,7 +593,7 @@ pnpm db:migrate:remote                   # wrangler d1 migrations apply cat_fact
 pnpm deploy                              # builds @cat-factory/worker, then wrangler deploy
 ```
 
-Agents always perform **real** work — an unpinned block defaults to the Qwen
+Agents always perform **real** work: an unpinned block defaults to the Qwen
 model on the Workers AI (`AI`) binding, so a minimal deployment needs **no
 provider key**. Setting a direct-provider key simply upgrades that model to its
 own API (see "Model picker" below).
@@ -576,20 +603,20 @@ own API (see "Model picker" below).
 Two different `wrangler` mechanisms, and getting them confused is the most common
 mistake:
 
-- **`[vars]`** — non-secret config, committed in `wrangler.toml`. Origins,
+- **`[vars]`**: non-secret config, committed in `wrangler.toml`. Origins,
   ids, slugs, feature toggles, budgets. Visible in the dashboard.
-- **Secrets** — `wrangler secret put NAME` (never committed). Private keys,
+- **Secrets**: `wrangler secret put NAME` (never committed). Private keys,
   OAuth/client and HMAC secrets, provider API keys, the per-feature encryption
   master keys. Locally these go in `.dev.vars` (gitignored; see
   `deploy/backend/.dev.vars.example`).
 
-| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                                |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                              |
-| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own — see below)                                                                                                      |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                                           |
-| `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT` (the spend budget is per-workspace in the UI, not env)                             | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                    |
-| `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`                               | `ENCRYPTION_KEY` (shared master for every integration's credentials, **required** — the always-on document/task/environment sources fail config load without it) |
+| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                             |
+| `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own: see below)                                                                                                      |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                                          |
+| `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT` (the spend budget is per-workspace in the UI, not env)                             | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                   |
+| `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`                               | `ENCRYPTION_KEY` (shared master for every integration's credentials, **required**: the always-on document/task/environment sources fail config load without it) |
 
 > `WORKER_PUBLIC_URL` is a **`[var]`, not a secret**, despite older notes that
 > said otherwise. Set it in `[vars]`.
@@ -599,7 +626,7 @@ mistake:
 The API **fails closed**: every route except a small public allowlist (`/health`, `/auth/*`, the
 `/v1` container proxy, and `/github` webhooks) requires a signed-in session, and when auth is
 unconfigured those routes return `503 auth_not_configured` rather than serving data. **A production
-deployment without auth configured is locked, not open** — so this is a required setup step, not an
+deployment without auth configured is locked, not open**, so this is a required setup step, not an
 optional one.
 
 Register a GitHub OAuth app (a GitHub App's OAuth credentials or a classic OAuth App) with the
@@ -616,18 +643,18 @@ wrangler secret put AUTH_SESSION_SECRET            # any high-entropy random str
 # recommended in production (see docs/auth.md):
 #   AUTH_SUCCESS_REDIRECT_URL = "https://<your-spa>"   # fixed post-login landing
 
-# REQUIRED — sign-in allowlist, fails closed (set at least one; see docs/auth.md):
+# REQUIRED - sign-in allowlist, fails closed (set at least one; see docs/auth.md):
 #   AUTH_ALLOWED_LOGINS = "octocat,hubot"      # admit these GitHub users, OR…
 #   AUTH_ALLOWED_ORGS   = "acme-inc"           # …any member of these GitHub orgs
 # Both empty => nobody can sign in. The two lists combine as an OR allowlist.
 ```
 
 Local dev and the test suite run open via the `AUTH_DEV_OPEN=true` escape hatch (in `.dev.vars`,
-gitignored, and the vitest bindings) — **never set it in the deployed `wrangler.toml`**, as that
+gitignored, and the vitest bindings): **never set it in the deployed `wrangler.toml`**, as that
 would re-open production. `AUTH_DEV_OPEN` opens only the **API gate**; the SPA still routes to the
 login screen on a remote facade (which has no anonymous tier). The end-to-end suite, which needs
 the SPA to boot straight to the board with auth providers off, uses the stronger **`TESTING_NO_AUTH`**
-hatch instead — it implies `AUTH_DEV_OPEN` _and_ tells the SPA (via `/auth/config`) to render
+hatch instead: it implies `AUTH_DEV_OPEN` _and_ tells the SPA (via `/auth/config`) to render
 anonymously. As belt-and-braces, set `ENVIRONMENT = "production"` in the deployed `[vars]`: when the
 environment is production-like the worker **refuses** both hatches even if they leak in, so a stray
 dev flag can't re-open a live deployment. Full details, the OAuth flow, and all optional vars are in
@@ -662,27 +689,27 @@ only labels and provider/model ids, never the keys.
 
 A third flavour, **subscription**, runs a model in the Claude Code / Codex harness on a vendor
 token. The **poolable, organization-permitted** coding plans (Kimi, DeepSeek) are connected per
-workspace under the **LLM Vendors** UI (`/workspaces/:ws/vendor-credentials`, encrypted at rest —
+workspace under the **LLM Vendors** UI (`/workspaces/:ws/vendor-credentials`, encrypted at rest:
 needs `ENCRYPTION_KEY`). The overall flavour precedence is **subscription > direct > cloudflare**
 ("subscriptions always win"): connecting a dual-mode vendor token upgrades that model for the
 workspace, and subscription-only models (Opus/Sonnet, GPT-5.x) run _only_ this way. Subscription
 runs are flat-rate **quota** and are exempt from the monetary spend gate. One nuance: the
-**individual-use-only** subscriptions — Claude (Pro/Max), GLM (Z.ai Coding Plan) and ChatGPT/Codex
-— are **never pooled on a workspace**; each user connects their own under **Personal
+**individual-use-only** subscriptions, Claude (Pro/Max), GLM (Z.ai Coding Plan) and ChatGPT/Codex,
+are **never pooled on a workspace**; each user connects their own under **Personal
 subscriptions** and only that user's runs use it (organizations use a direct provider API key
 instead). See [`docs/individual-subscription-usage.md`](./docs/individual-subscription-usage.md).
 
-> Full details — the resolution precedence, the Pi/Claude Code/Codex harnesses and the inline
+> Full details (the resolution precedence, the Pi/Claude Code/Codex harnesses and the inline
 > degradation seam, dual-mode context windows, Bedrock, and the per-runtime provisioning/env
-> reference — are in [`docs/model-support.md`](./docs/model-support.md).
+> reference) are in [`docs/model-support.md`](./docs/model-support.md).
 
 #### Container implementation (running agents on a real checkout)
 
-The phases that must operate on the repository — `coder` (implementation), `mocker` (WireMock
-mocks) and `playwright` (end-to-end tests) — run inside a per-run Cloudflare Container that
+The phases that must operate on the repository, `coder` (implementation), `mocker` (WireMock
+mocks) and `playwright` (end-to-end tests), run inside a per-run Cloudflare Container that
 clones the repo, edits files and opens a PR, instead of as a single inline LLM call. Every other
 phase (architect, reviewer, tester, the `acceptance` scenario writer, …) stays inline. This is
-**always on** — there is no opt-out flag — so its prerequisites are mandatory and the Worker
+**always on** (there is no opt-out flag) so its prerequisites are mandatory and the Worker
 **fails to start** if any is missing:
 
 ```toml
@@ -697,17 +724,23 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
 > custom domain.** A per-run Container egresses from inside Cloudflare's network, so
 > a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
-blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+> blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
 > unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
-> unblocked. The container image is pinned by the `[[containers]].image` GHCR tag —
+> unblocked. The container image is pinned by the `[[containers]].image` GHCR tag:
 > use a version tag, not `latest`, for reproducible deploys.
 
 The container never holds a provider key: it reaches models only through this Worker's LLM proxy
 (`/v1/chat/completions`) using a short-lived, model-locked session token, and the proxy is the
-single spend-metering point.
+single spend-metering point. The same handler is also served at
+`/v1/phase/<phase>/chat/completions`: the harness points Pi there for the pass it is about to run
+so each metered call is attributed to the run phase that spent it (the agent's own loop vs a
+validation or reproduction repair round; see
+[token-burn instrumentation](../docs/initiatives/token-burn-instrumentation.md)). The backend
+advertises that route on the job body (`proxyPhasePath`), so a harness image paired with an older
+backend keeps using the plain path instead of 404ing; those calls are recorded as unattributed.
 
 **No extra LLM secret is required.** With no direct-provider key set, blocks resolve to their
-**Workers AI** flavour, and the proxy serves those in-process through the Worker's `AI` binding —
+**Workers AI** flavour, and the proxy serves those in-process through the Worker's `AI` binding,
 so container runs work out of the box on Workers AI. Setting a direct-provider key (above) simply
 upgrades the same blocks to that provider; the proxy then forwards to its OpenAI-compatible
 endpoint instead. Either way the container is unchanged and holds no credentials.
@@ -715,12 +748,12 @@ endpoint instead. Either way the container is unchanged and holds no credentials
 ##### Web search (optional; same key-out-of-the-sandbox seam)
 
 Container agents (coder / ci-fixer / mocker / …) can use `web_search` / `web_fetch` (the
-`@juicesharp/rpiv-web-tools` Pi extension in the image), and — exactly like the LLM proxy —
+`@juicesharp/rpiv-web-tools` Pi extension in the image), and (exactly like the LLM proxy)
 **no search key enters the container**. The Worker hosts a SearXNG-compatible **web-search proxy**
 at `${WORKER_PUBLIC_URL}/v1/web-search`; the container reaches it with the **same** model-locked
 session token it uses for the LLM proxy, and the Worker runs the search server-side under the
 deployment's own key. Enable it **per account** in the UI (Account settings → Deployment
-integrations; the sealed `account_settings` secrets blob), by setting **one** upstream — never in
+integrations; the sealed `account_settings` secrets blob), by setting **one** upstream, never in
 the container:
 
 - a **Brave Search** key (recommended; what Claude Code uses), **or**
@@ -734,9 +767,9 @@ runs behave exactly as before. When configured, `ContainerAgentExecutor` flags t
 points the extension's SearXNG provider at the proxy (the session token as its bearer). The two web
 tools count as read-only exploration for the no-edit guard, but a dedicated cap
 (`JOB_MAX_CONSECUTIVE_WEB_CALLS`, default 25) stops a search rabbit-hole. Adding another search
-vendor is a new `WebSearchUpstream` implementation behind the gateway — the container side never
+vendor is a new `WebSearchUpstream` implementation behind the gateway: the container side never
 changes. (A **self-hosted runner pool** controls its own container env, so it may instead set any
-`rpiv-web-tools` provider key — `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY`, `SEARXNG_URL`, … —
+`rpiv-web-tools` provider key (`BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY`, `SEARXNG_URL`, …)
 directly; the harness auto-detects it.)
 
 Separately, the **inline** design/research agents (architect / researcher) can use the
@@ -744,6 +777,12 @@ provider-hosted `web_search` tool on Anthropic / OpenAI models via `INLINE_WEB_S
 (see `INLINE_WEB_SEARCH_KINDS` / `INLINE_WEB_SEARCH_MAX_USES`); it is a no-op on other providers.
 
 #### Repo bootstrap (creating a new repo from a reference architecture)
+
+A run can also target a **directory of an existing monorepo** instead (`monorepo` on the start
+body): it surveys the monorepo's conventions against the template's, parks on `awaiting_review`
+until a human settles what the new service adopts from each, then writes the service and opens a
+pull request. It never force-pushes, and its two durable drives are keyed apart from the run id.
+Design and traps: [`monorepo-service-bootstrap.md`](../docs/initiatives/monorepo-service-bootstrap.md).
 
 The "bootstrap repo" task adapts a reference architecture (or scaffolds from scratch) into a
 pre-created, empty GitHub repo and force-pushes the result, running the bootstrapper agent
@@ -753,7 +792,7 @@ provisional **service frame** on the board; a durable `BootstrapWorkflow` (bindi
 `BOOTSTRAP_WORKFLOW`, declared in `wrangler.toml` like `EXECUTION_WORKFLOW`) polls the container,
 streams live subtask progress over the WebSocket events hub, and on success links the new repo to
 that frame so it becomes a real, droppable service (on failure the frame is marked blocked). See
-[`CLAUDE.md`](../CLAUDE.md) for the end-to-end flow. Managing reference architectures (the CRUD
+[`AGENTS.md`](../AGENTS.md) for the end-to-end flow. Managing reference architectures (the CRUD
 under `/bootstrap/reference-architectures`) always works, but **kicking off a run** needs the same
 machinery as container implementation. When
 any prerequisite is missing the endpoint returns:
@@ -770,17 +809,17 @@ any prerequisite is missing the endpoint returns:
 To enable the run path, all of the following must be present (see `selectRepoBootstrapper` in
 `src/infrastructure/container.ts`):
 
-| Prerequisite             | Kind     | How to set it                                                                                                                                       |
-| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EXEC_CONTAINER` binding | binding  | declared in `wrangler.toml` — the per-run container _factory_, not a shared instance (see below)                                                    |
-| `GITHUB_APP_ID`          | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`)                                                                                           |
-| `GITHUB_APP_PRIVATE_KEY` | secret   | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM)                                                                                           |
-| `GITHUB_WEBHOOK_SECRET`  | secret   | `wrangler secret put GITHUB_WEBHOOK_SECRET`                                                                                                         |
-| `WORKER_PUBLIC_URL`      | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"` — it's a public origin, not a secret |
-| `AUTH_SESSION_SECRET`    | secret   | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth)                                                                               |
+| Prerequisite             | Kind     | How to set it                                                                                                                                      |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EXEC_CONTAINER` binding | binding  | declared in `wrangler.toml`: the per-run container _factory_, not a shared instance (see below)                                                    |
+| `GITHUB_APP_ID`          | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`)                                                                                          |
+| `GITHUB_APP_PRIVATE_KEY` | secret   | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM)                                                                                          |
+| `GITHUB_WEBHOOK_SECRET`  | secret   | `wrangler secret put GITHUB_WEBHOOK_SECRET`                                                                                                        |
+| `WORKER_PUBLIC_URL`      | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"`: it's a public origin, not a secret |
+| `AUTH_SESSION_SECRET`    | secret   | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth)                                                                              |
 
 `EXEC_CONTAINER` is the Durable Object **namespace** binding, not a single long-lived container.
-Each run derives its own instance — `container.get(container.idFromName(jobId))` — so containers
+Each run derives its own instance (`container.get(container.idFromName(jobId))`) so containers
 are spun up **on demand, one per job**, up to the `[[containers]] max_instances` ceiling in
 `wrangler.toml`, and Cloudflare reclaims (spins down) each idle instance once its run finishes.
 The gate above only checks that this factory binding is wired into the deployment; you can't spin
@@ -792,20 +831,20 @@ wrangler secret put GITHUB_APP_PRIVATE_KEY   # PKCS#8 PEM
 wrangler secret put GITHUB_WEBHOOK_SECRET
 wrangler secret put AUTH_SESSION_SECRET
 
-# Non-secret config — set in wrangler.toml [vars], not as secrets:
+# Non-secret config - set in wrangler.toml [vars], not as secrets:
 #   GITHUB_APP_ID = "..."          (with GITHUB_APP_SLUG)
 #   WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 # plus the EXEC_CONTAINER binding (already declared in wrangler.toml).
 ```
 
-Bootstrap needs the same runner backend as container implementation — the `EXEC_CONTAINER`
+Bootstrap needs the same runner backend as container implementation: the `EXEC_CONTAINER`
 binding (or a registered runner pool). Like the container executor, the bootstrapper holds no
 provider key: the agent reaches models only through this Worker's LLM proxy with a short-lived
 session token.
 
 #### GitHub App integration (acting on repos)
 
-Distinct from "Login with GitHub" above — this is how a **workspace acts on repos**
+Distinct from "Login with GitHub" above: this is how a **workspace acts on repos**
 (read/write repos, branches, PRs, issues; webhooks). Off until an App is configured.
 Register a GitHub App, then:
 
@@ -829,8 +868,9 @@ Design + runbook: [`docs/github-integration.md`](./docs/github-integration.md) �
 
 **GitLab is also supported**, as an opt-in alternative/addition to GitHub (single
 shared token rather than an App installation). See
-[`docs/vcs-providers.md`](./docs/vcs-providers.md) for the feature-by-feature
-parity table and setup pointers.
+[`docs/vcs-providers.md`](./docs/vcs-providers.md) for the provider layer, and the website's
+[support matrix](https://www.catfactory.ai/reference/vcs-support-matrix.html) for the
+feature-by-feature comparison and setup.
 
 **Creating repos directly (two-app tier, opt-in).** Programmatic repo creation
 needs `Administration: write`, which most installs shouldn't carry. So register a
@@ -851,10 +891,10 @@ wrangler secret put GITHUB_PRIVILEGED_APP_PRIVATE_KEY   # PKCS#8 PEM
 
 The document-source, task-source, ephemeral-environment, and self-hosted runner-pool
 integrations are **per-workspace**: each workspace enters its own provider credentials
-**in the app**, stored **encrypted at rest** in D1 — there are **no provider
+**in the app**, stored **encrypted at rest** in D1; there are **no provider
 credentials in `wrangler.toml`**. The only deployment secret they need is **one shared
 encryption master key** (`ENCRYPTION_KEY`, base64, ≥32 bytes decoded; generate with
-`openssl rand -base64 32`). One key backs them all — the cipher domain-separates per
+`openssl rand -base64 32`). One key backs them all: the cipher domain-separates per
 integration via its HKDF `info` tag, so document, task, environment and runner
 credentials never share a derived key. Document and task sources are **always on**;
 environments and runner pools stay behind their `*_ENABLED` flag.
@@ -867,7 +907,7 @@ environments and runner pools stay behind their `*_ENABLED` flag.
 | Self-hosted runner pool | `RUNNERS_ENABLED = "true"`                           | [runner-pool-integration](./docs/runner-pool-integration.md)   |
 
 > Document and task sources are **always on** (tenants connect their own
-> sources/trackers through the UI), so they have no enable flag — but the worker
+> sources/trackers through the UI), so they have no enable flag, but the worker
 > **refuses to boot** until `ENCRYPTION_KEY` is set, instead of silently dropping the
 > feature from the task-creation modal.
 

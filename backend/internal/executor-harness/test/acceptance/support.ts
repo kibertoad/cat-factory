@@ -6,6 +6,7 @@ import net from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DEFAULT_HARNESS_PORT } from '../../src/harness-port.js'
 
 // Shared plumbing for the Docker-based acceptance tests: build/launch the image,
 // stand up local stub servers (LLM upstream + GitHub API), seed a bind-mounted
@@ -120,12 +121,27 @@ export function startContainer(name: string, hostPort: number, bare: string): vo
       '-e',
       'GITHUB_ALLOWED_HOSTS=host.docker.internal',
       '-p',
-      `${hostPort}:8080`,
+      `${hostPort}:${DEFAULT_HARNESS_PORT}`,
       '-v',
       `${bare}:/srv/repo`,
       IMAGE,
     ],
     { stdio: 'ignore' },
+  )
+}
+
+/**
+ * Start a detached container with nothing mounted and no job-specific env: just the image, as it
+ * boots in production. What the image-inventory suite asserts is the BOOT itself (the docker probe,
+ * the harness's own environment), so a bind-mounted repo would only be noise it has to clean up.
+ */
+export function startBareContainer(name: string, hostPort: number): void {
+  execFileSync(
+    'docker',
+    ['run', '-d', '--name', name, '-p', `${hostPort}:${DEFAULT_HARNESS_PORT}`, IMAGE],
+    {
+      stdio: 'ignore',
+    },
   )
 }
 

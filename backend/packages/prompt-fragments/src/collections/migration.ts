@@ -38,6 +38,8 @@ export const migrationFragments: PromptFragment[] = [
       '- Finish the job: prove parity on the new target, flip the defaults, and REMOVE the old path. A migration that leaves the legacy code and its dependencies behind is not done.',
       '- Record every non-obvious choice (a strategy per object, a retained legacy path, a compat posture) as an explicit decision, not a silent edit.',
     ].join('\n'),
+    brief:
+      'Migration discipline: establish the full blast zone (incl. transitive callers, config, jobs, CI) first; pin observable behaviour with green tests BEFORE the swap; state the compatibility posture deliberately; deliver in small increments keeping the suite green on both technologies; finish by proving parity, flipping defaults and REMOVING the old path; record every non-obvious choice as an explicit decision.',
     appliesTo: { agentKinds: ['spec-writer', 'architect', 'coder', 'tester', 'doc-writer'] },
   },
   {
@@ -56,6 +58,8 @@ export const migrationFragments: PromptFragment[] = [
       '- Establish the baseline first: the behaviour suite must be green on the CURRENT technology before any migration code lands, so a later failure unambiguously means the swap changed behaviour.',
       '- Be additive and traceable: add tests for behaviour that lacks coverage, name each test after the behaviour it pins, and never weaken or delete an existing assertion to make the new target pass.',
     ].join('\n'),
+    brief:
+      'Behaviour preservation: characterize at a seam ABOVE the swapped layer so tests survive it; assert observable outcomes, never vendor error codes, implicit ordering or locking mechanics; preserve silently-differing edge semantics (NULL vs empty, precision/rounding, collation, pagination stability, leaked identity values); keep set-based work batched, never an app-side per-row loop; baseline green on the current technology first; be additive — never weaken an assertion to make the new target pass.',
     appliesTo: { agentKinds: ['spec-writer', 'coder', 'tester', 'playwright'] },
   },
   {
@@ -75,6 +79,8 @@ export const migrationFragments: PromptFragment[] = [
       '5. Safety nets and safeguards — the dual-target test harness, the CI legs, the rollback / compatibility posture, and the gated delivery batches.',
       '- Be the single writer of the confidence-case document: append to it, never fork a parallel copy, and keep it the one source of the safety argument.',
     ].join('\n'),
+    brief:
+      'Confidence case: an evidence-backed proof a human audits, not a re-derivation — cover (1) expected blast zone plus deltas found since, (2) per-touchpoint coverage grounded in NAMED real tests and what each pins (an ungrounded row is a gap), (3) gaps/waivers each justified against the stated coverage bar, (4) risk mitigations, (5) safety nets (dual-target harness, CI legs, rollback posture, gated batches). Append to the one document; never fork a parallel copy.',
     appliesTo: { agentKinds: ['coder', 'doc-writer'] },
   },
 ]

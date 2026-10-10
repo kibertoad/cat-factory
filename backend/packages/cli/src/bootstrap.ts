@@ -1,5 +1,10 @@
 import { dirname, join, resolve } from 'node:path'
 import { type CliOptions, OPTION_DEFAULTS } from './args.js'
+import {
+  COMPOSE_FILE_PATH,
+  composeProjectNameFor,
+  orphanedComposeProjectNote,
+} from './composeProject.js'
 import { ALL_NATIVE_HARNESSES, NATIVE_HARNESS_INFO } from './execution.js'
 import { type FileSystem, realFs } from './fs.js'
 import { createConsoleIo, type Io } from './io.js'
@@ -47,6 +52,10 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
 
   const targetDir = resolve(cwd, options.dir ?? projectName)
 
+  // Resolved here, beside the npm slug, because it is the only place the target directory is
+  // known. Both names identify the same deployment and each obeys its own charset rule.
+  const composeProjectName = composeProjectNameFor(targetDir, OPTION_DEFAULTS.projectName)
+
   const appTitle =
     options.appTitle ??
     (options.yes
@@ -88,8 +97,17 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
     ? fs.readFileSync(gitignorePath, 'utf8')
     : undefined
 
+  // Only a --force run rewrites the compose file, so only a --force run can move the deployment
+  // to another Compose project and leave the old one's container and volume behind.
+  const composePath = join(targetDir, ...COMPOSE_FILE_PATH.split('/'))
+  const orphanedProject =
+    options.force && fs.existsSync(composePath)
+      ? orphanedComposeProjectNote(fs.readFileSync(composePath, 'utf8'), composeProjectName)
+      : undefined
+
   const plan = buildPlan({
     projectName,
+    composeProjectName,
     appTitle,
     provider,
     token,
@@ -109,6 +127,8 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
   })
 
   writePlan(plan, targetDir, fs, io, options.force)
+
+  if (orphanedProject !== undefined) io.warn(orphanedProject)
 
   printNextSteps(io, {
     targetDir,

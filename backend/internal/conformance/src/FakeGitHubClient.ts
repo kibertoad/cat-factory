@@ -15,9 +15,11 @@ import type {
   InstallationSummary,
   ListOptions,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
   Paged,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
 } from '@cat-factory/kernel'
@@ -73,12 +75,13 @@ export class FakeGitHubClient implements GitHubClient {
     installationId: number,
     query: string,
     opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
-  ): Promise<GitHubRepo[]> {
+  ): Promise<Paged<GitHubRepo>> {
     this.searchReposCalls.push({ installationId, query, opts })
     const q = query.trim().toLowerCase()
-    if (!q) return []
+    if (!q) return { items: [], truncated: false }
     const matched = this.repos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
-    return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+    const cap = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+    return { items: matched.slice(0, cap), truncated: matched.length > cap }
   }
 
   async getRepo(_installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo> {
@@ -119,7 +122,7 @@ export class FakeGitHubClient implements GitHubClient {
    * carries the file `content` and a `sha`; `listDirectory` lists the entries
    * under a dir prefix and `getFileContent` returns one. Populate before syncing.
    */
-  files: Record<string, { content: string; sha: string }> = {}
+  files: Record<string, { content: string; sha: string; size?: number }> = {}
 
   async listDirectory(
     _installationId: number,
@@ -136,6 +139,26 @@ export class FakeGitHubClient implements GitHubClient {
         type: 'file',
         sha: f.sha,
       }))
+  }
+
+  async listTree(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    _gitRef?: string,
+  ): Promise<RepoTreeListing> {
+    // The canned `files` map is already the full recursive tree (paths keyed flat). Never
+    // truncated: a fake that reported a cut would make every consumer's degraded path the one
+    // the suites exercise.
+    return {
+      entries: Object.entries(this.files).map(([p, f]) => ({
+        path: p,
+        name: p.split('/').pop() ?? p,
+        type: 'file',
+        sha: f.sha,
+        ...(typeof f.size === 'number' ? { size: f.size } : {}),
+      })),
+      truncated: false,
+    }
   }
 
   async getFileContent(
@@ -267,7 +290,7 @@ export class FakeGitHubClient implements GitHubClient {
     _installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
+  ): Promise<OpenedPullRequest> {
     this.writes.push({ method: 'openPullRequest', ref, args: input })
     const repoId =
       this.repos.find((r) => r.owner === ref.owner && r.name === ref.repo)?.githubId ?? 0
@@ -284,6 +307,7 @@ export class FakeGitHubClient implements GitHubClient {
       author: 'acme-bot',
       updatedAt: 0,
       syncedAt: 0,
+      url: `https://github.test/${ref.owner}/${ref.repo}/pull/1`,
     }
   }
 
@@ -310,6 +334,21 @@ export class FakeGitHubClient implements GitHubClient {
       updatedAt: 0,
       syncedAt: 0,
     }
+  }
+
+  /**
+   * PR bodies served by {@link getPullRequestBody}, keyed by `owner/repo#number`. Seed one to
+   * exercise the verification report's read-splice-write upsert against an existing body; an
+   * unseeded PR reads as an empty description.
+   */
+  pullRequestBodies = new Map<string, string>()
+
+  async getPullRequestBody(
+    _installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return this.pullRequestBodies.get(`${ref.owner}/${ref.repo}#${number}`) ?? null
   }
 
   /** Canned mergeability returned by getPullRequestMergeability (override per test). */

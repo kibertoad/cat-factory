@@ -26,6 +26,29 @@ export function repoDocUrl(path: string, anchor?: string): string {
   return anchor ? `${base}#${anchor}` : base
 }
 
+/** The published documentation site, which owns everything a reader can act on with no checkout. */
+const SITE_BASE = 'https://www.catfactory.ai'
+
+/**
+ * Named WEBSITE pages referenced by error remedies, for the remedies whose instructions the site
+ * owns. Reach for one of these when the fix is a SETUP step: the site states it for the operator
+ * doing it, and after the documentation split the repo doc deliberately no longer restates it.
+ *
+ * {@link DOCS} stays the right target when the remedy is about this repository's own internals, or
+ * when the reader may be somewhere a browser is inconvenient: a GitHub blob URL renders in a
+ * terminal-adjacent tab and survives a checkout that has no docs.
+ *
+ * A page named here must be one that is LIVE. Nothing in CI can confirm that (the site deploys from
+ * its own repository), so load it before adding an entry: a remedy pointing at a 404 fails the one
+ * reader who is already stuck.
+ */
+export const SITE_DOCS = {
+  /** VCS support matrix — including per-provider setup and the webhook secrets. */
+  vcsSetup: `${SITE_BASE}/reference/vcs-support-matrix.html#setting-each-one-up`,
+  /** Registering the GitHub App: the permissions, the PKCS#8 conversion, connecting a workspace. */
+  githubApp: `${SITE_BASE}/deploy/github-app.html`,
+} as const
+
 /**
  * Named in-repo docs referenced by error remedies. Each helper takes an optional section anchor.
  * Add an entry here (rather than a bare literal at the call site) whenever a new remedy links a

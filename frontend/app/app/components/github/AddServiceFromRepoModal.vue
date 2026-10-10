@@ -1,21 +1,34 @@
 <script setup lang="ts">
-// Add a board service backed by an EXISTING GitHub repository — no bootstrap
-// run. Unlike the bootstrap modal (which creates a repo and has an agent adapt
-// it in a container), this just links a repo the App can access to a fresh,
-// `ready` service frame. The workspace need not track the repo yet: the backend
-// links + syncs it on import. If the App can't see the wanted repo, the user
-// grants it access from here, then searches for it again.
+// Add a board service backed by an EXISTING repository — no bootstrap run. Unlike the
+// bootstrap modal (which creates a repo and has an agent adapt it in a container), this
+// just links a repo the workspace's connection can reach to a fresh, `ready` service
+// frame. The workspace need not track the repo yet: the backend links + syncs it on
+// import. On a GitHub App connection, a repo the App can't see yet is granted from here
+// and searched for again; a PAT connection has no such page (see `~/utils/vcs`), so what
+// is listed follows the token's own access.
 //
 // MONOREPO support: a repo flagged a monorepo can back SEVERAL services, each
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
-// browses its tree and picks the service's directory before adding (and may add
-// more than one, a subset of the repo's services).
+// browses its tree and multi-selects the service directories to add — from ANY
+// parent folder, in one pass — then adds them all at once. Directories that
+// already back a service on this board are shown but not selectable.
+//
+// One of those directories may be marked the FRONTEND for the rest: it is created as a
+// `frontend` frame instead of a service, pinned to its subdirectory, and bound to every
+// backend added beside it (`frontendConfig.backendBindings`, the frontend→service board
+// link). Every frontend frame the import creates also gets its subdirectory recorded on
+// `frontendConfig`, marked or not. The rules live in `~/utils/monorepoImport`, which also
+// explains why the bindings carry no env-var names.
 import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
-import GitHubConnect from '~/components/github/GitHubConnect.vue'
+import type { CreatedMonorepoFrame } from '~/utils/monorepoImport'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
+import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 
@@ -29,6 +42,7 @@ const github = useGitHubStore()
 const board = useBoardStore()
 const services = useServicesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 
 const open = computed({
@@ -63,7 +77,22 @@ watch(
 )
 
 // The integration is on but this workspace isn't bound yet — connect first.
-const needsGitHub = computed(() => github.available === true && !github.connected)
+const needsConnection = computed(() => github.available === true && !github.connected)
+
+// Brand name of whatever the workspace connected, for the hint that names it. Only read where
+// a connection exists (the hints below the picker), so `provider` is the right question there.
+const providerLabel = computed(() => VCS_PROVIDER_LABELS[github.provider])
+
+// Which remedy the picker's hint offers: an App installation sends the user to its repo-access
+// list, a pasted token to the token's own scope. Asked of the CONNECTION rather than of the
+// manage URL below, so a host whose settings page we could not build (an Enterprise install,
+// say) never tells an App-connected user to go check their token's scope.
+const isAppConnection = computed(() => github.connection?.method === 'app')
+
+// The intro renders BEFORE a connection may exist, so it asks `surfaceProvider` instead and
+// stays neutral where the deployment offers several and none is bound: naming one would be a
+// guess, and `provider`'s own default would name GitHub on a GitLab-only deployment.
+const introProvider = computed(() => github.surfaceProvider)
 
 // Repos whose service is ALREADY mounted on THIS board can't be added again — adding here would
 // be a no-op. A repo whose service lives on ANOTHER board in the org stays addable: adding it
@@ -136,12 +165,94 @@ const repoMenuItems = computed(() => {
 // repo + requires a directory when it creates the service). A repo already flagged a
 // monorepo (it backs other services) seeds the toggle on when selected.
 const isMonorepo = ref(false)
-const selectedDirectory = ref<string | undefined>(undefined)
+// The cart of monorepo service directories the user has picked (repo-root-relative),
+// accumulated across the whole browse session so picks from different parent folders
+// coexist. Added all at once (see `addServices`), unlike the one-at-a-time whole-repo add.
+const selectedDirectories = ref<string[]>([])
+
+// Directories in the selected repo that ALREADY back a service on this board — surfaced
+// so the tree browser can disable them (adding one again would be a no-op). Derived from
+// the org catalog filtered to this repo; a whole-repo service (null directory) is ignored.
+const addedDirectories = computed<string[]>(() => {
+  if (selectedRepoId.value === undefined) return []
+  return services.catalog
+    .filter((s) => s.repoGithubId === selectedRepoId.value && s.directory)
+    .map((s) => normalizeRepoPath(s.directory as string))
+})
+const addedDirSet = computed(() => new Set(addedDirectories.value))
+
+// What the next "Add N services" will actually create: the cart minus anything already backing a
+// service. THE population every frontend-mark decision reads, and the one `addServices` iterates.
+// The two can differ: a partial failure leaves the cart intact while its earlier creates stand, so
+// judging the mark by the raw cart would offer it (and count it) for frames that already exist.
+const pendingDirectories = computed(() =>
+  selectedDirectories.value.filter((d) => !addedDirSet.value.has(normalizeRepoPath(d))),
+)
+
+// The one picked directory marked as the frontend for the others, or undefined when the
+// selection is all backends. Empty string is the select's "none" option.
+const frontendDirectory = ref<string | undefined>(undefined)
+
+// Whether the mark is on offer at all (role must be `service`, at least two directories to
+// create): see `canDesignateFrontend`. The picker is hidden otherwise, so drop a mark that a role
+// change has made unofferable rather than leaving it to act unseen.
+const frontendOffered = computed(() =>
+  canDesignateFrontend(selectedType.value, pendingDirectories.value.length),
+)
+watch(frontendOffered, (offered) => {
+  if (!offered) frontendDirectory.value = undefined
+})
+// The pending set is the option list, so a directory that leaves it (removed from the cart, or
+// created by an earlier add) can no longer be the mark. The computed re-runs on the cart's
+// in-place mutations (`push`/`splice`), so no deep watch is needed on top of it.
+watch(pendingDirectories, (dirs) => {
+  if (frontendDirectory.value && !dirs.includes(frontendDirectory.value)) {
+    frontendDirectory.value = undefined
+  }
+})
+
+const frontendItems = computed(() => [
+  { label: t('github.addService.frontendNone'), value: '' },
+  ...pendingDirectories.value.map((d) => ({ label: d, value: d })),
+])
+
+// USelect needs a present value for its "none" row; the mark itself stays absent-or-a-path.
+const frontendSelection = computed({
+  get: () => frontendDirectory.value ?? '',
+  set: (value: string) => {
+    frontendDirectory.value = value || undefined
+  },
+})
 
 function toggleMonorepo(value: boolean) {
   isMonorepo.value = value
-  selectedDirectory.value = undefined
+  selectedDirectories.value = []
+  frontendDirectory.value = undefined
 }
+
+// Add/remove a directory from the cart. Guards against an already-added directory (the
+// browser disables it, but keep the model authoritative).
+function toggleDirectory(path: string) {
+  if (addedDirSet.value.has(normalizeRepoPath(path))) return
+  const i = selectedDirectories.value.indexOf(path)
+  if (i >= 0) selectedDirectories.value.splice(i, 1)
+  else selectedDirectories.value.push(path)
+}
+
+function removeSelected(path: string) {
+  const i = selectedDirectories.value.indexOf(path)
+  if (i >= 0) selectedDirectories.value.splice(i, 1)
+}
+
+// The just-added whole-repo service, kept on the board store so the user can configure it
+// (test infra + fragments) right here — the same controls as the inspector. Only the
+// whole-repo flow surfaces this inline configure step; a monorepo adds several services at
+// once and they're configured later in the inspector. Declared above the watcher and
+// `resetSelection` below, both of which clear it.
+const configuredBlockId = ref<string | undefined>(undefined)
+const configuredBlock = computed(() =>
+  configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
+)
 
 // On repo change, capture the picked repo (from the volatile loaded list, before a later
 // search replaces it), seed the monorepo toggle from its persisted flag, and clear the rest.
@@ -152,13 +263,15 @@ watch(selectedRepoId, (id) => {
     if (found) selectedRepo.value = found
   }
   isMonorepo.value = selectedRepo.value?.isMonorepo === true
-  selectedDirectory.value = undefined
+  selectedDirectories.value = []
+  frontendDirectory.value = undefined
   configuredBlockId.value = undefined
 })
 
 function resetSelection() {
   selectedRepoId.value = undefined
-  selectedDirectory.value = undefined
+  selectedDirectories.value = []
+  frontendDirectory.value = undefined
   isMonorepo.value = false
   configuredBlockId.value = undefined
   resetRepoSearch()
@@ -172,29 +285,14 @@ function clearSelection() {
   resetSelection()
 }
 
-// The App's installation settings page — where the user grants it access to a
-// repo it can't see yet (mirrors the bootstrap modal's "grant access" link).
-const manageInstallUrl = computed(() => {
-  const conn = github.connection
-  if (!conn) return undefined
-  return conn.targetType === 'Organization'
-    ? `https://github.com/organizations/${conn.accountLogin}/settings/installations/${conn.installationId}`
-    : `https://github.com/settings/installations/${conn.installationId}`
-})
+// The App's installation settings page — where the user grants it access to a repo it can't
+// see yet (mirrors the bootstrap modal's "grant access" link). Absent on a PAT connection,
+// which has no installation to manage, so the affordance and its hint both drop out.
+const manageInstallUrl = computed(() => appInstallationManageUrl(github.connection))
 
 function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
 }
-
-// The just-added service, kept on the board store so the user can configure it (test
-// infra + fragments) right here — the same controls as the inspector. A monorepo can
-// host several services, so adding another keeps the modal open; a whole-repo service
-// can only be added once (its repo is then on the board).
-const configuredBlockId = ref<string | undefined>(undefined)
-const configuredDirectory = ref<string | undefined>(undefined)
-const configuredBlock = computed(() =>
-  configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
-)
 
 // On open: ensure we know the connection + which repos the App can access, and
 // the workspace's already-tracked repos (to flag ones already on the board).
@@ -210,21 +308,37 @@ watch(
   { immediate: true },
 )
 
-// A monorepo service needs a chosen directory; a whole-repo service can be added once.
+// A whole-repo service is added once (then configured inline). A monorepo instead
+// multi-selects directories and adds them together via `addServices`.
 const canAdd = computed(
   () =>
-    !needsGitHub.value &&
+    !needsConnection.value &&
     selectedRepoId.value !== undefined &&
-    (isMonorepo.value ? !!selectedDirectory.value : !configuredBlockId.value),
+    !isMonorepo.value &&
+    !configuredBlockId.value,
 )
+const canAddServices = computed(
+  () =>
+    !needsConnection.value &&
+    selectedRepoId.value !== undefined &&
+    isMonorepo.value &&
+    pendingDirectories.value.length > 0,
+)
+
+// Directories the user has picked but NOT yet committed via "Add N services". Closing the
+// modal ("Done") would silently discard them — almost never what the user wants — so the
+// footer's Done is disabled while any remain (see the template).
+const hasPendingSelection = computed(() => isMonorepo.value && pendingDirectories.value.length > 0)
 
 async function add() {
   if (!canAdd.value || selectedRepoId.value === undefined) return
   adding.value = true
   try {
     const block = await board.addServiceFromRepo(selectedRepoId.value, {
-      directory: isMonorepo.value ? selectedDirectory.value : undefined,
-      isMonorepo: isMonorepo.value,
+      // The switch is off, so import the whole repo as ONE service. Send the flag
+      // explicitly: a repo already flagged a monorepo (the toggle seeds on) must be
+      // un-flagged here, or the backend still requires a service subdirectory and rejects.
+      isMonorepo: false,
       type: selectedType.value,
       // Place the imported frame in free space (centred in view) instead of the
       // backend's default stagger, so it never overlaps an existing service.
@@ -235,22 +349,87 @@ async function add() {
     // Centre the camera on the newly imported service.
     await focusFrame(block.id)
     configuredBlockId.value = block.id
-    configuredDirectory.value = isMonorepo.value ? selectedDirectory.value : undefined
     toast.add({
       title: t('github.addService.toast.addedTitle'),
       description: t('github.addService.toast.addedDescription', { title: block.title }),
       icon: 'i-lucide-check',
       color: 'success',
     })
-    // Ready to pick another monorepo service (the just-added directory is taken).
-    selectedDirectory.value = undefined
   } catch (e) {
+    present(e, 'github.addService.toast.addFailedTitle')
+  } finally {
+    adding.value = false
+  }
+}
+
+// What the success toast says about the frontend wiring, which is the half of the add that can
+// fail on its own. A landed mark names the directory and points at the inspector for the env-var
+// names the import deliberately leaves empty; a patch that did not persist says SO, because the
+// frames are on the board either way and a silent omission reads exactly like a clean import. The
+// failure note covers an undesignated frontend frame too: it lost its subdirectory, so the harness
+// would build the repo root.
+function frontendNote(designatedDirectory: string | undefined, wiringLanded: boolean): string {
+  if (!wiringLanded) return t('github.addService.toast.frontendWiringFailedNote')
+  if (!designatedDirectory) return ''
+  return t('github.addService.toast.frontendLinkedNote', { directory: designatedDirectory })
+}
+
+// Add every pending directory as its own frame, in one action. Each add lays the frame out in free
+// space (seeing the ones added earlier in the loop, so they don't overlap); the projection is
+// refreshed and the camera centres on the last one. The just-added directories then move to
+// `addedDirectories`, so the cart is cleared and the tree marks them "added", ready to pick more
+// (from any folder) or close. That is why the pending set is SNAPSHOTTED before the first await:
+// each create refreshes the projection, so the live computed shrinks under the loop.
+//
+// A created `frontend` frame is then patched with its `frontendConfig`: its subdirectory always,
+// plus a binding per sibling frame when it is the marked one. Those patches can only run after the
+// loop, because the bindings name block ids the creates mint. The frame being wired is the one the
+// PLAN designated, never whichever entry happens to carry `type: 'frontend'` (see
+// `MonorepoImportEntry.designatedFrontend`). A patch that does not land leaves its frames standing
+// and is REPORTED: `updateBlock` toasts its own failure and answers whether it persisted, so the
+// success toast claims only the links that were actually written.
+async function addServices() {
+  if (!canAddServices.value || selectedRepoId.value === undefined) return
+  const dirs = [...pendingDirectories.value]
+  if (dirs.length === 0) return
+  // The mark is handed over raw: `planMonorepoImport` applies `canDesignateFrontend` itself over
+  // the very directories it is creating, so there is no second copy of that condition to drift.
+  const plan = planMonorepoImport(dirs, selectedType.value, frontendDirectory.value)
+  const designatedDirectory = plan.find((entry) => entry.designatedFrontend)?.directory
+  adding.value = true
+  try {
+    const created: CreatedMonorepoFrame[] = []
+    for (const entry of plan) {
+      const block = await board.addServiceFromRepo(selectedRepoId.value, {
+        directory: entry.directory,
+        isMonorepo: true,
+        type: entry.type,
+        position: freeFramePosition(),
+      })
+      created.push({ blockId: block.id, entry })
+    }
+    let wiringLanded = true
+    for (const patch of planFrontendConfigPatches(created)) {
+      const persisted = await board.updateBlock(patch.blockId, { frontendConfig: patch.config })
+      if (!persisted) wiringLanded = false
+    }
+    await github.load()
+    const lastBlockId = created.at(-1)?.blockId
+    if (lastBlockId) await focusFrame(lastBlockId)
+    selectedDirectories.value = []
     toast.add({
-      title: t('github.addService.toast.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
+      title: t('github.addService.toast.servicesAddedTitle'),
+      description: [
+        t('github.addService.toast.servicesAddedDescription', { count: dirs.length }, dirs.length),
+        frontendNote(designatedDirectory, wiringLanded),
+      ]
+        .filter(Boolean)
+        .join(' '),
+      icon: wiringLanded ? 'i-lucide-check' : 'i-lucide-triangle-alert',
+      color: wiringLanded ? 'success' : 'warning',
     })
+  } catch (e) {
+    present(e, 'github.addService.toast.addFailedTitle')
   } finally {
     adding.value = false
   }
@@ -265,31 +444,44 @@ function done() {
   <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
     <template #body>
       <div class="space-y-6">
-        <p class="text-sm text-slate-400">
-          {{ t('github.addService.intro') }}
+        <p class="text-sm text-muted">
+          {{
+            introProvider
+              ? t('vcs.addService.intro', { provider: VCS_PROVIDER_LABELS[introProvider] })
+              : t('vcs.addService.introAny')
+          }}
         </p>
 
-        <!-- not connected: linking a repo needs the App bound to this workspace -->
+        <!-- not connected: linking a repo needs a connection bound to this workspace, so
+             offer whichever connect methods the deployment serves (never just the App) -->
         <div
-          v-if="needsGitHub"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          v-if="needsConnection"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
-              {{ t('github.addService.connectFirst') }}
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
+              {{ t('vcs.addService.connectFirst') }}
             </p>
           </div>
-          <GitHubConnect />
+          <VcsConnectSurfaces />
         </div>
 
         <template v-else>
           <UFormField
             :label="t('github.addService.repository')"
-            :description="t('github.addService.repositoryHint')"
+            :description="
+              isAppConnection
+                ? t('vcs.addService.repositoryHintApp')
+                : t('vcs.addService.repositoryHintToken', { provider: providerLabel })
+            "
             required
           >
-            <div class="space-y-1.5">
+            <!-- The wrapper, not the UInputMenu itself, carries the anchor: a tutorial tour
+                 stop needs an element that is present the moment the modal mounts, and it
+                 highlights the whole field rather than whichever inner node Nuxt UI happens
+                 to forward the attribute to. -->
+            <div class="space-y-1.5" data-testid="add-service-repo-search">
               <UInputMenu
                 v-model="selectedRepoId"
                 v-model:search-term="repoSearch"
@@ -329,8 +521,9 @@ function done() {
             <USelect v-model="selectedType" :items="typeItems" value-key="value" class="w-full" />
           </UFormField>
 
-          <!-- monorepo handling: flag + directory picker -->
-          <div v-if="selectedRepoId !== undefined" class="space-y-3">
+          <!-- monorepo handling: flag + multi-directory picker (hidden once a whole-repo
+               service has been added and is being configured inline) -->
+          <div v-if="selectedRepoId !== undefined && !configuredBlock" class="space-y-3">
             <USwitch
               :model-value="isMonorepo"
               :label="t('github.addService.monorepoLabel')"
@@ -340,48 +533,119 @@ function done() {
 
             <div
               v-if="isMonorepo"
-              class="rounded-md border border-slate-700/60 bg-slate-900/40 p-3"
+              class="space-y-3 rounded-md border border-muted/60 bg-default/40 p-3"
             >
-              <p class="mb-2 text-xs text-slate-400">
+              <p class="text-xs text-muted">
                 {{ t('github.addService.monorepoBrowseHint') }}
               </p>
               <RepoTreeBrowser
-                v-model="selectedDirectory"
                 :repo-github-id="selectedRepoId!"
                 mode="dir"
+                multiple
+                :selected-paths="selectedDirectories"
+                :added-paths="addedDirectories"
+                @toggle="toggleDirectory"
               />
-              <p class="mt-2 truncate text-xs text-slate-400">
-                <template v-if="selectedDirectory">
-                  {{ t('github.addService.serviceDirectory') }}
-                  <code class="text-slate-200">{{ selectedDirectory }}</code>
-                </template>
-                <template v-else>{{ t('github.addService.noDirectorySelected') }}</template>
-              </p>
+
+              <!-- the selection cart + the add action sit right beside the tree, so the
+                   picked services and the button that adds them are never scrolled apart -->
+              <div class="space-y-2 rounded-md border border-default bg-app-950/40 p-2.5">
+                <SectionLabel as="p">
+                  {{ t('github.addService.selectedServices') }}
+                </SectionLabel>
+                <div v-if="selectedDirectories.length" class="flex flex-wrap gap-1.5">
+                  <span
+                    v-for="dir in selectedDirectories"
+                    :key="dir"
+                    class="inline-flex items-center gap-1 rounded-sm bg-elevated px-2 py-0.5 text-xs text-default"
+                  >
+                    <code class="text-default">{{ dir }}</code>
+                    <IconButton
+                      color="neutral"
+                      variant="ghost"
+                      icon="i-lucide-x"
+                      :label="t('github.addService.removeService', { directory: dir })"
+                      :ui="{
+                        base: 'p-0 text-muted hover:bg-transparent hover:text-app-100',
+                        leadingIcon: 'h-3 w-3',
+                      }"
+                      @click="removeSelected(dir)"
+                    />
+                  </span>
+                </div>
+                <p v-else class="text-xs text-dimmed">
+                  {{ t('github.addService.noServicesSelected') }}
+                </p>
+
+                <!-- Mark one pick as the frontend for the others: it is created as a frontend
+                     app and bound to every backend added beside it. Only offered while the
+                     mark would wire something (see `canDesignateFrontend`). -->
+                <UFormField
+                  v-if="frontendOffered"
+                  :label="t('github.addService.frontendLabel')"
+                  :description="t('github.addService.frontendHint')"
+                >
+                  <USelect
+                    v-model="frontendSelection"
+                    :items="frontendItems"
+                    value-key="value"
+                    size="sm"
+                    class="w-full"
+                    data-testid="add-service-frontend-select"
+                  />
+                </UFormField>
+
+                <div class="flex justify-end">
+                  <UButton
+                    color="primary"
+                    icon="i-lucide-plus"
+                    size="sm"
+                    :loading="adding"
+                    :disabled="!canAddServices"
+                    @click="addServices"
+                  >
+                    <!-- Counts what the click will CREATE, not the raw cart: an entry whose frame
+                         already exists (a retry after a partial failure) is not added again. -->
+                    {{
+                      t(
+                        'github.addService.addServices',
+                        { count: pendingDirectories.length },
+                        pendingDirectories.length,
+                      )
+                    }}
+                  </UButton>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- just-added service: configure it with the same controls as the inspector -->
           <div
             v-if="configuredBlock"
-            class="space-y-4 rounded-md border border-emerald-900/50 bg-emerald-950/20 p-3"
+            class="space-y-4 rounded-md border border-app-success-900/50 bg-app-success-950/20 p-3"
           >
             <div
-              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+              class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
               {{ t('github.addService.addedConfigure', { title: configuredBlock.title }) }}
             </div>
+            <!-- Test infrastructure only applies to a runnable frame — a `document`
+                 repo stands up no test environment, so skip it (parity with the
+                 inspector, which hides the same panel for a document frame). -->
             <ServiceTestConfig
+              v-if="configuredBlock.type !== 'document'"
               :block="configuredBlock"
-              :repo="{ githubId: selectedRepoId!, directory: configuredDirectory }"
+              :repo="{ githubId: selectedRepoId! }"
               default-open
             />
             <ServiceFragments :block="configuredBlock" default-open />
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <!-- App connections only: a pasted token has no installation whose repo access
+               could be edited, so there is no page to send the user to. -->
+          <div v-if="manageInstallUrl" class="flex flex-wrap items-center gap-2">
             <UButton
-              v-if="manageInstallUrl"
               color="neutral"
               variant="subtle"
               size="sm"
@@ -395,22 +659,30 @@ function done() {
           </div>
 
           <div class="flex justify-end gap-2">
-            <UButton v-if="configuredBlock" color="neutral" variant="soft" size="sm" @click="done">
+            <!-- Monorepo adds via the cart's own button; the footer only closes. A
+                 whole-repo add shows its "Add service" button until one is added, then
+                 the inline configure panel + this Done. -->
+            <UButton
+              v-if="configuredBlock || isMonorepo"
+              color="neutral"
+              variant="soft"
+              size="sm"
+              :disabled="hasPendingSelection"
+              :title="hasPendingSelection ? t('github.addService.donePendingHint') : undefined"
+              @click="done"
+            >
               {{ t('github.addService.done') }}
             </UButton>
             <UButton
-              v-if="!configuredBlock || isMonorepo"
+              v-if="!isMonorepo && !configuredBlock"
               color="primary"
               icon="i-lucide-plus"
               :loading="adding"
               :disabled="!canAdd"
+              data-testid="add-service-submit"
               @click="add"
             >
-              {{
-                configuredBlock && isMonorepo
-                  ? t('github.addService.addAnother')
-                  : t('github.addService.add')
-              }}
+              {{ t('github.addService.add') }}
             </UButton>
           </div>
         </template>

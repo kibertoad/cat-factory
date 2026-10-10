@@ -5,7 +5,9 @@
 // once reached npm as shells; `prepublishOnly` now rebuilds on publish, this is the CI
 // backstop). Three layers, run over every non-private workspace package after `pnpm build`:
 //   1. Empty-shell guard: every file that `main`/`types`/`bin`/`exports` points at exists
-//      and is non-empty.
+//      and is non-empty, PLUS a files-payload guard: every concrete path the `files` list
+//      declares would publish content. The second is what covers `@cat-factory/app`, whose
+//      payload no entry point names (rationale: `publish-payload.mjs`).
 //   2. publint: the package.json publish contract (files/exports/type shape) is coherent.
 //   3. attw --pack --profile esm-only: the *packed tarball*'s types resolve for node16-ESM
 //      and bundler consumers (every package here is ESM-only, so the node10/CJS resolutions
@@ -20,12 +22,19 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { publint } from 'publint'
 import { formatMessage } from 'publint/utils'
+import { findMissingPayload } from './publish-payload.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 // The workspace globs from pnpm-workspace.yaml, as a literal list (same convention as
 // check-package-catalog.mjs). Private packages are skipped at read time, so listing the
 // internal/deploy globs costs nothing and keeps the two scripts symmetric.
+//
+// `sdk/*` expands to the two npm members of the SDK family (`sdk/typescript`, `sdk/mcp`); the
+// Python, Go and Java clients have no package.json and drop out at read time. They belong here for
+// the reason this whole script exists: `@cat-factory/mcp-server` is one `bin` entry pointing at a
+// gitignored `dist`, which is exactly the shape the two packages that already reached npm as empty
+// shells had.
 const WORKSPACE_GLOBS = [
   'backend/packages/*',
   'backend/runtimes/*',
@@ -35,6 +44,7 @@ const WORKSPACE_GLOBS = [
   'deploy/frontend',
   'deploy/node',
   'deploy/local',
+  'sdk/*',
 ]
 
 // @cat-factory/app is a source-published Nuxt layer (main: ./nuxt.config.ts, no dist, no
@@ -42,13 +52,13 @@ const WORKSPACE_GLOBS = [
 const ATTW_SKIP = new Set(['@cat-factory/app'])
 
 // Per-package extra attw flags. @cat-factory/worker is consumed exclusively through
-// bundler resolution (wrangler / vitest-pool-workers — it cannot run outside workerd), and
+// bundler resolution (wrangler / vitest-plugin, since it cannot run outside workerd), and
 // its d.ts files carry extensionless relative imports that are valid there but never
 // resolve under node16-ESM; suppress that one rule for it rather than mass-adding .js
 // extensions across the facade. Every other package stays on the full esm-only profile.
 const ATTW_EXTRA_FLAGS = new Map([
   ['@cat-factory/worker', ['--ignore-rules', 'internal-resolution-error']],
-  // @cat-factory/executor-harness's `.` entry is a compiled runner payload (dist/server.js,
+  // @cat-factory/executor-harness's `.` entry is a compiled runner payload (dist/harness-server.js,
   // built with declaration:false) that consumers spawn as a process, not import for types, so
   // its "no types" is intentional — suppress just that rule. Its `./embed` source export still
   // resolves types and stays fully checked.
@@ -157,7 +167,7 @@ const problems = []
 // files more verbosely, so it's skipped for exactly these (and only these) below.
 const shellFailed = new Set()
 
-// 1. Empty-shell guard + 2. publint (in-process API, one pass over all packages).
+// 1. Empty-shell + files-payload guards + 2. publint (in-process API, one pass over all packages).
 for (const { relDir, pkg } of packages) {
   for (const entryFile of collectEntryFiles(pkg)) {
     const abs = join(repoRoot, relDir, entryFile)
@@ -176,6 +186,15 @@ for (const { relDir, pkg } of packages) {
         `${pkg.name}: entry point ${entryFile} ${why} — the package would publish as an empty shell. Run \`pnpm build\` first; if dist/ is built, the exports map is wrong.`,
       )
     }
+  }
+
+  // A missing declared payload does NOT join `shellFailed`: a gone `migrations/` or `i18n/`
+  // says nothing about whether the packed tarball's types resolve, and suppressing attw for it
+  // would let one problem hide the other.
+  for (const { entry, why } of findMissingPayload(join(repoRoot, relDir), pkg)) {
+    problems.push(
+      `${pkg.name}: files entry ${entry} ${why}: the package would publish without the payload it declares. Run \`pnpm build\` first; if the tree is built, the \`files\` list names a path that is gone.`,
+    )
   }
 
   const { messages } = await publint({ pkgDir: join(repoRoot, relDir) })
@@ -211,5 +230,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `check-publish-integrity: all ${packages.length} publishable packages ship coherent artifacts (entries exist, publint clean, attw clean). ✅`,
+  `check-publish-integrity: all ${packages.length} publishable packages ship coherent artifacts (entries and declared payloads exist, publint clean, attw clean). ✅`,
 )

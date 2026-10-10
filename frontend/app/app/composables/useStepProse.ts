@@ -4,23 +4,35 @@ import { parseOutputOutline } from '~/utils/agentOutput'
 /**
  * The prose reader for an agent step's markdown output: its heading outline, the
  * per-section collapse state, and the scroll-spy that keeps the ToC in sync.
- * Owns the scroll container + per-section element refs the template binds; the
- * details card is always the first anchor. `reset()` re-seeds (all sections
- * expanded, scrolled to top) whenever a different step opens.
+ * Owns the scroll container + per-section element refs the template binds.
+ * `reset()` re-seeds (all sections expanded, scrolled to top) whenever a different
+ * step opens.
+ *
+ * `leadAnchorId` names a section the CONSUMER renders ahead of the prose and registers in
+ * `sectionEls` — the step reader's details card. It is an option rather than a constant
+ * because the scroll-spy walks the anchors in document order and stops at the first one it
+ * cannot measure: a consumer that renders no such element (the initiative tracker's
+ * plan-approval rail, which has the document alone) would otherwise have its spy stop dead on
+ * an anchor that never exists, pinning `activeId` to a section nobody can see and leaving the
+ * ToC with nothing highlighted. Pass `null` when the prose is the whole document.
  */
-export function useStepProse(getOutput: () => string) {
+export function useStepProse(getOutput: () => string, opts: { leadAnchorId?: string | null } = {}) {
+  const leadAnchorId = opts.leadAnchorId === undefined ? 'step-details' : opts.leadAnchorId
   const outline = computed(() => parseOutputOutline(getOutput()))
   const tocSections = computed(() => outline.value.sections.filter((s) => s.depth > 0))
   const hasOutput = computed(() => !!getOutput().trim())
 
   const collapsed = reactive<Record<string, boolean>>({})
-  const activeId = ref<string>('step-details')
+  const activeId = ref<string>(leadAnchorId ?? '')
   const scrollEl = ref<HTMLElement | null>(null)
   const sectionEls = reactive<Record<string, HTMLElement | null>>({})
 
-  // Anchors the ToC navigates + the scroll-spy tracks: the details card first, then
-  // every heading section of the prose.
-  const anchors = computed(() => ['step-details', ...tocSections.value.map((s) => s.id)])
+  // Anchors the ToC navigates + the scroll-spy tracks: the lead section (when the consumer
+  // renders one) first, then every heading section of the prose.
+  const anchors = computed(() => [
+    ...(leadAnchorId ? [leadAnchorId] : []),
+    ...tocSections.value.map((s) => s.id),
+  ])
 
   function toggle(id: string) {
     collapsed[id] = !collapsed[id]
@@ -43,7 +55,7 @@ export function useStepProse(getOutput: () => string) {
     const container = scrollEl.value
     if (!container) return
     const line = container.getBoundingClientRect().top + 80
-    let current = anchors.value[0] ?? 'step-details'
+    let current = anchors.value[0] ?? ''
     for (const id of anchors.value) {
       const el = sectionEls[id]
       if (el && el.getBoundingClientRect().top <= line) current = id
@@ -55,7 +67,7 @@ export function useStepProse(getOutput: () => string) {
   // Re-seed (all sections expanded, scrolled to top) for a freshly-opened step.
   function reset() {
     for (const k of Object.keys(collapsed)) delete collapsed[k]
-    activeId.value = 'step-details'
+    activeId.value = leadAnchorId ?? ''
     void nextTick(() => scrollEl.value?.scrollTo({ top: 0 }))
   }
 

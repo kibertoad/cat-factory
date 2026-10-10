@@ -16,8 +16,10 @@ export function useBlockDeletion() {
   const ui = useUiStore()
   const recurring = useRecurringPipelinesStore()
   const toast = useToast()
+  const { present } = usePipelineErrorToast()
   const { confirm } = useConfirm()
   const { t } = useI18n()
+  const access = useWorkspaceAccess()
 
   /** A service is any top-level frame; only services are archivable. */
   function isService(block: Block): boolean {
@@ -37,6 +39,9 @@ export function useBlockDeletion() {
    */
   async function archiveBlock(block: Block | undefined | null): Promise<boolean> {
     if (!block || !isService(block)) return false
+    // Archiving is a `board.write` mutation — a read-only viewer's keyboard/inspector path
+    // no-ops (the inspector button is disabled for them; this guards the shortcut too).
+    if (!access.canWriteBoard.value) return false
     const ok = await confirm({
       title: t('panels.inspector.confirmArchive.title'),
       description: t('panels.inspector.confirmArchive.body', { name: block.title }),
@@ -53,12 +58,7 @@ export function useBlockDeletion() {
         color: 'neutral',
       })
     } catch (e) {
-      toast.add({
-        title: t('board.toast.archiveFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.archiveFailed')
     }
     return true
   }
@@ -72,7 +72,14 @@ export function useBlockDeletion() {
         ? 'task'
         : block.level === 'module'
           ? 'module'
-          : 'service'
+          : // An initiative names itself rather than falling through to the service copy, which
+            // would describe a blast radius orders of magnitude larger than the real one. Its
+            // cascade is also genuinely different from a container's: the plan goes with it, but
+            // the tasks its loop already spawned are NOT descendants — the backend only detaches
+            // their membership link — so the count branch below deliberately doesn't apply.
+            block.level === 'initiative'
+            ? 'initiative'
+            : 'service'
     const title = t(`panels.inspector.confirmDelete.${kind}.title`)
     // For a container (service/module) state the exact cascade size so the blast radius is
     // explicit — "and everything inside it" hides how many tasks/modules go with it.
@@ -94,6 +101,9 @@ export function useBlockDeletion() {
 
   async function deleteBlock(block: Block | undefined | null): Promise<boolean> {
     if (!block) return false
+    // Deletion is a `board.write` mutation — no-op for a read-only viewer (guards both the
+    // inspector Delete button and the global Delete-key shortcut, which share this path).
+    if (!access.canWriteBoard.value) return false
     // A service with unfinished work can't be deleted (the backend rejects it) — archive it
     // instead. Route straight to the archive flow so the user is never handed a dead-end error.
     if (isService(block) && unfinishedTaskCount(block) > 0) return archiveBlock(block)

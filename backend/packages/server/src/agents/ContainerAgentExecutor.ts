@@ -1,158 +1,110 @@
 import {
-  type AgentContextFile,
-  type AgentContextFragment,
   type AgentContextRecorder,
   type AgentJobHandle,
   type AgentJobUpdate,
   type AgentRunContext,
   type AgentRunResult,
   type AsyncAgentExecutor,
-  type HarnessCallMetric,
   type HarnessKind,
   type LlmTraceSink,
+  type Logger,
+  type ModelFlavor,
   type ModelRef,
-  type RecordAgentContextInput,
+  type McpOAuthTokenSource,
+  type OperationalMetrics,
   type RunnerDispatchKind,
-  type RunnerDispatchOptions,
   type RunnerJobRef,
+  type RunnerJobView,
+  type RunReclaimTarget,
+  type StoreAgentContextGate,
   type SubscriptionQuotaTarget,
   type SubscriptionVendor,
   type TestSecretEntry,
+  type ToolSecretResolver,
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
-import {
-  CONTEXT_BUDGET,
-  ConflictError,
-  CredentialRequiredError,
-  VCS_DOC_URLS,
-  renderTaskContext,
-  SUBSCRIPTION_VENDORS,
-  isIndividualVendor,
-  isSubscriptionVendor,
-} from '@cat-factory/kernel'
-import {
-  aprioriReferenceBranches,
-  resolveAprioriWorkingBranch,
-  resolveInstanceTypeId,
-} from '@cat-factory/contracts'
+import { ConflictError, VCS_DOC_URLS, noopLogger } from '@cat-factory/kernel'
+import { resolveAprioriWorkingBranch, taskTypeAttachesPullRequest } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
-  DOC_WRITER_KIND,
-  READ_ONLY_AGENT_KINDS,
+  withComplexityAllowance,
   defaultAgentKindRegistry,
-  isProxyableProvider,
   isReadOnlyAgentKind,
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
-import { toRunResult } from './containerAgentResult.js'
 import {
-  buildKindBody,
-  renderMergerMultiRepoSection,
-  renderMultiRepoWorkspaceSection,
-  renderReferenceBranchesSection,
-  renderReferenceReposSection,
-} from './jobBody.js'
+  ContainerJobAuthResolver,
+  type LeasePersonalSubscriptionToken,
+  type LeaseSubscriptionToken,
+} from './containerJobAuth.js'
+import { buildDispatchContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
-  CONFLICT_RESOLVER_AGENT_KIND,
-  MERGER_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
-  isTesterKind,
-  type HarnessCallsRecordInput,
-} from '@cat-factory/orchestration'
+  dispatchToolServerDeps,
+  resolveDispatchToolServers,
+  stepToolServerRecord,
+  type ResolvedToolServers,
+} from './toolServers.js'
+import { resolveCapabilitySecrets } from './capabilitySecrets.js'
+import {
+  buildDoneUpdate,
+  buildFailureMeta,
+  buildRunningUpdate,
+  settledRunResult,
+} from './containerAgentResult.js'
+import { buildKindBody } from './jobBody.js'
+import { resolveTestCredentials, type ResolvedTestCredentials } from './testCredentials.js'
+import { buildDispatchPromptContext } from './dispatchPromptContext.js'
+import { buildDispatchOptions } from './dispatchOptions.js'
+import { containerJobLog, settleFailureFields } from './containerAgentLogging.js'
+import { acceptContainerJob } from './containerAgentDispatch.js'
+import { recordAgentContextSnapshot } from './agentContextRecord.js'
+import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
+import { isTesterKind, type RecordHarnessCalls } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
-import type { RepoCheckout, ResolveRepoTargets } from './resolveRepoTarget.js'
+import {
+  imageVariantFor,
+  refForHandle,
+  runImageVariants,
+  stepJobId,
+} from './containerJobAddressing.js'
+import { ContainerJobAccounting } from './containerJobAccounting.js'
+import type { ResolveRepoTargets } from './resolveRepoTarget.js'
+import {
+  buildCommonBody,
+  dispatchDesignImageDelivery,
+  buildRepoSpec,
+  githubRepoOrigin,
+  resolveAuxiliaryRepos,
+} from './containerAgentBody.js'
 
 // Re-exported for the composition root + tests that wire this executor by name.
 export type { ResolveRunnerTransport }
 
-// The GitHub repo a run should be implemented against, resolved from the
-// workspace's installation + connected repos (see each facade's container.ts).
-export interface RepoTarget {
-  installationId: number
-  owner: string
-  name: string
-  baseBranch: string
-  /**
-   * For a service in a monorepo, the subdirectory (relative to the repo root) the
-   * service lives in, e.g. `packages/api`. Present only when the resolved repo is
-   * flagged a monorepo AND the service pins a directory; the harness then runs the
-   * agent within that subtree and tells it so. Absent ⇒ whole-repo behaviour.
-   */
-  serviceDirectory?: string
-}
-
-export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promise<RepoTarget | null>
-
-/**
- * Mint a GitHub token for repo work. The optional run context lets a facade prefer
- * the run initiator's personal access token over the App/env default (see
- * `ResolveUserGitHubToken`). Optional ⇒ callers that don't know the run (the
- * bootstrapper, tests) call `mint(installationId)` unchanged.
- */
-export type MintInstallationToken = (
-  installationId: number,
-  ctx?: { executionId: string; initiatedBy?: string },
-) => Promise<string>
-
-/**
- * One private package-registry entry as it rides the harness job body: the decrypted
- * token plus the registry host (derived backend-side from the fixed vendor set — the
- * harness hard-allowlists the hosts it will send a token to). Ecosystem-discriminated
- * so later ecosystems (pip/maven/cargo) are additive. Deliberately a dedicated
- * top-level body field, NEVER a context file: the agent-context snapshot copies
- * `contextFiles` content verbatim, while unknown top-level fields are omitted by its
- * allow-list projection.
- */
-export interface JobPackageRegistrySpec {
-  ecosystem: 'npm'
-  host: string
-  scopes: string[]
-  token: string
-}
-
-/**
- * Ensure the per-task work branch exists on the remote, so every agent in the pipeline
- * operates on the SAME branch. Returns whether the branch is present afterwards; a
- * `false`/absent result makes read-only agents fall back to the base branch (writers
- * create-or-resume the branch in their harness regardless). `options.create` is `true`
- * for writers (create from base when absent) and `false` for read-only agents (probe
- * only — never create, since a missing branch means there is nothing yet to read).
- */
-export type EnsureWorkBranch = (
-  repo: RepoTarget,
-  branch: string,
-  options: { create: boolean },
-) => Promise<boolean>
-
-/** A subscription token leased from the workspace's pool for a vendor. */
-interface LeasedSubscriptionToken {
-  tokenId: string
-  secret: string
-}
-
-/** Lease the least-loaded subscription token for a vendor, or throw if none. */
-type LeaseSubscriptionToken = (
-  workspaceId: string,
-  vendor: SubscriptionVendor,
-) => Promise<LeasedSubscriptionToken>
-
-/**
- * Lease the run-initiator's OWN activated personal credential for an individual-usage
- * vendor (Claude). Scoped to the run + user (not pooled); throws a
- * `CredentialRequiredError` when the run has no live activation (the user must re-enter
- * their password). Returns just the raw secret — no token id, since there is no pool
- * rotation/usage to attribute for a single-user credential.
- */
-type LeasePersonalSubscriptionToken = (
-  executionId: string,
-  userId: string,
-  vendor: SubscriptionVendor,
-) => Promise<{ secret: string }>
+// The repo-targeting vocabulary lives next door (a pure declaration block that was crowding
+// this file against its size budget); re-exported here so every existing importer is unchanged.
+import type {
+  EnsureWorkBranch,
+  JobPackageRegistrySpec,
+  MintInstallationToken,
+  RepoTarget,
+  ResolveRepoOrigin,
+  ResolveRepoTarget,
+} from './repoTargeting.js'
+import { jobTokenRepoIds } from './repoTargeting.js'
+export type {
+  EnsureWorkBranch,
+  JobPackageRegistrySpec,
+  MintInstallationToken,
+  RepoOrigin,
+  RepoTarget,
+  ResolveRepoOrigin,
+  ResolveRepoTarget,
+} from './repoTargeting.js'
+export { jobTokenRepoIds } from './repoTargeting.js'
 
 /** Fold a finished subscription job's usage into the leased token + telemetry. */
 type RecordSubscriptionUsage = (
@@ -172,317 +124,16 @@ type RecordSubscriptionQuotaUsage = (
   usage: { inputTokens: number; outputTokens: number },
 ) => Promise<void>
 
-/**
- * Record a finished subscription harness's per-call telemetry into `llm_call_metrics`
- * — the proxy-bypassing analogue of the per-call rows the LLM proxy writes for Pi. The
- * facade maps each harness call metric onto the observability sink. NOT gated on a
- * pooled token id (a personal/individual subscription leases no tokenId yet still
- * produces telemetry), unlike {@link RecordSubscriptionUsage}. The payload is the
- * orchestration recorder's own {@link HarnessCallsRecordInput}, so the two can't drift.
- */
-type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
-
-/**
- * The repo spec every container job body carries: clone coordinates plus, for a
- * monorepo service, the subdirectory the harness should run the agent within. Built
- * here once so the (six) agent-kind job bodies can't drift on which repo fields they
- * forward.
- */
-/**
- * The harness job id for one pipeline step: the run (execution) id plus the agent
- * kind. A run executes a sequence of steps that all share the one per-run container,
- * so each needs an id that is UNIQUE WITHIN THE RUN — the harness keys its per-kind
- * job registries by it, and two steps sharing an id alias there (the bug where an
- * `architect` /explore poll read back the `spec-writer`'s /spec result). The run is
- * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
- *
- * A step RE-dispatched within the run (the Tester→Fixer loop's re-test, a fixer round, a
- * polling gate's helper retry) carries a non-zero `dispatchEpoch` so each round gets a
- * distinct id. The harness re-attaches to an EXISTING job id rather than re-running (replay
- * idempotency), and a container-reusing transport (a warm local pool / a self-hosted runner
- * pool) keeps that registry alive across rounds — reclaiming a pooled member does NOT
- * destroy it — so without the epoch a re-test would replay the first round's stale report
- * (the bug where the Tester appeared to "pass regardless" and never actually re-ran). Epoch
- * 0 (a step dispatched once) keeps the original unsuffixed id, so single-dispatch steps are
- * unaffected. See {@link AgentRunContext.dispatchEpoch}.
- */
-function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
-  const base = `${executionId}-${agentKind}`
-  return dispatchEpoch > 0 ? `${base}-${dispatchEpoch}` : base
-}
-
-/** The provider slug from a handle's `provider:model` string (fallback when the handle omits `provider`). */
-function providerOf(model: string | undefined): string {
-  if (!model) return 'unknown'
-  const colon = model.indexOf(':')
-  return colon > 0 ? model.slice(0, colon) : model
-}
-
-/**
- * Strip any embedded `user:pass@` userinfo from a URL before it is stored in an
- * observability snapshot. The allow-list promises "never a credential-bearing URL", but
- * the injected-doc URLs and a tester's ephemeral `environmentUrl` are operator-supplied
- * and could carry credentials in their userinfo, so defang them here. Non-URL strings
- * (and URLs with no userinfo) pass through unchanged.
- */
-export function stripUrlCredentials(value: string): string {
-  if (!value) return value
-  try {
-    const url = new URL(value)
-    if (!url.username && !url.password) return value
-    url.username = ''
-    url.password = ''
-    return url.toString()
-  } catch {
-    return value
-  }
-}
-
-/**
- * Redact credential-bearing URLs from the tester's `infra` spec before it is stored.
- * An `ephemeral` run carries the provisioned `environmentUrl`; the env's access
- * credentials live on a separate field that is never copied, but the URL itself is
- * operator-mapped and could embed userinfo, so strip it. Returns the value untouched
- * when it is not an `infra` object.
- */
-function redactInfra(infra: unknown): unknown {
-  if (!infra || typeof infra !== 'object' || Array.isArray(infra)) return infra
-  const copy = { ...(infra as Record<string, unknown>) }
-  if (typeof copy.environmentUrl === 'string') {
-    copy.environmentUrl = stripUrlCredentials(copy.environmentUrl)
-  }
-  return copy
-}
-
-/**
- * Build the redacted agent-context snapshot from a dispatched job body + run context.
- * Deliberately an ALLOW-LIST: it copies the composed prompts, the folded-in fragment
- * bodies and the injected context files, plus a handful of structural fields — and
- * NEVER any credential (the GitHub token, the proxy session token, a leased
- * subscription token, or the clone/environment URL that embeds them).
- */
-function buildAgentContextRecord(
-  context: AgentRunContext,
-  body: Record<string, unknown>,
-  model: string,
-  ids: { workspaceId: string; executionId: string },
-): RecordAgentContextInput {
-  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
-  const repo = (body.repo ?? {}) as Record<string, unknown>
-  const contextFiles = Array.isArray(body.contextFiles)
-    ? (body.contextFiles as unknown[]).map((f): AgentContextFile => {
-        const file = (f ?? {}) as Record<string, unknown>
-        return {
-          path: str(file.path),
-          title: str(file.title),
-          url: stripUrlCredentials(str(file.url)),
-          content: str(file.content),
-        }
-      })
-    : []
-  const fragments: AgentContextFragment[] = (context.block.resolvedFragments ?? []).map((fr) => ({
-    id: fr.id,
-    body: fr.body,
-  }))
-  return {
-    workspaceId: ids.workspaceId,
-    executionId: ids.executionId,
-    agentKind: context.agentKind,
-    stepIndex: context.stepIndex,
-    model,
-    // Record the harness the body actually carried; don't guess. A body without an
-    // explicit harness records `null` rather than mislabelling a codex / claude-code
-    // dispatch as `pi`.
-    harness: typeof body.harness === 'string' ? body.harness : null,
-    systemPrompt: str(body.systemPrompt),
-    userPrompt: str(body.userPrompt),
-    fragments,
-    contextFiles,
-    extras: {
-      pipelineName: context.pipelineName,
-      mode: body.mode,
-      repo: { owner: str(repo.owner), name: str(repo.name), baseBranch: str(repo.baseBranch) },
-      branch: body.branch,
-      serviceDirectory: repo.serviceDirectory,
-      webSearch: body.webSearch ?? false,
-      infra: redactInfra(body.infra),
-      decisions: context.decisions,
-      ...(context.revision
-        ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
-        : {}),
-    },
-  }
-}
-
-/**
- * The {@link RunnerJobRef} a job handle addresses: the run (for the per-run container)
- * plus the per-step job id. Falls back to the job id as the run id for a handle minted
- * before run ids were carried (or a single-job flow where the two coincide).
- */
-function refForHandle(handle: AgentJobHandle): RunnerJobRef {
-  return { runId: handle.runId ?? handle.jobId, jobId: handle.jobId }
-}
-
-/** The git origin a run's repo is reached at: the clone URL plus the VCS provider. */
-export interface RepoOrigin {
-  cloneUrl: string
-  provider: 'github' | 'gitlab'
-}
-
-/**
- * Resolve the clone URL + VCS provider for a run's repo. The repo projection carries NO host
- * (it stores only `owner`/`name`), so the origin is a deployment-level fact supplied here.
- * Defaults to GitHub (`https://github.com/<owner>/<name>.git`); a GitLab deployment (local
- * mode) injects a builder that emits the configured GitLab host + `gitlab`, so the harness
- * clones the right host AND opens a merge request instead of a pull request. Without this the
- * clone URL would always point at github.com, so a GitLab repo could never be cloned.
- */
-export type ResolveRepoOrigin = (repo: RepoTarget) => RepoOrigin
-
-const githubRepoOrigin: ResolveRepoOrigin = (repo) => ({
-  cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-  provider: 'github',
-})
-
-function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
-  return {
-    owner: repo.owner,
-    name: repo.name,
-    baseBranch: repo.baseBranch,
-    cloneUrl: origin.cloneUrl,
-    provider: origin.provider,
-    ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
-  }
-}
-
-/**
- * The built-in implementer ("Coder") kind. The multi-repo coding fan-out
- * (service-connections phase 3) started ONLY on this kind: it is the step that makes the
- * cross-service change.
- */
-const IMPLEMENTER_AGENT_KIND = 'coder'
-
-/**
- * The PRE-REGISTRY built-in kinds that fan out across the task's connected repos as sibling
- * checkouts (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes
- * those SAME work branches to fix red CI across every repo in one container (a cross-repo
- * contract break is exactly what a single-repo fixer can't fix). The conflict-resolver stays
- * SINGLE-repo (a git conflict is per-repo textual — handled by targeting the conflicted repo,
- * not fan-out).
- *
- * These two are not yet migrated to the agent-kind registry, so they can't declare
- * `fanOutMultiRepo` on a definition — hence this small allow-list. Registry-backed kinds (the
- * read-only `bug-investigator`, and any custom cross-service explore kind a deployment registers)
- * opt in via {@link AgentKindRegistry.fansOutMultiRepo} instead of being added here — so a new
- * fan-out kind is a registry flag, not another entry in this Set.
- */
-const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
-  IMPLEMENTER_AGENT_KIND,
-  'ci-fixer',
-])
-
-/**
- * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
- * checkouts the agent may read (to reuse existing solutions) but never write to. Deliberately
- * a SEPARATE gate from {@link MULTI_REPO_FANOUT_BUILTIN_KINDS}: reference repos are not involved
- * services (never writable, no branch/PR, don't need to be board services), so they must not be
- * folded into the fan-out path. Only the document writer reads them today.
- */
-const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
-
-/**
- * The read-only bug-triage kind excluded from the reference-branch consumers below: it clones the
- * REPORTED PR/commit as its subject, so an unrelated prior-art reference branch is noise for it.
- */
-const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
-
-/**
- * The kinds that consume a task's read-only apriori REFERENCE branches (the apriori-branches
- * reference mode) — the branches are fetched into the primary checkout's `origin/<b>` refs so the
- * agent can inspect a spike/prototype/prior-art branch it must never commit to. The consumers are
- * the kinds that read/plan/author against the primary repo — the implementer (`coder`), the
- * spec-writer, the doc-writer, and the read-only design/analysis kinds (`architect` / `analysis`).
- * Deliberately EXCLUDES the PR-cloning fix/assess kinds (ci-fixer / conflict-resolver / tester /
- * merger): they already carry the work in the PR branch they clone, so a reference branch is noise
- * — and folding it in would spend prompt tokens and a fetch on a branch they will not use.
- *
- * The design/analysis members are DERIVED from the authoritative {@link READ_ONLY_AGENT_KINDS}
- * (minus `bug-investigator`) rather than re-listed as literals, so a newly-registered read-only
- * design kind is picked up here automatically without a second hard-coded list to keep in step.
- */
-const REFERENCE_BRANCH_KINDS: ReadonlySet<string> = new Set([
-  IMPLEMENTER_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
-  DOC_WRITER_KIND,
-  ...[...READ_ONLY_AGENT_KINDS].filter((k) => k !== BUG_INVESTIGATOR_AGENT_KIND),
-])
-
-/** A safe, collision-free `<base>.md` filename for a materialised context file. */
-function contextFileName(base: string, used: Set<string>): string {
-  const slug =
-    base
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60) || 'context'
-  let name = `${slug}.md`
-  for (let i = 2; used.has(name); i++) name = `${slug}-${i}.md`
-  used.add(name)
-  return name
-}
-
-type ContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number]
-type ContextTask = NonNullable<AgentRunContext['block']['contextTasks']>[number]
-
-/**
- * Materialise the block's linked context (docs + tracker issues) into files the harness
- * writes under CONTEXT_DIR in the checkout, so a container agent reads them on demand.
- * Each file is prefixed with its title + source URL (the zero-cost slice of Anthropic's
- * contextual-retrieval). Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large
- * corpus can't bloat the job body; items past the cap are dropped.
- *
- * Returns both the files AND the docs/tasks that actually fit (`contextDocs`/`contextTasks`),
- * so the caller can render the prompt's summary index from exactly the materialised set —
- * the prompt never names a file the agent won't find on disk.
- */
-function buildContextFiles(context: AgentRunContext): {
-  files: { path: string; title: string; url: string; content: string }[]
-  contextDocs: ContextDoc[]
-  contextTasks: ContextTask[]
-} {
-  const { contextDocs, contextTasks } = context.block
-  const files: { path: string; title: string; url: string; content: string }[] = []
-  const keptDocs: ContextDoc[] = []
-  const keptTasks: ContextTask[] = []
-  if (!contextDocs?.length && !contextTasks?.length)
-    return { files, contextDocs: keptDocs, contextTasks: keptTasks }
-  const used = new Set<string>()
-  let bytes = 0
-  // Write the file when it fits the byte budget; report back whether it was kept so the
-  // caller can keep the prompt index in lock-step with what's on disk.
-  const fit = (title: string, url: string, baseName: string, raw: string): boolean => {
-    const content = `# ${title}\nSource: ${url}\n\n${raw}`
-    const size = new TextEncoder().encode(content).length
-    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) return false
-    bytes += size
-    files.push({ path: contextFileName(baseName, used), title, url, content })
-    return true
-  }
-  for (const doc of contextDocs ?? [])
-    if (fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt)) keptDocs.push(doc)
-  for (const task of contextTasks ?? [])
-    if (fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task)))
-      keptTasks.push(task)
-  return { files, contextDocs: keptDocs, contextTasks: keptTasks }
-}
-
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
   resolveTransport: ResolveRunnerTransport
   /** Default model routing; used when the block pins no (usable) model. */
   agentRouting: AgentRouting
-  /** Resolve a block's selected model id to a concrete ref (direct flavour). */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a block's selected model id to a concrete ref, under a preset's route order. */
+  resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve the workspace's per-agent-kind default model id, consulted when the
    * block pins no model. Optional: absent → the env routing for the kind is used.
@@ -544,6 +195,9 @@ export interface ContainerAgentExecutorDependencies {
    * absent ⇒ no subscription-harness call telemetry is captured. See {@link RecordHarnessCalls}.
    */
   recordHarnessCalls?: RecordHarnessCalls
+  /** The trajectory drain's two halves, both documented in `toolTrajectory.ts`. */
+  recordToolCalls?: RecordToolCalls
+  toolBodyGate?: StoreAgentContextGate
   /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
    * returns true for a resolved subscription harness + vendor, the job carries
@@ -615,6 +269,33 @@ export interface ContainerAgentExecutorDependencies {
    */
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
   /**
+   * Resolve the credentials a TOOL SERVER (MCP) declared, for a kind that declares tool servers.
+   * Both facades wire the deployment-environment resolver (`createEnvToolSecretResolver`) by
+   * default, so a registered server works with no new storage; a deployment needing per-workspace
+   * credentials implements the port itself. Absent ⇒ a server declaring a REQUIRED secret is
+   * reported to the agent as unavailable rather than started without its credential.
+   */
+  resolveToolSecrets?: ToolSecretResolver
+  /**
+   * Mint the ACCESS TOKEN an OAuth-authenticated remote tool server needs, per dispatch. Wired by
+   * every facade that has a grant store (which needs `ENCRYPTION_KEY`); absent ⇒ a server
+   * declaring `oauth` is reported to the agent as `oauth_not_connected` rather than dispatched
+   * without its `Authorization` header. The value rides the job body only, exactly like a resolved
+   * `secretKeys` value.
+   */
+  resolveToolServerOAuth?: McpOAuthTokenSource
+  /**
+   * The facade logger, used for the best-effort degradations around agent capabilities (an
+   * unregistered tool-server id, a credential lookup that failed). Absent ⇒ those are silent,
+   * which is why every facade wires it.
+   */
+  logger?: Logger
+  /**
+   * Where this seam counts its operational faults (dispatch failures, container evictions).
+   * Absent ⇒ the counts go nowhere, which is why every facade wires the app's collector.
+   */
+  operationalMetrics?: OperationalMetrics
+  /**
    * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
    * the container's drained tool spans as child spans under the run's trace — the same
    * sink the LLM proxy fans generations out to, so the trace tree is complete.
@@ -660,41 +341,30 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private readonly jobs: RunnerJobClient
 
   /**
-   * Job ids whose subscription usage has already been folded into the leased token.
-   * `recordSubscriptionUsage` is additive, and the durable driver polls a finished
-   * job inside a retriable step — so a poll that records usage and then throws (or
-   * whose surrounding upsert/emit throws) would replay and double-count, unfairly
-   * penalising the token in the usage-aware rotation. Recording once per job id
-   * guards that. Best-effort + bounded: cleared wholesale past a cap, and it cannot
-   * survive a cold isolate replay — a re-record there is the documented, benign
-   * worst case (one extra job's tokens on one row), never silent over-counting.
+   * Where a settled subscription job's tokens are recorded: per-call telemetry, the leased pool
+   * token's rotation counters, the modeled quota cycle. It owns the at-most-once guards those
+   * three need (see `containerJobAccounting.ts`).
    */
-  private readonly recordedUsageJobs = new Set<string>()
-
-  /**
-   * Job ids whose per-call telemetry (`llm_call_metrics`) has already been recorded.
-   * Separate from {@link recordedUsageJobs} because the two recorders are independently
-   * wired and gated (telemetry records even for a personal subscription that leases no
-   * pooled token id). Same replay-safety rationale + bound as the usage guard.
-   */
-  private readonly recordedCallMetricJobs = new Set<string>()
-
-  /**
-   * Job ids whose subscription usage has already been folded into the modeled quota
-   * cycle. Separate from {@link recordedUsageJobs} because quota tracking counts BOTH
-   * pooled and personal runs (not gated on a pooled token id). Same replay-safety
-   * rationale + bound as the usage guard.
-   */
-  private readonly recordedQuotaJobs = new Set<string>()
+  private readonly accounting: ContainerJobAccounting
 
   /** Resolves which model + subscription path a step runs on (routing policy). */
   private readonly modelRouter: ModelRouter
 
+  /**
+   * Resolves the per-job auth channel (proxy session token / leased subscription credential /
+   * ambient CLI). Shared with the single-job dispatchers, so no flow can know only half of it.
+   */
+  private readonly jobAuth: ContainerJobAuthResolver
+
   /** The app-owned agent-kind registry the job-body builders read (custom-kind prompts/tuning). */
   private readonly agentKindRegistry: AgentKindRegistry
 
+  /** Normalised once, so the best-effort degradations below stay unit-testable. */
+  private readonly log: Logger
+
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
+    this.accounting = new ContainerJobAccounting(deps)
     this.agentKindRegistry = deps.agentKindRegistry ?? defaultAgentKindRegistry()
     this.modelRouter = new ModelRouter({
       agentRouting: deps.agentRouting,
@@ -703,6 +373,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       hasSubscriptionToken: deps.hasSubscriptionToken,
       hasPersonalSubscription: deps.hasPersonalSubscription,
     })
+    this.jobAuth = new ContainerJobAuthResolver(deps)
+    this.log = deps.logger ?? noopLogger
   }
 
   /** Repo-operating steps always run as polled async jobs (the coding can be long). */
@@ -718,34 +390,51 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, provider, kind, subscriptionTokenId, search, repoSummary } =
-      await this.buildJobBody(context)
+    const {
+      body,
+      model,
+      provider,
+      kind,
+      subscriptionTokenId,
+      subscriptionVendor,
+      search,
+      repoSummary,
+      toolServers,
+    } = await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
     const jobId = body.jobId as string
-    const ref: RunnerJobRef = { runId: executionId, jobId }
-    await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
-    // Capture the complete provided context for observability (best-effort, gated inside
-    // the recorder). This is the only place the fully composed prompts + the injected
-    // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
-    // Awaited (not fire-and-forget): this runs AFTER the container job is already dispatched,
-    // so it is off the container's critical path — the only thing it delays is the driver's
-    // return of the handle, which then sleeps before its first poll regardless. A bare
-    // `void promise` here would be silently dropped on the Worker: `startJob` runs inside a
-    // Cloudflare Workflow step, and the isolate hibernates on the next durable `step.sleep`
-    // before an un-awaited insert can land (see `http/waitUntil.ts`), so the snapshot would
-    // stop recording on the primary runtime. Awaiting keeps it reliable on both facades; the
-    // swallow guarantees a recorder failure still never breaks a dispatch.
-    if (this.deps.agentContextObservability) {
-      try {
-        await this.deps.agentContextObservability.record(
-          buildAgentContextRecord(context, body, model, { workspaceId, executionId }),
-        )
-      } catch {
-        // Swallowed: observability never breaks a dispatch.
-      }
-    }
+    // The image variant rides the ref, not just the dispatch options: a per-run container
+    // backend has to address THIS step's container again on every poll and on release.
+    const image = imageVariantFor(context.agentKind, this.agentKindRegistry)
+    const ref: RunnerJobRef = { runId: executionId, jobId, ...(image ? { image } : {}) }
+    const jobLog = containerJobLog(
+      this.deps.logger,
+      { workspaceId, executionId, jobId, agentKind: context.agentKind },
+      this.deps.operationalMetrics,
+    )
+    // Dispatch, log the transition, and refuse a run whose body carries a capability this runner
+    // image told us it cannot serve. See `containerAgentDispatch.ts`.
+    const options = buildDispatchOptions(context, this.agentKindRegistry)
+    const fields = { model, provider, kind }
+    await acceptContainerJob(this.jobs, { workspaceId, ref, body, kind, options, jobLog, fields })
+    // The one projection of what this dispatch decided about its tool servers. It lands on the
+    // STEP (below), which is the authority; the snapshot takes the same value only to keep serving
+    // the `extras` copy its consumers already read, until that deprecation window closes.
+    const toolServerRecord = stepToolServerRecord(toolServers)
+    // Capture the complete provided context for observability (best-effort, gated inside the
+    // recorder, awaited for a reason `recordAgentContextSnapshot` states). This is the only place
+    // the fully composed prompts + the injected file bodies exist as one unit; proxy telemetry
+    // never sees the `.cat-context` files.
+    await recordAgentContextSnapshot(this.deps.agentContextObservability, jobLog.logger, {
+      context,
+      body,
+      model,
+      workspaceId,
+      executionId,
+      toolServers: toolServerRecord,
+    })
     // Carry the run id + workspace on the handle so the poll/stop site can re-address
     // the same per-run container (Cloudflare vs. self-hosted pool) given only the
     // handle; carry the leased subscription token id so a finished subscription job
@@ -757,8 +446,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       provider,
       workspaceId,
       agentKind: context.agentKind,
+      ...(subscriptionVendor ? { subscriptionVendor } : {}),
       search,
       repo: repoSummary,
+      // The run's own record of what the agent could call. Unconditional on purpose: see
+      // `stepToolServerRecord`, where the empty-vs-absent rule lives.
+      toolServers: toolServerRecord,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
       ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
     }
@@ -766,25 +459,37 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    const view = await this.jobs.poll(handle.workspaceId, refForHandle(handle))
-    // Forward any tool spans the harness drained on this poll to the trace sink, as
-    // child spans under the RUN's trace (the run id is the trace id the LLM proxy's
-    // generations also use, so per-step jobs share one trace). Isolated + best-effort:
-    // never affects the lifecycle.
-    if (this.deps.llmTraceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
-      try {
-        await this.deps.llmTraceSink.recordToolSpans(
-          {
-            workspaceId: handle.workspaceId ?? null,
-            executionId: handle.runId ?? handle.jobId,
-            agentKind: handle.agentKind ?? 'agent',
-          },
-          view.spans,
-        )
-      } catch {
-        // Swallowed: the sink logs its own errors; observability never breaks a run.
-      }
+    const jobLog = containerJobLog(
+      this.deps.logger,
+      {
+        workspaceId: handle.workspaceId,
+        executionId: handle.runId,
+        jobId: handle.jobId,
+        agentKind: handle.agentKind,
+      },
+      this.deps.operationalMetrics,
+    )
+    // A poll that THROWS is as opaque as a dispatch that throws — the durable driver retries or
+    // fails the step with a transport error and nothing records which job/backend it was against.
+    // Logged and re-thrown; the lifecycle is unchanged.
+    let view: RunnerJobView
+    try {
+      view = await this.jobs.poll(handle.workspaceId, refForHandle(handle, this.agentKindRegistry))
+    } catch (error) {
+      jobLog.pollFailed(error)
+      throw error
     }
+    // The tool calls the harness drained on this poll, to the trace sink as child spans under
+    // the RUN's trace (the run id is the trace id the LLM proxy's generations also use, so
+    // per-step jobs share one trace) AND to the trajectory store as persisted rows. Both
+    // isolated + best-effort: never affects the lifecycle. See `toolTrajectory.ts`.
+    await drainToolCalls(this.deps, handle, view.spans, jobLog.logger)
+    // Per-call telemetry the harness drained on this poll: record it NOW rather than waiting
+    // for the terminal result. A run whose container dies mid-flight never produces one, so
+    // batching to the end meant a killed run reported zero calls no matter how many tokens it
+    // had spent — the exact run an operator most needs to see. Idempotent via the calls' `seq`,
+    // so the terminal write below re-offers them harmlessly.
+    await this.accounting.recordCalls(handle, view.callMetrics)
     // Forward-looking items the Coder streamed since the last poll (drain-on-read): surfaced
     // on both running and done so a final burst on the completion poll isn't lost. Normalise
     // the transport's optional `detail` to the engine's `StreamedFollowUp` shape.
@@ -796,158 +501,54 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }))
     const followUps = streamedFollowUps.length > 0 ? { followUps: streamedFollowUps } : {}
     if (view.state === 'running') {
-      // Forward the latest subtask counts (if any) so the engine can surface live
-      // "N/M done" progress on the step; the shapes match field-for-field. Also forward
-      // the container's current lifecycle phase (clone / agent / push, from the harness)
-      // and its identity/address (id + url, from the transport) so the engine can show
-      // what the container is doing and where it lives — not just a blank "working".
-      const containerMeta = {
-        ...(view.phase ? { phase: view.phase } : {}),
-        ...(view.container ? { container: view.container } : {}),
-        ...(view.backend ? { backend: view.backend } : {}),
-      }
-      return view.progress
-        ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
-        : { state: 'running', ...followUps, ...containerMeta }
+      jobLog.progress({ progress: view.progress })
+      return buildRunningUpdate(view, followUps)
     }
-    // The harness's structured failure cause + extended diagnostic, forwarded so the engine
-    // classifies the failure without regex-matching `error`. Absent on an older image.
-    const failureMeta = {
-      ...(view.failureCause ? { failureCause: view.failureCause } : {}),
-      ...(view.detail ? { detail: view.detail } : {}),
-      ...(view.backend ? { backend: view.backend } : {}),
-      // Forward the transport's STRUCTURED container-eviction verdict so the driver recovers it on
-      // the right budget without regex-matching `error` (job.logic `evictionKindOf`). Absent on a
-      // non-eviction failure / an older producer.
-      ...(view.evicted ? { evicted: view.evicted } : {}),
-    }
+    const failureMeta = buildFailureMeta(view)
     // Completed OR failed: a subscription harness attaches its per-call telemetry to
     // BOTH — a failed token-spending run (no changes / unusable output / unresolved
     // conflicts) is exactly what an operator needs to inspect — so record it before the
     // terminal returns below, on every terminal state.
     const result = view.result ?? {}
-    await this.recordHarnessCallsOnce(handle, result)
+    await this.accounting.recordCallsOnce(handle, result)
     if (view.state === 'failed') {
+      jobLog.settled('failed', settleFailureFields(view))
       return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
     // carries the cause on the view even for these clean-exit failures, so forward it too.
     if (result.error) {
+      jobLog.settled('failed', { failureCause: view.failureCause, cleanExit: true })
       return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
     }
-    // Attribute a subscription harness's reported usage to its leased pool token
-    // (usage-aware rotation) and the telemetry sink. Best-effort: a missing usage
-    // signal or unconfigured recorder is a no-op; recorded at most once per job id
-    // so a retried/replayed poll can't double-count (see `recordedUsageJobs`).
-    if (
-      handle.subscriptionTokenId &&
-      handle.workspaceId &&
-      result.usage &&
-      this.deps.recordSubscriptionUsage &&
-      !this.recordedUsageJobs.has(handle.jobId)
-    ) {
-      await this.deps.recordSubscriptionUsage(
-        handle.workspaceId,
-        handle.subscriptionTokenId,
-        result.usage,
-      )
-      // Mark only AFTER a successful write: a failed record is left to retry rather
-      // than silently dropped. Bound the set so a long-lived process can't grow it
-      // unboundedly (clearing only risks a benign re-record on a later retry).
-      if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
-      this.recordedUsageJobs.add(handle.jobId)
-    }
-    // Fold the SAME subscription usage into the modeled quota-cycle counters (Part B), for
-    // BOTH pooled and personal runs. A subscription run is the one reporting per-call
-    // metrics (Pi is proxy-metered and has none), and the handle's provider is the vendor
-    // slug. Scope = the leased pool token when present, else the run initiator (personal).
-    // Best-effort, once per job id so a replayed poll can't double-count.
-    const quotaVendor = handle.provider ?? providerOf(handle.model)
-    if (
-      result.callMetrics &&
-      result.callMetrics.length > 0 &&
-      result.usage &&
-      this.deps.recordSubscriptionQuotaUsage &&
-      isSubscriptionVendor(quotaVendor) &&
-      !this.recordedQuotaJobs.has(handle.jobId)
-    ) {
-      const target: SubscriptionQuotaTarget | null = handle.subscriptionTokenId
-        ? { scope: 'pooled', scopeId: handle.subscriptionTokenId, vendor: quotaVendor }
-        : handle.initiatedByUserId
-          ? { scope: 'user', scopeId: handle.initiatedByUserId, vendor: quotaVendor }
-          : null
-      if (target) {
-        await this.deps.recordSubscriptionQuotaUsage(target, result.usage)
-        if (this.recordedQuotaJobs.size >= 10_000) this.recordedQuotaJobs.clear()
-        this.recordedQuotaJobs.add(handle.jobId)
-      }
-    }
-    const runResult = toRunResult(result, handle.agentKind)
-    // A subscription harness (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) bypasses
-    // the LLM proxy, so its tokens aren't metered there. It's the ONLY container path that
-    // emits per-call `callMetrics`, so their presence unambiguously marks a subscription
-    // run: stamp its usage onto the result tagged `'subscription'` so the engine records it
-    // in the durable usage ledger for the report — while the budget gate excludes it (a
-    // quota plan costs nothing per token). Pi (proxy-metered) has no `callMetrics`, so its
-    // usage stays off the result and the proxy remains its sole meter (no double-count).
-    if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
-      runResult.usage = result.usage
-      runResult.usageBilling = 'subscription'
-      runResult.usageVendor = handle.provider ?? providerOf(handle.model)
-    }
-    return { state: 'done', result: runResult, ...followUps }
+    // Best-effort subscription usage attribution, split into their own methods so `pollJob` stays
+    // within the complexity budget: the pool-token usage feedback + telemetry sink, and the
+    // modeled quota-cycle counters. Both are idempotent (once per job id) and behaviour-neutral.
+    await this.accounting.recordPooledUsageOnce(handle, result)
+    await this.accounting.recordQuotaUsageOnce(handle, result)
+    // Model label and subscription usage both come off the dispatch HANDLE, which the poll site
+    // has and the mapping does not; `settledRunResult` owns that fold for this path and `run()`.
+    const runResult = settledRunResult(result, handle, this.agentKindRegistry)
+    jobLog.settled('done', { model: handle.model })
+    return buildDoneUpdate(view, runResult, followUps)
   }
 
   /**
-   * Record the subscription harness's per-call telemetry into `llm_call_metrics` — the
-   * proxy-bypassing analogue of the rows the LLM proxy writes for Pi. NOT gated on a
-   * pooled token id, so a personal (individual-usage) subscription run is observed too.
-   * Runs on every terminal state (success and failure alike). Best-effort: an unwired
-   * recorder or an empty metric list is a no-op. An in-memory once-per-job guard skips
-   * the redundant DB round-trip within this process; the recorder additionally mints
-   * deterministic per-call ids off the job id, so even a durable-driver replay in a
-   * fresh isolate (empty guard) re-records idempotently rather than duplicating rows.
+   * Reclaim every runner resource a run holds: resolve the same transport its jobs dispatched
+   * to (by workspace) and release EACH container the run opened — for the Cloudflare backend
+   * that SIGKILLs them instead of letting them idle out.
+   *
+   * "Each" rather than "the": a run whose step declared a different executor image (the
+   * browser-carrying `tester-ui`) holds a second container beside the ordinary one, and
+   * reclaiming one ref leaves the other running. This resolves WHICH images from the kinds the
+   * run dispatched, because only the registry knows; the fan-out itself is the job client's.
    */
-  private async recordHarnessCallsOnce(
-    handle: AgentJobHandle,
-    result: { callMetrics?: HarnessCallMetric[] },
-  ): Promise<void> {
-    if (
-      !handle.workspaceId ||
-      !result.callMetrics ||
-      result.callMetrics.length === 0 ||
-      !this.deps.recordHarnessCalls ||
-      this.recordedCallMetricJobs.has(handle.jobId)
-    ) {
-      return
-    }
-    try {
-      await this.deps.recordHarnessCalls({
-        workspaceId: handle.workspaceId,
-        executionId: handle.runId ?? null,
-        agentKind: handle.agentKind ?? 'agent',
-        provider: handle.provider ?? providerOf(handle.model),
-        model: handle.model ?? '',
-        jobId: handle.jobId,
-        calls: result.callMetrics,
-      })
-      if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
-      this.recordedCallMetricJobs.add(handle.jobId)
-    } catch {
-      // Swallowed: telemetry is observability, never a reason to fail (or fail to
-      // complete) a run.
-    }
-  }
-
-  /**
-   * Stop a running job and reclaim its backing runner: resolve the same transport
-   * the job dispatched to (by workspace) and `release` it — for the Cloudflare
-   * backend this SIGKILLs the per-run container instead of letting it idle out.
-   * Best-effort/idempotent: a transport without `release`, or an already-gone job,
-   * is a no-op.
-   */
-  async stopJob(handle: AgentJobHandle): Promise<void> {
-    await this.jobs.release(handle.workspaceId, refForHandle(handle))
+  async reclaimRun(target: RunReclaimTarget): Promise<void> {
+    await this.jobs.releaseRun(target.workspaceId, {
+      runId: target.runId,
+      jobId: target.jobId,
+      images: runImageVariants(target.agentKinds, this.agentKindRegistry),
+    })
   }
 
   /**
@@ -960,9 +561,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     for (;;) {
       const update = await this.pollJob(handle)
       if (update.state === 'done') {
-        // The poll site can't resolve the model ref, so fold in the label the
-        // dispatch captured (matches what the durable path records on the step).
-        return { ...update.result, ...(handle.model ? { model: handle.model } : {}) }
+        // `pollJob` already folds `handle.model` onto the result, so both paths carry it.
+        return update.result
       }
       if (update.state === 'failed') throw new Error(update.error)
       await new Promise((resolve) => setTimeout(resolve, RUN_POLL_INTERVAL_MS))
@@ -991,30 +591,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (!context.workspaceId) return false
     const { ref } = await this.modelRouter.resolveEffectiveRef(context, context.workspaceId)
     return ref.harness === 'claude-code' || ref.harness === 'codex'
-  }
-
-  /**
-   * Per-service provisioning hints for the dispatch: the cloud provider the service
-   * runs on and the abstract instance size resolved to the target's concrete
-   * instance-type id. Cloudflare maps the id to a Container instance type; a
-   * self-hosted pool forwards it (with the provider) and provisions itself. Undefined
-   * when the service pins no provider/size (the transport keeps its default).
-   */
-  private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
-    const provider = context.service?.cloudProvider
-    const size = context.service?.instanceSize
-    // The UI tester needs the heavier Playwright+browser image; every other kind uses
-    // the default harness image (so the browser never bloats their cold-start).
-    const image: 'ui' | undefined = context.agentKind === UI_TESTER_AGENT_KIND ? 'ui' : undefined
-    if (!provider && !size && !image) return undefined
-    return {
-      ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
-      ...(provider ? { provider } : {}),
-      // Forward the abstract size too, so the local Docker/Podman backend can size
-      // the per-job container (`--memory`/`--cpus`) without decoding the cloud id.
-      ...(size ? { instanceSize: size } : {}),
-      ...(image ? { image } : {}),
-    }
   }
 
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */
@@ -1056,6 +632,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (context.block.pullRequest?.branch === workBranch) {
       return true
     }
+    // An attached pull request is worked on its own branch alone, so creating the per-task work
+    // branch would leave a stray ref in a repository whose pull request belongs to someone else.
+    if (taskTypeAttachesPullRequest(context.block.taskType)) return false
     if (aprioriWork) {
       // Apriori working branch: probe only (create: false). It must pre-exist — a missing
       // branch is a loud dispatch failure, never a silent create off base (which would look
@@ -1087,9 +666,22 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     provider: string
     kind: RunnerDispatchKind
     subscriptionTokenId?: string
+    /**
+     * The subscription VENDOR this dispatch resolved, beside the pooled token id. Carried onto the
+     * handle because it is what a quota cycle is keyed on, and it differs from `provider` for four
+     * of the five vendors (see `AgentJobHandle.subscriptionVendor`).
+     */
+    subscriptionVendor?: SubscriptionVendor
     search: WebSearchAvailability
     /** The repo the job operates on, for the run diagnostics (owner/name/baseBranch + VCS provider). */
     repoSummary: { owner: string; name: string; baseBranch?: string; provider?: string }
+    /**
+     * The tool servers (MCP) resolved for this dispatch — the non-secret projection plus what
+     * could not be wired. Returned so the caller can record it on the agent-context snapshot: the
+     * decision is made HERE (it depends on the resolved harness) and the run context the engine
+     * built does not carry it.
+     */
+    toolServers: ResolvedToolServers
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
     // Per-STEP harness job id: unique within the run so this step's job never aliases
@@ -1098,29 +690,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // re-attaches to the prior round's completed job on a container-reusing transport.
     const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
 
-    // "Subscriptions always win": a subscription-only model carries its harness; a
-    // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
-    // Code when the workspace has a pooled token for the vendor. Shared with
-    // isQuotaBased so the dispatch and the spend gate agree on what the step runs.
-    const { ref, subscriptionVendor } = await this.modelRouter.resolveEffectiveRef(
+    const { ref, harness, subscriptionVendor } = await this.modelRouter.resolveDispatchRef(
       context,
       workspaceId,
     )
-    const harness: HarnessKind = ref.harness ?? 'pi'
-
-    // The Pi harness reaches models through the LLM proxy, so its model must be a
-    // provider the proxy can serve; locking it here stops the container choosing
-    // another. The subscription harnesses (Claude Code / Codex) talk direct to the
-    // vendor with a pooled token, so the proxyable guard does not apply to them.
-    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
-      throw new Error(
-        `Container implementation needs a model the LLM proxy can serve ` +
-          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
-          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
-          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
-          `runner (Ollama / LM Studio / …) and pick that model.`,
-      )
-    }
 
     const repo = await this.deps.resolveRepoTarget(workspaceId, blockId)
     if (!repo) {
@@ -1130,26 +703,32 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       )
     }
 
-    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed
-    // here because the token mint below is repo-scoped while the branch ensure needs the
-    // resolved name, and both are fanned out in the wave that follows.
+    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed here
+    // because the branch ensure needs the resolved name, and it is fanned out in the wave below.
     const aprioriWork = resolveAprioriWorkingBranch(context.aprioriBranches, repo.baseBranch)
     const workBranch = aprioriWork ?? `cat-factory/${blockId}`
 
     // These dispatch I/O steps are mutually independent once the repo target is resolved: the
-    // installation-token mint + the work-branch ensure are repo-scoped, while auth resolution,
-    // private-registry auth, tester secrets, and web-search availability are workspace/block-
-    // scoped. Serialising them added ~6 round-trips of latency to EVERY step dispatch (and
-    // every tester→fixer re-dispatch epoch), so fan them out in one wave instead. `auth` (the
-    // proxy session token for Pi, or a leased subscription token for Claude Code / Codex) is
-    // spread into every job body so the per-kind bodies can't drift on which auth they forward.
-    const [ghToken, workBranchReady, authResult, packageRegistries, resolvedTestSecrets, search] =
+    // work-branch ensure and the auxiliary-checkout resolution are repo-scoped, while auth
+    // resolution, private-registry auth, tester secrets, and web-search availability are
+    // workspace/block-scoped. Serialising them added ~6 round-trips of latency to EVERY step
+    // dispatch (and every tester→fixer re-dispatch epoch), so fan them out in one wave instead.
+    // `auth` (the proxy session token for Pi, or a leased subscription token for Claude Code /
+    // Codex) is spread into every job body so the per-kind bodies can't drift on which auth
+    // they forward.
+    const [workBranchReady, aux, authResult, packageRegistries, testCredentials, search] =
       await Promise.all([
-        this.deps.mintInstallationToken(repo.installationId, {
-          executionId,
-          initiatedBy: context.initiatedByUserId,
-        }),
         this.resolveWorkBranchReady(repo, workBranch, aprioriWork, context),
+        // The auxiliary checkouts + their prompt sections: the multi-repo fan-out (coder /
+        // ci-fixer), the conflict-resolver's peer targeting, the merger's combined-diff siblings,
+        // and the read-only reference repos/branches. It rides the wave rather than the tail of
+        // this method because the token mint below is narrowed to the repos it resolves.
+        resolveAuxiliaryRepos(
+          context,
+          { workspaceId, blockId, repo, workBranch },
+          this.deps,
+          this.agentKindRegistry,
+        ),
         this.resolveAuth(context, {
           harness,
           ref,
@@ -1162,10 +741,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         this.deps.resolvePackageRegistries
           ? this.deps.resolvePackageRegistries(workspaceId)
           : Promise.resolve<JobPackageRegistrySpec[]>([]),
-        // Sensitive test credentials for the tester kinds ONLY (mapped to env pairs below).
-        isTesterKind(context.agentKind) && this.deps.resolveTestSecrets
-          ? this.deps.resolveTestSecrets(workspaceId, blockId)
-          : Promise.resolve<TestSecretEntry[]>([]),
+        this.resolveTestCredentialsFor(context.agentKind, workspaceId, blockId),
         // The proxy-backed web-tools switch: web_search is offered only when the run's account
         // has a usable upstream, so the agent is never handed a tool that always fails.
         this.deps.resolveWebSearchAvailability
@@ -1174,60 +750,106 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ])
     const { auth, subscriptionTokenId } = authResult
 
+    // The clone/push credential, minted AFTER the wave because it is narrowed to the repos this
+    // dispatch actually resolved (primary + fan-out peers + conflict/merger siblings + reference
+    // repos) rather than to everything the installation covers. It is the one step that cannot
+    // join the wave: the scope is what the wave produces. One round trip left the wave as the
+    // auxiliary resolution entered it, so what changed is the ORDERING, not the work, and a warm
+    // process still hits the App-token cache (keyed by scope: `installationTokenCache.ts`). A
+    // PAT-backed facade ignores `repoIds` (`backend/docs/security-model.md`, Layer 3).
+    const ghToken = await this.deps.mintInstallationToken(repo.installationId, {
+      executionId,
+      workspaceId,
+      ...(context.initiatedByUserId ? { initiatedBy: context.initiatedByUserId } : {}),
+      repoIds: jobTokenRepoIds(repo, aux.repoTargets),
+    })
+
     // The fields EVERY harness job body carries, built once so the per-kind bodies
     // can't drift on which jobId/model/auth/repo/proxy fields they forward.
     // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
     // container agent can read what it needs on demand; the prompt only lists them. The
     // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
-    const {
-      files: contextFiles,
-      contextDocs: keptDocs,
-      contextTasks: keptTasks,
-    } = buildContextFiles(context)
-    // The UI tester uploads its captured screenshots back to the backend from inside the
-    // container. It reuses the SAME container session token it already carries for the LLM
-    // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
-    // base URL — so no extra credential and no extra public-URL dependency. Only the
-    // `tester-ui` kind gets it; every other kind never sees an upload seam.
-    const artifactUpload =
-      context.agentKind === UI_TESTER_AGENT_KIND &&
-      typeof auth.proxyBaseUrl === 'string' &&
-      typeof auth.sessionToken === 'string'
-        ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
-        : undefined
+    const contextFiles = buildDispatchContextFiles(context)
+    // The dispatch's resolved skills (a `skill` step's pick and/or the running kind's declared
+    // playbooks), rendered harness-aware: the payload travels as the top-level `skills` job-body
+    // field (the harness materialises them — natively for claude-code, under
+    // `.cat-context/skill/<name>/` for Pi/codex), and `skillSection` primes the prompt. Ambient
+    // (native) claude-code takes the checkout path too — it has no isolated config home to install
+    // into — so the prompt must carry the instructions rather than point at an install.
+    const skillRender = renderSkillsForHarness(context.skills, harness, auth.ambientAuth === true)
+    // Tool servers (MCP) the running kind declared, narrowed to what THIS harness and auth mode can
+    // serve and whose credentials (static or granted) resolve. Never throws: an unwirable server is
+    // stated to the agent as unavailable rather than turned into a failed dispatch. The binding of
+    // the injected deps onto the resolution lives beside the resolution, because each new credential
+    // channel adds another optional dep and this file sits at its size ratchet.
+    const tools = await resolveDispatchToolServers(
+      dispatchToolServerDeps(this.deps, this.agentKindRegistry),
+      context,
+      {
+        harness,
+        ambientAuth: auth.ambientAuth === true,
+        workspaceId,
+        blockId,
+      },
+    )
+    const { testSecretEnv, capabilitySecrets } = await this.resolveJobSecretEnv(context, {
+      workspaceId,
+      blockId,
+      resolvedTestSecrets: testCredentials?.env ?? [],
+    })
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
     const tuning = agentTuningFor(context.agentKind, this.agentKindRegistry)
-    // Sensitive test credentials (resolved above) as `{ key, value }` env pairs on a dedicated
-    // top-level body field (like `packageRegistries`), which the agent-context snapshot
-    // allow-list omits. The harness injects each as an env var; the prompt only advertises the
-    // keys+descriptions (from `context.testSecrets`). Values NEVER reach a prompt or telemetry.
-    const testSecretEnv = resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value }))
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
-    const common = {
-      jobId,
-      model: ref.model,
-      ...auth,
-      ghToken,
-      ...(packageRegistries.length ? { packageRegistries } : {}),
-      repo: buildRepoSpec(repo, origin),
-      ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      ...(contextFiles.length ? { contextFiles } : {}),
-      ...(artifactUpload ? { artifactUpload } : {}),
-      ...(tuning?.guardLimits ? { guardLimits: tuning.guardLimits } : {}),
-    }
-    // Render the prompt's linked-context summary index from exactly the items that were
-    // materialised (some may have been dropped at the byte cap), so the agent is never
-    // pointed at a `.cat-context/` file that doesn't exist.
-    const promptContext: AgentRunContext = contextFiles.length
-      ? { ...context, block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
-      : context
+    const designImageDelivery = dispatchDesignImageDelivery(context, harness, ref)
+    const common = buildCommonBody(
+      context,
+      {
+        jobId,
+        model: ref.model,
+        auth,
+        ghToken,
+        packageRegistries,
+        repoSpec: buildRepoSpec(repo, origin),
+        contextFiles,
+        skillsBody: skillRender.body,
+        mcpServers: tools.mcpServers,
+        capabilitySecrets,
+        // Extend the no-edit exploration allowance by the task-estimator's complexity when a
+        // prior estimator step produced one (absent ⇒ the kind's tuning / harness default
+        // stands — only absolute spiralling is caught). Loosen-only; see `withComplexityAllowance`.
+        guardLimits: withComplexityAllowance(
+          tuning?.guardLimits,
+          context.block.estimate?.complexity,
+        ),
+        // Only a dispatch that can actually show them sends a manifest: a harness with no image
+        // input would download the frames into a directory nothing ever opens, and its prompt
+        // already says (from the same verdict) that the pictures could not be delivered.
+        ...(designImageDelivery?.attached ? { designImages: context.designImages } : {}),
+      },
+      this.deps,
+      this.agentKindRegistry,
+    )
+    // The prompt's linked-context summary index is rendered from the block's own docs/tasks: every
+    // one of them was materialised, because `buildContextFiles` refuses a corpus that would not fit
+    // rather than writing a prefix of it — so the index can never name a `.cat-context/` file the
+    // agent won't find on disk.
+    // The dispatch-resolved facts layered over the engine's context: what MCP the harness could
+    // be given, whether the design pictures were attached, and the credential state of the read
+    // that produced the values this job carries. See the collaborator for why each is a DISPATCH
+    // fact rather than something the engine could have put on the context.
+    const promptContext = buildDispatchPromptContext(context, {
+      tools,
+      designImageDelivery,
+      testCredentials,
+    })
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
     // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
     // the per-kind hint (coder/mocker/analysis/… and any custom container kind) is applied here.
+    // What `webSearch` does and does NOT state is on `KindBodyParts.webTools`.
     const webTools = {
       webToolsGuidance: webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, {
         fetch: true,
@@ -1235,237 +857,20 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(search.available ? { webSearch: true } : {}),
     }
 
-    // Multi-repo coding (service-connections phases 3–4): when the implementer OR the ci-fixer
-    // runs on a task with connected involved services, resolve every involved repo and fan the
-    // work out — peer repos as sibling checkouts plus a prompt section naming the layout. The
-    // coder opens one PR per changed repo; the ci-fixer resumes those same work branches to fix
-    // red CI across all of them (jobBody drops the peer `pr` on the fixer path). A service
-    // co-located in the primary's own repo (same monorepo) has no separate checkout; it rides
-    // the own-service PR and is named in the section so the agent edits its subtree. Any involved
-    // service present ⇒ the agent works at the repo ROOT (not just its own service subdir) so it
-    // can reach every involved subtree; `commonForKind` swaps `repo`.
-    let peerRepos:
-      | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
-      | undefined
-    let multiRepoSection: string | undefined
-    let commonForKind = common
-    // The repo target the per-kind body builds against — the task's own service by default, but
-    // swapped to a PEER repo when the conflicts gate targets the conflict-resolver at a connected
-    // service (see the conflict-resolver block below).
-    let repoForKind = repo
-    const involvedServices = context.involvedServices ?? []
-    const fansOutMultiRepo =
-      MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
-      this.agentKindRegistry.fansOutMultiRepo(context.agentKind)
-    if (fansOutMultiRepo && involvedServices.length > 0 && this.deps.resolveRepoTargets) {
-      // Reuse the primary repo already resolved above (line ~889) so the plural resolver skips
-      // re-reading the installation and re-walking the primary block's ancestry — it only needs
-      // to resolve + dedupe the involved peers on top of it.
-      const { checkouts } = await this.deps.resolveRepoTargets(
-        workspaceId,
-        blockId,
-        involvedServices.map((s) => s.frameId),
-        repo,
-      )
-      const primaryCheckout = checkouts.find((c) => c.primary)
-      const peerCheckouts = checkouts.filter((c) => !c.primary)
-      // Multi-service iff there is a distinct peer repo OR an involved service co-located in
-      // the primary's monorepo (both need the root-cwd + the prompt section).
-      const coLocated = primaryCheckout?.involved ?? []
-      if (peerCheckouts.length > 0 || coLocated.length > 0) {
-        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-        if (peerCheckouts.length > 0) {
-          peerRepos = peerCheckouts.map((c: RepoCheckout) => ({
-            repo: buildRepoSpec(c.target, origin(c.target)),
-            ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
-          }))
-        }
-        multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
-        // Work at the repo ROOT: drop the primary's own-service subdir scoping so the agent
-        // can edit every involved subtree in the (mono)repo. The layout section names which
-        // subdirectory each service lives in.
-        if (primaryCheckout) {
-          const { serviceDirectory: _drop, ...rootTarget } = primaryCheckout.target
-          commonForKind = {
-            ...common,
-            repo: buildRepoSpec(rootTarget, origin(rootTarget)),
-          }
-        }
-      }
-    }
-
-    // Conflict-resolver PEER targeting (service-connections phase 4 follow-up): when the
-    // conflicts gate detected the conflict on a connected involved service's repo, it hands the
-    // resolver `context.conflictTarget`. Point the (single-repo) resolver at that PEER repo —
-    // resolve its target and swap `repo`/`common.repo` — instead of the task's own service. The
-    // resolver clones the peer's PR (work) branch and merges the peer's base in (jobBody pins the
-    // branch to the shared work branch and reads `mergeBase` off this swapped target). An own-repo
-    // conflict carries no `frameId`, so this is a no-op and the resolver targets the own service.
-    const conflictFrameId =
-      context.agentKind === CONFLICT_RESOLVER_AGENT_KIND
-        ? context.conflictTarget?.frameId
-        : undefined
-    if (conflictFrameId && this.deps.resolveRepoTargets) {
-      const { checkouts } = await this.deps.resolveRepoTargets(
-        workspaceId,
-        blockId,
-        [conflictFrameId],
-        repo,
-      )
-      const peer = checkouts.find(
-        (c) => !c.primary && c.involved.some((i) => i.frameId === conflictFrameId),
-      )
-      // Fail fast if the tagged peer can't be resolved (e.g. a stale/missing repo projection row):
-      // falling through would silently point the resolver at the OWN repo, which has no conflict, so
-      // every re-probe would re-dispatch until the whole attempt budget is spent on the wrong repo
-      // and the run gives up misattributing the failure. A loud dispatch error surfaces the
-      // inconsistency immediately instead.
-      if (!peer) {
-        throw new Error(
-          `Conflict-resolver could not resolve the conflicted peer repo (frame '${conflictFrameId}') ` +
-            `for block '${blockId}' — its repo projection may be missing or unlinked.`,
-        )
-      }
-      const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-      repoForKind = peer.target
-      commonForKind = { ...common, repo: buildRepoSpec(peer.target, origin(peer.target)) }
-    }
-
-    // Merger combined-diff (service-connections phase 4 follow-up): a multi-repo task opened one PR
-    // per changed repo. The merger scores the COMBINED change by cloning EVERY PR's repo as a
-    // read-only sibling at its PR branch (the read-only explore fan-out) and diffing each vs its
-    // base. Driven by the PRs that actually exist (`block.peerPullRequests`), not the involved-
-    // services set — a peer with no change opened no PR, so there is nothing to score there. The
-    // own-service PR rides the primary checkout (the merger clones `pr` full); the peers are added
-    // here with their own PR branch to check out, plus a section naming the sibling diff commands.
-    const peerPrs = context.block.peerPullRequests ?? []
-    if (
-      context.agentKind === MERGER_AGENT_KIND &&
-      peerPrs.length > 0 &&
-      this.deps.resolveRepoTargets
-    ) {
-      const frameIds = peerPrs.map((p) => p.frameId).filter((f): f is string => !!f)
-      if (frameIds.length > 0) {
-        const { checkouts } = await this.deps.resolveRepoTargets(
-          workspaceId,
-          blockId,
-          frameIds,
-          repo,
-        )
-        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-        const legs: {
-          spec: Record<string, unknown>
-          frameId: string
-          cloneBranch: string
-          target: RepoTarget
-        }[] = []
-        for (const pr of peerPrs) {
-          if (!pr.frameId) continue
-          const checkout = checkouts.find(
-            (c) => !c.primary && c.involved.some((i) => i.frameId === pr.frameId),
-          )
-          if (!checkout) continue
-          legs.push({
-            spec: buildRepoSpec(checkout.target, origin(checkout.target)),
-            frameId: pr.frameId,
-            cloneBranch: pr.ref.branch ?? workBranch,
-            target: checkout.target,
-          })
-        }
-        if (legs.length > 0) {
-          peerRepos = legs.map((l) => ({
-            repo: l.spec,
-            frameId: l.frameId,
-            cloneBranch: l.cloneBranch,
-          }))
-          // The own service rides the primary checkout at its PR head (clone `pr`, or base when the
-          // own service had no change); list it first so the section names its diff command too.
-          multiRepoSection = renderMergerMultiRepoSection([
-            { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
-            ...legs.map((l) => ({
-              owner: l.target.owner,
-              name: l.target.name,
-              baseBranch: l.target.baseBranch,
-            })),
-          ])
-        }
-      }
-    }
-
-    // Read-only reference repos (document-authoring tasks): independent of the fan-out above —
-    // the doc-writer clones each attached repo as a READ-ONLY sibling checkout it may read but
-    // never writes to. The spec carries NO branch/PR fields, so it is structurally unpushable;
-    // the harness clones it at its own default branch and skips it in the push phase. Auth reuses
-    // the run's already-resolved `ghToken` (the run initiator's own token when they have one, per
-    // `mintInstallationToken`), so no extra token mint. A reference repo may be outside the
-    // workspace projection, so its clone identity comes straight from the persisted attachment.
-    // Provider-neutral: the clone URL + provider come from `resolveRepoOrigin` (the same
-    // deployment-level seam the primary rides), so a GitLab deployment clones from GitLab.
-    let referenceRepos: { repo: Record<string, unknown> }[] | undefined
-    let referenceReposSection: string | undefined
-    const attachedReferenceRepos = context.referenceRepos ?? []
-    if (attachedReferenceRepos.length > 0 && REFERENCE_REPO_KINDS.has(context.agentKind)) {
-      const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-      // Dedup against the primary and each other by the harness's sibling-checkout key
-      // (`owner/name`, case-insensitive — it maps to the `owner__name` clone directory): two legs
-      // claiming the same directory would make the second `git clone` fail into a non-empty dir.
-      // A reference pointing at the doc task's OWN repo is therefore dropped (it is already the
-      // primary checkout), and duplicate attachments collapse to one.
-      const siblingKey = (owner: string, name: string) => `${owner}/${name}`.toLowerCase()
-      const seen = new Set<string>([siblingKey(repo.owner, repo.name)])
-      const targets: RepoTarget[] = []
-      for (const r of attachedReferenceRepos) {
-        const key = siblingKey(r.owner, r.name)
-        if (seen.has(key)) continue
-        seen.add(key)
-        targets.push({
-          installationId: r.connectionId ?? repo.installationId,
-          owner: r.owner,
-          name: r.name,
-          baseBranch: r.defaultBranch,
-        })
-      }
-      if (targets.length > 0) {
-        referenceRepos = targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) }))
-        referenceReposSection = renderReferenceReposSection(repo, targets)
-      }
-    }
-
-    // Read-only apriori REFERENCE branches (the apriori-branches reference mode): existing branches
-    // of the PRIMARY repo the task names as prior-art the agent may READ but never write. Unlike
-    // the reference REPOS above, these are not sibling checkouts — they ride the primary clone as
-    // `origin/<b>` refs the harness fetches before the agent runs (see the harness
-    // `fetchReferenceBranches`). Only the consumer kinds (coder / spec-writer / doc-writer /
-    // architect / analysis) receive them. Each is PROBED at dispatch (create:false) and a missing
-    // branch is DROPPED — asymmetric with a missing WORKING branch (which fails loudly): a
-    // reference is garnish, so a stale/typo'd one is silently omitted rather than failing the run.
-    // When probing isn't wired (tests / no GitHub) every named branch is forwarded and the harness
-    // fetch is best-effort. A run that already carries a PR still reads reference branches (they are
-    // context, independent of the work branch).
-    let referenceBranches: string[] | undefined
-    let referenceBranchesSection: string | undefined
-    if (REFERENCE_BRANCH_KINDS.has(context.agentKind)) {
-      const named = aprioriReferenceBranches(context.aprioriBranches)
-      // Drop any that collide with the resolved work branch (a reference and the working branch are
-      // disjoint by the write boundary, but never fetch/announce the branch the agent builds on).
-      const candidates = named.filter((b) => b !== workBranch)
-      let present: string[]
-      if (this.deps.ensureWorkBranch) {
-        const probe = this.deps.ensureWorkBranch
-        const existence = await Promise.all(
-          candidates.map((b) => probe(repo, b, { create: false })),
-        )
-        present = candidates.filter((_b, i) => existence[i])
-      } else {
-        present = candidates
-      }
-      if (present.length > 0) {
-        referenceBranches = present
-        referenceBranchesSection = renderReferenceBranchesSection(present, {
-          multiRepo: Boolean(multiRepoSection || referenceReposSection),
-        })
-      }
-    }
+    const {
+      peerRepos,
+      multiRepoSection,
+      repoSpecOverride,
+      repoForKind,
+      referenceRepos,
+      referenceReposSection,
+      referenceBranches,
+      referenceBranchesSection,
+    } = aux
+    // The multi-repo fan-out re-roots the checkout at the repo root, and the conflict-resolver
+    // swaps in a peer repo; either way only `common.repo` changes, so the override is applied
+    // here rather than having the resolvers rebuild a `common` that did not exist when they ran.
+    const commonForKind = repoSpecOverride ? { ...common, repo: repoSpecOverride } : common
 
     const { body, kind } = buildKindBody(
       promptContext,
@@ -1482,11 +887,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(referenceReposSection ? { referenceReposSection } : {}),
         ...(referenceBranches ? { referenceBranches } : {}),
         ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
+        ...(skillRender.section ? { skillSection: skillRender.section } : {}),
       },
       this.agentKindRegistry,
     )
     return {
       subscriptionTokenId,
+      // The VENDOR, beside the provider: the two differ for four of the five, and it is the vendor
+      // a quota cycle is keyed on (see `recordQuotaUsageOnce`).
+      subscriptionVendor,
       body,
       model: `${ref.provider}:${ref.model}`,
       provider: ref.provider,
@@ -1498,15 +907,80 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(repo.baseBranch ? { baseBranch: repo.baseBranch } : {}),
         provider: origin.provider,
       },
+      toolServers: tools,
     }
   }
 
   /**
-   * Resolve the per-job auth the harness carries: the proxy session token for Pi, or a
-   * leased subscription token for Claude Code / Codex. Spread into every job body
-   * (`common`) so the per-kind bodies can't drift on which auth they forward.
+   * The frame's sensitive test credentials, for the kinds that are handed them: one read, two
+   * projections (the values the container carries, the state the prompt states).
+   *
+   * The SAME resolution the environment dry run uses, which is what makes a dry run's verdict
+   * about authenticating here predict this step's. Best-effort inside, so a sealed store that will
+   * not open costs the credentials and not the step; resolved unguarded in the dispatch wave, a
+   * read failure took the whole step down with an error naming nothing an operator could act on.
+   *
+   * `undefined` for every other kind, which is what keeps their prompts byte-identical.
    */
-  private async resolveAuth(
+  private resolveTestCredentialsFor(
+    agentKind: string,
+    workspaceId: string,
+    blockId: string,
+  ): Promise<ResolvedTestCredentials | undefined> {
+    if (!isTesterKind(agentKind)) return Promise.resolve(undefined)
+    return resolveTestCredentials({
+      ...(this.deps.resolveTestSecrets ? { resolve: this.deps.resolveTestSecrets } : {}),
+      workspaceId,
+      blockId,
+      logger: this.log,
+    })
+  }
+
+  /**
+   * The two SECRET env channels a dispatch carries, resolved together because they are one
+   * concern: `{ key, value }` pairs the harness turns into environment variables of this one
+   * job's agent process, on dedicated top-level body fields the agent-context snapshot's
+   * allow-list omits. Values NEVER reach a prompt or telemetry — the prompt sees only names.
+   *
+   * - `testSecretEnv`: the tester's sensitive credentials (already resolved by the caller); the
+   *   prompt advertises their keys + descriptions through `context.testSecrets`.
+   * - `capabilitySecrets`: this step's registered CAPABILITIES — its generative integrations, and
+   *   the foundational services it was briefed to read and store through. The engine resolved
+   *   WHICH ones; only their values are resolved here, where the facade's resolver lives, and both
+   *   producers share ONE call because a variable-name conflict between them is visible per JOB
+   *   alone. A key that does not resolve is absent: the brief already defines an unset variable.
+   */
+  private async resolveJobSecretEnv(
+    context: AgentRunContext,
+    args: {
+      workspaceId: string
+      blockId: string
+      resolvedTestSecrets: { key: string; value: string }[]
+    },
+  ): Promise<{
+    testSecretEnv: { key: string; value: string }[]
+    capabilitySecrets: { key: string; value: string }[]
+  }> {
+    const capabilitySecrets = await resolveCapabilitySecrets({
+      context,
+      workspaceId: args.workspaceId,
+      blockId: args.blockId,
+      ...(this.deps.resolveToolSecrets ? { resolveToolSecrets: this.deps.resolveToolSecrets } : {}),
+      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
+    })
+    return {
+      testSecretEnv: args.resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value })),
+      capabilitySecrets,
+    }
+  }
+
+  /**
+   * Resolve the per-job auth the harness carries, through the SHARED resolver: the proxy session
+   * token for Pi, or a leased subscription token for Claude Code / Codex. Spread into every job
+   * body (`common`) so the per-kind bodies can't drift on which auth they forward, and shared
+   * with the single-job dispatchers so no flow serves only the Pi branch.
+   */
+  private resolveAuth(
     context: AgentRunContext,
     args: {
       harness: HarnessKind
@@ -1516,93 +990,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       executionId: string
     },
   ): Promise<{ auth: Record<string, unknown>; subscriptionTokenId?: string }> {
-    const { harness, ref, subscriptionVendor, workspaceId, executionId } = args
-    if (harness === 'pi') {
-      const accountId = this.deps.resolveAccountId
-        ? await this.deps.resolveAccountId(workspaceId)
-        : undefined
-      const sessionToken = await this.deps.sessionService.mint({
-        workspaceId,
-        accountId: accountId ?? undefined,
-        userId: context.initiatedByUserId,
-        executionId,
-        agentKind: context.agentKind,
-        provider: ref.provider,
-        model: ref.model,
-      })
-      return { auth: { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken } }
-    }
-    // Native local execution: the harness runs the developer's own CLI with its ambient
-    // login, so we lease NOTHING and gate NOTHING — just flag ambient auth for the harness.
-    // Passed the vendor so it can refuse a non-native vendor reusing the `claude-code`
-    // harness (GLM/Kimi/DeepSeek), whose subscriptionBaseUrl ambient auth would drop.
-    if (this.deps.nativeAmbientAuth?.(harness, subscriptionVendor)) {
-      return { auth: { harness, ambientAuth: true } }
-    }
-    if (!subscriptionVendor) {
-      throw new Error(
-        `The ${harness} harness is not configured on this deployment; connect a ` +
-          `subscription token or pick a different model.`,
-      )
-    }
-    // Individual-usage vendors (Claude) are NOT pooled: lease the run-initiator's OWN
-    // activated personal credential. Pooled vendors (GLM/Kimi/DeepSeek/Codex) lease
-    // from the workspace pool. Either path hands the RAW credential to the resolved
-    // runner transport (see the trust note below).
-    let secret: string
-    let subscriptionTokenId: string | undefined
-    if (isIndividualVendor(subscriptionVendor)) {
-      if (!this.deps.leasePersonalSubscriptionToken) {
-        throw new Error(
-          `Personal ${subscriptionVendor} subscriptions are not configured on this ` +
-            `deployment (no ENCRYPTION_KEY); pick a different model.`,
-        )
-      }
-      if (!context.initiatedByUserId) {
-        // No identified initiator (auth-disabled/local dev): an individual-usage
-        // credential is owned by a specific user and can't be resolved without one.
-        throw new CredentialRequiredError(
-          `Running a ${subscriptionVendor} model requires a signed-in user with a personal subscription.`,
-          { vendor: subscriptionVendor, reason: 'no_subscription' },
-        )
-      }
-      // Throws CredentialRequiredError(password_required) when the run has no live
-      // activation — the dispatch path surfaces it as a clear, retriable failure.
-      const leased = await this.deps.leasePersonalSubscriptionToken(
-        executionId,
-        context.initiatedByUserId,
-        subscriptionVendor,
-      )
-      secret = leased.secret
-    } else {
-      if (!this.deps.leaseSubscriptionToken) {
-        throw new Error(
-          `The ${harness} harness is not configured on this deployment; connect a ` +
-            `subscription token or pick a different model.`,
-        )
-      }
-      const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
-      subscriptionTokenId = leased.tokenId
-      secret = leased.secret
-    }
-    // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
-    // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
-    // token or a full ChatGPT auth.json — to the resolved runner transport. For the
-    // Cloudflare backend that is an ephemeral, managed per-run container. For a
-    // self-hosted runner pool it is the WORKSPACE'S OWN BYO infra (it connected the
-    // pool), so the credential stays within the workspace's trust domain — but a
-    // workspace should only point its subscription-harness steps at a runner pool it
-    // operates, since the credential leaves the backend to reach it.
-    // Non-Anthropic Claude-Code vendors (GLM/Kimi/DeepSeek) need their Anthropic-
-    // compatible base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
-    const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
-    return {
-      auth: {
-        harness,
-        subscriptionToken: secret,
-        ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
-      },
-      ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
-    }
+    return this.jobAuth.resolve({
+      ...args,
+      agentKind: context.agentKind,
+      ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+    })
   }
 }

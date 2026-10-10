@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { DOC_KINDS } from '~/types/domain'
 import type { DocKind, DocumentLinkRole, SourceDocument } from '~/types/domain'
+import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
 // A kind can be pointed at one of the workspace's already-imported documents so its parsed
@@ -10,7 +12,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.documentTemplates,
@@ -33,12 +35,7 @@ watch(
       // Surface a load failure instead of silently rendering an empty panel (which would invite
       // re-linking over links that still exist server-side).
       Promise.all([documents.loadDocuments(), documents.loadRoleLinks()]).catch((e) => {
-        toast.add({
-          title: t('documents.templates.loadFailed'),
-          description: e instanceof Error ? e.message : String(e),
-          icon: 'i-lucide-triangle-alert',
-          color: 'error',
-        })
+        present(e, 'documents.templates.loadFailed')
       })
     }
   },
@@ -72,12 +69,7 @@ async function link(role: DocumentLinkRole) {
     await documents.linkForKind(doc.source, doc.externalId, role, kind.value)
     pick.value = undefined
   } catch (e) {
-    toast.add({
-      title: t('documents.templates.linkFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.templates.linkFailed')
   } finally {
     busy.value = false
   }
@@ -88,12 +80,7 @@ async function unlink(doc: SourceDocument) {
   try {
     await documents.unlinkForKind(doc.source, doc.externalId)
   } catch (e) {
-    toast.add({
-      title: t('documents.templates.linkFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.templates.linkFailed')
   } finally {
     busy.value = false
   }
@@ -107,17 +94,17 @@ async function unlink(doc: SourceDocument) {
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">{{ t('documents.templates.intro') }}</p>
+        <p class="text-xs text-muted">{{ t('documents.templates.intro') }}</p>
 
         <!-- No imported documents yet: a template/exemplar must be an imported document. -->
         <div v-if="!documents.documents.length" class="space-y-3 text-center">
-          <UIcon name="i-lucide-file-plus" class="mx-auto h-8 w-8 text-slate-500" />
-          <p class="text-sm text-slate-400">{{ t('documents.templates.importFirst') }}</p>
+          <UIcon name="i-lucide-file-plus" class="mx-auto h-8 w-8 text-dimmed" />
+          <p class="text-sm text-muted">{{ t('documents.templates.importFirst') }}</p>
           <UButton
             color="primary"
             variant="soft"
             icon="i-lucide-file-down"
-            @click="ui.openDocumentImport(null)"
+            @click="ui.openDocumentImport()"
           >
             {{ t('documents.templates.importButton') }}
           </UButton>
@@ -145,25 +132,24 @@ async function unlink(doc: SourceDocument) {
           </UFormField>
 
           <!-- Template (singular per kind) ------------------------------------ -->
-          <section class="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <section class="rounded-lg border border-default bg-default/50 p-3">
+            <SectionLabel as="h3">
               {{ t('documents.templates.templateHeading') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-slate-500">
+            </SectionLabel>
+            <p class="mt-0.5 text-xs text-dimmed">
               {{ t('documents.templates.templateHint', { kind }) }}
             </p>
             <div
               v-if="template"
-              class="mt-2 flex items-center justify-between gap-2 rounded-md bg-slate-900/70 px-3 py-2"
+              class="mt-2 flex items-center justify-between gap-2 rounded-md bg-default/70 px-3 py-2"
             >
-              <a
-                :href="template.url"
-                target="_blank"
-                rel="noopener"
-                class="truncate text-sm font-medium text-white hover:underline"
+              <DocumentOriginLink
+                :url="template.url"
+                class="truncate text-sm font-medium text-highlighted"
+                hover-class="hover:underline"
               >
                 {{ template.title }}
-              </a>
+              </DocumentOriginLink>
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -175,33 +161,32 @@ async function unlink(doc: SourceDocument) {
                 {{ t('documents.templates.remove') }}
               </UButton>
             </div>
-            <p v-else class="mt-2 text-xs text-slate-500">
+            <p v-else class="mt-2 text-xs text-dimmed">
               {{ t('documents.templates.templateEmpty') }}
             </p>
           </section>
 
           <!-- Exemplars (multi per kind) -------------------------------------- -->
-          <section class="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <section class="rounded-lg border border-default bg-default/50 p-3">
+            <SectionLabel as="h3">
               {{ t('documents.templates.exemplarsHeading') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-slate-500">
+            </SectionLabel>
+            <p class="mt-0.5 text-xs text-dimmed">
               {{ t('documents.templates.exemplarsHint') }}
             </p>
             <div v-if="exemplars.length" class="mt-2 space-y-1.5">
               <div
                 v-for="doc in exemplars"
                 :key="`${doc.source}:${doc.externalId}`"
-                class="flex items-center justify-between gap-2 rounded-md bg-slate-900/70 px-3 py-2"
+                class="flex items-center justify-between gap-2 rounded-md bg-default/70 px-3 py-2"
               >
-                <a
-                  :href="doc.url"
-                  target="_blank"
-                  rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
+                <DocumentOriginLink
+                  :url="doc.url"
+                  class="truncate text-sm font-medium text-highlighted"
+                  hover-class="hover:underline"
                 >
                   {{ doc.title }}
-                </a>
+                </DocumentOriginLink>
                 <UButton
                   color="neutral"
                   variant="ghost"
@@ -214,7 +199,7 @@ async function unlink(doc: SourceDocument) {
                 </UButton>
               </div>
             </div>
-            <p v-else class="mt-2 text-xs text-slate-500">
+            <p v-else class="mt-2 text-xs text-dimmed">
               {{ t('documents.templates.exemplarsEmpty') }}
             </p>
           </section>

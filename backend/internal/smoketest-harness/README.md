@@ -2,7 +2,7 @@
 
 A standalone, headless harness that runs **real coding tasks** through cat-factory's
 **actual Pi coding-agent setup** and captures the whole run for analysis. Unlike the
-[benchmark harness](../benchmark-harness/README.md) it **does not grade anything** —
+[benchmark harness](../benchmark-harness/README.md) it **does not grade anything**:
 it answers a different question:
 
 > Can this model actually do the work through our Pi harness, and _where does it get
@@ -11,11 +11,11 @@ it answers a different question:
 For every case it captures the **complete prompt/response/tool-call transcript** and
 analyses it for:
 
-- **Breakage** — the model is unusable: Pi can't run, the model went unreachable and
+- **Breakage**: the model is unusable: Pi can't run, the model went unreachable and
   exhausted retries, or it produced nothing at all (no-op).
-- **Dead-ends** — the agent stopped making progress: killed by the no-progress guard,
+- **Dead-ends**: the agent stopped making progress: killed by the no-progress guard,
   hit the watchdog, or ran without ever landing a file change.
-- **Non-productive loops** — repeated identical tool calls, thrashing on a failing
+- **Non-productive loops**: repeated identical tool calls, thrashing on a failing
   operation, a web-search rabbit-hole, lots of motion with a near-empty diff.
 
 It reuses as much as possible: the **same Pi flow** as the runtime (clone → write the
@@ -30,7 +30,7 @@ re-implementing anything.
 Like the benchmark harness, this runs **locally** while using **actual Cloudflare
 Workers AI**: `workers-ai` models are reached over the Cloudflare REST OpenAI-compatible
 endpoint (`CF_ACCOUNT_ID` + `CF_API_TOKEN`), which is also what Pi is pointed at. It is
-**not** run in CI — it needs a configured Cloudflare account and the `pi` CLI.
+**not** run in CI: it needs a configured Cloudflare account and the `pi` CLI.
 
 ## Usage
 
@@ -51,16 +51,16 @@ Flags: `--fixture <id>` (one task), `--name <id>`, `--out <dir>`, `--relax-guard
 
 Under `docs/smoketests/<run-id>/`:
 
-- `report.md` — the at-a-glance table (verdict + findings per case) and "what to look at
+- `report.md`: the at-a-glance table (verdict + findings per case) and "what to look at
   first".
-- `results.json` / `manifest.json` — machine-readable results + run summary.
+- `results.json` / `manifest.json`: machine-readable results + run summary.
 - `cases/<case-id>/`:
-  - `analysis.md` — verdict, findings, metrics, the agent's summary.
-  - `transcript.jsonl` — **the raw capture**: every Pi event, including the full final
+  - `analysis.md`; verdict, findings, metrics, the agent's summary.
+  - `transcript.jsonl`: **the raw capture**: every Pi event, including the full final
     transcript (all prompts + responses).
-  - `transcript.md` — a rendered, skimmable conversation.
-  - `prompt.md` — the exact system + user prompt the agent was given.
-  - `diff.patch` — what the run changed (may be empty / partial).
+  - `transcript.md`: a rendered, skimmable conversation.
+  - `prompt.md`: the exact system + user prompt the agent was given.
+  - `diff.patch`: what the run changed (may be empty / partial).
 
 The run exits non-zero if any case is `broken`.
 

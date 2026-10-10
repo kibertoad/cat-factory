@@ -1,4 +1,9 @@
-import { useBreakpoints, breakpointsTailwind, useMediaQuery } from '@vueuse/core'
+import {
+  breakpointsTailwind,
+  createSharedComposable,
+  useBreakpoints,
+  useMediaQuery,
+} from '@vueuse/core'
 
 /**
  * Single source of truth for responsive / input-modality decisions across the SPA.
@@ -18,11 +23,16 @@ import { useBreakpoints, breakpointsTailwind, useMediaQuery } from '@vueuse/core
  * but which can still be finger-panned. Use it for behaviour that must work the
  * moment a finger is on the glass (the board's one-finger pan); use `isTouch` for
  * the dominant-modality choices (hit-target sizing).
+ *
+ * SHARED, as the "single source of truth" above says: every caller gets the same three refs and
+ * the same three media-query listeners. Plain per-call composition attached a fresh listener set
+ * per calling component, so the layout shell, the board canvas and every responsive panel each
+ * registered their own copies of queries that can only ever agree.
  */
-export function useViewport() {
+export const useViewport = createSharedComposable(() => {
   const breakpoints = useBreakpoints(breakpointsTailwind)
   const isCompact = breakpoints.smaller('lg')
   const isTouch = useMediaQuery('(pointer: coarse)')
   const hasTouch = useMediaQuery('(any-pointer: coarse)')
   return { isCompact, isTouch, hasTouch }
-}
+})

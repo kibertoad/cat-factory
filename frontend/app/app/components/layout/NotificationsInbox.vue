@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { Notification } from '~/types/domain'
+import type { ReviewEffort } from '~/types/merge'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -7,25 +9,17 @@ import type { Notification } from '~/types/domain'
 // (merge / confirm / retry) or dismissed. Hydrated from the snapshot and patched
 // live via the `notification` WorkspaceEvent.
 
-const { t, te } = useI18n()
+const { t, te, d } = useI18n()
 
 const notifications = useNotificationsStore()
 const ui = useUiStore()
+const access = useWorkspaceAccess()
 const execution = useExecutionStore()
+const trackRecords = useMergeTrackRecordsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const busy = ref<string | null>(null)
-
-/** Toast a failed act/dismiss — the store throws, so without this a failure was silent and the
- * item just stayed in the inbox with no explanation. */
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 /** Per-type display metadata (icon, colour). The primary-action label is resolved
  * separately through the i18n catalog (`ACTION_KEYS`). */
@@ -33,8 +27,15 @@ type Accent = 'warning' | 'primary' | 'error'
 const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   merge_review: { icon: 'i-lucide-git-pull-request-arrow', color: 'warning' },
   pipeline_complete: { icon: 'i-lucide-circle-check', color: 'primary' },
+  // A PR merged directly on the provider left its merge track record untagged. Purely a nudge:
+  // "act" records the picked reviewer effort (nothing at all if none was picked) and dismissing
+  // it is always fine — the record stays valid untagged.
+  merge_tag_request: { icon: 'i-lucide-tag', color: 'primary' },
   ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error' },
   test_failed: { icon: 'i-lucide-flask-conical', color: 'error' },
+  // The deploy-fixer gave up on an environment that would not come up. Same disposition as
+  // `ci_failed`: the run failed, and "act" retries it once the files are fixed.
+  deploy_blocked: { icon: 'i-lucide-server-off', color: 'error' },
   // Clicking the title opens the review window for the task (see `reveal`); "act" just marks
   // it read (the server performs no side-effect for this type).
   requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary' },
@@ -64,9 +65,35 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // the title opens the fork-decision window (see `reveal`); "act" just marks it read (the
   // choice is made in that window — pick a fork / enter a custom approach — not here).
   fork_decision_pending: { icon: 'i-lucide-git-fork', color: 'warning' },
+  judge_review: { icon: 'i-lucide-scale', color: 'warning' },
+  // The PR reviewer surfaced findings to triage. Clicking the title opens the PR-review window
+  // (see `reveal`); "act" just marks it read (findings are selected in that window, not here).
+  pr_review_ready: { icon: 'i-lucide-clipboard-check', color: 'primary' },
+  // A bug-fishing expedition finished every angle and is waiting for its catch to be triaged.
+  // Clicking the title opens the expedition window (see `reveal`); "act" just marks it read
+  // (findings are marked in that window, and each mark spawns its own fix task, not here).
+  bug_fishing_triage: { icon: 'i-lucide-fish', color: 'primary' },
   // The initiative loop needs attention (a blocked task, or completion). Clicking the title
   // opens the initiative tracker window; "act" just marks it read.
   initiative: { icon: 'i-lucide-milestone', color: 'primary' },
+  // The deployment's OWN run health crossed an operator threshold. Not block-scoped: clicking
+  // the title opens the operator dashboard (where the live numbers are); "act" marks it read.
+  platform_health: { icon: 'i-lucide-server-cog', color: 'warning' },
+  // Runs were paused by the spend safeguard. Workspace-scoped (no block to reveal); "act" just
+  // marks it read (the human raises the budget then resumes from the spend panel).
+  budget_paused: { icon: 'i-lucide-wallet', color: 'warning' },
+  // Spend crossed an alert threshold, or is projected to overrun the budget before the period
+  // ends. The PROACTIVE sibling of `budget_paused`, so it is amber rather than red: nothing has
+  // stopped yet, which is the entire point of it arriving. "act" just marks it read.
+  budget_threshold: { icon: 'i-lucide-trending-up', color: 'warning' },
+  // Stored credentials could not be decrypted (the ENCRYPTION_KEY changed since they were
+  // sealed). Not block-scoped; "act" drops the listed stale ciphertexts so they can be re-entered
+  // (or restore the previous key to recover them instead).
+  key_drift: { icon: 'i-lucide-key-round', color: 'error' },
+  // A configured infrastructure connection stopped answering its live probe. Not block-scoped and
+  // nothing to act on from here — the fix is on the provider's side, and the card clears itself when
+  // the reachability watcher sees it answer again; "act" just marks it read.
+  infra_unreachable: { icon: 'i-lucide-plug-zap', color: 'error' },
 }
 
 // Per-type primary-action label. An exhaustive Record keyed off the notification
@@ -75,8 +102,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
 const ACTION_KEYS: Record<Notification['type'], string> = {
   merge_review: 'layout.notifications.action.merge_review',
   pipeline_complete: 'layout.notifications.action.pipeline_complete',
+  merge_tag_request: 'layout.notifications.action.merge_tag_request',
   ci_failed: 'layout.notifications.action.ci_failed',
   test_failed: 'layout.notifications.action.test_failed',
+  deploy_blocked: 'layout.notifications.action.deploy_blocked',
   requirement_review: 'layout.notifications.action.requirement_review',
   clarity_review: 'layout.notifications.action.clarity_review',
   release_regression: 'layout.notifications.action.release_regression',
@@ -86,7 +115,15 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   human_review: 'layout.notifications.action.human_review',
   followup_pending: 'layout.notifications.action.followup_pending',
   fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
+  judge_review: 'layout.notifications.action.judge_review',
+  pr_review_ready: 'layout.notifications.action.pr_review_ready',
+  bug_fishing_triage: 'layout.notifications.action.bug_fishing_triage',
   initiative: 'layout.notifications.action.initiative',
+  platform_health: 'layout.notifications.action.platform_health',
+  budget_paused: 'layout.notifications.action.budget_paused',
+  budget_threshold: 'layout.notifications.action.budget_threshold',
+  key_drift: 'layout.notifications.action.key_drift',
+  infra_unreachable: 'layout.notifications.action.infra_unreachable',
 }
 
 /** The localized primary-action label for a notification (te()-guarded against a
@@ -109,17 +146,64 @@ function accent(n: Notification): Accent {
   return isUrgent(n) ? 'error' : META[n.type].color
 }
 
+/**
+ * Which cards collect a reviewer-effort tag: the two that MERGE a PR, plus the post-hoc nudge for
+ * one that was merged on the provider. Everything else has nothing to tag.
+ */
+function collectsEffort(n: Notification): boolean {
+  return (
+    n.type === 'merge_review' || n.type === 'pipeline_complete' || n.type === 'merge_tag_request'
+  )
+}
+
+/**
+ * The human's picked effort per card, preselected from evidence rather than starting blank: if the
+ * run's `pr-reviewer` step actually recorded findings, review comments plausibly drove rework
+ * (`minor`); if it did not, the PR needed nothing (`none`). One tap either confirms that guess or
+ * corrects it. `undefined` means the card collects no tag at all.
+ */
+const effortByCard = reactive<Record<string, ReviewEffort | null>>({})
+
+/** Whether the run's PR review surfaced any findings — the default-preselection signal. */
+function hadReviewFindings(n: Notification): boolean {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  return (instance?.steps ?? []).some((s) => (s.prReview?.findings?.length ?? 0) > 0)
+}
+
+function effortFor(n: Notification): ReviewEffort | null {
+  if (!(n.id in effortByCard)) effortByCard[n.id] = hadReviewFindings(n) ? 'minor' : 'none'
+  return effortByCard[n.id] ?? null
+}
+
+/** The change class the engine recorded for the run, when classification resolved one. */
+function changeClassOf(n: Notification) {
+  return n.payload?.changeClass
+}
+
+// Load the per-class rollups ONCE, the first time an effort-collecting card is in the inbox, so a
+// merge card can show what that class has historically needed. Not part of the workspace snapshot
+// (it's settings-screen/card context, not board state) and a single request for every class.
+watch(
+  () => notifications.open.some(collectsEffort),
+  (needed) => {
+    if (needed && !trackRecords.loaded && !trackRecords.loading) void trackRecords.load()
+  },
+  { immediate: true },
+)
+
 async function act(n: Notification) {
   busy.value = n.id
   try {
-    await notifications.act(n.id)
+    // Only the merge cards carry a tag; passing `undefined` elsewhere keeps the historical
+    // no-body act, so a non-merge card's action is completely unchanged.
+    await notifications.act(n.id, collectsEffort(n) ? effortFor(n) : undefined)
     toast.add({
       title: t('layout.notifications.toast.acted'),
       color: 'success',
       icon: 'i-lucide-check',
     })
   } catch (e) {
-    notifyError(t('layout.notifications.toast.actFailed'), e)
+    present(e, 'layout.notifications.toast.actFailed')
   } finally {
     busy.value = null
   }
@@ -135,7 +219,7 @@ async function dismiss(n: Notification) {
       icon: 'i-lucide-check',
     })
   } catch (e) {
-    notifyError(t('layout.notifications.toast.dismissFailed'), e)
+    present(e, 'layout.notifications.toast.dismissFailed')
   } finally {
     busy.value = null
   }
@@ -148,6 +232,9 @@ async function dismiss(n: Notification) {
  * type just focuses the related block on the board.
  */
 function reveal(n: Notification) {
+  // A `platform_health` card is deployment-scoped (no block) — send the operator to the
+  // dashboard where the live aggregate numbers behind the alert live.
+  if (n.type === 'platform_health') return ui.openOperatorDashboard()
   if (!n.blockId) return
   if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
@@ -157,6 +244,9 @@ function reveal(n: Notification) {
   else if (n.type === 'human_review') revealHumanReview(n)
   else if (n.type === 'followup_pending') revealFollowUps(n)
   else if (n.type === 'fork_decision_pending') revealForkDecision(n)
+  else if (n.type === 'judge_review') revealJudge(n)
+  else if (n.type === 'pr_review_ready') revealPrReview(n)
+  else if (n.type === 'bug_fishing_triage') revealBugFishing(n)
   else if (n.type === 'initiative') ui.openInitiativeTracker(n.blockId)
   else ui.select(n.blockId)
 }
@@ -192,6 +282,36 @@ function revealForkDecision(n: Notification) {
 }
 
 /**
+ * Open the judge window for a run parked on a rubric verdict: find the step carrying the parked
+ * verdict and open it through the universal step dispatch (a registered judge declares the
+ * `judge` result view). Falls back to focusing the block when the run isn't loaded.
+ */
+function revealJudge(n: Notification) {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  const idx = instance?.steps.findIndex((s) => s.judge?.status === 'awaiting_decision') ?? -1
+  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
+ * Open the PR deep-review window for a run parked awaiting a finding selection.
+ * Falls back to focusing the block when the run isn't loaded.
+ */
+function revealPrReview(n: Notification) {
+  if (n.executionId && execution.getInstance(n.executionId)) ui.openPrReview(n.executionId)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
+ * Open the bug-fishing expedition window for a run whose angles have all settled. Falls back to
+ * focusing the block when the run is not loaded, exactly like its PR-review sibling.
+ */
+function revealBugFishing(n: Notification) {
+  if (n.executionId && execution.getInstance(n.executionId)) ui.openBugFishing(n.executionId)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
  * Open the human-testing window for a parked `human-test` gate: find the run's parked
  * human-test step and open it through the universal step dispatch (its archetype declares
  * the `human-test` result view). Falls back to focusing the block.
@@ -222,6 +342,44 @@ function revealVisualConfirm(n: Notification) {
 }
 
 /**
+ * The failing runs a `platform_health` card is aggregating, captured when the alert fired.
+ * Empty for a card raised on a condition with no failing run behind it (a backlog or a stall),
+ * where the payload carries no list at all, which is the point: an empty list would read as
+ * "we looked and found no failures".
+ */
+function failingRuns(n: Notification) {
+  return n.payload?.platformFailingRuns ?? []
+}
+
+/**
+ * How many of the workspace's failures the card is showing. Rendered only when the sample is
+ * SHORT of the total, so the card states what it left out instead of presenting the cap as the
+ * whole story.
+ */
+function failingRunsOmitted(n: Notification): number {
+  return Math.max(0, (n.payload?.platformFailedTotal ?? 0) - failingRuns(n).length)
+}
+
+/**
+ * Whether a linked failing run can actually be opened. A run that has since aged out of the
+ * board's loaded set and carries no block is a link to nowhere, and rendering it as clickable
+ * would be worse than rendering it plainly: the operator would read "nothing happened" from a
+ * click that silently did nothing.
+ */
+function canOpenFailingRun(run: { executionId: string; blockId: string | null }): boolean {
+  return !!execution.getInstance(run.executionId) || !!run.blockId
+}
+
+/**
+ * Open one failing run behind a platform-health alert: its observability drill-down when the
+ * run is loaded (the "why did this fail" surface), otherwise focus its task on the board.
+ */
+function revealFailingRun(run: { executionId: string; blockId: string | null }) {
+  if (execution.getInstance(run.executionId)) ui.openObservability(run.executionId)
+  else if (run.blockId) ui.select(run.blockId)
+}
+
+/**
  * Open the decision surface for a parked iteration-cap run: find the run's step that is
  * waiting on a human and open it through the universal step dispatch — which routes a
  * `requirements-review` step to the review window and a companion step to its detail
@@ -249,9 +407,9 @@ function revealDecision(n: Notification) {
 
     <template #content>
       <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
-        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel class="px-2 py-1">
           {{ t('layout.notifications.heading') }}
-        </div>
+        </SectionLabel>
         <div
           v-for="n in notifications.open"
           :key="n.id"
@@ -260,8 +418,8 @@ function revealDecision(n: Notification) {
           class="rounded-lg border p-2.5 mt-1.5"
           :class="
             isUrgent(n)
-              ? 'border-error-500/60 bg-error-500/10'
-              : 'border-slate-700/60 bg-slate-800/40'
+              ? 'border-app-error-500/60 bg-app-error-500/10'
+              : 'border-muted/60 bg-elevated/40'
           "
         >
           <div class="flex items-start gap-2">
@@ -271,31 +429,86 @@ function revealDecision(n: Notification) {
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
-                <button
-                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-slate-200 hover:underline"
+                <UButton
+                  color="neutral"
+                  variant="link"
+                  class="block min-w-0 flex-1 truncate p-0 text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >
                   {{ n.title }}
-                </button>
+                </UButton>
                 <span
                   v-if="isUrgent(n)"
-                  class="shrink-0 rounded bg-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-400"
+                  class="shrink-0 rounded-sm bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"
                 >
                   {{ t('layout.notifications.overdue') }}
                 </span>
               </div>
-              <p class="mt-0.5 text-[11px] leading-snug text-slate-400">{{ n.body }}</p>
-              <a
+              <p class="mt-0.5 text-2xs leading-snug text-muted">{{ n.body }}</p>
+              <ULink
+                raw
                 v-if="n.payload?.prUrl"
-                :href="n.payload.prUrl"
+                :to="n.payload.prUrl"
                 target="_blank"
                 rel="noopener"
-                class="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline"
+                class="mt-1 inline-flex items-center gap-1 text-2xs text-app-info-400 hover:underline"
               >
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
-              </a>
+              </ULink>
+              <!--
+                A platform-health card deep-links to the runs it aggregated, so the operator
+                lands on the evidence rather than only on the dashboard.
+              -->
+              <div
+                v-if="failingRuns(n).length"
+                class="mt-1.5 flex flex-col gap-0.5"
+                data-testid="notification-failing-runs"
+              >
+                <template v-for="run in failingRuns(n)" :key="run.executionId">
+                  <UButton
+                    v-if="canOpenFailingRun(run)"
+                    color="neutral"
+                    variant="link"
+                    size="xs"
+                    class="gap-1 p-0 text-start text-2xs text-app-info-400 hover:text-app-info-400 hover:underline"
+                    @click="revealFailingRun(run)"
+                  >
+                    <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{
+                      t('layout.notifications.failingRun', {
+                        kind: run.failureKind,
+                        at: d(new Date(run.createdAt), 'short'),
+                      })
+                    }}</span>
+                  </UButton>
+                  <span
+                    v-else
+                    class="flex cursor-default items-center gap-1 text-start text-2xs text-dimmed"
+                    :title="t('layout.notifications.failingRunGone')"
+                  >
+                    <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{
+                      t('layout.notifications.failingRun', {
+                        kind: run.failureKind,
+                        at: d(new Date(run.createdAt), 'short'),
+                      })
+                    }}</span>
+                  </span>
+                </template>
+                <span v-if="failingRunsOmitted(n) > 0" class="text-2xs text-dimmed">
+                  {{ t('layout.notifications.failingRunsMore', { count: failingRunsOmitted(n) }) }}
+                </span>
+              </div>
+              <MergeEffortChips
+                v-if="collectsEffort(n)"
+                :model-value="effortFor(n)"
+                :change-class="changeClassOf(n)"
+                :rollup="changeClassOf(n) ? trackRecords.byClass[changeClassOf(n)!] : null"
+                :disabled="busy === n.id || !access.canExecuteRuns.value"
+                @update:model-value="effortByCard[n.id] = $event"
+              />
               <div class="mt-2 flex items-center gap-1.5">
                 <UButton
                   data-testid="notification-act"
@@ -303,6 +516,8 @@ function revealDecision(n: Notification) {
                   variant="soft"
                   size="xs"
                   :loading="busy === n.id"
+                  :disabled="!access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="act(n)"
                 >
                   {{ actionLabel(n) }}
@@ -312,7 +527,8 @@ function revealDecision(n: Notification) {
                   color="neutral"
                   variant="ghost"
                   size="xs"
-                  :disabled="busy === n.id"
+                  :disabled="busy === n.id || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="dismiss(n)"
                 >
                   {{ t('layout.notifications.dismiss') }}

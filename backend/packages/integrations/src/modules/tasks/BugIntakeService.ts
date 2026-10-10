@@ -1,7 +1,7 @@
 import type {
   IssueIntakeQuery,
   PipelineScheduleRepository,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskRepository,
   TaskSearchResult,
   TaskSourceKind,
@@ -29,7 +29,7 @@ import { issueTaskDescription, issueTaskTitle } from './TaskLinkService.js'
 export interface BugIntakeServiceDependencies {
   pipelineScheduleRepository: PipelineScheduleRepository
   taskSourceRegistry: TaskSourceRegistry
-  taskConnectionRepository: TaskConnectionRepository
+  taskConnectionStore: TaskConnectionStore
   importService: TaskImportService
   linkService: TaskLinkService
   taskRepository: TaskRepository
@@ -119,7 +119,7 @@ export class BugIntakeService {
     let hit: TaskSearchResult | undefined
     try {
       const credentials =
-        (await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, config.source))
+        (await this.deps.taskConnectionStore.getByWorkspace(workspaceId, config.source))
           ?.credentials ?? {}
       const hits = await provider.searchIssues(credentials, query, workspaceId)
       hit = hits[0]

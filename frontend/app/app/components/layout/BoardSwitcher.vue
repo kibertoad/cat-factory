@@ -1,29 +1,30 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
 // row is shown only when accounts exist (auth on); in dev it falls back to a plain
 // board switcher over the single unscoped context.
+//
+// `collapsed` renders the icon-only rail variant (the sidebar's collapsed state): the
+// account row folds away — it is a label with a menu duplicated inside the board menu's
+// reach — and the board button keeps only its glyph. Both dropdowns are unchanged, so
+// switching boards never requires expanding the sidebar first.
+withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
+
 const { t } = useI18n()
 
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
+const access = useWorkspaceAccess()
 const { confirm } = useConfirm()
 
 const busy = ref(false)
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 // The cloud provider new services in the active account default to (a service may
 // override it per-frame). `docker` is the local Docker/Podman backend. The brand
@@ -44,7 +45,7 @@ async function setDefaultProvider(provider: CloudProvider) {
   try {
     await accounts.setDefaultCloudProvider(id, provider)
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.updateProviderFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.updateProviderFailed')
   }
 }
 
@@ -92,28 +93,43 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
 
 const boardItems = computed<DropdownMenuItem[][]>(() => [
   workspace.accountWorkspaces.map((w) => ({
-    label: w.name,
-    icon: 'i-lucide-layout-dashboard',
+    // Badge a board the caller only reaches as a read-only viewer (a restricted board
+    // they're not a member/admin of), so the switcher shows why it's read-only.
+    label: w.viewerRole === 'viewer' ? `${w.name} · ${t('access.viewerBadge')}` : w.name,
+    // A restricted board (limited to an explicit roster) gets a lock glyph so an admin who
+    // manages membership can see at a glance which boards are scoped vs open to the account.
+    icon: w.accessMode === 'restricted' ? 'i-lucide-lock' : 'i-lucide-layout-dashboard',
     trailingIcon: w.id === workspace.workspaceId ? 'i-lucide-check' : undefined,
+    // Addressable per board id: which board a row opens is the one thing about this menu a test
+    // (or a screen reader's user testing a switch) cannot get from the label, which is a name a
+    // person chose and two boards may share.
+    'data-testid': `board-option-${w.id}`,
     onSelect: () => void switchBoard(w.id),
   })),
   [
     {
       label: t('layout.boardSwitcher.board.new'),
       icon: 'i-lucide-plus',
+      'data-testid': 'board-new',
       onSelect: () => openPrompt('board'),
     },
-    {
-      label: t('layout.boardSwitcher.board.rename'),
-      icon: 'i-lucide-pencil',
-      onSelect: () => openPrompt('rename'),
-    },
-    {
-      label: t('layout.boardSwitcher.board.delete'),
-      icon: 'i-lucide-trash-2',
-      color: 'error' as const,
-      onSelect: () => void removeBoard(),
-    },
+    // Rename/delete of the active board is `settings.manage` — omit for a member/viewer,
+    // who would only get a 403 (the backend gates WorkspaceController update/delete).
+    ...(access.canManageSettings.value
+      ? [
+          {
+            label: t('layout.boardSwitcher.board.rename'),
+            icon: 'i-lucide-pencil',
+            onSelect: () => openPrompt('rename'),
+          },
+          {
+            label: t('layout.boardSwitcher.board.delete'),
+            icon: 'i-lucide-trash-2',
+            color: 'error' as const,
+            onSelect: () => void removeBoard(),
+          },
+        ]
+      : []),
   ],
 ])
 
@@ -123,7 +139,7 @@ async function selectAccount(id: string) {
   try {
     await workspace.selectAccount(id)
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.switchAccountFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.switchAccountFailed')
   } finally {
     busy.value = false
   }
@@ -134,7 +150,7 @@ async function switchBoard(id: string) {
   try {
     await workspace.switchTo(id)
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.openBoardFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.openBoardFailed')
   } finally {
     busy.value = false
   }
@@ -158,7 +174,7 @@ async function removeBoard() {
     await workspace.remove(id)
     toast.add({ title: t('layout.boardSwitcher.toast.boardDeleted'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.deleteBoardFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.deleteBoardFailed')
   } finally {
     busy.value = false
   }
@@ -225,7 +241,7 @@ async function submitPrompt() {
     }
     prompt.value = null
   } catch (e) {
-    notifyError(t('common.actionFailed'), e)
+    present(e, 'common.actionFailed')
   } finally {
     busy.value = false
   }
@@ -234,51 +250,62 @@ async function submitPrompt() {
 
 <template>
   <div class="space-y-1.5">
-    <!-- account selector (only when accounts exist) -->
+    <!-- account selector (only when accounts exist, and not in the collapsed rail) -->
     <UDropdownMenu
-      v-if="accounts.enabled"
+      v-if="accounts.enabled && !collapsed"
       :items="accountItems"
       :content="{ align: 'start' }"
       class="w-full"
     >
-      <button
-        type="button"
-        class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start transition hover:bg-slate-800/60"
+      <UButton
+        color="neutral"
+        variant="ghost"
+        class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start transition hover:bg-elevated/60"
         :disabled="busy"
       >
         <UIcon
           :name="accounts.activeAccount?.type === 'org' ? 'i-lucide-users' : 'i-lucide-user'"
-          class="h-3.5 w-3.5 shrink-0 text-slate-400"
+          class="h-3.5 w-3.5 shrink-0 text-muted"
         />
-        <span class="truncate text-[11px] font-medium uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span" class="truncate">
           {{ accounts.activeAccount?.name ?? t('layout.boardSwitcher.accountFallback') }}
-        </span>
-        <UIcon
-          name="i-lucide-chevrons-up-down"
-          class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-600"
-        />
-      </button>
+        </SectionLabel>
+        <UIcon name="i-lucide-chevrons-up-down" class="ms-auto h-3.5 w-3.5 shrink-0 text-app-600" />
+      </UButton>
     </UDropdownMenu>
 
     <!-- board selector -->
     <UDropdownMenu :items="boardItems" :content="{ align: 'start' }" class="w-full">
-      <button
-        type="button"
-        class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-start transition hover:bg-slate-800/60"
+      <UButton
+        color="neutral"
+        variant="ghost"
+        :title="
+          collapsed
+            ? (workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback'))
+            : undefined
+        "
+        class="flex w-full items-center gap-2 rounded-lg border border-default bg-default/60 px-2.5 py-1.5 text-start transition hover:bg-elevated/60"
+        :class="collapsed ? 'justify-center' : ''"
         :disabled="busy"
+        data-testid="board-switcher"
+        :data-board-id="workspace.workspaceId ?? ''"
       >
-        <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-indigo-400" />
-        <span class="truncate text-sm font-medium text-white">
+        <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-primary" />
+        <span v-if="!collapsed" class="truncate text-sm font-medium text-highlighted">
           {{ workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback') }}
         </span>
-        <UIcon name="i-lucide-chevron-down" class="ms-auto h-4 w-4 shrink-0 text-slate-500" />
-      </button>
+        <UIcon
+          v-if="!collapsed"
+          name="i-lucide-chevron-down"
+          class="ms-auto h-4 w-4 shrink-0 text-dimmed"
+        />
+      </UButton>
     </UDropdownMenu>
 
     <!-- create / rename prompt -->
     <UModal v-model:open="promptOpen" :title="prompt ? promptMeta[prompt].title : ''">
       <template #body>
-        <form class="space-y-3" @submit.prevent="submitPrompt">
+        <UForm class="space-y-3" @submit="submitPrompt">
           <UFormField :label="t('layout.boardSwitcher.prompt.nameLabel')">
             <UInput
               v-model="promptValue"
@@ -316,7 +343,7 @@ async function submitPrompt() {
               {{ prompt ? promptMeta[prompt].cta : '' }}
             </UButton>
           </div>
-        </form>
+        </UForm>
       </template>
     </UModal>
   </div>

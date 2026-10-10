@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
-import { buildInfraNotes, buildPreviewOutcome } from '../src/agent.js'
+import {
+  buildPreviewOutcome,
+  exploreCheckoutRefs,
+  ralphUnsupportedOnMultiRepo,
+} from '../src/agent.js'
+import { buildInfraNotes } from '../src/infra-standup.js'
 import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
@@ -24,11 +29,14 @@ const base = {
   branch: 'main',
 }
 
-describe('parseAgentJob', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-  })
+// Shared by every suite below: hoisted to module scope when the one long `describe` was
+// split into siblings, so each still sees the same fixtures (a module-level `beforeEach`
+// runs for every suite in the file, exactly as the in-describe one did).
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
+describe('parseAgentJob — repo legs', () => {
   it('parses the optional repo.provider discriminator', () => {
     // The GitLab host must be allow-listed or the clone-URL host check rejects it first.
     vi.stubEnv('GITHUB_ALLOWED_HOSTS', 'gitlab.com')
@@ -43,6 +51,21 @@ describe('parseAgentJob', () => {
   it('leaves repo.provider undefined when absent (host inference applies downstream)', () => {
     const job = parseAgentJob({ ...base, mode: 'coding' })
     expect(job.repo.provider).toBeUndefined()
+  })
+
+  // The backend's correlation ids: bound onto the per-job logger so a container line can be
+  // joined to the run that dispatched it. Optional — a body from a backend older than the
+  // field still runs, it just logs without them.
+  it('carries the run correlation ids when the backend sends them', () => {
+    const job = parseAgentJob({ ...base, mode: 'coding', workspaceId: 'ws_1', executionId: 'ex_1' })
+    expect(job.workspaceId).toBe('ws_1')
+    expect(job.executionId).toBe('ex_1')
+  })
+
+  it('runs without the correlation ids', () => {
+    const job = parseAgentJob({ ...base, mode: 'coding', workspaceId: '', executionId: 42 })
+    expect(job.workspaceId).toBeUndefined()
+    expect(job.executionId).toBeUndefined()
   })
 
   it('rejects an unknown repo.provider', () => {
@@ -66,7 +89,7 @@ describe('parseAgentJob', () => {
             baseBranch: 'main',
             cloneUrl: 'https://github.com/acme/email.git',
           },
-          frameId: 'frame-email',
+          frameIds: ['frame-email'],
           newBranch: 'cat-factory/blk',
           pr: { title: 'Wire email', body: 'body' },
         },
@@ -74,11 +97,56 @@ describe('parseAgentJob', () => {
     })
     expect(job.peerRepos).toHaveLength(1)
     expect(job.peerRepos?.[0]).toMatchObject({
-      frameId: 'frame-email',
+      frameIds: ['frame-email'],
       newBranch: 'cat-factory/blk',
       repo: { owner: 'acme', name: 'email' },
       pr: { title: 'Wire email' },
     })
+  })
+
+  // A peer that is a MONOREPO hosting several of the run's involved services is still ONE
+  // checkout, one work branch and one pull request. The harness decides no frame attribution
+  // of its own: it carries the dispatch's whole set through so the backend can record that PR
+  // against every frame whose change landed in it.
+  it('carries a peer repo’s full frame set through, dropping only non-string entries', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'platform',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/platform.git',
+          },
+          frameIds: ['frm_billing', 'frm_ledger', 7, ''],
+          newBranch: 'cat-factory/blk',
+        },
+      ],
+    })
+    expect(job.peerRepos?.[0]?.frameIds).toEqual(['frm_billing', 'frm_ledger'])
+  })
+
+  it('omits frameIds entirely when a peer names none (never an empty array)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'email',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/email.git',
+          },
+          newBranch: 'cat-factory/blk',
+        },
+      ],
+    })
+    expect(job.peerRepos?.[0]).not.toHaveProperty('frameIds')
   })
 
   it('rejects a peer repo whose clone URL host is not allow-listed (token-exfil guard)', () => {
@@ -129,12 +197,12 @@ describe('parseAgentJob', () => {
             baseBranch: 'main',
             cloneUrl: 'https://github.com/acme/email.git',
           },
-          frameId: 'frame-email',
+          frameIds: ['frame-email'],
         },
       ],
     })
     expect(job.peerRepos).toHaveLength(1)
-    expect(job.peerRepos?.[0]).toMatchObject({ frameId: 'frame-email', repo: { name: 'email' } })
+    expect(job.peerRepos?.[0]).toMatchObject({ frameIds: ['frame-email'], repo: { name: 'email' } })
     // A read-only explore peer carries no work branch and no PR — it exists only to be read.
     expect(job.peerRepos?.[0]?.newBranch).toBeUndefined()
     expect(job.peerRepos?.[0]?.pr).toBeUndefined()
@@ -157,7 +225,7 @@ describe('parseAgentJob', () => {
             baseBranch: 'develop',
             cloneUrl: 'https://github.com/acme/billing.git',
           },
-          frameId: 'frame-billing',
+          frameIds: ['frame-billing'],
           cloneBranch: 'cat-factory/blk_1',
         },
       ],
@@ -241,6 +309,31 @@ describe('parseAgentJob', () => {
     expect(() => parseAgentJob({ ...base, mode: 'coding', referenceBranches: 'spike' })).toThrow(
       /referenceBranches/,
     )
+  })
+})
+
+describe('parseAgentJob — job knobs and infra specs', () => {
+  it('parses reviewPrNumber (the pr-reviewer PR-head prefetch target)', () => {
+    const job = parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 4558 })
+    expect(job.reviewPrNumber).toBe(4558)
+  })
+
+  it('floors a fractional reviewPrNumber to a positive integer', () => {
+    const job = parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 12.9 })
+    expect(job.reviewPrNumber).toBe(12)
+  })
+
+  it('omits reviewPrNumber when absent or non-positive', () => {
+    expect(parseAgentJob({ ...base, mode: 'explore' }).reviewPrNumber).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 0 }).reviewPrNumber,
+    ).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: -3 }).reviewPrNumber,
+    ).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 'nope' }).reviewPrNumber,
+    ).toBeUndefined()
   })
 
   it('accepts a structured explore job', () => {
@@ -681,5 +774,195 @@ describe('parseAgentJob (preview mode)', () => {
 
   it('rejects a job with an unknown mode', () => {
     expect(() => parseAgentJob({ ...base, mode: 'serve' })).toThrow(/mode/)
+  })
+})
+
+describe('ralphUnsupportedOnMultiRepo', () => {
+  const validation = { command: 'pnpm test' }
+  const repo = {
+    owner: 'acme',
+    name: 'email',
+    baseBranch: 'main',
+    cloneUrl: 'https://github.com/acme/email.git',
+  }
+  const peer = [{ repo }]
+
+  it('is true for a ralph iteration (validation set) on a peer-repo job', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation, peerRepos: peer })).toBe(true)
+  })
+
+  it('is true for a ralph iteration on a reference-repo job', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation, referenceRepos: [{ repo }] })).toBe(true)
+  })
+
+  it('is false for a ralph iteration on a single-repo job (the supported path)', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation })).toBe(false)
+    expect(ralphUnsupportedOnMultiRepo({ validation, peerRepos: [] })).toBe(false)
+  })
+
+  it('is false for a non-ralph multi-repo job (no validation set)', () => {
+    expect(ralphUnsupportedOnMultiRepo({ peerRepos: peer })).toBe(false)
+  })
+})
+
+describe('parseAgentJob — skills', () => {
+  it('parses a skill (name/description/instructions + resources) and preserves sub-paths', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skills: [
+        {
+          name: 'bug-triage',
+          description: 'Triage a bug',
+          instructions: 'Reproduce, then classify.',
+          resources: [
+            { relPath: 'templates/report.md', content: '# report' },
+            { relPath: 'checklist.md', content: '- item' },
+          ],
+        },
+      ],
+    })
+    expect(job.skills?.[0]?.name).toBe('bug-triage')
+    expect(job.skills?.[0]?.instructions).toContain('Reproduce')
+    expect(job.skills?.[0]?.resources.map((r) => r.relPath)).toEqual([
+      'templates/report.md',
+      'checklist.md',
+    ])
+  })
+
+  it('drops a resource whose relPath traverses out, and normalises a leading slash to a safe relative path', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skills: [
+        {
+          name: 'x',
+          description: 'd',
+          instructions: 'i',
+          resources: [
+            { relPath: '../../etc/passwd', content: 'nope' }, // traversal → dropped
+            { relPath: '/abs/path.md', content: 'yes' }, // leading slash stripped → kept, safe
+            { relPath: 'ok/file.md', content: 'yes' },
+          ],
+        },
+      ],
+    })
+    expect(job.skills?.[0]?.resources.map((r) => r.relPath)).toEqual(['abs/path.md', 'ok/file.md'])
+  })
+
+  it('falls back to a safe name when the authored name sanitises to nothing', () => {
+    // A name that sanitises to nothing (pure traversal / non-ASCII) only affects the install
+    // directory, so the skill is kept under a safe fallback name rather than dropped — otherwise
+    // the claude-code prompt would point at a skill that was never installed.
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skills: [{ name: '..', description: 'd', instructions: 'i', resources: [] }],
+    })
+    expect(job.skills?.[0]?.name).toBe('skill')
+    expect(job.skills?.[0]?.instructions).toBe('i')
+  })
+
+  it('drops a skill with no instructions (nothing to run)', () => {
+    expect(
+      parseAgentJob({ ...base, mode: 'coding', skills: [{ name: 'x', description: 'd' }] }).skills,
+    ).toBeUndefined()
+  })
+
+  it('drops a second skill claiming a name already taken', () => {
+    // Two skills sharing a directory name would overwrite each other's SKILL.md, leaving the agent
+    // pointed at whichever landed last — so the first wins rather than the two silently mixing.
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skills: [
+        { name: 'dup', description: 'first', instructions: 'a', resources: [] },
+        { name: 'dup', description: 'second', instructions: 'b', resources: [] },
+      ],
+    })
+    expect(job.skills?.map((s) => s.description)).toEqual(['first'])
+  })
+
+  it('leaves skills undefined when absent', () => {
+    expect(parseAgentJob({ ...base, mode: 'coding' }).skills).toBeUndefined()
+  })
+})
+
+describe('parseAgentJob — mcpServers', () => {
+  it('parses a stdio server with args + env and an http server with headers', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      mcpServers: [
+        {
+          id: 'issues',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', 'issue-mcp'],
+          env: { ISSUE_TOKEN: 'tok', BAD: 3 },
+          allowedTools: ['search_issues'],
+        },
+        {
+          id: 'docs',
+          transport: 'http',
+          url: 'https://mcp.example.com/sse',
+          headers: { Authorization: 'Bearer tok' },
+        },
+      ],
+    })
+    expect(job.mcpServers?.map((s) => s.id)).toEqual(['issues', 'docs'])
+    // A non-string env value is dropped rather than stringified into the server's environment.
+    expect(job.mcpServers?.[0]?.env).toEqual({ ISSUE_TOKEN: 'tok' })
+    expect(job.mcpServers?.[0]?.allowedTools).toEqual(['search_issues'])
+    expect(job.mcpServers?.[1]?.url).toBe('https://mcp.example.com/sse')
+  })
+
+  it('drops entries that cannot be served: bad id, no command, non-http url, duplicate id', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      mcpServers: [
+        // The id becomes a tool-name fragment AND a TOML table key, so an unsafe one would
+        // produce an unmatchable allow-list entry or a malformed Codex config.
+        { id: 'Bad Id', transport: 'stdio', command: 'x' },
+        { id: 'nocmd', transport: 'stdio' },
+        { id: 'file', transport: 'http', url: 'file:///etc/passwd' },
+        { id: 'ok', transport: 'stdio', command: 'x' },
+        { id: 'ok', transport: 'stdio', command: 'y' },
+      ],
+    })
+    expect(job.mcpServers?.map((s) => s.id)).toEqual(['ok'])
+    expect(job.mcpServers?.[0]?.command).toBe('x')
+  })
+
+  it('leaves mcpServers undefined when absent', () => {
+    expect(parseAgentJob({ ...base, mode: 'coding' }).mcpServers).toBeUndefined()
+  })
+})
+
+describe('exploreCheckoutRefs', () => {
+  const job = (branch: string, baseBranch: string) => ({
+    branch,
+    repo: { ...base.repo, baseBranch },
+  })
+
+  it('asks for the REPO base beside the explored branch, so both refs are refreshed', () => {
+    // The regression this pins: passing the explored branch as the base collapses
+    // `prepareExistingCheckout`'s two refspecs into one, so a reused pool dir keeps whatever
+    // `origin/<base>` it was first cloned with and the reviewer's three-dot diff resolves its
+    // merge base to that stale tip.
+    const refs = exploreCheckoutRefs(job('cat-factory/blk', 'main'))
+    expect(refs).toEqual({ branch: 'cat-factory/blk', baseBranch: 'main' })
+    expect(refs.baseBranch).not.toBe(refs.branch)
+  })
+
+  it('names a non-default base branch rather than assuming main', () => {
+    expect(exploreCheckoutRefs(job('fix/x', 'release-7')).baseBranch).toBe('release-7')
+  })
+
+  it('collapses to one ref only when the explored branch IS the base', () => {
+    // A `clone.branch: 'base'` explore (the pr-reviewer) legitimately has nothing else to fetch.
+    const refs = exploreCheckoutRefs(job('main', 'main'))
+    expect(refs.baseBranch).toBe(refs.branch)
   })
 })

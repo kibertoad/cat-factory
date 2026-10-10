@@ -25,8 +25,14 @@ import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding
 //
 // Format: `base64url(JSON payload).base64url(HMAC(base64url(JSON payload)))`.
 // The payload is base64url (no dots), so the dot split is unambiguous. Payloads
-// carrying an `exp` (epoch ms) are rejected once expired. There is no server-side
-// store: logout is a client-side drop and expiry bounds the blast radius.
+// carrying an `exp` (epoch ms) are rejected once expired.
+//
+// Signing itself remains store-free — nothing here reads a database, and every token class but
+// one is bounded purely by its expiry. The exception is the USER SESSION, which carries a `gen`
+// claim checked against the user's row by `verifySession` (see `auth/middleware.ts`), so that a
+// leaked or offboarded bearer can be revoked before it expires. That check is deliberately NOT
+// folded in here: this module is the shared primitive every audience uses, and only the session
+// audience has a principal whose row could be consulted.
 
 /** Distinct token audiences. Each verifier pins exactly one of these. */
 export const TOKEN_AUDIENCE = {
@@ -34,6 +40,15 @@ export const TOKEN_AUDIENCE = {
   session: 'session',
   /** OAuth login `state` nonce. */
   oauthState: 'oauth-state',
+  /**
+   * Enterprise-SSO round-trip cookie. Deliberately NOT `oauthState`, even though both are one
+   * login round-trip's CSRF state: the OAuth value travels in the URL (so any user holds a
+   * validly-signed one), while this one is an httpOnly cookie carrying the PKCE `code_verifier`
+   * and the OIDC `nonce`. Sharing an audience would let the public value verify as the secret
+   * container, leaving the two secrets `undefined` and the flow resting on the provider to
+   * refuse a PKCE mismatch. Pinned so it cannot.
+   */
+  ssoState: 'sso-state',
   /** Implementation-container → LLM proxy token. */
   container: 'llm-proxy',
   /** Single-workspace WebSocket event-stream ticket. */
@@ -65,6 +80,19 @@ export interface SessionPayload extends SessionUser {
   /** Audience pin — always `session` for a user session. */
   aud: typeof TOKEN_AUDIENCE.session
   exp: number
+  /**
+   * The user's session GENERATION at mint time. Verification compares it against the stored
+   * `users.session_generation` and refuses a mismatch, which is what makes a stateless token
+   * revocable: advancing the row invalidates every token minted before it, with nothing to
+   * enumerate.
+   *
+   * Declared REQUIRED, so a mint site that forgets it fails to compile rather than issuing a
+   * token nothing can revoke. A token predating the column carries no `gen` at all and is refused
+   * (see `verifySession`) rather than admitted, because the alternative — treating an absent claim
+   * as "current" — is a permanent bypass of the whole mechanism, and the one an attacker would aim
+   * at. The cost is that everyone signs in again once, which is the deliberate pre-1.0 break.
+   */
+  gen: number
 }
 
 /**

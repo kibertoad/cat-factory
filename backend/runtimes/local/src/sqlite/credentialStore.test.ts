@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { runActivationScope } from '@cat-factory/kernel'
 import type {
   PersonalSubscriptionRecord,
   ProviderApiKeyRecord,
@@ -30,6 +31,8 @@ function apiKey(overrides: Partial<ProviderApiKeyRecord> = {}): ProviderApiKeyRe
     inputTokens: 0,
     outputTokens: 0,
     requestCount: 0,
+    enabled: true,
+    isDefault: false,
     deletedAt: null,
     ...overrides,
   }
@@ -256,7 +259,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Ollama',
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
-      models: ['llama3', 'qwen'],
+      models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -267,7 +271,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Ollama',
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
-      models: ['llama3', 'qwen'],
+      models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -282,7 +287,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'First',
       baseUrl: 'http://a/v1',
       apiKeyCipher: null,
-      models: ['a'],
+      models: [{ id: 'a' }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -292,7 +298,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Second',
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
-      models: ['b', 'c'],
+      models: [{ id: 'b' }, { id: 'c' }],
+      unreadableModels: false,
       createdAt: 999, // must be ignored
       updatedAt: 200,
     })
@@ -301,7 +308,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Second',
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
-      models: ['b', 'c'],
+      models: [{ id: 'b' }, { id: 'c' }],
       createdAt: 100,
       updatedAt: 200,
     })
@@ -325,6 +332,7 @@ function endpoint(provider: 'ollama' | 'lmstudio', createdAt: number) {
     baseUrl: `http://localhost/${provider}/v1`,
     apiKeyCipher: null,
     models: [],
+    unreadableModels: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -345,6 +353,8 @@ function subToken(
     inputTokens: 0,
     outputTokens: 0,
     requestCount: 0,
+    enabled: true,
+    isDefault: false,
     deletedAt: null,
     ...overrides,
   }
@@ -522,7 +532,7 @@ function activation(
 ): SubscriptionActivationRecord {
   return {
     id: 'act_1',
-    executionId: 'ex_1',
+    scopeId: runActivationScope('ex_1'),
     userId: 'usr_1',
     vendor: 'claude',
     tokenCipher: 'sealed:system-only',
@@ -543,42 +553,48 @@ describe('SqliteSubscriptionActivationRepository', () => {
   it('gets an unexpired activation and hides an expired one', async () => {
     const repo = store.subscriptionActivationRepository
     await repo.upsert(activation({ expiresAt: 5000 }))
-    expect(await repo.get('ex_1', 'usr_1', 'claude', 4000)).toMatchObject({ id: 'act_1' })
+    expect(await repo.get(runActivationScope('ex_1'), 'usr_1', 'claude', 4000)).toMatchObject({
+      id: 'act_1',
+    })
     // At/after expiry → treated as absent (get uses strictly-greater).
-    expect(await repo.get('ex_1', 'usr_1', 'claude', 5000)).toBeNull()
-    expect(await repo.get('ex_1', 'usr_1', 'claude', 6000)).toBeNull()
-    // Wrong run/user/vendor → absent.
-    expect(await repo.get('ex_other', 'usr_1', 'claude', 4000)).toBeNull()
+    expect(await repo.get(runActivationScope('ex_1'), 'usr_1', 'claude', 5000)).toBeNull()
+    expect(await repo.get(runActivationScope('ex_1'), 'usr_1', 'claude', 6000)).toBeNull()
+    // Wrong scope/user/vendor -> absent.
+    expect(await repo.get(runActivationScope('ex_other'), 'usr_1', 'claude', 4000)).toBeNull()
   })
 
-  it('replaces on conflict of (execution, user, vendor)', async () => {
+  it('replaces on conflict of (scope, user, vendor)', async () => {
     const repo = store.subscriptionActivationRepository
     await repo.upsert(activation({ id: 'a', tokenCipher: 'sealed:1', expiresAt: 5000 }))
-    // Same (execution, user, vendor), different id/cipher/ttl → row is replaced in place.
+    // Same (scope, user, vendor), different id/cipher/ttl -> row is replaced in place.
     await repo.upsert(activation({ id: 'b', tokenCipher: 'sealed:2', expiresAt: 9000 }))
-    const got = await repo.get('ex_1', 'usr_1', 'claude', 1)
+    const got = await repo.get(runActivationScope('ex_1'), 'usr_1', 'claude', 1)
     expect(got).toMatchObject({ tokenCipher: 'sealed:2', expiresAt: 9000 })
   })
 
-  it('deletes all activations for a finished execution', async () => {
+  it('deletes all activations for a settled scope', async () => {
     const repo = store.subscriptionActivationRepository
-    await repo.upsert(activation({ id: 'a', executionId: 'ex_1', vendor: 'claude' }))
-    await repo.upsert(activation({ id: 'b', executionId: 'ex_1', vendor: 'codex' }))
-    await repo.upsert(activation({ id: 'c', executionId: 'ex_2', vendor: 'claude' }))
-    await repo.deleteByExecution('ex_1')
-    expect(await repo.get('ex_1', 'usr_1', 'claude', 1)).toBeNull()
-    expect(await repo.get('ex_1', 'usr_1', 'codex', 1)).toBeNull()
-    expect(await repo.get('ex_2', 'usr_1', 'claude', 1)).not.toBeNull()
+    await repo.upsert(
+      activation({ id: 'a', scopeId: runActivationScope('ex_1'), vendor: 'claude' }),
+    )
+    await repo.upsert(activation({ id: 'b', scopeId: runActivationScope('ex_1'), vendor: 'codex' }))
+    await repo.upsert(
+      activation({ id: 'c', scopeId: runActivationScope('ex_2'), vendor: 'claude' }),
+    )
+    await repo.deleteByScope(runActivationScope('ex_1'))
+    expect(await repo.get(runActivationScope('ex_1'), 'usr_1', 'claude', 1)).toBeNull()
+    expect(await repo.get(runActivationScope('ex_1'), 'usr_1', 'codex', 1)).toBeNull()
+    expect(await repo.get(runActivationScope('ex_2'), 'usr_1', 'claude', 1)).not.toBeNull()
   })
 
   it('deletes expired activations and returns the count', async () => {
     const repo = store.subscriptionActivationRepository
-    await repo.upsert(activation({ id: 'a', executionId: 'ex_1', expiresAt: 1000 }))
-    await repo.upsert(activation({ id: 'b', executionId: 'ex_2', expiresAt: 2000 }))
-    await repo.upsert(activation({ id: 'c', executionId: 'ex_3', expiresAt: 9000 }))
+    await repo.upsert(activation({ id: 'a', scopeId: runActivationScope('ex_1'), expiresAt: 1000 }))
+    await repo.upsert(activation({ id: 'b', scopeId: runActivationScope('ex_2'), expiresAt: 2000 }))
+    await repo.upsert(activation({ id: 'c', scopeId: runActivationScope('ex_3'), expiresAt: 9000 }))
     // expires_at <= now → deleted (a and b), c survives.
     expect(await repo.deleteExpired(2000)).toBe(2)
-    expect(await repo.get('ex_3', 'usr_1', 'claude', 1)).not.toBeNull()
+    expect(await repo.get(runActivationScope('ex_3'), 'usr_1', 'claude', 1)).not.toBeNull()
     expect(await repo.deleteExpired(2000)).toBe(0)
   })
 })

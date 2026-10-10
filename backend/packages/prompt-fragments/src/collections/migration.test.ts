@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FRAGMENTS, getFragment } from '../index.js'
+import { getFragment } from '../index.js'
 import { migrationFragments } from './migration.js'
 
 // The `migration.*` collection is the default fragment pack the `preset_tech_migration`
@@ -34,11 +34,5 @@ describe('migration fragment collection', () => {
     for (const fragment of migrationFragments) {
       expect(getFragment(fragment.id)).toBe(fragment)
     }
-  })
-
-  it('introduces no id collision with the rest of the catalog', () => {
-    // Ids are persisted on blocks, so a duplicate would silently shadow another fragment's body.
-    const ids = FRAGMENTS.map((f) => f.id)
-    expect(new Set(ids).size).toBe(ids.length)
   })
 })

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { AgentKindRegistry } from './registry.js'
+import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
+import { AgentKindRegistry, defaultAgentKindRegistry } from './registry.js'
+import { PR_REVIEWER_KIND } from './pr-reviewer.js'
 
 // The agent-definition extension fields added on top of the kind registry:
 // presentation (frontend metadata), the agent-step surface, and the pre/post-op hooks.
@@ -57,6 +59,37 @@ describe('agent-definition registry fields', () => {
     expect(registry.postOps('security-auditor')).toEqual([postOp])
     expect(registry.presentation('security-auditor')?.label).toBe('Security Auditor')
     expect(registry.presentation('security-auditor')?.resultView).toBe('generic-structured')
+  })
+
+  it('registers the built-in pr-reviewer as a read-only structured review kind', () => {
+    const registry = defaultAgentKindRegistry()
+    // A container-explore kind ⇒ requires a container, read-only (no PR opened).
+    expect(registry.requiresContainer(PR_REVIEWER_KIND)).toBe(true)
+    expect(registry.agentStep(PR_REVIEWER_KIND)?.surface).toBe('container-explore')
+    // Structured output is derived from the schema (a shapeHint is present).
+    expect(registry.agentStep(PR_REVIEWER_KIND)?.output?.kind).toBe('structured')
+    expect(registry.structuredOutput(PR_REVIEWER_KIND)).toBeDefined()
+    // First-class palette + the dedicated PR-review result view (findings + multi-select).
+    const presentation = registry.presentation(PR_REVIEWER_KIND)
+    expect(presentation?.category).toBe('review')
+    expect(presentation?.resultView).toBe('pr-review')
+  })
+
+  it('registers the built-in initiative planning kinds as read-only container-explore kinds', () => {
+    const registry = defaultAgentKindRegistry()
+    // Both explore a read-only checkout on the base branch, so they must require a container —
+    // the fact CompositeAgentExecutor's `pick()` now relies on instead of a hard-coded list.
+    for (const kind of [INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND]) {
+      expect(registry.requiresContainer(kind)).toBe(true)
+      expect(registry.agentStep(kind)?.surface).toBe('container-explore')
+      expect(registry.agentStep(kind)?.clone?.branch).toBe('base')
+    }
+    // The analyst returns prose (no structured output); the planner returns the plan as JSON.
+    expect(registry.agentStep(INITIATIVE_ANALYST_AGENT_KIND)?.output).toBeUndefined()
+    expect(registry.agentStep(INITIATIVE_PLANNER_AGENT_KIND)?.output?.kind).toBe('structured')
+    // Pipeline-internal steps, not user-draggable palette kinds ⇒ no presentation.
+    expect(registry.presentation(INITIATIVE_ANALYST_AGENT_KIND)).toBeUndefined()
+    expect(registry.presentation(INITIATIVE_PLANNER_AGENT_KIND)).toBeUndefined()
   })
 
   it('returns empty / undefined for kinds that did not opt in', () => {

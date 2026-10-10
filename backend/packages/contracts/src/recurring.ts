@@ -16,11 +16,24 @@ import { taskSourceKindSchema } from './tasks.js'
 // run forward until it lands inside an allowed window.
 // ---------------------------------------------------------------------------
 
-/** Template a schedule was created from; drives the seeded block description. */
+/**
+ * Template a schedule was created from; drives the seeded block description.
+ *
+ * `tech-debt`, `bug-triage` and `bug-fishing` are INFERRED by the SPA from the picked pipeline,
+ * whose shape is specific to that kind of work. `dep-update` is not: its pipeline was retired in
+ * the catalog collapse (it was the ordinary build tail under a recurring name), so a
+ * dependency-update schedule runs a plain build rung and there is nothing to infer from. It stays
+ * in the union because an explicit API caller can still name it to get the canned description.
+ *
+ * `bug-fishing` is the shape a recurring EXPEDITION takes: the schedule re-fishes the service on
+ * its cadence, and each fire's findings are triaged into their own fix tasks, so the standing
+ * hunt never becomes a backlog nobody owns.
+ */
 export const scheduleTemplateSchema = v.picklist([
   'dep-update',
   'tech-debt',
   'bug-triage',
+  'bug-fishing',
   'custom',
 ])
 export type ScheduleTemplate = v.InferOutput<typeof scheduleTemplateSchema>
@@ -45,6 +58,22 @@ export const issueIntakeConfigSchema = v.object({
     linearTeamId: v.optional(intakePredicateStringSchema),
     /** GitHub repository as `owner/name`. */
     githubRepo: v.optional(intakePredicateStringSchema),
+    /**
+     * GitLab project as its full path with namespace, e.g. `group/project` or
+     * `group/sub/project`. Its own leg rather than a reuse of `githubRepo`: a GitLab namespace
+     * NESTS, so the two are not the same shape, and the two providers read different fields.
+     */
+    gitlabProject: v.optional(intakePredicateStringSchema),
+    /**
+     * A DEPLOYMENT-REGISTERED source's board scope, held opaquely: only that provider knows what
+     * its board id means, so the platform carries the string and never interprets it.
+     *
+     * Its own field rather than reusing a built-in's. The legs above are each named for the vendor
+     * whose provider reads them, so putting a registered source's id on one of them would hand a
+     * provider a scope belonging to a different tracker — silently, since every one of them is a
+     * plain string. A built-in source never sets this and a registered one never sets the others.
+     */
+    boardId: v.optional(intakePredicateStringSchema),
   }),
   /** Which open issues qualify. All present predicates must match. */
   predicates: v.object({
@@ -60,8 +89,47 @@ export const issueIntakeConfigSchema = v.object({
    * has no native workflow status). Absent ⇒ `in-progress`.
    */
   inProgressLabel: v.optional(intakePredicateStringSchema),
+  /**
+   * What a WEBHOOK-pushed issue event that matches these predicates actually does. Absent ⇒
+   * `queue`, so every existing schedule is unchanged.
+   *
+   *  - **`queue`** fires this schedule, and the run's `bug-intake` step drains the board
+   *    oldest-first. The pushed issue is not necessarily the one picked up: intake is fair
+   *    queueing and the webhook's job is to drain the queue promptly, not to reorder it. This is
+   *    the right shape for a bug backlog, where WHICH bug is worked next is the platform's call.
+   *  - **`per-ticket`** dispatches THAT ticket: it is imported, materialised as its own task
+   *    under the schedule's frame, and started on the schedule's pipeline. This is the shape for
+   *    tickets a human already triaged — a feature request enters the platform from the tracker
+   *    it was filed in rather than through an API call.
+   *
+   * They are different enough to be a mode rather than a knob: `queue` reuses ONE block and
+   * competes for it, while `per-ticket` creates a block per ticket and never queues. A
+   * `per-ticket` config therefore requires `onDemand` (see `assertValidIssueIntake`), because a
+   * CADENCE tick has no triggering ticket and would otherwise silently fall back to draining the
+   * queue — the same rule under a different name.
+   */
+  dispatch: v.optional(v.picklist(['queue', 'per-ticket'])),
 })
 export type IssueIntakeConfig = v.InferOutput<typeof issueIntakeConfigSchema>
+
+/**
+ * Why a schedule's issue-intake configuration was refused, as `error.details.reason`.
+ *
+ * The backend does not localize prose, so a refusal that carried only its `message` would reach a
+ * non-English user as English. These are the machine-readable half the SPA maps to translated copy
+ * through an exhaustive `Record`, which is why the vocabulary lives HERE rather than as string
+ * literals at the throw site: both sides import the same union, and adding a member fails the SPA's
+ * typecheck until it has copy.
+ *
+ * Both members describe the same underlying rule (the two dispatch modes are exclusive) from the
+ * two directions an author can hit it, and they are kept apart because the fix differs: one is
+ * "make the schedule on-demand", the other is "pick a pipeline with no `bug-intake` step".
+ */
+export const issueIntakeRefusalReasonSchema = v.picklist([
+  'per_ticket_requires_on_demand',
+  'per_ticket_conflicts_with_bug_intake',
+])
+export type IssueIntakeRefusalReason = v.InferOutput<typeof issueIntakeRefusalReasonSchema>
 
 const hourOfDaySchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(23))
 const weekdaySchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(6))

@@ -1,4 +1,4 @@
-import { DOCS } from '../config/docs.js'
+import { DOCS, SITE_DOCS } from '../config/docs.js'
 import { logger } from '../observability/logger.js'
 
 // ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@ import { logger } from '../observability/logger.js'
 // ---------------------------------------------------------------------------
 
 /** Which webhook route rejected the delivery — GitHub (HMAC) or a neutral VCS provider (token). */
-export type WebhookSignatureProvider = 'github' | 'gitlab'
+type WebhookSignatureProvider = 'github' | 'gitlab'
 
 export interface WebhookSignatureRejection {
   provider: WebhookSignatureProvider
@@ -55,7 +55,7 @@ const PROVIDER_COPY: Record<WebhookSignatureProvider, ProviderCopy> = {
     envVar: 'GITLAB_WEBHOOK_SECRET',
     header: 'X-Gitlab-Token',
     providerSecretField: "the webhook's 'Secret token' (GitLab project/group Settings → Webhooks)",
-    docsUrl: DOCS.vcsProviders('setup'),
+    docsUrl: SITE_DOCS.vcsSetup,
   },
 }
 
@@ -99,8 +99,8 @@ export function describeWebhookSignatureRejection(rejection: WebhookSignatureRej
  * operator in the logs. The `provider` doubles as a structured field for log filtering.
  */
 export function logWebhookSignatureRejection(rejection: WebhookSignatureRejection): void {
-  logger.warn(
-    { provider: rejection.provider, event: 'webhook_signature_rejected' },
-    describeWebhookSignatureRejection(rejection),
-  )
+  logger.warn(describeWebhookSignatureRejection(rejection), {
+    provider: rejection.provider,
+    event: 'webhook_signature_rejected',
+  })
 }

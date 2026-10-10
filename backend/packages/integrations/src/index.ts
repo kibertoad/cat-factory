@@ -10,6 +10,11 @@ export {
   type GitHubSyncServiceDependencies,
 } from './modules/github/GitHubSyncService.js'
 export { WebhookService, type WebhookServiceDependencies } from './modules/github/WebhookService.js'
+export {
+  VcsPatConnectionService,
+  type VcsPatConnectionServiceDependencies,
+} from './modules/vcs/VcsPatConnectionService.js'
+export { syntheticInstallationId } from './modules/vcs/syntheticInstallationId.js'
 export * as githubProjection from './modules/github/projection.logic.js'
 export {
   RepoProvisioningService,
@@ -22,20 +27,52 @@ export { canCreateRepo } from './modules/github/provisioning.logic.js'
 export {
   DocumentConnectionService,
   type DocumentConnectionServiceDependencies,
+  type DocumentOAuthRenewer,
 } from './modules/documents/DocumentConnectionService.js'
+// The ONE place a document-source credential bag is sealed or opened — over the deployment's own
+// key, or over the mothership's when this node holds none.
+export {
+  createDocumentConnectionStore,
+  type DocumentConnectionStoreDependencies,
+} from './modules/documents/documentConnectionStore.js'
+export {
+  DocumentSourceOAuthService,
+  type DocumentOAuthClient,
+  type DocumentSourceOAuthServiceDependencies,
+} from './modules/documents/DocumentSourceOAuthService.js'
 export {
   DocumentContentResolverService,
   type DocumentContentResolverServiceDependencies,
 } from './modules/documents/DocumentContentResolverService.js'
+// The DEPLOYMENT-scoped twin: a document the deployment owns, read with credentials it configured
+// centrally rather than any tenant's connection. See `backend/docs/document-sources.md`.
 export {
+  DeploymentDocumentResolverService,
+  buildDeploymentDocumentResolver,
+  deploymentDocumentCredentialsFromEnv,
+  deploymentScopedDocumentProviders,
+  envKeyFor,
+  envPrefixFor,
+  resolveDeploymentDocumentResolver,
+  type DeploymentDocumentCredentialResult,
+  type DeploymentDocumentResolverServiceDependencies,
+} from './modules/documents/DeploymentDocumentResolverService.js'
+export {
+  assertUploadReadable,
   DocumentImportService,
   type DocumentImportServiceDependencies,
   toSourceDocument,
+  type UploadedDocument,
 } from './modules/documents/DocumentImportService.js'
+export {
+  LinkedDocumentRefreshService,
+  type LinkedDocumentRefreshServiceDependencies,
+} from './modules/documents/LinkedDocumentRefreshService.js'
 export {
   DocumentPlannerService,
   type DocumentPlannerServiceDependencies,
 } from './modules/documents/DocumentPlannerService.js'
+export type { PlanTarget } from './modules/documents/documents.logic.js'
 export {
   DocumentLinkService,
   type DocumentLinkServiceDependencies,
@@ -52,7 +89,7 @@ export * as designLogic from './modules/documents/design.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
-export { FIGMA_DESCRIPTOR } from './modules/documents/figma.logic.js'
+export { FIGMA_DESCRIPTOR, FIGMA_OAUTH } from './modules/documents/figma.logic.js'
 export { ZEPLIN_DESCRIPTOR } from './modules/documents/zeplin.logic.js'
 // Shared host-pinned HTTP helpers reused by the fixed-host document providers.
 export {
@@ -81,13 +118,17 @@ export {
   linearAuthFromCredentials,
   unwrapLinearData,
   type LinearAuth,
-  type LinearFetchLike,
 } from './modules/shared/linear.client.js'
 
 export {
   TaskConnectionService,
   type TaskConnectionServiceDependencies,
 } from './modules/tasks/TaskConnectionService.js'
+// The ONE place a tracker credential bag is sealed or opened; the document-source sibling above.
+export {
+  createTaskConnectionStore,
+  type TaskConnectionStoreDependencies,
+} from './modules/tasks/taskConnectionStore.js'
 export {
   TaskImportService,
   type TaskImportServiceDependencies,
@@ -103,6 +144,37 @@ export {
   type BugIntakeOutcome,
   type BugIntakePickup,
 } from './modules/tasks/BugIntakeService.js'
+export {
+  BugHuntService,
+  BUG_HUNT_SCAN_LIMIT,
+  type BugHuntScan,
+  type BugHuntServiceDependencies,
+} from './modules/tasks/BugHuntService.js'
+export {
+  trackerWebhookPath,
+  type TaskSourceWebhookState,
+} from './modules/tasks/TaskConnectionService.js'
+export {
+  TrackerWebhookService,
+  type ReviewReplyGateway,
+  type TrackerWebhookOutcome,
+  type TrackerWebhookServiceDependencies,
+} from './modules/tasks/TrackerWebhookService.js'
+export { judgeIssueEventForIntake } from './modules/tasks/intakeMatch.logic.js'
+export type { IntakeMatchVerdict, IntakePredicateName } from './modules/tasks/intakeMatch.logic.js'
+export {
+  githubIssuesWebhookAdapter,
+  gitlabIssuesWebhookAdapter,
+  jiraWebhookAdapter,
+  linearWebhookAdapter,
+} from './modules/tasks/webhook/adapters.js'
+export {
+  DEFAULT_IN_PROGRESS_LABEL,
+  createRepoIssueWriteback,
+  type RepoIssueWritebackDependencies,
+} from './modules/tasks/writeback/repo-issue.writeback.js'
+export { jiraWriteback } from './modules/tasks/writeback/jira.writeback.js'
+export { linearWriteback } from './modules/tasks/writeback/linear.writeback.js'
 export {
   MapTaskSourceRegistry,
   type TaskContextView,
@@ -128,10 +200,19 @@ export * as linearCreateLogic from './modules/tracker/linear.create.logic.js'
 export * as linearWritebackLogic from './modules/tracker/linear.writeback.logic.js'
 export { extractReferences, type ExtractedReferences } from './modules/corpus/references.logic.js'
 export {
-  DEFAULT_IN_PROGRESS_LABEL,
   IssueWritebackService,
   type IssueWritebackServiceDependencies,
 } from './modules/writeback/IssueWritebackService.js'
+export {
+  issueRefFor,
+  renderReviewQuestionsComment,
+} from './modules/writeback/reviewQuestions.logic.js'
+export {
+  isAllowedReplyAuthor,
+  parseReviewReplyCommands,
+  renderReviewReplyAck,
+  type ReviewReplyCommand,
+} from './modules/writeback/reviewReplies.logic.js'
 export {
   createGitHubIssueViaToken,
   type GitHubIssueTokenRequest,
@@ -142,6 +223,15 @@ export {
   GitHubIssuesProvider,
   type GitHubIssuesProviderDependencies,
 } from './modules/tasks/GitHubIssuesProvider.js'
+export * as gitlabIssuesLogic from './modules/tasks/gitlab-issues.logic.js'
+export {
+  GITLAB_ISSUES_DESCRIPTOR,
+  gitlabWebBaseFromApiBase,
+} from './modules/tasks/gitlab-issues.logic.js'
+export {
+  GitLabIssuesProvider,
+  type GitLabIssuesProviderDependencies,
+} from './modules/tasks/GitLabIssuesProvider.js'
 // The Jira task-source provider (a thin `fetch` shell around the pure Jira logic):
 // runtime-neutral, so both facades compose the SAME class instead of a per-runtime copy.
 export { JiraProvider, JiraApiError } from './modules/tasks/JiraProvider.js'
@@ -155,6 +245,10 @@ export {
   type EnvironmentHandlerView,
   type ResolvedTypeProvider,
 } from './modules/environments/EnvironmentConnectionService.js'
+// The generic (deployment-neutral) seeder that idempotently registers a deployment's pre-declared
+// environment handlers onto a workspace — the concrete implementation of the kernel
+// `EnvironmentHandlerSeeder` port, built over the connection service's list/register handlers.
+export { createEnvironmentHandlerSeeder } from './modules/environments/EnvironmentHandlerSeeder.js'
 // Deployment-level, additive extensions to the built-in provisioning-detection conventions
 // (extra compose file names/dirs, seed dirs, env-template dirs). Threaded from the app config
 // through `CoreDependencies` into the detectors so an org can broaden detection without a code edit.
@@ -194,12 +288,23 @@ export {
   type ProvisionArgs,
   type ProvisionDispatch,
   type ResolvedEnvironment,
+  type SettledProvision,
 } from './modules/environments/EnvironmentProvisioningService.js'
 export {
   EnvironmentTeardownService,
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService.js'
 export * as environmentsLogic from './modules/environments/environments.logic.js'
+// Which hosts a container must have re-pointed to reach the environments a job was handed, and
+// what to re-point each at. Shared because BOTH container transports build the same bridges out of
+// the same dispatch options (local Docker `--add-host`, Kubernetes pod `hostAliases`).
+export {
+  addressBridges,
+  planEnvironmentBridges,
+  type EnvironmentBridgePlan,
+  type HostBridge,
+  type UnbridgeableEnvironment,
+} from './modules/shared/environmentBridge.js'
 // The shared SSRF-safe fetch (per-hop redirect revalidation + response byte cap) used by
 // the policy-based providers; also reused by the server's web-search upstream.
 export {
@@ -216,8 +321,10 @@ export {
 } from './modules/environments/HttpEnvironmentProvider.js'
 export {
   isDeployStep,
+  isDisposeStep,
+  classifyTeardownProbe,
   DEPLOYER_AGENT_KIND,
-  ENVIRONMENT_BLOCK_TYPE,
+  DISPOSER_AGENT_KIND,
 } from './modules/environments/environments.logic.js'
 
 export {
@@ -285,6 +392,10 @@ export {
   SharedStackService,
   type SharedStackServiceDependencies,
 } from './modules/sharedStack/SharedStackService.js'
+// The generic (deployment-neutral) seeder that idempotently creates a deployment's pre-declared
+// shared stacks in a workspace — the concrete implementation of the kernel `SharedStackSeeder`
+// port, and the shared-stack sibling of `createEnvironmentHandlerSeeder`.
+export { createSharedStackSeeder } from './modules/sharedStack/SharedStackSeeder.js'
 // Preflights: the runtime-neutral runner over an injected host-probe seam (local facade only).
 export {
   PreflightService,
@@ -306,6 +417,42 @@ export {
   type LoggingRunnerTransportOptions,
 } from './modules/provisioning-logs/LoggingRunnerTransport.js'
 export { redactSecrets } from './modules/provisioning-logs/redact.js'
+
+// Notification webhook: an outbound HTTP delivery transport for the existing notification
+// mechanism (`WebhookNotificationChannel` implements the same `NotificationChannel` port),
+// plus the per-workspace endpoint management service. This is how a HEADLESS integration —
+// which has no in-app inbox and no browser WebSocket — learns that a run parked.
+export {
+  WebhookNotificationChannel,
+  type WebhookNotificationChannelDependencies,
+} from './modules/notificationWebhook/WebhookNotificationChannel.js'
+export {
+  WebhookRunLifecycleSink,
+  type WebhookRunLifecycleSinkDependencies,
+} from './modules/notificationWebhook/WebhookRunLifecycleSink.js'
+export {
+  WebhookPlatformAlertSink,
+  type WebhookPlatformAlertSinkDependencies,
+} from './modules/notificationWebhook/WebhookPlatformAlertSink.js'
+export {
+  NotificationWebhookService,
+  type NotificationWebhookServiceDependencies,
+} from './modules/notificationWebhook/NotificationWebhookService.js'
+export {
+  WEBHOOK_SIGNATURE_HEADERS,
+  signWebhookDelivery,
+} from './modules/notificationWebhook/webhookSignature.js'
+export {
+  NOTIFICATION_WEBHOOK_CIPHER_INFO,
+  buildNotificationWebhookSupport,
+  type NotificationWebhookSupportDependencies,
+} from './modules/notificationWebhook/support.js'
+export { assertSafeNotificationWebhookUrl } from './modules/notificationWebhook/webhookUrl.js'
+
+// The provider-neutral SSRF host/scheme guard behind every operator-supplied-URL integration
+// (environments, runner pools, notification webhooks). One implementation, so a bypass found in
+// any of them is fixed for all of them; each caller supplies only its wording + its own policy.
+export { assertSafePublicUrl, type PublicUrlGuardOptions } from './modules/shared/url-guard.js'
 
 // Slack: an additional delivery transport for the existing notification mechanism
 // (the `SlackNotificationChannel` implements the same `NotificationChannel` port),
@@ -343,12 +490,14 @@ export {
 } from './modules/slack/slack.logic.js'
 export {
   ProviderSubscriptionService,
+  PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
   type ProviderSubscriptionServiceDependencies,
   type VendorCredentialSummary,
   type LeasedSubscriptionToken,
 } from './modules/providers/ProviderSubscriptionService.js'
 export {
   ApiKeyService,
+  PROVIDER_API_KEYS_CIPHER_INFO,
   type ApiKeyServiceDependencies,
   type ApiKeySummary,
   type LeasedApiKey,
@@ -356,12 +505,14 @@ export {
 } from './modules/providers/ApiKeyService.js'
 export {
   PublicApiKeyService,
+  scopeSatisfies,
   type PublicApiKeyServiceDependencies,
   type PublicApiKeyAuth,
   type IssuedPublicApiKey,
 } from './modules/publicApi/PublicApiKeyService.js'
 export {
   PersonalSubscriptionService,
+  PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
   type PersonalSubscriptionServiceDependencies,
   type LeasedPersonalToken,
   DEFAULT_ACTIVATION_TTL_MS,
@@ -369,12 +520,20 @@ export {
 } from './modules/providers/PersonalSubscriptionService.js'
 export {
   LocalModelEndpointService,
+  LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
   type LocalModelEndpointServiceDependencies,
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
-export { fetchLocalRunner, localRunnerUrlError } from './modules/providers/localModelUrl.js'
+export {
+  fetchLocalRunner,
+  type LocalRunnerUrlPolicy,
+  type LocalRunnerUrlRefusal,
+  localRunnerUrlRefusal,
+  runnerRequestUrl,
+} from './modules/providers/localModelUrl.js'
 export {
   UserSecretService,
+  USER_SECRET_CIPHER_INFO,
   type UserSecretServiceDependencies,
 } from './modules/providers/UserSecretService.js'
 export {
@@ -384,6 +543,17 @@ export {
   type UserSecretKindHandler,
   type UserSecretTestInput,
 } from './modules/providers/userSecretKinds.js'
+export {
+  describeGitHubPatScope,
+  summarizeGitHubPatScope,
+  type GitHubPatScopeReport,
+} from './modules/providers/githubPatScope.js'
+export {
+  probeGitHubPatCapability,
+  type GitHubPatCapabilityDeps,
+  type GitHubPatCapabilityRequest,
+  type GitHubPatProbeRepo,
+} from './modules/providers/githubPatCapability.js'
 export {
   OpenRouterCatalogService,
   type OpenRouterCatalogServiceDependencies,
@@ -407,9 +577,11 @@ export {
   type RegistryReleaseHealthProviderDependencies,
   type ObservabilityAdapter,
   type ObservabilityAdapterFactory,
-  type ObservabilityProviderRegistry,
 } from './modules/observability/RegistryReleaseHealthProvider.js'
-export { defaultObservabilityRegistry } from './modules/observability/registry.js'
+export {
+  ObservabilityProviderRegistry,
+  defaultObservabilityRegistry,
+} from './modules/observability/registry.js'
 export {
   DatadogObservabilityAdapter,
   type DatadogCredentialsShape,
@@ -463,6 +635,53 @@ export {
   type TestSecretsServiceDependencies,
 } from './modules/testSecrets/TestSecretsService.js'
 export {
+  CapabilityCredentialsService,
+  CAPABILITY_CREDENTIALS_CIPHER_INFO,
+  type CapabilityCredentialsServiceDependencies,
+} from './modules/capabilityCredentials/CapabilityCredentialsService.js'
+export {
+  McpOAuthService,
+  MCP_OAUTH_CIPHER_INFO,
+  type McpAuthorizationRequest,
+  type McpOAuthServiceDependencies,
+} from './modules/mcpOAuth/McpOAuthService.js'
+export {
+  McpAuthorizationServer,
+  McpOAuthProtocolError,
+  McpOAuthRedirectableError,
+  CONSENT_DEFAULT_SCOPE,
+  MCP_AUTH_SERVER_CIPHER_INFO,
+  isAllowedRedirectUri,
+  mcpOAuthErrorRedirect,
+  type McpAuthorizationRequestState,
+  type McpAuthorizationRequestSummary,
+  type McpAuthorizationServerDependencies,
+  type McpClientRegistration,
+  type McpIssuedToken,
+  type McpOAuthErrorCode,
+  type McpOAuthRedirectTarget,
+} from './modules/mcpAuthServer/McpAuthorizationServer.js'
+export {
+  AUTHORIZATION_SERVER_METADATA_PATH,
+  OAUTH_ENDPOINT_PATHS,
+  PROTECTED_RESOURCE_METADATA_PATH,
+  authorizationServerMetadata,
+  bearerChallenge,
+  mcpResourceIdentifier,
+  protectedResourceMetadata,
+} from './modules/mcpAuthServer/metadataDocuments.js'
+export {
+  McpOAuthError,
+  MCP_OAUTH_TIMEOUT_MS,
+  discoverMcpOAuthEndpoints,
+  type McpOAuthEndpoints,
+} from './modules/mcpOAuth/mcpOAuthClient.js'
+export {
+  ValidationConfigService,
+  type ValidationConfigServiceDependencies,
+} from './modules/validation/ValidationConfigService.js'
+export { detectValidationChecksFromRepo } from './modules/validation/detectValidationChecksFromRepo.js'
+export {
   LocalSettingsService,
   type LocalSettingsServiceDependencies,
 } from './modules/localSettings/LocalSettingsService.js'
@@ -481,3 +700,63 @@ export {
   type EmailConnectionServiceDependencies,
   type EmailConnection,
 } from './modules/email/EmailConnectionService.js'
+export {
+  EmailNotificationChannel,
+  type EmailNotificationChannelDependencies,
+} from './modules/email/EmailNotificationChannel.js'
+export {
+  notificationDeepLink,
+  notificationTypeLabel,
+  renderNotificationEmail,
+  resolveRecipientAddresses,
+  type RenderedNotificationEmail,
+} from './modules/email/emailNotification.logic.js'
+export { AuditService, type AuditServiceDependencies } from './modules/audit/AuditService.js'
+
+// The SERVICE CATALOG connection: a workspace's developer portal (Backstage), whose services are
+// imported into the foundational-services catalog. See backend/docs/service-catalog-import.md.
+export {
+  SERVICE_CATALOG_CIPHER_INFO,
+  ServiceCatalogConnectionService,
+  type ServiceCatalogConnectionServiceDependencies,
+} from './modules/serviceCatalog/ServiceCatalogConnectionService.js'
+export {
+  BackstageCatalogClient,
+  type BackstageCatalogClientOptions,
+} from './modules/serviceCatalog/BackstageCatalogClient.js'
+export {
+  API_FETCH_FIELDS,
+  CATALOG_LIST_FIELDS,
+  MAX_DEFINITION_CHARS,
+  MAX_DESCRIPTION_CHARS,
+  type BackstageEntity,
+  type BackstageEntityRef,
+  apiContractFormatForType,
+  composeDescription,
+  entityCapabilities,
+  entityRef,
+  entitySummary,
+  formatEntityRef,
+  ownerLabel,
+  parseEntityRef,
+  providedApiRefs,
+  serviceIdForEntity,
+  slugify,
+  toServiceCatalogApi,
+  toServiceCatalogEntry,
+} from './modules/serviceCatalog/backstage-catalog.logic.js'
+export {
+  clientCredentialsBody,
+  mintLegacyBackstageToken,
+  parseServiceCatalogAuth,
+  readAccessToken,
+  requiresResolvedBearer,
+  serviceCatalogAuthHeaders,
+} from './modules/serviceCatalog/serviceCatalogAuth.js'
+export {
+  base64ToBytes,
+  bytesToBase64,
+  bytesToBase64Url,
+  toBase64,
+  toBase64Url,
+} from './modules/shared/base64.js'

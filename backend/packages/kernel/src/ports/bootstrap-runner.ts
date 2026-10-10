@@ -7,17 +7,24 @@
 
 export interface BootstrapRunner {
   /**
-   * Begin durably driving the bootstrap job `jobId` for `workspaceId`. Must be
-   * idempotent per job id (a duplicate start, or a sweeper re-drive racing a live
-   * instance, is a no-op) — the persisted job record is authoritative.
+   * Begin durably driving the bootstrap job `jobId` for `workspaceId`, under the drive key
+   * `driveId`. Must be idempotent per DRIVE key (a duplicate start, or a sweeper re-drive racing
+   * a live instance, is a no-op); the persisted job record is authoritative.
+   *
+   * The key is separate from the run id because a monorepo bootstrap is driven twice: once for
+   * the survey, and once for the apply that a human's review releases, potentially days later.
+   * Keying on the run would make the second start a no-op on Node (the pg-boss singleton dedupes
+   * against the finished drive) and a hard failure on Cloudflare (a Workflows instance id cannot
+   * be recreated once its instance is terminal). `driveId === jobId` for a single-drive run, so a
+   * plain bootstrap behaves exactly as before.
    */
-  startRun(workspaceId: string, jobId: string): Promise<void>
+  startRun(workspaceId: string, jobId: string, driveId: string): Promise<void>
   /**
-   * Best-effort: tear down the durable driver for `jobId` (terminate its Workflows
-   * instance) when the run is being stopped/cancelled. Idempotent — no live
-   * instance to terminate is a no-op.
+   * Best-effort: tear down the durable driver for the drive `driveId` (terminate its Workflows
+   * instance) when the run is being stopped/cancelled. Idempotent: no live instance to terminate
+   * is a no-op.
    */
-  cancelRun(workspaceId: string, jobId: string): Promise<void>
+  cancelRun(workspaceId: string, driveId: string): Promise<void>
 }
 
 /** The default runner: does nothing (tests drive `pollBootstrapJob` directly). */

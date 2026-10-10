@@ -208,6 +208,66 @@ function emptyRecommendation(message: string): FrontendConfigRecommendation {
 }
 
 /**
+ * Serve mode from package.json scripts: a production-preview script ⇒ command mode, else the static
+ * default. Mutates `config`/`notes` in place.
+ */
+function applyServeMode(
+  pkg: PackageJson,
+  config: FrontendConfig,
+  notes: FrontendDetectionNote[],
+): void {
+  const serveScript = SERVE_SCRIPT_CANDIDATES.find((s) => s in pkg.scripts)
+  if (serveScript) {
+    config.serveMode = 'command'
+    config.serveScript = serveScript
+    notes.push({
+      field: 'serveMode',
+      confidence: 'low',
+      message: `Found a "${serveScript}" script ⇒ proposing Command serve mode. Static (serving the build output) is usually cheaper for a UI test — switch if the build is fully static.`,
+    })
+  } else {
+    config.serveMode = 'static'
+    notes.push({
+      field: 'serveMode',
+      confidence: 'high',
+      message: 'No preview/serve script found ⇒ serving the build output statically.',
+    })
+  }
+}
+
+/**
+ * Backend bindings: env-var NAMES from the dotenv examples matching a backend/base-URL suffix, added
+ * as mock bindings (capped at {@link MAX_BINDINGS}). Vite's `import.meta.env` usage isn't scanned
+ * (too broad) — the dotenv examples are the reliable, bounded source. Mutates `config`/`notes`.
+ */
+async function applyBackendBindings(
+  scanner: BudgetedRepoScanner,
+  root: string,
+  config: FrontendConfig,
+  notes: FrontendDetectionNote[],
+): Promise<void> {
+  const envNames = new Set<string>()
+  for (const file of ENV_EXAMPLE_FILES) {
+    const content = await scanner.getFile(joinRepoPath(root, file))
+    if (!content) continue
+    for (const key of parseEnvExampleKeys(content)) {
+      if (BACKEND_ENV_PATTERNS.some((re) => re.test(key))) envNames.add(key)
+    }
+  }
+  if (envNames.size > 0) {
+    const bindings: FrontendBackendBinding[] = [...envNames]
+      .slice(0, MAX_BINDINGS)
+      .map((envVar) => ({ envVar, source: { kind: 'mock' } }))
+    config.backendBindings = bindings
+    notes.push({
+      field: 'backendBindings',
+      confidence: 'low',
+      message: `Found ${bindings.length} backend URL env var(s) in a .env example, added as mock bindings. Point any at a service frame (the service under test).${envNames.size > bindings.length ? ` ${envNames.size - bindings.length} more were omitted.` : ''}`,
+    })
+  }
+}
+
+/**
  * Detect a recommended frontend config for a repo, read CHECKOUT-FREE. Reads are rooted at
  * `options.directory` (the frontend's subdirectory) or the repo root. Every inferred field carries
  * a confidence note; nothing found ⇒ a `detected: false` recommendation with an explanatory note.
@@ -304,47 +364,11 @@ export async function detectFrontendConfig(
   }
 
   // 5) Serve mode: a production-preview script ⇒ command mode, else the static default.
-  if (pkg) {
-    const serveScript = SERVE_SCRIPT_CANDIDATES.find((s) => s in pkg.scripts)
-    if (serveScript) {
-      config.serveMode = 'command'
-      config.serveScript = serveScript
-      notes.push({
-        field: 'serveMode',
-        confidence: 'low',
-        message: `Found a "${serveScript}" script ⇒ proposing Command serve mode. Static (serving the build output) is usually cheaper for a UI test — switch if the build is fully static.`,
-      })
-    } else {
-      config.serveMode = 'static'
-      notes.push({
-        field: 'serveMode',
-        confidence: 'high',
-        message: 'No preview/serve script found ⇒ serving the build output statically.',
-      })
-    }
-  }
+  if (pkg) applyServeMode(pkg, config, notes)
 
   // 6) Backend bindings: env-var NAMES from the dotenv examples + Vite's `import.meta.env` usage
   //    aren't scanned (too broad) — the dotenv examples are the reliable, bounded source.
-  const envNames = new Set<string>()
-  for (const file of ENV_EXAMPLE_FILES) {
-    const content = await scanner.getFile(joinRepoPath(root, file))
-    if (!content) continue
-    for (const key of parseEnvExampleKeys(content)) {
-      if (BACKEND_ENV_PATTERNS.some((re) => re.test(key))) envNames.add(key)
-    }
-  }
-  if (envNames.size > 0) {
-    const bindings: FrontendBackendBinding[] = [...envNames]
-      .slice(0, MAX_BINDINGS)
-      .map((envVar) => ({ envVar, source: { kind: 'mock' } }))
-    config.backendBindings = bindings
-    notes.push({
-      field: 'backendBindings',
-      confidence: 'low',
-      message: `Found ${bindings.length} backend URL env var(s) in a .env example, added as mock bindings. Point any at a service frame (the service under test).${envNames.size > bindings.length ? ` ${envNames.size - bindings.length} more were omitted.` : ''}`,
-    })
-  }
+  await applyBackendBindings(scanner, root, config, notes)
 
   if (scanner.exhausted) {
     notes.push({

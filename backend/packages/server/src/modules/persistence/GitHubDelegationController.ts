@@ -1,8 +1,9 @@
 import { Hono } from 'hono'
 import type { GitHubInstallation, GitHubRepo } from '@cat-factory/kernel'
-import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
+import { getErrorMessage, RateLimitedError, UnavailableError } from '@cat-factory/kernel'
 
 /**
  * The mothership-mode GitHub delegation API: `POST /internal/github/installation-token`.
@@ -28,7 +29,9 @@ import { logger } from '../../observability/logger.js'
  *   narrowed to the live App-linked repos the mothership projects for the installation
  *   (`github_repos`), so a delegated token can never reach repos the platform doesn't
  *   even track. `user_pat`-linked rows are excluded (not reachable through the App
- *   installation). No linked repos ⇒ 404 — there is nothing in scope to grant.
+ *   installation). A caller may narrow FURTHER by naming `repositoryIds` (a container
+ *   dispatch names the repos its run resolved), which is INTERSECTED with the linked set:
+ *   asking narrows, never widens. Nothing left in scope ⇒ 404.
  * - Every mint (and every denial/failure) is audit-logged with the token's nodeId +
  *   userId; the client-facing 500 stays opaque.
  *
@@ -43,7 +46,7 @@ import { logger } from '../../observability/logger.js'
  */
 
 /** Fixed-window rate limit for the delegation mint (per authenticated node). */
-export interface GitHubDelegationRateLimit {
+interface GitHubDelegationRateLimit {
   /** Max mints per node per window. */
   limit: number
   windowMs: number
@@ -64,6 +67,23 @@ export interface GitHubDelegationControllerOptions {
  */
 const DEFAULT_RATE_LIMIT: GitHubDelegationRateLimit = { limit: 30, windowMs: 60_000 }
 
+/**
+ * The caller's requested narrowing, or `undefined` when it asked for none. A malformed entry
+ * makes the whole field `undefined` (⇒ the full linked scope) rather than a partial list: the
+ * request is only ever intersected with what the mothership links, so ignoring a garbled ask can
+ * never widen past the installation's own repos, while honouring half of one would mint a token
+ * missing a repo the caller is about to clone.
+ */
+function readRequestedRepositoryIds(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const ids: number[] = []
+  for (const value of raw) {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return undefined
+    ids.push(value)
+  }
+  return ids
+}
+
 export function githubDelegationController(
   options: GitHubDelegationControllerOptions = {},
 ): Hono<AppEnv> {
@@ -82,11 +102,7 @@ export function githubDelegationController(
     // Machine-token gate first: the endpoint's availability must not be probeable
     // without a valid token, and the shared conformance suite asserts the 403 on
     // facades that wire no GitHub App at all.
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json({ error: { code: 'forbidden', message: 'invalid machine token' } }, 403)
     }
@@ -103,28 +119,17 @@ export function githubDelegationController(
     if (!bucket || nowMs - bucket.windowStart >= windowMs) {
       mintWindows.set(payload.nodeId, { windowStart: nowMs, count: 1 })
     } else if (++bucket.count > limit) {
-      log.warn({ limit, windowMs }, 'github delegation: mint rate limit exceeded')
-      return c.json(
-        { error: { code: 'rate_limited', message: 'too many token mints, retry shortly' } },
-        429,
-      )
+      log.warn('github delegation: mint rate limit exceeded', { limit, windowMs })
+      throw new RateLimitedError('too many token mints, retry shortly')
     }
 
     const registry = container.repositories
     const delegation = container.githubTokenDelegation
     if (!registry || !delegation) {
-      return c.json(
-        {
-          error: {
-            code: 'unavailable',
-            message: 'GitHub token delegation is not enabled on this deployment',
-          },
-        },
-        503,
-      )
+      throw new UnavailableError('GitHub token delegation is not enabled on this deployment')
     }
 
-    let body: { installationId?: unknown; forceRefresh?: unknown }
+    let body: { installationId?: unknown; forceRefresh?: unknown; repositoryIds?: unknown }
     try {
       body = (await c.req.json()) as typeof body
     } catch {
@@ -160,7 +165,7 @@ export function githubDelegationController(
       )) as GitHubInstallation | null
       const accountId = installation && !installation.deletedAt ? installation.accountId : null
       if (typeof accountId !== 'string' || !payload.scope.accountIds.includes(accountId)) {
-        log.warn({ installationId }, 'github delegation: installation out of scope, denied')
+        log.warn('github delegation: installation out of scope, denied', { installationId })
         return denied()
       }
 
@@ -171,16 +176,28 @@ export function githubDelegationController(
       // the App installation, and GitHub would reject their ids on the mint. The same
       // repo linked by several workspaces projects one row each, so dedupe by githubId.
       const repos = (await repoProjection.listByInstallation(installationId)) as GitHubRepo[]
-      const repositoryIds = [
-        ...new Set(
-          (repos ?? [])
-            .filter((repo) => (repo.linkedVia ?? 'app') !== 'user_pat')
-            .map((repo) => repo.githubId),
-        ),
-      ]
+      const linked = new Set(
+        (repos ?? [])
+          .filter((repo) => (repo.linkedVia ?? 'app') !== 'user_pat')
+          .map((repo) => repo.githubId),
+      )
+      // A caller may ask for LESS: a container dispatch requests only the repos its run resolved
+      // (`jobTokenRepoIds`), so the delegated token is as narrow as the engine's own would be on a
+      // hosted deployment. The request is INTERSECTED with the linked set, never unioned: the
+      // node's ask is a narrowing hint, and the mothership's projection stays the authority on
+      // what may be granted. An unscoped request (the engine's gate/merge calls) takes the whole
+      // linked set, as before.
+      const requested = readRequestedRepositoryIds(body.repositoryIds)
+      const repositoryIds = requested ? requested.filter((id) => linked.has(id)) : [...linked]
       if (repositoryIds.length === 0) {
-        // Nothing in scope to grant — same uniform denial as an out-of-scope installation.
-        log.warn({ installationId }, 'github delegation: no linked repos to scope, denied')
+        // Nothing in scope to grant, the same uniform denial as an out-of-scope installation. It
+        // covers both "this installation links nothing" and "nothing the caller asked for is
+        // linked"; the log line separates them, the response deliberately does not.
+        log.warn('github delegation: no linked repos to scope, denied', {
+          installationId,
+          linkedCount: linked.size,
+          ...(requested ? { requestedCount: requested.length } : {}),
+        })
         return denied()
       }
 
@@ -189,19 +206,24 @@ export function githubDelegationController(
         forceRefresh,
         repositoryIds,
       })
-      // Audit trail: who minted what, scoped how wide. NEVER log the token itself.
-      log.info(
-        { installationId, forceRefresh, repoCount: repositoryIds.length },
-        'github delegation: minted repo-scoped installation token',
-      )
+      // Audit trail: who minted what, scoped how wide. `requestedCount` beside `repoCount` is
+      // what shows a caller asking for a repo this installation does not link (a repo unlinked
+      // between the node's read and this mint). The token is still granted, narrower than asked,
+      // and the harness would fail to clone the missing leg. NEVER log the token itself.
+      log.info('github delegation: minted repo-scoped installation token', {
+        installationId,
+        forceRefresh,
+        repoCount: repositoryIds.length,
+        ...(requested ? { requestedCount: requested.length } : {}),
+      })
       return c.json({ token: minted }, 200)
     } catch (error) {
       // Server-side diagnostics only — the client-facing 500 stays opaque so an internal
       // error's message never leaks over the machine API.
-      log.error(
-        { installationId, err: error instanceof Error ? error.message : String(error) },
-        'github delegation: mint failed',
-      )
+      log.error('github delegation: mint failed', {
+        installationId,
+        err: getErrorMessage(error),
+      })
       return c.json({ error: { code: 'internal', message: 'Internal error' } }, 500)
     }
   })

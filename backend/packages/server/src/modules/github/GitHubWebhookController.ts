@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import { StateSigner } from '../../github/state.js'
+import { webhookBodyLimit } from '../../webhooks/bodyLimit.js'
 import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 import type { AppEnv } from '../../http/env.js'
+import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
 
 /**
  * Public GitHub-facing endpoints (NOT under /workspaces, since GitHub calls
@@ -15,11 +17,10 @@ import type { AppEnv } from '../../http/env.js'
 export function githubWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/webhooks', async (c) => {
+  app.post('/webhooks', webhookBodyLimit(), async (c) => {
     const container = c.get('container')
     const github = container.github
-    if (!github)
-      return c.json({ error: { code: 'unavailable', message: 'GitHub not configured' } }, 503)
+    if (!github) throw new UnavailableError('GitHub not configured')
 
     // Verify against the raw bytes before parsing.
     const raw = await c.req.arrayBuffer()
@@ -32,7 +33,7 @@ export function githubWebhookController(): Hono<AppEnv> {
         secretConfigured: container.config.github.webhookSecret !== '',
         signaturePresent: !!signature,
       })
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid signature' } }, 401)
+      throw new UnauthorizedError('Invalid signature')
     }
 
     const eventName = c.req.header('x-github-event') ?? ''
@@ -63,8 +64,7 @@ export function githubWebhookController(): Hono<AppEnv> {
   app.get('/setup/callback', async (c) => {
     const container = c.get('container')
     const github = container.github
-    if (!github)
-      return c.json({ error: { code: 'unavailable', message: 'GitHub not configured' } }, 503)
+    if (!github) throw new UnavailableError('GitHub not configured')
 
     const installationId = Number(c.req.query('installation_id'))
     if (!Number.isFinite(installationId)) {
@@ -78,7 +78,7 @@ export function githubWebhookController(): Hono<AppEnv> {
     const workspaceId =
       state?.workspaceId ?? (await github.installationService.resolveBoundWorkspace(installationId))
     if (!workspaceId) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
+      throw new UnauthorizedError('Invalid or expired state')
     }
 
     await github.installationService.connect(workspaceId, installationId)

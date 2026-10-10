@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { SubscriptionVendor, VendorCredential } from '~/types/domain'
+import type {
+  SubscriptionVendor,
+  UpdateVendorCredentialInput,
+  VendorCredential,
+} from '~/types/domain'
 
 /**
  * The workspace's connected LLM-vendor subscription credentials (the token pool
@@ -33,6 +37,22 @@ export const useVendorCredentialsStore = defineStore('vendorCredentials', () => 
     credentials.value = [...credentials.value, created]
   }
 
+  /**
+   * Enable/disable and/or (un)pin a token as its vendor's default. Because pinning a
+   * default clears any prior default of the same vendor server-side, we reload the pool so
+   * the whole vendor group reflects the single-default invariant rather than patching one row.
+   */
+  async function update(id: string, patch: UpdateVendorCredentialInput) {
+    if (!workspaceId.value) return
+    const updated = await api.updateVendorCredential(workspaceId.value, id, patch)
+    if (patch.isDefault !== undefined) {
+      await load(workspaceId.value)
+    } else {
+      credentials.value = credentials.value.map((c) => (c.id === id ? updated : c))
+    }
+    return updated
+  }
+
   async function remove(id: string) {
     if (!workspaceId.value) return
     await api.removeVendorCredential(workspaceId.value, id)
@@ -50,5 +70,15 @@ export const useVendorCredentialsStore = defineStore('vendorCredentials', () => 
     return credentials.value.filter((c) => c.vendor === vendor)
   }
 
-  return { credentials, loading, load, add, remove, configuredVendors, hasVendor, forVendor }
+  return {
+    credentials,
+    loading,
+    load,
+    add,
+    update,
+    remove,
+    configuredVendors,
+    hasVendor,
+    forVendor,
+  }
 })

@@ -1,4 +1,13 @@
-import type { Block, Position, SourceTask, TaskContent, TaskSourceKind } from '@cat-factory/kernel'
+import type {
+  Block,
+  CreateTaskType,
+  Position,
+  SourceTask,
+  TaskContent,
+  TaskRecord,
+  TaskSourceKind,
+} from '@cat-factory/kernel'
+import type { BlockEditAuthority } from '@cat-factory/contracts'
 import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
@@ -58,6 +67,81 @@ export class TaskLinkService {
   }
 
   /**
+   * Attach an imported issue to a block, but ONLY if no other block already holds it: the
+   * "file this issue as a task, once" half of {@link linkToBlock}'s deliberate re-point.
+   *
+   * This is where the platform's one-task-per-ticket rule lives, and it is a CLAIM rather than a
+   * read-then-write because the writers genuinely race: a redelivering tracker webhook is two
+   * filings of one issue in flight at once, and a check that has already returned cannot stop the
+   * second write. Losing raises the same `ticket_already_linked` conflict a caller's own
+   * pre-check raises, naming the block that holds it, so a caller sees one refusal whether it
+   * lost the race or never entered it.
+   *
+   * The claim is the LAST write of a filing, after the block exists, because the column can only
+   * name a block that does. What that costs a caller is stated at the two call sites: whoever
+   * created a block for this issue owns rolling it back when the claim is lost.
+   */
+  async claimForBlock(
+    workspaceId: string,
+    blockId: string,
+    source: TaskSourceKind,
+    externalId: string,
+  ): Promise<SourceTask> {
+    const task = assertFound(
+      await this.deps.taskRepository.get(workspaceId, source, externalId),
+      'Task',
+      externalId,
+    )
+    return this.claimResolved(workspaceId, blockId, source, externalId, task)
+  }
+
+  /**
+   * The block that currently holds an issue, or null when nothing does (an unimported issue
+   * answers null too: it holds nothing either).
+   *
+   * The read a caller needs to find out whether its own claim landed after that claim FAILED to
+   * report. See `ticketLinkage.ts`, which decides whether to roll a task back on it. Exposed as
+   * a service method rather than by handing the caller the repository, so the linkage rule and
+   * the port stay on this side of the seam.
+   */
+  async holderOf(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+  ): Promise<string | null> {
+    const task = await this.deps.taskRepository.get(workspaceId, source, externalId)
+    return task?.linkedBlockId ?? null
+  }
+
+  /**
+   * {@link claimForBlock} for a caller that already holds the issue record, so the filing pays
+   * one point read rather than two for the same row.
+   */
+  private async claimResolved(
+    workspaceId: string,
+    blockId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    task: TaskRecord,
+  ): Promise<SourceTask> {
+    const won = await this.deps.taskRepository.claimBlockLink(
+      workspaceId,
+      source,
+      externalId,
+      blockId,
+    )
+    if (won) return toSourceTask({ ...task, linkedBlockId: blockId })
+    // Re-read rather than reporting the snapshot above: the whole point of losing is that the
+    // row moved under us, so only a fresh read names the block a caller should follow instead.
+    const holder = await this.deps.taskRepository.get(workspaceId, source, externalId)
+    throw new ConflictError(
+      `Issue ${externalId} is already linked to task ${holder?.linkedBlockId ?? 'another task'}`,
+      'ticket_already_linked',
+      holder?.linkedBlockId ? { taskId: holder.linkedBlockId } : {},
+    )
+  }
+
+  /**
    * Replace a block's linked issue: detach EVERYTHING currently linked to the
    * block (one batched write), then attach the given issue. The recurring
    * intake's link move — a schedule's reused block works a different issue every
@@ -93,14 +177,33 @@ export class TaskLinkService {
    * of truth (re-importing refreshes it) and is fed to every agent step via the
    * link. Reuses BoardService.addTask so scope/placement rules stay in one place.
    * `createdBy` (the signed-in user) flows onto the new task for notification routing.
+   *
+   * `shape` lets a caller that already KNOWS what kind of work the issue is pre-classify the
+   * new task — the bug hunt adopts a candidate as a `bug` on the bug-fix pipeline. Omitted
+   * (every pre-existing caller) leaves both to `BoardService.addTask`'s defaults, so the
+   * generic import path is unchanged.
+   *
+   * `editor` is whose authority the board write is made under, and it comes from the CALLER
+   * because only the caller knows: filing an issue from the SPA is a member acting on their own
+   * board, while the tracker reconciliation sweep behind the same method holds no tier at all.
+   * Deciding it here would pick one of those and be wrong about the other (see
+   * {@link BlockEditAuthority}).
+   *
+   * Takes an input OBJECT: `editor` was the seventh thing to identify (which board, which
+   * container, which issue, on whose authority, filed by whom, shaped how), and past a handful a
+   * positional list stops being readable at the call site and starts being a place to transpose
+   * two strings. Same shape as the resolution helpers this file's neighbours already take.
    */
-  async createTaskFromIssue(
-    workspaceId: string,
-    containerId: string,
-    source: TaskSourceKind,
-    externalId: string,
-    createdBy?: string | null,
-  ): Promise<TaskFromIssue> {
+  async createTaskFromIssue(input: {
+    workspaceId: string
+    containerId: string
+    source: TaskSourceKind
+    externalId: string
+    editor: BlockEditAuthority
+    createdBy?: string | null
+    shape?: { taskType?: CreateTaskType; pipelineId?: string }
+  }): Promise<TaskFromIssue> {
+    const { workspaceId, containerId, source, externalId, editor, createdBy, shape } = input
     const issue = assertFound(
       await this.deps.taskRepository.get(workspaceId, source, externalId),
       'Task',
@@ -109,9 +212,16 @@ export class TaskLinkService {
     // An issue carries a single `linkedBlockId`, so creating a second task from it
     // would silently re-point the link and orphan the first task's issue context.
     // Refuse rather than lose the existing link (the issue is the source of truth).
+    //
+    // This pre-check is the FAST path, not the guarantee: it refuses before any board write, so
+    // the overwhelmingly common "this issue already has a task" answer costs nothing. The
+    // invariant itself is held by the atomic claim below, which is what a concurrent second
+    // filing actually loses to.
     if (issue.linkedBlockId) {
       throw new ConflictError(
         `Issue ${externalId} is already linked to task ${issue.linkedBlockId}; unlink it first`,
+        'ticket_already_linked',
+        { taskId: issue.linkedBlockId },
       )
     }
     // Resolve the container in the REQUEST workspace (like linkToBlock) so the new
@@ -125,13 +235,23 @@ export class TaskLinkService {
       {
         title: issueTaskTitle(issue),
         description: issueTaskDescription(issue),
+        ...(shape?.taskType ? { taskType: shape.taskType } : {}),
+        ...(shape?.pipelineId ? { pipelineId: shape.pipelineId } : {}),
       },
+      editor,
       createdBy ?? null,
     )
     // Link the issue to the new task so agents get the full issue (description,
-    // comments, metadata) as context — and the task carries the back-reference.
-    await this.deps.taskRepository.linkBlock(workspaceId, source, externalId, block.id)
-    return { block, task: toSourceTask({ ...issue, linkedBlockId: block.id }) }
+    // comments, metadata) as context, and the task carries the back-reference. A CLAIM, so a
+    // filing that raced the pre-check refuses here instead of re-pointing the winner's link.
+    //
+    // Losing leaves the block this call just created behind, unlinked. That is deliberate on
+    // this path: the caller is a person, on the board the block is sitting on, holding a 409 that
+    // names the task that won, so the leftover is visible and theirs to delete, where an
+    // automatic rollback would delete a block out from under whoever was already looking at it.
+    // The headless path makes the opposite choice, for the opposite reason (`ticketLinkage.ts`).
+    const task = await this.claimResolved(workspaceId, block.id, source, externalId, issue)
+    return { block, task }
   }
 
   /**
@@ -143,15 +263,21 @@ export class TaskLinkService {
    * outside the imported set are skipped, and the board's cycle guard protects against bad
    * data (a rejected edge is ignored, never fatal). The board (`epicId` + `dependsOn`) is
    * the source of truth after the spawn; the issue projections back agent context.
+   *
+   * `editor` is whose authority every child task is created under, supplied by the caller for the
+   * reason {@link TaskLinkService.createTaskFromIssue} states, and this takes an input object for
+   * the reason stated there too.
    */
-  async spawnEpic(
-    workspaceId: string,
-    source: TaskSourceKind,
-    epicRef: string,
-    containerId: string,
-    createdBy?: string | null,
-    position?: Position,
-  ): Promise<SpawnedEpic> {
+  async spawnEpic(input: {
+    workspaceId: string
+    source: TaskSourceKind
+    epicRef: string
+    containerId: string
+    editor: BlockEditAuthority
+    createdBy?: string | null
+    position?: Position
+  }): Promise<SpawnedEpic> {
+    const { workspaceId, source, epicRef, containerId, editor, createdBy, position } = input
     // The container must be visible to this workspace (a frame/module the issue tasks land in).
     assertFound(await this.deps.blockRepository.get(workspaceId, containerId), 'Block', containerId)
 
@@ -197,6 +323,7 @@ export class TaskLinkService {
           description: issueTaskDescription(content),
           epicId: epic.id,
         },
+        editor,
         createdBy ?? null,
       )
       await this.deps.taskRepository.linkBlock(workspaceId, source, content.externalId, block.id)

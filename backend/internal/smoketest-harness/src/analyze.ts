@@ -252,8 +252,47 @@ export function analyzeCase(input: AnalyzeInput): CaseAnalysis {
   const isGuardAbort = !!err && err.includes('no progress:')
   const isWatchdogAbort = !!err && !isGuardAbort && /\baborted\b/i.test(err)
   const terminalErr = terminalRunError(stdout)
+  const ranAtAll = events.length > 0 && (stats.toolCalls > 0 || stats.assistantChars > 0)
 
-  // --- Breakage: the model could not be used / the run hard-failed. ---
+  const signals: CaseSignals = {
+    input,
+    events,
+    err,
+    expectsEdits,
+    isSpawnFailure,
+    isGuardAbort,
+    isWatchdogAbort,
+    terminalErr,
+    stats,
+    metrics,
+    ranAtAll,
+  }
+  detectBreakageFindings(signals, add)
+  detectDeadEndFindings(signals, add)
+  detectLoopFindings(signals, add)
+  detectIncompleteTodos(signals, add)
+
+  return { verdict: verdictFor(findings), findings, metrics, summary: summary || undefined }
+}
+
+/** The derived per-run signals the finding detectors read (computed once in {@link analyzeCase}). */
+interface CaseSignals {
+  input: AnalyzeInput
+  events: AnalyzeInput['events']
+  err: string | undefined
+  expectsEdits: boolean
+  isSpawnFailure: boolean
+  isGuardAbort: boolean
+  isWatchdogAbort: boolean
+  terminalErr: ReturnType<typeof terminalRunError>
+  stats: ReturnType<typeof summarizePiRun>['stats']
+  metrics: ReturnType<typeof computeMetrics>
+  ranAtAll: boolean
+}
+
+/** Breakage: the model could not be used / the run hard-failed. */
+function detectBreakageFindings(signals: CaseSignals, add: (f: Finding) => void): void {
+  const { events, err, isSpawnFailure, terminalErr, stats } = signals
   if (isSpawnFailure) {
     add({
       code: 'pi-not-runnable',
@@ -292,8 +331,13 @@ export function analyzeCase(input: AnalyzeInput): CaseAnalysis {
       detail: err,
     })
   }
+}
 
-  // --- Dead-ends: the agent stopped making progress. ---
+/** Dead-ends: the agent stopped making progress (guard/watchdog aborts, run errors, no-changes). */
+function detectDeadEndFindings(signals: CaseSignals, add: (f: Finding) => void): void {
+  const { input, events, err, expectsEdits, isSpawnFailure, isGuardAbort, isWatchdogAbort } =
+    signals
+  const { terminalErr, metrics, ranAtAll } = signals
   if (isGuardAbort) {
     const { code, category, message } = classifyGuardAbort(err!)
     add({ code, category, severity: 'error', message, detail: err })
@@ -317,8 +361,6 @@ export function analyzeCase(input: AnalyzeInput): CaseAnalysis {
     })
   }
 
-  const ranAtAll = events.length > 0 && (stats.toolCalls > 0 || stats.assistantChars > 0)
-
   // Expected to change files but didn't — a soft dead-end (it talked/explored but
   // never implemented). Only flag when the run actually executed and wasn't already
   // killed for no progress (which implies the same thing more strongly).
@@ -331,8 +373,11 @@ export function analyzeCase(input: AnalyzeInput): CaseAnalysis {
       detail: `${metrics.toolCalls} tool call(s), ${metrics.edits} edit-tool call(s).`,
     })
   }
+}
 
-  // --- Loops: repeating without advancing. ---
+/** Loops: repeating without advancing (tool-error streaks, identical calls, web loops, low yield). */
+function detectLoopFindings(signals: CaseSignals, add: (f: Finding) => void): void {
+  const { input, events, err, isGuardAbort, metrics } = signals
   const calls = toolCallSequence(events)
   const ends = endEvents(events)
 
@@ -405,9 +450,11 @@ export function analyzeCase(input: AnalyzeInput): CaseAnalysis {
       message: `${metrics.toolCalls} tool calls produced only ${input.diffBytes} bytes of diff — lots of motion, little output.`,
     })
   }
+}
 
-  // Left subtasks unfinished while still producing changes — worth a look but not
-  // a failure on its own.
+/** Left subtasks unfinished while still producing changes — worth a look, not a failure on its own. */
+function detectIncompleteTodos(signals: CaseSignals, add: (f: Finding) => void): void {
+  const { input, metrics, ranAtAll } = signals
   if (
     metrics.todo &&
     metrics.todo.total > 0 &&
@@ -422,8 +469,6 @@ export function analyzeCase(input: AnalyzeInput): CaseAnalysis {
       message: `Finished with ${metrics.todo.completed}/${metrics.todo.total} subtasks done — left work on the table.`,
     })
   }
-
-  return { verdict: verdictFor(findings), findings, metrics, summary: summary || undefined }
 }
 
 /** Sub-classify a guard-abort error message into a specific finding. */

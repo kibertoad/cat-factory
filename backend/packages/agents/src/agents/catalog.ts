@@ -1,29 +1,48 @@
-import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentDispatchContext, AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   acceptanceSystemPrompt,
   testApproachSection,
   e2eTargetSection,
 } from './prompts/acceptance.js'
-import { companionSystemPrompt } from './prompts/companion.js'
-import { companionTargets, isCompanionKind } from './kinds/companions.js'
+import { isStandardsContextFile } from './runtime/fragments.js'
+import { companionCheckoutSection, companionSystemPrompt } from './prompts/companion.js'
+import { companionTargets } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
+import { surfaceTraits } from './kinds/surface-traits.js'
+import { SPIKE_AGENT_KIND, spikeContextSection } from './kinds/spike.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
 import type { AgentKindRegistry } from './kinds/registry.js'
-import { traitGuidanceFor } from './kinds/traits.js'
-import { roleSystemPrompt } from './prompts/roles.js'
-import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
+import { type TraitDelivery, traitGuidanceFor } from './kinds/traits.js'
+import { roleSystemPrompt, TRIAGE_JSON_CONTRACT } from './prompts/roles.js'
 import {
+  CONTAINER_DISPATCH_DIRECTIVES,
+  FINAL_ANSWER_IN_REPLY,
+  PLATFORM_IS_NOT_THE_PRODUCT,
+  REVIEW_FINDINGS_LAYOUT,
+} from './prompts/shared.js'
+import {
+  ACCOUNTING_REVIEW_DIRECTIVE,
+  FEEDBACK_ACCOUNTING_DIRECTIVE,
+  PRIOR_ROUNDS_DIRECTIVE,
+  renderOpenFindings,
+  renderPriorReviewRounds,
+  renderRevisionComments,
+} from './prompts/review-rounds.js'
+import {
+  customTaskTypeSection,
   environmentSection,
   initiativePresetSection,
   involvedServicesSection,
   linkedContextSection,
+  ownServiceSection,
   phaseForKind,
   renderStandardUserPrompt,
   standardSystemPrompt,
   testSecretsSection,
+  testingContextSection,
 } from './prompts/standard.js'
 
 // Prompt construction for the built-in agent kinds: turns an agent kind + block
@@ -35,17 +54,173 @@ import {
 // the tester/fixer track in ./prompts/testing, the companions in ./prompts/companion,
 // and the thin one-line roles + generic fallback in ./prompts/roles).
 
-export function systemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
-  const base = baseSystemPromptFor(kind, registry)
+/**
+ * The fragments an override must never be able to delete, whether they reach the shipped prompt
+ * by being APPENDED ({@link applySurfaceDirectives}) or by being written INLINE into a built-in
+ * track prompt. That difference is invisible from the outside and is exactly the trap: an
+ * override replaces the track prompt, so for a built-in kind it silently takes the inline copy
+ * with it. See {@link restoreShippedInvariants}.
+ *
+ * {@link REVIEW_FINDINGS_LAYOUT} belongs here for the same reason the final-answer rule does: it
+ * is a fact about how the platform READS a reviewer's reply, not editorial content. The severities
+ * it asks for are what the ENGINE acts on (a `blocker` holds the step), the `summary` it shapes is
+ * rendered as markdown in the run panel, and the escaping sentence it carries is what keeps a
+ * multi-line verdict from arriving as invalid JSON. A workspace that edits its reviewer prompt for
+ * an unrelated reason would otherwise get ungraded findings back — every point reaching the engine
+ * as equally urgent — with nothing in the editor saying why.
+ *
+ * {@link TRIAGE_JSON_CONTRACT} is the third of that shape and the one a BESPOKE split could not
+ * have covered: the `task-estimator` takes its prompt from a built-in track, so an override
+ * replaces the whole thing, and its JSON shape is what `coerceTaskEstimate` reads. An estimate
+ * that fails to parse is silent (every step gated on the estimate simply stops being gated),
+ * which is why it must survive an edit rather than merely be documented as load-bearing.
+ */
+const OVERRIDE_PRESERVED_FRAGMENTS = [
+  READ_ONLY_GUARDRAIL,
+  FINAL_ANSWER_IN_REPLY,
+  REVIEW_FINDINGS_LAYOUT,
+  TRIAGE_JSON_CONTRACT,
+] as const
+
+/**
+ * Re-append any invariant the SHIPPED prompt for this kind guaranteed and the overridden
+ * composition now lacks.
+ *
+ * The property, stated once: **an override changes what an agent is told to BE, never how the
+ * platform RUNS it.** `applySurfaceDirectives` alone cannot hold that, because its
+ * final-answer rule is gated on the base being the REGISTRY's prompt — a guard against
+ * double-appending for built-in kinds, whose track prompts carry the rule inline. The moment an
+ * override replaces such a track prompt, the guard reads "already has it" about a string that
+ * no longer exists, and the rule is lost on precisely the kinds that need it (spec-writer,
+ * merger, the testers, the reviewers — every kind whose deliverable IS its visible reply).
+ *
+ * Comparing against the fully COMPOSED shipped prompt rather than its base is what makes this
+ * total: it covers a fragment however it arrived, so a kind that later moves a directive from
+ * inline to appended (or the reverse) needs no change here. Membership is a plain `includes`, so
+ * an override that restates the rule itself is not given a second copy.
+ *
+ * The measurement is made under THIS dispatch's `delivery`, not with every gate open. Gated trait
+ * guidance contributes only when its `.cat-context/` file arrived, so measuring with the gate open
+ * would let a gated member of the preserve list be restored onto an overridden prompt on a
+ * deployment whose un-overridden prompt correctly drops it: two dispatches of one kind disagreeing
+ * about a rule, decided by whether somebody edited the prompt. No member is gated today; threading
+ * the argument is what keeps that from becoming true silently.
+ */
+function restoreShippedInvariants(
+  composed: string,
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+  delivery?: TraitDelivery,
+): string {
+  // No `override` argument ⇒ terminates after exactly one level.
+  const shipped = systemPromptFor(kind, registry, undefined, delivery)
+  let result = composed
+  for (const fragment of OVERRIDE_PRESERVED_FRAGMENTS) {
+    if (shipped.includes(fragment) && !result.includes(fragment)) {
+      result = `${result}\n\n${fragment}`
+    }
+  }
+  return result
+}
+
+/**
+ * A string no real prompt contains, used to MEASURE what the platform appends without having to
+ * restate it. Composed in-process only; never stored, never sent.
+ */
+const DIRECTIVE_PROBE = ' cat-factory:override-probe '
+
+/**
+ * The text {@link systemPromptFor} appends to an override for this kind — the surface directives,
+ * the trait guidance, and anything {@link restoreShippedInvariants} puts back.
+ *
+ * MEASURED, never restated: compose the real prompt around a probe and return the tail. That is
+ * what makes it total — a hand-written summary would miss precisely the invisible case (a rule the
+ * shipped track prompt carried inline), and would go stale the first time a directive is added.
+ *
+ * Two consumers depend on it: the prompt editor SHOWS it, so a workspace can see the rules its
+ * override cannot delete; and the sandbox composes a candidate the same way production does, so a
+ * prompt is graded on the text that will actually be sent.
+ *
+ * Totality is why {@link containerDispatchDirectivesFor} is folded in as well: `systemPromptFor` is
+ * not the last thing that appends to a container prompt, and the editor's promise is about the wire
+ * rather than about one seam.
+ *
+ * It is the MAXIMUM, not an exact prediction of one dispatch. Trait guidance that names an injected
+ * `.cat-context/` file is gated on that file arriving (see `TraitDelivery`), and neither the editor
+ * nor the sandbox has a dispatch to ask, so both measure with the gate open. A real dispatch that
+ * delivered nothing therefore sends a SUBSET of this. That direction is the safe one and is the
+ * same call `containerDispatchDirectivesFor` makes: what this promise exists to guarantee is that no
+ * rule the platform enforces is missing from it, and an over-report cannot break that.
+ */
+export function appendedDirectivesFor(kind: AgentKind, registry: AgentKindRegistry): string {
+  const measured = systemPromptFor(kind, registry, DIRECTIVE_PROBE).slice(DIRECTIVE_PROBE.length)
+  return `${measured}${containerDispatchDirectivesFor(kind, registry)}`
+}
+
+/**
+ * What the container-dispatch chokepoint (`buildKindBody`) appends for this kind on top of
+ * everything {@link systemPromptFor} composed, or `''` for a kind that never reaches it: an inline
+ * kind, a consensus-panel participant, or a kind with no agent step at all.
+ *
+ * Gated on the DECLARED surface, and deliberately not consulted by the chokepoint itself, which
+ * appends the pair unconditionally: it IS the container dispatch, so a kind whose surface the
+ * registry reports as something else would otherwise silently lose the contract on a real run.
+ * Here the direction of the error is the safe one, an over- rather than an under-report.
+ */
+export function containerDispatchDirectivesFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): string {
+  const surface = registry.agentStep(kind)?.surface
+  if (surface !== 'container-explore' && surface !== 'container-coding') return ''
+  return `\n\n${CONTAINER_DISPATCH_DIRECTIVES.join('\n\n')}`
+}
+
+/**
+ * The system prompt for a kind: its track prompt plus the surface directives and trait
+ * guidance the engine enforces.
+ *
+ * `override` replaces only the TRACK prompt — a workspace's edited prompt for this kind (see
+ * ./prompt-overrides). The directives and trait guidance are still appended on top, and
+ * {@link restoreShippedInvariants} puts back any invariant the shipped prompt happened to carry
+ * INLINE rather than appended, because they are invariants of how the platform runs the kind (a
+ * read-only kind must not edit; a reasoning kind's answer must land in its visible reply), not
+ * editorial content: an override that dropped them would break the run in exactly the ways they
+ * exist to prevent.
+ */
+export function systemPromptFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+  override?: string,
+  delivery?: TraitDelivery,
+): string {
+  const base = override ?? baseSystemPromptFor(kind, registry)
   // Append the surface-driven directives (read-only guardrail + final-answer-in-reply) — see
   // {@link applySurfaceDirectives}. This is the single place that decision lives, so a
   // registered kind gets the SAME treatment a built-in does from its declared `agent.surface`.
-  const withDirectives = applySurfaceDirectives(base, kind, registry)
+  // Then the platform/product boundary, which is UNCONDITIONAL: every kind is run by the same
+  // orchestrator and can see its mechanics, so every kind needs telling that they are not the
+  // subject of the work. Appended here rather than inside `applySurfaceDirectives` because it is
+  // not derived from the surface — and appended AFTER the override, so an edited prompt cannot
+  // delete it (which is why it needs no `OVERRIDE_PRESERVED_FRAGMENTS` entry).
+  const withDirectives = `${applySurfaceDirectives(base, kind, registry)}\n\n${PLATFORM_IS_NOT_THE_PRODUCT}`
   // Fold in any guidance contributed by the kind's traits (e.g. the spec-aware kinds get
   // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
   // their effect (folding the service's fragments) is applied by the execution engine.
-  const guidance = traitGuidanceFor(kind, registry)
-  return guidance.length ? `${withDirectives}\n\n${guidance.join('\n\n')}` : withDirectives
+  //
+  // `delivery` lets guidance that NAMES an injected `.cat-context/` file stay silent when the
+  // dispatch did not inject it. Omitted by every caller with no dispatch in hand (the editor's
+  // measurement, the sandbox, a test), which renders every trait in full: see `TraitDelivery`.
+  const guidance = traitGuidanceFor(kind, registry, delivery)
+  const composed = guidance.length
+    ? `${withDirectives}\n\n${guidance.join('\n\n')}`
+    : withDirectives
+  // Unedited ⇒ byte-for-byte what the kind always sent. Overridden ⇒ put back any invariant the
+  // shipped prompt carried inline, which replacing the track prompt would otherwise have taken
+  // with it. Only reachable with an override, so the unedited path costs nothing.
+  return override === undefined
+    ? composed
+    : restoreShippedInvariants(composed, kind, registry, delivery)
 }
 
 /**
@@ -71,23 +246,37 @@ function applySurfaceDirectives(
   kind: AgentKind,
   registry: AgentKindRegistry,
 ): string {
-  const surface = registry.agentStep(kind)?.surface
+  const step = registry.agentStep(kind)
+  const surface = step?.surface
   // True only when the base prompt is the one from the registry — i.e. no built-in track claimed
   // this kind. A built-in-track-owned id (even if also registered) already got the directive.
   const usedRegisteredPrompt = prompt === registry.systemPrompt(kind)
-  const needsGuardrail = isReadOnlyAgentKind(kind) || surface === 'container-explore'
-  const needsFinalAnswer =
-    usedRegisteredPrompt && (surface === 'inline' || surface === 'container-explore')
+  // `localWrites` is the explore kind that legitimately writes inside its own working tree (a
+  // tester installs dependencies and runs a suite). The surface still means "never pushes"; the
+  // guardrail's wording ("must not create files") does not, and reads to that agent as a refusal
+  // to run the suite. See {@link AgentStepSpec.localWrites}.
+  const traits = surfaceTraits(surface)
+  const needsGuardrail =
+    isReadOnlyAgentKind(kind) || (traits?.readOnlyGuardrail === true && !step?.localWrites)
+  const needsFinalAnswer = usedRegisteredPrompt && traits?.deliverableIsReply === true
   let result = prompt
   if (needsGuardrail) result = `${result}\n\n${READ_ONLY_GUARDRAIL}`
   if (needsFinalAnswer) result = `${result}\n\n${FINAL_ANSWER_IN_REPLY}`
   return result
 }
 
-function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
+/**
+ * The SHIPPED track prompt for a kind, before the surface directives and trait guidance
+ * `systemPromptFor` layers on. Exported because it is the unit a workspace prompt override
+ * replaces (see ./prompt-overrides): the directives are engine-enforced invariants — a
+ * read-only kind must not edit, a reasoning kind must answer in its reply — so they are
+ * re-applied on top of an override rather than being handed to an editor that could delete
+ * them. It is also therefore the text the prompt editor shows as the built-in baseline.
+ */
+export function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
   // Companion kinds (reviewer, architect-companion, spec-companion, …) win over every
   // built-in track: they grade a prior step's output and return a JSON rating.
-  const companion = companionSystemPrompt(kind)
+  const companion = companionSystemPrompt(kind, registry)
   if (companion) return companion
   const phase = phaseForKind(kind)
   if (phase) return standardSystemPrompt(phase)
@@ -112,9 +301,26 @@ function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): stri
 }
 
 /**
- * When a human requested changes on this step's gated proposal, append their
- * feedback and the previous proposal so the agent revises rather than restarts.
- * Applied to every inline agent kind (standard-phase and generic alike).
+ * Who asked for the revision, said in one sentence. An exhaustive `Record`, so a third kind of
+ * reviewer fails to compile here rather than silently borrowing one of these two framings.
+ *
+ * The distinction is load-bearing in both directions: a companion's automatic round framed as a
+ * person's request tells the agent somebody is waiting on work no person has read, and a real
+ * "request changes" flattened into "your work was reviewed" loses the one fact that outranks the
+ * feedback itself.
+ */
+const REVISION_REQUESTER_FRAMING: Record<
+  NonNullable<AgentRunContext['revision']>['requestedBy'],
+  string
+> = {
+  human: 'A person reviewed your previous proposal and requested changes.',
+  reviewer: 'An automated reviewer graded your previous proposal and asked for changes.',
+}
+
+/**
+ * When changes were requested on this step's previous proposal — by a person on its gate, or by
+ * the reviewer that grades it — append the feedback and that proposal so the agent revises rather
+ * than restarts. Applied to every inline agent kind (standard-phase and generic alike).
  */
 function withRevision(prompt: string, context: AgentRunContext): string {
   const revision = context.revision
@@ -122,9 +328,13 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   const lines = [
     prompt,
     '',
-    'A human reviewed your previous proposal and requested changes. Revise that',
-    'proposal to address their feedback — keep what still holds, change what they',
+    // Falls back to the reviewer framing for a rework row written before `requestedBy` existed:
+    // it is the common case, and it is the false-human claim that this exists to stop.
+    REVISION_REQUESTER_FRAMING[revision.requestedBy] ?? REVISION_REQUESTER_FRAMING.reviewer,
+    'Revise that proposal to answer the feedback: keep what still holds, change what was',
     'flagged. Do not start from scratch.',
+    '',
+    FEEDBACK_ACCOUNTING_DIRECTIVE,
     '',
     'Your previous proposal:',
     revision.previousProposal || '(empty)',
@@ -132,44 +342,309 @@ function withRevision(prompt: string, context: AgentRunContext): string {
     'Reviewer feedback:',
     revision.feedback || '(none given)',
   ]
-  // Per-block comments the reviewer left on specific parts of the proposal. Each
-  // quotes the exact text it targets, so the agent can locate and revise it.
-  if (revision.comments?.length) {
-    lines.push('', 'Comments on specific parts of your proposal:')
-    for (const c of revision.comments) {
-      lines.push(
-        '',
-        'On this part:',
-        c.quotedSource || '(empty)',
-        'Comment:',
-        c.body || '(none given)',
-      )
-    }
-  }
+  // Per-block comments the reviewer left on specific parts of the proposal, each naming what it
+  // targets so the agent can locate and revise it.
+  //
+  // Rendered by `renderRevisionComments`, beside the renderer for the ROUNDS BEFORE this one: worst
+  // first (because a `blocker` left open sends the work straight back however much else was
+  // addressed), labelled with the urgency it was raised at, and anchored the way the reviewer
+  // anchored it. A person's comment carries no grade and is simply unlabelled: they are already
+  // holding the run, so there is nothing for a label to add.
+  if (revision.comments?.length) lines.push(...renderRevisionComments(revision.comments))
   return lines.join('\n')
+}
+
+/** How a caller wants the user prompt rendered. See {@link userPromptFor}. */
+export interface AgentUserPromptOptions {
+  /**
+   * The caller has a filesystem and has already written the run's context files onto it, so
+   * linked context renders as an index pointing at them rather than folding their bodies in.
+   */
+  materialized?: boolean
+  /**
+   * The resolved checkout this dispatch creates, for the kinds whose own prompt names a branch.
+   * Absent for every inline caller (which has no checkout), so a builder that reads it must
+   * phrase itself without one rather than invent a branch name.
+   */
+  dispatch?: AgentDispatchContext
+  /**
+   * A caller-supplied note about how THIS run differs from the run the kind's own prompt assumes.
+   * The Sandbox is the caller: it runs a container-backed kind inline, so the composed system
+   * prompt tells the agent to diff a branch it will not have, and saying nothing would grade it on
+   * failing to do something impossible (the "degrade loudly" rule).
+   *
+   * Threaded through here rather than concatenated onto the finished string BECAUSE of the
+   * ordering below: `userPromptSuffix` exists to be the last thing the agent reads, and a caller
+   * appending afterwards silently buries a kind's reply-shape instruction behind an aside.
+   */
+  runNotice?: string
 }
 
 /**
  * Build the user prompt from the block context and the run so far. `opts.materialized`
  * (set by the container executor) renders linked context as a summary index pointing at
  * the on-disk files; the default (inline executors) injects the bodies into the prompt.
+ * `opts.dispatch` carries the resolved checkout facts (base/work branch, multi-repo) for the
+ * kinds whose own prompt has to name a branch; absent for every inline caller, which has no
+ * checkout to describe.
  */
 export function userPromptFor(
   context: AgentRunContext,
   registry: AgentKindRegistry,
-  opts: { materialized?: boolean } = {},
+  opts: AgentUserPromptOptions = {},
 ): string {
-  return withRevision(buildBaseUserPrompt(context, registry, opts), context)
+  const { prompt, suffix } = buildBaseUserPrompt(context, registry, opts)
+  // The wrappers in the ONE order they may run, INVARIANT MATERIAL FIRST and VOLATILE LAST. That
+  // ordering is load-bearing rather than cosmetic: a provider's prompt cache matches on a PREFIX,
+  // so whatever sits ahead of the first byte that changed between two dispatches is served from
+  // cache and everything after it is re-written. The checkout facts and the injected context files
+  // are the same bytes on every round of a rework loop (a resolved base branch; a preOp's output,
+  // the run's linked documents) and the context fold is the largest block here; the revision
+  // feedback, the grading history and the rope left are different bytes by definition on every
+  // round. Composed the other way round, as this was, each round paid a fresh cache WRITE for the
+  // whole fold: on a real revision round, 62k cache-write tokens against 26k reads over four calls.
+  //
+  // The ordering rule is stated for THESE WRAPPERS and reaches no further, which bounds what it
+  // buys. `buildBaseUserPrompt` renders `priorOutputs` ("Work from earlier agents in this
+  // pipeline") at the tail of the base prompt, ahead of every wrapper — on a PRODUCER's rework
+  // dispatch those bytes are stable between rounds and the fold below is genuinely cached, but on
+  // a companion GRADER's they carry the producer's newly-rewritten reply, so the prefix breaks
+  // before the fold is reached and the grader half of the loop pays the write regardless. Moving
+  // that block is a change to every standard phase template (the shared `blockContext` partial),
+  // not to this list, so it is named here rather than implied away.
+  //
+  // A LIST rather than nested calls because the order is the decision: five levels of nesting hid
+  // it, and every wrapper here was appended to the end of whatever the one before it returned.
+  const composed = [
+    (text: string) => withCompanionCheckout(text, context, registry, opts),
+    (text: string) => withInjectedContext(text, context, opts),
+    (text: string) => withRevision(text, context),
+    (text: string) => withPriorReview(text, context),
+    (text: string) => withGradingBar(text, context),
+    (text: string) => withRunNotice(text, opts.runNotice),
+  ].reduce((text, wrap) => wrap(text), prompt)
+  // The kind's closing instruction is applied OUTSIDE every wrapper, not folded into the base
+  // prompt: `userPromptSuffix` exists to be the last thing the agent reads (the `on-call` kind's
+  // "respond with ONLY a JSON object" is the shape), and every wrapper appends. Folded in earlier,
+  // a revision re-run would end on the reviewer's feedback and an inline run on a context-file
+  // dump, leaving the reply-shape instruction buried mid-prompt. `opts.runNotice` is inside the
+  // same rule: it goes after the material and BEFORE the suffix.
+  return withSuffix(composed, suffix)
+}
+
+/**
+ * Tell a container-backed companion where its review starts: the base branch this dispatch
+ * resolved, and the commands that turn it into the change.
+ *
+ * A WRAPPER rather than a line in the generic block-context branch, for the reason
+ * {@link withInjectedContext} is one: `buildBaseUserPrompt` returns early for a standard phase, and
+ * the code `reviewer` IS a standard phase (`review`). Added inside the generic branch it would have
+ * reached `doc-reviewer` and a deployment's own companion while silently missing the one companion
+ * the finding was about.
+ */
+function withCompanionCheckout(
+  prompt: string,
+  context: AgentRunContext,
+  registry: AgentKindRegistry,
+  opts: AgentUserPromptOptions,
+): string {
+  const section = companionCheckoutSection(context, registry, opts.dispatch)
+  return section ? `${prompt}\n${section}` : prompt
+}
+
+/** Append the caller's note about how this run differs from the one the prompt assumes. */
+function withRunNotice(prompt: string, notice: string | undefined): string {
+  return notice?.trim() ? `${prompt}\n\n${notice.trim()}` : prompt
+}
+
+/**
+ * Append the rounds this step's companion loop has already been through.
+ *
+ * ONE site, deliberately, and it is what makes the memory arrive for every companion rather than
+ * for whichever one somebody wired: `userPromptFor` is the single prompt assembly both surfaces
+ * go through, so an inline companion (`architect-companion`, `spec-companion`), a
+ * container-backed one (`reviewer`, `doc-reviewer`) and a companion a DEPLOYMENT registered all
+ * receive it on the same terms, as does the producer being reworked.
+ *
+ * Applied AFTER {@link withRevision} so a producer reads the current round's asks first (that is
+ * the work) and the older rounds after it (that is the thing not to regress on). `context.role`
+ * decides the framing, since the two sides need opposite instructions from the same data.
+ */
+function withPriorReview(prompt: string, context: AgentRunContext): string {
+  const prior = context.priorReview
+  if (!prior?.rounds.length) return prompt
+  const grading = prior.role === 'grader'
+  // Whether this prompt HAS a current-round list above these rounds. Read rather than assumed:
+  // the producer heading points at that list, and pointing at a section that is not there is the
+  // same class of untruth the dedup below exists to remove.
+  //
+  // PRODUCER only. `context.revision` on a grader dispatch is a HUMAN's "request changes" on the
+  // companion's own approval gate — someone else's list, about someone else's asks — so folding
+  // the grader's own recorded verdict points against it would delete a point the grader raised and
+  // point it at a section a different author wrote, under a heading reading "Your own previous
+  // verdicts". Two lists that merely overlap in wording are not the same list.
+  const listedNow = grading ? [] : (context.revision?.comments ?? [])
+  const lines = [
+    prompt,
+    '',
+    grading
+      ? `You have already reviewed earlier revisions of this work ${prior.rounds.length} time(s). ` +
+        'Your own previous verdicts:'
+      : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
+        `above.${listedNow.length ? ' The list above is the authoritative one to work through; this is the rest of the history,' : ' Everything previously raised,'} ` +
+        `so you do not undo a fix or drop an open point:`,
+    // Deduplicated against whatever the prompt already lists as the work to do now: a point still
+    // open is re-raised every round, and rendering it in both places is how one ask came to appear
+    // three times in one prompt with no single list to work from. In practice that is the PRODUCER
+    // side, since `revision` is what a step being reworked carries; a grader re-run on its own
+    // gate has one too, and folding a verbatim repeat of its own verdict is right there as well.
+    ...renderPriorReviewRounds(prior.rounds, prior.threshold, listedNow),
+    '',
+    grading
+      ? PRIOR_ROUNDS_DIRECTIVE
+      : 'Keep every earlier point that was already addressed addressed. Where an earlier point ' +
+        'is still open, deal with it in this revision too, not only the feedback above, and ' +
+        'account for it in the same way.',
+  ]
+  // Only the grader, and only here: an accounting can exist only once a round has been answered,
+  // which is exactly the condition this whole section renders under.
+  if (grading) lines.push('', ACCOUNTING_REVIEW_DIRECTIVE)
+  return lines.join('\n')
+}
+
+/**
+ * State the bar a companion GRADER is scoring against, and how much rope is left.
+ *
+ * Its own wrapper rather than a clause inside {@link withPriorReview}, because the two answer
+ * different questions and are available at different times. The history exists only from round two;
+ * the bar applies from round one, and folding it into the history section is what left the first
+ * grading of every step asking for a 0..1 rating against a threshold nobody had stated. The scale's
+ * anchors live in the companion system prompt and point here for the number, so the two halves of
+ * one instruction are read together.
+ *
+ * Grader only: `AgentRunContext.gradingBar` is set for no other dispatch, so this is a no-op for a
+ * producer, a judge and every non-companion kind. A producer handed the number would optimise for
+ * the number; it gets the per-round bar COMPARISON instead, which is the part about its own work.
+ */
+function withGradingBar(prompt: string, context: AgentRunContext): string {
+  const bar = context.gradingBar
+  if (!bar) return prompt
+  return [
+    prompt,
+    '',
+    // The NUMBER and the rope, and nothing else. How the rating and a `blocker` are read against
+    // each other, and the instruction to grade honestly rather than steer the number, are stated
+    // once in the companion system prompt, which rides every one of these dispatches; restating
+    // them here would be the same paragraph twice in one prompt.
+    `The bar for this work is ${bar.threshold.toFixed(2)} on the scale above: at or over it the ` +
+      'work moves on, under it the producer is sent back to revise.',
+    // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
+    // optimises for the grader rather than for the work; a grader that knows it is holding the run
+    // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.
+    bar.roundsRemaining > 0
+      ? `${bar.roundsRemaining} automatic rework round(s) remain after this one.`
+      : 'This is the LAST automatic round: below the bar, the run stops for a person or ' +
+        "proceeds on this work under the run's risk policy. Rate what is actually there.",
+  ].join('\n')
+}
+
+/** Append a kind's closing task instructions ({@link buildBaseUserPrompt}'s `suffix`), if any. */
+function withSuffix(prompt: string, suffix: string | undefined): string {
+  return suffix ? `${prompt}\n\n${suffix}` : prompt
+}
+
+/**
+ * Total budget for the folded context bodies. A panel re-sends this prompt to every participant
+ * on every round, so an unbounded fold multiplies by panel size × rounds; and a preOp's output is
+ * only as bounded as that preOp chose to be. Generous enough for the `pr-reviewer` diff (its own
+ * renderer caps well under this) while keeping a pathological custom kind from filling a context
+ * window with one file.
+ */
+const MAX_INJECTED_CONTEXT_CHARS = 320_000
+
+/**
+ * Fold the backend-prepared context files a preOp produced into the prompt when the caller
+ * has NO filesystem to materialise them onto (every inline caller: the inline executor, the
+ * consensus panel). The container path passes `materialized`, where the same bodies are
+ * written to `.cat-context/` and the agent reads them with tools — folding them here as well
+ * would double the tokens on exactly the kinds whose files are largest.
+ *
+ * Applied at the wrapper level, beside {@link withRevision}, deliberately: `buildBaseUserPrompt`
+ * returns early for a standard phase AND for a kind that supplies its own user prompt, and it
+ * is precisely those self-authoring kinds (`pr-reviewer`, whose preOps inject the diff, the
+ * existing review threads and the standards) whose whole input arrives this way. A fold inside
+ * the generic branch would reach none of them.
+ *
+ * It runs BEFORE the revision wrappers, not after: this is the biggest and most stable block in
+ * the prompt, so putting it ahead of the per-round feedback is what lets a rework round read it
+ * from the provider's prompt cache instead of re-writing it. See {@link userPromptFor}.
+ *
+ * STANDARDS files are deliberately excluded ({@link isStandardsContextFile}). They reach an
+ * inline caller through the SYSTEM prompt instead, where `composeBlockSystemPrompt` folds them at
+ * the kind's {@link StandardsVerbosity} — so an implementer kind gets each standard's condensed
+ * `brief` rather than its full body. Folding them here as well would both duplicate every
+ * standard and silently restore the full bodies, which is the hazard the verbosity tier exists to
+ * prevent. Inline executors therefore pass `standardsDeliveredAsFiles: false`: with no filesystem,
+ * the files were never really delivered.
+ */
+function withInjectedContext(
+  prompt: string,
+  context: AgentRunContext,
+  opts: AgentUserPromptOptions,
+): string {
+  if (opts.materialized) return prompt
+  const files = (context.injectedContextFiles ?? []).filter((f) => !isStandardsContextFile(f.path))
+  if (!files.length) return prompt
+  const lines = [
+    prompt,
+    '',
+    'Context files prepared for this run (their full contents follow — there is no',
+    'checkout to read them from):',
+  ]
+  // Bounded, and the boundary is STATED. A silently shortened body reads exactly like a complete
+  // one, so a reviewer would report on a file whose tail it never saw without ever knowing.
+  let budget = MAX_INJECTED_CONTEXT_CHARS
+  const dropped: string[] = []
+  for (const file of files) {
+    if (file.content.length > budget) {
+      dropped.push(file.path)
+      continue
+    }
+    budget -= file.content.length
+    lines.push('', `--- ${file.path} ---`, file.content)
+  }
+  if (dropped.length) {
+    lines.push(
+      '',
+      `NOT INCLUDED (over the injected-context budget): ${dropped.join(', ')}. You cannot read ` +
+        'these and must not infer their contents; say so rather than treating them as reviewed.',
+    )
+  }
+  return lines.join('\n')
+}
+
+/**
+ * The prompt body, plus the kind's closing instructions carried OUT rather than folded in.
+ *
+ * The split is what lets {@link userPromptFor} apply the suffix outside `withRevision` /
+ * `withInjectedContext`: a suffix appended here would stop being last the moment either wrapper
+ * fires. Only the generic block-context branch produces one — a standard phase owns its whole
+ * template, and a kind supplying its own `userPrompt` replaces the generic prompt outright.
+ */
+interface BaseUserPrompt {
+  prompt: string
+  suffix?: string
 }
 
 function buildBaseUserPrompt(
   context: AgentRunContext,
   registry: AgentKindRegistry,
-  opts: { materialized?: boolean } = {},
-): string {
+  opts: AgentUserPromptOptions = {},
+): BaseUserPrompt {
   // Standard phases get their built-out, templated user prompt.
   const phase = phaseForKind(context.agentKind)
-  if (phase) return renderStandardUserPrompt(phase, context, opts)
+  if (phase) return { prompt: renderStandardUserPrompt(phase, context, registry, opts) }
+  const dispatch = opts.dispatch
 
   // A registered custom kind may supply its own user prompt; otherwise it falls through
   // to the generic block-context prompt below, like any other non-standard-phase kind. Even a
@@ -177,10 +652,19 @@ function buildBaseUserPrompt(
   // initiative-spawned custom kind's standing org methodology frames its role before its own
   // task text — so the preset addition reaches a custom kind however it builds its prompt.
   // Empty on every non-initiative run ⇒ the custom prompt is byte-for-byte unchanged.
-  const registered = registry.userPrompt(context)
+  //
+  // The operation's per-case PARAMETERS ride the same prepend, and this is the emit point that
+  // matters most for them: an org's reusable operation typically runs on that org's OWN kinds,
+  // which are exactly the kinds that author their own user prompt. Miss it and the parameters
+  // vanish for the runs the whole feature exists to serve.
+  const registered = registry.userPrompt(context, dispatch)
   if (registered !== undefined) {
-    const presetSection = initiativePresetSection(context)
-    return presetSection ? `${presetSection.trimStart()}\n\n${registered}` : registered
+    const prepended = [initiativePresetSection(context), customTaskTypeSection(context)]
+      .filter(Boolean)
+      .map((section) => section.trimStart())
+    return {
+      prompt: prepended.length ? `${prepended.join('\n\n')}\n\n${registered}` : registered,
+    }
   }
 
   const { block, pipelineName, priorOutputs, decisions, resolvedDecision } = context
@@ -193,26 +677,26 @@ function buildBaseUserPrompt(
   // frames the agent's role before the task specifics. Empty on every non-initiative run.
   const presetSection = initiativePresetSection(context)
   if (presetSection) lines.push(presetSection)
+  // What system this work belongs to (or that nothing said) — see `ownServiceSection`. Before the
+  // linked context, which it frames.
+  const ownService = ownServiceSection(context)
+  if (ownService) lines.push(ownService)
+  // The operation's per-case parameters, in the same position the standard prompt puts them.
+  const taskParams = customTaskTypeSection(context)
+  if (taskParams) lines.push(taskParams)
   // A companion grades a specific preceding producer; name it explicitly so the
   // model rates the right output rather than guessing among the prior-agent sections.
-  const companionTarget = companionTargetSection(context)
+  const companionTarget = companionTargetSection(context, registry)
   if (companionTarget) lines.push(companionTarget)
   const linked = linkedContextSection(context, opts)
   if (linked) lines.push(linked)
-  const envSection = environmentSection(context)
-  if (envSection) lines.push(envSection)
-  const involvedSection = involvedServicesSection(context)
-  if (involvedSection) lines.push(involvedSection)
-  const approachSection = testApproachSection(context)
-  if (approachSection) lines.push(approachSection)
-  const targetSection = e2eTargetSection(context)
-  if (targetSection) lines.push(targetSection)
-  const testerEnv = testerEnvironmentSection(context)
-  if (testerEnv) lines.push(testerEnv)
-  const testSecrets = testSecretsSection(context)
-  if (testSecrets) lines.push(testSecrets)
-  const mockFrontend = mockFrontendSection(context)
-  if (mockFrontend) lines.push(mockFrontend)
+  // A `spike`'s per-task research criteria + time-box (the create form's spike fields), folded
+  // in after the block description + linked context so the investigation is scoped to them.
+  if (context.agentKind === SPIKE_AGENT_KIND) {
+    const spikeSection = spikeContextSection(context)
+    if (spikeSection) lines.push(spikeSection)
+  }
+  lines.push(...systemUnderTestSections(context, registry))
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')
@@ -222,10 +706,48 @@ function buildBaseUserPrompt(
     lines.push('', 'Work from earlier agents in this pipeline:')
     for (const p of priorOutputs) {
       lines.push(`### ${p.agentKind}`, p.output)
+      // Immediately under the output they qualify, never collected into one list at the end: the
+      // reader has to be able to tell WHICH artifact a finding is against, and a run with two
+      // reviewed producers renders two of these.
+      if (p.openFindings?.length) lines.push(...renderOpenFindings(p.agentKind, p.openFindings))
     }
   }
   lines.push('', 'Produce your contribution. Be concise and concrete.')
-  return lines.join('\n')
+  // A kind's ADDITIVE closing instructions (see `AgentKindDefinition.userPromptSuffix`) — the
+  // shape for a kind that needs everything above (the run's evidence, the prior agents' output)
+  // plus its own task framing. Returned BESIDE the prompt rather than pushed onto `lines`, so
+  // `userPromptFor` can append it after the revision/injected-context wrappers and it genuinely
+  // ends the prompt.
+  const suffix = registry.userPromptSuffix(context, dispatch)
+  return { prompt: lines.join('\n'), ...(suffix ? { suffix } : {}) }
+}
+
+/**
+ * Everything the platform states about the RUNNING SYSTEM a step may be pointed at, in the order a
+ * reader needs it: where the environment is, which peers are up beside it, how this step is meant
+ * to test it, which credentials its shell carries, what the service's own team says about testing
+ * it, and what stands in for a backend that is not there.
+ *
+ * One collaborator rather than eight `const`/`if` pairs inline, because they are one concern and
+ * the run of them is what pushed `buildBaseUserPrompt` past its statement budget. Each section
+ * decides for itself whether it applies (most return `''` for every kind but one), so the order
+ * here is the only thing this owns; empties are dropped rather than pushed, which is what keeps a
+ * prompt that gains no section byte-for-byte unchanged. One of them answers `undefined` rather
+ * than `''` for "does not apply", so the filter narrows as well as drops.
+ */
+function systemUnderTestSections(context: AgentRunContext, registry: AgentKindRegistry): string[] {
+  const sections: (string | undefined)[] = [
+    environmentSection(context, registry),
+    involvedServicesSection(context),
+    testApproachSection(context),
+    e2eTargetSection(context),
+    testerEnvironmentSection(context),
+    testSecretsSection(context),
+    // The service's own standing testing prose, right after the credentials it refers to by key.
+    testingContextSection(context),
+    mockFrontendSection(context),
+  ]
+  return sections.filter((section): section is string => Boolean(section))
 }
 
 /**
@@ -235,9 +757,12 @@ function buildBaseUserPrompt(
  * producer is adjacent, ambiguous when other steps sit in between. Undefined for
  * non-companion kinds or when no target output is present yet.
  */
-function companionTargetSection(context: AgentRunContext): string | undefined {
-  if (!isCompanionKind(context.agentKind)) return undefined
-  const targets = companionTargets(context.agentKind)
+function companionTargetSection(
+  context: AgentRunContext,
+  registry: AgentKindRegistry,
+): string | undefined {
+  const targets = companionTargets(context.agentKind, registry)
+  if (targets.length === 0) return undefined
   for (let i = context.priorOutputs.length - 1; i >= 0; i--) {
     const produced = context.priorOutputs[i]!
     if (targets.includes(produced.agentKind)) {

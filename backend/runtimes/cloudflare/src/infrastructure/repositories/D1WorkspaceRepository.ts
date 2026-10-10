@@ -1,8 +1,14 @@
-import type { ServiceRehome, WorkspaceRepository, WorkspaceVisibility } from '@cat-factory/kernel'
+import type {
+  ServiceRehome,
+  WorkspaceAccessRow,
+  WorkspaceRepository,
+  WorkspaceVisibility,
+} from '@cat-factory/kernel'
 import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
-import type { Workspace } from '@cat-factory/contracts'
+import type { Workspace, WorkspaceAccessMode } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
+import { chunkForIn } from './chunk'
 
 // Cloudflare-only workspace-scoped tables that have no Node/Drizzle analogue (Durable-Object
 // tracking), appended to the shared cascade list for this facade. Kept here — not in the
@@ -27,18 +33,40 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
         .all<WorkspaceRow>()
       return results.map(rowToWorkspace)
     }
-    // A signed-in user sees boards in any account they belong to, plus any legacy
-    // board they personally own (account_id NULL, owner_user_id = them).
-    const placeholders = scope.accountIds.map(() => '?').join(', ')
-    const accountClause = scope.accountIds.length > 0 ? `account_id IN (${placeholders})` : '0'
-    const { results } = await this.db
-      .prepare(
-        `SELECT * FROM workspaces
-          WHERE ${accountClause}
-             OR (account_id IS NULL AND owner_user_id = ?)
-          ORDER BY created_at DESC`,
+    // A signed-in user sees, resolved SQL-side (see WorkspaceVisibility): unrestricted
+    // boards in accounts they belong to, ANY board in accounts they admin (escape hatch),
+    // boards they hold an explicit member row on (ANDed with their account ids so an
+    // orphaned foreign-account row can't resurface), and legacy boards they personally own.
+    const inList = (ids: string[]) => ids.map(() => '?').join(', ')
+    const clauses: string[] = []
+    const binds: string[] = []
+    if (scope.accountIds.length > 0) {
+      clauses.push(`(account_id IN (${inList(scope.accountIds)}) AND access_mode = 'account')`)
+      binds.push(...scope.accountIds)
+    }
+    if (scope.adminAccountIds.length > 0) {
+      clauses.push(`account_id IN (${inList(scope.adminAccountIds)})`)
+      binds.push(...scope.adminAccountIds)
+    }
+    if (scope.accountIds.length > 0) {
+      clauses.push(
+        `(account_id IN (${inList(scope.accountIds)}) AND id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?))`,
       )
-      .bind(...scope.accountIds, scope.ownerUserId)
+      binds.push(...scope.accountIds, scope.userId)
+    }
+    clauses.push('(account_id IS NULL AND owner_user_id = ?)')
+    binds.push(scope.ownerUserId)
+    const { results } = await this.db
+      .prepare(`SELECT * FROM workspaces WHERE ${clauses.join(' OR ')} ORDER BY created_at DESC`)
+      .bind(...binds)
+      .all<WorkspaceRow>()
+    return results.map(rowToWorkspace)
+  }
+
+  async listByAccount(accountId: string): Promise<Workspace[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM workspaces WHERE account_id = ? ORDER BY created_at DESC')
+      .bind(accountId)
       .all<WorkspaceRow>()
     return results.map(rowToWorkspace)
   }
@@ -67,6 +95,49 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       .first<{ account_id: string | null }>()
     // Row absent → undefined (missing); present → the (possibly null) account id.
     return row ? row.account_id : undefined
+  }
+
+  async accountIdsOf(ids: string[]): Promise<Record<string, string | null>> {
+    const found: Record<string, string | null> = {}
+    if (ids.length === 0) return found
+    for (const chunk of chunkForIn([...new Set(ids)])) {
+      const { results } = await this.db
+        .prepare(
+          `SELECT id, account_id FROM workspaces WHERE id IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(...chunk)
+        .all<{ id: string; account_id: string | null }>()
+      for (const row of results) found[row.id] = row.account_id
+    }
+    return found
+  }
+
+  async accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {
+    const row = await this.db
+      .prepare('SELECT account_id, owner_user_id, access_mode FROM workspaces WHERE id = ?')
+      .bind(id)
+      .first<{
+        account_id: string | null
+        owner_user_id: string | null
+        access_mode: string | null
+      }>()
+    if (!row) return undefined
+    return {
+      accountId: row.account_id,
+      ownerUserId: row.owner_user_id,
+      accessMode: row.access_mode === 'restricted' ? 'restricted' : 'account',
+    }
+  }
+
+  async setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void> {
+    await this.db.prepare('UPDATE workspaces SET access_mode = ? WHERE id = ?').bind(mode, id).run()
+  }
+
+  async linkAccount(id: string, accountId: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE workspaces SET account_id = ? WHERE id = ?')
+      .bind(accountId, id)
+      .run()
   }
 
   async create(

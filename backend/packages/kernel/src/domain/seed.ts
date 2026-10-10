@@ -1,10 +1,37 @@
-import { mergeRegisteredPipelines } from './pipeline-registry.js'
-import type { Block, Pipeline } from './types.js'
+import { NANO_BANANA_GENERATOR_ID, PLATFORM_ASSET_STORAGE_SERVICE_ID } from '@cat-factory/contracts'
+import { definePipeline, type PipelineStepSpec } from './define-pipeline.js'
+import type { PipelineRegistry } from './pipeline-registry.js'
+import type { TaskTypeRegistry } from './task-type-registry.js'
+import type { Block, Pipeline, StepGating, StepOptions } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
 // frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks
 // are keyed by (workspace_id, id) every workspace gets its own copy, so reusing
 // these ids across workspaces is safe.
+
+/**
+ * The 3x2 grid the sample services are laid out on.
+ *
+ * A service frame is sized by the SPA's LANE GEOMETRY, not by this file, and the pitch has to
+ * clear a POPULATED frame (~744 x ~601 in flow space) rather than the empty one most of these
+ * start as: any of them becomes populated the moment someone adds a task, and a frame that grows
+ * into its neighbour covers that neighbour's cards. Overlapping frames are not merely untidy,
+ * they eat clicks — a card underneath another frame cannot be pressed at all.
+ *
+ * These were 540 x 500, spacing authored when a frame was a small free canvas, and the swimlanes
+ * outgrew them: the seeded Auth Service (the one service with tasks) ran a fifth of its width
+ * under Core Database, which sat on top of its "needs you" lane. `frames-clear.spec.ts` asserts
+ * the rendered result rather than these numbers, since only the assembled product knows the real
+ * footprint.
+ */
+const SEED_GRID_X = 800
+const SEED_GRID_Y = 660
+const SEED_ORIGIN = { x: 80, y: 80 }
+
+/** Top-left of the sample grid's cell at `col`,`row`. */
+function seedCell(col: number, row: number): { x: number; y: number } {
+  return { x: SEED_ORIGIN.x + col * SEED_GRID_X, y: SEED_ORIGIN.y + row * SEED_GRID_Y }
+}
 
 export function seedBlocks(): Block[] {
   const base = (b: Partial<Block> & Pick<Block, 'id' | 'title' | 'type' | 'position'>): Block => ({
@@ -23,7 +50,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_frontend',
       title: 'Web Frontend',
       type: 'frontend',
-      position: { x: 80, y: 80 },
+      position: seedCell(0, 0),
       description: 'Customer-facing SPA consuming the API gateway.',
       status: 'planned',
     }),
@@ -31,7 +58,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_api',
       title: 'API Gateway',
       type: 'api',
-      position: { x: 620, y: 80 },
+      position: seedCell(1, 0),
       description: 'Single entrypoint; routing, rate limiting, auth checks.',
       status: 'planned',
     }),
@@ -39,7 +66,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_payments',
       title: 'Payments (External)',
       type: 'external',
-      position: { x: 1160, y: 80 },
+      position: seedCell(2, 0),
       description: 'Third-party payment provider integration.',
       status: 'planned',
     }),
@@ -47,7 +74,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_auth',
       title: 'Auth Service',
       type: 'service',
-      position: { x: 80, y: 580 },
+      position: seedCell(0, 1),
       description: 'Issues and validates sessions and access tokens.',
       status: 'ready',
     }),
@@ -55,7 +82,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_db',
       title: 'Core Database',
       type: 'database',
-      position: { x: 620, y: 580 },
+      position: seedCell(1, 1),
       description: 'Primary relational store for users, accounts and orders.',
       status: 'done',
       progress: 1,
@@ -64,7 +91,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_queue',
       title: 'Notification Queue',
       type: 'queue',
-      position: { x: 1160, y: 580 },
+      position: seedCell(2, 1),
       description: 'Async fan-out for emails and push notifications.',
       status: 'planned',
     }),
@@ -120,170 +147,386 @@ export function seedBlocks(): Block[] {
   ]
 }
 
-/**
- * A pipeline step in the readable seed form. A bare kind string is an ENABLED step with no human
- * gate; the object form NAMES the step's human `gate` (approval pause) and/or marks it opt-in
- * (`enabled: false` — present in the preset but disabled by default). This replaces the fragile
- * index-aligned `gates`/`enabled` boolean arrays: a gate is declared BY NAME on its own step, so
- * inserting a step (e.g. a `deployer` before the tester) can never shift a positional flag onto the
- * wrong step. `gate` is intentionally the extension seam — a custom gate can carry its own config
- * here (see the ambient-augmentation note in docs/initiatives/deployer-single-provisioner.md).
- */
-type SeedStep = string | { kind: string; gate?: boolean; enabled?: boolean }
+// ---- The conditional tester pair ----------------------------------------------------------
+//
+// Every build preset verifies through BOTH testers and lets each one decide for itself whether
+// this run is its business: the browser pass runs where the change touches a service declared as
+// a frontend, the API pass where it touches anything else, and a full-stack task (a frontend plus
+// an involved backend service) runs both. See `stepRunConditionSchema` for why this is a separate
+// axis from estimate gating rather than another threshold.
+//
+// This is what retired the `pl_frontend` preset: a UI-testing pipeline was a pipeline only
+// because a `tester-ui` step could not say "not on this run", so the frontend case needed a whole
+// near-duplicate of the build ladder to itself.
+const TESTER_API_STEP: PipelineStepSpec = {
+  kind: 'tester-api',
+  options: { condition: { serviceScope: 'backend' } },
+}
+const TESTER_UI_STEP: PipelineStepSpec = {
+  kind: 'tester-ui',
+  options: { condition: { serviceScope: 'frontend' } },
+}
 
-/**
- * Lower a named-step pipeline spec into the wire {@link Pipeline} (index-aligned
- * `agentKinds`/`gates`/`enabled`). `gates`/`enabled` are emitted ONLY when a step actually declares
- * a human gate / is disabled by default, so a plain all-enabled, gate-less pipeline stays as bare
- * `agentKinds` — its persisted shape is byte-identical to the hand-authored form.
- */
-function definePipeline(spec: {
-  id: string
-  name: string
-  steps: readonly SeedStep[]
-  availability?: Pipeline['availability']
-  labels?: string[]
-  version?: number
-  public?: boolean
-}): Pipeline {
-  const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
-  const gates = norm.map((s) => s.gate === true)
-  const enabled = norm.map((s) => s.enabled !== false)
-  return {
-    id: spec.id,
-    name: spec.name,
-    agentKinds: norm.map((s) => s.kind),
-    ...(gates.some(Boolean) ? { gates } : {}),
-    ...(enabled.some((e) => !e) ? { enabled } : {}),
-    ...(spec.availability ? { availability: spec.availability } : {}),
-    ...(spec.labels ? { labels: spec.labels } : {}),
-    ...(spec.version !== undefined ? { version: spec.version } : {}),
-    ...(spec.public ? { public: spec.public } : {}),
-  } as Pipeline
+/** The same pair, additionally gated on the task estimate (the adaptive rung). */
+function gatedTesterSteps(gating: StepGating): PipelineStepSpec[] {
+  return [
+    { ...(TESTER_API_STEP as { kind: string; options: StepOptions }), gating },
+    { ...(TESTER_UI_STEP as { kind: string; options: StepOptions }), gating },
+  ]
+}
+
+// The built-in pipeline catalog is split across three cohesive builders (delivery, build
+// variants, specialty) purely so no single function exceeds the size budget; `seedPipelines`
+// below composes them in order. Each returns plain `Pipeline[]` and shares the module-level
+// `definePipeline` helper.
+function buildBuildPipelineLadder(): Pipeline[] {
+  return [
+    // ---- The build ladder: three fixed rungs plus one adaptive preset ---------------------
+    //
+    // The catalog collapse (docs/initiatives/pipeline-catalog-collapse.md) replaced seven
+    // near-identical build presets with a deliberate ladder. The axis is HOW MUCH DESIGN a task
+    // gets, because that is the only axis anyone actually chose a build pipeline on:
+    //
+    //   pl_build   (DEFAULT) design → implement → review → verify → guards → merge
+    //   pl_simple            implement → review → verify → guards → merge
+    //   pl_full    (adaptive) sizes the task and switches its own optional steps on
+    //   pl_complex           settles the requirements and researches first, then the full loop
+    //
+    // All three share the same non-negotiable tail — `conflicts → ci → merger` — so no rung can
+    // merge over a conflict or a red build, and each opens exactly one PR that `merger` lands
+    // according to the task's merge preset (automatically, or held for a person).
+    //
+    // ORDER IS LOAD-BEARING: `seedPipelines()[0]` is the positional default a plain "Start"
+    // resolves (see TaskCard's `pipelines.pipelines[0]`), so the default rung must stay first.
+
+    // THE DEFAULT. The everyday programmatic loop: work out the shape of the solution, build it,
+    // review it, verify it, pass the guards, merge. Every step is UNCONDITIONAL, so a run's shape
+    // is known before it starts and is the same every time.
+    //
+    // It includes the `architect` because the design step is what stops the coder from inventing an
+    // approach mid-implementation, and its inline `architect-companion` because a design nobody
+    // challenges is just the first idea — the companion rates it and loops the architect back below
+    // threshold, converging without a human in the loop.
+    //
+    // It deliberately STOPS there. What it omits, and why each is more than the everyday loop
+    // needs: `requirements-review` (an iterative human answer/dismiss/re-review conversation that
+    // parks the run — the right tool for genuinely ambiguous scope, overkill for a task someone
+    // already wrote down), `spec-writer` (mutates the in-repo spec baseline), `researcher`,
+    // `mocker` (authors and commits WireMock mappings), `blueprints` (rewrites the service map),
+    // `code-commenter`, the docs kinds, and any human approval gate. All remain available as
+    // opt-in steps in the builder; they are omitted rather than shipped disabled so the preset's
+    // step list reads as exactly what it does.
+    definePipeline({
+      id: 'pl_build',
+      name: 'Standard build',
+      purpose: 'build',
+      description:
+        'The default: design the solution and challenge the design, implement and review the change, then verify it — the browser pass on a frontend, the API pass behind it — before gating on conflicts + CI and merging. No requirements interview, no human pauses.',
+      // Version 2 appends the terminal `disposer`: a Deployer that stands an environment up now
+      // has to say where it comes down again (see `validatePipelineAuthoring`), and the bump is
+      // what offers an already-seeded workspace the reseed that adopts it. Version 3 splits the
+      // single `tester-api` into the CONDITIONAL tester pair, so one preset covers a frontend, a
+      // backend and a full-stack task (see `TESTER_API_STEP`).
+      version: 3,
+      steps: [
+        'architect',
+        'architect-companion',
+        'coder',
+        'reviewer',
+        'deployer',
+        TESTER_API_STEP,
+        TESTER_UI_STEP,
+        'conflicts',
+        'ci',
+        'merger',
+        'disposer',
+      ],
+    }),
+    // The TRIVIAL rung: the plainest thing that can ship a change. `pl_build` minus the design
+    // phase, for work whose approach is not in question — a copy fix, a version bump, a one-line
+    // guard. Unconditional like `pl_build`, and with no estimator either: a pipeline that cannot
+    // escalate has nothing to consult an estimate for, so paying for one would be pure overhead.
+    //
+    // `deployer` stays because it PROVISIONS the environment `tester-api` reads
+    // (`assertDeployerBeforeConsumer`) and is a no-op on an infraless service — it adds no
+    // complexity a service hasn't already declared.
+    definePipeline({
+      id: 'pl_simple',
+      name: 'Simple build',
+      purpose: 'build',
+      description:
+        'For trivial work whose approach is not in question: implement and review the change, verify it, then gate on conflicts + CI and merge. No design phase, no human pauses, no surprises.',
+      // Version 5 is the catalog collapse: `mocker` dropped, because authoring stub mappings is not
+      // part of the plainest path to a merged change. Version 6 appends the terminal `disposer`;
+      // version 7 splits the tester into the conditional pair.
+      version: 7,
+      steps: [
+        'coder',
+        'reviewer',
+        'deployer',
+        TESTER_API_STEP,
+        TESTER_UI_STEP,
+        'conflicts',
+        'ci',
+        'merger',
+        'disposer',
+      ],
+    }),
+    // The ADAPTIVE rung: the same delivery loop, but it sizes the task up first and switches the
+    // expensive optional steps on only when the work warrants them. Pick this over the fixed rungs
+    // when a service's tasks vary enough in size that ONE fixed shape is wrong for most of them —
+    // it is the rung that picks between the other two per task, rather than per service.
+    //
+    // A `task-estimator` runs first — one cheap inline call — and the optional steps are
+    // ESTIMATE-GATED off it:
+    //
+    //   - `architect` (+ its companion, which cascades) above a complexity bar. This is exactly the
+    //     `pl_simple`-vs-`pl_build` choice, made per task from the estimate instead of once by
+    //     whoever picked the pipeline.
+    //   - the TESTER PAIR above a low complexity/risk bar, so a trivial change isn't charged a
+    //     verification pass its own diff can't justify. Each one additionally carries its service
+    //     condition, so the estimate decides WHETHER to verify and the scope decides HOW.
+    //   - `human-review` above a HIGH risk bar. This is the escalation direction: the default is
+    //     to merge on the preset's thresholds, and a genuinely risky change additionally waits for
+    //     a person on the PR. It replaces the whole `pl_pr_review` preset.
+    //
+    // So a trivial task runs estimator → coder → reviewer → deployer → conflicts → ci → merger,
+    // and a risky one runs the full ladder. `deployer` is unconditional because it PROVISIONS the
+    // environment the tester reads (`assertDeployerBeforeConsumer`) and is a no-op on an infraless
+    // service; `conflicts`/`ci`/`merger` are unconditional because "pass the guards" is not
+    // negotiable on task size.
+    //
+    // Everything the old `pl_full`/`pl_fullstack` carried unconditionally — the requirements
+    // review, spec increment, researcher, mocks, blueprints refresh, comment pass, docs, e2e
+    // tests — remains available as opt-in steps in the builder. They are omitted here rather than
+    // shipped disabled so the default's step list reads as what it does.
+    definePipeline({
+      id: 'pl_full',
+      name: 'Adaptive build',
+      purpose: 'build',
+      description:
+        'Sizes the task up first, then designs it only when it needs designing, implements and reviews, verifies, and gates on conflicts + CI before merging. Optional steps switch themselves on for bigger tasks — a risky change also waits for a human review on the PR.',
+      // Version 6 is the catalog collapse: the preset went from 15 unconditional steps to a gated
+      // 7-to-10 and absorbed pl_quick / pl_dep_update / pl_pr_review / pl_human_review /
+      // pl_fullstack / pl_integrate, which are retired (see buildRetiredPipelines). The bump is what
+      // offers an already-seeded workspace the reseed. Version 7 appends the terminal `disposer`;
+      // version 8 splits the estimate-gated tester into the conditional pair, so the adaptive rung
+      // picks the RIGHT verification pass as well as deciding whether the task earns one.
+      version: 8,
+      steps: [
+        // Sizes the task so every gate below has an estimate to read. Inline + cheap, and
+        // `assertValidGating` requires it to precede any gated step.
+        'task-estimator',
+        {
+          kind: 'architect',
+          gating: { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' },
+        },
+        // Deliberately carries NO gate of its own: it CASCADES with the architect, skipped
+        // automatically whenever its producer was (see `producerWasSkipped`). Repeating the
+        // architect's threshold here would be a second copy to keep in sync, and the two could
+        // only ever disagree by leaving a design unreviewed.
+        'architect-companion',
+        'coder',
+        // The coder's companion — unconditional. A code review is the cheapest defect-catching
+        // step in the run, and gating it is what made pl_quick and pl_simple different pipelines.
+        'reviewer',
+        // Stands a kubernetes/custom/compose env up for the tester; a no-op otherwise. NOT gatable
+        // — it provisions what its consumer reads.
+        'deployer',
+        ...gatedTesterSteps({
+          enabled: true,
+          minComplexity: 0.3,
+          minRisk: 0.3,
+          onMissingEstimate: 'run',
+        }),
+        'conflicts',
+        'ci',
+        // Waits for a real human review on the PR once risk clears the bar — escalation, not a
+        // gate the estimate can cancel (it carries no `gate: true`, so the exclusivity rule is
+        // satisfied). A pass-through until a PR-review provider is wired.
+        {
+          kind: 'human-review',
+          gating: { enabled: true, minRisk: 0.8, onMissingEstimate: 'skip' },
+        },
+        'merger',
+        // Terminal, for the same reason it is terminal in `pl_bug_triage`: every earlier slot
+        // would reclaim the environment while a later step might still want it, and the merge is
+        // the last thing in this chain that can. Unconditional even though its provider (the
+        // tester) is estimate-gated: the Deployer above is unconditional too, so a trivial task
+        // still stands an environment up and still has to give it back.
+        'disposer',
+      ],
+    }),
+    // The THOROUGH rung: `pl_build` with the two phases that come BEFORE anyone designs anything.
+    //
+    //   - `requirements-review` settles the product layer first — the iterative
+    //     review → answer → incorporate → re-review loop that parks the run until the ambiguities
+    //     in the brief are answered. This is the rung for work whose SCOPE is the risky part, not
+    //     its implementation, and it is the one thing no amount of estimate-gating can add to
+    //     `pl_full`: an estimator scores the task as written, and a task written vaguely enough to
+    //     need this conversation is exactly the one it will score wrong.
+    //   - `researcher` then reads around the problem (prior art, the libraries in play, the
+    //     constraints the codebase already commits to) so the architect designs against findings
+    //     rather than against its own first idea.
+    //
+    // Everything after that is `pl_build` unchanged, conditional tester pair included. Expensive
+    // and slow by construction: pick it per task, not per service.
+    definePipeline({
+      id: 'pl_complex',
+      name: 'Complex build',
+      purpose: 'build',
+      description:
+        'For work whose scope is the hard part: settle the requirements with you, research the problem, then design, implement, review, verify, and gate on conflicts + CI before merging.',
+      steps: [
+        // The gate is the review loop's own park/answer/resume, driven by its controller, so it
+        // carries no `gate: true` (that would add a SECOND, redundant human checkpoint after the
+        // conversation the step already held).
+        'requirements-review',
+        'researcher',
+        'architect',
+        'architect-companion',
+        'coder',
+        'reviewer',
+        'deployer',
+        TESTER_API_STEP,
+        TESTER_UI_STEP,
+        'conflicts',
+        'ci',
+        'merger',
+        'disposer',
+      ],
+    }),
+  ]
 }
 
 /**
- * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog
- * plus any pipelines a deployment registered via `registerPipeline` (e.g. a proprietary
- * org package), merged by id.
+ * The UNATTENDED rung, in its own builder purely so {@link buildBuildPipelineLadder} stays inside
+ * the function-size budget. Composed straight after it, so catalog order (and the positional
+ * default `pl_build`) is unchanged.
+ *
+ * This is the rung a run NOBODY IS WATCHING resolves when its task pinned no pipeline: seeded as
+ * `isUnattendedDefault`, which is why it is a built-in rather than something each deployment
+ * assembles. Before it, a headless start naming no pipeline against a task pinning none was simply
+ * refused (`pipeline_required`), so the honest default for that door was "there isn't one".
+ *
+ * Two things make it different from every other rung, and they pull in opposite directions on
+ * purpose:
+ *
+ *   - **No `requirements-review`.** The rung a headless caller lands on by default cannot open a
+ *     conversation: its whole park/answer/re-review loop needs somebody to answer, and ADR 0053
+ *     records that a review still ASKING questions parks under either autonomy posture, because
+ *     inventing a product judgement is the one thing an unattended policy may never do. A caller
+ *     that WANTS the conversation names `pl_complex` and answers it over
+ *     `/api/v1/runs/:runId/decisions` or on the ticket (ADR 0047).
+ *   - **Human checkpoints reached by measured risk.** Dropping the conversation removes the
+ *     platform's chance to ask about SCOPE, so the rung buys the oversight back where the evidence
+ *     is strongest: after the automation has run. A `task-estimator` sizes the task and both human
+ *     doors are ESTIMATE-GATED, so a routine change merges on its policy's thresholds and a risky
+ *     one waits for a person even though nobody was watching it start. That is escalation, not a
+ *     pause the estimate can cancel: neither step carries `gates[i]`.
+ *
+ * `human-test` sits behind a HIGHER bar than `human-review`, because the two asks are not the same
+ * size: a review reads a diff that is already open, while a manual test needs somebody to drive a
+ * running environment. Both fail toward `skip` on a missing estimate, the rule `pl_full` already
+ * applies to `human-review`: an unestimated task must never silently wait forever for a person
+ * nobody told about it.
  */
-export function seedPipelines(): Pipeline[] {
-  const builtins: Pipeline[] = [
-    // `requirements` runs first and reviews the collected requirements; the spec-writer then
-    // applies them as an increment onto the in-repo spec baseline, and only THEN does the architect
-    // design the solution against that written spec (the architect is spec-aware). The requirements
-    // review + the architecture pause for human approval (`gate: true`); the spec is NOT human-gated
-    // — its `spec-companion` rates it and loops the spec-writer back automatically. `blueprints`
-    // refreshes the service map from the new code; a `deployer` stands a kubernetes/custom env up
-    // for the tester (a no-op otherwise); `conflicts`/`ci`/`merger` gate + ship the PR. The two
-    // brainstorm dialogues are opt-in (`enabled: false`). Version bumped for the deployer reseed.
+function buildUnattendedPipelineRung(): Pipeline[] {
+  const HUMAN_DOOR_MISSING_ESTIMATE = 'skip' as const
+  return [
     definePipeline({
-      id: 'pl_full',
-      name: 'Full build',
-      // `code-commenter` runs after the reviewer clears the implementation: it amends the coder's
-      // PR in place with comment-only edits (WHY-not-what, fixes drifted comments, drops noise), so
-      // basic comment hygiene is business-as-usual on every task. `ci` re-runs to prove the
-      // comment-only diff is behaviour-neutral. Version bumped for the code-commenter reseed.
-      version: 3,
+      id: 'pl_unattended',
+      name: 'Unattended delivery',
+      purpose: 'build',
+      description:
+        'The default for a run nobody is watching: sizes the task up, designs it only when it needs designing, implements, reviews and verifies it, then gates on conflicts + CI before merging. No requirements interview — a risky or complex task instead waits for a human test and a human PR review.',
+      unattendedDefault: true,
       steps: [
-        // Opt-in structured-dialogue option exploration before the requirements review.
-        { kind: 'requirements-brainstorm', gate: true, enabled: false },
-        { kind: 'requirements-review', gate: true },
-        'spec-writer',
-        'spec-companion',
-        // Opt-in structured-dialogue approach exploration before the architect.
-        { kind: 'architecture-brainstorm', gate: true, enabled: false },
-        { kind: 'architect', gate: true },
-        'researcher',
+        // Every gate below reads this estimate; `assertValidGating` requires it to come first.
+        'task-estimator',
+        {
+          kind: 'architect',
+          gating: { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' },
+        },
+        // No gate of its own: it CASCADES with the architect (`producerWasSkipped`).
+        'architect-companion',
         'coder',
         'reviewer',
-        'code-commenter',
-        'blueprints',
-        'mocker',
         'deployer',
-        'tester-api',
+        ...gatedTesterSteps({
+          enabled: true,
+          minComplexity: 0.3,
+          minRisk: 0.3,
+          onMissingEstimate: 'run',
+        }),
         'conflicts',
         'ci',
+        // Asked AFTER the guards on purpose: a person driving a build that cannot merge anyway is
+        // the one review round this rung can be sure it wasted.
+        {
+          kind: 'human-test',
+          gating: {
+            enabled: true,
+            minComplexity: 0.8,
+            minRisk: 0.7,
+            onMissingEstimate: HUMAN_DOOR_MISSING_ESTIMATE,
+          },
+        },
+        {
+          kind: 'human-review',
+          gating: {
+            enabled: true,
+            minRisk: 0.6,
+            onMissingEstimate: HUMAN_DOOR_MISSING_ESTIMATE,
+          },
+        },
         'merger',
+        'disposer',
       ],
     }),
-    definePipeline({
-      // The most thorough preset: a complex, full-stack feature run that engages
-      // every valuable agent so no angle is left uncovered. It extends "Full build"
-      // with the up-front researcher, the acceptance-scenario author, the external-
-      // dependency mock builder, the business-logic documenter and the developer
-      // documenter, in addition to the runnable end-to-end (`playwright`) tests:
-      //
-      //   requirements-review → analyse + clarify the collected context (human gate)
-      //   researcher          → investigate prior art, libraries and constraints
-      //   spec-writer         → apply this task's clarified requirements as a spec
-      //                         increment (+ acceptance scenarios) onto the baseline
-      //                         on the work branch BEFORE the design/code
-      //   spec-companion      → challenge acceptance-scenario coverage; loop the
-      //                         spec-writer back below threshold (no human gate)
-      //   architect           → design the solution against the written spec
-      //   architect-companion → challenge the design's quality; loop back below
-      //                         threshold, then raise the human gate on a pass
-      //   mocker        → stand up mocks for the external dependencies
-      //   coder         → implement the feature on the implementation branch
-      //   reviewer      → coder's companion: rate the change immediately, loop back
-      //                   for rework before the map/test tail runs
-      //   code-commenter→ bring the changed code's in-source comments up to standard
-      //                   (why-not-what, fix drift, drop noise) on the same PR
-      //   blueprints    → refresh the in-repo service map from the new code
-      //   business-documenter → capture the domain rules the code now encodes
-      //   tester        → define the unit / integration test strategy
-      //   playwright    → author the runnable end-to-end / acceptance TESTS (from the
-      //                   spec's derived Gherkin)
-      //   documenter    → write the developer-facing documentation
-      //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
-      id: 'pl_fullstack',
-      name: 'Complex fullstack feature',
-      // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Human gates: the
-      // two opt-in brainstorm dialogues, the requirements review, and — after its companion clears
-      // the quality bar — the architecture (on `architect-companion`). A `code-commenter` runs after
-      // the reviewer to keep in-source comments up to standard on the same PR. Version bumped for
-      // the code-commenter reseed.
-      version: 3,
-      steps: [
-        // Opt-in structured-dialogue option exploration.
-        { kind: 'requirements-brainstorm', gate: true, enabled: false },
-        { kind: 'requirements-review', gate: true },
-        'researcher',
-        'spec-writer',
-        'spec-companion',
-        // Opt-in structured-dialogue approach exploration.
-        { kind: 'architecture-brainstorm', gate: true, enabled: false },
-        'architect',
-        { kind: 'architect-companion', gate: true },
-        'mocker',
-        'coder',
-        'reviewer',
-        'code-commenter',
-        'blueprints',
-        'business-documenter',
-        'deployer',
-        'tester-api',
-        'playwright',
-        'documenter',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    }),
+  ]
+}
+
+/**
+ * The delivery presets that are NOT rungs of the ladder: a bug fix and the Ralph loop. Split from
+ * {@link buildBuildPipelineLadder} purely so neither function exceeds the size budget; both are
+ * composed in order by `seedPipelines`, so the catalog order (and therefore the positional
+ * default) is unchanged.
+ */
+function buildOtherDeliveryPipelines(): Pipeline[] {
+  return [
     // A bug-fix preset, front-loaded with the investigate → triage pair: `bug-investigator` reads
     // the codebase from the raw report (read-only) and emits an enriched report; `clarity-review`
     // triages it for fixability (the ONLY human gate — the iterative answer → incorporate → re-review
-    // loop); `spec-writer` folds the clarified brief into the spec; architect → coder → reviewer is
-    // the core; conflicts → ci → merger is the standard tail.
+    // loop); `spec-writer` folds the clarified brief into the spec; architect → `repro-test` → coder
+    // → reviewer is the core; conflicts → ci → merger is the standard tail.
+    //
+    // `repro-test` sits between the design and the fix, exactly where `pl_bug_triage` puts it: it
+    // writes a FAILING test onto the shared work branch that the coder then resumes. It belongs in
+    // a bugfix preset on its own merits (produce a red test before the fix), and it is also the
+    // declaration seam the reproduction proof reads — without it the coder's PR carries no evidence
+    // that the defect ever manifested, which is the one claim a bugfix PR is really making. The
+    // step never blocks: an agent that cannot reproduce the bug concedes structurally, and the
+    // concede is published on the PR with its reason rather than looking like nobody tried.
     definePipeline({
       id: 'pl_bugfix',
       name: 'Triage & fix bug',
+      // Not `build`: its front half has no input on a task that reports no defect, so the
+      // classifier keeps it out of the `feature` picker (`pipelineAllowedForTaskType`) while a
+      // `bug` task still gets the whole build ladder beside it.
+      purpose: 'bugfix',
+      // Bumped for the reseed offer that adopts the `repro-test` step into existing workspaces,
+      // then again for the `bugfix` purpose classifier (a board that has not reseeded goes on
+      // offering it to feature tasks, since every gate reads the stored row).
+      version: 5,
+      description:
+        'Investigate a bug report against the codebase, triage it for fixability with you, write a failing reproduction test, then fix, review, and ship the PR.',
       steps: [
         'bug-investigator',
         { kind: 'clarity-review', gate: true },
         'spec-writer',
         'architect',
+        'repro-test',
         'coder',
         'reviewer',
         'conflicts',
@@ -291,90 +534,104 @@ export function seedPipelines(): Pipeline[] {
         'merger',
       ],
     }),
-    {
-      id: 'pl_quick',
-      name: 'Quick implement',
-      // A `deployer` runs before the tester so a kubernetes/custom service gets its ephemeral env
-      // stood up (a no-op for docker-compose/infraless/frontend); bump the version for the reseed
-      // offer. Same pattern across every tester/human-test built-in below.
-      version: 2,
-      agentKinds: [
-        'coder',
-        'blueprints',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
-    // The leanest end-to-end build: implement → review → test, then the standard
-    // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
-    // its `reviewer` companion rates it immediately and loops it back for automatic
-    // rework below threshold, `mocker` stands up the external-dependency mocks the
-    // `tester` needs to run the suite, and `conflicts` / `ci` / `merger` gate and
-    // ship the PR — no design, spec or docs phases.
-    {
-      id: 'pl_simple',
-      name: 'Simple',
-      version: 2,
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
-    {
-      id: 'pl_integrate',
-      name: 'Integrate & ship',
-      version: 2,
-      agentKinds: ['integrator', 'mocker', 'deployer', 'tester-api', 'documenter'],
-    },
-    // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
-    // ephemeral environment and PARKS for a person to validate the change in a live URL before
-    // the standard mergeability / CI / merge tail. From the gate the human can request a fix
-    // (the Tester's `fixer`), pull main into the branch (the `conflict-resolver` on a conflict),
-    // or destroy/recreate the env. Opt-in — it requires a human present and (ideally) an
-    // ephemeral-environment provider, so it is NOT folded into the always-on default pipelines.
-    {
-      id: 'pl_human_review',
-      name: 'Build & human-test',
-      // The `deployer` stands the ephemeral env up before the human-test gate reads it (the gate no
-      // longer provisions its own — the deployer is the single provisioner; the gate loops back here
-      // to rebuild on a fix/recreate).
-      version: 2,
-      agentKinds: ['coder', 'reviewer', 'deployer', 'human-test', 'conflicts', 'ci', 'merger'],
-    },
-    // A human-code-review build: the full implement → review → map → test tail, then a
-    // `human-review` gate that watches the PR for a human reviewer on GitHub before `merger`
-    // ships it. The gate advances once the PR meets GitHub's required approvals with no
-    // unresolved review threads; otherwise it loops the `fixer` to address the reviewer's
-    // comments (after a grace period when not yet approved) and waits indefinitely for the
-    // human. Opt-in — it requires a real reviewer (and a wired PR-review provider), so it is
-    // NOT folded into the always-on default pipelines; it is a pass-through when unwired.
-    {
-      id: 'pl_pr_review',
-      name: 'Build & PR review',
-      version: 2,
-      agentKinds: [
+    // The TEST-VERIFIED bug fix: `pl_bugfix`'s investigate → triage → reproduce → fix spine, with
+    // the verification moved OFF the ephemeral environment and into the repository. It is the
+    // preset for a deployment whose preview environments are slow, costly or unrepresentative
+    // enough that gating a fix on an agent probing one buys less than a test that ships with it,
+    // and it is the DEFAULT a marked bug-fishing finding spawns onto
+    // (`BugFishingController.resolveDefaultFixPipelineId`), because a defect nobody reported comes
+    // with no human reproduction steps and a regression test is the whole deliverable.
+    //
+    // Two decisions make it what it is, and both are about what the environment is FOR:
+    //
+    //   - `mocker` then `integration-test` are the verification. The mock step stands the service's
+    //     external dependencies up as stubs the repository owns; the integration step commits the
+    //     tests that drive the fix through the seam a caller uses, against those stubs, and states
+    //     what it could NOT cover. Neither is handed environment coordinates, so the tests cannot
+    //     quietly come to depend on a live URL. The `ci` gate below re-runs them for real, which is
+    //     what makes them a check rather than a claim.
+    //   - `deployer` then `disposer`, with NOTHING between them, is a LAUNCH CHECK. The deployer
+    //     provisions the task's pull-request branch and settles on a reachability verdict, so a
+    //     service that no longer starts, or starts unreachable, fails here; a service that stands
+    //     nothing up (`infraless`, or `docker-compose` with no handler) records a clean no-op. That
+    //     verdict is the only thing this preset asks an environment for, which is why the reclaim
+    //     is adjacent rather than terminal: every other preset keeps the environment alive to the
+    //     end because a later step may still read it, and here nothing does, so holding it through
+    //     the merge tail would bill for a URL no step is going to open.
+    //
+    // Adding a tester (or any other env consumer) between the two turns it into a different
+    // pipeline: the launch check becomes a provisioning step something reads, and the fix is
+    // established by an agent probing a live environment again, which is how every rung of the
+    // build ladder already verifies. Anyone who wants that has the builder.
+    definePipeline({
+      id: 'pl_bugfix_tested',
+      name: 'Fix bug, verified by tests',
+      purpose: 'bugfix',
+      version: 1,
+      description:
+        'Investigate a bug report, triage it for fixability with you, write a failing reproduction test, then fix it and leave behind the mocks and integration tests that prove the fix. The ephemeral environment is stood up only to confirm the service still launches, never to test through, and is reclaimed as soon as it has answered.',
+      steps: [
+        'bug-investigator',
+        { kind: 'clarity-review', gate: true },
+        'spec-writer',
+        'architect',
+        'repro-test',
         'coder',
         'reviewer',
-        'blueprints',
         'mocker',
+        'integration-test',
         'deployer',
-        'tester-api',
+        'disposer',
         'conflicts',
         'ci',
-        'human-review',
         'merger',
       ],
+    }),
+    // The BUG-FISHING EXPEDITION: a read-only, multi-angle hunt for latent defects. One step,
+    // dispatched once per ANGLE by the engine's phase loop, each pass reading the same codebase
+    // with a different question (control flow, failure handling, boundaries, concurrency,
+    // lifecycle, contracts, footguns, requirements conformance). Nothing is written and no PR is
+    // opened: the deliverable is the catch, and each finding a human MARKS spawns its own
+    // bug-fix task on the workspace's configured fix pipeline.
+    //
+    // No tail at all — not even `conflicts`/`ci`, which would gate a PR this pipeline never
+    // opens. The run reaches `done` through the engine's no-PR completion path once the human
+    // finishes triaging.
+    definePipeline({
+      id: 'pl_bug_fishing',
+      name: 'Bug fishing expedition',
+      // `research`, beside the spike and the environment analysis: a read-only investigation whose
+      // deliverable is findings. Not `bugfix`, which names a preset built around a DEFECT REPORT to
+      // triage and reproduce — an expedition has no report and is looking for the ones nobody has
+      // filed. `pipelineAllowedForTaskType` narrows a `bug-fishing` task to this purpose.
+      purpose: 'research',
+      version: 1,
+      description:
+        'Systematically hunt an existing codebase for genuine defects, logic gaps, footguns and unhandled edge cases — one pass per angle — then spawn a bug-fix task for each finding you mark.',
+      steps: ['bug-fisher'],
+    }),
+    // The "Ralph loop": a single persistent, retry-until-done coding step. Each iteration is
+    // a fresh-context container run that works the task spec, after which the harness runs the
+    // task's configured programmatic validation command (exit 0 = done) and the engine loops
+    // the iteration until it passes or the per-task budget is spent — then the standard
+    // conflicts / CI / merge tail ships the validated PR. The completion criterion and
+    // iteration budget are per-task agent config on the `ralph` step (no design/spec phases;
+    // the task description is the spec, and prior iterations' validation output is threaded
+    // forward as feedback). See backend/docs/ralph-loop.md.
+    {
+      id: 'pl_ralph',
+      name: 'Ralph loop',
+      purpose: 'build',
+      version: 3,
+      description:
+        'A single persistent coding step that retries against your validation command until it passes, then gates and ships the PR.',
+      agentKinds: ['ralph', 'conflicts', 'ci', 'merger'],
     },
+  ]
+}
+
+function buildBuildVariantPipelines(): Pipeline[] {
+  return [
     // A UI-focused build: implement → review → mock → the UI tester drives a browser through
     // the new screens (capturing a screenshot of each distinct view), then a
     // `visual-confirmation` gate PARKS for a person to review those screenshots against the
@@ -393,8 +650,14 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_visual',
       name: 'Build & visual confirmation',
+      purpose: 'build',
+      description:
+        'Implement and UI-test, then pause for a person to compare the captured screenshots against the reference designs before gating and merging.',
       labels: ['experimental'],
-      version: 2,
+      // Version 5 appends the terminal `disposer`. It lands AFTER the human visual-confirmation
+      // gate for the reason that gate exists: a person is looking at the live environment, so
+      // reclaiming it before they have finished would take the thing under review away.
+      version: 5,
       agentKinds: [
         'coder',
         'reviewer',
@@ -405,81 +668,7 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-      ],
-    },
-    // A self-contained FRONTEND build + UI-test pipeline: implement → review → mock →
-    // `tester-ui` drives a real browser against the frontend the platform stood up for it.
-    // Unlike `pl_visual` (a human `visual-confirmation` gate over uploaded reference designs),
-    // this is the fully-automated, self-contained flow slice 3 wired: for a `type: 'frontend'`
-    // frame the engine resolves the frame's `frontendConfig` + backend bindings, and the `ui`
-    // container builds the app from its branch, injects the resolved backend URLs (a bound
-    // service's live ephemeral env, else WireMock), stands WireMock up for every OTHER upstream
-    // from the frontend repo's `mocks/` mappings, serves the built app, and runs `tester-ui`
-    // against the two together — no docker-compose, no DinD. `mocker` runs first so those
-    // WireMock mappings exist (it is frontend-aware: it authors them under `mocks/mappings`).
-    // `conflicts` / `ci` / `merger` gate and ship the PR like every other build pipeline.
-    //
-    // EXPERIMENTAL (labelled as such): one deploy-time step remains before this is fully
-    // end-to-end. `image: 'ui'` per-step routing is not wired yet — a run's first step fixes the
-    // container image (see slice 3's `Dockerfile.ui` note), so `tester-ui` only gets the frontend
-    // toolchain when the whole run uses the `ui` image. (Live-service env keying landed in slice
-    // 4b: a bound service's ephemeral env is now recorded under the service FRAME the binding
-    // names, so a live-service binding resolves to its real URL instead of WireMock; a MOCK-ONLY
-    // frontend also runs fully self-contained.) The `experimental` label keeps the pipeline
-    // discoverable but clearly flagged until the `ui`-image routing lands.
-    {
-      id: 'pl_frontend',
-      name: 'Frontend build & UI test',
-      labels: ['experimental'],
-      version: 2,
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'mocker',
-        'deployer',
-        'tester-ui',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
-    // Recurring-pipeline presets. "Dependency updates" is a plain implement →
-    // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
-    // a special `tracker` step (files a GitHub issue / Jira ticket from the
-    // analysis) before implementation. Both are picked when creating a recurring
-    // pipeline on a service.
-    {
-      id: 'pl_dep_update',
-      name: 'Dependency updates',
-      version: 2,
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'blueprints',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
-    {
-      id: 'pl_tech_debt',
-      name: 'Tech debt',
-      version: 2,
-      agentKinds: [
-        'analysis',
-        'tracker',
-        'coder',
-        'reviewer',
-        'blueprints',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
+        'disposer',
       ],
     },
     definePipeline({
@@ -506,10 +695,18 @@ export function seedPipelines(): Pipeline[] {
       // investigator auto-advances and the conflicts/ci/merger tail self-drives.
       id: 'pl_bug_triage',
       name: 'Bug triage (recurring)',
+      // The recurring twin of `pl_bugfix`, so it carries the same classifier. It never reaches a
+      // task picker (`availability: 'recurring'`), but the builder's saved-pipeline library
+      // narrows by purpose too, and the two belong side by side there.
+      purpose: 'bugfix',
+      description:
+        'A recurring run that pulls one open issue from your tracker board, investigates and clarifies it, then fixes, tests, and ships the PR, reclaiming the environment it stood up.',
       availability: 'recurring',
       // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Only
-      // `clarity-review` is a human gate; version bumped for the reseed offer.
-      version: 2,
+      // `clarity-review` is a human gate; version bumped for the reseed offer, then again for the
+      // pipeline-description reseed, then again for the purpose classifier reseed, then again for
+      // the terminal `disposer`, then again for the `bugfix` purpose.
+      version: 6,
       steps: [
         'bug-intake',
         'bug-investigator',
@@ -523,31 +720,94 @@ export function seedPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
+        // Closes the run's own teardown proof, and this preset had it first because nobody is
+        // watching a scheduled run: a recurring triage fires on a cadence into an empty room, so
+        // leaving the environment to the 2-minute `expires_at` sweep compounds the cost once per
+        // fire and publishes "still live" as the PR's third lifecycle leg. Every deploying preset
+        // now ends this way, because a Deployer with nowhere to come down again is the shape
+        // `validatePipelineAuthoring` refuses.
+        //
+        // TERMINAL, after `merger`, for the same reason the deferred plan recommended it: every
+        // earlier slot would reclaim the environment while a later step might still want it, and
+        // the merge is the last thing in this chain that can. Safe there because the merger's
+        // resolver owns the block's terminal status (`ownsTerminalStatus`) independently of its
+        // position, so a step after it neither delays nor overwrites `done`, and because the
+        // disposer NEVER fails a run: the work has shipped by the time it runs, so an
+        // unreclaimed environment is a recorded warning and the TTL sweep is still the backstop.
+        'disposer',
       ],
     }),
-    // A blueprint-only pipeline, run after a bootstrap to create the initial
-    // service map (and populate the board) from the freshly bootstrapped repo.
-    { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
+  ]
+}
+
+function buildSpecialtyPipelines(): Pipeline[] {
+  return [
+    // The PR deep-review pipeline (the DEFAULT for a `review` task): a single read-only
+    // `pr-reviewer` step that slices an open PR's diff into cohesive chunks, reviews each,
+    // and returns prioritized findings. No code is written and no PR is opened, so there is
+    // no merge tail — the run terminates cleanly via the no-PR terminal path in
+    // `RunStateMachine.finalizeBlock`. See backend/docs/adr/0023-pr-deep-review.md.
+    {
+      id: 'pl_review',
+      name: 'Review a pull request',
+      purpose: 'review',
+      // Version bumped for the large-PR / chunked-review description reseed.
+      version: 4,
+      description:
+        'A read-only deep review of an open pull request that returns prioritized findings — no code is written and no PR is opened. Built for large PRs: it slices the diff into cohesive chunks and reviews each one, so it can work through a big change over a longer run rather than choking on it in a single pass.',
+      agentKinds: ['pr-reviewer'],
+    },
+    // The DEFAULT for a `resolve-conflicts` task: the `conflicts` gate alone, run against the pull
+    // request the task attached at creation. A PR that already merges cleanly passes straight
+    // through with nothing pushed; a conflicted one loops the `conflict-resolver` onto its own head
+    // branch until the gate re-probes clean, or fails the run once the attempt budget is spent. No
+    // merge tail, because the PR belongs to whoever opened it: the run ends `done` and leaves it
+    // open (see `taskTypeAttachesPullRequest`).
+    {
+      id: 'pl_resolve_conflicts',
+      name: 'Resolve pull request conflicts',
+      purpose: 'maintenance',
+      // A schedule fires on a fresh recurring block that has attached no pull request, so the gate
+      // would pass on "no open PR" every time.
+      availability: 'one-off',
+      version: 1,
+      description:
+        'Bring an existing pull request back to mergeable by resolving its conflicts with the base branch on the pull request’s own branch. Opens no new pull request and merges nothing.',
+      agentKinds: ['conflicts'],
+    },
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
-      // engine's runnable guard). The INTERVIEWER interviews the human on goals /
+      // engine's runnable guard). The ANALYST reads the repo FIRST and writes a
+      // codebase analysis (including the open questions only a human can settle); the
+      // INTERVIEWER — grounded in that analysis — then interviews the human on goals /
       // constraints (an inline park/answer/resume gate driven by its own controller,
-      // NOT a `gates[]` human gate — hence `false` at its index); the ANALYST reads
-      // the repo and writes a codebase analysis; the PLANNER — grounded in both —
-      // emits the multi-phase plan as structured output; the HUMAN GATE after it
-      // (index 2) holds the run until the plan is approved; the committer then persists
-      // the plan (the `initiatives` entity + the in-repo tracker under
+      // NOT a `gates[]` human gate — hence `false` at its index); the PLANNER —
+      // grounded in both — emits the multi-phase plan as structured output; the HUMAN
+      // GATE after it (index 2) holds the run until the plan is approved; the committer
+      // then persists the plan (the `initiatives` entity + the in-repo tracker under
       // `docs/initiatives/<slug>/`) and arms the execution loop.
+      //
+      // ANALYST-BEFORE-INTERVIEWER is load-bearing, not cosmetic. The interviewer is an
+      // INLINE kind with no checkout, so an interviewer that runs first can only ask the
+      // stakeholder what the repository would have told it — which is exactly what it did,
+      // interrogating humans about their own code instead of reading it. Ordering the
+      // read-only exploration first is what lets the interview spend its rounds on intent,
+      // priorities and tolerances, the facts no amount of exploration can recover.
       id: 'pl_initiative',
       name: 'Plan initiative',
+      purpose: 'planning',
+      description:
+        'Explore the codebase, interview you on what the code cannot answer, and draft a multi-phase plan for approval before committing it.',
       // Slice 2 added the interviewer + analyst in front of the planner; version bumped for the
       // reseed offer. The interviewer parks via its own controller (not a `gate`); the only human
-      // gate is on the planner's output, before the committer persists it.
-      version: 2,
+      // gate is on the planner's output, before the committer persists it. Bumped again for the
+      // pipeline-description reseed, then again for the purpose classifier reseed, then again for
+      // the analyst-before-interviewer reorder (which also rewrote the description).
+      version: 5,
       steps: [
-        'initiative-interviewer',
         'initiative-analyst',
+        'initiative-interviewer',
         { kind: 'initiative-planner', gate: true },
         'initiative-committer',
       ],
@@ -562,29 +822,68 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_initiative_docs',
       name: 'Plan documentation refresh',
+      purpose: 'planning',
+      version: 3,
+      description:
+        'Audit the codebase for documentation gaps and draft a phased documentation-refresh plan — no interview, runs unattended.',
       agentKinds: ['initiative-analyst', 'initiative-planner', 'initiative-committer'],
     },
-    // A spec-only pipeline, to (re)generate a service's unified in-repo specification
-    // (and its Gherkin acceptance scenarios) independently.
-    { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
-    // An analyst-only pipeline: the opt-in `environment-analyst` clones a service's repo
-    // read-only and drafts a declarative Docker Compose stack recipe (setup steps,
-    // prerequisites, health gate) as a NON-BINDING recommendation. The setup wizard runs it
-    // against a service frame and merges the draft over the deterministic detection; nothing is
-    // applied until the human confirms. See docs/initiatives/stack-recipes-and-shared-stacks.md.
-    {
-      id: 'pl_environment_analysis',
-      name: 'Analyze environment',
-      agentKinds: ['environment-analyst'],
-    },
+    definePipeline({
+      // The SPIKE pipeline — a timeboxed research/investigation task that produces a findings
+      // document, delivered as a PULL REQUEST (the default). It is the type-default a
+      // `taskType: 'spike'` task is pinned to at creation ({@link defaultPipelineIdForTaskType});
+      // the full-build `pl_full` (the positional default) is wrong for a research task. A
+      // `requirements-review` gate leads (off by default — a spike's criteria are usually clear,
+      // and the gate is a pass-through when unwired), then the read-only `spike` explore agent
+      // investigates + returns structured findings, whose backend post-op commits
+      // `docs/research/<slug>.md` to a work branch and opens a PR (it sees a merge tail via
+      // `RepoOpContext.opensPr`). The `conflicts → ci → human-review → merger` tail then reviews
+      // (the human-review gate + fixer react to PR review comments, a pass-through until a
+      // PR-review provider is wired) and merges it — so protected base branches are respected and
+      // the findings land through review, not a force-push. Use `pl_spike_direct` for the fast,
+      // no-PR path on an unprotected repo.
+      id: 'pl_spike',
+      name: 'Run a spike',
+      purpose: 'research',
+      version: 3,
+      description:
+        'A timeboxed read-only investigation that answers a research question and delivers a findings document as a pull request.',
+      steps: [
+        { kind: 'requirements-review', gate: true, enabled: false },
+        'spike',
+        'conflicts',
+        'ci',
+        'human-review',
+        'merger',
+      ],
+    }),
+    definePipeline({
+      // The DIRECT spike pipeline — the fast, no-PR path: the read-only `spike` explore agent,
+      // whose post-op commits the findings `docs/research/<slug>.md` STRAIGHT onto the base
+      // branch (best-effort — see `spikePostOp`) with no review/merge tail. Since it has no
+      // `merger`, `RepoOpContext.opensPr` is false and the run reaches `done` via the engine's
+      // no-PR completion path (see `RunStateMachine.finalizeBlock`). Opt-in for unprotected repos
+      // / throwaway research where the PR round-trip of `pl_spike` isn't wanted.
+      id: 'pl_spike_direct',
+      name: 'Run a spike (direct commit)',
+      purpose: 'research',
+      version: 3,
+      description:
+        'A timeboxed read-only investigation that commits its findings document straight to the base branch — no PR or review tail.',
+      steps: [{ kind: 'requirements-review', gate: true, enabled: false }, 'spike'],
+    }),
     // The first PUBLIC-API pipeline: a single inline `initiative-breakdown` step that
     // decomposes an initiative brief into a structured plan. `public: true` exposes it to
-    // external callers via `POST /api/v1/initiatives`; being inline (no container / no repo)
+    // external callers via `POST /api/v1/jobs`; being inline (no container / no repo)
     // it runs headlessly and persists its result to the DB, never touching GitHub. The kind
     // itself is registered in @cat-factory/agents (like every other kind referenced here).
     {
       id: 'pl_initiative_breakdown',
       name: 'Break down initiative',
+      purpose: 'planning',
+      version: 3,
+      description:
+        'Decompose an initiative brief into a structured plan headlessly (inline, no repo) — the first pipeline exposed to the public API.',
       agentKinds: ['initiative-breakdown'],
       public: true,
     },
@@ -614,11 +913,15 @@ export function seedPipelines(): Pipeline[] {
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as a code pipeline
       id: 'pl_document',
       name: 'Author a document',
+      purpose: 'document',
+      description:
+        'Turn a brief and its linked context into a polished in-repo Markdown document — research, outline, interview, write, review, then gate and ship the PR.',
       // Slice WS5 inserted the interactive `doc-interviewer` after the outliner and replaced the
       // outline's binary human gate with its iterative loop; version bumped for the reseed offer. The
       // interviewer parks via its OWN controller (not a `gate`), `doc-quality` is a polling gate
       // (auto), so the only human `gate` is the converged review (`doc-reviewer`, after its loop).
-      version: 3,
+      // Bumped again for the pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 5,
       steps: [
         'doc-researcher',
         'doc-outliner',
@@ -639,7 +942,10 @@ export function seedPipelines(): Pipeline[] {
       // just without the research / outline / finalize stages and their human gates.
       id: 'pl_document_quick',
       name: 'Quick document',
-      version: 2,
+      purpose: 'document',
+      description:
+        'A lean document build for a small or low-stakes doc: draft, auto-review, the structural quality gate, then gate on conflicts + CI and merge.',
+      version: 4,
       agentKinds: ['doc-writer', 'doc-reviewer', 'doc-quality', 'conflicts', 'ci', 'merger'],
     },
     // The Documentation-refresh pilot's two lean spawn pipelines (initiative-presets slice 7).
@@ -648,14 +954,25 @@ export function seedPipelines(): Pipeline[] {
     // docs-refresh preset (slice 8) spawns tasks onto these; they are also pickable standalone.
     // (Diagrams + READMEs reuse `doc-writer` / `pl_document_quick` — a Mermaid `.md` is just a
     // document a writer produces — so only the in-place comment annotator gets a new kind/pipeline.)
-    {
+    definePipeline({
       // Add/clarify why-not-what in-source comments with NO behaviour change: `code-commenter`
       // edits only comments and (with no prior PR on a standalone run) opens one; the `ci` step is
       // load-bearing here — it proves the diff is behaviour-neutral before `merger` ships it.
+      //
+      // `internal`: it is not a pipeline anyone picks, it is the chain the documentation-refresh
+      // preset SPAWNS its comment tasks onto (`CODE_COMMENTS_PIPELINE_ID`). Retiring it outright
+      // would take that doc type down with it; leaving it in the catalog offers a build pipeline
+      // whose whole scope is "edit comments", which is a step in the builder, not a preset.
       id: 'pl_code_comments',
       name: 'Improve code comments',
-      agentKinds: ['code-commenter', 'conflicts', 'ci', 'merger'],
-    },
+      purpose: 'build',
+      // Version 4 withdraws it from every user-facing surface (`internal`).
+      version: 4,
+      internal: true,
+      description:
+        'Add or clarify why-not-what in-source comments with no behaviour change, prove the diff is behaviour-neutral on CI, then merge.',
+      steps: ['code-commenter', 'conflicts', 'ci', 'merger'],
+    }),
     {
       // Capture the service's business rules / domain constraints as in-repo docs: the reverse-
       // documentation `business-documenter` reads the implementation, commits the docs and opens
@@ -663,8 +980,217 @@ export function seedPipelines(): Pipeline[] {
       // documenter into a full build pipeline when only the domain-rules docs are wanted.
       id: 'pl_business_docs',
       name: 'Document business rules',
+      purpose: 'document',
+      version: 3,
+      description:
+        'Read the implementation and capture the service business rules / domain constraints as in-repo docs, then gate on conflicts + CI and ship the PR.',
       agentKinds: ['business-documenter', 'conflicts', 'ci', 'merger'],
     },
+  ]
+}
+
+/**
+ * The MEDIA preset, in its own builder rather than among the specialty pipelines.
+ *
+ * Not only for the size ratchet, though that is what forced the split: it is the ONE built-in
+ * whose step ships a `stepOptions` selection, so it is the one entry a reader looking for "how
+ * does a preset configure a step" should find on its own rather than by scrolling a builder full
+ * of step LISTS.
+ */
+function buildMediaPipelines(): Pipeline[] {
+  return [
+    // The Media pipeline (the DEFAULT for a `media` task): ONE `media-generator` step whose
+    // deliverable is generated binary assets stored through an asset-storage service. No merge
+    // tail, because nothing here writes to the repository: the run terminates through the
+    // no-PR terminal path, exactly as `pl_review` does.
+    //
+    // The step SHIPS a selection rather than leaving it blank, and that is what makes the task
+    // type usable on a fresh board: `assertValidBinaryOutputSteps` refuses a binary-output step
+    // with no storage service at pipeline SAVE and at run start, so an unconfigured preset would
+    // be one nobody could start until they had opened the builder. It points at the platform's
+    // own asset storage, which every deployment has once content storage is configured (the
+    // local one defaults it to the filesystem).
+    //
+    // BOTH HALVES are shipped now: the storage the artifacts go to, and `nano-banana`, the one
+    // generative integration the platform registers (`@cat-factory/binary-generators`, installed
+    // by every facade's default registry). Without it the step had a place to put pictures and no
+    // API to make them with, so the agent fell back to whatever its own model could draw. The
+    // selection is what makes the preset name an id, which is also its one sharp edge: a
+    // deployment that INJECTS a `binaryGeneratorRegistry` of its own replaces the shipped set
+    // rather than adding to it, and this preset's runs are then refused at admission
+    // (`binary_output_generator_invalid`) until it starts from `binaryGeneratorRegistryWithBuiltins()`
+    // or edits the step. A loud refusal naming the id beats a run that dispatches and generates
+    // nothing.
+    //
+    // `comparison` is on by default with two candidates from each producer, because generating
+    // one picture and keeping it is the case that did not need a pipeline: the reason to run
+    // several image APIs at once is to look at what came back and keep what is good.
+    // `multiSelect` is what lets a person keep more than one of them, each stored under its own
+    // id. `perGenerator: 2` is also what keeps the preset SAVEABLE with no generative
+    // integration selected at all (`assertComparableCandidates` needs either two producers or
+    // more than one candidate each), so the comparison still happens on a deployment whose
+    // agent generates through its own model.
+    //
+    // `modalities` is deliberately UNSET. It is a statement about the WORK, and this preset
+    // covers every media task a board has; a step that must deliver a 3D model or a sound says
+    // so in the builder, and admission then holds the selected integrations to it.
+    definePipeline({
+      id: 'pl_media',
+      name: 'Generate media',
+      purpose: 'media',
+      // `version: 1` against the copies seeded before this preset selected an integration, which
+      // carry no version at all and read as 0: those workspaces are offered the reseed that adds
+      // the selection, rather than keeping a step that generates through nothing.
+      version: 1,
+      description:
+        'Generate images, 3D models or other binary assets through the generative integrations you select, compare what each one produced, and keep the ones you want.',
+      steps: [
+        {
+          kind: 'media-generator',
+          options: {
+            binaryOutput: {
+              storageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID,
+              generatorIds: [NANO_BANANA_GENERATOR_ID],
+              comparison: { perGenerator: 2, multiSelect: true },
+            },
+          },
+        },
+      ],
+    }),
+  ]
+}
+
+/**
+ * Built-in pipelines WITHDRAWN from the catalog: a pipeline that is no longer relevant (superseded
+ * by a better preset, or built on a flow that no longer exists) is deleted from the builders above
+ * and named HERE instead. The tombstone is what makes the removal reach a workspace that was
+ * already seeded with it: `PipelineService.remove` accepts a built-in named here (and only one
+ * named here), and the SPA's pipeline-health advisory offers it as a "retired — remove it" row.
+ *
+ * A tombstone is REQUIRED because absence from the catalog cannot mean retirement. `seedPipelines`
+ * takes a {@link PipelineRegistry}, so the live catalog is a different set depending on whether a
+ * deployment's own pipeline package is wired — treating "not in the catalog" as "retired" would
+ * offer to delete a deployment's pipelines every time its registry was unwired. Retirement is
+ * therefore only ever a POSITIVE assertion.
+ *
+ * To retire one, delete its definition from the builder above and add its id here with a comment
+ * saying why; point `replacedBy` at the preset that supersedes it when one does, so the advisory can
+ * name the replacement. A deployment retires its OWN registered pipelines through
+ * {@link PipelineRegistry.retire}.
+ */
+function buildRetiredPipelines(): RetiredPipeline[] {
+  return [
+    // The catalog collapse (docs/initiatives/pipeline-catalog-collapse.md). All six were the SAME
+    // spine as the build ladder — `coder → [reviewer] → [blueprints] → [mocker] → deployer →
+    // tester → conflicts → ci → [human gate] → merger` — differing by at most two toggles, which
+    // is not an axis anyone picks a pipeline on: `pl_quick` differed from `pl_simple` by
+    // reviewer-vs-blueprints. The ladder now varies the one axis that matters (how much design a
+    // task gets), so these have nothing left to vary.
+    //
+    // Every step they carried is still reachable — as a rung of the ladder, an estimate-gated step
+    // of `pl_full` (`human-review`), or an opt-in step in the builder (`blueprints`, `mocker`, the
+    // spec / research / docs phases) — so retiring them removes presets, not capability.
+
+    // Differed from `pl_simple` by reviewer-vs-blueprints, which is not a choice: a code review is
+    // the cheapest defect-catching step in a run and a service-map refresh is not.
+    { id: 'pl_quick', replacedBy: 'pl_simple' },
+    // Every optional step switched on at once. That is a saved workspace preset (clone a rung and
+    // enable them), not something the product should ship and version.
+    { id: 'pl_fullstack', replacedBy: 'pl_full' },
+    // The build tail under a recurring-preset name. `replacedBy` points at the trivial rung because
+    // a version bump is exactly its use case — it is the advisory's RECOMMENDATION for a board still
+    // holding the retired row, not a claim about what any schedule runs: a schedule runs whichever
+    // pipeline its author picks, and the recurring modal offers the whole schedulable set.
+    { id: 'pl_dep_update', replacedBy: 'pl_simple' },
+    // Each was a build plus ONE human checkpoint. `human-review` is now a risk-gated step of
+    // `pl_full`, so escalation happens when the estimate says it should rather than when someone
+    // remembered to pick a different pipeline; `human-test` remains a builder toggle.
+    { id: 'pl_pr_review', replacedBy: 'pl_full' },
+    { id: 'pl_human_review', replacedBy: 'pl_full' },
+    // Retired rather than folded in, because its shape was unsafe: with no `merger` step
+    // `runOpensPr` is false, so the `integrator` — a coder-class agent — committed STRAIGHT to the
+    // base branch with no conflicts check and no CI. Wiring an existing change into its
+    // surroundings is the `coder`'s job on a ladder rung, which gates and merges properly.
+    { id: 'pl_integrate', replacedBy: 'pl_build' },
+
+    // ---- The catalog narrowing (this change) ------------------------------------------------
+    // Five more presets whose reason to exist had been absorbed by a mechanism, a step, or a
+    // rung of the ladder. Each is a preset removed, not a capability: every kind they carried is
+    // still placeable in the builder, and the three with a replacement name it.
+
+    // A near-duplicate of the build ladder that existed ONLY because `tester-ui` could not say
+    // "not on this run". Now that a step carries a service condition, the ladder's own presets
+    // drive a browser on a frontend task and an API pass everywhere else, so the frontend case
+    // needs no preset of its own.
+    { id: 'pl_frontend', replacedBy: 'pl_build' },
+    // The build tail behind an `analysis` + `tracker` head. Auditing a repo and filing what it
+    // finds is a RECURRING SCHEDULE's business (point one at a build rung), and the audit itself
+    // is the `analysis` step, still placeable in front of any pipeline.
+    { id: 'pl_tech_debt', replacedBy: 'pl_build' },
+    // A single `blueprints` step. Running ONE agent against a service is now a first-class action
+    // (`ExecutionService.startAgentKind`, the service frame's "Map service" affordance), so
+    // wrapping that agent in a pipeline — with a name that reads like a build preset, in the same
+    // picker as the build presets — bought nothing. No `replacedBy`: nothing in the catalog
+    // replaces it, and pointing at a build rung would be worse than saying so.
+    { id: 'pl_blueprint' },
+    // A single `spec-writer` step, for the same reason: one agent, no chain. The spec increment
+    // belongs INSIDE a build (the `spec-writer` step, still placeable), and regenerating a spec on
+    // its own is the single-kind run above.
+    { id: 'pl_spec' },
+    // A single `environment-analyst` step, retired for the same reason `pl_blueprint` was: the
+    // environment setup wizard runs that agent ON DEMAND now (`startAgentKind`), so the chain it
+    // used to need is a definition with one step and no second caller.
+    { id: 'pl_environment_analysis' },
+    // Retired as a CATALOG entry only: it lives on as an `internal` pipeline because the
+    // documentation-refresh preset spawns onto it. Deliberately NOT tombstoned — a tombstone
+    // offers a workspace the row's removal, and this row still has to resolve for that preset.
+    // (Named here so the next reader looking for it stops here rather than concluding it was
+    // missed: see `pl_code_comments` in the specialty builder.)
+  ]
+}
+
+/**
+ * A built-in pipeline that has been withdrawn from the catalog. Deliberately NOT a {@link Pipeline}:
+ * a retired pipeline has no definition left to carry (its steps were deleted with it), it is never
+ * seeded or persisted, and keeping it out of the stored/wire entity type is what stops a tombstone
+ * from ever being mistaken for something runnable.
+ */
+export interface RetiredPipeline {
+  /** The withdrawn built-in's catalog id — the id a already-seeded workspace still stores. */
+  id: string
+  /**
+   * The catalog id that supersedes it, when one does. Carries no prose: the SPA names the
+   * replacement pipeline and writes the sentence in the user's language (the backend does not
+   * localize copy), so the WHY of a retirement lives in a comment beside its entry above.
+   */
+  replacedBy?: string
+}
+
+/**
+ * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog plus any
+ * pipelines a deployment registered on the app-owned {@link PipelineRegistry} (e.g. a proprietary
+ * org package), merged by id. Omit `registry` (or pass a fresh one) for the built-in catalog only —
+ * the shape a caller that only resolves a BUILT-IN pipeline's id needs (e.g. plan-helpers, the
+ * cross-runtime conformance baseline). The workspace + pipeline services thread the app-owned
+ * instance so a deployment's custom pipelines are seeded into every new workspace.
+ *
+ * There is deliberately NO retirement filter here, and that is the whole reason retirement costs
+ * nothing at the ~40 call sites: a retired built-in is one whose DEFINITION was deleted from the
+ * builders above, so it is already absent from what this returns. The tombstone in
+ * {@link buildRetiredPipelines} is a second, independent assertion — it says "this id used to be
+ * ours and is now obsolete", which is knowledge no filter over the live catalog could reconstruct.
+ * Retiring a built-in is therefore TWO edits, and `retiredPipelines` drops a tombstone whose
+ * definition is still present rather than papering over a half-done one (a kernel unit test and the
+ * `retirement_of_live_pipeline` boot check both catch that state).
+ */
+export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
+  const builtins: Pipeline[] = [
+    ...buildBuildPipelineLadder(),
+    ...buildUnattendedPipelineRung(),
+    ...buildOtherDeliveryPipelines(),
+    ...buildBuildVariantPipelines(),
+    ...buildSpecialtyPipelines(),
+    ...buildMediaPipelines(),
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an
   // editable copy but not edited in place (see PipelineService.update / clone). Each carries
@@ -673,15 +1199,62 @@ export function seedPipelines(): Pipeline[] {
   // version of a built-in, bump that pipeline's own `version` here (an explicit `version: N`
   // on the object overrides this default) — that increment is the signal the app's reseed
   // prompt keys off. The default is applied to EVERY built-in in the merged catalog — including
-  // ones contributed by `registerPipeline` — so a registered built-in is version-tracked +
+  // ones contributed via the pipeline registry — so a registered built-in is version-tracked +
   // reseedable too, while custom (non-built-in) registered pipelines stay versionless.
-  return mergeRegisteredPipelines(builtins.map((p) => ({ ...p, builtin: true }))).map((p) =>
-    p.builtin ? { ...p, version: p.version ?? 1 } : p,
-  )
+  const tagged = builtins.map((p) => ({ ...p, builtin: true }))
+  const merged = registry ? registry.merge(tagged) : tagged
+  return merged.map((p) => (p.builtin ? { ...p, version: p.version ?? 1 } : p))
 }
 
-/** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
-export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
+/**
+ * The built-in pipelines withdrawn from the catalog — the tombstones a workspace seeded before the
+ * withdrawal can act on ({@link buildRetiredPipelines}, plus anything a deployment retired on its
+ * own {@link PipelineRegistry}).
+ *
+ * A LIVE pipeline always wins: an id that {@link seedPipelines} still yields is filtered out here,
+ * so a deployment that registers a pipeline under an id we retired keeps its pipeline instead of
+ * being offered a delete for it. That also makes the two sets disjoint by construction, so no
+ * caller has to decide which of "reseed it" and "remove it" applies.
+ */
+export function retiredPipelines(registry?: PipelineRegistry): RetiredPipeline[] {
+  const builtins = buildRetiredPipelines()
+  const merged = registry ? registry.mergeRetired(builtins) : builtins
+  // Nothing to filter ⇒ don't rebuild the catalog. This is the case on EVERY deployment that has
+  // retired nothing (including, today, the built-in list), and it sits on `WorkspaceService.
+  // snapshot()` — the board-load path, which already builds the catalog once for
+  // `pipelineCatalogVersions`. Without this the feature doubles that work forever to filter an
+  // empty list.
+  if (merged.length === 0) return merged
+  const live = new Set(seedPipelines(registry).map((p) => p.id))
+  return merged.filter((p) => !live.has(p.id))
+}
+
+// The two agents the platform runs WITHOUT a pipeline (post-bootstrap service mapping, the setup
+// wizard's stack-recipe draft) are named in `@cat-factory/contracts`, because the SPA offers both
+// actions and has to recognise the runs they produce. Re-exported here so a kernel consumer
+// resolving pipeline ids finds them beside the ids they replaced.
+export { BLUEPRINT_AGENT_KIND, ENVIRONMENT_ANALYST_AGENT_KIND } from '@cat-factory/contracts'
+
+/**
+ * The pipelines a user-facing surface may OFFER: every stored row except the INTERNAL ones.
+ *
+ * Membership is decided by the CATALOG, not by the stored row, and that is the whole design. The
+ * flag is a property of the DEFINITION — there is no way to author an internal pipeline in the
+ * builder — so a column for it would be a second copy of a fact kernel already holds, one that
+ * goes stale the moment a pipeline's status changes and can only be corrected by a reseed. The row
+ * is still checked too, so a definition that reaches a store some other way is withheld either way.
+ *
+ * `catalog` is passed in rather than rebuilt here because both callers already hold one (the
+ * snapshot builds it for `pipelineCatalogVersions`), and it must be the SAME catalog the caller
+ * reads elsewhere: a deployment's registry decides what is in it.
+ */
+export function offeredPipelines<T extends Pick<Pipeline, 'id' | 'internal'>>(
+  rows: readonly T[],
+  catalog: readonly Pipeline[],
+): T[] {
+  const internal = new Set(catalog.filter((p) => p.internal).map((p) => p.id))
+  return rows.filter((p) => !p.internal && !internal.has(p.id))
+}
 
 /** Pipeline id of the Initiative Planning pipeline (initiative blocks only). */
 export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
@@ -711,6 +1284,20 @@ export const BUSINESS_DOCS_PIPELINE_ID = 'pl_business_docs'
 export const DOCUMENT_PIPELINE_ID = 'pl_document'
 
 /**
+ * Pipeline id of the spike pipeline (`requirements-review`(off) → `spike` → `conflicts` → `ci` →
+ * `human-review` → `merger`). This is the DEFAULT pipeline a `taskType: 'spike'` task is pinned to
+ * at creation ({@link defaultPipelineIdForTaskType}) — the full-build pipeline makes no sense for a
+ * timeboxed research task. The findings are delivered as a PULL REQUEST that the review/merge tail
+ * lands, so protected base branches are respected.
+ */
+export const SPIKE_PIPELINE_ID = 'pl_spike'
+
+// The direct-commit spike pipeline (`requirements-review`(off) → `spike`) is `pl_spike_direct`
+// (defined above) — the fast no-PR path for unprotected repos, opt-in (not the type default). It
+// has no exported id constant because nothing resolves it programmatically; the type default
+// resolves `SPIKE_PIPELINE_ID` and a user selects the direct variant by pipeline id in the UI.
+
+/**
  * Pipeline id of the lean document pipeline (`doc-writer` → auto-review → `doc-quality` → the
  * mergeability / CI / merge tail). The docs-refresh preset (slice 8) spawns README + diagram tasks
  * onto it.
@@ -718,17 +1305,102 @@ export const DOCUMENT_PIPELINE_ID = 'pl_document'
 export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
 
 /**
- * The pipeline a task of the given task type should default to when the creator pins none. Only
- * `document` tasks get a non-default today (the full-build `pl_full` is wrong for a document);
- * every other task type falls through to the workspace's positional default. Returns `undefined`
- * when there is no type-specific default, so the caller leaves `pipelineId` unset.
+ * Pipeline id of the PR deep-review pipeline (`pr-reviewer`). The DEFAULT pipeline a
+ * `taskType: 'review'` task is pinned to at creation ({@link defaultPipelineIdForTaskType}) — the
+ * full-build pipeline makes no sense for a review (no code / spec / tests, no PR opened).
  */
-export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
-  return taskType === 'document' ? DOCUMENT_PIPELINE_ID : undefined
+export const REVIEW_PIPELINE_ID = 'pl_review'
+
+/**
+ * Pipeline id of the conflict-resolution preset (the `conflicts` gate alone). The DEFAULT a
+ * `taskType: 'resolve-conflicts'` task is pinned to at creation ({@link defaultPipelineIdForTaskType}).
+ */
+export const RESOLVE_CONFLICTS_PIPELINE_ID = 'pl_resolve_conflicts'
+
+/** Pipeline id of the Ralph loop (a persistent retry-until-done build; see backend/docs/ralph-loop.md). */
+export const RALPH_PIPELINE_ID = 'pl_ralph'
+
+/**
+ * Pipeline id of the media preset: generate binary assets, compare the candidates, keep what a
+ * human picked. See docs/initiatives/binary-output-foundational-storage.md.
+ */
+export const MEDIA_PIPELINE_ID = 'pl_media'
+
+/**
+ * The pipeline a task of the given task type should default to when the creator pins none.
+ * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review`, `media` →
+ * `pl_media`, `bug-fishing` → `pl_bug_fishing` and `resolve-conflicts` → `pl_resolve_conflicts`
+ * (the full-build `pl_full` is wrong for all six: a document has no code, a spike has no code, a
+ * review opens no PR, a media task's deliverable is a stored binary, an expedition changes
+ * nothing at all, and a conflict resolution works on a pull request somebody else opened); every
+ * other BUILT-IN task type falls through to the workspace's positional default.
+ * A CUSTOM (namespaced) task type consults the injected {@link TaskTypeRegistry} AFTER the
+ * built-in map, so a deployment-registered type can pin its own default pipeline. Returns
+ * `undefined` when there is no type-specific default, so the caller leaves `pipelineId` unset.
+ */
+export function defaultPipelineIdForTaskType(
+  taskType: Block['taskType'],
+  taskTypeRegistry?: TaskTypeRegistry,
+): string | undefined {
+  if (taskType === 'document') return DOCUMENT_PIPELINE_ID
+  if (taskType === 'spike') return SPIKE_PIPELINE_ID
+  if (taskType === 'review') return REVIEW_PIPELINE_ID
+  if (taskType === 'resolve-conflicts') return RESOLVE_CONFLICTS_PIPELINE_ID
+  if (taskType === 'ralph') return RALPH_PIPELINE_ID
+  if (taskType === 'media') return MEDIA_PIPELINE_ID
+  if (taskType === 'bug-fishing') return BUG_FISHING_PIPELINE_ID
+  if (taskType && taskTypeRegistry) return taskTypeRegistry.defaultPipelineId(taskType)
+  return undefined
 }
 
-/** Pipeline ids of the built-in recurring-pipeline presets. */
-export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'
-export const TECH_DEBT_PIPELINE_ID = 'pl_tech_debt'
 /** Pipeline id of the recurring bug-triage pipeline (backlog worker; see backend/docs/bug-triage-pipeline.md). */
 export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
+/**
+ * Pipeline id of the one-off bug-fix preset (investigate → triage → fix → ship). This is the
+ * default an adopted bug-hunt candidate runs, so the interactive hunt lands on the same
+ * investigate/clarify path the recurring triage pipeline uses — see backend/docs/bug-hunt.md.
+ */
+export const BUGFIX_PIPELINE_ID = 'pl_bugfix'
+
+/**
+ * Pipeline id of the TEST-VERIFIED bug-fix preset: {@link BUGFIX_PIPELINE_ID}'s spine with the
+ * verification in the repository (a `mocker` + `integration-test` pair) instead of on a live
+ * environment, and a `deployer` + `disposer` pair standing an environment up only long enough to
+ * confirm the service still launches.
+ *
+ * The default a marked BUG-FISHING finding spawns onto, which is the difference between the two
+ * presets in practice: a fished defect arrives with no reporter to reproduce it with and no
+ * environment story of its own, so the committed regression test IS the deliverable. A workspace
+ * that wants the other one says so through `bugFishingFixPipelineId`, and a single marking says so
+ * through the request's `pipelineId`.
+ */
+export const TEST_VERIFIED_BUGFIX_PIPELINE_ID = 'pl_bugfix_tested'
+
+/**
+ * Pipeline id of the BUG-FISHING EXPEDITION (`bug-fisher`, dispatched once per angle). The
+ * DEFAULT pipeline a `taskType: 'bug-fishing'` task is pinned to at creation
+ * ({@link defaultPipelineIdForTaskType}) — the full-build pipeline makes no sense for a hunt
+ * that changes nothing and opens no PR. Also the pipeline a RECURRING expedition schedule
+ * fires. Findings are acted on by spawning bug-fix tasks, whose pipeline is the workspace's
+ * `bugFishingFixPipelineId` (defaulting to {@link TEST_VERIFIED_BUGFIX_PIPELINE_ID}).
+ */
+export const BUG_FISHING_PIPELINE_ID = 'pl_bug_fishing'
+
+// ---- The build ladder's rungs ---------------------------------------------------------------
+// The axis is how much design a task gets. `pl_build` is the DEFAULT and must stay first in
+// `buildDeliveryPipelines`, because `seedPipelines()[0]` is the positional default a plain "Start"
+// resolves. A caller that needs "the ordinary build pipeline" programmatically should name
+// `BUILD_PIPELINE_ID` rather than re-deriving it from catalog order.
+//
+// The ids and the interface-mode default live in `@cat-factory/contracts` (`build-ladder.ts`),
+// because the SPA pre-selects the same rung this catalog defines; re-exported here so a kernel
+// consumer resolving pipeline ids finds them beside the rest.
+export {
+  ADAPTIVE_BUILD_PIPELINE_ID,
+  BUILD_PIPELINE_ID,
+  COMPLEX_BUILD_PIPELINE_ID,
+  SIMPLE_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
+  declaredDefaultPipelineId,
+  defaultBuildPipelineId,
+} from '@cat-factory/contracts'

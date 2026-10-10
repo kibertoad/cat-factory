@@ -37,8 +37,6 @@ export interface ServiceRepository {
    * mounts when composing its board, without one round-trip per mount. Empty input → empty.
    */
   listByIds(ids: string[]): Promise<Service[]>
-  /** The service linked to a repo (installation + github id), or null. */
-  getByRepo(installationId: number, repoGithubId: number): Promise<Service | null>
   insert(service: Service): Promise<void>
   update(id: string, patch: ServicePatch): Promise<void>
   delete(id: string): Promise<void>
@@ -57,13 +55,8 @@ export interface WorkspaceMountRepository {
   /** Services mounted onto a workspace board (with their layout overrides). */
   listByWorkspace(workspaceId: string): Promise<WorkspaceMount[]>
   /**
-   * Workspaces a service is mounted onto — used to fan real-time events out to
-   * every board that shows the changed service.
-   */
-  listByService(serviceId: string): Promise<WorkspaceMount[]>
-  /**
-   * Every mount of ANY of the given services, in a single (chunked) query — the batched form of
-   * {@link WorkspaceMountRepository.listByService}. Backs the workspace-delete re-home decision
+   * Every mount of ANY of the given services, in a single (chunked) query. Backs the
+   * workspace-delete re-home decision
    * (which surviving board still mounts each homed service) without an N+1 per service. Empty
    * input → empty result.
    */
@@ -79,8 +72,8 @@ export interface WorkspaceMountRepository {
   listWorkspaceIdsMountingBlock(originWorkspaceId: string, blockId: string): Promise<string[]>
   /**
    * Mount counts for a set of services in a single query, keyed by service id (services with
-   * no mounts are absent). Backs the org catalog's "Shared" badge without an N+1
-   * {@link WorkspaceMountRepository.listByService} per service on the snapshot hot path.
+   * no mounts are absent). Backs the org catalog's "Shared" badge without an N+1 per-service
+   * read on the snapshot hot path.
    */
   countByServiceIds(serviceIds: string[]): Promise<Record<string, number>>
   get(workspaceId: string, serviceId: string): Promise<WorkspaceMount | null>

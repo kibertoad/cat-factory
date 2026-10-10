@@ -190,8 +190,10 @@ describe('github sync', () => {
       accountLogin: 'octo',
       targetType: 'Organization' as const,
       appId: null,
+      provider: 'github' as const,
       cachedToken: null,
       tokenExpiresAt: null,
+      accessToken: null,
       createdAt: 1000,
       deletedAt: null,
     })

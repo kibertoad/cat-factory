@@ -11,7 +11,7 @@ concludes the Tester step (advance on greenlight, loop a fixer otherwise) purely
 the report's `greenlight` flag plus its blocking concerns and failed outcomes. Nothing
 checked whether the report was itself a complete, honest account of what was tested. In
 practice a Tester could list many areas in `tested`, describe them in prose, but record
-only a single happy-path outcome and greenlight — the run then "passed" even though most
+only a single happy-path outcome and greenlight: the run then "passed" even though most
 listed scenarios showed no discrete recorded check, and the step was treated as
 successfully completed regardless.
 
@@ -42,7 +42,7 @@ the report is inadequate, loops the Tester for a focused additional pass:
 ## Rationale
 
 - **Reuse the `followUps` shape, not a new companion-step abstraction.** The QC audit
-  has to run inside the Tester's own gate, before the pass/fail branch — the separate
+  has to run inside the Tester's own gate, before the pass/fail branch: the separate
   companion-step model can't intercept there, so the per-step inline-loop pattern was
   the correct fit.
 - **A dedicated iteration counter avoids budget interference.** Coupling the QC loop to
@@ -56,7 +56,7 @@ the report is inadequate, loops the Tester for a focused additional pass:
 
 - Adding the field to the pipeline entity schema alone was not sufficient: the create/
   update/clone request schemas and `PipelineService` did not carry `testerQuality` (nor
-  the sibling `followUps`), and the `pipelines` table had no column for either — so a
+  the sibling `followUps`), and the `pipelines` table had no column for either, so a
   custom pipeline's builder toggle was silently dropped on save until a follow-up change
   added `follow_ups` + `tester_quality` JSON columns (mirrored D1 ⇄ Drizzle) and threaded
   the fields through the request schemas and mapper. Future per-step companion toggles

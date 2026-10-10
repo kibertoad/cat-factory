@@ -1,7 +1,9 @@
-import type { ConfigProblem } from '@cat-factory/contracts'
+import type { AuthProvidersConfig, ConfigProblem } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { CORS_ALLOWED_HEADERS } from '../http/cors.js'
+import { CORS_ALLOWED_HEADERS, CORS_EXPOSED_HEADERS } from '../http/cors.js'
+import type { AppEnv } from '../http/env.js'
+import { mountRequestLogging } from '../http/requestLogging.js'
 
 // ---------------------------------------------------------------------------
 // The misconfiguration fallback backend.
@@ -25,7 +27,20 @@ import { CORS_ALLOWED_HEADERS } from '../http/cors.js'
 // (failed) config load ever resolved CORS_ALLOWED_ORIGINS / ENVIRONMENT.
 // ---------------------------------------------------------------------------
 
-const AUTH_DISABLED_PROVIDERS = { github: false, password: false, google: false }
+/**
+ * Every login provider reported OFF, for the fallback `/auth/config`.
+ *
+ * Typed against the contract's own providers shape rather than left as an inferred literal: this
+ * response is hand-built with `Response.json` (the fallback app has no contract-typed route
+ * layer), so nothing else would notice a provider added to the vocabulary and missing here — the
+ * SPA would simply read `undefined` for it and render whatever that coerces to.
+ */
+const AUTH_DISABLED_PROVIDERS: AuthProvidersConfig['providers'] = {
+  github: false,
+  password: false,
+  google: false,
+  sso: false,
+}
 
 /**
  * Build the Response for one request against the fallback backend, keyed off the URL pathname.
@@ -61,8 +76,14 @@ export function buildMisconfiguredResponse(pathname: string, problems: ConfigPro
  * normal port when their boot throws a {@link ConfigValidationError}). Reflects any origin so the
  * SPA can read it cross-origin.
  */
-export function createMisconfiguredApp(problems: ConfigProblem[]): Hono {
-  const app = new Hono()
+export function createMisconfiguredApp(problems: ConfigProblem[]): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+  // Correlation FIRST, exactly as the two real facades mount it. The Worker gets this for free
+  // because it serves the fallback from INSIDE `createApp`'s container-build middleware, but
+  // Node/local swap in this whole app instead — so without it a misconfigured deployment is the
+  // one shape that serves every request with no id and no line, which is precisely when an
+  // operator is trying to work out what is wrong.
+  mountRequestLogging(app)
   app.use(
     '*',
     cors({
@@ -71,8 +92,10 @@ export function createMisconfiguredApp(problems: ConfigProblem[]): Hono {
       // unconditionally to guarantee the SPA can read the error screen's data.
       origin: (origin) => origin ?? '*',
       allowHeaders: [...CORS_ALLOWED_HEADERS],
+      // …and the correlation id back out, or the id is on the wire and unreadable by the SPA.
+      exposeHeaders: [...CORS_EXPOSED_HEADERS],
     }),
   )
-  app.all('*', (c) => buildMisconfiguredResponse(new URL(c.req.url).pathname, problems))
+  app.all('*', (c) => buildMisconfiguredResponse(c.req.path, problems))
   return app
 }

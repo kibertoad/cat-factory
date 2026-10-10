@@ -7,12 +7,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
 const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -177,11 +179,7 @@ async function connect() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('personalSubscriptions.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'personalSubscriptions.toast.connectFailed')
   } finally {
     busy.value = false
   }
@@ -203,11 +201,7 @@ async function disconnect(v: SubscriptionVendor) {
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({ title: t('personalSubscriptions.toast.disconnected'), icon: 'i-lucide-check' })
   } catch (e) {
-    toast.add({
-      title: t('personalSubscriptions.toast.disconnectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'personalSubscriptions.toast.disconnectFailed')
   }
 }
 </script>
@@ -215,10 +209,10 @@ async function disconnect(v: SubscriptionVendor) {
 <template>
   <div class="space-y-3">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4">
         {{ t('personalSubscriptions.heading') }}
-      </h4>
-      <p class="mt-1 text-sm text-slate-400">{{ t('personalSubscriptions.intro') }}</p>
+      </SectionLabel>
+      <p class="mt-1 text-sm text-muted">{{ t('personalSubscriptions.intro') }}</p>
     </div>
 
     <ProvidersSignInRequiredNotice
@@ -230,12 +224,12 @@ async function disconnect(v: SubscriptionVendor) {
     <div
       v-for="sub in personal.subscriptions"
       :key="sub.vendor"
-      class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+      class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
     >
       <div>
-        <span class="font-medium text-slate-200">{{ sub.label }}</span>
-        <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(sub.vendor) }}</span>
-        <div class="text-[11px] text-slate-500">
+        <span class="font-medium text-default">{{ sub.label }}</span>
+        <span class="ms-2 text-xs text-dimmed">{{ vendorLabel(sub.vendor) }}</span>
+        <div class="text-2xs text-dimmed">
           <template v-if="sub.expiresAt">
             {{ t('personalSubscriptions.expires', { date: d(new Date(sub.expiresAt), 'short') }) }}
           </template>
@@ -251,7 +245,7 @@ async function disconnect(v: SubscriptionVendor) {
       />
     </div>
 
-    <p v-for="(line, i) in renewals" :key="i" class="text-sm text-amber-400/90">{{ line }}</p>
+    <p v-for="(line, i) in renewals" :key="i" class="text-sm text-app-warning-400/90">{{ line }}</p>
 
     <!-- vendor picker -->
     <UFormField :label="t('personalSubscriptions.vendorField')">
@@ -265,7 +259,7 @@ async function disconnect(v: SubscriptionVendor) {
 
     <!-- connect / replace form -->
     <ol
-      class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
+      class="list-decimal space-y-1.5 rounded-lg border border-muted bg-default/60 p-4 ps-8 text-sm text-toned"
     >
       <li v-for="(step, i) in selectedMeta.steps" :key="i">{{ step }}</li>
     </ol>
@@ -299,11 +293,11 @@ async function disconnect(v: SubscriptionVendor) {
         </UFormField>
       </div>
       <div class="flex items-center justify-end gap-3">
-        <p v-if="savedNotice" class="flex items-center gap-1.5 text-sm text-emerald-400">
+        <p v-if="savedNotice" class="flex items-center gap-1.5 text-sm text-app-success-400">
           <UIcon name="i-lucide-check" class="size-4" />
           {{ savedNotice }}
         </p>
-        <p v-else-if="disabledReason" class="text-sm text-rose-400">{{ disabledReason }}</p>
+        <p v-else-if="disabledReason" class="text-sm text-app-error-400">{{ disabledReason }}</p>
         <UButton
           :loading="busy"
           :disabled="disabledReason !== null"

@@ -12,18 +12,29 @@
 // base-model picker plus a filterable per-agent override list.
 import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { ModelFlavor } from '@cat-factory/contracts'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
+import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
+import { filterByAgentTierKeeping } from '~/utils/agentTier'
 import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
 import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
+import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection.vue'
+import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEditor.vue'
+import { showOverrideField } from '~/utils/uiMode'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const uiMode = useUiModeStore()
 const models = useModelsStore()
 const presets = useModelPresetsStore()
 const agents = useAgentsStore()
+const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
+const { present } = usePipelineErrorToast()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -39,6 +50,8 @@ interface EditorState {
   baseModelId: string
   overrides: Record<string, string>
   isDefault: boolean
+  /** The preset's route order; undefined ⇒ it inherits the deployment's default order. */
+  providerPreference: ModelFlavor[] | undefined
 }
 const editor = ref<EditorState | null>(null)
 const busy = ref(false)
@@ -46,16 +59,38 @@ const busy = ref(false)
 const filter = ref('')
 
 // The palette archetypes PLUS the engine-driven kinds that still run an LLM
-// (spec-writer, merger, the fixers/resolver). The pure gates run no model, so they
-// stay out — exactly the set the per-agent override list should cover.
+// (merger, the fixers/resolver). The pure gates run no model, so they stay out —
+// exactly the set the per-agent override list should cover.
 const configurableKinds = computed(() => [...agents.archetypes, ...MODEL_CONFIGURABLE_SYSTEM_KINDS])
+
+// Narrowed to the selected agent tier, EXCEPT that a kind the preset being edited already
+// pins a model for is always kept: that override may have been written by a teammate, by the
+// API, or by this user at a wider tier, and a row hidden here is one they can neither read
+// nor clear. Same rule the interface mode's `showOverrideField` states for a single field.
+const tieredKinds = computed(() =>
+  filterByAgentTierKeeping(
+    configurableKinds.value,
+    agentTier.tier,
+    (a) => editor.value?.overrides[a.kind] !== undefined,
+  ),
+)
+
 const filteredKinds = computed(() => {
   const q = filter.value.trim().toLowerCase()
-  if (!q) return configurableKinds.value
+  if (!q) return tieredKinds.value
+  // A typed query searches the WHOLE catalog, not the tiered slice: naming an agent is a
+  // stronger statement of intent than the tier default, and "No agents match" for a kind the
+  // user can spell would read as "this deployment doesn't have it".
   return configurableKinds.value.filter(
     (a) => a.label.toLowerCase().includes(q) || String(a.kind).toLowerCase().includes(q),
   )
 })
+
+// Nothing is being held back while a search is running (it spans every kind), so the hint
+// reports 0 rather than a count the visible list contradicts.
+const hiddenByTier = computed(() =>
+  filter.value.trim() ? 0 : configurableKinds.value.length - tieredKinds.value.length,
+)
 
 watch(
   open,
@@ -118,6 +153,7 @@ function startCreate() {
     baseModelId: selectableModels.value[0]?.id ?? 'kimi-k2.7',
     overrides: {},
     isDefault: false,
+    providerPreference: undefined,
   }
   filter.value = ''
 }
@@ -128,9 +164,18 @@ function startEdit(p: ModelPreset) {
     baseModelId: p.baseModelId,
     overrides: { ...p.overrides },
     isDefault: p.isDefault,
+    providerPreference: p.providerPreference ? [...p.providerPreference] : undefined,
   }
   filter.value = ''
 }
+
+// The route order is an OVERRIDE of the deployment's default, so basic mode hides it — but only
+// while this preset states none. A preset that already carries one (written by a teammate, by the
+// API, or here at the advanced tier) keeps the control, or a basic-mode user would be looking at a
+// preset whose routes they can neither read nor reset.
+const showRouteOrder = computed(() =>
+  showOverrideField(uiMode.isAdvanced, editor.value?.providerPreference),
+)
 
 async function setDefault(p: ModelPreset) {
   if (p.isDefault) return
@@ -138,7 +183,7 @@ async function setDefault(p: ModelPreset) {
   try {
     await presets.update(p.id, { isDefault: true })
   } catch (e) {
-    fail(t('settings.modelConfiguration.toast.setDefaultFailed'), e)
+    present(e, 'settings.modelConfiguration.toast.setDefaultFailed')
   } finally {
     busy.value = false
   }
@@ -157,7 +202,7 @@ async function remove(p: ModelPreset) {
   try {
     await presets.remove(p.id)
   } catch (e) {
-    fail(t('settings.modelConfiguration.toast.deleteFailed'), e)
+    present(e, 'settings.modelConfiguration.toast.deleteFailed')
   } finally {
     busy.value = false
   }
@@ -209,10 +254,15 @@ async function save() {
   const e = editor.value
   if (!e) return
   if (!e.name.trim()) {
-    fail(
-      t('settings.modelConfiguration.toast.nameRequiredTitle'),
-      new Error(t('settings.modelConfiguration.toast.nameRequiredBody')),
-    )
+    // NOT through `present`: that funnel classifies a BACKEND failure, and a synthesized local
+    // `Error` carries no envelope and no status, so it lands on the network-fault description and
+    // tells the user the server could not be reached about a check that never left the browser.
+    toast.add({
+      title: t('settings.modelConfiguration.toast.nameRequiredTitle'),
+      description: t('settings.modelConfiguration.toast.nameRequiredBody'),
+      color: 'warning',
+      icon: 'i-lucide-triangle-alert',
+    })
     return
   }
   busy.value = true
@@ -223,6 +273,9 @@ async function save() {
         baseModelId: e.baseModelId,
         overrides: e.overrides,
         isDefault: e.isDefault,
+        // Always sent on a patch, `[]` included: an absent field means "leave the stored order
+        // alone", so a reset has to arrive as the empty list that clears it.
+        providerPreference: e.providerPreference ?? [],
       })
     } else {
       await presets.create({
@@ -230,23 +283,15 @@ async function save() {
         baseModelId: e.baseModelId,
         overrides: e.overrides,
         isDefault: e.isDefault,
+        ...(e.providerPreference ? { providerPreference: e.providerPreference } : {}),
       })
     }
     editor.value = null
   } catch (err) {
-    fail(t('settings.modelConfiguration.toast.saveFailed'), err)
+    present(err, 'settings.modelConfiguration.toast.saveFailed')
   } finally {
     busy.value = false
   }
-}
-
-function fail(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 </script>
 
@@ -255,21 +300,19 @@ function fail(title: string, e: unknown) {
     <Transition name="reader-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15"
-          >
-            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-indigo-300" />
+        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-primary" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
+            <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('settings.modelConfiguration.title') }}
             </h1>
-            <p class="truncate text-xs text-slate-500">
+            <p class="truncate text-xs text-dimmed">
               {{ t('settings.modelConfiguration.subtitle') }}
             </p>
           </div>
@@ -289,13 +332,13 @@ function fail(title: string, e: unknown) {
           >
             {{ t('settings.modelConfiguration.back') }}
           </UButton>
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
             :class="editor ? '' : 'ms-auto'"
-            :title="t('settings.modelConfiguration.closeEsc')"
+            :label="t('settings.modelConfiguration.closeEsc')"
             @click="
               () => {
                 open = false
@@ -309,14 +352,14 @@ function fail(title: string, e: unknown) {
             <!-- ===== list view ===== -->
             <template v-if="!editor">
               <div class="flex items-center justify-between">
-                <p class="text-sm leading-relaxed text-slate-400">
+                <p class="text-sm leading-relaxed text-muted">
                   <i18n-t
                     keypath="settings.modelConfiguration.list.intro"
                     scope="global"
                     tag="span"
                   >
                     <template #baseModel>
-                      <span class="text-slate-300">{{
+                      <span class="text-toned">{{
                         t('settings.modelConfiguration.list.introBaseModel')
                       }}</span>
                     </template>
@@ -333,7 +376,7 @@ function fail(title: string, e: unknown) {
                 </UButton>
               </div>
 
-              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-slate-500">
+              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-dimmed">
                 {{ t('settings.modelConfiguration.list.loadingCatalog') }}
               </p>
 
@@ -341,40 +384,40 @@ function fail(title: string, e: unknown) {
                 <div
                   v-for="p in sortedPresets"
                   :key="p.id"
-                  class="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+                  class="rounded-xl border border-default bg-default/50 p-4"
                 >
                   <div class="flex items-center gap-2">
-                    <span class="truncate text-sm font-semibold text-slate-100">{{ p.name }}</span>
+                    <span class="truncate text-sm font-semibold text-app-100">{{ p.name }}</span>
                     <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ms-auto flex items-center gap-1">
-                      <UButton
+                      <IconButton
                         v-if="!p.isDefault"
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-star"
                         :loading="busy"
-                        :title="t('settings.modelConfiguration.list.setDefaultTitle')"
+                        :label="t('settings.modelConfiguration.list.setDefaultTitle')"
                         @click="setDefault(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-pencil"
-                        :title="t('settings.modelConfiguration.list.editTitle')"
+                        :label="t('settings.modelConfiguration.list.editTitle')"
                         @click="startEdit(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="error"
                         icon="i-lucide-trash-2"
                         :disabled="p.isDefault"
                         :loading="busy"
-                        :title="
+                        :label="
                           p.isDefault
                             ? t('settings.modelConfiguration.list.deleteDisabledTitle')
                             : t('settings.modelConfiguration.list.deleteTitle')
@@ -383,9 +426,9 @@ function fail(title: string, e: unknown) {
                       />
                     </div>
                   </div>
-                  <div class="mt-1.5 text-[11px] text-slate-400">
+                  <div class="mt-1.5 text-2xs text-muted">
                     {{ t('settings.modelConfiguration.list.basePrefix') }}
-                    <span class="text-slate-300">{{ modelLabel(p.baseModelId) }}</span>
+                    <span class="text-toned">{{ modelLabel(p.baseModelId) }}</span>
                     <span v-if="Object.keys(p.overrides).length">
                       ·
                       {{
@@ -396,26 +439,32 @@ function fail(title: string, e: unknown) {
                         )
                       }}
                     </span>
+                    <!-- A custom route order changes which provider the same model runs on, so the
+                         list says so rather than leaving it visible only inside the editor (which
+                         basic mode hides). -->
+                    <span v-if="p.providerPreference?.length" class="text-toned">
+                      · {{ t('settings.modelConfiguration.list.customRouteOrder') }}
+                    </span>
                   </div>
                 </div>
-                <p
-                  v-if="sortedPresets.length === 0"
-                  class="py-6 text-center text-sm text-slate-500"
-                >
+                <p v-if="sortedPresets.length === 0" class="py-6 text-center text-sm text-dimmed">
                   {{ t('settings.modelConfiguration.list.empty') }}
                 </p>
               </div>
+
+              <!-- The consensus-GROUP library: which model PANELS review the workspace's heavier
+                   tasks, and at what estimate bar. Beside the presets because both answer "which
+                   models do the work"; its own component so this screen keeps its size budget. -->
+              <ConsensusGroupsSection />
             </template>
 
             <!-- ===== editor view ===== -->
             <template v-else>
-              <div class="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
                 <div>
-                  <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.nameLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UInput
                     v-model="editor.name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
@@ -425,11 +474,9 @@ function fail(title: string, e: unknown) {
                 </div>
 
                 <div>
-                  <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UDropdownMenu
                     :items="baseMenu"
                     :ui="{ content: 'max-h-80 overflow-y-auto z-[60]' }"
@@ -446,17 +493,29 @@ function fail(title: string, e: unknown) {
                   </UDropdownMenu>
                 </div>
 
-                <label class="flex items-center gap-2 text-sm text-slate-300">
+                <label class="flex items-center gap-2 text-sm text-toned">
                   <UCheckbox v-model="editor.isDefault" />
                   {{ t('settings.modelConfiguration.editor.makeDefault') }}
                 </label>
               </div>
 
+              <!-- Which of a model's ROUTES this preset's runs prefer: a compliance preset can put
+                   AWS Bedrock ahead of a model's own provider API, an everyday preset a flat-rate
+                   subscription first. An override of the deployment default, so basic mode hides it
+                   until the preset actually carries one. -->
+              <ProviderPreferenceEditor
+                v-if="showRouteOrder"
+                v-model="editor.providerPreference"
+                :has-subscription="creds.configuredVendors.size > 0"
+                :is-default-preset="editor.isDefault"
+              />
+
               <div>
-                <div class="mb-1 flex items-center justify-between">
-                  <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div class="mb-1 flex items-start justify-between gap-3">
+                  <SectionLabel as="span">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
-                  </span>
+                  </SectionLabel>
+                  <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
                 </div>
                 <UInput
                   v-model="filter"
@@ -465,9 +524,7 @@ function fail(title: string, e: unknown) {
                   :placeholder="t('settings.modelConfiguration.editor.filterPlaceholder')"
                   class="mb-3 w-full"
                 />
-                <div
-                  class="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/50"
-                >
+                <div class="divide-y divide-default rounded-xl border border-default bg-default/50">
                   <div
                     v-for="a in filteredKinds"
                     :key="a.kind"
@@ -480,7 +537,7 @@ function fail(title: string, e: unknown) {
                       :title="a.description"
                     />
                     <div class="min-w-0 flex-1" :title="a.description">
-                      <p class="truncate text-sm text-slate-200">{{ a.label }}</p>
+                      <p class="truncate text-sm text-default">{{ a.label }}</p>
                     </div>
                     <UDropdownMenu
                       :items="overrideMenu(a.kind)"
@@ -499,7 +556,7 @@ function fail(title: string, e: unknown) {
                   </div>
                   <p
                     v-if="filteredKinds.length === 0"
-                    class="px-4 py-6 text-center text-sm text-slate-500"
+                    class="px-4 py-6 text-center text-sm text-dimmed"
                   >
                     {{ t('settings.modelConfiguration.editor.noAgentsMatch', { filter }) }}
                   </p>

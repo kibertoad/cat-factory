@@ -1,6 +1,6 @@
 # @cat-factory/provider-bedrock
 
-Opt-in **AWS Bedrock** model resolver for cat-factory's AI provisioning facade — lets a
+Opt-in **AWS Bedrock** model resolver for cat-factory's AI provisioning facade: lets a
 deployment serve LLMs through Amazon Bedrock alongside (or instead of) the built-in direct
 vendors.
 
@@ -8,7 +8,7 @@ vendors.
 
 Bedrock support pulls in the AWS Bedrock SDK (`@ai-sdk/amazon-bedrock` + `ai`), which is heavy
 and irrelevant to any deployment that doesn't use Bedrock. Keeping it in a separate opt-in
-package means the core packages and the Cloudflare Worker base registry stay free of the SDK —
+package means the core packages and the Cloudflare Worker base registry stay free of the SDK:
 only a facade that actually wires Bedrock pays for it. It contributes a single provider
 (`bedrock`) to a `CompositeModelProvider` through the neutral `ModelResolver` / `ProviderRegistry`
 seam from `@cat-factory/agents`; no model-resolution logic is duplicated.
@@ -20,24 +20,24 @@ The package exports two helpers:
 - `bedrockResolver(opts)` → a `ModelResolver` for the `bedrock` provider.
 - `bedrockRegistry(opts)` → a `ProviderRegistry` (`{ bedrock: resolver }`) ready to mix in.
 
-### Node / local facade — via env
+### Node / local facade: via env
 
 The Node facade wires Bedrock automatically **when `BEDROCK_REGION` is set** (see
 `createNodeModelProviderResolver` in `backend/runtimes/node/src/modelProvider.ts`); it appends
 `bedrockRegistry(...)` to the composite's extra registries:
 
 ```ts
-if (env.BEDROCK_REGION) {
+// ONE pair of readers, shared with the model catalog's `bedrock` capability: see below.
+const bedrockRegion = bedrockRegionFromEnv(env)
+if (bedrockRegion) {
+  const supportedModels = bedrockAllowListFromEnv(env)
   extraRegistries.push(
     bedrockRegistry({
-      region: env.BEDROCK_REGION,
+      region: bedrockRegion,
       accessKeyId: env.AWS_ACCESS_KEY_ID,
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
       sessionToken: env.AWS_SESSION_TOKEN,
-      // BEDROCK_MODELS="anthropic.claude-…,meta.llama3-…" → the allow-list below
-      supportedModels: env.BEDROCK_MODELS?.split(',')
-        .map((m) => m.trim())
-        .filter(Boolean),
+      ...(supportedModels ? { supportedModels: [...supportedModels] } : {}),
     }),
   )
 }
@@ -45,10 +45,17 @@ if (env.BEDROCK_REGION) {
 
 So a Node/local deployment opts in purely with env: `BEDROCK_REGION` (required to enable),
 optional `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (omit to use the
-ambient AWS credential chain — instance role, `~/.aws`, etc.), and optional `BEDROCK_MODELS`
+ambient AWS credential chain; instance role, `~/.aws`, etc.), and optional `BEDROCK_MODELS`
 (comma-separated allow-list).
 
-### Cloudflare Worker facade — via `registerModelRegistry`
+**`BEDROCK_MODELS` does double duty**, which is why it is parsed by
+`bedrockAllowListFromEnv` (`@cat-factory/server`) rather than inline: the same value becomes
+this resolver's allow-list AND `ProviderCapabilities.bedrockModels`, which decides whether a
+catalog model's `bedrock` flavour is selectable in the picker. Parsed separately, the picker
+could offer an id this resolver throws on. Details:
+[`model-support.md` §8](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/model-support.md).
+
+### Cloudflare Worker facade: via `registerModelRegistry`
 
 The Worker's base registry ships without the SDK; a deployment mixes Bedrock in at startup
 through the installation-level model-provider extension point (see
@@ -62,9 +69,16 @@ registerModelRegistry((env) => bedrockRegistry({ region: env.BEDROCK_REGION }))
 ```
 
 Registration is process-wide and read by every `buildContainer(env)` call, so the provider
-reaches all paths — HTTP requests, the durable Workflow driver, and the cron sweeper — not just
+reaches all paths (HTTP requests, the durable Workflow driver, and the cron sweeper) not just
 one entry point. The factory receives the runtime `env`, so credentials/region come from the
 deployment's configuration.
+
+**The registration is also what unlocks the picker flavour on this facade.** The Worker reads
+`BEDROCK_REGION` / `BEDROCK_MODELS` for the per-model enablement, but grants the capability only
+when a registered registry can actually serve `bedrock` (`bedrockModelsCapability` in
+`ai/registries.ts`): the env vars alone don't prove this package was mixed in, and offering the
+flavour on them would put rows in the picker whose dispatch fails. Set-but-unregistered logs a
+warning naming the missing `registerModelRegistry` call.
 
 ## How it resolves a model
 
@@ -87,6 +101,6 @@ message instead of a deep AWS SDK error. Omit `supportedModels` to forward any m
 
 ## Related
 
-Part of cat-factory's opt-in **AWS stack** alongside [`@cat-factory/provider-s3`](../provider-s3)
-(blob storage) and [`@cat-factory/eks`](../eks) (runner + environment backends). Each is
-independent and registers into its own seam — mix in only what you use.
+Part of cat-factory's opt-in **AWS stack** alongside [`@cat-factory/provider-s3`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/provider-s3)
+(blob storage) and [`@cat-factory/eks`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/eks) (runner + environment backends). Each is
+independent and registers into its own seam: mix in only what you use.

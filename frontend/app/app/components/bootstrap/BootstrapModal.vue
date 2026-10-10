@@ -4,10 +4,25 @@
 // adapt it (in a sandbox container) — either by cloning a chosen reference
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
-import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
-// Explicit import (see GitHubPanel): the auto-import name for github/GitHubConnect
-// doesn't match the `<GitHubConnect>` tag, so bind it directly.
-import GitHubConnect from '~/components/github/GitHubConnect.vue'
+import type {
+  BootstrapDelivery,
+  BootstrapStatus,
+  FrameRepoType,
+  ReferenceArchitecture,
+} from '~/types/domain'
+import {
+  defaultBootstrapDelivery,
+  type ReferenceRefusal,
+  referenceRefusalOf,
+  referenceRefusalSurvivesSave,
+  serviceDirectoryLeaf,
+  serviceDirectoryParent,
+} from '~/components/bootstrap/BootstrapModal.logic'
+import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
+import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -15,16 +30,12 @@ const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const board = useBoardStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
-const open = computed({
-  get: () => ui.bootstrapOpen,
-  set: (v: boolean) => {
-    if (!v) void requestClose()
-  },
-})
+const open = computed(() => ui.bootstrapOpen)
 
 // Load the workspace's reference architectures + recent jobs, plus (best-effort)
 // the GitHub repos the user can access so the base form can pick from them.
@@ -84,6 +95,115 @@ const typeItems = useFrameRepoTypeItems()
 
 const usingReference = computed(() => mode.value === 'reference')
 
+// ---- where the service LANDS ----------------------------------------------
+// A second, independent axis from `mode` (which says where the CONTENT comes from): a run
+// either creates a repository of its own, or writes the service into a subdirectory of an
+// existing monorepo and opens a pull request against it. The monorepo path adds the human
+// adoption review between the survey and the write, which is why the two are not one control.
+type Target = 'new-repo' | 'monorepo'
+const target = ref<Target>('new-repo')
+const targetItems = computed(() => [
+  {
+    label: t('bootstrap.target.newRepo.label'),
+    value: 'new-repo' as const,
+    description: t('bootstrap.target.newRepo.description'),
+  },
+  {
+    label: t('bootstrap.target.monorepo.label'),
+    value: 'monorepo' as const,
+    description: t('bootstrap.target.monorepo.description'),
+  },
+])
+const intoMonorepo = computed(() => target.value === 'monorepo')
+
+// ---- how the work LANDS ----------------------------------------------------
+// A third axis, orthogonal to both of the above: the same service, written the same way, either
+// arrives as a pull request somebody reviews or straight on the default branch. The two targets
+// want opposite defaults (a repository being created has nobody to review its first commit; a
+// monorepo's default branch is the branch every other service builds from), which is exactly why
+// this is a control and not a constant.
+const delivery = ref<BootstrapDelivery>(defaultBootstrapDelivery(false))
+// Whether the person has answered this question themselves. Until they have, switching target
+// re-defaults; once they have, their answer stands, because re-defaulting over an explicit
+// choice is how a run they asked to review lands unreviewed. Cleared after a launch, so the
+// answer binds the run it was given for rather than every later one (see `launch`).
+const deliveryTouched = ref(false)
+watch(intoMonorepo, (into) => {
+  if (!deliveryTouched.value) delivery.value = defaultBootstrapDelivery(into)
+})
+function chooseDelivery(value: BootstrapDelivery) {
+  deliveryTouched.value = true
+  delivery.value = value
+}
+const deliveryItems = computed(() => [
+  {
+    label: t('bootstrap.delivery.pullRequest.label'),
+    value: 'pull_request' as const,
+    description: intoMonorepo.value
+      ? t('bootstrap.delivery.pullRequest.descMonorepo')
+      : t('bootstrap.delivery.pullRequest.descNewRepo'),
+  },
+  {
+    label: t('bootstrap.delivery.directPush.label'),
+    value: 'direct_push' as const,
+    description: intoMonorepo.value
+      ? t('bootstrap.delivery.directPush.descMonorepo')
+      : t('bootstrap.delivery.directPush.descNewRepo'),
+  },
+])
+
+/** The projected repo the new service lands in, by numeric id. */
+const monorepoRepoId = ref<number | undefined>(undefined)
+const monorepoDirectory = ref('')
+
+const monorepoRepoItems = computed(() =>
+  github.repos.map((r) => ({ label: `${r.owner}/${r.name}`, value: r.githubId })),
+)
+
+// `repoPathSegments` is the backend's `normalizeServiceDirectory` reduction: the path becomes
+// an agent's working directory, so a value that could escape the checkout is refused here
+// rather than at the API.
+const directorySegments = computed(() => repoPathSegments(monorepoDirectory.value))
+const directoryError = computed<string | undefined>(() => {
+  if (!monorepoDirectory.value.trim()) return undefined
+  if (!directorySegments.value.length) return t('bootstrap.monorepo.directory.error.empty')
+  if (directorySegments.value.some((seg) => seg === '..')) {
+    return t('bootstrap.monorepo.directory.error.escapes')
+  }
+  return undefined
+})
+
+// ---- exploring the monorepo for the directory's home -----------------------
+// The target must NOT exist, so nothing in the tree can BE it: the tree picks the enclosing
+// folder and hands back that folder plus the leaf (see `BootstrapModal.logic`, which owns the
+// two readings of the typed value).
+const directoryLeaf = computed(() => serviceDirectoryLeaf(monorepoDirectory.value, repoName.value))
+const browsingDirectory = ref(false)
+// The folder the tree opens at, captured when the browser is OPENED rather than read live off
+// the field: as a computed it would re-navigate the listing on every keystroke in the input.
+const directoryBrowseStart = ref('')
+
+function toggleDirectoryBrowse() {
+  if (!browsingDirectory.value) {
+    directoryBrowseStart.value = serviceDirectoryParent(monorepoDirectory.value)
+  }
+  browsingDirectory.value = !browsingDirectory.value
+}
+
+/** The tree emits the composed path: the folder it was standing in plus the leaf it was given. */
+function placeDirectory(path: string | undefined) {
+  if (!path) return
+  monorepoDirectory.value = path
+  browsingDirectory.value = false
+}
+
+// Landing in a monorepo needs no NEW repository, so the repo name is the SERVICE's name (and
+// seeds the directory's leaf); the create-repo affordances below are for the other target.
+watch([intoMonorepo, repoName], ([into, name]) => {
+  if (!into || !name.trim() || monorepoDirectory.value.trim()) return
+  monorepoDirectory.value = `services/${name.trim()}`
+})
+
 // UX-18: prompt before discarding a half-filled launch form on Escape / backdrop / the X.
 // The modal keeps its fields across opens (no reset watcher), so the baseline is whatever
 // the form held when it opened — a close only prompts once the user has typed something
@@ -99,6 +219,15 @@ const { requestClose } = useUnsavedGuard({
     description: description.value.trim(),
     instructions: instructions.value.trim(),
   }),
+})
+
+// The template's v-model binding: dismissal (Escape / backdrop) routes through the guard.
+// Declared after the guard so the setter's `requestClose` reference is never in its TDZ.
+const modalOpen = computed({
+  get: () => open.value,
+  set: (v: boolean) => {
+    if (!v) void requestClose()
+  },
 })
 
 // Mirror of the backend `slugField` rule (@cat-factory/contracts bootstrap
@@ -119,6 +248,49 @@ const selectedArch = computed(() =>
   bootstrap.architectures.find((a) => a.id === selectedArchId.value),
 )
 
+// ---- a launch refused for its reference architecture -----------------------
+// The backend pre-flights the template against the workspace's source-control connection BEFORE
+// it records anything, so this refusal costs the user nothing except a correction: the run does
+// not exist, the board has no card, and every other field of this form is still filled in. That
+// is what the alert is for. A toast would say the same words and then disappear, leaving the
+// person to work out which of the two repositories in this dialog was the problem. Reading it off
+// the wire, and deciding when a save makes it stale, are in `BootstrapModal.logic.ts`.
+const referenceRefusal = ref<ReferenceRefusal | null>(null)
+
+const referenceRefusalMessage = computed(() => {
+  const refusal = referenceRefusal.value
+  if (!refusal) return ''
+  const repo = refusal.repo ?? t('bootstrap.reference.refusal.unnamedRepo')
+  return refusal.reason === 'reference_repo_not_found'
+    ? t('bootstrap.reference.refusal.notFound', { repo })
+    : t('bootstrap.reference.refusal.unreadable', { repo })
+})
+
+/**
+ * Whether correcting the ENTRY is the fix. Only for `not_found`: an unreadable probe says nothing
+ * about the entry, so offering to edit it there would send someone to change a value that is
+ * very likely already right.
+ */
+const referenceRefusalIsFixable = computed(
+  () => referenceRefusal.value?.reason === 'reference_repo_not_found',
+)
+
+/** Open the refused entry's edit form, prefilled, leaving the launch form untouched. */
+function editRefusedArchitecture() {
+  const id = referenceRefusal.value?.architectureId
+  const arch = bootstrap.architectures.find((a) => a.id === id)
+  if (arch) startEdit(arch)
+}
+
+// A refusal is about ONE entry as it was, so picking a different reference architecture makes it
+// stale, and a stale error banner reads as a live one. Reopening the dialog clears it for the same
+// reason: the form deliberately keeps its fields across opens, but a refusal is not a field, it is
+// a claim about a check that has not been made again. Saving the refused entry clears it too
+// (`saveArch`), and saving any other one deliberately does not.
+watch([open, selectedArchId], () => {
+  referenceRefusal.value = null
+})
+
 const archOptions = computed(() =>
   bootstrap.architectures.map((a) => ({
     label: `${a.name} · ${a.repoOwner}/${a.repoName}`,
@@ -137,35 +309,44 @@ watch(
   { immediate: true },
 )
 
-// A bootstrap run pushes into a GitHub repo, so the workspace must be connected
-// first (the backend pre-flights the same and 409s otherwise). When the
-// integration is on but unconnected, surface the discover-and-link prompt inline
-// and block launch until it's bound.
-const needsGitHub = computed(() => github.available === true && !github.connected)
+// A bootstrap run pushes into a repo on the connected host, so the workspace must be
+// connected first (the backend pre-flights the same and 409s otherwise). When the
+// integration is on but unconnected, surface the connect prompt inline and block launch
+// until it's bound.
+const needsConnection = computed(() => github.available === true && !github.connected)
 
-// The account the repo must live under — the connected installation's account. The
-// run pushes into an existing repo here (cat-factory doesn't create it: a GitHub App
-// can't create repos under a personal account, and we'd rather not hold the broad
-// Administration permission). The repo must be empty or hold only a prepopulated
-// README/.gitignore/license — the push force-overwrites that boilerplate. The
-// convenience link opens GitHub's new-repo page prefilled so the user can create it
-// in one click.
+// The host this modal is about: the connected one, or the only one the deployment could
+// connect while nothing is bound. Null where it offers several and none is connected, so
+// `provider`'s own "what is connected" default can never send a GitLab deployment to github.com.
+const hostProvider = computed(() => github.surfaceProvider)
+const providerLabel = computed(() =>
+  hostProvider.value ? VCS_PROVIDER_LABELS[hostProvider.value] : '',
+)
+
+// The account the repo must live under — the connected account. The run pushes into an
+// existing repo here (cat-factory doesn't create it: a GitHub App can't create repos under a
+// personal account, and we'd rather not hold the broad Administration permission). The repo
+// must be empty or hold only a prepopulated README/.gitignore/license — the push
+// force-overwrites that boilerplate. The convenience link opens the host's own new-repo page,
+// prefilled, and is ABSENT for any host `~/utils/vcs` can't name (an unresolved provider, or a
+// deployment whose API base does not invert to a web host); the copy and the button both key off
+// it, so what the intro promises and what renders cannot disagree. The host now comes off the
+// connection (or, before one exists, off the connect option), so a GitLab deployment that states
+// one gets the button back rather than losing it to the provider alone.
 const repoOwner = computed(() => github.connection?.accountLogin ?? '')
-const createRepoUrl = computed(() => {
-  const params = new URLSearchParams()
-  if (repoOwner.value) params.set('owner', repoOwner.value)
-  const name = repoName.value.trim()
-  if (name) params.set('name', name)
-  const desc = description.value.trim()
-  if (desc) params.set('description', desc)
-  params.set('visibility', isPrivate.value ? 'private' : 'public')
-  return `https://github.com/new?${params.toString()}`
-})
+const createRepoUrl = computed(() =>
+  newRepoUrl(hostProvider.value, github.surfaceWebUrl, {
+    owner: repoOwner.value,
+    name: repoName.value.trim(),
+    description: description.value.trim(),
+    private: isPrivate.value,
+  }),
+)
 
 const creatingRepo = ref(false)
 
 // The "create repository" button behaves differently per tier. Restricted orgs
-// (the default) open GitHub's new-repo page prefilled — cat-factory needs no
+// (the default) open the host's new-repo page — cat-factory needs no
 // repo-creation permission. Privileged orgs (the connection reports
 // `canCreateRepos`) create it programmatically via the backend, with no page.
 async function openCreateRepo() {
@@ -173,7 +354,9 @@ async function openCreateRepo() {
   if (!name || repoNameError.value) return
 
   if (!github.canCreateRepos) {
-    window.open(createRepoUrl.value, '_blank', 'noopener')
+    // The button is hidden without a resolved host, so there is always a URL here; the guard
+    // keeps that a local fact rather than an assumption about the template.
+    if (createRepoUrl.value) window.open(createRepoUrl.value, '_blank', 'noopener')
     return
   }
 
@@ -191,12 +374,7 @@ async function openCreateRepo() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.repoCreateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.repoCreateFailed')
   } finally {
     creatingRepo.value = false
   }
@@ -207,21 +385,20 @@ async function openCreateRepo() {
 // "not accessible to the GitHub App". Link straight to the connected
 // installation's settings page, where the user adds the repo to its access list
 // in one click — no install/connect round-trip (the workspace is already bound).
-const manageInstallUrl = computed(() => {
-  const conn = github.connection
-  if (!conn) return undefined
-  return conn.targetType === 'Organization'
-    ? `https://github.com/organizations/${conn.accountLogin}/settings/installations/${conn.installationId}`
-    : `https://github.com/settings/installations/${conn.installationId}`
-})
+// Absent on a PAT connection, which grants no per-installation access (see `~/utils/vcs`).
+const manageInstallUrl = computed(() => appInstallationManageUrl(github.connection))
 
 function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
 }
 
 const canLaunch = computed(() => {
-  if (needsGitHub.value) return false
+  if (needsConnection.value) return false
   if (!repoName.value.trim() || repoNameError.value) return false
+  if (intoMonorepo.value) {
+    if (!monorepoRepoId.value) return false
+    if (!monorepoDirectory.value.trim() || directoryError.value) return false
+  }
   return usingReference.value ? !!selectedArchId.value : instructions.value.trim().length > 0
 })
 
@@ -236,6 +413,15 @@ async function launch() {
       private: isPrivate.value,
       instructions: instructions.value.trim(),
       type: selectedType.value,
+      delivery: delivery.value,
+      ...(intoMonorepo.value && monorepoRepoId.value
+        ? {
+            monorepo: {
+              repoGithubId: monorepoRepoId.value,
+              directory: monorepoDirectory.value.trim(),
+            },
+          }
+        : {}),
     })
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
@@ -252,15 +438,28 @@ async function launch() {
       // background and becomes a real, droppable service when it finishes.
       toast.add({
         title: t('bootstrap.toast.started'),
-        description: t('bootstrap.toast.startedDesc', { repo: job.repoName }),
+        // A monorepo run does not run straight through: it surveys, then waits for the
+        // reviewer. Saying "bootstrapping…" there would set the wrong expectation about who
+        // the next move belongs to.
+        description: job.monorepo
+          ? t('bootstrap.toast.startedMonorepoDesc', { directory: job.monorepo.directory })
+          : t('bootstrap.toast.startedDesc', { repo: job.repoName }),
         icon: 'i-lucide-loader-circle',
         color: 'info',
       })
       repoName.value = ''
       description.value = ''
       instructions.value = ''
+      monorepoDirectory.value = ''
+      browsingDirectory.value = false
       // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
       selectedType.value = 'service'
+      // And the delivery, which has to reset the ANSWERED flag with it: leaving that set disarms
+      // the per-target default for good, so a "push directly" picked deliberately for one
+      // monorepo would go on governing the next bootstrap, into a different repository, without
+      // the person having been asked about that one. Back to the current target's own default.
+      deliveryTouched.value = false
+      delivery.value = defaultBootstrapDelivery(intoMonorepo.value)
       // The provisional frame arrived (bootstrap() refreshed the board). Re-home it to
       // free space so it never overlaps an existing service — the backend places it on a
       // fixed diagonal stagger that can land on top of a large neighbour — then centre the
@@ -282,12 +481,11 @@ async function launch() {
       ui.closeBootstrap()
     }
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.bootstrapFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    // A reference-architecture refusal is kept on the form as well as toasted: the run was never
+    // recorded, so what the user needs is the one field to change and everything else left alone,
+    // which a toast cannot hold still long enough to give them.
+    referenceRefusal.value = referenceRefusalOf(e)
+    present(e, 'bootstrap.toast.bootstrapFailed')
   } finally {
     launching.value = false
   }
@@ -367,18 +565,17 @@ async function saveArch() {
       description: archForm.value.description.trim(),
       defaultInstructions: archForm.value.defaultInstructions.trim(),
     }
-    if (archForm.value.id) await bootstrap.updateArchitecture(archForm.value.id, body)
+    const editedId = archForm.value.id
+    if (editedId) await bootstrap.updateArchitecture(editedId, body)
     else await bootstrap.createArchitecture(body)
+    if (!referenceRefusalSurvivesSave(editedId, referenceRefusal.value)) {
+      referenceRefusal.value = null
+    }
     showArchForm.value = false
     archForm.value = blankForm()
     archRepoSlug.value = undefined
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.saveArchFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.saveArchFailed')
   } finally {
     savingArch.value = false
   }
@@ -391,18 +588,16 @@ async function removeArch(a: ReferenceArchitecture) {
     if (selectedArchId.value === a.id) selectedArchId.value = undefined
     toastDone('remove', a.name)
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.deleteFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.deleteFailed')
   }
 }
 
-const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'error'> = {
+const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
   pending: 'neutral',
   running: 'info',
+  // A parked run is not "in progress": it is waiting on a person, which is what `warning`
+  // says on every other surface where the platform is blocked on its user.
+  awaiting_review: 'warning',
   succeeded: 'success',
   failed: 'error',
 }
@@ -411,38 +606,139 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
 const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
   pending: t('bootstrap.status.pending'),
   running: t('bootstrap.status.running'),
+  awaiting_review: t('bootstrap.status.awaitingReview'),
   succeeded: t('bootstrap.status.succeeded'),
   failed: t('bootstrap.status.failed'),
 }))
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="modalOpen" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-6">
-        <p class="text-sm text-slate-400">
-          {{ github.canCreateRepos ? t('bootstrap.intro.canCreate') : t('bootstrap.intro.manual') }}
+        <!-- Three states, because each promises the user something different about the repo.
+             cat-factory creates it (privileged App tier, so a provider is always resolved);
+             the user creates it in one click on a host we can name; or the user creates it
+             themselves somewhere we cannot name, where promising a click below would be a lie
+             (the button is absent for exactly the same reason). -->
+        <p class="text-sm text-muted">
+          {{
+            intoMonorepo
+              ? t('bootstrap.monorepo.intro')
+              : github.canCreateRepos
+                ? t('vcs.bootstrap.introCanCreate', { provider: providerLabel })
+                : createRepoUrl
+                  ? t('vcs.bootstrap.introManual', { provider: providerLabel })
+                  : t('vcs.bootstrap.introManualAny')
+          }}
         </p>
 
-        <!-- not connected: a run needs GitHub, so discover & link before launching -->
+        <!-- not connected: a run pushes to the host, so connect before launching. Offer
+             whichever methods the deployment serves, never just the GitHub App. -->
         <div
-          v-if="needsGitHub"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          v-if="needsConnection"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
-              {{ t('bootstrap.github.prompt') }}
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
+              {{ t('vcs.bootstrap.connectPrompt') }}
             </p>
           </div>
-          <GitHubConnect />
+          <VcsConnectSurfaces />
         </div>
 
         <!-- launch -->
         <section class="space-y-4">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3">
             {{ t('bootstrap.section.newRepo') }}
-          </h3>
+          </SectionLabel>
+
+          <UFormField :label="t('bootstrap.target.label')" required>
+            <URadioGroup v-model="target" :items="targetItems" />
+          </UFormField>
+
+          <!-- Where the service goes and how it gets there are two questions, and the second
+               has no answer that is right for both targets. Its descriptions therefore change
+               with the target rather than the control being duplicated per target. -->
+          <UFormField :label="t('bootstrap.delivery.label')" required>
+            <URadioGroup
+              :model-value="delivery"
+              :items="deliveryItems"
+              @update:model-value="chooseDelivery($event as BootstrapDelivery)"
+            />
+          </UFormField>
+
+          <!-- Landing in an existing monorepo: pick the repository and the subdirectory. The
+               run surveys the monorepo's conventions against the template's and PARKS for a
+               human adoption review before it writes anything. -->
+          <template v-if="intoMonorepo">
+            <UFormField
+              :label="t('bootstrap.monorepo.repo.label')"
+              :description="t('bootstrap.monorepo.repo.description')"
+              required
+            >
+              <div v-if="!monorepoRepoItems.length" class="text-sm text-muted">
+                {{ t('bootstrap.monorepo.repo.empty') }}
+              </div>
+              <USelect
+                v-else
+                v-model="monorepoRepoId"
+                :items="monorepoRepoItems"
+                :placeholder="t('bootstrap.monorepo.repo.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('bootstrap.monorepo.directory.label')"
+              :description="t('bootstrap.monorepo.directory.description')"
+              required
+              :error="directoryError"
+            >
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <UInput
+                    v-model="monorepoDirectory"
+                    :placeholder="t('bootstrap.monorepo.directory.placeholder')"
+                    class="flex-1"
+                  />
+                  <IconButton
+                    v-if="monorepoRepoId !== undefined"
+                    variant="soft"
+                    color="neutral"
+                    icon="i-lucide-folder-search"
+                    :label="t('bootstrap.monorepo.directory.browse')"
+                    data-testid="bootstrap-directory-browse"
+                    @click="toggleDirectoryBrowse()"
+                  />
+                </div>
+
+                <!-- The tree answers WHERE, never WHAT: with no name to place yet it could
+                     decide nothing, so say that instead of listing a repo for nothing. -->
+                <div
+                  v-if="browsingDirectory && monorepoRepoId !== undefined"
+                  class="rounded-md border border-default bg-default/40 p-2"
+                >
+                  <p class="mb-2 text-xs text-muted">
+                    {{
+                      directoryLeaf
+                        ? t('bootstrap.monorepo.directory.browseHint')
+                        : t('bootstrap.monorepo.directory.browseNeedsName')
+                    }}
+                  </p>
+                  <RepoTreeBrowser
+                    v-if="directoryLeaf"
+                    :repo-github-id="monorepoRepoId"
+                    mode="dir"
+                    :new-dir-name="directoryLeaf"
+                    :model-value="monorepoDirectory"
+                    :start-path="directoryBrowseStart"
+                    @update:model-value="placeDirectory"
+                  />
+                </div>
+              </div>
+            </UFormField>
+          </template>
 
           <UFormField :label="t('bootstrap.mode.label')" required>
             <URadioGroup v-model="mode" :items="modeItems" />
@@ -454,7 +750,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               :description="t('bootstrap.reference.description')"
               required
             >
-              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-slate-400">
+              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-muted">
                 {{ t('bootstrap.reference.empty') }}
               </div>
               <USelect
@@ -465,14 +761,43 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="w-full"
               />
             </UFormField>
+
+            <!-- The launch was refused for the template, before anything was recorded. The
+                 remedy lives in this same dialog, so the alert carries the jump to it rather
+                 than describing where to go. -->
+            <UAlert
+              v-if="referenceRefusal"
+              color="error"
+              variant="subtle"
+              icon="i-lucide-triangle-alert"
+              :title="t('bootstrap.reference.refusal.title')"
+              :description="referenceRefusalMessage"
+              data-testid="bootstrap-reference-refusal"
+            >
+              <template v-if="referenceRefusalIsFixable" #actions>
+                <UButton
+                  color="error"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-pencil"
+                  @click="editRefusedArchitecture"
+                >
+                  {{ t('bootstrap.reference.refusal.edit') }}
+                </UButton>
+              </template>
+            </UAlert>
           </template>
 
           <UFormField
-            :label="t('bootstrap.targetRepo.label')"
+            :label="
+              intoMonorepo ? t('bootstrap.serviceName.label') : t('bootstrap.targetRepo.label')
+            "
             :description="
-              repoOwner
-                ? t('bootstrap.targetRepo.descWithOwner', { owner: repoOwner })
-                : t('bootstrap.targetRepo.descNoOwner')
+              intoMonorepo
+                ? t('bootstrap.serviceName.description')
+                : repoOwner
+                  ? t('bootstrap.targetRepo.descWithOwner', { owner: repoOwner })
+                  : t('bootstrap.targetRepo.descNoOwner')
             "
             required
             :error="repoNameError"
@@ -484,7 +809,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                   :placeholder="t('bootstrap.targetRepo.namePlaceholder')"
                   class="w-full"
                 />
+                <!-- Creating the repo for the user needs no host name; sending them to the
+                     host's own form needs one, so that variant waits until a host is
+                     resolved rather than guessing which page to open. -->
                 <UButton
+                  v-if="!intoMonorepo && (github.canCreateRepos || createRepoUrl)"
                   color="neutral"
                   variant="subtle"
                   :icon="github.canCreateRepos ? 'i-lucide-plus' : 'i-lucide-external-link'"
@@ -493,19 +822,19 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                   :title="
                     github.canCreateRepos
                       ? t('bootstrap.createRepo.titleNow')
-                      : t('bootstrap.createRepo.titleGitHub')
+                      : t('vcs.bootstrap.createRepoTitle', { provider: providerLabel })
                   "
                   @click="openCreateRepo"
                 >
                   {{
                     github.canCreateRepos
                       ? t('bootstrap.createRepo.now')
-                      : t('bootstrap.createRepo.onGitHub')
+                      : t('vcs.bootstrap.createRepoOn', { provider: providerLabel })
                   }}
                 </UButton>
               </div>
               <UButton
-                v-if="manageInstallUrl && !github.canCreateRepos"
+                v-if="!intoMonorepo && manageInstallUrl && !github.canCreateRepos"
                 color="neutral"
                 variant="ghost"
                 size="sm"
@@ -565,7 +894,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <UFormField :label="t('bootstrap.visibility.label')">
             <div class="flex items-center gap-2">
               <USwitch v-model="isPrivate" />
-              <span class="text-sm text-slate-300">{{ t('bootstrap.visibility.private') }}</span>
+              <span class="text-sm text-toned">{{ t('bootstrap.visibility.private') }}</span>
             </div>
           </UFormField>
 
@@ -584,17 +913,17 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- recent jobs -->
         <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3">
             {{ t('bootstrap.recent.title') }}
-          </h3>
+          </SectionLabel>
           <div
             v-for="job in agentRuns.bootstrapJobs.slice(0, 5)"
             :key="job.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2 text-sm"
           >
             <div class="min-w-0">
-              <div class="truncate text-slate-200">{{ job.repoName }}</div>
-              <div class="truncate text-[11px] text-slate-500">
+              <div class="truncate text-default">{{ job.repoName }}</div>
+              <div class="truncate text-2xs text-dimmed">
                 {{
                   job.referenceArchitectureName
                     ? t('bootstrap.recent.fromArch', { name: job.referenceArchitectureName })
@@ -607,9 +936,21 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.repoUrl"
                 :to="job.repoUrl"
                 target="_blank"
-                class="text-[11px] text-indigo-400 hover:underline"
+                class="text-2xs text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
+              </ULink>
+              <!-- The deliverable of a `pull_request` run, and the only thing it produced that
+                   the user still has to act on. A monorepo run has no `repoUrl` at all, so
+                   without this the run's whole output is unreachable from the list that
+                   offered the choice. -->
+              <ULink
+                v-if="job.prUrl"
+                :to="job.prUrl"
+                target="_blank"
+                class="text-2xs text-primary hover:underline"
+              >
+                {{ t('bootstrap.recent.openPr') }}
               </ULink>
               <UBadge :color="statusColor[job.status]" variant="subtle" size="sm">
                 {{ statusLabel[job.status] }}
@@ -623,9 +964,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         <!-- reference architecture management -->
         <section class="space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="h3">
               {{ t('bootstrap.arch.title') }}
-            </h3>
+            </SectionLabel>
             <UButton
               size="xs"
               color="neutral"
@@ -640,13 +981,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <div
             v-for="a in bootstrap.architectures"
             :key="a.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
           >
             <div class="min-w-0">
-              <div class="truncate text-sm text-slate-200">{{ a.name }}</div>
-              <div class="truncate text-[11px] text-slate-500">
-                {{ a.repoOwner }}/{{ a.repoName }}
-              </div>
+              <div class="truncate text-sm text-default">{{ a.name }}</div>
+              <div class="truncate text-2xs text-dimmed">{{ a.repoOwner }}/{{ a.repoName }}</div>
             </div>
             <div class="flex items-center gap-1">
               <UButton
@@ -669,11 +1008,13 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <!-- add / edit form -->
           <div
             v-if="showArchForm"
-            class="space-y-3 rounded-md border border-slate-700 bg-slate-900/80 p-3"
+            class="space-y-3 rounded-md border border-muted bg-default/80 p-3"
           >
+            <!-- The options come from the connected projection, so a repo to pick means a
+                 connection exists and `providerLabel` names it rather than guessing. -->
             <UFormField
               v-if="hasRepoOptions"
-              :label="t('bootstrap.arch.pickRepo.label')"
+              :label="t('vcs.bootstrap.archPickRepo', { provider: providerLabel })"
               :description="t('bootstrap.arch.pickRepo.description')"
             >
               <USelect

@@ -39,6 +39,20 @@ export interface StepResolution {
   /** Replacement step output (e.g. a human-readable merge summary). */
   output?: string
   /**
+   * Declares that {@link output} is a deterministic RENDERING of an artifact this resolver
+   * already committed, rather than the agent's own work product — the engine records it as
+   * `step.outputIsRendered`, which makes the approval gate refuse an edited proposal (an edit
+   * typed over a rendering reaches nothing; see the flag's contract in `@cat-factory/contracts`).
+   *
+   * A resolver sets this when the COMMITTED artifact is something it derived, so the generic
+   * `reviewableArtifactOutput` seam — which renders straight off the agent's raw result — would
+   * render a document the reviewer's approval does not govern. The initiative planner is the
+   * reference case: its plan is reshaped at ingest (a preset's phase template reorders phases and
+   * its `seedPlan` hook adds/drops items), so only the ingest knows what was actually committed.
+   * Ignored when `output` is absent.
+   */
+  outputIsRendered?: boolean
+  /**
    * Set when the resolver has already decided the block's TERMINAL status itself (the
    * merger flips the block to `done` on a real merge or `pr_ready` on a review). The
    * engine's `finalizeBlock` then only backstops a block the resolver left untouched.
@@ -95,31 +109,41 @@ export interface ResolverContext {
  */
 export type StepResolverFactory = (ctx: ResolverContext) => StepCompletionResolver
 
-// Process-wide registry, mirroring the gate / agent-kind / pipeline registry seams.
-// Registration is a startup import side effect, read once when an ExecutionService lazily
-// builds its resolver registry — register at startup, before serving.
-const registry = new Map<string, StepResolverFactory>()
+/**
+ * App-owned registry of step-completion resolvers, mirroring the gate registry
+ * ({@link GateRegistry}) and the agent-kind registry. The composition root news ONE
+ * instance (`defaultStepResolverRegistry()`), threads it through `CoreDependencies`, and the
+ * engine reads it from there when it lazily builds its per-kind resolver map — so there is no
+ * module-global `Map`, no `clear*()` test cruft, and no external-adapter module-identity
+ * gotcha: a deployment registers extra resolvers by reference
+ * (`registry.register(kind, factory)`) on the instance the facade injects. Empty by default
+ * (the built-in `merger` resolver is a privileged engine-internal built-in, not a registry
+ * entry — see the step taxonomy in `AGENTS.md`).
+ */
+export class StepResolverRegistry {
+  private readonly registry = new Map<string, StepResolverFactory>()
+
+  /**
+   * Register a step-completion resolver, keyed by the step `agentKind` whose completion it
+   * resolves. A later registration of the same kind replaces the earlier one (so a
+   * deployment can override an earlier registration).
+   */
+  register(kind: string, factory: StepResolverFactory): void {
+    this.registry.set(kind, factory)
+  }
+
+  /** The registered step resolvers (registration order). */
+  factories(): { kind: string; factory: StepResolverFactory }[] {
+    return [...this.registry].map(([kind, factory]) => ({ kind, factory }))
+  }
+}
 
 /**
- * Register a custom step-completion resolver, keyed by the step `agentKind` whose
- * completion it resolves. A later registration of the same kind replaces the earlier one,
- * and a registered resolver replaces a built-in of the same kind.
+ * A fresh, empty step-resolver registry. A deployment registers its own resolvers by
+ * reference on the instance the composition root injects.
  */
-export function registerStepResolver(kind: string, factory: StepResolverFactory): void {
-  registry.set(kind, factory)
-}
-
-/** The registered custom step resolvers (registration order). */
-export function registeredStepResolverFactories(): {
-  kind: string
-  factory: StepResolverFactory
-}[] {
-  return [...registry].map(([kind, factory]) => ({ kind, factory }))
-}
-
-/** Drop all registered step resolvers. Intended for tests that exercise registration. */
-export function clearRegisteredStepResolvers(): void {
-  registry.clear()
+export function defaultStepResolverRegistry(): StepResolverRegistry {
+  return new StepResolverRegistry()
 }
 
 /**

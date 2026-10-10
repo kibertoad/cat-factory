@@ -1,0 +1,1 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "submission_classes_by_role" text DEFAULT '{}' NOT NULL;

@@ -1,4 +1,4 @@
-import type { Clock, ConnectionTestResult, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, ConnectionTestResult, IdGenerator, Logger } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRecord,
   EnvironmentRecord,
@@ -20,8 +20,12 @@ import type {
   ProvisionedEnvironment,
   RecipeStepLog,
   ResolveRunRepoContext,
+  HostResolver,
+  RouteProbe,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  ProvisioningLogRecord,
+  ProviderRemediationAction,
   RunnerJobRef,
   RunnerJobView,
   RunRepoContext,
@@ -30,8 +34,14 @@ import type {
   SharedStackEnsureResult,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import type { SecretCipher } from '@cat-factory/kernel'
-import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
+import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
+import { createOrgSecretCipher } from '@cat-factory/kernel'
+import type {
+  EnvironmentAccessHandle,
+  EnvironmentHandle,
+  EnvironmentReachabilityNote,
+} from '@cat-factory/kernel'
+import { reachabilityNote } from '@cat-factory/contracts'
 import {
   assertFound,
   getErrorMessage,
@@ -42,12 +52,27 @@ import {
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import {
   assertSafeEnvironmentUrl,
+  boundStatusNote,
+  describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
+  parseReachability,
   recordToHandle,
+  serializeReachability,
   shouldTeardownSuperseded,
   stringifyProviderConfig,
 } from './environments.logic.js'
+import { foldStatedAddresses, proveEnvironmentRoute } from './environmentReachability.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
+import {
+  createEnvironmentDiagnostics,
+  type EnvironmentDiagnostics,
+  type EnvironmentEvidence,
+  type EnvironmentFailureFacts,
+} from './environmentDiagnostics.js'
+import {
+  createEnvironmentStatusPoller,
+  type EnvironmentStatusPoller,
+} from './environmentStatusPoll.js'
 
 // EnvironmentProvisioningService: orchestrates provisioning an environment from a
 // workspace's registered provider. Deterministic and side-effecting via the
@@ -58,12 +83,47 @@ export interface EnvironmentProvisioningServiceDependencies {
   connectionService: EnvironmentConnectionService
   environmentRegistryRepository: EnvironmentRegistryRepository
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the environment row lives on the mothership and
+   * is sealed under ITS key. This service both READS the access handle (status, teardown, tester
+   * context) and WRITES it, so the delegation has to run in both directions: a handle a laptop
+   * sealed locally is one the mothership's own teardown could never open.
+   */
+  secretDelegate?: SecretDelegate
   idGenerator: IdGenerator
   clock: Clock
   /** URL/host safety policy applied to the URL a provider returns. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
+  /**
+   * Opens one bounded TCP connection, so {@link EnvironmentProvisioningService.proveReachability}
+   * can prove a route instead of asserting one. Absent means every proof records `unproved` and
+   * nothing downstream changes, which is what a facade with no socket API is owed.
+   */
+  routeProbe?: RouteProbe
+  /**
+   * Turns a stated NAME into the addresses it answers with, for the provider that identifies its
+   * balancers by name rather than by a literal it would have to re-snapshot on every poll.
+   *
+   * Absent means a candidate stating a name is recorded `resolver_unavailable` and dialled by
+   * nobody, which leaves the route unruled-out rather than failing a frame. Addresses stated
+   * directly are unaffected.
+   */
+  hostResolver?: HostResolver
   /** Best-effort provisioning-event log; absent ⇒ provisioning is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
+  /** Kernel logger for the diagnostic reads' best-effort degradations; absent ⇒ silent. */
+  logger?: Logger
+  /**
+   * READ side of that same log, for the environment investigation's timeline: the one place a
+   * failed provision's own history can be lined up against the provider's timestamps, which is how
+   * the motivating incident was diagnosed by hand. Separate from {@link provisioningLog} because
+   * the write seam is deliberately best-effort and write-only. Absent ⇒ the timeline carries the
+   * registry row's dates alone.
+   */
+  readProvisioningLog?: (
+    workspaceId: string,
+    executionId: string,
+  ) => Promise<ProvisioningLogRecord[]>
   /**
    * Resolve the VCS-neutral, run-repo-bound RepoFiles for a block, so provisioning can
    * pre-flight `provider.validateRepo` BEFORE calling the provider — failing fast with a
@@ -148,13 +208,19 @@ export interface EnvironmentProvisioningServiceDependencies {
  * runtime-neutral; the facade passes its `RunnerJobClient`, which is structurally compatible.
  */
 export interface DeployJobClient {
+  /**
+   * The harness's dispatch acknowledgement is accepted but ignored here: a deploy job runs no
+   * agent, so it carries none of the body capabilities the handshake covers and has nothing to
+   * verify. Widened to `unknown` rather than `void` so the server's `RunnerJobClient` (which
+   * forwards the ack for the agent path) stays structurally compatible.
+   */
   dispatch(
     workspaceId: string | undefined,
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void>
+  ): Promise<unknown>
   poll(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobView>
   release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void>
 }
@@ -170,13 +236,36 @@ interface ResolvedProvision {
 }
 
 /**
+ * A settled environment plus the machine-readable cause when it settled FAILED.
+ *
+ * The pair exists because those two facts are produced together and consumed together, and only
+ * one of them is persisted. The handle is a row: it carries `lastError`, the prose a human reads.
+ * The reason is the provider's CLASSIFICATION, and the engine reads it to decide whether an
+ * automated fixer may be dispatched at the failure at all. Returning the handle alone is what
+ * dropped it: a provider that classified its failure correctly had its verdict discarded one call
+ * before the decision that needed it, and the loop then read every non-throwing failure as
+ * unclassified, indistinguishable from a provider that never opted in.
+ *
+ * Deliberately NOT a column on the environment row. The reason is consumed in the same call that
+ * produces it (a settle, immediately), so persisting it would add state with no reader and a
+ * migration on both runtimes to keep it in step.
+ *
+ * `null` whenever the environment is not failed, and equally when it failed and the provider
+ * classified nothing: "we could not tell" is never repo-fixable.
+ */
+export interface SettledProvision {
+  handle: EnvironmentHandle
+  reason: EnvironmentFailureReason | null
+}
+
+/**
  * The outcome of {@link EnvironmentProvisioningService.startProvision}: either the environment
- * was provisioned SYNCHRONOUSLY (the in-Worker REST path for raw manifests — `handle` is final)
- * or a CONTAINER-backed deploy job was dispatched (`ref`) and the caller must park on it and poll
- * via {@link EnvironmentProvisioningService.pollProvisionJob} until it settles.
+ * was provisioned SYNCHRONOUSLY (the in-Worker REST path for raw manifests, where the pair is
+ * final) or a CONTAINER-backed deploy job was dispatched (`ref`) and the caller must park on it
+ * and poll via {@link EnvironmentProvisioningService.pollProvisionJob} until it settles.
  */
 export type ProvisionDispatch =
-  | { kind: 'completed'; handle: EnvironmentHandle }
+  | ({ kind: 'completed' } & SettledProvision)
   | { kind: 'dispatched'; ref: RunnerJobRef }
 
 export interface ProvisionArgs {
@@ -224,13 +313,88 @@ export interface ResolvedEnvironment {
   status: EnvironmentHandle['status']
   access: EnvironmentAccessHandle | null
   expiresAt: number | null
+  /**
+   * What the platform proved about reaching this environment, flattened to what a consumer needs:
+   * the address it may dial and the layer that failed. Absent when nothing has probed it.
+   */
+  reachability?: EnvironmentReachabilityNote
 }
 
 export class EnvironmentProvisioningService {
-  constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {}
+  /** Seals/opens the environment ciphers, through the mothership when this node holds no org key. */
+  private readonly orgSecrets: OrgSecretCipher
+
+  /** The forensic reads, behind the thin delegates at the bottom of this class. */
+  private readonly diagnostics: EnvironmentDiagnostics
+
+  /** One status poll, behind {@link refreshStatus}. */
+  private readonly statusPoller: EnvironmentStatusPoller
+
+  constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
+    this.diagnostics = createEnvironmentDiagnostics({
+      readRecord: (workspaceId, id) => deps.environmentRegistryRepository.get(workspaceId, id),
+      resolveProvider: (record) => deps.connectionService.resolveProviderForRecord(record),
+      decryptFields: (record) => this.decryptFields(record),
+      // The `remediate` row rides the same write seam every other environment verb uses, mapped
+      // here rather than in the collaborator so the log's shape stays known in one place.
+      recordRemediation: async (row) => {
+        await deps.provisioningLog?.record({
+          workspaceId: row.workspaceId,
+          subsystem: 'environment',
+          operation: 'remediate',
+          targetId: row.environmentId,
+          providerId: row.providerId,
+          blockId: row.blockId,
+          executionId: row.executionId,
+          outcome: row.outcome,
+          error: row.error,
+          detail: row.detail,
+        })
+      },
+      ...(deps.readProvisioningLog ? { listProvisioningLog: deps.readProvisioningLog } : {}),
+      ...(deps.logger ? { logger: deps.logger } : {}),
+    })
+    this.statusPoller = createEnvironmentStatusPoller({
+      registry: deps.environmentRegistryRepository,
+      resolveProvider: (record) => deps.connectionService.resolveProviderForRecord(record),
+      decryptFields: (record) => this.decryptFields(record),
+      sealFields: (workspaceId, fields) => this.encryptProvisionFields(workspaceId, fields),
+      sealAccess: (workspaceId, access) => this.encryptAccess(workspaceId, access),
+      assertPublishableUrl: (url) => this.assertPublishableUrl(url),
+      resolveExpiry: (provisioned, defaultTtlMs, base) =>
+        this.resolveExpiry(provisioned, defaultTtlMs, base),
+      clock: deps.clock,
+      ...(deps.routeProbe ? { probe: deps.routeProbe } : {}),
+      ...(deps.hostResolver ? { resolveHost: deps.hostResolver } : {}),
+      ...(deps.provisioningLog ? { provisioningLog: deps.provisioningLog } : {}),
+      ...(deps.logger ? { logger: deps.logger } : {}),
+    })
+  }
 
   private get urlPolicy(): UrlSafetyPolicy {
     return this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY
+  }
+
+  /**
+   * Every grade an environment URL has to pass before it is recorded, in the ONE place every
+   * provider's URL passes through: the sync provision, the async finalize, and the status
+   * reconcile all settle here.
+   *
+   * The two are a pair on purpose. Safety says the URL may not be FETCHED (an internal host, an
+   * embedded credential); reachability says it does not name this deployment at all, which is
+   * the failure a rendered wildcard-DNS host produces silently. Grading them together is what
+   * keeps the second one provider-agnostic: a container-rendered URL a deploy harness hands back
+   * and a host read off a live Ingress are checked exactly as a URL derived in process is.
+   */
+  private assertPublishableUrl(url: string | null): void {
+    if (!url) return
+    assertSafeEnvironmentUrl(url, 'environment URL', this.urlPolicy)
+    const misresolving = describeMisresolvingEnvironmentUrl(url)
+    if (misresolving) throw new ValidationError(misresolving)
   }
 
   /**
@@ -316,8 +480,8 @@ export class EnvironmentProvisioningService {
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const resolved = await this.resolveProvision(args)
-    // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
-    // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a
+    // Pre-flight gate: if the provider declares repo-config expectations (e.g. a
+    // `.deploy.yml`), verify them against the block's repo BEFORE provisioning, so a
     // missing/malformed config fails synchronously here instead of as an async failed
     // environment. Skipped for a block-less manual provision or an unconfigured workspace.
     await this.preflightValidateRepo(
@@ -333,7 +497,10 @@ export class EnvironmentProvisioningService {
       undefined,
       { resolveClone: true },
     )
-    return this.provisionSync(args, resolved, req)
+    // The handle alone: this entry point is the standalone/manual provision, which has no run to
+    // remediate and so nothing to hand a classification to. `startProvision` is the deployer's
+    // door and keeps the pair.
+    return (await this.provisionSync(args, resolved, req)).handle
   }
 
   /**
@@ -365,7 +532,7 @@ export class EnvironmentProvisioningService {
     )
     let job: DeployProvisionJob | null = null
     try {
-      job = resolved.provider.asyncProvision?.buildProvisionJob(req) ?? null
+      job = (await resolved.provider.asyncProvision?.buildProvisionJob(req)) ?? null
     } catch (error) {
       // `buildProvisionJob` throws when rendering is needed but the deploy inputs aren't wired.
       // Persist a failed env so the deployer step shows the cause, then propagate.
@@ -374,20 +541,27 @@ export class EnvironmentProvisioningService {
     }
     if (!job) {
       // Raw manifests / no async provider: the synchronous in-Worker REST path.
-      const handle = await this.provisionSync(args, resolved, req)
-      return { kind: 'completed', handle }
+      return { kind: 'completed', ...(await this.provisionSync(args, resolved, req)) }
     }
     if (!this.deps.deployJobClient) {
       // Provider-agnostic on purpose: ANY provider whose config needs a container-backed render
       // (Kubernetes today; a future Nomad/custom provider tomorrow) reaches here, so the message
-      // names the runtime-neutral transport remedies, not one provider's CLIs. The SPA keys its
-      // runtime-/provider-specific hint off the `deploy_runner_unwired` reason instead.
+      // names the runtime-neutral transport remedies, not one provider's CLIs. It spells out each
+      // facade's exact setting (and, for local mode, both modes + which needs a companion) so the
+      // remedy is actionable without cross-referencing the docs. The SPA still keys its
+      // runtime-/provider-specific hint off the `deploy_runner_unwired` reason on top of this.
       const message =
         "This service's environment provider needs a container-backed deploy to render and " +
-        'apply its manifests, but this deployment has no deploy runner wired to run it. ' +
-        'Configure a deploy backend for this deployment — a self-hosted runner pool (Node), the ' +
-        'LOCAL_DEPLOY_RUNTIME env (local mode), or the DeployContainer binding (Cloudflare) — or ' +
-        'use an environment config that provisions without a deploy container.'
+        'apply its manifests, but this deployment has no deploy runner wired to run it. Wire a ' +
+        'deploy runner for this deployment:\n' +
+        '  • Local mode — set LOCAL_DEPLOY_RUNTIME to `container` (runs the deploy-harness image ' +
+        'per job; the image is resolved automatically, so no other variable is needed) or `native` ' +
+        '(renders with your own host kubectl/kustomize/helm; also set LOCAL_DEPLOY_HARNESS_ENTRY). ' +
+        'It has no default — pick one.\n' +
+        '  • Node — register a self-hosted runner pool (it runs the deploy-harness image).\n' +
+        '  • Cloudflare — add the DeployContainer binding.\n' +
+        'Or use an environment config that provisions without a deploy container (raw manifests, ' +
+        'or an infraless service).'
       await this.captureProvisionFailure(args, resolved, message)
       const reason: EnvironmentFailureReason = 'deploy_runner_unwired'
       throw new ValidationError(message, { reason })
@@ -447,7 +621,7 @@ export class EnvironmentProvisioningService {
    * the `provisioning` row from {@link startProvision}). A failed view becomes a `failed` env
    * carrying the harness error, so the deployer step's details project it.
    */
-  async finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<EnvironmentHandle> {
+  async finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<SettledProvision> {
     const resolved = await this.resolveProvision(args)
     const capability = resolved.provider.asyncProvision
     if (!capability) {
@@ -457,9 +631,7 @@ export class EnvironmentProvisioningService {
     // deploy clone inputs aren't needed here — skip minting a fresh clone token.
     const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
     const provisioned = capability.finalizeProvision(view, req)
-    if (provisioned.url) {
-      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
-    }
+    this.assertPublishableUrl(provisioned.url)
     return this.recordProvisioned(
       args,
       resolved.manifest,
@@ -660,7 +832,7 @@ export class EnvironmentProvisioningService {
     args: ProvisionArgs,
     resolved: ResolvedProvision,
     req: ProvisionEnvironmentRequest,
-  ): Promise<EnvironmentHandle> {
+  ): Promise<SettledProvision> {
     let provisioned: ProvisionedEnvironment
     try {
       provisioned = await resolved.provider.provision(req)
@@ -670,9 +842,7 @@ export class EnvironmentProvisioningService {
       await this.captureProvisionFailure(args, resolved, getErrorMessage(error))
       throw error
     }
-    if (provisioned.url) {
-      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
-    }
+    this.assertPublishableUrl(provisioned.url)
     return this.recordProvisioned(
       args,
       resolved.manifest,
@@ -725,7 +895,7 @@ export class EnvironmentProvisioningService {
     provisioned: ProvisionedEnvironment,
     provisionType: ProvisionType | null,
     engine: InfraEngine | null,
-  ): Promise<EnvironmentHandle> {
+  ): Promise<SettledProvision> {
     const { workspaceId } = args
     // A (block, frame) pair holds at most one live environment: supersede any prior one, tearing
     // its real infra down when the new provision targets a different provider identity (else keep
@@ -748,9 +918,20 @@ export class EnvironmentProvisioningService {
       externalId: provisioned.externalId,
       url: provisioned.url,
       status: provisioned.status,
-      accessCipher: await this.encryptAccess(provisioned.access),
-      provisionFieldsCipher: await this.deps.secretCipher.encrypt(
-        JSON.stringify(provisioned.fields),
+      accessCipher: await this.encryptAccess(workspaceId, provisioned.access),
+      // `null` on a create is a provider that captured nothing, not one that made no statement:
+      // there is no stored bag for "keep what you have" to mean anything against, which is why
+      // the field is nullable rather than optional (see {@link ProvisionedEnvironment.fields}).
+      provisionFieldsCipher: await this.encryptProvisionFields(
+        workspaceId,
+        provisioned.fields ?? {},
+      ),
+      // The provider's CLAIM about where this URL is reachable, stored with no proof beside it.
+      // Nothing has dialled anything yet: the proof runs once the environment is `ready`, in the
+      // deployer's settle path, and publishing an unproved address before then is precisely the
+      // failure mode that makes an address bridge worse than no bridge.
+      reachability: serializeReachability(
+        foldStatedAddresses(null, null, provisioned.addresses, provisioned.url),
       ),
       createdAt: now,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, now),
@@ -760,6 +941,13 @@ export class EnvironmentProvisioningService {
       // provider gave none.
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
+      // The non-failure counterpart, and the one field here NOT gated on a status: a provider
+      // reporting `provisioning` is exactly the case that has something to explain and no
+      // `error` to explain it with (see {@link ProvisionedEnvironment.statusNote}). No fallback
+      // literal either: a provider with nothing to add says nothing, which is the prior
+      // behaviour byte for byte. Bounded, because it is prose a third-party adapter authored:
+      // {@link boundStatusNote}.
+      statusNote: boundStatusNote(provisioned.statusNote),
       // The resolved provision type + engine (the per-type path); null on the legacy connection.
       provisionType,
       engine,
@@ -779,7 +967,14 @@ export class EnvironmentProvisioningService {
       error: record.lastError,
       detail: JSON.stringify({ status: provisioned.status }),
     })
-    return recordToHandle(record)
+    // The classification rides BESIDE the row rather than on it: `lastError` is the prose a human
+    // reads and this is the class the engine acts on, and only the first is worth a column (see
+    // {@link SettledProvision}). Nulled on anything but a failure so a stale reason can never be
+    // read off a healthy environment.
+    return {
+      handle: recordToHandle(record),
+      reason: provisioned.status === 'failed' ? (provisioned.reason ?? null) : null,
+    }
   }
 
   /**
@@ -831,83 +1026,13 @@ export class EnvironmentProvisioningService {
     throw new ValidationError(`Repo validation failed: ${summary}`)
   }
 
-  /** Re-poll the provider for an environment's status and persist any change. */
+  /**
+   * Re-poll the provider for an environment's status and persist what the answer says. Thin
+   * delegate; the rules about what a second look may overwrite live in
+   * {@link createEnvironmentStatusPoller}.
+   */
   async refreshStatus(workspaceId: string, id: string): Promise<EnvironmentHandle> {
-    const record = assertFound(
-      await this.deps.environmentRegistryRepository.get(workspaceId, id),
-      'Environment',
-      id,
-    )
-    // Resolve the provider from the record's stored provision type/engine (the handler that stood
-    // it up), not the workspace-primary — matching the per-type resolution provisioning uses.
-    const { manifest, provider, resolveSecret } =
-      await this.deps.connectionService.resolveProviderForRecord(record)
-    const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
-
-    let provisioned: ProvisionedEnvironment
-    try {
-      provisioned = await provider.status({
-        manifest,
-        externalId: record.externalId,
-        provisionFields,
-        resolveSecret,
-      })
-    } catch (error) {
-      await this.deps.provisioningLog?.record({
-        workspaceId,
-        subsystem: 'environment',
-        operation: 'status',
-        targetId: record.id,
-        providerId: manifest.providerId,
-        blockId: record.blockId,
-        executionId: record.executionId,
-        outcome: 'failure',
-        error: error instanceof Error ? error.message : String(error),
-        detail: null,
-      })
-      throw error
-    }
-    if (provisioned.url) {
-      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
-    }
-
-    const patch = {
-      status: provisioned.status,
-      url: provisioned.url,
-      externalId: provisioned.externalId ?? record.externalId,
-      expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, record.createdAt),
-      accessCipher: await this.encryptAccess(provisioned.access),
-    }
-    await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
-
-    // A reconciliation that flips the env to `failed` (e.g. a rollout that exceeded its progress
-    // deadline, or a vanished namespace — the cases the provider maps to `failed` WITHOUT
-    // throwing) records a provisioning-log failure on the TRANSITION, so the run's "Infrastructure
-    // attempts" shows the env stopped spinning up instead of leaving it silently stuck. Repeated
-    // polls of an already-failed env don't re-log. (A read that THROWS is logged in the catch
-    // above; this covers the non-throwing failed verdict.) This runs AFTER the status patch is
-    // persisted and is best-effort: a logging hiccup must not throw back through refreshStatus and
-    // leave the env stuck at `provisioning` again — the exact bug this surfacing is meant to fix.
-    if (provisioned.status === 'failed' && record.status !== 'failed') {
-      try {
-        await this.deps.provisioningLog?.record({
-          workspaceId,
-          subsystem: 'environment',
-          operation: 'status',
-          targetId: record.id,
-          providerId: manifest.providerId,
-          blockId: record.blockId,
-          executionId: record.executionId,
-          outcome: 'failure',
-          error: 'Environment provisioning did not complete (it never became ready).',
-          detail: null,
-        })
-      } catch {
-        // swallow: the env is already persisted as `failed`; the log entry is advisory
-      }
-    }
-
-    return recordToHandle({ ...record, ...patch })
+    return this.statusPoller.refresh(workspaceId, id)
   }
 
   /**
@@ -933,7 +1058,7 @@ export class EnvironmentProvisioningService {
   async getHandleWithAccess(workspaceId: string, id: string): Promise<EnvironmentHandle | null> {
     const record = await this.deps.environmentRegistryRepository.get(workspaceId, id)
     if (!record) return null
-    return recordToHandle(record, await this.decryptAccess(record.accessCipher))
+    return recordToHandle(record, await this.decryptAccess(record))
   }
 
   /**
@@ -949,12 +1074,55 @@ export class EnvironmentProvisioningService {
     // A browsable-preview row is not a provisioned environment — never resolve it as a block's
     // live env (e.g. for tester context enrichment); it is owned solely by the PreviewService.
     if (!record || record.provisionType === PREVIEW_PROVISION_TYPE) return null
+    const note = reachabilityNote(parseReachability(record.reachability))
     return {
       url: record.url,
       status: record.status,
-      access: await this.decryptAccess(record.accessCipher),
+      access: await this.decryptAccess(record),
       expiresAt: record.expiresAt,
+      ...(note ? { reachability: note } : {}),
     }
+  }
+
+  /**
+   * Dial this environment once and record what carried: its own name first, then each address its
+   * provider stated for that name, in the provider's order.
+   *
+   * Called by the `deployer` at the moment a frame settles `ready`, which is the one place in the
+   * lifecycle where the I/O is free and the answer is still worth acting on. Deliberately NOT a
+   * gate: `docs/initiatives/deployment-failure-remediation.md` withdrew a `deploy-health` gate that
+   * would have probed the environment handle, on the grounds that the deployer owns provisioning
+   * through to a terminal verdict.
+   *
+   * Returns the updated handle so the caller reads the verdict off the same object it will record,
+   * rather than re-reading the row it just wrote. A probe never throws (see the `RouteProbe` port),
+   * so the only failure this can propagate is the persistence write, which is the caller's to
+   * handle exactly as every other settle write is.
+   */
+  async proveReachability(workspaceId: string, id: string): Promise<EnvironmentHandle> {
+    const record = assertFound(
+      await this.deps.environmentRegistryRepository.get(workspaceId, id),
+      'Environment',
+      id,
+    )
+    const stored = parseReachability(record.reachability)
+    const proof = await proveEnvironmentRoute(record.url, stored?.candidates ?? [], {
+      ...(this.deps.routeProbe ? { probe: this.deps.routeProbe } : {}),
+      ...(this.deps.hostResolver ? { resolveHost: this.deps.hostResolver } : {}),
+      clock: this.deps.clock,
+    })
+    const patch = {
+      // `probedAt` from the proof's own date, so the record that the platform LOOKED survives a
+      // later fold having to drop the verdict (see `EnvironmentReachability.probedAt`); the poll
+      // path's re-prove paces itself against it.
+      reachability: serializeReachability({
+        candidates: stored?.candidates ?? [],
+        proof,
+        probedAt: proof.checkedAt,
+      }),
+    }
+    await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
+    return recordToHandle({ ...record, ...patch })
   }
 
   /**
@@ -1026,9 +1194,23 @@ export class EnvironmentProvisioningService {
     return null
   }
 
-  private async encryptAccess(access: EnvironmentAccessHandle | null): Promise<string | null> {
+  private async encryptAccess(
+    workspaceId: string,
+    access: EnvironmentAccessHandle | null,
+  ): Promise<string | null> {
     if (!access) return null
-    return this.deps.secretCipher.encrypt(JSON.stringify(access))
+    return this.orgSecrets.encryptFor(
+      { source: 'environment_access', workspaceId },
+      JSON.stringify(access),
+    )
+  }
+
+  /** Seal the provider's opaque status/teardown fields, alongside the access handle above. */
+  private async encryptProvisionFields(workspaceId: string, fields: unknown): Promise<string> {
+    return this.orgSecrets.encryptFor(
+      { source: 'environment_provision_fields', workspaceId },
+      JSON.stringify(fields),
+    )
   }
 
   /**
@@ -1038,9 +1220,19 @@ export class EnvironmentProvisioningService {
    * `EnvironmentRecord` becomes a compile error at both call sites instead of a silent miss.
    */
   private buildEnvironmentRecord(
-    fields: Omit<EnvironmentRecord, 'id' | 'deletedAt'>,
+    fields: Omit<EnvironmentRecord, 'id' | 'deletedAt' | 'lastPolledAt' | 'pollCount'>,
   ): EnvironmentRecord {
-    return { id: this.deps.idGenerator.next('env'), deletedAt: null, ...fields }
+    // The poll marker joins the scaffolding rather than the discriminating fields: an environment
+    // being recorded has by construction never been polled, so there is no per-call-site decision
+    // to force. Both are written explicitly rather than left to a column default, so the row a
+    // facade inserts and the record its repo reads back can never disagree about them.
+    return {
+      id: this.deps.idGenerator.next('env'),
+      deletedAt: null,
+      lastPolledAt: null,
+      pollCount: 0,
+      ...fields,
+    }
   }
 
   /**
@@ -1125,9 +1317,14 @@ export class EnvironmentProvisioningService {
         status: 'failed',
         accessCipher: null,
         provisionFieldsCipher: null,
+        // A provision that never produced a URL has no host anyone could have named an address for.
+        reachability: null,
         createdAt: this.deps.clock.now(),
         expiresAt: null,
         lastError,
+        // Nothing to add: the thrown error IS the account, and this row is born terminal, so
+        // there is no non-terminal state left to describe.
+        statusNote: null,
         provisionType,
         engine,
       })
@@ -1147,23 +1344,70 @@ export class EnvironmentProvisioningService {
           blockId: args.blockId ?? null,
           executionId: args.executionId ?? null,
           outcome: 'failure',
-          error: `failed to persist the failed-environment record: ${
-            persistError instanceof Error ? persistError.message : String(persistError)
-          }`,
+          error: `failed to persist the failed-environment record: ${getErrorMessage(
+            persistError,
+          )}`,
           detail: null,
         })
         .catch(() => undefined)
     }
   }
 
-  private async decryptAccess(cipher: string | null): Promise<EnvironmentAccessHandle | null> {
-    if (!cipher) return null
-    return JSON.parse(await this.deps.secretCipher.decrypt(cipher)) as EnvironmentAccessHandle
+  /**
+   * Open a stored environment's access handle. Takes the RECORD, not the bare envelope, because a
+   * delegated open addresses the ROW: the mothership re-reads it under the node's account scope
+   * rather than decrypting whatever ciphertext it was handed.
+   */
+  private async decryptAccess(
+    record: Pick<EnvironmentRecord, 'workspaceId' | 'id' | 'accessCipher'>,
+  ): Promise<EnvironmentAccessHandle | null> {
+    if (!record.accessCipher) return null
+    const plaintext = await this.orgSecrets.decryptFor(
+      { source: 'environment_access', workspaceId: record.workspaceId, key: [record.id] },
+      record.accessCipher,
+    )
+    return JSON.parse(plaintext) as EnvironmentAccessHandle
   }
 
-  private async decryptFields(cipher: string | null): Promise<Record<string, string>> {
-    if (!cipher) return {}
-    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(cipher))
+  /**
+   * Gather the forensic evidence about an environment that never became usable: the registry
+   * row, the WHOLE captured provision-field bag, the run's provisioning attempts, and the
+   * provider's own diagnosis where it implements one, plus what that same resolved provider says
+   * it will remediate. Thin delegate; the reads live in {@link createEnvironmentDiagnostics}.
+   */
+  async collectEnvironmentEvidence(args: {
+    workspaceId: string
+    environmentId: string | null
+    executionId?: string
+    failure: EnvironmentFailureFacts
+  }): Promise<EnvironmentEvidence> {
+    return this.diagnostics.collect(args)
+  }
+
+  /** Ask the provider to remediate an environment in place. Thin delegate. */
+  async remediateEnvironment(args: {
+    workspaceId: string
+    environmentId: string
+    action: ProviderRemediationAction
+  }): Promise<{ applied: boolean; detail: string }> {
+    return this.diagnostics.remediate(args)
+  }
+
+  /** Open a stored environment's provision fields: the row-addressed sibling of the above. */
+  private async decryptFields(
+    record: Pick<EnvironmentRecord, 'workspaceId' | 'id' | 'provisionFieldsCipher'>,
+  ): Promise<Record<string, string>> {
+    if (!record.provisionFieldsCipher) return {}
+    const parsed = JSON.parse(
+      await this.orgSecrets.decryptFor(
+        {
+          source: 'environment_provision_fields',
+          workspaceId: record.workspaceId,
+          key: [record.id],
+        },
+        record.provisionFieldsCipher,
+      ),
+    )
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
   }
 }

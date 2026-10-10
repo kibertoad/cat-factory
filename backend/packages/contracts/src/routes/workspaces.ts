@@ -1,8 +1,9 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { workspaceSchema } from '../entities.js'
 import { createWorkspaceSchema, renameWorkspaceSchema } from '../requests.js'
 import { workspaceSnapshotSchema } from '../snapshot.js'
+import { workspaceRoleSchema } from '../workspace-members.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -13,7 +14,19 @@ import { errorResponses, singleStringParam } from './_shared.js'
 // `param(c, 'workspaceId')`, so it is NOT declared as a contract param.
 // ---------------------------------------------------------------------------
 
-const workspaceListSchema = v.array(workspaceSchema)
+/**
+ * A board as returned by `GET /workspaces`, annotated with the caller's effective
+ * workspace-RBAC role (`viewerRole`) so the SPA can badge a restricted board the caller
+ * only reaches as a viewer/member. Optional: absent ⇒ dev-open, or a board the caller
+ * reaches purely via account membership with no explicit member row.
+ */
+export const workspaceListItemSchema = v.object({
+  ...workspaceSchema.entries,
+  viewerRole: v.optional(workspaceRoleSchema),
+})
+export type WorkspaceListItem = v.InferOutput<typeof workspaceListItemSchema>
+
+const workspaceListSchema = v.array(workspaceListItemSchema)
 
 export const listWorkspacesContract = defineApiContract({
   method: 'get',
@@ -47,5 +60,5 @@ export const deleteWorkspaceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: singleStringParam('workspaceId'),
   pathResolver: ({ workspaceId }) => `/workspaces/${workspaceId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

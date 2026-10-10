@@ -134,21 +134,18 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   const u = usageOf(usage)
   const oaToolCalls = toOpenAiToolCalls(toolCalls)
   const finishReason = toOpenAiFinish(rawFinish, oaToolCalls.length > 0)
-  log.info(
-    {
-      inputTokens: u.prompt_tokens,
-      outputTokens: u.completion_tokens,
-      textLength: text.length,
-      // A reasoning model can spend its whole output budget thinking and return empty
-      // text (the kimi-k2.7 empty-completion failure); log the reasoning size so that
-      // "N output tokens, 0 text" is no longer a black hole.
-      reasoningLength: reasoning.length,
-      toolCalls: oaToolCalls.length,
-      finishReason,
-      streaming,
-    },
-    'llm proxy: Workers AI completion ok',
-  )
+  log.info('llm proxy: Workers AI completion ok', {
+    inputTokens: u.prompt_tokens,
+    outputTokens: u.completion_tokens,
+    textLength: text.length,
+    // A reasoning model can spend its whole output budget thinking and return empty
+    // text (the kimi-k2.7 empty-completion failure); log the reasoning size so that
+    // "N output tokens, 0 text" is no longer a black hole.
+    reasoningLength: reasoning.length,
+    toolCalls: oaToolCalls.length,
+    finishReason,
+    streaming,
+  })
   await record(u)
   recordMetric?.({
     usage: u,
@@ -218,30 +215,23 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
   const run = binding.run as (model: string, inputs: unknown) => Promise<unknown>
   const completion = (await run(modelId, input)) as OpenAiCompletion
 
-  const choice = completion?.choices?.[0]
-  const message = choice?.message
-  const text = typeof message?.content === 'string' ? message.content : ''
-  const rawReasoning = message?.reasoning_content ?? message?.reasoning
-  const reasoning = typeof rawReasoning === 'string' ? rawReasoning : ''
-  const oaToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
-  const finishReason = choice?.finish_reason ?? (oaToolCalls.length > 0 ? 'tool_calls' : 'stop')
-  const u: LlmTokenUsage = {
-    prompt_tokens: completion?.usage?.prompt_tokens ?? 0,
-    completion_tokens: completion?.usage?.completion_tokens ?? 0,
-  }
+  const {
+    text,
+    reasoning,
+    oaToolCalls,
+    finishReason,
+    usage: u,
+  } = parseCatalogCompletion(completion)
 
-  log.info(
-    {
-      inputTokens: u.prompt_tokens,
-      outputTokens: u.completion_tokens,
-      textLength: text.length,
-      reasoningLength: reasoning.length,
-      toolCalls: oaToolCalls.length,
-      finishReason,
-      streaming,
-    },
-    'llm proxy: AI-catalog completion ok',
-  )
+  log.info('llm proxy: AI-catalog completion ok', {
+    inputTokens: u.prompt_tokens,
+    outputTokens: u.completion_tokens,
+    textLength: text.length,
+    reasoningLength: reasoning.length,
+    toolCalls: oaToolCalls.length,
+    finishReason,
+    streaming,
+  })
   await record(u)
   recordMetric?.({
     usage: u,
@@ -294,6 +284,33 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
     },
   })
   return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+/**
+ * Project a Cloudflare AI-catalog OpenAI completion into the fields {@link runCatalogModel} relays:
+ * assistant text, reasoning trace, tool calls, finish reason, and normalized token usage. Extracted
+ * from that function to keep it within the cyclomatic-complexity budget — the (defensive `?.`)
+ * derivations are moved verbatim.
+ */
+function parseCatalogCompletion(completion: OpenAiCompletion): {
+  text: string
+  reasoning: string
+  oaToolCalls: Array<Record<string, unknown>>
+  finishReason: string
+  usage: LlmTokenUsage
+} {
+  const choice = completion?.choices?.[0]
+  const message = choice?.message
+  const text = typeof message?.content === 'string' ? message.content : ''
+  const rawReasoning = message?.reasoning_content ?? message?.reasoning
+  const reasoning = typeof rawReasoning === 'string' ? rawReasoning : ''
+  const oaToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
+  const finishReason = choice?.finish_reason ?? (oaToolCalls.length > 0 ? 'tool_calls' : 'stop')
+  const usage: LlmTokenUsage = {
+    prompt_tokens: completion?.usage?.prompt_tokens ?? 0,
+    completion_tokens: completion?.usage?.completion_tokens ?? 0,
+  }
+  return { text, reasoning, oaToolCalls, finishReason, usage }
 }
 
 /** The slice of an OpenAI Chat Completions response the catalog path reads. */
@@ -431,6 +448,26 @@ function systemFromMessages(raw: unknown): string | undefined {
 }
 
 /**
+ * Convert an assistant message's OpenAI `tool_calls` into AI SDK `tool-call` content parts,
+ * skipping any malformed entry. Extracted so the per-call loop doesn't nest under the
+ * message loop + role branch in {@link toModelMessages} (keeps max-depth ≤ 4).
+ */
+function assistantToolCallParts(toolCalls: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(toolCalls)) return []
+  const parts: Array<Record<string, unknown>> = []
+  for (const tc of toolCalls) {
+    if (!isObject(tc) || !isObject(tc.function) || typeof tc.function.name !== 'string') continue
+    parts.push({
+      type: 'tool-call',
+      toolCallId: typeof tc.id === 'string' ? tc.id : '',
+      toolName: tc.function.name,
+      input: safeParseArgs(tc.function.arguments),
+    })
+  }
+  return parts
+}
+
+/**
  * Convert OpenAI chat messages to AI SDK `ModelMessage`s, handling the tool
  * round-trip: an assistant message's `tool_calls` become `tool-call` content parts,
  * and a `tool` message becomes a `tool-result` (its tool name recovered by id from
@@ -466,19 +503,7 @@ function toModelMessages(raw: unknown): ModelMessage[] {
       const parts: Array<Record<string, unknown>> = []
       const text = contentText(m.content)
       if (text) parts.push({ type: 'text', text })
-      if (Array.isArray(m.tool_calls)) {
-        for (const tc of m.tool_calls) {
-          if (!isObject(tc) || !isObject(tc.function) || typeof tc.function.name !== 'string') {
-            continue
-          }
-          parts.push({
-            type: 'tool-call',
-            toolCallId: typeof tc.id === 'string' ? tc.id : '',
-            toolName: tc.function.name,
-            input: safeParseArgs(tc.function.arguments),
-          })
-        }
-      }
+      parts.push(...assistantToolCallParts(m.tool_calls))
       out.push({ role: 'assistant', content: parts.length > 0 ? parts : text } as ModelMessage)
     } else if (m.role === 'tool') {
       const toolCallId = typeof m.tool_call_id === 'string' ? m.tool_call_id : ''

@@ -1,0 +1,42 @@
+# The preview stack's single origin: the static SPA and the API served together.
+#
+# Why single-origin at all: the SPA is `ssr: false`, so its API base is baked in at BUILD time,
+# and a preview stack's host port is only assigned at `up` time. Serving both halves on one
+# origin lets the SPA use a RELATIVE API base (see deploy/preview/compose/Dockerfile.web), which
+# works on whatever port the stack lands on — and removes CORS from the picture entirely.
+#
+# The split rule: the SPA owns what exists on disk plus its own client-side routes; EVERYTHING
+# else is the backend. The backend mounts most of its controllers at the root (`/workspaces/*`,
+# `/auth/*`, `/api/*`, `/models`, `/health`, `/v1/*`, …), so "not the SPA ⇒ the API" is the only
+# rule that stays correct as controllers are added. It does mean a NEW SPA page needs a line in
+# `@spa_route` below — Nuxt with `ssr: false` emits `index.html` (+ `200.html`) and no per-route
+# file, so a client-side route that is not listed here would fall through to the API and 404.
+:8080 {
+	encode zstd gzip
+
+	root * /srv
+
+	# Anything the generated SPA actually emitted: index.html, /_nuxt/*, favicon.ico, …
+	@spa_file file {path}
+	# The SPA's client-side routes (frontend/app/app/pages), served as the app shell.
+	@spa_route path / /reset-password /reset-password/*
+
+	# `route` pins the evaluation order to the order written here, rather than letting Caddy
+	# sort the handlers by matcher specificity.
+	route {
+		handle @spa_file {
+			file_server
+		}
+
+		handle @spa_route {
+			rewrite * /index.html
+			file_server
+		}
+
+		# The API, including the `/workspaces/:id/events` WebSocket — reverse_proxy passes an
+		# Upgrade through untouched, which is what keeps the board's live push working.
+		handle {
+			reverse_proxy backend:8787
+		}
+	}
+}

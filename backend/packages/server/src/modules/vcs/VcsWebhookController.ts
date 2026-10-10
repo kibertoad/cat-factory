@@ -1,8 +1,9 @@
 import { Hono } from 'hono'
-import { getVcsProvider, isVcsProvider } from '@cat-factory/kernel'
+import { isVcsProvider, UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
 import type { VcsConnectionRef } from '@cat-factory/kernel'
 import type { AppConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
+import { webhookBodyLimit } from '../../webhooks/bodyLimit.js'
 import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 
 /**
@@ -21,25 +22,19 @@ import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 export function vcsWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/:provider/webhooks', async (c) => {
+  app.post('/:provider/webhooks', webhookBodyLimit(), async (c) => {
     const providerParam = c.req.param('provider')
     if (!isVcsProvider(providerParam)) {
       return c.json({ error: { code: 'validation', message: 'Unknown VCS provider' } }, 404)
     }
-    const bundle = getVcsProvider(providerParam)
+    const bundle = c.get('container').vcsRegistry.get(providerParam)
     if (!bundle) {
-      return c.json(
-        { error: { code: 'unavailable', message: `${providerParam} is not configured` } },
-        503,
-      )
+      throw new UnavailableError(`${providerParam} is not configured`)
     }
 
     const connection = resolveConnection(c.get('container').config, providerParam)
     if (!connection) {
-      return c.json(
-        { error: { code: 'unavailable', message: `${providerParam} connection not configured` } },
-        503,
-      )
+      throw new UnavailableError(`${providerParam} connection not configured`)
     }
 
     // Verify against the RAW bytes before parsing. Each provider keys off a different
@@ -48,10 +43,7 @@ export function vcsWebhookController(): Hono<AppEnv> {
     const signatureHeader =
       c.req.header('x-gitlab-token') ?? c.req.header('x-hub-signature-256') ?? null
     if (!bundle.webhookVerifier) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Webhook verification not configured' } },
-        503,
-      )
+      throw new UnavailableError('Webhook verification not configured')
     }
     if (!(await bundle.webhookVerifier.verify(raw, signatureHeader))) {
       // Response stays terse (external caller); log the operator-facing setup remedy. NOTE: a
@@ -63,7 +55,7 @@ export function vcsWebhookController(): Hono<AppEnv> {
         secretConfigured: connectionSecret(c.get('container').config, providerParam) !== '',
         signaturePresent: !!signatureHeader,
       })
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid signature' } }, 401)
+      throw new UnauthorizedError('Invalid signature')
     }
 
     let payload: unknown
@@ -96,7 +88,7 @@ function resolveConnection(
 ): VcsConnectionRef | null {
   if (provider === 'gitlab') {
     const gitlab = config.gitlab
-    if (!gitlab?.enabled) return null
+    if (!gitlab.enabled) return null
     return { provider: 'gitlab', connectionId: gitlab.connectionId }
   }
   // GitHub uses its dedicated `/github/webhooks` route; the neutral route does not serve it.
@@ -106,7 +98,7 @@ function resolveConnection(
 /** The deployment's configured webhook secret for a provider ('' when unset) — the signal for
  * the C2 "no secret configured" rejection sub-case. */
 function connectionSecret(config: AppConfig, provider: 'github' | 'gitlab'): string {
-  if (provider === 'gitlab') return config.gitlab?.webhookSecret ?? ''
+  if (provider === 'gitlab') return config.gitlab.webhookSecret
   // GitHub is not served by the neutral route (see resolveConnection).
   return ''
 }

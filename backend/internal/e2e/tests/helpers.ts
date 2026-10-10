@@ -6,18 +6,42 @@ import { INFRA_SETUP_AREAS, INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-facto
 // test side can't drift from the control-channel payload the backend parses. Type-only, so it
 // pulls in none of that module's runtime deps (`@cat-factory/conformance`).
 import type { FakeProfile } from '../src/fakeProfile.ts'
+// Same reasoning for the team/password scenario shapes: type-only, from the seam that produces them.
+import type { PasswordUserScenario, TeamPrincipalSpec, TeamScenario } from '../src/seedTeam.ts'
+// The origins come from the ONE derivation the Playwright config, the backend and the auth SPA's
+// launcher all read (`src/ports.ts`), so no override can move what the specs open without moving what
+// the suite started. Re-exported here because a spec's whole vocabulary is this module.
+import { AUTH_FRONTEND_URL, BACKEND_URL, CONTROL_URL } from '../src/ports.ts'
 
-// The backend origin the specs seed/trigger state against. The auth gate is open in the
-// e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
-// backend runs on a non-default port.
-export const BACKEND_URL =
-  process.env.E2E_BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 8787}`
+/**
+ * The backend origin the specs seed/trigger state against. The auth gate is open in the e2e backend,
+ * so plain REST calls need no token.
+ */
+export { BACKEND_URL }
 
-// The test-only control channel `testServer.ts` listens on (a separate port, so it never
-// couples to the app's CORS/auth). Defaults to `PORT + 1` — the same derivation the backend
-// uses. A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE starting a run.
-export const CONTROL_URL =
-  process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
+/**
+ * The test-only control channel `testServer.ts` listens on (a separate port, so it never couples to
+ * the app's CORS/auth). A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE
+ * starting a run.
+ */
+export { CONTROL_URL }
+
+/**
+ * The SPA origin served against the AUTH-ENABLED backend surface (`src/authBackend.ts`), for the
+ * specs whose subject is identity: the login screen itself, and any policy that names PEOPLE.
+ *
+ * A spec opts into that stack with `test.use({ baseURL: AUTH_FRONTEND_URL })` and otherwise drives
+ * the product exactly as every other spec does. Two things make that work without a parallel set of
+ * helpers: it is the same backend PROCESS (one engine, one pg-boss worker, one realtime fan-out), so
+ * REST seeding and triggering still go through the anonymous surface at {@link BACKEND_URL}; and
+ * cookies are not port-scoped, so the session/board/tier seeds below apply to both origins.
+ *
+ * Why a second stack at all: the primary backend runs `TESTING_NO_AUTH`, under which the SPA renders
+ * the board anonymously and never resolves a signed-in user, so the login screen is unreachable and
+ * a named-approver gate refuses everybody in the browser, for a reason that is correct there and
+ * useless as coverage.
+ */
+export { AUTH_FRONTEND_URL }
 
 /**
  * Re-export the backend `FakeProfile` so specs get the per-workspace fake-behaviour shape
@@ -26,6 +50,103 @@ export const CONTROL_URL =
  * when the run's first agent step dispatches.
  */
 export type { FakeProfile }
+
+/**
+ * A restricted-board RBAC scenario seeded over the control channel (see `testServer.ts`
+ * `seedRbacScenario`): an org owned by an admin, a developer scoped to the board as a
+ * `viewer`, and the board flipped to `restricted`. Carries a signed Bearer token + user id
+ * per principal so the spec can drive the SPA as an authenticated viewer vs admin.
+ */
+export interface RbacScenario {
+  workspaceId: string
+  accountId: string
+  adminToken: string
+  adminUserId: string
+  viewerToken: string
+  viewerUserId: string
+}
+
+/**
+ * Seed a restricted-board RBAC scenario and return the principals' sessions. `tag` makes the
+ * seeded users/board unique per test (so parallel/retry runs never collide). The shared e2e
+ * backend runs auth-enabled-for-signed-tokens (anonymous stays dev-open), so injecting one of
+ * the returned tokens into the SPA (see {@link pinAuthedWorkspace}) drives the board AS that
+ * user with the workspace-RBAC gate enforcing.
+ */
+export async function seedRbacScenario(
+  request: APIRequestContext,
+  tag: string,
+): Promise<RbacScenario> {
+  const res = await request.post(`${CONTROL_URL}/rbac-seed`, { data: { tag } })
+  if (!res.ok()) throw new Error(`rbac-seed control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as RbacScenario
+}
+
+/**
+ * Re-export the team-scenario wire shapes from the backend seam that produces them, so the two
+ * ends of the control channel can't drift (same reason {@link FakeProfile} is re-exported).
+ */
+export type {
+  PasswordUserScenario,
+  SeededPrincipal,
+  TeamPrincipalSpec,
+  TeamScenario,
+} from '../src/seedTeam.ts'
+
+/**
+ * Seed an org + board + the principals a spec needs, each with a signed session (backend seam:
+ * `src/seedTeam.ts`). The general form of {@link seedRbacScenario}: a principal may be enrolled in
+ * the ACCOUNT and left UN-SCOPED (`role: null`), which is the state the members roster grants FROM,
+ * and the board starts unrestricted unless asked, so a spec can restrict it through the UI.
+ *
+ * `tag` makes the seeded users/board unique per test. Also records the `infraless` provisioning
+ * choice over REST for the same reason {@link createSeededWorkspace} does: otherwise the advisory
+ * default-test-env banner overlays the board chrome the spec drives. EVERY board the scenario
+ * created, the spare included: that one is where a revoked session actually lands, so it is the board
+ * such a spec has to click through. (It is only harmless today because the banner is gated on
+ * `settings.manage` and today's fallen-through principals are not admins.)
+ */
+export async function seedTeamScenario(
+  request: APIRequestContext,
+  spec: {
+    tag: string
+    restricted?: boolean
+    principals?: TeamPrincipalSpec[]
+    /** Also seed a second, empty board in the account (see the backend seam's own note). */
+    spareBoard?: boolean
+  },
+): Promise<TeamScenario> {
+  const res = await request.post(`${CONTROL_URL}/team-seed`, { data: spec })
+  if (!res.ok()) throw new Error(`team-seed control ${res.status()}: ${await res.text()}`)
+  const scenario = (await res.json()) as TeamScenario
+  for (const workspaceId of [scenario.workspaceId, scenario.spareWorkspaceId]) {
+    if (!workspaceId) continue
+    await request.put(`${BACKEND_URL}/workspaces/${workspaceId}/settings`, {
+      data: { defaultProvisionType: 'infraless' },
+    })
+  }
+  return scenario
+}
+
+/**
+ * Seed a user who can SIGN IN with a password, plus the account + board they land on (backend seam:
+ * `src/seedTeam.ts`). The credential is written through the identity service the signup endpoint
+ * calls, so the password a spec types is checked by production code.
+ *
+ * Only meaningful for a browser on {@link AUTH_FRONTEND_URL}: the primary stack has no login screen.
+ */
+export async function seedPasswordUser(
+  request: APIRequestContext,
+  spec: { tag: string; password: string },
+): Promise<PasswordUserScenario> {
+  const res = await request.post(`${CONTROL_URL}/password-user-seed`, { data: spec })
+  if (!res.ok()) throw new Error(`password-user-seed control ${res.status()}: ${await res.text()}`)
+  const scenario = (await res.json()) as PasswordUserScenario
+  await request.put(`${BACKEND_URL}/workspaces/${scenario.workspaceId}/settings`, {
+    data: { defaultProvisionType: 'infraless' },
+  })
+  return scenario
+}
 
 /** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
 export async function setFakeProfile(
@@ -41,6 +162,20 @@ export async function setFakeProfile(
 export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as const
 
 /**
+ * The pull request the faked GitHub integration serves, and the one a `review` task points at
+ * (source of truth: `src/fakeGitHub.ts`, `E2E_REVIEWED_PR`). A task carries the NUMBER; the URL is
+ * the provider's to give, and creation canonicalises the stored reference to it.
+ *
+ * Its diff touches `src/auth.ts` lines 10-13 and `src/session.ts` line 21 on the head side, so a
+ * finding anchored in either range is posted as an INLINE comment rather than folded into the
+ * summary. `src/session.ts:21` is the anchor the fake refuses ONCE (the partial-post path).
+ */
+export const GITHUB_REVIEWED_PR = { number: 42 } as const
+
+/** The anchor whose first post attempt the fake refuses (source: `E2E_TRANSIENT_REVIEW_POST_FAILURE`). */
+export const GITHUB_TRANSIENT_POST_FAILURE = { path: 'src/session.ts', line: 21 } as const
+
+/**
  * Make `workspaceId` a GitHub-connected workspace with the seeded repo + branches (see
  * `src/fakeGitHub.ts`), by writing the installation + projection rows over the control channel.
  * Call BEFORE opening the board so the SPA loads the connected state. The GitHub App is faked
@@ -49,6 +184,72 @@ export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as 
 export async function seedGitHub(request: APIRequestContext, workspaceId: string): Promise<void> {
   const res = await request.post(`${CONTROL_URL}/github-seed`, { data: { workspaceId } })
   if (!res.ok()) throw new Error(`github-seed control ${res.status()}: ${await res.text()}`)
+}
+
+/**
+ * Seed a repo that belongs to THIS workspace alone, and return it.
+ *
+ * Use this (not {@link GITHUB_REPO}) when a spec needs a repo-LINKED service frame. A `Service` is
+ * ACCOUNT-owned, so importing the shared repo dedupes across every board in the account and MOUNTS
+ * the frame that another spec's workspace already owns — a frame this workspace cannot start runs
+ * under. Seeding an own repo removes the collision at its source (source of truth for the
+ * derivation: `src/fakeGitHub.ts` — `ownRepoFor`).
+ */
+export async function seedOwnRepo(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<{ githubId: number; owner: string; name: string; defaultBranch: string }> {
+  const res = await request.post(`${CONTROL_URL}/github-seed-own-repo`, { data: { workspaceId } })
+  if (!res.ok())
+    throw new Error(`github-seed-own-repo control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as {
+    githubId: number
+    owner: string
+    name: string
+    defaultBranch: string
+  }
+}
+
+/** One PR-review write the engine attempted, as the control channel reports it. */
+export interface ReviewAttempt {
+  number: number
+  comments: { path: string; line: number }[]
+  hasBody: boolean
+}
+
+/**
+ * The PR-review writes a workspace's runs ATTEMPTED, oldest first.
+ *
+ * The only view of what the engine actually sent. The window's post report is derived from the
+ * outcomes the provider returned, so it reads identically whether a retry re-sent a comment that
+ * had already landed or skipped it: at-most-once posting is only observable here.
+ */
+export async function readReviewAttempts(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<ReviewAttempt[]> {
+  const res = await request.post(`${CONTROL_URL}/github-review-attempts`, { data: { workspaceId } })
+  if (!res.ok())
+    throw new Error(`github-review-attempts control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as ReviewAttempt[]
+}
+
+/**
+ * Add a bare service frame (the `POST /blocks` the palette drag-drop calls). The sample board
+ * seeds exactly ONE `type: 'service'` frame, so a spec about anything that offers the OTHER
+ * service frames has to create its own.
+ */
+export async function addFrame(
+  request: APIRequestContext,
+  workspaceId: string,
+  title: string,
+  type = 'service',
+): Promise<Block> {
+  return json<Block>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks`, {
+      data: { type, title },
+    }),
+  )
 }
 
 /** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
@@ -64,17 +265,57 @@ export async function addServiceFromRepo(
   )
 }
 
-/** Add a task under a frame/module (the `POST /blocks/:id/tasks` the add-task modal calls). */
+/**
+ * Add a task under a frame/module (the `POST /blocks/:id/tasks` the add-task modal calls).
+ *
+ * The default DESCRIPTION is not decoration: the pre-dispatch input gate parks a run whose task
+ * states nothing to act on, so a title-only fixture would park every spec that starts a run
+ * before its first step. A spec that wants to exercise the gate passes `description: ''`.
+ */
 export async function createTask(
   request: APIRequestContext,
   workspaceId: string,
   parentId: string,
   title = 'E2E task',
-  opts: { agentConfig?: Record<string, string> } = {},
+  opts: {
+    agentConfig?: Record<string, string>
+    /** A built-in or CUSTOM (namespaced `<ns>:<name>`) task type. */
+    taskType?: string
+    /** The sparse per-type fields bag (e.g. `{ custom: { severity: 'sev1' } }`). */
+    taskTypeFields?: Record<string, unknown>
+    /** Override the default description (pass `''` to drive the pre-dispatch input gate). */
+    description?: string
+  } = {},
 ): Promise<Block> {
   return json<Block>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${parentId}/tasks`, {
-      data: { title, ...(opts.agentConfig ? { agentConfig: opts.agentConfig } : {}) },
+      data: {
+        title,
+        description:
+          opts.description ??
+          'End-to-end fixture task: exercise the pipeline against this service and report back.',
+        ...(opts.agentConfig ? { agentConfig: opts.agentConfig } : {}),
+        ...(opts.taskType ? { taskType: opts.taskType } : {}),
+        ...(opts.taskTypeFields ? { taskTypeFields: opts.taskTypeFields } : {}),
+      },
+    }),
+  )
+}
+
+/**
+ * Patch a block (the `PATCH /blocks/:id` the inspector's edits post to). Used as a TRIGGER by
+ * the input-gate spec: the gate's `recheck` re-evaluates the task AS IT NOW STANDS, so proving
+ * the release needs the task to actually change between the park and the click.
+ */
+export async function updateTask(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+  patch: { title?: string; description?: string; pipelineId?: string },
+): Promise<Block> {
+  return json<Block>(
+    await request.patch(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}`, {
+      data: patch,
     }),
   )
 }
@@ -99,6 +340,30 @@ interface Block {
 }
 interface Pipeline {
   id: string
+}
+/**
+ * A pipeline as the workspace snapshot carries it, with the two fields that say what the engine
+ * will actually DO with it: the ordered step kinds and the parallel per-step human-gate flags.
+ * Read back by {@link findPipelineByName} so a spec that authored a pipeline in the BUILDER can
+ * assert the persisted wire shape matches what was drawn.
+ */
+export interface PipelineShape {
+  id: string
+  name: string
+  agentKinds: string[]
+  gates?: boolean[]
+  /**
+   * The per-step options bag, of which a spec reads only the GATE configuration: who may resolve
+   * the step's human checkpoint and how many of them must. Like `gates`, it is the persisted form
+   * of something DRAWN, so a builder that saved a policy against the wrong step index (or dropped
+   * it from the payload) is only visible here.
+   */
+  stepOptions?: {
+    gateConfig?: {
+      approvers?: { roles?: string[]; userIds?: string[] }
+      minApprovals?: number
+    }
+  }[]
 }
 // The full board read; only the fields the specs touch are typed.
 export interface WorkspaceSnapshot {
@@ -134,11 +399,28 @@ async function json<T>(res: {
  */
 export async function createSeededWorkspace(
   request: APIRequestContext,
+  /**
+   * The board's name. Worth setting when a spec drives the board SWITCHER, whose rows are labelled
+   * by name: the sample architecture uses fixed block ids, so two seeded boards are otherwise
+   * indistinguishable on screen.
+   */
+  name?: string,
 ): Promise<WorkspaceSnapshot> {
   const snapshot = await json<WorkspaceSnapshot>(
-    await request.post(`${BACKEND_URL}/workspaces`, { data: { seed: true } }),
+    await request.post(`${BACKEND_URL}/workspaces`, {
+      data: { seed: true, ...(name ? { name } : {}) },
+    }),
   )
   await seedGitHub(request, snapshot.workspace.id)
+  // Record a default test-environment provisioning mechanism, so `DefaultTestEnvBanner` — an
+  // advisory top overlay that would otherwise render on every seeded board and intercept clicks
+  // on the board chrome the specs drive — legitimately doesn't fire. `infraless` is the ACCURATE
+  // answer for this backend, not a mute button: e2e fakes the agent executor and wires no
+  // environment provider, so its services genuinely stand up no environment. A future spec that
+  // wants to drive the banner creates its workspace directly and records no choice.
+  await request.put(`${BACKEND_URL}/workspaces/${snapshot.workspace.id}/settings`, {
+    data: { defaultProvisionType: 'infraless' },
+  })
   return snapshot
 }
 
@@ -155,9 +437,81 @@ export async function createSimplePipeline(
 ): Promise<Pipeline> {
   return json<Pipeline>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/pipelines`, {
-      data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
+      data: { name: 'E2E pipeline', purpose: 'build', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
+}
+
+/**
+ * Find a workspace pipeline by NAME off the board snapshot, or null.
+ *
+ * By name rather than by id because the caller is a spec that created the pipeline through the
+ * SPA (the builder), where the id is minted backend-side and never shown: the name is the only
+ * handle the test typed. Returns the persisted shape, so the spec can assert that what was drawn
+ * in the builder is what the engine will run.
+ */
+export async function findPipelineByName(
+  request: APIRequestContext,
+  workspaceId: string,
+  name: string,
+): Promise<PipelineShape | null> {
+  const snapshot = await json<{ pipelines?: PipelineShape[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return (snapshot.pipelines ?? []).find((p) => p.name === name) ?? null
+}
+
+/**
+ * A merge-threshold preset as the workspace snapshot carries it (only the fields a spec reads).
+ *
+ * The three ceilings are what the `merger` compares a PR assessment against, so a spec that
+ * AUTHORED a preset through the settings panel reads them back to prove the numbers it typed are
+ * the numbers the engine will judge with.
+ */
+export interface RiskPolicyShape {
+  id: string
+  name: string
+  maxComplexity: number
+  maxRisk: number
+  maxImpact: number
+  autoMergeEnabled: boolean
+  isDefault: boolean
+}
+
+/**
+ * Find a workspace merge-threshold preset by NAME off the board snapshot, or null.
+ *
+ * By name for the same reason {@link findPipelineByName} is: the caller created the preset through
+ * the SPA, where the id is minted backend-side and never shown, so the name is the only handle the
+ * test typed. The returned id is what the inspector's picker options are keyed by.
+ */
+export async function findRiskPolicyByName(
+  request: APIRequestContext,
+  workspaceId: string,
+  name: string,
+): Promise<RiskPolicyShape | null> {
+  const snapshot = await json<{ riskPolicies?: RiskPolicyShape[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return (snapshot.riskPolicies ?? []).find((p) => p.name === name) ?? null
+}
+
+/**
+ * A block's status as the workspace snapshot reports it, or null when the block is absent.
+ *
+ * Corroboration only: a spec asserts on the live UI first and reads this to name WHICH terminal
+ * state the run reached, for the one outcome the board deliberately renders as an ABSENCE (an
+ * auto-merged task stops being a unit of work, so its card unmounts: see the e2e README).
+ */
+export async function readBlockStatus(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+): Promise<string | null> {
+  const snapshot = await json<{ blocks: { id: string; status?: string }[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return snapshot.blocks.find((b) => b.id === blockId)?.status ?? null
 }
 
 /** An initiative as the create endpoint returns it (only the fields the specs read). */
@@ -278,10 +632,11 @@ export interface ParkedApproval {
  * Find a block's currently-PARKED human-approval gate for the given step `agentKind`, or null.
  * A `gate: true` pipeline step parks its run `blocked` with the step `waiting_decision` and a
  * `pending` approval — the same generic gate `approval-gate.spec` drives through the UI. The
- * initiative planner gate rides this exact mechanism, but no SPA surface exposes it for an
- * initiative-level block, so its e2e approves it over REST (a trigger). Reads the run off the
- * workspace snapshot (there is no per-block executions endpoint) and returns the parked run +
- * approval ids to approve.
+ * initiative planner gate rides this exact mechanism and IS exposed in the SPA (the card's review
+ * button → the tracker window's plan-review rail, pinned by `initiative-plan-review.spec`); the
+ * specs whose subject lies past that gate clear it over REST instead, as a trigger. Reads the run
+ * off the workspace snapshot (there is no per-block executions endpoint) and returns the parked
+ * run + approval ids to approve.
  */
 export async function findParkedApproval(
   request: APIRequestContext,
@@ -419,8 +774,23 @@ export async function startBootstrap(
  * key is `local`. Seeding it here (before `goto`, the single choke point every board spec routes
  * through) keeps the suite deterministic without a test-only branch in product code. The key + area
  * list come from `@cat-factory/contracts`, the same source the banner reads, so they can't drift.
+ *
+ * The two FIRST-RUN questions (the tutorial offer and the role question) are pre-answered here for
+ * the same reason: each is a real modal on a first-ever launch, and a fresh Playwright context is
+ * always a first-ever launch. `role` defaults to `engineer`, the full surface, so a spec asserting
+ * anything else drives the product every other spec drives; `'unanswered'` opts back into the
+ * first-run behaviour for the specs whose subject IS one of those questions.
  */
-export async function pinWorkspace(page: Page, workspaceId: string): Promise<void> {
+export async function pinWorkspace(
+  page: Page,
+  workspaceId: string,
+  opts: {
+    tutorial?: 'accepted' | 'declined' | 'unanswered'
+    role?: 'engineer' | 'product-manager' | 'designer' | 'unanswered'
+  } = {},
+): Promise<void> {
+  await answerTutorialPrompt(page, tutorialAnswer(opts.tutorial))
+  await answerRolePrompt(page, opts.role === 'unanswered' ? null : (opts.role ?? 'engineer'))
   await page.addInitScript(
     ({ id, dismissKey, areas }) => {
       window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
@@ -432,6 +802,178 @@ export async function pinWorkspace(page: Page, workspaceId: string): Promise<voi
       areas: [...INFRA_SETUP_AREAS],
     },
   )
+}
+
+/**
+ * Pre-answer the in-app tutorial's launch prompt, so the board opens as it does for a
+ * RETURNING user instead of a first-ever one.
+ *
+ * Same class of problem as the infra-setup banner above, and the same fix: a fresh
+ * Playwright context has no persisted state, so `tutorial.decision` is `null` and the app
+ * correctly offers a guided tour — a `UModal`, which (being a reka-ui dismissable layer)
+ * sets `body { pointer-events: none }` and would make every spec's clicks unactionable.
+ * Seeding a saved answer before `goto` keeps that real first-run behaviour intact in the
+ * product while every OTHER spec drives a board nobody is being onboarded onto.
+ *
+ * Pass `null` to leave the prompt unanswered — what `pinWorkspace(…, { tutorial:
+ * 'unanswered' })` does for `tutorial.spec.ts`, since the first-launch offer is exactly its
+ * subject. Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}), so this
+ * seeds the `tutorial` cookie the store picks. Must run BEFORE `page.goto`.
+ *
+ * `'declined'` is the suite-wide default because it is the quietest answer: a decline stops the
+ * launch prompt AND the contextual offer, so no spec but the tutorial one has a tutorial surface
+ * appearing over the board it drives. A spec whose subject IS one of those offers needs
+ * `'accepted'` instead, which is the returning user who wants them.
+ */
+/** The saved answer a `pinWorkspace` tutorial option asks for; `null` = leave it unanswered. */
+function tutorialAnswer(
+  option: 'accepted' | 'declined' | 'unanswered' | undefined,
+): 'accepted' | 'declined' | null {
+  if (option === 'unanswered') return null
+  return option === 'accepted' ? 'accepted' : 'declined'
+}
+
+export async function answerTutorialPrompt(
+  page: Page,
+  decision: 'accepted' | 'declined' | null,
+): Promise<void> {
+  if (decision === null) return
+  await page.context().addCookies([
+    {
+      name: 'tutorial',
+      value: encodeURIComponent(JSON.stringify({ decision, completedTourIds: [] })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
+/**
+ * Pre-answer the first-run ROLE question, so the board opens for someone who has already said what
+ * they do (see `frontend/app/app/stores/uiRole.ts`).
+ *
+ * Same class of problem, and the same fix, as {@link answerTutorialPrompt}: unanswered, the question
+ * is a `UModal`, and a dismissable layer sets `body { pointer-events: none }`, which makes every
+ * other spec's clicks unactionable. `null` leaves it unanswered for `ui-role.spec.ts`, whose subject
+ * is that first launch.
+ *
+ * Seeding a ROLE also pins the surface, which is why the narrowed cases pass `designer` rather than
+ * clicking through the picker: what a spec is asserting then is the surface, not the act of choosing.
+ * Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}). Must run BEFORE
+ * `page.goto`.
+ */
+export async function answerRolePrompt(
+  page: Page,
+  role: 'engineer' | 'product-manager' | 'designer' | null,
+): Promise<void> {
+  if (role === null) return
+  await page.context().addCookies([
+    {
+      name: 'uiRole',
+      value: encodeURIComponent(JSON.stringify({ storedRole: role })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
+/**
+ * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated as a
+ * specific user, pinned to a specific board (the workspace-RBAC spec).
+ *
+ * The persisted pinia stores (`auth.token`, `workspace.workspaceId`, `accounts.activeAccountId`)
+ * are backed by COOKIES — `pinia-plugin-persistedstate/nuxt` defaults to cookie storage, NOT
+ * localStorage — so restoring a session + pinning a specific board means seeding those cookies.
+ * (Existing dev-open specs get away with the localStorage `pinWorkspace` no-op only because their
+ * freshly-seeded board is the newest in the unfiltered list; an authed caller's list is
+ * account-filtered, so the pin must actually restore.) Cookie values are URL-encoded JSON — the
+ * shape each store persists (`auth` → `useApi`'s `Authorization: Bearer`; `workspace` → the opened
+ * board; `accounts` → keep that board in the active-account scope). The infra-setup banner reads
+ * its dismissals from localStorage keyed by the signed-in user id, so seed that too, or the
+ * advisory banner overlays the board chrome the spec drives. Must run BEFORE `page.goto`.
+ */
+export async function pinAuthedWorkspace(
+  page: Page,
+  workspaceId: string,
+  token: string,
+  userId: string,
+  accountId: string,
+): Promise<void> {
+  await pinBoardForUser(page, { workspaceId, accountId, userId, token })
+}
+
+/**
+ * Seed the persisted state a signed-in user's board open needs, with the session token OPTIONAL.
+ *
+ * {@link pinAuthedWorkspace} is this plus a token, and is what a spec that boots straight into a
+ * session wants. A spec that means to SIGN IN through the form leaves the token out: it still has to
+ * say which board to open afterwards, because a signed-in user's list is account-filtered and the
+ * SPA otherwise resolves the first board of whichever account is active (creating an empty one when
+ * that is none, which lands the session on the repo-onboarding gate instead of a board).
+ *
+ * Cookies are not PORT-scoped, so this applies to the auth stack's origin as well as the primary
+ * one, which is why the auth specs need no parallel set of seeding helpers.
+ */
+export async function pinBoardForUser(
+  page: Page,
+  seed: { workspaceId: string; accountId: string; userId: string; token?: string },
+): Promise<void> {
+  await answerTutorialPrompt(page, 'declined')
+  await answerRolePrompt(page, 'engineer')
+  const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
+  const cookie = (name: string, value: unknown) => ({
+    name,
+    value: encodeURIComponent(JSON.stringify(value)),
+    url: frontendUrl,
+  })
+  await page
+    .context()
+    .addCookies([
+      ...(seed.token ? [cookie('auth', { token: seed.token, autoLoginProvider: null })] : []),
+      cookie('workspace', { workspaceId: seed.workspaceId }),
+      cookie('accounts', { activeAccountId: seed.accountId }),
+    ])
+  await page.addInitScript(
+    ({ uid, dismissKey, areas }) => {
+      window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas, [uid]: areas }))
+    },
+    {
+      uid: seed.userId,
+      dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
+      areas: [...INFRA_SETUP_AREAS],
+    },
+  )
+}
+
+/**
+ * Boot the SPA in ADVANCED interface mode by seeding the `uiMode` store's persisted state.
+ *
+ * The shipped default is BASIC, which hides the power-user nav destinations and the
+ * less-used run options (see `frontend/app/app/stores/uiMode.ts`). A spec whose subject is
+ * something else — RBAC gating, the compact drawer — must therefore pin the tier explicitly,
+ * or it would be asserting two axes at once and fail for the wrong reason. `ui-mode.spec.ts`
+ * is the one place that exercises the default and the switch itself.
+ *
+ * Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}), so this seeds the
+ * cookie the store picks (`storedMode`/`railCollapsed`) rather than localStorage. Must run
+ * BEFORE `page.goto`. Note this is the USER-choice layer: a deployment that also set
+ * NUXT_PUBLIC_UI_MODE would override it, which the e2e frontend deliberately does not.
+ *
+ * `railCollapsed` is seeded explicitly rather than left to its default so a spec that only
+ * wants the advanced DESTINATIONS also gets the labels rendered — a railed navbar hides them,
+ * which would fail a `getByText` assertion for a reason that has nothing to do with the tier.
+ */
+export async function useAdvancedInterfaceMode(page: Page): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: 'uiMode',
+      value: encodeURIComponent(
+        JSON.stringify({
+          storedMode: 'advanced',
+          railCollapsed: { basic: true, advanced: false },
+        }),
+      ),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
 }
 
 /** Navigate to the board and wait for it to finish bootstrapping (canvas mounted). The
@@ -454,9 +996,101 @@ export async function openBoard(page: Page): Promise<void> {
   })
 }
 
+/**
+ * Put the browser on `workspaceId` through the sidebar board switcher, and confirm it landed.
+ *
+ * Idempotent, so a spec can use it to ESTABLISH which board it is on rather than inherit whichever
+ * board a cold load resolved to. That resolution is a product decision (the persisted choice, else
+ * the first of a newest-first list), not a suite guarantee, so a spec whose meaning depends on
+ * being on a particular board names it instead of relying on the order it seeded them in.
+ */
+export async function switchBoard(page: Page, workspaceId: string): Promise<void> {
+  const switcher = page.getByTestId('board-switcher')
+  await expect(switcher).toBeVisible({ timeout: BOOT_TIMEOUT })
+  if ((await switcher.getAttribute('data-board-id')) !== workspaceId) {
+    await switcher.click()
+    await page.getByTestId(`board-option-${workspaceId}`).click()
+  }
+  await expect(switcher).toHaveAttribute('data-board-id', workspaceId, { timeout: BOOT_TIMEOUT })
+}
+
 /** Locate a task card by its block id (the card root carries `data-block-id`). */
 export function taskCard(page: Page, blockId: string): Locator {
   return page.locator(`[data-block-id="${blockId}"]`)
+}
+
+/**
+ * Open a task's FOCUS VIEW (the full-screen run view whose step list is `pipeline-step`).
+ *
+ * Click the card's own Review affordance, NEVER the card root. Playwright clicks the CENTRE of
+ * what it is given, and the centre of a `pr_ready` card sits in its ACTION ROW, whose membership
+ * is asynchronous: `Outcome` renders only while `outcomeReadable` holds, which is composed from
+ * the EXECUTION INSTANCE in the store, and that arrives on a different event than the
+ * `data-status` a spec gates on. So a card gated as `pr_ready` shows `Review | Merge` until the
+ * instance lands and `Outcome | Review | Merge` after, and the identical centre click resolves
+ * to Review in the second case and to Merge in the first, where it opens the merge confirm and
+ * no focus view at all. The spec then waits out its full timeout on a step list nothing opened,
+ * and the failure points at the assertion rather than at the click.
+ *
+ * A spec that needs the card SELECTED takes `selectTask` below, for the same reason.
+ *
+ * Targeting the right control is only half of it: the click can still be LOST, the same way
+ * `openAttention` documents. The action row's membership changes as the execution instance
+ * lands, so Vue can re-render the row between Playwright's hit test and its mouse event, and the
+ * event is then dispatched to a detached node with no handler behind it. Nothing is pending after
+ * a lost click, so waiting longer cannot help and the failure surfaces later, on the step list
+ * the spec goes on to read — which is what `element(s) not found` on `pipeline-step` was. So
+ * click again until the focus view is actually up, which is what a user does too; opening it is a
+ * UI-only action, and the guard makes re-clicking a no-op once it is open.
+ */
+export async function openTaskFocusView(card: Locator): Promise<void> {
+  const blockId = await card.getAttribute('data-block-id')
+  if (!blockId)
+    throw new Error(
+      'openTaskFocusView expects a card locator carrying data-block-id (see `taskCard`)',
+    )
+  // Keyed by BLOCK, so a focus view left open on an earlier task cannot read as this one's.
+  const focus = card
+    .page()
+    .locator(`[data-testid="block-focus-view"][data-focus-block="${blockId}"]`)
+  await expect(async () => {
+    if (await focus.isHidden()) await card.getByTestId('task-review').click()
+    await expect(focus).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: LIVE_TIMEOUT })
+}
+
+/**
+ * SELECT a task, i.e. open the inspector on it (its run panel is the `run-step` list).
+ *
+ * This used to be spelled `card.click()`, on the reasoning that selection is what every path
+ * through the card does. That reasoning was wrong, and it is what made
+ * `requirements-review.spec` fail one CI run in N as `element(s) not found` on a step list
+ * nothing had opened. Every control on the card's action row is `@click.stop`, and the
+ * attention affordance's handler (`attention.open()`) opens a decision or a result window
+ * WITHOUT selecting, so a centre click resolved to it selects nothing at all. `review()`
+ * happens to select; `task-resolve`, `task-start` and `merge` do not.
+ *
+ * Which one the centre lands on is a coin flip a spec cannot gate away, because card height
+ * tracks content that arrives on its own events: the parked card grows a "folding in" stage
+ * chip, the running one a progress bar and step list, the finished one a PR chip. Gating on
+ * `data-status` first does not help, since the status arrives before the row settles.
+ *
+ * So click the TITLE, which is always rendered, is never a control, and bubbles to the root's
+ * `selectTask`. Then assert the panel is showing THIS block: a stale panel from an earlier
+ * selection is visible too, and only the subject tells the two apart. The retry covers the same
+ * lost-click race `openAttention` documents, and re-selecting is idempotent.
+ */
+export async function selectTask(card: Locator): Promise<void> {
+  const blockId = await card.getAttribute('data-block-id')
+  if (!blockId)
+    throw new Error('selectTask expects a card locator carrying data-block-id (see `taskCard`)')
+  const panel = card
+    .page()
+    .locator(`[data-testid="inspector-panel"][data-inspector-block="${blockId}"]`)
+  await expect(async () => {
+    if (await panel.isHidden()) await card.getByTestId('task-title').click()
+    await expect(panel).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: LIVE_TIMEOUT })
 }
 
 /**
@@ -466,9 +1100,29 @@ export function taskCard(page: Page, blockId: string): Locator {
  * a real regression the original run.spec never caught). Shared by every run-driving spec.
  */
 export async function resolveDecision(page: Page, card: Locator): Promise<void> {
-  await card.getByTestId('task-resolve').click()
   const modal = page.getByTestId('decision-modal')
-  await expect(modal).toBeVisible()
+  await openAttention(card, modal)
   await modal.getByTestId('decision-option').first().click()
   await expect(modal).toBeHidden({ timeout: LIVE_TIMEOUT })
+}
+
+/**
+ * Click a task card's attention affordance (`task-resolve` — "Resolve" for a decision, "Approve"
+ * for an approval gate) until the surface it opens is actually up.
+ *
+ * The retry is the point, and it is not a timing guess. That button is `v-if`-ed on what the task
+ * needs from a human, and the reason flips mid-flight as a run advances — a decision is resolved
+ * (button unmounts), then the step completes and the approval gate mints its approval (button
+ * remounts as "Approve"). Under load that remount can land between Playwright's hit-test and its
+ * mouse event, so the click is dispatched to a node Vue has just detached and NO handler runs.
+ * Confirmed by instrumenting the component: on a failing run the click never reached the handler,
+ * while it did on every passing one. Waiting longer cannot help — after a lost click nothing is
+ * pending — so the only correct answer is to click again, which is what a user does too. Opening
+ * either surface is a UI-only action, so re-clicking is safe.
+ */
+export async function openAttention(card: Locator, surface: Locator): Promise<void> {
+  await expect(async () => {
+    if (await surface.isHidden()) await card.getByTestId('task-resolve').click()
+    await expect(surface).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: LIVE_TIMEOUT })
 }

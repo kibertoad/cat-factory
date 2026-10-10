@@ -13,6 +13,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useReleaseHealthStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const open = computed({
@@ -36,15 +37,6 @@ const pagerDuty = reactive({ apiToken: '', fromEmail: '' })
 const incidentIo = reactive({ apiKey: '' })
 const incidentBusy = ref(false)
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 watch(
   open,
   async (isOpen) => {
@@ -56,7 +48,7 @@ watch(
       if (site) datadog.site = site
       await store.loadIncident()
     } catch (e) {
-      notifyError(t('settings.observabilityConnection.toast.loadFailed'), e)
+      present(e, 'settings.observabilityConnection.toast.loadFailed')
     }
   },
   { immediate: true },
@@ -90,7 +82,7 @@ async function saveIncident() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.observabilityConnection.toast.incidentSaveFailed'), e)
+    present(e, 'settings.observabilityConnection.toast.incidentSaveFailed')
   } finally {
     incidentBusy.value = false
   }
@@ -104,7 +96,7 @@ async function disconnectIncident() {
     await store.removeIncident()
     toastDone('disconnect', noun)
   } catch (e) {
-    notifyError(t('settings.observabilityConnection.toast.incidentDisconnectFailed'), e)
+    present(e, 'settings.observabilityConnection.toast.incidentDisconnectFailed')
   } finally {
     incidentBusy.value = false
   }
@@ -125,7 +117,7 @@ async function saveConnection() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.observabilityConnection.toast.connectFailed'), e)
+    present(e, 'settings.observabilityConnection.toast.connectFailed')
   } finally {
     busy.value = false
   }
@@ -139,7 +131,7 @@ async function disconnect() {
     await store.removeConnection()
     toastDone('disconnect', noun)
   } catch (e) {
-    notifyError(t('settings.observabilityConnection.toast.disconnectFailed'), e)
+    present(e, 'settings.observabilityConnection.toast.disconnectFailed')
   } finally {
     busy.value = false
   }
@@ -168,7 +160,7 @@ const connectedLabel = computed(() => {
         <i18n-t
           keypath="settings.observabilityConnection.intro"
           tag="p"
-          class="text-sm text-slate-400"
+          class="text-sm text-muted"
           scope="global"
         >
           <template #gate>
@@ -176,7 +168,7 @@ const connectedLabel = computed(() => {
           </template>
         </i18n-t>
 
-        <section class="space-y-3 rounded-lg border border-slate-700 p-3">
+        <section class="space-y-3 rounded-lg border border-muted p-3">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold">
               {{ t('settings.observabilityConnection.connection.heading') }}
@@ -230,7 +222,7 @@ const connectedLabel = computed(() => {
              already opened from the same monitors/SLOs. -->
         <section
           v-if="store.incidentAvailable !== false"
-          class="space-y-3 rounded-lg border border-slate-700 p-3"
+          class="space-y-3 rounded-lg border border-muted p-3"
         >
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold">
@@ -244,7 +236,7 @@ const connectedLabel = computed(() => {
               }}
             </UBadge>
           </div>
-          <p class="text-[11px] text-slate-400">
+          <p class="text-2xs text-muted">
             {{ t('settings.observabilityConnection.incident.description') }}
           </p>
 

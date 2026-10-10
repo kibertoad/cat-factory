@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import type { DocumentSourceKind } from '~/types/domain'
+import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
-// to import from (Confluence, Notion, …). Carries an optional target frame from
-// the inspector so "Preview & spawn" lands the structure inside that frame.
+// to import from (Confluence, Notion, …). "Preview & spawn" always creates new
+// top-level frames — see `SpawnPreviewModal` for why there is no frame target.
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const board = useBoardStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.documentImport !== null,
@@ -19,11 +21,6 @@ const open = computed({
   },
 })
 const back = useIntegrationBack(open)
-
-const targetFrameId = computed(() => ui.documentImport?.targetFrameId ?? null)
-const targetFrameTitle = computed(() =>
-  targetFrameId.value ? board.getBlock(targetFrameId.value)?.title : null,
-)
 
 /** Which connected source we're importing from (defaults to the first). */
 const source = ref<DocumentSourceKind | undefined>(undefined)
@@ -66,19 +63,14 @@ async function doImport() {
       icon: 'i-lucide-file-down',
     })
   } catch (e) {
-    toast.add({
-      title: t('documents.import.importFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.import.importFailed')
   } finally {
     importing.value = false
   }
 }
 
 function preview(externalId: string) {
-  if (source.value) ui.openSpawnPreview(source.value, externalId, targetFrameId.value)
+  if (source.value) ui.openSpawnPreview(source.value, externalId)
 }
 </script>
 
@@ -89,8 +81,8 @@ function preview(externalId: string) {
     </template>
     <template #body>
       <div v-if="!documents.anyConnected" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">{{ t('documents.import.connectFirst') }}</p>
+        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
+        <p class="text-sm text-muted">{{ t('documents.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="s in documents.sources"
@@ -106,14 +98,6 @@ function preview(externalId: string) {
       </div>
 
       <div v-else class="space-y-4">
-        <p v-if="targetFrameTitle" class="text-xs text-slate-400">
-          <i18n-t keypath="documents.import.spawningInto" scope="global">
-            <template #frame>
-              <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
-            </template>
-          </i18n-t>
-        </p>
-
         <UFormField v-if="sourceItems.length > 1" :label="t('documents.import.sourceLabel')">
           <USelect v-model="source" :items="sourceItems" class="w-full" />
         </UFormField>
@@ -142,25 +126,27 @@ function preview(externalId: string) {
         </div>
 
         <div v-if="sourceDocs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3">
             {{ t('documents.import.importedHeading') }}
-          </h3>
+          </SectionLabel>
           <div
             v-for="doc in sourceDocs"
             :key="`${doc.source}:${doc.externalId}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="rounded-lg border border-default bg-default/60 p-3"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <a
-                  :href="doc.url"
+                <ULink
+                  raw
+                  :to="doc.url"
                   target="_blank"
                   rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
+                  class="truncate text-sm font-medium text-highlighted hover:underline"
                 >
                   {{ doc.title }}
-                </a>
-                <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ doc.excerpt }}</p>
+                </ULink>
+                <p class="mt-0.5 line-clamp-2 text-xs text-dimmed">{{ doc.excerpt }}</p>
+                <DocumentSyncState :doc="doc" class="mt-1" />
               </div>
               <UButton
                 color="primary"
@@ -174,7 +160,7 @@ function preview(externalId: string) {
             </div>
           </div>
         </div>
-        <p v-else class="text-center text-xs text-slate-500">
+        <p v-else class="text-center text-xs text-dimmed">
           {{ t('documents.import.noneImported') }}
         </p>
       </div>

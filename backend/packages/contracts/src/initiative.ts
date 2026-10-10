@@ -1,6 +1,11 @@
 import * as v from 'valibot'
 import { createTaskTypeSchema, taskTypeFieldsSchema } from './primitives.js'
 import { agentConfigValuesSchema } from './agent-config.js'
+import {
+  descriptorFieldValuesSchema,
+  type DescriptorFieldValue,
+  type DescriptorFieldValues,
+} from './form-fields.js'
 
 // ---------------------------------------------------------------------------
 // Initiative wire contracts. An Initiative is the longer-running counterpart to
@@ -32,42 +37,42 @@ export const INITIATIVE_MAX_CONCURRENT = 20
 
 const score = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const idField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX))
+// The tracker-folder slug feeds `initiativeDocDir(slug)` = `docs/initiatives/<slug>` and the
+// JSON/tracker/version paths committed via `RepoFiles.commitFiles`, so it must stay a plain
+// lower-kebab token — no dots or slashes that could reshape a committed path. The server only
+// ever produces such slugs (`initiativeSlug`), so this constrains the wire contract to what the
+// generator already guarantees. Distinct from `idField` (used for pipeline/phase/item ids like
+// `pl_full`, which legitimately carry underscores).
+const slugField = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(INITIATIVE_ID_MAX),
+  v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
+)
 const titleField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_TITLE_MAX))
 const proseField = v.pipe(v.string(), v.maxLength(INITIATIVE_PROSE_MAX))
 const shortProseField = v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX))
 
 // ---------------------------------------------------------------------------
 // Initiative-preset inputs. A preset (see `initiative-preset.ts`) bundles a
-// backend-supplied FORM the user fills at create time; the filled values are this
+// backend-supplied FORM the user fills at create time; the filled values are a
 // bounded JSON record, persisted on the entity (`presetInputs`) and FROZEN after
-// create. Kept HERE (with the entity that persists them, next to the item `spawn`
-// bag) rather than in `initiative-preset.ts` so the entity can reference the shape
-// without a module cycle — the preset descriptor imports these back the other way.
+// create. The shape itself is the SHARED descriptor-form value bag (`form-fields.ts`,
+// the vocabulary a custom task type's per-case form also fills); these are the
+// preset-named aliases, kept here beside the entity that persists them.
 // ---------------------------------------------------------------------------
 
-/** Bound on a single string / string-array element value in {@link initiativePresetInputsSchema}. */
-export const INITIATIVE_PRESET_INPUT_MAX = 2000
-/** Bound on the number of elements in a `checkbox-group`/multi-value input. */
-export const INITIATIVE_PRESET_INPUT_ARRAY_MAX = 50
+/**
+ * One filled preset-form value: a scalar (`text`/`select`/`path`/…), a multi-select, a toggle, or a
+ * number. The shared descriptor-form value shape ({@link DescriptorFieldValue}) under the
+ * preset's own name, so this entity keeps referencing the vocabulary it persists.
+ */
+export type InitiativePresetInputValue = DescriptorFieldValue
 
-/** One filled preset-form value: a scalar (`text`/`select`/`path`/…), a multi-select, a toggle, or a number. */
-export const initiativePresetInputValueSchema = v.union([
-  v.pipe(v.string(), v.maxLength(INITIATIVE_PRESET_INPUT_MAX)),
-  v.pipe(
-    v.array(v.pipe(v.string(), v.maxLength(INITIATIVE_PRESET_INPUT_MAX))),
-    v.maxLength(INITIATIVE_PRESET_INPUT_ARRAY_MAX),
-  ),
-  v.boolean(),
-  v.number(),
-])
-export type InitiativePresetInputValue = v.InferOutput<typeof initiativePresetInputValueSchema>
-
-/** The user's filled preset form — a bounded map from field `key` to its value. */
-export const initiativePresetInputsSchema = v.record(
-  v.pipe(v.string(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX)),
-  initiativePresetInputValueSchema,
-)
-export type InitiativePresetInputs = v.InferOutput<typeof initiativePresetInputsSchema>
+/** The user's filled preset form: a bounded map from field `key` to its value. */
+export const initiativePresetInputsSchema = descriptorFieldValuesSchema
+export type InitiativePresetInputs = DescriptorFieldValues
 
 /** Lifecycle of a single tracker item (one unit of work → one spawned task). */
 export const initiativeItemStatusSchema = v.picklist([
@@ -316,7 +321,7 @@ export const initiativeSchema = v.object({
   /** The initiative-level board block this entity belongs to (1:1). */
   blockId: v.string(),
   /** Stable slug naming the in-repo tracker folder (`docs/initiatives/<slug>/`). */
-  slug: idField,
+  slug: slugField,
   title: titleField,
   /**
    * The initiative-preset this initiative was created from (see `initiative-preset.ts`).
@@ -541,7 +546,7 @@ export function initiativeDocDir(slug: string): string {
 export function initiativeJsonPath(slug: string): string {
   return `${initiativeDocDir(slug)}/initiative.json`
 }
-/** Human-readable tracker rendering (the CLAUDE.md tracker-document convention). */
+/** Human-readable tracker rendering (the AGENTS.md tracker-document convention). */
 export function initiativeTrackerPath(slug: string): string {
   return `${initiativeDocDir(slug)}/tracker.md`
 }
@@ -618,9 +623,201 @@ export function decodeInitiativeRow(row: InitiativeRowLike): Initiative | null {
   )
 }
 
-/** Strictly parse a planner plan draft. Throws on shape violations. */
+/**
+ * Strictly parse a planner plan draft. Throws on shape violations.
+ *
+ * There is deliberately NO non-throwing variant: the only consumer is the ingest, whose
+ * whole job is to reject a malformed plan loudly. The review rendering does not parse the
+ * planner's raw output at all — it renders the INGESTED entity (see
+ * {@link renderInitiativePlanForReview}), so a second, more lenient reading of the same
+ * bytes can never disagree with what was committed.
+ */
 export function parseInitiativePlanDraft(value: unknown): InitiativePlanDraft {
   return v.parse(initiativePlanDraftSchema, value)
+}
+
+/**
+ * What {@link renderInitiativePlanForReview} reads — the plan-shaped intersection of the
+ * planner's {@link InitiativePlanDraft} and the ingested {@link Initiative}, so one renderer
+ * serves both without either type having to know about it.
+ *
+ * It exists because the two are NOT interchangeable in the one place that matters: the human
+ * gate reviews the plan that will EXECUTE, which is the entity — the draft has not yet been
+ * through the preset's phase-template reorder, its `seedPlan` decoration, or the carry-over of
+ * items a previous plan already materialised. The renderer is therefore written against the
+ * shape both satisfy, and its callers choose the truthful one (see the `initiative-planner`
+ * step resolver). Every field is read-only and optional-tolerant: the entity's `policy` is
+ * nullable and its items carry runtime `status`, neither of which a draft has.
+ */
+export interface InitiativePlanView {
+  goal?: string
+  constraints?: readonly string[]
+  nonGoals?: readonly string[]
+  analysisSummary?: string
+  phases?: readonly {
+    id?: string
+    title: string
+    goal?: string
+    maxConcurrent?: number
+    checkpoint?: boolean
+  }[]
+  items?: readonly {
+    id?: string
+    phaseId: string
+    title: string
+    description?: string
+    dependsOn?: readonly string[]
+    estimate?: InitiativeEstimate
+    pipelineId?: string
+    status?: InitiativeItemStatus
+  }[]
+  policy?: InitiativeExecutionPolicy | null
+  decisions?: readonly { title: string; detail?: string }[]
+  caveats?: readonly string[]
+}
+
+/** One estimate axis rendered as a percentage, so the three read comparably. */
+function estimatePct(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
+/** The axes a pipeline rule matches on, as prose ('never' when it declares none). */
+function renderRuleAxes(rule: InitiativePipelineRule): string {
+  const axes = [
+    rule.minComplexity !== undefined ? `complexity ≥ ${estimatePct(rule.minComplexity)}` : null,
+    rule.minRisk !== undefined ? `risk ≥ ${estimatePct(rule.minRisk)}` : null,
+    rule.minImpact !== undefined ? `impact ≥ ${estimatePct(rule.minImpact)}` : null,
+  ].filter((axis): axis is string => axis !== null)
+  return axes.length ? axes.join(' or ') : 'never matches (no thresholds declared)'
+}
+
+/** One item's body, under a heading the outline turns into its own navigable section. */
+function renderPlanItem(item: NonNullable<InitiativePlanView['items']>[number]): string[] {
+  const lines: string[] = ['', `### ${item.title}${item.id ? ` (${item.id})` : ''}`]
+  if (item.description) lines.push('', item.description)
+  // Only a NON-pending status is worth a line: it means the item is already underway or
+  // settled, which is how a re-plan's carried-over items differ from the ones being proposed.
+  if (item.status && item.status !== 'pending') lines.push('', `Status: \`${item.status}\`.`)
+  const estimate = item.estimate
+  if (estimate) {
+    lines.push(
+      '',
+      `- Complexity: ${estimatePct(estimate.complexity)}`,
+      `- Risk: ${estimatePct(estimate.risk)}`,
+      `- Impact: ${estimatePct(estimate.impact)}`,
+    )
+    if (estimate.rationale) lines.push(`- Rationale: ${estimate.rationale}`)
+  }
+  if (item.dependsOn?.length) {
+    lines.push('', `Depends on: ${item.dependsOn.map((id) => `\`${id}\``).join(', ')}`)
+  }
+  if (item.pipelineId) lines.push('', `Pipeline: \`${item.pipelineId}\``)
+  return lines
+}
+
+/**
+ * Render an {@link InitiativePlanView} as readable markdown for HUMAN review — the
+ * planning counterpart of {@link renderSpecForReview} / {@link renderBlueprintForReview},
+ * and the document the `initiative-planner`'s human gate parks on.
+ *
+ * The planner is a container agent that emits the plan as JSON; its own `result.output` is
+ * the raw Pi transcript summary ("Initiative plan drafted."). Parking the gate on THAT gave
+ * the reviewer a one-line proposal: nothing to navigate, nothing to quote a comment against,
+ * and a "request changes" re-run that handed the planner back a sentence instead of the plan
+ * it had just written. Rendering the plan itself is what makes the generic review surface
+ * (ToC + per-block comments + approve / request changes / reject) work for it, exactly as it
+ * already does for the architect's prose.
+ *
+ * HEADINGS ARE LOAD-BEARING, not decoration: the reader's outline parser splits the document
+ * at each heading into the collapsible sections its table of contents navigates, so every
+ * part a reviewer might jump to (each phase, each item, the policy) gets its own heading
+ * rather than being folded into a table. Deterministic and dependency-free.
+ *
+ * NOTHING IS SILENTLY DROPPED. An item is placed by matching its `phaseId` against the
+ * phases, and a plan can legitimately reach here with items that match none: a phase's `id`
+ * is optional on the draft, and the reference validation only rejects a dangling `phaseId`
+ * once at least one phase declares an id. Those items are still ingested and still execute,
+ * so they get their own section rather than vanishing — approving a plan whose items you were
+ * never shown is exactly the failure this document exists to prevent.
+ */
+export function renderInitiativePlanForReview(plan: InitiativePlanView): string {
+  const lines: string[] = ['# Initiative plan']
+  if (plan.goal) lines.push('', '## Goal', '', plan.goal)
+  if (plan.constraints?.length) {
+    lines.push('', '## Constraints', '', ...plan.constraints.map((c) => `- ${c}`))
+  }
+  if (plan.nonGoals?.length) {
+    lines.push('', '## Non-goals', '', ...plan.nonGoals.map((g) => `- ${g}`))
+  }
+  if (plan.analysisSummary) lines.push('', '## Codebase analysis', '', plan.analysisSummary)
+
+  const items = plan.items ?? []
+  const phases = plan.phases ?? []
+  const placed = new Set<(typeof items)[number]>()
+  phases.forEach((phase, index) => {
+    lines.push('', `## Phase ${index + 1}: ${phase.title}`)
+    if (phase.goal) lines.push('', phase.goal)
+    if (phase.checkpoint) {
+      lines.push(
+        '',
+        '> Checkpoint — the initiative pauses for human review once this phase settles.',
+      )
+    }
+    if (phase.maxConcurrent !== undefined) {
+      lines.push('', `Concurrency for this phase: ${phase.maxConcurrent}.`)
+    }
+    // An id-less phase matches nothing (an item's `phaseId` is always a non-empty string),
+    // so its items surface under "Unplaced items" below rather than being lost.
+    const phaseItems = phase.id ? items.filter((item) => item.phaseId === phase.id) : []
+    if (phaseItems.length === 0) {
+      lines.push('', '_No items in this phase._')
+      return
+    }
+    for (const item of phaseItems) {
+      placed.add(item)
+      lines.push(...renderPlanItem(item))
+    }
+  })
+
+  const unplaced = items.filter((item) => !placed.has(item))
+  if (unplaced.length > 0) {
+    lines.push(
+      '',
+      '## Unplaced items',
+      '',
+      `${unplaced.length === 1 ? 'This item names' : 'These items name'} a phase the plan does not declare, so ${unplaced.length === 1 ? 'it is' : 'they are'} listed here rather than under a phase. The initiative still carries ${unplaced.length === 1 ? 'it' : 'them'}.`,
+    )
+    for (const item of unplaced) {
+      lines.push(...renderPlanItem(item), '', `Declared phase: \`${item.phaseId}\`.`)
+    }
+  }
+
+  const policy = plan.policy
+  lines.push('', '## Execution policy', '')
+  if (policy) {
+    lines.push(
+      `- Up to ${policy.maxConcurrent} item${policy.maxConcurrent === 1 ? '' : 's'} run at once.`,
+      `- Default pipeline: \`${policy.defaultPipelineId}\`.`,
+    )
+    for (const rule of policy.rules ?? []) {
+      lines.push(`- \`${rule.pipelineId}\` when ${renderRuleAxes(rule)}.`)
+    }
+  } else {
+    // Only reachable for an entity whose policy has not been planned yet; say so rather than
+    // omitting the section, which would read as "there is nothing to configure here".
+    lines.push('_No execution policy has been agreed yet._')
+  }
+
+  if (plan.decisions?.length) {
+    lines.push('', '## Decisions', '')
+    for (const decision of plan.decisions) {
+      lines.push(`- **${decision.title}**${decision.detail ? ` — ${decision.detail}` : ''}`)
+    }
+  }
+  if (plan.caveats?.length) {
+    lines.push('', '## Caveats', '', ...plan.caveats.map((c) => `- ${c}`))
+  }
+  return lines.join('\n')
 }
 
 /** Item statuses that count as settled (nothing left for the loop to drive). */

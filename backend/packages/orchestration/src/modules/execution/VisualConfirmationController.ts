@@ -5,6 +5,7 @@ import type {
   ResolveBinaryArtifactStore,
   Block,
   BlockRepository,
+  DocumentRepository,
   ExecutionInstance,
   ExecutionRepository,
   PipelineStep,
@@ -13,12 +14,18 @@ import type {
   WorkRunner,
 } from '@cat-factory/kernel'
 import { ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { countCapturedViews } from '@cat-factory/contracts'
+import { resolveBlockReferences } from './block-reference-set.js'
 import { FIXER_AGENT_KIND, UI_TESTER_AGENT_KIND, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
+import { liveJobId } from './step-fold.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -49,10 +56,26 @@ export interface VisualConfirmationControllerDeps {
    * reference designs from, for the run's workspace. Absent / resolving to null → manual mode.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The imported-document corpus, read to find the DESIGNS a task links so their retained frames
+   * join the gallery beside the hand-uploaded references. Absent (documents unwired) ⇒ the gate
+   * behaves exactly as it did before: uploads only.
+   */
+  documentRepository?: DocumentRepository
   /** The task's helper attempt budget (from the resolved merge preset). */
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<{ ciMaxAttempts: number }>
   /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record, calls the executor and folds what came back: a
+   * delegation claim for a helper kind whose work leaves the platform, a container cold boot
+   * otherwise. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
   clockNow: () => number
@@ -98,9 +121,12 @@ export class VisualConfirmationController {
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!vc) return this.begin(workspaceId, instance, step, block, isFinalStep)
-    // A fixer is in flight: re-attach to its job rather than re-parking.
-    if (vc.phase === 'fixing' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // A fixer is in flight: re-attach to its job rather than re-parking. LIVE, not merely
+    // stamped: a delegated fixer's claim is committed before its executor is called, so an
+    // unanswered one re-parks the human rather than polling work nobody started.
+    const attached = liveJobId(step)
+    if (vc.phase === 'fixing' && attached) {
+      return awaitingJob(step, instance.currentStep, attached)
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
   }
@@ -127,7 +153,14 @@ export class VisualConfirmationController {
     await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
-    vc.pairs = await this.gatherPairs(workspaceId, instance, block, await this.store(workspaceId))
+    const gathered = await this.gatherPairs(
+      workspaceId,
+      instance,
+      block,
+      await this.store(workspaceId),
+    )
+    vc.pairs = gathered.pairs
+    vc.designReferences = gathered.design
     // The pairs come from the LAST UI-tester report, which predates this fix — the gate does
     // not auto re-run the UI tester yet (see the handover doc). Flag the staleness so the human
     // knows to recapture (or re-run the UI tester) before judging the screenshots as final,
@@ -190,15 +223,21 @@ export class VisualConfirmationController {
     if (!store) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
-    const maxAttempts = (await this.deps.resolveRiskPolicy(workspaceId, block)).ciMaxAttempts
-    const pairs = await this.gatherPairs(workspaceId, instance, block, store)
+    const maxAttempts = (await this.deps.resolveRiskPolicy(workspaceId, block, instance))
+      .ciMaxAttempts
+    const { pairs, design } = await this.gatherPairs(workspaceId, instance, block, store)
     step.visualConfirm = {
       phase: 'awaiting_human',
       pairs,
+      designReferences: design,
       attempts: 0,
       maxAttempts,
       rounds: [],
-      ...(pairs.length === 0
+      // Gated on what was CAPTURED, never on how many rows the gallery has: a reference-only row
+      // (a linked design's frame, an uploaded mock) makes a pair too, so counting rows would drop
+      // this warning — and the approve-button acknowledgement it drives — for exactly the run that
+      // needs it, one showing a reviewer nothing but the mocks they already had.
+      ...(countCapturedViews(pairs) === 0
         ? {
             degradedReason:
               'No UI screenshots were captured for this task — review the change manually, then approve or request a fix.',
@@ -228,13 +267,16 @@ export class VisualConfirmationController {
         return this.dispatchFixer(workspaceId, instance, step, block, action.findings ?? '')
       case 'recapture': {
         const vc = step.visualConfirm
-        if (vc)
-          vc.pairs = await this.gatherPairs(
+        if (vc) {
+          const refreshed = await this.gatherPairs(
             workspaceId,
             instance,
             block,
             await this.store(workspaceId),
           )
+          vc.pairs = refreshed.pairs
+          vc.designReferences = refreshed.design
+        }
         return this.toAwaitingHuman(workspaceId, instance, step, block)
       }
     }
@@ -289,13 +331,16 @@ export class VisualConfirmationController {
         { agentKind: VISUAL_CONFIRM_AGENT_KIND, output: renderFindingsForFixer(findings) },
       ],
     }
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    // The dispatch returned, so the helper's per-run container is up; surface it via the
-    // same `container` projection the Coder/Tester use (the live phase + id/url arrive on
-    // the first poll). A finished cold-boot must NOT linger as a stale "spinning up".
-    step.container = { status: 'up' }
+    // The fixer's record, opened and committed before the executor is called, and settled by the
+    // same seam if the call throws: a deployment whose fixer runs on its own external loop needs
+    // the same claim-before-effect every other dispatch takes.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job, NOT parked on a stale approval (a re-drive would otherwise abandon the job).
@@ -310,27 +355,28 @@ export class VisualConfirmationController {
       {
         findings,
         helperKind: FIXER_AGENT_KIND,
-        jobId: handle.jobId,
+        jobId,
         outcome: null,
         at: this.deps.clockNow(),
       },
     ]
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**
-   * Gather actual-vs-reference pairs: the latest UI-tester report's screenshots + block
-   * references. The caller passes the already-resolved per-account store (or null) so the
-   * gate's entry path doesn't resolve it twice.
+   * Gather actual-vs-reference pairs: the latest UI-tester report's screenshots, the frames the
+   * task's linked DESIGNS retained, and the block's hand-uploaded references. The caller passes
+   * the already-resolved per-account store (or null) so the gate's entry path doesn't resolve it
+   * twice; the design summary comes back beside the pairs because "a design is linked and gave
+   * nothing" is a fact only this read knows and only the gate state can carry.
    */
   private async gatherPairs(
     workspaceId: string,
     instance: ExecutionInstance,
     block: Block,
     store: BinaryArtifactStore | null,
-  ): Promise<VisualConfirmPair[]> {
+  ): Promise<{ pairs: VisualConfirmPair[]; design: VisualConfirmStepState['designReferences'] }> {
     const byView = new Map<string, VisualConfirmPair>()
     // The artifact ids the run ACTUALLY uploaded — so a screenshot id the agent reported but
     // that was never stored (a fabricated/typo'd id), or one since removed by the retention
@@ -352,25 +398,41 @@ export class VisualConfirmationController {
       byView.set(shot.view, {
         view: shot.view,
         actualArtifactId,
+        // No `referenceOrigin`: a reference the CAPTURE named is one the gate did not source, so
+        // it can say where it came from only by guessing. An absent origin is "unknown", which is
+        // the honest answer and a different one from "a person uploaded this".
         referenceArtifactId: shot.referenceArtifactId ?? null,
       })
     }
-    // Reference: the block's uploaded reference design images (carry no executionId).
-    if (store) {
-      const refs = (await store.listByBlock(workspaceId, block.id)).filter(
-        (r) => r.kind === 'reference',
-      )
-      // `listByBlock` returns references oldest-first, so assign unconditionally: the LAST
-      // (newest) reference uploaded for a view wins. A human re-uploading a corrected reference
-      // for a view they already populated must override the stale one, not be discarded.
-      for (const ref of refs) {
-        const view = ref.view ?? '(reference)'
-        const existing = byView.get(view)
-        if (existing) existing.referenceArtifactId = ref.id
-        else byView.set(view, { view, actualArtifactId: null, referenceArtifactId: ref.id })
+    // Reference: the task's own reference set, the frames its linked DESIGNS retained plus the
+    // images a person uploaded against it, already merged (an upload outranks a design frame for
+    // the same view) by the one module both this gate and a capturing dispatch read it through.
+    const { references, design } = await resolveBlockReferences(
+      this.deps.documentRepository,
+      store,
+      workspaceId,
+      block.id,
+    )
+    for (const ref of references) {
+      const existing = byView.get(ref.view)
+      if (!existing) {
+        byView.set(ref.view, {
+          view: ref.view,
+          actualArtifactId: null,
+          referenceArtifactId: ref.artifactId,
+          referenceOrigin: ref.origin,
+        })
+        continue
       }
+      // A reference the CAPTURE named for this view outranks a DESIGN frame: an explicitly chosen
+      // reference beats a projection of whatever the linked file says today, and the design fold
+      // cannot tell which of the two it would be replacing. It does NOT outrank an UPLOAD, which
+      // is the more deliberate act of the two and the one a person takes to correct a pairing.
+      if (ref.origin === 'design' && existing.referenceArtifactId) continue
+      existing.referenceArtifactId = ref.artifactId
+      existing.referenceOrigin = ref.origin
     }
-    return [...byView.values()]
+    return { pairs: [...byView.values()], design }
   }
 
   /** Flip to awaiting-human, summon the human (idempotent notification), and park. */
@@ -393,25 +455,8 @@ export class VisualConfirmationController {
     step: PipelineStep,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    this.deps.stepGraph.finishStep(step)
-    step.progress = 1
-    step.subtasks = undefined
-    step.approval = null
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.deps.stepGraph.startStep(next)
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    this.deps.stateMachine.finishHumanGateStep(step)
+    return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
 
   /**
@@ -490,8 +535,19 @@ export class VisualConfirmationController {
     return found
   }
 
+  /**
+   * How many screenshots this gate is asking a human to look at.
+   *
+   * The captured count, not the row count: a design frame or an uploaded mock makes a pair with
+   * nothing captured against it, so summoning a reviewer to "5 captured screenshots" that are all
+   * blank is the same misreading the degraded note above exists to prevent.
+   */
+  private capturedCount(vc: VisualConfirmStepState): number {
+    return countCapturedViews(vc.pairs ?? [])
+  }
+
   private proposal(vc: VisualConfirmStepState): string {
-    const n = vc.pairs?.length ?? 0
+    const n = this.capturedCount(vc)
     return n > 0
       ? `Review ${n} screenshot${n === 1 ? '' : 's'} against the reference designs, then approve or request a fix.`
       : 'Review the UI change, then approve or request a fix.'
@@ -505,7 +561,7 @@ export class VisualConfirmationController {
     vc: VisualConfirmStepState,
   ): Promise<void> {
     if (!this.deps.notificationService) return
-    const n = vc.pairs?.length ?? 0
+    const n = this.capturedCount(vc)
     await this.deps.notificationService.raise(workspaceId, {
       type: 'visual_confirmation_ready',
       blockId: block.id,
@@ -526,11 +582,8 @@ export class VisualConfirmationController {
   private async clearReadyNotification(workspaceId: string, blockId: string): Promise<void> {
     const svc = this.deps.notificationService
     if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    for (const card of open) {
-      if (card.type === 'visual_confirmation_ready' && card.blockId === blockId) {
-        await svc.resolve(workspaceId, card.id, 'act')
-      }
-    }
+    // `act`, not `dismiss`: the human did the thing the card asked for. One indexed
+    // (block, type) lookup and one write, never a scan of the workspace's open inbox.
+    await svc.clearOnBlock(workspaceId, blockId, 'visual_confirmation_ready', 'act')
   }
 }

@@ -9,7 +9,7 @@ import type {
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS } from './providers.logic.js'
 
 // ApiKeyService: owns the direct-provider API-key pool (OpenAI/Anthropic/Qwen/
@@ -26,6 +26,14 @@ import { DEFAULT_USAGE_WINDOW_MS } from './providers.logic.js'
 // meant to hold a handful of keys for quota headroom; a generous ceiling keeps the
 // feature usable while bounding accidental/abusive unbounded growth.
 const MAX_KEYS_PER_PROVIDER = 25
+
+/**
+ * HKDF domain tag separating the sealed provider API keys from every other cipher (mirrors
+ * {@link TEST_SECRETS_CIPHER_INFO} et al). Both facades build their `WebCryptoSecretCipher` from
+ * this constant: the tag derives the key, so a facade spelling it differently seals credentials
+ * its sibling cannot unseal.
+ */
+export const PROVIDER_API_KEYS_CIPHER_INFO = 'cat-factory:provider-api-keys'
 
 export interface ApiKeyServiceDependencies {
   providerApiKeyRepository: ProviderApiKeyRepository
@@ -49,6 +57,8 @@ export interface ApiKeySummary {
   inputTokens: number
   outputTokens: number
   requestCount: number
+  enabled: boolean
+  isDefault: boolean
 }
 
 /** A leased key: the decrypted secret plus the row id (for usage attribution). */
@@ -105,6 +115,8 @@ export class ApiKeyService {
       inputTokens: 0,
       outputTokens: 0,
       requestCount: 0,
+      enabled: true,
+      isDefault: false,
       deletedAt: null,
     }
     await this.deps.providerApiKeyRepository.add(record)
@@ -119,6 +131,34 @@ export class ApiKeyService {
   ): Promise<ApiKeySummary[]> {
     const rows = await this.deps.providerApiKeyRepository.listByScope(scope, scopeId, provider)
     return rows.map(toSummary)
+  }
+
+  /**
+   * Enable/disable and/or (un)pin the default of a pool key. Both flags are optional;
+   * pinning a default clears any prior default of the same (scope, provider), and
+   * un-pinning clears it only when THIS key was the default. Returns the updated metadata.
+   */
+  async updateKey(
+    scope: ApiKeyScope,
+    scopeId: string,
+    id: string,
+    patch: { enabled?: boolean; isDefault?: boolean },
+  ): Promise<ApiKeySummary> {
+    const repo = this.deps.providerApiKeyRepository
+    const existing = await repo.getById(scope, scopeId, id)
+    if (!existing) {
+      throw new NotFoundError(`${scope} API key`, id)
+    }
+    if (patch.enabled !== undefined) {
+      await repo.setEnabled(scope, scopeId, id, patch.enabled)
+    }
+    if (patch.isDefault === true) {
+      await repo.setDefault(scope, scopeId, existing.provider, id)
+    } else if (patch.isDefault === false && existing.isDefault) {
+      await repo.setDefault(scope, scopeId, existing.provider, null)
+    }
+    const updated = await repo.getById(scope, scopeId, id)
+    return toSummary(updated ?? existing)
   }
 
   /** Remove a key from its scope's pool. */
@@ -192,12 +232,13 @@ export class ApiKeyService {
       // that leases keys before any LLM call) points at the offending provider key rather
       // than surfacing the cipher's opaque error with no context. The cipher already
       // explains the likely encryption-key mismatch; prepend which key it was.
-      throw new Error(
-        `Could not decrypt the leased '${provider}' API key '${chosen.id}': ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-        { cause: e },
-      )
+      //
+      // The cause is ATTACHED, not interpolated. Every describer in the repo now walks `.cause`,
+      // so a message that also embeds the inner text renders it twice ("…: <inner>: <inner>") and
+      // spends the chain's character budget saying the same thing over again.
+      throw new Error(`Could not decrypt the leased '${provider}' API key '${chosen.id}'`, {
+        cause: e,
+      })
     }
     return { keyId: chosen.id, provider, secret }
   }
@@ -228,5 +269,7 @@ function toSummary(record: ProviderApiKeyRecord): ApiKeySummary {
     inputTokens: record.inputTokens,
     outputTokens: record.outputTokens,
     requestCount: record.requestCount,
+    enabled: record.enabled,
+    isDefault: record.isDefault,
   }
 }

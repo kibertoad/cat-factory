@@ -8,23 +8,17 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { PackageRegistriesModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the package-registries module or send a 503, returning null when unconfigured. */
-function requirePackageRegistries<E extends AppEnv>(c: Context<E>): PackageRegistriesModule | null {
-  return c.get('container').packageRegistries ?? null
-}
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'The package-registry integration is not configured',
-      },
-    },
-    503,
+/** Resolve the package-registries module, or refuse with a 503 naming what isn't wired. */
+function requirePackageRegistries<E extends AppEnv>(c: Context<E>): PackageRegistriesModule {
+  return requireCapability(
+    c.get('container').packageRegistries,
+    'The package-registry integration is not configured',
   )
+}
 
 /**
  * Per-workspace private package-registry entries (npm private orgs, GitHub Packages)
@@ -34,22 +28,20 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function packageRegistriesController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  mountWorkspacePermission(app, 'integrations.manage', ['/package-registries'])
 
   buildHonoRoute(app, listPackageRegistriesContract, async (c) => {
     const registries = requirePackageRegistries(c)
-    if (!registries) return unavailable(c)
     return c.json(await registries.service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, addPackageRegistryContract, async (c) => {
     const registries = requirePackageRegistries(c)
-    if (!registries) return unavailable(c)
     return c.json(await registries.service.add(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deletePackageRegistryContract, async (c) => {
     const registries = requirePackageRegistries(c)
-    if (!registries) return unavailable(c)
     await registries.service.remove(param(c, 'workspaceId'), c.req.valid('param').entryId)
     return c.body(null, 204)
   })

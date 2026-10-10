@@ -11,6 +11,11 @@ import type {
  * the NotificationService, so this is purely the live push — best-effort, errors
  * swallowed by the publisher.
  *
+ * Takes EVERY delivery edge (it is a STATE transport, not an alert one): a board holding an
+ * open card has to see that card settle or escalate, and the push is the only thing that says
+ * so before the next full snapshot. The mute a workspace sets on `in_app` is applied one layer
+ * out by {@link RoutedNotificationChannel}, which gates the raise alone for that reason.
+ *
  * Runtime-neutral: it wraps whatever {@link ExecutionEventPublisher} a facade wires
  * (the Worker's Durable-Object publisher, the Node service's WebSocket-hub publisher),
  * so both facades deliver in-app notifications through the same channel. Composed

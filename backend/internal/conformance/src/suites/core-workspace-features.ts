@@ -1,0 +1,1208 @@
+import { allPullRequests } from '@cat-factory/contracts'
+import {
+  type Block,
+  type ExecutionInstance,
+  MODEL_PRESET_SEED_IDS,
+  type ModelPreset,
+  type Notification,
+  type Pipeline,
+  seedModelPresets,
+  type WorkspaceSnapshot,
+} from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+import type { ConformanceHarness } from '../harness.js'
+
+// Core conformance, slice 4: the remaining workspace feature surfaces — per-workspace budget +
+// incident-enrichment secrets, epics + the dependency graph, notifications, and model presets.
+// Split out of the former monolithic `core.ts`; re-opens its `describe` groups inside the
+// aggregator's `[name] conformance` wrapper (test tree unchanged).
+export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarness): void {
+  describe('per-workspace budget + incident-enrichment secrets', () => {
+    it('resolves a per-workspace budget set in settings, reflected in /spend (D1 ⇄ Postgres)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // No override ⇒ the built-in deployment default budget.
+      const before = await call<{ costLimit: number; currency: string }>(
+        'GET',
+        `/workspaces/${wsId}/spend`,
+      )
+      expect(before.status).toBe(200)
+      expect(before.body.costLimit).toBe(100)
+      expect(before.body.currency).toBe('EUR')
+
+      // Setting a per-workspace budget must take effect immediately — the initial GET
+      // warmed the shared `workspaceSettings` cache slice (which SpendService's pricing
+      // overlay reads through), and the settings write invalidates it — and round-trip
+      // through the workspace_settings columns identically on both stores.
+      const put = await call('PUT', `/workspaces/${wsId}/settings`, {
+        spendMonthlyLimit: 250,
+        spendCurrency: 'USD',
+      })
+      expect(put.status).toBe(200)
+
+      const after = await call<{ costLimit: number; currency: string }>(
+        'GET',
+        `/workspaces/${wsId}/spend`,
+      )
+      expect(after.body.costLimit).toBe(250)
+      expect(after.body.currency).toBe('USD')
+    })
+
+    it('round-trips the allowInitiatorPat credential policy (D1 ⇄ Postgres)', async () => {
+      // The workspace's "may a run act as its initiator's own PAT?" switch. A boolean column
+      // is exactly the shape that silently diverges between the two stores (D1 stores 0/1,
+      // Postgres an integer we map back), and this one decides which CREDENTIAL a run pushes
+      // with — so a facade that failed to persist it would leave an operator believing they
+      // had turned the preference off. See backend/docs/security-model.md.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const settings = `/workspaces/${workspace.id}/settings`
+
+      const seeded = await call<{ allowInitiatorPat: boolean }>('GET', settings)
+      expect(seeded.status).toBe(200)
+      // Attribution is the shipped default, so a fresh workspace starts permissive.
+      expect(seeded.body.allowInitiatorPat).toBe(true)
+
+      const off = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        allowInitiatorPat: false,
+      })
+      expect(off.status).toBe(200)
+      expect(off.body.allowInitiatorPat).toBe(false)
+      expect(
+        (await call<{ allowInitiatorPat: boolean }>('GET', settings)).body.allowInitiatorPat,
+      ).toBe(false)
+
+      // And back on — `false` must not be a one-way door, and a patch that omits the field
+      // must not silently reinstate the default over a deliberate choice.
+      const untouched = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        waitingEscalationMinutes: 33,
+      })
+      expect(untouched.body.allowInitiatorPat).toBe(false)
+      const on = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        allowInitiatorPat: true,
+      })
+      expect(on.body.allowInitiatorPat).toBe(true)
+    })
+
+    it('reads the ACCOUNT-tier allowInitiatorPat floor without the secrets (D1 ⇄ Postgres)', async () => {
+      // The account floor a workspace admin cannot lift. Driven through the repository rather
+      // than HTTP on purpose: no route reads `getConfigByAccount`. The admin settings endpoint
+      // goes through `getByAccount` (the whole row, sealed secrets included), while this method
+      // exists so the RUN path — and a mothership node over the machine API — can read the floor
+      // with no secret on the wire. A store that diverged here would not blank a panel; it would
+      // stop enforcing an account admin's refusal on one runtime only.
+      //
+      // The two-tier COMBINATION is pinned as pure logic in kernel's `initiator-pat-gate.test.ts`
+      // — it is a decision, not a persisted shape. What is runtime-specific, and therefore here,
+      // is reading one key out of a JSON config column on two different stores.
+      const app = harness.makeApp()
+      const repo = app.accountSettingsRepository()
+      const accountId = `acc_conf_${Date.now().toString(36)}`
+
+      // An account with NO row must read as "no opinion" rather than as a refusal, or single-user
+      // adoption breaks on every existing deployment the moment this ships.
+      expect((await repo.getConfigByAccount(accountId)).allowInitiatorPat).toBeUndefined()
+
+      const now = Date.now()
+      await repo.upsert({
+        accountId,
+        config: JSON.stringify({ allowInitiatorPat: false }),
+        secretsCipher: 'sealed-blob-that-must-not-surface',
+        summary: '{}',
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      const config = await repo.getConfigByAccount(accountId)
+      expect(config.allowInitiatorPat).toBe(false)
+      // Nothing from the sealed column may ride along: this method's whole reason for existing
+      // over `getByAccount` is that it is safe to proxy to a laptop that has no decryption key.
+      expect(JSON.stringify(config)).not.toContain('sealed-blob')
+
+      // And back to permitted — the floor must not be a one-way door.
+      await repo.upsert({
+        accountId,
+        config: JSON.stringify({ allowInitiatorPat: true }),
+        secretsCipher: null,
+        summary: '{}',
+        createdAt: now,
+        updatedAt: now,
+      })
+      expect((await repo.getConfigByAccount(accountId)).allowInitiatorPat).toBe(true)
+    })
+
+    it('counts subscription usage in /usage but excludes it from the spend budget (D1 ⇄ Postgres)', async () => {
+      type UsageRow = {
+        billing: string
+        vendor: string | null
+        provider: string
+        model: string
+        inputTokens: number
+        outputTokens: number
+        costEstimate: number
+        calls: number
+      }
+      type UsageReport = { periodStart: number; currency: string; rows: UsageRow[] }
+      type Spend = { inputTokens: number; outputTokens: number; costSpent: number }
+
+      // A subscription-harness run: the fake reports usage tagged 'subscription' (vendor
+      // claude) — the proxy-bypassing Claude Code / Codex path.
+      const sub = harness.makeApp({
+        usage: { inputTokens: 1000, outputTokens: 500 },
+        usageBilling: 'subscription',
+        usageVendor: 'claude',
+      })
+      const subWs = (await sub.createWorkspace()).workspace.id
+      const subPipe = await sub.call<Pipeline>('POST', `/workspaces/${subWs}/pipelines`, {
+        name: 'Code',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const subStart = await sub.call('POST', `/workspaces/${subWs}/blocks/task_login/executions`, {
+        pipelineId: subPipe.body.id,
+      })
+      expect(subStart.status).toBe(201)
+      const subRuns = await sub.drive(subWs)
+
+      const subUsage = await sub.call<UsageReport>('GET', `/workspaces/${subWs}/usage`)
+      expect(subUsage.status).toBe(200)
+      const subRow = subUsage.body.rows.find((r) => r.billing === 'subscription')
+      expect(subRow).toBeDefined()
+      expect(subRow?.vendor).toBe('claude')
+      expect(subRow?.inputTokens).toBeGreaterThanOrEqual(1000)
+      // The load-bearing invariant: a flat-rate subscription call is counted in the report
+      // but NEVER in the spend budget (a quota plan costs nothing per token).
+      expect(subUsage.body.rows.every((r) => r.billing === 'subscription')).toBe(true)
+      const subSpend = await sub.call<Spend>('GET', `/workspaces/${subWs}/spend`)
+      expect(subSpend.body.inputTokens).toBe(0)
+      expect(subSpend.body.costSpent).toBe(0)
+      // The same fact on the STEP, which is where a person reads the money: the step's own
+      // `metrics.costEstimate` is a list price priced identically for both billing kinds, so
+      // without this it reads as spend on a run that spent none.
+      expect(subRuns.at(-1)?.steps.find((s) => s.agentKind === 'coder')?.usageBilling).toBe(
+        'subscription',
+      )
+
+      // A metered run (same usage, default billing) IS counted by both the report and the budget.
+      const met = harness.makeApp({ usage: { inputTokens: 1000, outputTokens: 500 } })
+      const metWs = (await met.createWorkspace()).workspace.id
+      const metPipe = await met.call<Pipeline>('POST', `/workspaces/${metWs}/pipelines`, {
+        name: 'Code',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const metStart = await met.call('POST', `/workspaces/${metWs}/blocks/task_login/executions`, {
+        pipelineId: metPipe.body.id,
+      })
+      expect(metStart.status).toBe(201)
+      const metRuns = await met.drive(metWs)
+      expect(metRuns.at(-1)?.steps.find((s) => s.agentKind === 'coder')?.usageBilling).toBe(
+        'metered',
+      )
+
+      const metSpend = await met.call<Spend>('GET', `/workspaces/${metWs}/spend`)
+      expect(metSpend.body.inputTokens).toBeGreaterThanOrEqual(1000)
+      const metUsage = await met.call<UsageReport>('GET', `/workspaces/${metWs}/usage`)
+      expect(metUsage.body.rows.some((r) => r.billing === 'metered')).toBe(true)
+    })
+
+    it('surfaces a spend-paused run as a workspace-scoped budget_paused card, cleared on resume (D1 ⇄ Postgres)', async () => {
+      // F3 (stuck-run audit): a spend-`paused` run is invisible to the sweeper and has no
+      // auto-resume, so the paused board badge used to be its ONLY signal. The pause must now
+      // raise ONE workspace-scoped inbox card (persisted on whichever store the runtime uses),
+      // and lifting the pause via /spend/resume must clear it — asserted on both D1 and Postgres.
+      type Notif = { id: string; type: string; blockId: string | null; status: string }
+      const app = harness.makeApp({ usage: { inputTokens: 1000, outputTokens: 500 } })
+      const wsId = (await app.createWorkspace()).workspace.id
+
+      // A tiny positive budget: the run STARTS (0 spend is within budget, so the up-front
+      // start guard allows it) but the first metered step's usage pushes cumulative cost over
+      // the limit, so the SECOND step pauses mid-run — the exact state the sweeper can't see.
+      expect(
+        (await app.call('PUT', `/workspaces/${wsId}/settings`, { spendMonthlyLimit: 0.0001 }))
+          .status,
+      ).toBe(200)
+
+      const pipe = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Code',
+        purpose: 'build',
+        agentKinds: ['coder', 'documenter'],
+      })
+      const started = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipe.body.id,
+      })
+      expect(started.status).toBe(201)
+      const driven = await app.drive(wsId)
+      expect(driven.find((e) => e.blockId === 'task_login')?.status).toBe('paused')
+
+      // Exactly one workspace-scoped (block-less) budget_paused card, open.
+      const inbox = await app.call<Notif[]>('GET', `/workspaces/${wsId}/notifications`)
+      const budget = inbox.body.filter((n) => n.type === 'budget_paused')
+      expect(budget).toHaveLength(1)
+      expect(budget[0]!.blockId).toBeNull()
+      expect(budget[0]!.status).toBe('open')
+
+      // Raise the budget and resume: the card is cleared and the run advances off `paused`.
+      expect(
+        (await app.call('PUT', `/workspaces/${wsId}/settings`, { spendMonthlyLimit: 1000 })).status,
+      ).toBe(200)
+      expect((await app.call('POST', `/workspaces/${wsId}/spend/resume`)).status).toBe(200)
+      const resumed = await app.drive(wsId)
+      expect(resumed.find((e) => e.blockId === 'task_login')?.status).not.toBe('paused')
+
+      const after = await app.call<Notif[]>('GET', `/workspaces/${wsId}/notifications`)
+      expect(after.body.some((n) => n.type === 'budget_paused' && n.status === 'open')).toBe(false)
+    })
+
+    it('round-trips the per-user (user-tier) budget (D1 ⇄ Postgres)', async () => {
+      // The user-tier budget lives in the `user_settings` table (PK user_id). It is user-scoped,
+      // so — like local model endpoints — it is exercised through the service directly (the
+      // dev-open HTTP `call` path has no signed-in user). Asserts the new table round-trips a
+      // nullable numeric identically on both stores.
+      const app = harness.makeApp()
+      const probe = app.userSettings?.()
+      if (!probe) return
+      const userId = 'usr_budget_conformance'
+
+      const before = await probe.get(userId)
+      expect(before.spendMonthlyLimit).toBeNull()
+
+      const saved = await probe.update(userId, { spendMonthlyLimit: 42 })
+      expect(saved.spendMonthlyLimit).toBe(42)
+      expect((await probe.get(userId)).spendMonthlyLimit).toBe(42)
+
+      // `0` is a real "no paid spend" limit, distinct from null (inherit/unlimited).
+      await probe.update(userId, { spendMonthlyLimit: 0 })
+      expect((await probe.get(userId)).spendMonthlyLimit).toBe(0)
+
+      await probe.update(userId, { spendMonthlyLimit: null })
+      expect((await probe.get(userId)).spendMonthlyLimit).toBeNull()
+    })
+
+    it('round-trips the local-mode delegation toggle + a paired boolean (D1 ⇄ Postgres)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      type Settings = {
+        delegateAgentsToRunnerPool: boolean
+        kaizenEnabled: boolean
+      }
+      // Fresh-workspace defaults: agent delegation off (local-everything), Kaizen on.
+      const initial = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+      expect(initial.status).toBe(200)
+      expect(initial.body.delegateAgentsToRunnerPool).toBe(false)
+      expect(initial.body.kaizenEnabled).toBe(true)
+
+      // Both flip and persist identically through the workspace_settings columns.
+      const put = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        delegateAgentsToRunnerPool: true,
+        kaizenEnabled: false,
+      })
+      expect(put.status).toBe(200)
+      expect(put.body.delegateAgentsToRunnerPool).toBe(true)
+      expect(put.body.kaizenEnabled).toBe(false)
+
+      const reread = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+      expect(reread.body.delegateAgentsToRunnerPool).toBe(true)
+      expect(reread.body.kaizenEnabled).toBe(false)
+
+      // A partial patch leaves the untouched flag intact (per-field merge).
+      const partial = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        delegateAgentsToRunnerPool: false,
+      })
+      expect(partial.body.delegateAgentsToRunnerPool).toBe(false)
+      expect(partial.body.kaizenEnabled).toBe(false)
+    })
+
+    it('round-trips the custom workspace metadata bag (D1 ⇄ Postgres)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      type Settings = { metadata: Record<string, string>; kaizenEnabled: boolean }
+      // A fresh workspace has filled nothing in — an empty object, never null: every reader
+      // (an external-tool URL resolver above all) indexes it without a null check.
+      const initial = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+      expect(initial.status).toBe(200)
+      expect(initial.body.metadata).toEqual({})
+
+      // The bag is a JSON column on both stores, so this is where a store that stringified
+      // or parsed it differently would diverge.
+      const put = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        metadata: { gameId: 'zork', region: 'eu' },
+      })
+      expect(put.status).toBe(200)
+      expect(put.body.metadata).toEqual({ gameId: 'zork', region: 'eu' })
+      expect((await call<Settings>('GET', `/workspaces/${wsId}/settings`)).body.metadata).toEqual({
+        gameId: 'zork',
+        region: 'eu',
+      })
+
+      // Supplied ⇒ REPLACED: a field the editor cleared has to disappear, and a cleared value
+      // drops its key rather than persisting as `''` (which would read as "set to nothing").
+      const replaced = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        metadata: { gameId: 'myst', region: '  ' },
+      })
+      expect(replaced.body.metadata).toEqual({ gameId: 'myst' })
+
+      // Omitted ⇒ untouched, like every other field's partial patch.
+      const untouched = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        kaizenEnabled: false,
+      })
+      expect(untouched.body.metadata).toEqual({ gameId: 'myst' })
+
+      // A key that isn't identifier-shaped is refused at the boundary rather than encoded on
+      // its way into a tool URL.
+      const rejected = await call('PUT', `/workspaces/${wsId}/settings`, {
+        metadata: { 'not a key': 'x' },
+      })
+      expect(rejected.status).toBe(400)
+    })
+
+    it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      type View = {
+        connected: boolean
+        summary: { pagerDuty: boolean; incidentIo: boolean } | null
+      }
+      const initial = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+      // Wired only when the facade has the shared encryption key; skip otherwise.
+      if (initial.status === 503) return
+      expect(initial.status).toBe(200)
+      expect(initial.body).toMatchObject({ connected: false, summary: null })
+
+      const put = await call<View>('PUT', `/workspaces/${wsId}/incident-enrichment`, {
+        pagerDuty: { apiToken: 'pd-secret-token', fromEmail: 'oncall@example.com' },
+      })
+      expect(put.status).toBe(200)
+      expect(put.body.summary).toEqual({ pagerDuty: true, incidentIo: false })
+      // The sealed token is NEVER surfaced on any read path.
+      expect(JSON.stringify(put.body)).not.toContain('pd-secret-token')
+
+      const view = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+      expect(view.body).toMatchObject({
+        connected: true,
+        summary: { pagerDuty: true, incidentIo: false },
+      })
+      expect(JSON.stringify(view.body)).not.toContain('pd-secret-token')
+
+      const del = await call('DELETE', `/workspaces/${wsId}/incident-enrichment`)
+      expect(del.status).toBe(204)
+      const gone = await call<View>('GET', `/workspaces/${wsId}/incident-enrichment`)
+      expect(gone.body).toMatchObject({ connected: false, summary: null })
+    })
+  })
+
+  registerEpicDependencyTests(harness)
+
+  registerMultiRepoPullRequestTests(harness)
+  registerNotificationAndPresetTests(harness)
+}
+
+/**
+ * Epics and the block dependency graph.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerEpicDependencyTests(harness: ConformanceHarness): void {
+  describe('epics + dependency graph', () => {
+    it('round-trips an epic node + a task’s epic membership identically on every store', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      const epic = await call<Block>('POST', `/workspaces/${wsId}/epics`, {
+        title: 'Checkout revamp',
+        position: { x: 10, y: 20 },
+      })
+      expect(epic.status).toBe(201)
+      expect(epic.body.level).toBe('epic')
+
+      const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Part of the epic',
+      })
+      const assigned = await call<Block>(
+        'POST',
+        `/workspaces/${wsId}/blocks/${task.body.id}/epic`,
+        { epicId: epic.body.id },
+      )
+      expect(assigned.status).toBe(200)
+      expect(assigned.body.epicId).toBe(epic.body.id)
+
+      // Both the epic level and the membership link survive the store round-trip.
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.blocks.find((b) => b.id === epic.body.id)?.level).toBe('epic')
+      expect(snap.body.blocks.find((b) => b.id === task.body.id)?.epicId).toBe(epic.body.id)
+    })
+
+    it('round-trips a service frame provisioning config (the JSON column) on every store', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // The service-owned provisioning config (the "what + where") is a JSON object on the
+      // service frame. A runtime that forgot to map the `provisioning` column drops it on
+      // write — so this asserts it survives PATCH + a fresh snapshot read on D1 and Postgres.
+      const provisioning = {
+        type: 'docker-compose' as const,
+        composePath: 'docker-compose.yml',
+        localDevOnly: true,
+      }
+      const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        provisioning,
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.body.provisioning).toEqual(provisioning)
+
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.provisioning).toEqual(provisioning)
+    })
+
+    it('round-trips a frontend frame config (the JSON column + backend bindings) on every store', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // A frontend frame's `frontendConfig` (build/serve/mock knobs + the backend bindings
+      // that double as board links) is a JSON object on the frame block, mirroring
+      // `provisioning`. A runtime that forgot to map the `frontend_config` column drops it on
+      // write — so this asserts it survives PATCH + a fresh snapshot read on D1 and Postgres.
+      const frontendConfig = {
+        packageManager: 'pnpm' as const,
+        buildScript: 'build',
+        outputDir: 'dist',
+        serveMode: 'static' as const,
+        servePort: 8080,
+        envInjection: 'build' as const,
+        mockMappingsPath: 'mocks/',
+        previewEnabled: true,
+        backendBindings: [
+          {
+            envVar: 'PUB_BACKEND_URL',
+            source: { kind: 'service' as const, serviceBlockId: 'blk_auth' },
+          },
+          { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' as const } },
+        ],
+      }
+      const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        frontendConfig,
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.body.frontendConfig).toEqual(frontendConfig)
+
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.frontendConfig).toEqual(
+        frontendConfig,
+      )
+    })
+
+    it('round-trips service connections + involved services (the JSON columns) on every store', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // A service frame's `serviceConnections` (consumer→provider edges) and a task's
+      // `involvedServiceIds` are JSON columns on the block, mirroring `frontend_config`.
+      // A runtime that forgot to map either column drops it on write — so this asserts
+      // both survive PATCH + a fresh snapshot read on D1 and Postgres. The seed has one
+      // service-type frame (blk_auth), so create the provider frame to connect to.
+      const provider = await call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 900, y: 900 },
+      })
+      const providerId = provider.body.id
+      expect(providerId).toBeTruthy()
+
+      const serviceConnections = [
+        { serviceBlockId: providerId, description: 'sends transactional email via it' },
+      ]
+      const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        serviceConnections,
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.body.serviceConnections).toEqual(serviceConnections)
+
+      // The task may involve a connected neighbor (either direction); its own frame never.
+      const task = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        involvedServiceIds: [providerId],
+      })
+      expect(task.status).toBe(200)
+      expect(task.body.involvedServiceIds).toEqual([providerId])
+
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.serviceConnections).toEqual(
+        serviceConnections,
+      )
+      expect(snap.body.blocks.find((b) => b.id === 'task_login')?.involvedServiceIds).toEqual([
+        providerId,
+      ])
+
+      // Write-gate guards: a self-connection and an unconnected involved service are
+      // ValidationErrors (422 per the shared error handler).
+      const selfConn = await call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        serviceConnections: [{ serviceBlockId: 'blk_auth' }],
+      })
+      expect(selfConn.status).toBe(422)
+      const unconnected = await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        involvedServiceIds: ['blk_db'],
+      })
+      expect(unconnected.status).toBe(422)
+    })
+
+    it("round-trips a task's read-only reference repos (the JSON column) on every store", async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // `referenceRepos` is a DOCUMENT-task-only JSON column carrying the doc-writer agent's
+      // read-only reference repos, each a self-contained clone identity (NOT resolved from
+      // the repo projection). BoardService.update drops it on any non-document block, so the
+      // round-trip is asserted on a real document task: a runtime that forgot to map the
+      // column drops it on write, so this checks it survives PATCH + a fresh snapshot read,
+      // and that clearing writes NULL (an empty array comes back absent), on D1 and Postgres.
+      const doc = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Author the API guide',
+        taskType: 'document',
+      })
+      expect(doc.status).toBe(201)
+      const docId = doc.body.id
+
+      const referenceRepos = [
+        { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'main' },
+        {
+          repoId: 222,
+          owner: 'acme',
+          name: 'api-conventions',
+          defaultBranch: 'trunk',
+          connectionId: 42,
+        },
+      ]
+      const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${docId}`, {
+        referenceRepos,
+      })
+      expect(set.status).toBe(200)
+      expect(set.body.referenceRepos).toEqual(referenceRepos)
+
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.blocks.find((b) => b.id === docId)?.referenceRepos).toEqual(referenceRepos)
+
+      // Clearing with an empty array writes NULL, so the field comes back absent (mirroring
+      // the other JSON-array block columns' empty-is-null convention).
+      const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${docId}`, {
+        referenceRepos: [],
+      })
+      expect(cleared.status).toBe(200)
+      expect(cleared.body.referenceRepos).toBeUndefined()
+    })
+
+    it("round-trips a task's apriori branches (the JSON column) on every store", async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // `aprioriBranches` is a task-level JSON column carrying the pre-existing branches handed
+      // to the run (one optional `working` branch + any `reference` branches). BoardService
+      // validates the cross-entry invariants and drops it on non-task blocks; a runtime that
+      // forgot to map the column drops it on write, so this checks it survives PATCH + a fresh
+      // snapshot read, and that clearing writes NULL (an empty array comes back absent).
+      const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Continue the spike branch',
+      })
+      expect(task.status).toBe(201)
+      const taskId = task.body.id
+
+      const aprioriBranches = [
+        { name: 'feature/checkout-v2', mode: 'working' as const },
+        { name: 'spike/payments', mode: 'reference' as const },
+      ]
+      const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+        aprioriBranches,
+      })
+      expect(set.status).toBe(200)
+      expect(set.body.aprioriBranches).toEqual(aprioriBranches)
+
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.blocks.find((b) => b.id === taskId)?.aprioriBranches).toEqual(
+        aprioriBranches,
+      )
+
+      // Two working entries are rejected at the write boundary (single-working invariant).
+      const twoWorking = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+        aprioriBranches: [
+          { name: 'a', mode: 'working' },
+          { name: 'b', mode: 'working' },
+        ],
+      })
+      expect(twoWorking.status).toBe(422)
+
+      // An unsafe git ref name is rejected by the contract schema (400, not the 422 write
+      // boundary) — a value that would break the harness fetch/checkout never persists.
+      const unsafe = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+        aprioriBranches: [{ name: 'bad name~with^stuff', mode: 'reference' }],
+      })
+      expect(unsafe.status).toBe(400)
+
+      // Clearing with an empty array writes NULL, so the field comes back absent.
+      const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+        aprioriBranches: [],
+      })
+      expect(cleared.status).toBe(200)
+      expect(cleared.body.aprioriBranches).toBeUndefined()
+    })
+
+    it('rejects a dependency edge that would create a cycle', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+      const a = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'A',
+      })
+      const b = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'B',
+      })
+      // A dependsOn B — fine.
+      const first = await call('POST', `/workspaces/${wsId}/blocks/${a.body.id}/dependencies`, {
+        sourceId: b.body.id,
+      })
+      expect(first.status).toBe(200)
+      // B dependsOn A — would close a cycle, rejected (ValidationError → 422).
+      const cyclic = await call('POST', `/workspaces/${wsId}/blocks/${b.body.id}/dependencies`, {
+        sourceId: a.body.id,
+      })
+      expect(cyclic.status).toBe(422)
+    })
+
+    it('refuses to start a task while a dependency is unfinished', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+      const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Code only',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const blocker = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Blocker',
+      })
+      // task_login dependsOn the (planned) blocker.
+      await call('POST', `/workspaces/${wsId}/blocks/task_login/dependencies`, {
+        sourceId: blocker.body.id,
+      })
+      const blocked = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(blocked.status).toBe(409)
+    })
+  })
+
+  registerBlockRepositoryTests(harness)
+}
+
+/**
+ * The `BlockRepository` port itself, driven directly rather than through HTTP.
+ *
+ * Split out of the epics/dependency suite above, whose `describe` had grown to cover three
+ * unrelated concerns (epics + the dependency graph, the JSON-column round-trips, and these
+ * port-level reads and writes). These are the ones with no HTTP surface of their own: the batched
+ * and reverse-link reads the engine uses internally, a column the repository DERIVES rather than
+ * accepts, and a clear the repository has to normalise to one spelling.
+ */
+function registerBlockRepositoryTests(harness: ConformanceHarness): void {
+  describe('block repository port', () => {
+    it('findByIds resolves blocks across workspaces in one batched read', async () => {
+      // The cross-workspace dependency gate resolves a dependent's foreign blockers via
+      // the batched `BlockRepository.findByIds` (never a point-read per id) — assert the
+      // batched read maps each block to its HOME workspace identically on every store.
+      const app = harness.makeApp()
+      const { workspace: wsA } = await app.createWorkspace()
+      const { workspace: wsB } = await app.createWorkspace()
+      const a = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+        title: 'Home task',
+      })
+      const b = await app.call<Block>('POST', `/workspaces/${wsB.id}/blocks/blk_auth/tasks`, {
+        title: 'Foreign task',
+      })
+      const repo = app.blockRepository()
+      const found = await repo.findByIds([a.body.id, b.body.id, 'blk_does_not_exist'])
+      // Both blocks resolve with their home workspace; the unknown id is simply absent.
+      expect(found).toHaveLength(2)
+      const byId = new Map(found.map((f) => [f.block.id, f]))
+      expect(byId.get(a.body.id)?.workspaceId).toBe(wsA.id)
+      expect(byId.get(b.body.id)?.workspaceId).toBe(wsB.id)
+      expect(byId.get(a.body.id)?.block.title).toBe('Home task')
+      // Empty input short-circuits to an empty result.
+      expect(await repo.findByIds([])).toEqual([])
+    })
+
+    it('stamps completedAt when a block reaches done, and only the FIRST time', async () => {
+      // The board's Done swimlane ages a completed task out of view, and `blocks` carried no
+      // timestamp at all before this. The stamp is derived in the repository rather than at
+      // the several services that mark a task done, so it is the STORE that has to agree
+      // across runtimes — hence a conformance assertion rather than a unit test.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const repo = app.blockRepository()
+      const created = await app.call<Block>(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/blk_auth/tasks`,
+        { title: 'Ship it' },
+      )
+      const id = created.body.id
+
+      // An unfinished task has no completion date, and that must read as absent rather than
+      // as a zero a reader could mistake for "completed at the epoch".
+      expect((await repo.get(workspace.id, id))?.completedAt ?? null).toBeNull()
+
+      await repo.update(workspace.id, id, { status: 'done' })
+      const first = (await repo.get(workspace.id, id))?.completedAt
+      expect(typeof first).toBe('number')
+
+      // A second `done` write — what a replaying durable driver does — must NOT move the
+      // date, or a re-drive would quietly age the task back into the lane.
+      await repo.update(workspace.id, id, { status: 'done', progress: 1 })
+      expect((await repo.get(workspace.id, id))?.completedAt).toBe(first)
+
+      // A patch that does not touch `status` leaves the stamp alone.
+      await repo.update(workspace.id, id, { title: 'Ship it (renamed)' })
+      expect((await repo.get(workspace.id, id))?.completedAt).toBe(first)
+
+      // Leaving `done` clears it, which is what a reset-and-rerun does: the lane must date
+      // the attempt that actually landed, not the one that was thrown away.
+      await repo.update(workspace.id, id, { status: 'in_progress' })
+      expect((await repo.get(workspace.id, id))?.completedAt ?? null).toBeNull()
+    })
+
+    it('clears a task’s declared module on an empty patch, leaving one spelling of "none"', async () => {
+      // The board now has two routes that DETACH a task from its module (the inspector's picker
+      // and dragging it out of a module's group), and both spell the detach as the empty string,
+      // the way `updateBlock` spells every other clear. A store that wrote `''` verbatim instead
+      // of NULL would leave two spellings of "no module" for every reader to handle, and only one
+      // of the two runtimes would have it — so the store is what has to agree here.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const repo = app.blockRepository()
+      const created = await app.call<Block>(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/blk_auth/tasks`,
+        { title: 'Rotate the signing keys' },
+      )
+      const id = created.body.id
+      await repo.update(workspace.id, id, { moduleName: 'Sessions' })
+      expect((await repo.get(workspace.id, id))?.moduleName).toBe('Sessions')
+
+      await repo.update(workspace.id, id, { moduleName: '' })
+      expect((await repo.get(workspace.id, id))?.moduleName ?? null).toBeNull()
+    })
+
+    it('getByExecution resolves the block a run is stamped on, and nothing otherwise', async () => {
+      // The run→block REVERSE link, read when a run row cannot be decoded and so names no block of
+      // its own: it is what stops the disposal of a poison run leaving the card wedged
+      // `in_progress` forever. Asserted per store because the column and its scoping are the only
+      // things it consists of, and a workspace-blind read here would hand one board's disposal
+      // another board's block.
+      const app = harness.makeApp()
+      const { workspace: wsA } = await app.createWorkspace()
+      const { workspace: wsB } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsA.id}/pipelines`, {
+        name: 'Code only',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const task = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+        title: 'Stamped task',
+      })
+      const run = await app.call<{ id: string }>(
+        'POST',
+        `/workspaces/${wsA.id}/blocks/${task.body.id}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(run.status).toBe(201)
+      const repo = app.blockRepository()
+      const found = await repo.getByExecution(wsA.id, run.body.id)
+      expect(found?.id).toBe(task.body.id)
+      // Scoped to the workspace: the same run id asked of another board resolves to nothing
+      // rather than to the block that happens to carry it elsewhere.
+      expect(await repo.getByExecution(wsB.id, run.body.id)).toBeNull()
+      // A run id no block carries is a real state (a cancel clears the link), not an error.
+      expect(await repo.getByExecution(wsA.id, 'exec_never_started')).toBeNull()
+    })
+  })
+}
+
+/**
+ * A multi-repo run's pull requests on the block.
+ *
+ * Its own registration rather than a member of the epic/dependency group above: the subject is
+ * the peer-PR record, and the group it sat in was at the per-function line budget.
+ */
+function registerMultiRepoPullRequestTests(harness: ConformanceHarness): void {
+  describe('multi-repo pull requests', () => {
+    it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
+      // Service-connections phase 3: a coder run over a task with a connected involved service
+      // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`
+      // beside the own-service PR; the engine records BOTH on the block. This asserts the
+      // full recording + JSON-column round-trip on D1 and Postgres (the fake stands in for
+      // the container — the resolveRepoTargets/peerRepos dispatch path is unit-tested in the
+      // server package). `allPullRequests` then sees the own PR first, then the peer.
+      //
+      // The peer carries TWO frames on its one PR: the shared-monorepo case, where several of
+      // the run's involved services live in one repo and therefore share a checkout, a work
+      // branch and a pull request. Both stores must round-trip the whole set, since dropping
+      // any of it would leave the other frames looking like no PR ever opened for them.
+      const app = harness.makeApp({
+        asyncKinds: ['coder'],
+        asyncPolls: 1,
+        pullRequest: {
+          url: 'https://gh/acme/auth/pull/1',
+          number: 1,
+          branch: 'cat-factory/task_login',
+        },
+        peerPullRequests: [
+          {
+            repo: 'acme/email',
+            frameIds: ['blk_email', 'blk_email_admin'],
+            ref: {
+              url: 'https://gh/acme/email/pull/7',
+              number: 7,
+              branch: 'cat-factory/task_login',
+            },
+          },
+        ],
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      // Connect blk_auth → a provider frame and mark it involved in the task (realistic setup;
+      // the recording itself is driven by what the fake reports, not the resolution).
+      const provider = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 900, y: 900 },
+      })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        serviceConnections: [
+          { serviceBlockId: provider.body.id, description: 'sends mail via it' },
+        ],
+      })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        involvedServiceIds: [provider.body.id],
+      })
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Implement',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/task_login/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+      await app.drive(wsId)
+
+      const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const task = snap.body.blocks.find((b) => b.id === 'task_login')!
+      expect(task.pullRequest?.url).toBe('https://gh/acme/auth/pull/1')
+      expect(task.peerPullRequests).toEqual([
+        {
+          repo: 'acme/email',
+          frameIds: ['blk_email', 'blk_email_admin'],
+          ref: {
+            url: 'https://gh/acme/email/pull/7',
+            number: 7,
+            branch: 'cat-factory/task_login',
+          },
+        },
+      ])
+      expect(allPullRequests(task)).toEqual([
+        { ref: task.pullRequest },
+        {
+          repo: 'acme/email',
+          frameIds: ['blk_email', 'blk_email_admin'],
+          ref: task.peerPullRequests![0]!.ref,
+        },
+      ])
+    })
+  })
+}
+
+/**
+ * The notification inbox and the per-workspace model-preset library.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
+  describe('notifications', () => {
+    it('escalateStaleOpen flips exactly the overdue open normal cards in one statement', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const repo = app.notificationRepository()
+      const card = (id: string, overrides: Partial<Notification>): Notification =>
+        ({
+          id,
+          type: 'merge_review',
+          status: 'open',
+          severity: 'normal',
+          blockId: null,
+          executionId: null,
+          title: id,
+          body: 'body',
+          payload: null,
+          createdAt: 1_000,
+          resolvedAt: null,
+          ...overrides,
+        }) as Notification
+      await repo.upsert(wsId, card('ntf_overdue', {}))
+      await repo.upsert(wsId, card('ntf_recent', { createdAt: 50_000 }))
+      await repo.upsert(wsId, card('ntf_already_urgent', { severity: 'urgent' }))
+      await repo.upsert(wsId, card('ntf_dismissed', { status: 'dismissed', resolvedAt: 2_000 }))
+
+      // Only the open, still-normal card past the cutoff flips — and is returned for
+      // re-delivery (the real-time inbox re-render).
+      const escalated = await repo.escalateStaleOpen(wsId, 10_000)
+      expect(escalated.map((n) => n.id)).toEqual(['ntf_overdue'])
+      expect(escalated[0]?.severity).toBe('urgent')
+
+      const open = await repo.listOpen(wsId)
+      const severityById = new Map(open.map((n) => [n.id, n.severity]))
+      expect(severityById.get('ntf_overdue')).toBe('urgent')
+      expect(severityById.get('ntf_recent')).toBe('normal')
+      expect(severityById.get('ntf_already_urgent')).toBe('urgent')
+      // Idempotent: a second sweep finds nothing left to flip.
+      expect(await repo.escalateStaleOpen(wsId, 10_000)).toEqual([])
+    })
+
+    it('claimForAction atomically flips open→acted exactly once (act double-fire guard)', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const repo = app.notificationRepository()
+      const card: Notification = {
+        id: 'ntf_act',
+        type: 'merge_review',
+        status: 'open',
+        severity: 'normal',
+        blockId: null,
+        executionId: null,
+        title: 'merge?',
+        body: 'body',
+        payload: null,
+        createdAt: 1_000,
+        resolvedAt: null,
+      }
+      await repo.upsert(wsId, card)
+
+      // Two concurrent claims race the conditional UPDATE; exactly one wins the flip and
+      // gets the row back (its side effect would run), the other is handed null and skips it.
+      const [a, b] = await Promise.all([
+        repo.claimForAction(wsId, 'ntf_act', 5_000),
+        repo.claimForAction(wsId, 'ntf_act', 6_000),
+      ])
+      const winners = [a, b].filter((n) => n !== null)
+      expect(winners).toHaveLength(1)
+      expect(winners[0]?.status).toBe('acted')
+
+      // The card is now acted; a later claim (or a re-click) finds it non-open → null.
+      const persisted = await repo.get(wsId, 'ntf_act')
+      expect(persisted?.status).toBe('acted')
+      expect(persisted?.resolvedAt).toBe(winners[0]?.resolvedAt)
+      expect(await repo.claimForAction(wsId, 'ntf_act', 7_000)).toBeNull()
+    })
+  })
+
+  describe('model presets', () => {
+    it('seeds the built-ins, CRUDs presets and surfaces them on the snapshot', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+
+      // A fresh workspace is lazily seeded with the WHOLE built-in catalog: one row per
+      // `seedModelPresets()` entry, each carrying that entry's name, base model and catalog
+      // version, in catalog order (the seed stamps `createdAt` by that order and `list` sorts on
+      // it). Derived from the catalog rather than spot-checked member by member, because the
+      // population grows: a pinned count re-broke on every shipped built-in while naming nothing
+      // about what the seed got wrong, and the member added last was always the one with no
+      // row-level assertion. This is also what covers `upsertMany` on both facades, the one batch
+      // the whole seed is written through.
+      const catalog = seedModelPresets()
+      const initial = await call<ModelPreset[]>('GET', `/workspaces/${workspace.id}/model-presets`)
+      expect(initial.status).toBe(200)
+      const seeded = initial.body
+      expect(
+        seeded.map((p) => ({
+          id: p.id,
+          name: p.name,
+          baseModelId: p.baseModelId,
+          version: p.version,
+        })),
+      ).toEqual(
+        catalog.map((s) => ({
+          id: s.id,
+          name: s.name,
+          baseModelId: s.baseModelId,
+          version: s.version,
+        })),
+      )
+      // Exactly one default, and WHICH one is the deployment's own choice: the conformance
+      // harnesses seed Kimi, so every other built-in (Claude, which local mode defaults to, and
+      // GPT) is present and non-default.
+      expect(seeded.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
+        MODEL_PRESET_SEED_IDS.kimi,
+      ])
+
+      // Create a new preset with a per-agent override and promote it to default.
+      const created = await call<ModelPreset>('POST', `/workspaces/${workspace.id}/model-presets`, {
+        name: 'Mixed',
+        baseModelId: 'glm',
+        overrides: { architect: 'kimi-k2.7' },
+        isDefault: true,
+      })
+      expect(created.status).toBe(201)
+      expect(created.body.isDefault).toBe(true)
+      expect(created.body.overrides.architect).toBe('kimi-k2.7')
+
+      // Promoting it demoted the previous default (single-default invariant).
+      const afterCreate = await call<ModelPreset[]>(
+        'GET',
+        `/workspaces/${workspace.id}/model-presets`,
+      )
+      expect(afterCreate.body.filter((p) => p.isDefault)).toHaveLength(1)
+      expect(afterCreate.body.find((p) => p.isDefault)?.id).toBe(created.body.id)
+
+      // Patch the base model.
+      const patched = await call<ModelPreset>(
+        'PATCH',
+        `/workspaces/${workspace.id}/model-presets/${created.body.id}`,
+        { baseModelId: 'kimi-k2.7' },
+      )
+      expect(patched.status).toBe(200)
+      expect(patched.body.baseModelId).toBe('kimi-k2.7')
+
+      // The library rides along on the workspace snapshot.
+      const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+      expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
+    })
+
+    it('ships catalog versions on the snapshot and reseeds a built-in (drift repair + new appeared)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+      const base = `/workspaces/${wsId}/model-presets`
+
+      // The snapshot ships the built-in catalog versions so the SPA can offer a reseed, plus the
+      // companion NAME map: the advisory that offers to ADD a built-in has no stored row to take a
+      // name off, and without this channel the SPA humanises the id ("Chatgpt" for GPT-5.6 Sol).
+      // Both derived from the same `seedModelPresets()` read the facade builds them from, so
+      // shipping a built-in needs no edit here and a facade that drops either map still fails.
+      const snap = await call<{
+        modelPresetCatalogVersions?: Record<string, number>
+        modelPresetCatalogNames?: Record<string, string>
+      }>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.modelPresetCatalogVersions).toMatchObject(
+        Object.fromEntries(seedModelPresets().map((p) => [p.id, p.version])),
+      )
+      expect(snap.body.modelPresetCatalogNames).toMatchObject(
+        Object.fromEntries(seedModelPresets().map((p) => [p.id, p.name])),
+      )
+
+      // Seed, then drift a built-in (rename + change its base model). Reseed must restore the
+      // canonical definition + version while preserving the user's default + ordering.
+      await call('GET', base)
+      await call('PATCH', `${base}/mdp_kimi`, { name: 'Tampered', baseModelId: 'glm' })
+      const reseeded = await call<ModelPreset>('POST', `${base}/mdp_kimi/reseed`)
+      expect(reseeded.status).toBe(200)
+      expect(reseeded.body.name).toBe('Kimi K2.7')
+      expect(reseeded.body.baseModelId).toBe('kimi-k2.7')
+      expect(reseeded.body.version).toBe(1)
+      // The default is preserved across a reseed (the conformance harnesses default to Kimi).
+      expect(reseeded.body.isDefault).toBe(true)
+
+      // Reseeding a NEW built-in the workspace doesn't have yet materialises it (the
+      // "appeared upstream" case): delete the claude preset, then reseed it back.
+      await call('DELETE', `${base}/mdp_claude`)
+      const afterDelete = await call<ModelPreset[]>('GET', base)
+      expect(afterDelete.body.some((p) => p.id === 'mdp_claude')).toBe(false)
+      const readded = await call<ModelPreset>('POST', `${base}/mdp_claude/reseed`)
+      expect(readded.status).toBe(200)
+      expect(readded.body.baseModelId).toBe('claude-opus')
+      // Re-materialising a non-default built-in must not steal the default from Kimi.
+      expect(readded.body.isDefault).toBe(false)
+
+      // A custom (non-catalog) preset cannot be reseeded — delete it instead.
+      const custom = await call<ModelPreset>('POST', base, { name: 'Custom', baseModelId: 'glm' })
+      const badReseed = await call('POST', `${base}/${custom.body.id}/reseed`)
+      expect(badReseed.status).toBe(422)
+    })
+
+    it('round-trips a route preference and changes which route a model resolves to', async () => {
+      // Cloudflare AI ON plus a configured Qwen key, so `qwen` has TWO usable routes and the
+      // order is the only thing that decides between them.
+      const { call, createWorkspace } = harness.makeApp(undefined, {
+        cloudflareModelsEnabled: true,
+      })
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+      const base = `/workspaces/${wsId}/model-presets`
+      const models = `/workspaces/${wsId}/models`
+      await call('POST', `/workspaces/${wsId}/api-keys`, {
+        provider: 'qwen',
+        label: 'team',
+        key: 'qwen-api-key-secret',
+      })
+
+      // Default order: a model's own provider API beats the Cloudflare floor.
+      const routeOf = async () =>
+        (await call<{ id: string; flavor: string }[]>('GET', models)).body.find(
+          (m) => m.id === 'qwen',
+        )?.flavor
+      expect(await routeOf()).toBe('direct')
+
+      // A preset stating no preference persists NULL, not an empty order.
+      const seeded = await call<ModelPreset[]>('GET', base)
+      const defaultId = seeded.body.find((p) => p.isDefault)!.id
+      expect(seeded.body.every((p) => p.providerPreference === undefined)).toBe(true)
+
+      // Name only `cloudflare`: the routes it OMITS are appended in default order, so this is a
+      // reorder and not a filter — `qwen` now resolves to Cloudflare while staying selectable.
+      const patched = await call<ModelPreset>('PATCH', `${base}/${defaultId}`, {
+        providerPreference: ['cloudflare'],
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.body.providerPreference).toEqual(['cloudflare'])
+      expect(
+        (await call<ModelPreset[]>('GET', base)).body.find((p) => p.id === defaultId)
+          ?.providerPreference,
+      ).toEqual(['cloudflare'])
+      expect(await routeOf()).toBe('cloudflare')
+
+      // A model whose ONLY route the preference omitted still resolves (reorder, never filter).
+      const catalog = await call<{ id: string; flavor: string; available: boolean }[]>(
+        'GET',
+        models,
+      )
+      const kimi = catalog.body.find((m) => m.id === 'kimi-k2.7')!
+      expect(kimi.available).toBe(true)
+
+      // A repeated route is ambiguous to read back, so the write boundary refuses it.
+      const dupe = await call('PATCH', `${base}/${defaultId}`, {
+        providerPreference: ['bedrock', 'bedrock'],
+      })
+      expect(dupe.status).toBe(400)
+
+      // An EMPTY list is how the editor resets to the default order — stored as absent, not `[]`.
+      const reset = await call<ModelPreset>('PATCH', `${base}/${defaultId}`, {
+        providerPreference: [],
+      })
+      expect(reset.body.providerPreference).toBeUndefined()
+      expect(await routeOf()).toBe('direct')
+    })
+  })
+}

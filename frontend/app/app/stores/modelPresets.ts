@@ -26,10 +26,27 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
    * `useModelPresetHealth`.
    */
   const catalogVersions = ref<Record<string, number>>({})
+  /**
+   * The catalog's own NAME per id in {@link catalogVersions}, from the same snapshot field pair.
+   * Read only where a built-in has no stored row to take a name off, which is the "new built-in"
+   * advisory and nothing else. Empty for a facade that ships no name map.
+   */
+  const catalogNames = ref<Record<string, string>>({})
 
-  function hydrate(list: ModelPreset[], versions?: Record<string, number>) {
+  function hydrate(
+    list: ModelPreset[],
+    versions?: Record<string, number>,
+    names?: Record<string, string>,
+  ) {
     presets.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
-    if (versions) catalogVersions.value = versions
+    // The two catalog maps move TOGETHER, being one snapshot read split in two and keyed
+    // identically by construction. Assigning names on their own truthiness would let a facade
+    // shipping versions and no names leave the previous board's names indexed against this board's
+    // ids, which is the one way the pair can disagree (see the pipelines store).
+    if (versions) {
+      catalogVersions.value = versions
+      catalogNames.value = names ?? {}
+    }
   }
 
   /** The workspace default (fallback for a task that picks none). */
@@ -99,6 +116,7 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
   return {
     presets,
     catalogVersions,
+    catalogNames,
     defaultPreset,
     resolve,
     modelForKind,

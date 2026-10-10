@@ -11,18 +11,17 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { ReleaseHealthModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the release-health module or send a 503, returning null when unconfigured. */
-function requireReleaseHealth<E extends AppEnv>(c: Context<E>): ReleaseHealthModule | null {
-  return c.get('container').releaseHealth ?? null
-}
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'The observability integration is not configured' } },
-    503,
+/** Resolve the release-health module, or refuse with a 503 naming what isn't wired. */
+function requireReleaseHealth<E extends AppEnv>(c: Context<E>): ReleaseHealthModule {
+  return requireCapability(
+    c.get('container').releaseHealth,
+    'The observability integration is not configured',
   )
+}
 
 /**
  * Per-workspace settings for the post-release-health gate: the (single) observability
@@ -31,35 +30,31 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function releaseHealthController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  mountWorkspacePermission(app, 'settings.manage', ['/observability', '/release-health-configs'])
 
   buildHonoRoute(app, getObservabilityConnectionContract, async (c) => {
     const rh = requireReleaseHealth(c)
-    if (!rh) return unavailable(c)
     return c.json(await rh.service.getConnection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, setObservabilityConnectionContract, async (c) => {
     const rh = requireReleaseHealth(c)
-    if (!rh) return unavailable(c)
     return c.json(await rh.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deleteObservabilityConnectionContract, async (c) => {
     const rh = requireReleaseHealth(c)
-    if (!rh) return unavailable(c)
     await rh.service.deleteConnection(param(c, 'workspaceId'))
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, listReleaseHealthConfigsContract, async (c) => {
     const rh = requireReleaseHealth(c)
-    if (!rh) return unavailable(c)
     return c.json(await rh.service.listConfigs(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, upsertReleaseHealthConfigContract, async (c) => {
     const rh = requireReleaseHealth(c)
-    if (!rh) return unavailable(c)
     const config = await rh.service.upsertConfig(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
@@ -70,7 +65,6 @@ export function releaseHealthController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteReleaseHealthConfigContract, async (c) => {
     const rh = requireReleaseHealth(c)
-    if (!rh) return unavailable(c)
     await rh.service.deleteConfig(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.body(null, 204)
   })

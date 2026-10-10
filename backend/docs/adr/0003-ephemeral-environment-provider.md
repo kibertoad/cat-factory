@@ -12,7 +12,7 @@ environment** for the block under work. The hard part is that there is no common
 target to integrate with: every organization rolls its **own** preview/ephemeral
 environment tooling, with bespoke internal auth, and standardizing that across
 companies is not feasible. We also run on Cloudflare Workers (ADR 0002), which
-**cannot shell out** — so "run the company's CLI" is not an option from the
+**cannot shell out**, so "run the company's CLI" is not an option from the
 backend.
 
 We need a way for an organization to plug in its own environment management that:
@@ -37,8 +37,8 @@ in `@cat-factory/contracts`) that describes the org's self-rolled management API
   canonical environment handle (url, external id, status, expiry, and the env's own
   per-environment access credentials).
 
-One generic adapter — `HttpEnvironmentProvider` (`worker/src/infrastructure/
-environments/`) — interprets **any** manifest. There are no per-provider presets
+One generic adapter, `HttpEnvironmentProvider` (`worker/src/infrastructure/
+environments/`), interprets **any** manifest. There are no per-provider presets
 and no per-org TypeScript: an org's integration is data, registered through the
 API, not code we ship.
 
@@ -46,7 +46,7 @@ A new deterministic **`deployer` agent step** provisions the environment by call
 the provider directly through the execution engine (no LLM); the resulting handle
 is persisted in a registry keyed by block, and injected into subsequent steps'
 `AgentRunContext` so a `tester` step discovers the live URL and access scheme. The
-whole feature is **opt-in**, assembled only when configured — exactly like the
+whole feature is **opt-in**, assembled only when configured, exactly like the
 GitHub and Confluence modules (`Core.environments?`).
 
 ### Secrets
@@ -61,7 +61,7 @@ this module by its HKDF `info`); the feature refuses to assemble without it (nev
 silent plaintext fallback). The
 provisioned environment's own access credentials are likewise encrypted, and
 surfaced only via a dedicated, auth-gated access endpoint and the in-run agent
-context — never in list responses, logs, or error bodies.
+context, never in list responses, logs, or error bodies.
 
 ## Rationale
 
@@ -84,7 +84,7 @@ context — never in list responses, logs, or error bodies.
   org to deploy and operate a companion process; deferred in favour of the API-only
   manifest, which most self-rolled tools already expose.
 - **Per-org TypeScript adapters** registered in a code registry. Maximum
-  flexibility, but every org must write and we must ship/review code — exactly what
+  flexibility, but every org must write and we must ship/review code, exactly what
   the manifest avoids.
 - **SaaS provider presets** (Vercel/Heroku/…). Rejected: orgs run their own tooling;
   presets would be dead weight and wrong assumptions.

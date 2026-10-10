@@ -1,21 +1,144 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { AGENT_ARCHETYPES, AGENT_BY_KIND, uid } from '~/utils/catalog'
-import type { AgentArchetype, AgentKind, CustomAgentKind } from '~/types/domain'
+import { computed, ref, watch } from 'vue'
+import type { RemoteModuleManifest } from '@modular-vue/core'
+import { customKindToArchetype } from '~/modular/agent-kinds'
+import type { AppSlots } from '~/modular/slots'
+import {
+  AGENT_ARCHETYPES,
+  AGENT_BY_KIND,
+  setCustomAgentKindMeta,
+  setCustomCompanionTargets,
+  SYSTEM_AGENT_META,
+  uid,
+} from '~/utils/catalog'
+import type { RegisteredBinaryGenerator } from '@cat-factory/contracts'
+import type { AgentArchetype, AgentKind, AgentKindVariant, CustomAgentKind } from '~/types/domain'
 
 /**
- * The agent palette. Seeded from the static catalog, but custom agents can be
- * added at runtime (they show up in the pipeline builder). Newly created agents
- * are also registered into AGENT_BY_KIND so the many components that look an
- * agent up by kind keep rendering it correctly.
+ * The agent palette catalog (slice 2 of the modular-vue adoption —
+ * backend/docs/adr/0049-modular-vue-adoption.md).
+ *
+ * Reactive union of three sources, none of which mutates the frozen built-in
+ * {@link AGENT_BY_KIND} const any more:
+ *  - the built-in archetypes (static);
+ *  - CONSUMER-shipped kinds contributed as CODE via the modular `agentKinds`
+ *    slot (`registerConsumerKinds`, fed once at boot from the resolved manifest);
+ *  - the deployment's BACKEND-registered kinds, read from the shared per-workspace
+ *    {@link RemoteModuleManifest} swapped per workspace snapshot
+ *    (`hydrateCapabilities`, reading its own `agentKinds` slot — single-active-manifest shape).
+ *
+ * The merged custom catalog is projected back into `catalog.ts`'s
+ * {@link setCustomAgentKindMeta} read-model so the pure `agentKindMeta` /
+ * `isKnownAgentKind` lookups (used across ~17 renderers) resolve a custom kind
+ * reactively without importing this store.
  */
 export const useAgentsStore = defineStore('agents', () => {
-  const archetypes = ref<AgentArchetype[]>([...AGENT_ARCHETYPES])
+  // CODE-shipped consumer kinds from the static `agentKinds` slot (fed once at
+  // boot by the modular install plugin — module slots are resolved once).
+  const consumerKinds = ref<CustomAgentKind[]>([])
+  // The active per-workspace capability manifest built from the snapshot's
+  // `customAgentKinds`, or null before the first hydrate.
+  const capabilitiesManifest = ref<RemoteModuleManifest<AppSlots> | null>(null)
+  // In-UI, client-only prototype agents created via the "add agent" modal.
+  const runtimeAgents = ref<AgentArchetype[]>([])
+  // The deployment's registered agent-kind VARIANTS (alternate prompts for EXISTING kinds), from
+  // the snapshot. Deliberately NOT part of the capability manifest above: a variant is not a
+  // palette block and has no result view — it is a per-step OPTION on a kind that is already
+  // there — so folding it into the kind catalog would make it placeable, which is exactly what
+  // the backend model says it is not. A straight replace, like the skills catalog it mirrors.
+  const variants = ref<AgentKindVariant[]>([])
+  /**
+   * The deployment's GENERATIVE BINARY INTEGRATIONS, from the workspace snapshot. Static
+   * deployment-registered composition data like {@link variants}, and it rides the same store for
+   * the same reason: it is a fact ABOUT the agent catalog that the pipeline builder branches on,
+   * with no workspace state behind it. Empty on the stock product — the platform ships none.
+   */
+  const binaryGenerators = ref<RegisteredBinaryGenerator[]>([])
 
-  function get(kind: AgentKind) {
-    return AGENT_BY_KIND[kind]
+  /**
+   * Whether that set could not be READ, straight off the snapshot's own flag. Its own piece of
+   * state rather than something inferred from an empty list, because the two are opposite facts:
+   * an empty list means this deployment registers none (fix it in the build), and an unreadable
+   * one means nobody knows (fix the connection). A picker that renders them alike sends someone
+   * to the wrong repository. False on every deployment that reads its integrations in-process.
+   */
+  const binaryGeneratorsUnavailable = ref(false)
+
+  /**
+   * The merged CUSTOM catalog (consumer-slot → backend-manifest → runtime), each
+   * mapped to display metadata, de-duplicated, and never shadowing a built-in or
+   * system kind. The old `registerCustomKinds` only guarded `AGENT_BY_KIND`; this
+   * intentionally ALSO drops any custom kind colliding with a `SYSTEM_AGENT_META`
+   * kind (`ci` / `merger` / gates …), so a snapshot can't override an engine kind's
+   * palette entry either — matching `agentKindMeta`'s precedence (built-in → system
+   * → custom), where a colliding custom kind would never win anyway. Note the cost of
+   * that guard: a SYSTEM_AGENT_META entry silently removes a registered kind from the
+   * palette, so the map must stay limited to kinds the engine inserts itself.
+   */
+  const customArchetypes = computed<AgentArchetype[]>(() => {
+    const seen = new Set<string>()
+    const out: AgentArchetype[] = []
+    const add = (a: AgentArchetype) => {
+      if (a.kind in AGENT_BY_KIND || a.kind in SYSTEM_AGENT_META || seen.has(a.kind)) return
+      seen.add(a.kind)
+      out.push(a)
+    }
+    for (const k of consumerKinds.value) add(customKindToArchetype(k))
+    for (const k of capabilitiesManifest.value?.slots?.agentKinds ?? [])
+      add(customKindToArchetype(k))
+    for (const a of runtimeAgents.value) add(a)
+    return out
+  })
+
+  /** The full palette: built-in archetypes + the merged custom ones. */
+  const archetypes = computed<AgentArchetype[]>(() => [
+    ...AGENT_ARCHETYPES,
+    ...customArchetypes.value,
+  ])
+
+  // Known-kind lookup (built-in ∪ system ∪ custom) for `get`.
+  const customByKind = computed<Record<string, AgentArchetype>>(() =>
+    Object.fromEntries(customArchetypes.value.map((a) => [a.kind, a])),
+  )
+
+  // Keep `catalog.ts`'s pure-util projection in sync with the merged custom
+  // catalog so `agentKindMeta` / `isKnownAgentKind` resolve custom kinds. Sync
+  // flush so an imperative read right after `hydrateCapabilities` (e.g. the run
+  // dispatch resolving a custom kind's `resultView`) sees the fresh catalog with
+  // no tick gap. The watch lives in the store's effect scope (disposed with it).
+  watch(customByKind, (map) => setCustomAgentKindMeta(map), { immediate: true, flush: 'sync' })
+
+  /**
+   * The custom COMPANION pairings (companion kind → the producer kinds it reviews), read off the
+   * same custom-kind sources the palette is built from. Kept apart from `customByKind` because a
+   * pairing is not display metadata: the builder uses it to decide a kind is a TOGGLE on its
+   * producer rather than a placeable block, and `AgentArchetype` has no business carrying it.
+   */
+  const customCompanions = computed<Record<string, readonly AgentKind[]>>(() => {
+    const out: Record<string, readonly AgentKind[]> = {}
+    const add = (k: CustomAgentKind) => {
+      // A pairing with no targets is not a pairing. Recording it would make the kind vanish from
+      // the palette (an `isProducerCompanion` hit) with no producer to hang the toggle on.
+      if (k.companionTargets?.length) out[k.kind] = k.companionTargets
+    }
+    for (const k of consumerKinds.value) add(k)
+    for (const k of capabilitiesManifest.value?.slots?.agentKinds ?? []) add(k)
+    return out
+  })
+  watch(customCompanions, (map) => setCustomCompanionTargets(map), {
+    immediate: true,
+    flush: 'sync',
+  })
+
+  /** Display metadata for a KNOWN kind (built-in / system / custom), else undefined. */
+  function get(kind: AgentKind): AgentArchetype | undefined {
+    return AGENT_BY_KIND[kind] ?? SYSTEM_AGENT_META[kind] ?? customByKind.value[kind]
   }
 
+  /**
+   * Add an in-UI prototype agent (the pipeline builder's "add agent" modal).
+   * Client-only, so it lives in store state — no backend, no global mutation.
+   */
   function addAgent(input: {
     label: string
     description?: string
@@ -28,38 +151,86 @@ export const useAgentsStore = defineStore('agents', () => {
       label: input.label.trim() || 'Custom Agent',
       description: input.description?.trim() || 'Custom agent.',
       icon: input.icon || 'i-lucide-sparkles',
-      color: input.color || '#22d3ee',
+      color: input.color || 'var(--app-hue-cyan)',
     }
-    // register for kind-based lookups across the app, then surface in the palette
-    AGENT_BY_KIND[archetype.kind] = archetype
-    archetypes.value.push(archetype)
+    runtimeAgents.value = [...runtimeAgents.value, archetype]
     return archetype
   }
 
   /**
-   * Merge the deployment's registered CUSTOM agent kinds (from the workspace snapshot)
-   * into the palette catalog: each becomes a first-class palette block + a kind-based
-   * lookup (so timelines / inspectors render it instead of the generic fallback), and its
-   * declared `resultView` opens through the same registry the built-ins use. Idempotent
-   * and built-in-safe — a kind already known (a built-in, or a prior load) is left
-   * untouched, so a snapshot can't shadow a built-in or duplicate on reload.
+   * Register the deployment's CODE-shipped consumer agent kinds — the resolved
+   * modular `agentKinds` slot, fed once by the install plugin. Idempotent
+   * replace (module slots resolve once, so this is called a single time).
    */
-  function registerCustomKinds(kinds: CustomAgentKind[]) {
-    for (const { kind, presentation } of kinds) {
-      if (AGENT_BY_KIND[kind]) continue
-      const archetype: AgentArchetype = {
-        kind,
-        label: presentation.label,
-        icon: presentation.icon,
-        color: presentation.color,
-        description: presentation.description,
-        ...(presentation.category ? { category: presentation.category } : {}),
-        ...(presentation.resultView ? { resultView: presentation.resultView } : {}),
-      }
-      AGENT_BY_KIND[kind] = archetype
-      archetypes.value.push(archetype)
-    }
+  function registerConsumerKinds(kinds: readonly CustomAgentKind[]) {
+    consumerKinds.value = [...kinds]
   }
 
-  return { archetypes, get, addAgent, registerCustomKinds }
+  /**
+   * Hydrate the deployment's BACKEND-registered custom kinds from the shared per-workspace
+   * capability manifest (built by the workspace store from the snapshot, carrying both `agentKinds`
+   * + `taskTypes`; this store reads only its own `agentKinds` slot). Swapped wholesale per
+   * workspace. Replaces the old `registerCustomKinds` that mutated {@link AGENT_BY_KIND} directly.
+   *
+   * The snapshot re-delivers the same deployment kinds on every board refresh, so skip the swap —
+   * and the downstream projection invalidation of every `agentKindMeta` consumer — when the
+   * content-derived manifest version is unchanged. A genuinely different workspace's capabilities
+   * change the version and swap.
+   */
+  function hydrateCapabilities(manifest: RemoteModuleManifest<AppSlots>) {
+    if (capabilitiesManifest.value?.version === manifest.version) return
+    capabilitiesManifest.value = manifest
+  }
+
+  /**
+   * Hydrate the deployment's registered generative binary integrations from the snapshot (a
+   * straight replace, like {@link hydrateVariants}). The builder's binary-output picker offers
+   * exactly these ids, so they are the same set run admission resolves a step's `generatorIds`
+   * against — an id offered from anywhere else would save clean and be refused at run START.
+   */
+  function hydrateBinaryGenerators(
+    list: readonly RegisteredBinaryGenerator[],
+    unavailable = false,
+  ) {
+    binaryGenerators.value = [...list]
+    binaryGeneratorsUnavailable.value = unavailable
+  }
+
+  /** Hydrate the deployment's registered agent-kind variants from the snapshot (straight replace). */
+  function hydrateVariants(list: readonly AgentKindVariant[]) {
+    variants.value = [...list]
+  }
+
+  /**
+   * The variants registered for one kind — what the pipeline builder offers as that step's
+   * alternate prompt. Empty for every kind on the stock product.
+   */
+  function variantsForKind(kind: AgentKind): AgentKindVariant[] {
+    return variants.value.filter((variant) => variant.baseKind === kind)
+  }
+
+  /**
+   * A variant's display label, or the raw id when the deployment no longer registers it. The id
+   * is the honest fallback: a step really is configured to run that variant, and rendering
+   * nothing would show a varied step as if it were the stock kind.
+   */
+  function variantLabel(id: string): string {
+    return variants.value.find((variant) => variant.id === id)?.label ?? id
+  }
+
+  return {
+    archetypes,
+    customArchetypes,
+    get,
+    addAgent,
+    registerConsumerKinds,
+    hydrateCapabilities,
+    variants,
+    hydrateVariants,
+    variantsForKind,
+    binaryGenerators,
+    binaryGeneratorsUnavailable,
+    hydrateBinaryGenerators,
+    variantLabel,
+  }
 })

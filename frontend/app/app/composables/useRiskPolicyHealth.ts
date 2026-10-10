@@ -31,16 +31,29 @@ function builtinName(id: string, stored: RiskPolicy | undefined): string {
  * versions the snapshot ships ARE the set of built-in ids, so detection is entirely client-side:
  * a stored preset is a built-in iff its id is a catalog key, and a catalog key with no stored
  * preset is a new built-in.
+ *
+ * Asked of the WORKSPACE tier alone. Reseeding writes a board-owned row, so only a board-owned row
+ * can be out of date, and only an id no tier resolves is genuinely missing (ADR 0055).
  */
 export function useRiskPolicyHealth() {
   const store = useRiskPoliciesStore()
 
   const issues = computed<RiskPolicyIssue[]>(() => {
     const out: RiskPolicyIssue[] = []
-    const byId = new Map(store.presets.map((p) => [p.id, p]))
+    // The BOARD'S OWN rows only. Since ADR 0055 `presets` is the merged two-tier library, and an
+    // account entry carries no `version`, so indexing the merge read an account policy that happens
+    // to use a catalog id as a stored built-in stuck at version 0 — an advisory whose reseed would
+    // have written a board-owned row shadowing the account's deliberate posture.
+    const own = store.presets.filter((p) => p.tier === 'workspace')
+    const byId = new Map(own.map((p) => [p.id, p]))
+    const inheritedIds = new Set(store.presets.filter((p) => p.tier === 'account').map((p) => p.id))
     for (const [id, catalogVersion] of Object.entries(store.catalogVersions)) {
       const stored = byId.get(id)
       if (!stored) {
+        // A built-in the board does not hold, that its ACCOUNT defines, is not missing: the board
+        // already resolves a policy under that id. Adding the catalog copy would shadow it, so the
+        // advisory stays silent rather than offering a one-click override of the org's choice.
+        if (inheritedIds.has(id)) continue
         out.push({ type: 'new', id, name: builtinName(id, undefined) })
         continue
       }

@@ -13,7 +13,12 @@ import type {
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
-import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+  ValidationError,
+  hasInitiativeKinds,
+} from '@cat-factory/kernel'
 import type {
   InitiativePresetDescriptor,
   InitiativePresetInputs,
@@ -60,6 +65,27 @@ export function assertInitiativeShapeAllowed(block: Block, agentKinds: readonly 
       'An initiative block only accepts the Initiative Planning pipeline (pl_initiative)',
     )
   }
+}
+
+/**
+ * Whether a stakeholder INTERVIEW step still lies ahead of the running step in this run's chain.
+ *
+ * The planning pipeline is what decides this, not the preset: `pl_initiative` leads with the
+ * analyst and interviews after it, while `pl_initiative_docs` (and any other `interview: 'skip'`
+ * preset) has no interviewer at all — and a deployment may bind its own planning chain. Reading it
+ * off the chain therefore stays correct for a pipeline this repo has never seen, which neither a
+ * preset lookup nor a hard-coded pipeline id would.
+ *
+ * Strictly AHEAD of `currentStep`: an interviewer already behind us has settled what it was going
+ * to settle, so its questions are in the digest rather than still to be asked.
+ */
+export function interviewFollowsStep(
+  steps: readonly { agentKind: string }[],
+  currentStep: number,
+): boolean {
+  return steps
+    .slice(currentStep + 1)
+    .some((step) => step.agentKind === INITIATIVE_INTERVIEWER_AGENT_KIND)
 }
 
 /**
@@ -363,9 +389,9 @@ export function initiativeProgress(initiative: Initiative): { done: number; tota
 // ---------------------------------------------------------------------------
 
 /** How many interviewer passes may run before the loop is force-converged. */
-export const INITIATIVE_MAX_INTERVIEW_ROUNDS = 4
+const INITIATIVE_MAX_INTERVIEW_ROUNDS = 4
 /** Upper bound on questions the interviewer may ask in one round (keeps the gate answerable). */
-export const INITIATIVE_MAX_INTERVIEW_QUESTIONS = 8
+const INITIATIVE_MAX_INTERVIEW_QUESTIONS = 8
 
 const clampShort = (s: string): string => s.trim().slice(0, INITIATIVE_SHORT_MAX)
 
@@ -458,6 +484,25 @@ export function applyInterviewQuestions(
       status: 'awaiting',
     },
   }
+}
+
+/**
+ * Drop the interview state a PRIOR planning run left behind, so a re-run starts a clean
+ * round-1 interview instead of resuming a stale (often at-cap) session. Keeps the SAME digest
+ * {@link applyInterviewQuestions} keeps — answered + dismissed exchanges, which the preset form
+ * seeded and the human already settled — and drops only the round bookkeeping plus any questions
+ * the last run left pending.
+ *
+ * This is what makes a wedged planning run recoverable: without it, a run that burned its rounds
+ * leaves `interview.round >= maxRounds`, so the next run's first pass is force-converged
+ * ({@link interviewAtCap}) and the human is never asked anything again.
+ */
+export function applyInterviewReset(initiative: Initiative): Initiative {
+  // Delete the key rather than setting `undefined`: the entity is persisted (and content-compared)
+  // as JSON, where an explicit `undefined` and an absent key are indistinguishable — so dropping it
+  // keeps the reset a true no-op when there was no interview to clear.
+  const { interview: _cleared, ...rest } = initiative
+  return { ...rest, qa: retainedQa(initiative) }
 }
 
 /**
@@ -807,11 +852,6 @@ export function applyRevertClaim(
         : i,
     ),
   }
-}
-
-/** Whether an item currently holds an active concurrency slot. Exported for the loop's math. */
-export function itemIsActive(item: InitiativeItem): boolean {
-  return INITIATIVE_ITEM_ACTIVE_STATUSES.has(item.status)
 }
 
 // ---------------------------------------------------------------------------

@@ -1,26 +1,38 @@
-import type { BlockPatch } from '@cat-factory/kernel'
+import type { BlockPatch, PlatformAlertEventKind, RunLifecycleEventKind } from '@cat-factory/kernel'
+import { isPlatformAlertEventKind, isRunLifecycleEventKind } from '@cat-factory/kernel'
 import type {
   AgentFailure,
   Block,
   ExecutionInstance,
+  IntakeOrigin,
+  ModelFlavor,
+  NotificationType,
   IssueIntakeConfig,
   Pipeline,
   PipelineStep,
   PriorStepOutput,
   ResolvedFrontendBinding,
   RunDiagnostics,
+  RunInputGate,
+  RunMode,
   Workspace,
+  WorkspaceRole,
 } from '@cat-factory/contracts'
 import {
-  agentFailureKindSchema,
-  agentFailureSchema,
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
+  intakeOriginSchema,
+  isModelFlavor,
+  isUsableAgentFailure,
   issueIntakeConfigSchema,
+  notificationTypeSchema,
+  parseStoredAgentFailure,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
   runDiagnosticsSchema,
+  runInputGateSchema,
+  workspaceRoleSchema,
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
@@ -37,16 +49,24 @@ export interface WorkspaceRow {
   description?: string | null
   created_at: number
   account_id: string | null
+  /** Workspace RBAC access mode (`account` | `restricted`); absent on pre-RBAC rows. */
+  access_mode?: string | null
 }
 
+// Declared once; `description`/`accountId` are always-present nullables (never omitted).
+// `accessMode` surfaces only when the column carries a value (absent on a pre-RBAC row),
+// matching its optional wire shape.
+const workspaceReader = makeRowReader<WorkspaceRow, Workspace>([
+  readScalar('id'),
+  readScalar('name'),
+  readNullable('description'),
+  readScalar('createdAt', 'created_at'),
+  readNullable('accountId', 'account_id'),
+  readOptScalar('accessMode', 'access_mode'),
+])
+
 export function rowToWorkspace(row: WorkspaceRow): Workspace {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description ?? null,
-    createdAt: row.created_at,
-    accountId: row.account_id ?? null,
-  }
+  return workspaceReader(row)
 }
 
 export interface BlockRow {
@@ -59,6 +79,12 @@ export interface BlockRow {
   width: number | null
   height: number | null
   status: string
+  /**
+   * Epoch ms the block last entered `done`. Optional on the row (added by a later
+   * migration) and nullable in the column, so an old block reads as "no recorded
+   * completion date" rather than as one that completed at the epoch.
+   */
+  completed_at?: number | null
   progress: number
   depends_on: string
   execution_id: string | null
@@ -68,6 +94,8 @@ export interface BlockRow {
   epic_id?: string | null
   /** Task-level: membership link to an `initiative`-level block (loop-spawned tasks). */
   initiative_id?: string | null
+  /** Task-level: the BUG-FISHING expedition block whose finding spawned this fix task. */
+  expedition_id?: string | null
   /** Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. */
   auto_start_dependents?: number | null
   confidence: number | null
@@ -82,6 +110,8 @@ export interface BlockRow {
   pipeline_id: string | null
   /** Task-level agent-contributed config values, JSON id→value map. */
   agent_config: string | null
+  /** Service-frame-level: the operator's freeform testing context, injected into tester prompts. */
+  testing_context?: string | null
   /** Service-level: cloud provider the service's jobs run on. */
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
@@ -107,6 +137,7 @@ export interface BlockRow {
   /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
   tracker_comment_on_pr_open?: string | null
   tracker_resolve_on_merge?: string | null
+  tracker_questions_on_park?: string | null
   /** Headless marker: 1 ⇒ a public-API "initiative" anchor block excluded from the board; null ⇒ normal. */
   internal?: number | null
   /** Archive marker: 1 ⇒ an archived service frame hidden from the board (restorable); null ⇒ normal. */
@@ -143,47 +174,6 @@ interface FieldMapper<Domain, Patch> {
 /** camelCase property → snake_case column (`responsibleProductUserId` → `responsible_product_user_id`). */
 function toSnake(prop: string): string {
   return prop.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
-}
-
-// ---------------------------------------------------------------------------
-// LEGACY USER-ID REPAIR — REMOVE AFTER 2026-07-15
-//
-// PR #94 re-keyed every user id (block `createdBy`, execution `initiatedBy`, account
-// membership, personal subscriptions) from the GitHub *numeric* id to the canonical
-// `usr_*` *string*, with NO data migration (backwards compatibility is a non-goal here).
-// Rows written before that still hold a number. The wire contract now types these fields
-// as `string | null`, and the server ships rows WITHOUT validating them against the
-// contract — so a single pre-#94 row makes the SPA's response validation reject the entire
-// workspace snapshot, bricking the whole board with "Can't reach the backend".
-//
-// We repair on read: a non-string id is dropped to null. The stale number is an old GitHub
-// id that matches no `usr_*` user, so it is useless for creator/initiator routing anyway —
-// dropping it loses nothing real and lets the board load.
-//
-// After the 2026-07-15 grace cutoff, every project is expected to already be in the new
-// format. DELETE this block and its callers: read `createdBy` straight through with
-// `optField(prop, { patchable: false })`, and use `detail.initiatedBy ?? null` in
-// `rowToExecution`.
-function legacyUserId(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-
-/**
- * A legacy user-id column. Identical to a non-patchable {@link optField} except it drops a
- * non-string (pre-#94 numeric) value to null on read. See the LEGACY USER-ID REPAIR note.
- */
-function legacyUserIdField<D, P>(prop: string, column = toSnake(prop)): FieldMapper<D, P> {
-  return {
-    read: (row, out) => {
-      const v = legacyUserId(row[column])
-      if (v != null) out[prop] = v
-    },
-    insert: (d, out) => {
-      out[column] = (d as AnyRow)[prop] ?? null
-    },
-    // Insert-only, never patched (matches the previous `optField(..., { patchable: false })`).
-    patch: () => {},
-  }
 }
 
 /**
@@ -295,6 +285,102 @@ function optBoolIntField<D, P>(prop: string, column = toSnake(prop)): FieldMappe
   }
 }
 
+// ---------------------------------------------------------------------------
+// Read-only field mappers
+//
+// `workspace` and `pipeline` are read through the shared field-map machinery but their
+// writes DON'T route through it (the repos bind their columns positionally), so a full
+// {@link FieldMapper} (which also generates insert/patch) would be a poor fit — these
+// declare only the READ direction. A `RowReader` is one column → domain-property mapping;
+// {@link makeRowReader} folds a list of them into a `rowTo*` function, exactly like
+// {@link makeEntityMapper} does for the read direction. This keeps the LAST hand-enumerated
+// read mappers on the same "declare each column once" pattern as `blocks`.
+//
+// NOTE: the `<Row, Domain>` generics on {@link makeRowReader} are a boundary cast only — the
+// readers operate over `AnyRow`, so a mistyped property or column name (or a required `Domain`
+// field left undeclared) compiles cleanly and is caught by `test/mappers.spec.ts`, not `tsc`.
+// Column/field correctness here is TEST-enforced, not type-enforced (same trade as
+// {@link makeEntityMapper}).
+// ---------------------------------------------------------------------------
+
+/** One column → domain property mapping (mutates `out`), skipping absent optionals. */
+type RowReader = (row: AnyRow, out: AnyRow) => void
+
+/** A required column passed straight through (`row.foo → out.foo`). */
+function readScalar(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    out[prop] = row[column]
+  }
+}
+
+/** An always-present column that defaults a null/absent value to `null` (never omitted). */
+function readNullable(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    out[prop] = row[column] ?? null
+  }
+}
+
+/** A required JSON column parsed on read (`agent_kinds`). */
+function readJson(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    out[prop] = JSON.parse(row[column] as string)
+  }
+}
+
+/** An optional JSON column: parse only when a truthy value is stored, else stay absent. */
+function readOptJson(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    if (row[column]) out[prop] = JSON.parse(row[column] as string)
+  }
+}
+
+/** A truthy-flag column (1/true) surfaced as a literal `true`, else absent (`builtin`/`archived`). */
+function readFlag(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    if (row[column]) out[prop] = true
+  }
+}
+
+/** An optional column surfaced as-is only when truthy, else absent (`version`/`availability`). */
+function readOptScalar(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    if (row[column] != null && row[column] !== '') out[prop] = row[column]
+  }
+}
+
+/**
+ * A REQUIRED classifier column whose stored value this build may not be able to name.
+ *
+ * The two states are read differently on purpose, because they are different facts:
+ *
+ *  - EMPTY (NULL / `''`) is a row written before the field was mandatory, and it resolves to
+ *    `fallback`. Not a guess: `fallback` is the classifier such a row has always BEHAVED as, so
+ *    the resolution is byte-for-byte the prior behaviour rather than a new opinion about it. It is
+ *    resolved HERE rather than by a back-fill migration because it has to be anyway — a node one
+ *    build behind still writes NULL after any sweep, and no query filters on the column — and one
+ *    rule in one place beats the same rule in three (a mapper, a D1 migration, a Drizzle one).
+ *  - A value the schema does not recognise PASSES THROUGH unchanged, because it is a member this
+ *    build cannot name rather than a value that was never set, and the two must not render the
+ *    same. Dropping it would erase a deployment's own classifier on the next write; folding it
+ *    onto `fallback` would state a classification nobody chose. The readers narrow it themselves
+ *    (`isPipelinePurpose` / `classifierFor`) and the SPA quotes it back to the user by name.
+ */
+function readClassifier(prop: string, fallback: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    const value = row[column]
+    out[prop] = value == null || value === '' ? fallback : value
+  }
+}
+
+/** Fold a list of {@link RowReader}s into a `rowTo*` reader (the read-only analogue of {@link makeEntityMapper}). */
+function makeRowReader<Row, Domain>(readers: RowReader[]): (row: Row) => Domain {
+  return (row) => {
+    const out: AnyRow = {}
+    for (const r of readers) r(row as AnyRow, out)
+    return out as Domain
+  }
+}
+
 /** Build `rowTo*` / `*InsertValues` / `*PatchToColumns` from an entity's field table. */
 function makeEntityMapper<Domain, Patch, Row>(
   fields: FieldMapper<Domain, Patch>[],
@@ -361,6 +447,22 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
     },
   },
   enumField('status', blockStatusSchema, 'blocks'),
+  // Read and inserted through the field table like any other column, but with NO patch
+  // direction: `completedAt` is derived from the status a patch sets, by the repository
+  // (see `blockCompletionStamp`). `BlockPatch` excludes it, so nothing can reach here.
+  //
+  // A null column reads as an ABSENT key, like every other optional field, rather than as an
+  // explicit `null`. Both spell "no recorded completion date" to a consumer, and matching the
+  // siblings keeps the wire shape uniform.
+  {
+    read: (row, out) => {
+      if (row.completed_at != null) out.completedAt = row.completed_at
+    },
+    insert: (b, out) => {
+      out.completed_at = b.completedAt ?? null
+    },
+    patch: () => {},
+  },
   scalarField('progress'),
   // `dependsOn` is a required (always-present) JSON array, unlike the optional JSON fields.
   {
@@ -385,9 +487,17 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('epicId', { clearOnEmpty: true }),
   // Initiative membership (loop-spawned tasks); empty/null detaches.
   optField('initiativeId', { clearOnEmpty: true }),
+  // Bug-fishing-expedition provenance: which expedition's finding spawned this fix task. Written
+  // once at the spawn and never cleared by an ordinary edit (it records where the work came from
+  // rather than a current relationship), so it takes the plain optional field rather than the
+  // `clearOnEmpty` form its two membership neighbours above use.
+  optField('expeditionId'),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
-  optField('moduleName'),
+  // The declared module; an empty string detaches the task from it, like `epicId`/`initiativeId`
+  // above. A picker and a reparent can both clear it now, and storing `''` rather than NULL would
+  // leave two spellings of "no module" for every reader to remember to handle.
+  optField('moduleName', { clearOnEmpty: true }),
   optJsonField('fragmentIds'),
   // Service-level selection (frame blocks). Insert keeps a truthy value verbatim; patch
   // treats an empty array as "clear it" (length check), so the two directions differ.
@@ -436,6 +546,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   },
   // Service-owned provisioning config (the "what + where") — a JSON object on frame blocks.
   optJsonField('provisioning'),
+  // Service-frame prose fed to the tester prompts; an empty string clears it, like `modelId`.
+  optField('testingContext', { clearOnEmpty: true }),
   optField('cloudProvider'),
   optField('instanceSize'),
   // Frontend-frame-level config (build/serve/mock + backend bindings) — a JSON object.
@@ -533,9 +645,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
       }
     },
   },
-  // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
-  // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
-  legacyUserIdField('createdBy'),
+  // `createdBy` is set at insert time and never patched.
+  optField('createdBy', { patchable: false }),
   // The responsible product person; an empty string clears the assignment.
   optField('responsibleProductUserId', { clearOnEmpty: true }),
   // The task-estimator's triage; a falsy value clears it.
@@ -559,6 +670,7 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   // Per-task writeback overrides; an empty string clears it (back to inheriting the workspace setting).
   optField('trackerCommentOnPrOpen', { clearOnEmpty: true }),
   optField('trackerResolveOnMerge', { clearOnEmpty: true }),
+  optField('trackerQuestionsOnPark', { clearOnEmpty: true }),
   // Headless public-API "initiative" anchor: 1/0 column, set once at insert (never patched).
   optBoolIntField('internal'),
   // Archive marker for a service frame: 1/0 column, toggled by archive/restore.
@@ -581,9 +693,37 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
   return blockMapper.toPatch(patch)
 }
 
+/**
+ * What a block patch should do to `completed_at`.
+ *
+ * - `none` — the patch does not touch `status`, so the stamp is left exactly as it is.
+ * - `stampIfUnset` — the patch marks the block `done`. FIRST WRITE WINS: the durable
+ *   drivers replay, and several call sites mark a task done (the merge resolver, the run
+ *   state machine, the initiative loop), so an unconditional write would push the date
+ *   forward every time one of them re-ran and quietly age a task back into the Done lane.
+ * - `clear` — the patch moves the block OFF `done`, which is what a reset-and-rerun does.
+ *   Clearing is what lets the next completion stamp itself afresh, so the lane dates the
+ *   attempt that actually landed rather than the one that was thrown away.
+ *
+ * The two repositories render this verdict in their own SQL (D1 and Drizzle each express
+ * "keep the existing value" differently), but the rule itself lives here so they cannot
+ * drift; `defineConformanceSuite` asserts the behaviour against both.
+ */
+export type BlockCompletionStamp =
+  | { kind: 'none' }
+  | { kind: 'clear' }
+  | { kind: 'stampIfUnset'; at: number }
+
+export function blockCompletionStamp(patch: BlockPatch, now: number): BlockCompletionStamp {
+  if (patch.status === undefined) return { kind: 'none' }
+  return patch.status === 'done' ? { kind: 'stampIfUnset', at: now } : { kind: 'clear' }
+}
+
 export interface PipelineRow {
   id: string
   name: string
+  /** Nullable prose description shown next to the step list in the pickers/builder. */
+  description?: string | null
   agent_kinds: string
   /** Nullable JSON array of per-step approval gates (migration 0022). */
   gates: string | null
@@ -620,32 +760,53 @@ export interface PipelineRow {
    * NULL/absent ⇒ unrestricted (`'both'`).
    */
   availability?: string | null
+  /**
+   * The pipeline's use-case classifier: `'build'` / `'document'` / `'review'` / `'research'` /
+   * `'planning'` (migration 0056_pipeline_purpose). The COLUMN stays nullable while the domain
+   * field is mandatory: a row written before the classifier was required carries NULL, and
+   * {@link readClassifier} is where that is resolved.
+   */
+  purpose?: string | null
+  /**
+   * Truthy (1) when this pipeline is the workspace's declared default for a run somebody started
+   * in the app / for one nothing is watching (migration 0091_pipeline_defaults). NULL on every row
+   * of a scope no operator has declared, which is a real state: the scope's own fallback answers.
+   */
+  is_default?: number | boolean | null
+  is_unattended_default?: number | boolean | null
 }
 
+// Declared once. The many nullable JSON arrays parse only when present; `archived`/`builtin`/
+// `public` are 1/true flags surfaced as literal `true`; `version`/`availability`/`purpose` pass
+// through when set. Column names derive from the property (snake_case) except where noted.
+const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
+  readScalar('id'),
+  readScalar('name'),
+  readOptScalar('description'),
+  readJson('agentKinds'),
+  readOptJson('gates'),
+  readOptJson('thresholds'),
+  readOptJson('enabled'),
+  readOptJson('consensus'),
+  readOptJson('gating'),
+  readOptJson('followUps'),
+  readOptJson('testerQuality'),
+  readOptJson('stepOptions'),
+  readOptJson('labels'),
+  readFlag('archived'),
+  readFlag('builtin'),
+  readOptScalar('version'),
+  readFlag('public'),
+  readOptScalar('availability'),
+  // `purpose` is mandatory on the entity, so this read must be TOTAL: see {@link readClassifier}
+  // for why an empty column resolves to `build` while an unnameable member passes through.
+  readClassifier('purpose', 'build'),
+  readFlag('isDefault'),
+  readFlag('isUnattendedDefault'),
+])
+
 export function rowToPipeline(row: PipelineRow): Pipeline {
-  return {
-    id: row.id,
-    name: row.name,
-    agentKinds: JSON.parse(row.agent_kinds) as Pipeline['agentKinds'],
-    ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
-    ...(row.thresholds ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] } : {}),
-    ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
-    ...(row.consensus ? { consensus: JSON.parse(row.consensus) as Pipeline['consensus'] } : {}),
-    ...(row.gating ? { gating: JSON.parse(row.gating) as Pipeline['gating'] } : {}),
-    ...(row.follow_ups ? { followUps: JSON.parse(row.follow_ups) as Pipeline['followUps'] } : {}),
-    ...(row.tester_quality
-      ? { testerQuality: JSON.parse(row.tester_quality) as Pipeline['testerQuality'] }
-      : {}),
-    ...(row.step_options
-      ? { stepOptions: JSON.parse(row.step_options) as Pipeline['stepOptions'] }
-      : {}),
-    ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
-    ...(row.archived ? { archived: true } : {}),
-    ...(row.builtin ? { builtin: true } : {}),
-    ...(row.version != null ? { version: row.version } : {}),
-    ...(row.public ? { public: true } : {}),
-    ...(row.availability ? { availability: row.availability as Pipeline['availability'] } : {}),
-  }
+  return pipelineReader(row)
 }
 
 /**
@@ -674,6 +835,106 @@ export function serializeIssueIntakeColumn(config: IssueIntakeConfig | undefined
 }
 
 /**
+ * Parse a `notification_webhooks.types` JSON column (D1 migration 0061 ⇄ the Drizzle `types`
+ * column) onto the record's `types` filter. Lenient by design: NULL, malformed JSON, or entries
+ * that are no longer valid notification types read as an EMPTY filter — which the channel treats
+ * as "the default types", so a stale filter degrades to sensible deliveries rather than to a
+ * silently dead endpoint or a read that throws. Unknown members are dropped individually, so
+ * removing a notification type from the contract doesn't invalidate a whole workspace's filter.
+ * Shared by both runtimes' repos so the column can't drift.
+ */
+export function parseNotificationWebhookTypes(
+  value: string | null | undefined,
+): NotificationType[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry): entry is NotificationType => is(notificationTypeSchema, entry))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Parse a `notification_webhooks.run_events` JSON column onto the record's run-lifecycle filter.
+ * Lenient in exactly the same way as {@link parseNotificationWebhookTypes} — NULL, malformed JSON
+ * or unknown members read as an EMPTY filter — but note what empty MEANS differs: for run events
+ * it is "deliver none", so a corrupted column degrades to the pre-feature behaviour rather than to
+ * an unexpected firehose. Shared by both runtimes' repos so the column can't drift.
+ */
+export function parseRunLifecycleEvents(value: string | null | undefined): RunLifecycleEventKind[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isRunLifecycleEventKind)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Parse a `notification_webhooks.alert_events` JSON column onto the record's platform-health
+ * filter. Lenient exactly like {@link parseRunLifecycleEvents}, and empty means the same thing:
+ * deliver none. That degradation matters more here than for either sibling — this is the family
+ * a pager is wired to, so a corrupted column costs a receiver its alerts, and the operator finds
+ * out from the management API reporting an empty subscription rather than from a silent page
+ * that never came. Shared by both runtimes' repos so the column can't drift.
+ */
+export function parsePlatformAlertEvents(
+  value: string | null | undefined,
+): PlatformAlertEventKind[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isPlatformAlertEventKind)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Parse a `model_presets.provider_preference` JSON column (D1 migration 0078 ⇄ the Drizzle
+ * `provider_preference` column) onto the preset's route order. Shared by both runtimes' repos so
+ * the column can't drift.
+ *
+ * Returns UNDEFINED — not an empty array — for NULL, malformed JSON, or a list that narrows to
+ * nothing, because that is the value `ModelPreset.providerPreference` uses for "the default order"
+ * and it is what a reader must see: an empty array would read as an order over no routes.
+ *
+ * A member the current build no longer knows is dropped individually (`isModelFlavor`), so
+ * retiring a route leaves the surviving entries' relative order intact instead of invalidating a
+ * whole workspace's preference. Dropping is honest here specifically because the value names a
+ * ROUTE: once it is gone there is nothing a human could re-pick it as, and the preference still
+ * says exactly what it said about every route that still exists.
+ */
+export function parseProviderPreferenceColumn(
+  value: string | null | undefined,
+): ModelFlavor[] | undefined {
+  if (!value) return undefined
+  let flavors: ModelFlavor[]
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return undefined
+    flavors = parsed.filter((entry): entry is ModelFlavor =>
+      typeof entry === 'string' ? isModelFlavor(entry) : false,
+    )
+  } catch {
+    return undefined
+  }
+  return flavors.length ? flavors : undefined
+}
+
+/** Serialize a preset's route order for the column: absent or empty ⇒ NULL (the default order). */
+export function serializeProviderPreferenceColumn(
+  preference: readonly ModelFlavor[] | undefined,
+): string | null {
+  return preference?.length ? JSON.stringify(preference) : null
+}
+
+/**
  * A `kind='execution'` row of the unified `agent_runs` table (migration 0019).
  * The pipeline shape (pipelineId/Name, steps, currentStep) lives in the `detail`
  * JSON column; lifecycle/failure are top-level columns shared with bootstrap.
@@ -687,6 +948,14 @@ export interface ExecutionRow {
   error: string | null
   /** JSON-encoded AgentFailure; null unless the run failed. */
   failure: string | null
+  /**
+   * Epoch-ms row creation stamp, written once on insert and NEVER touched by an update. This is
+   * the AUTHORITATIVE creation time and the column every chronological read orders on
+   * (`listByWorkspace`, `listInternal`), so the entity's `createdAt` is projected from it rather
+   * than from the `detail` JSON — a keyset cursor minted from the entity has to name the exact
+   * value the query orders by, or a page silently skips rows.
+   */
+  created_at: number
   // Lease for the cron sweeper; not surfaced on the entity.
   updated_at: number
   workflow_instance_id: string | null
@@ -703,78 +972,39 @@ interface ExecutionDetail {
   currentStep: number
   /** Internal user id of the run's initiator (individual-usage credential ownership). */
   initiatedBy: string | null
+  /** How the run entered the system (see {@link ExecutionInstance.intakeOrigin}). */
+  intakeOrigin?: IntakeOrigin
+  /** The role the initiator held at admission (see {@link ExecutionInstance.initiatedByRole}). */
+  initiatedByRole?: WorkspaceRole
+  /**
+   * Who the run was started for on the caller's side (see
+   * {@link ExecutionInstance.initiatedByExternalIdentity}).
+   */
+  initiatedByExternalIdentity?: string
+  /** Whether the run may land its work (see {@link ExecutionInstance.mode}). */
+  mode?: RunMode
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
   /** Successful outputs a restart discarded, oldest→newest (see {@link ExecutionInstance.outputHistory}). */
   outputHistory?: PriorStepOutput[]
-  /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
-  createdAt?: number
   /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
   notes?: string[]
   /** Frontend bindings resolved once at run start (see {@link ExecutionInstance.frontendBindings}). */
   frontendBindings?: ResolvedFrontendBinding[]
   /** After-the-fact investigation context (see {@link ExecutionInstance.diagnostics}). */
   diagnostics?: RunDiagnostics
-}
-
-// ---------------------------------------------------------------------------
-// LEGACY FAILURE-KIND REPAIR — REMOVE AFTER 2026-07-15
-//
-// `decision_timeout` was removed from `agentFailureKindSchema` when human decisions
-// stopped being timeout-limited (other kinds may follow). A run that failed before then
-// can still carry the obsolete kind in its persisted failure JSON. The wire contract now
-// types the kind as a closed picklist, and the server ships rows WITHOUT validating them,
-// so one stale failure makes the SPA's response validation reject the entire workspace
-// snapshot and the board fails to load with "Can't reach the backend".
-//
-// We drop a failure whose kind is no longer known: the run's `status` + `error` string
-// still describe what happened, and the obsolete kind is meaningless now.
-//
-// After the 2026-07-15 grace cutoff, every project is expected to already be in the new
-// format. DELETE this helper and revert the three failure parsers (here + the two bootstrap
-// repos) to the plain `typeof o.kind === 'string'` check.
-const KNOWN_FAILURE_KINDS: ReadonlySet<string> = new Set(agentFailureKindSchema.options)
-
-/** Whether a persisted failure kind is still part of the current contract picklist. */
-export function isKnownAgentFailureKind(kind: string): boolean {
-  return KNOWN_FAILURE_KINDS.has(kind)
-}
-
-/**
- * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
- * wire schema, not just `kind`/`message`: the SPA re-validates the whole snapshot against
- * `agentFailureSchema` (both the `failure` field and the `failureHistory` array), so a
- * structurally-incomplete record — a removed legacy kind, OR a known kind missing
- * `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire workspace snapshot
- * decode if surfaced. Dropping it here keeps the run readable (its `status`/`error` still
- * describe what happened) and, for the history, means a retry can't make a bad record
- * permanent. (`is()` rejects removed kinds too, since the picklist no longer lists them —
- * subsuming the old `isKnownAgentFailureKind` check.)
- */
-function isUsableFailure(o: unknown): o is AgentFailure {
-  return is(agentFailureSchema, o)
-}
-
-/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
-function parseAgentFailure(raw: string | null): AgentFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as AgentFailure
-    if (isUsableFailure(o)) return o
-  } catch {
-    // fall through
-  }
-  return null
+  /** The pre-dispatch input gate's verdict (see {@link ExecutionInstance.inputGate}). */
+  inputGate?: RunInputGate
 }
 
 /**
  * The prior-attempts failure trail packed into `detail`. Tolerant like
- * {@link parseAgentFailure}: a non-array, or an entry that doesn't fully match the wire
- * schema (removed legacy kind, or a structurally-incomplete record), is dropped rather
- * than bricking the whole snapshot decode.
+ * {@link parseStoredAgentFailure}: a non-array, or an entry that doesn't fully match the
+ * wire schema (a kind outside the picklist, or a structurally-incomplete record), is
+ * dropped rather than bricking the whole snapshot decode.
  */
 function parseFailureHistory(list: unknown): AgentFailure[] {
-  return Array.isArray(list) ? list.filter(isUsableFailure) : []
+  return Array.isArray(list) ? list.filter(isUsableAgentFailure) : []
 }
 
 /**
@@ -804,6 +1034,16 @@ function parseRunDiagnostics(value: unknown): RunDiagnostics | undefined {
   return is(runDiagnosticsSchema, value) ? value : undefined
 }
 
+/**
+ * The pre-dispatch input gate's stored verdict. Dropped when malformed, exactly like the
+ * diagnostics above: an unreadable record must not brick the whole snapshot decode, and an
+ * ABSENT verdict already has a defined meaning (the gate has not evaluated this run yet), so
+ * dropping one is at worst a re-evaluation rather than a false clean bill of health.
+ */
+function parseRunInputGate(value: unknown): RunInputGate | undefined {
+  return is(runInputGateSchema, value) ? value : undefined
+}
+
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   let detail: Partial<ExecutionDetail>
   try {
@@ -814,10 +1054,11 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   // An execution with no owning block is structurally impossible — surface the corrupt
   // row loudly instead of coercing it to an empty id that callers read as "no block".
   if (!row.block_id) {
-    throw new DataIntegrityError('Execution row has no block_id', {
-      table: 'agent_runs',
-      id: row.id,
-    })
+    throw new DataIntegrityError(
+      'Execution row has no block_id',
+      { table: 'agent_runs', id: row.id },
+      'malformed',
+    )
   }
   const steps = (detail.steps ?? []).map((s) => ({ ...s, runId: row.id }))
   const currentStep = detail.currentStep ?? 0
@@ -825,12 +1066,11 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   // legitimate "ran off the end / complete" cursor). Anything outside that wedges the driver
   // on silent no-ops, so reject it at read.
   if (currentStep < 0 || currentStep > steps.length) {
-    throw new DataIntegrityError('Execution currentStep is out of bounds', {
-      table: 'agent_runs',
-      id: row.id,
-      currentStep,
-      steps: steps.length,
-    })
+    throw new DataIntegrityError(
+      'Execution currentStep is out of bounds',
+      { table: 'agent_runs', id: row.id, currentStep, steps: steps.length },
+      'malformed',
+    )
   }
   return {
     id: row.id,
@@ -846,7 +1086,7 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       column: 'status',
       id: row.id,
     }),
-    failure: parseAgentFailure(row.failure),
+    failure: parseStoredAgentFailure(row.failure),
     // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
     // no dedicated column); a run that never failed-then-retried simply has none.
     failureHistory: parseFailureHistory(detail.failureHistory),
@@ -864,16 +1104,51 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       const frontendBindings = parseFrontendBindings(detail.frontendBindings)
       return frontendBindings.length ? { frontendBindings } : {}
     })(),
-    // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
-    // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
-    initiatedBy: legacyUserId(detail.initiatedBy),
-    // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
-    ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
+    initiatedBy: detail.initiatedBy ?? null,
+    // How the run entered the system. Only a recognised value is surfaced — an absent (legacy)
+    // or unrecognised one is DROPPED so readers fall back to the `ui` default, which is the
+    // safe reading: a run whose intake we can't prove was headless never pushes its parked
+    // questions out to a tracker issue.
+    ...(is(intakeOriginSchema, detail.intakeOrigin) ? { intakeOrigin: detail.intakeOrigin } : {}),
+    // The tier the run was admitted under. Absent (legacy, a schedule fire, a public-API start,
+    // auth-disabled dev) stays ABSENT rather than being guessed onto a role, which is the whole
+    // design of the role-scoped rules: such a run falls through to the preset's BASE policy, the
+    // one that governed it before role scoping existed. An unrecognised value is dropped onto
+    // that same reading, deliberately unlike `mode` below: the role layer is subtractive, so
+    // losing it returns the run to a policy an operator authored, never past it.
+    ...(is(workspaceRoleSchema, detail.initiatedByRole)
+      ? { initiatedByRole: detail.initiatedByRole }
+      : {}),
+    // Who the run was started FOR, as the starting key's provisioner named them. Opaque, so the
+    // only decode rule is that it be a non-empty string; anything else is dropped onto the same
+    // reading as absent, which is honest here in a way it would not be for a policy field: the
+    // platform never resolves this value, so an unreadable one names nobody rather than hiding a
+    // decision that was made.
+    ...(typeof detail.initiatedByExternalIdentity === 'string' &&
+    detail.initiatedByExternalIdentity !== ''
+      ? { initiatedByExternalIdentity: detail.initiatedByExternalIdentity }
+      : {}),
+    // Whether the run may land its work. This one FAILS CLOSED, and the asymmetry with every
+    // other tolerant decode here is the point: absent means `live` because that is what every
+    // run predating the mode actually was, but a value that is PRESENT and unreadable means a
+    // mode was settled and we cannot tell which. Dropping it would hand a run merge authority it
+    // may never have had, so an unrecognised value reads as the sandbox. A run wrongly held back
+    // is a human tap away from merging; a run wrongly merged is not recoverable.
+    ...(detail.mode === undefined ? {} : { mode: detail.mode === 'live' ? 'live' : 'dry_run' }),
+    // Epoch-ms creation time, read from the ROW COLUMN — the value chronological reads order by,
+    // so a keyset cursor minted from this entity names exactly the position the query resumes at.
+    createdAt: row.created_at,
     // Investigation diagnostics ride in `detail` too (only present once a container step
     // dispatched); dropped if malformed so a bad record can't brick the snapshot decode.
     ...(() => {
       const diagnostics = parseRunDiagnostics(detail.diagnostics)
       return diagnostics ? { diagnostics } : {}
+    })(),
+    // The pre-dispatch input gate's verdict rides in `detail` too (absent until the run reaches
+    // its first dispatch); dropped if malformed, like the diagnostics above.
+    ...(() => {
+      const inputGate = parseRunInputGate(detail.inputGate)
+      return inputGate ? { inputGate } : {}
     })(),
     // Optimistic-concurrency token; a legacy row without the column reads as 0.
     rev: row.rev ?? 0,
@@ -881,7 +1156,68 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
 }
 
 /** Build the `agent_runs.detail` JSON for an execution instance (shared by both repos). */
+/**
+ * Resolve the `created_at` an INSERT should write, and back-fill it onto the instance.
+ *
+ * The row column is the authoritative creation stamp — it is what every chronological read
+ * orders by and what a keyset cursor names — while `ExecutionInstance.createdAt` is stamped
+ * earlier, at `ExecutionService.start`. Taking a fresh `clock.now()` here instead would make the
+ * two disagree by the milliseconds in between, and a cursor minted from the entity would then
+ * name a position slightly ahead of the row it points at, silently skipping any run inserted in
+ * that window. So the insert adopts the instance's stamp when it has one, and an instance with
+ * none (a run assembled outside `start`) adopts the row's — either way they end up identical.
+ *
+ * Shared by both facades' `upsert`/`insertLive`; an UPDATE never touches `created_at`.
+ */
+export function adoptCreatedAt(instance: ExecutionInstance, now: number): number {
+  return (instance.createdAt ??= now)
+}
+
+/**
+ * Refuse to persist a run that {@link rowToExecution} could not read back, the WRITE-side twin of
+ * that read guard. It asserts EVERY invariant the read refuses, not just the one that motivated it:
+ * a writer may only produce rows the reader accepts, so a guard covering half the contract still
+ * lets the other half through and reports nothing at the write.
+ *
+ * An unreadable run row is unusable in both directions and, worse, un-disposable: the board load
+ * drops it, `get` throws, and so every path that could settle it (retry, stop, the stale-run
+ * sweeper's hard-stall backstop) throws on the way in. Left to the read guard alone, the write that
+ * produced it is long gone by the time anything notices, which is exactly the trail that cannot be
+ * followed backwards. Both violations are impossible per the types (`blockId` is a `string`; the
+ * engine only ever advances the cursor over its own step list), which is why they are asserted
+ * rather than handled: reaching either means an instance assembled outside `ExecutionService`, or a
+ * path that truncated `steps` while leaving the cursor where it was.
+ */
+function assertPersistableExecution(instance: ExecutionInstance): void {
+  if (!instance.blockId) {
+    throw new DataIntegrityError(
+      'Execution has no blockId and cannot be persisted',
+      { table: 'agent_runs', column: 'block_id', id: instance.id },
+      'malformed',
+    )
+  }
+  // The same window the read accepts: `[0, steps.length]`, whose upper bound is the legitimate
+  // "ran off the end" cursor. A run whose steps were replaced by a shorter list without moving the
+  // cursor composes cleanly and is then exactly as un-loadable as a blockless one.
+  if (instance.currentStep < 0 || instance.currentStep > instance.steps.length) {
+    throw new DataIntegrityError(
+      'Execution currentStep is out of bounds and cannot be persisted',
+      {
+        table: 'agent_runs',
+        column: 'detail',
+        id: instance.id,
+        currentStep: instance.currentStep,
+        steps: instance.steps.length,
+      },
+      'malformed',
+    )
+  }
+}
+
 export function executionToDetail(instance: ExecutionInstance): string {
+  // Every write path (both facades' `upsert` / `insertLive` / `compareAndSwap`) composes its
+  // detail JSON here, which is what makes this the one place a new writer cannot forget to pass.
+  assertPersistableExecution(instance)
   return JSON.stringify({
     pipelineId: instance.pipelineId,
     pipelineName: instance.pipelineName,
@@ -890,12 +1226,27 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
+    // Only persisted for a NON-`ui` run, since `ui` is the read-time default and storing it would put
+    // a redundant key on every ordinary run's detail JSON. Written as "anything but the default"
+    // rather than as an allow-list of the origins that existed when this was authored: an
+    // allow-list here drops a newly added origin on the floor at write time, and the run then
+    // reads back as UI-started with nothing to grep for.
+    intakeOrigin: instance.intakeOrigin === 'ui' ? undefined : instance.intakeOrigin,
+    // The tier the run was ADMITTED under, and whether it may land its work. Both are settled
+    // once at start and read back on the DURABLE path, which rebuilds the run from this JSON and
+    // nothing else — so a field missing here is a merge policy that silently never applies.
+    initiatedByRole: instance.initiatedByRole ?? undefined,
+    // Only a public-API start has one, so an ordinary board run stores nothing extra
+    // (JSON.stringify omits the undefined key).
+    initiatedByExternalIdentity: instance.initiatedByExternalIdentity ?? undefined,
+    // Stored only when sandboxed: `live` is the read-time default and every run that predates the
+    // mode is exactly that, so persisting it would put a redundant key on every ordinary run.
+    mode: instance.mode === 'dry_run' ? 'dry_run' : undefined,
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
     // Likewise the successful-output trail: only present once a restart discarded a completed step.
     outputHistory: instance.outputHistory?.length ? instance.outputHistory : undefined,
-    ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
     // Likewise only persist run-start notes when there is something to flag.
     notes: instance.notes?.length ? instance.notes : undefined,
     // The resolved bindings are stamped once at start; only a frontend run carries any.
@@ -903,5 +1254,9 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Diagnostics are stamped once a container step dispatches; a pure inline/gate run has none
     // (JSON.stringify omits the undefined key so those runs carry nothing extra).
     diagnostics: instance.diagnostics,
+    // The pre-dispatch input gate's verdict, once it has one. Absent until the run reaches its
+    // first dispatch, which is a real state (see `ExecutionInstance.inputGate`), so an
+    // un-evaluated run carries nothing extra.
+    inputGate: instance.inputGate,
   } satisfies ExecutionDetail)
 }

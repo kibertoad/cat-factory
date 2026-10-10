@@ -1,16 +1,27 @@
 <script setup lang="ts">
-// The Integrations hub: a single modal that lists every external system the WORKSPACE can
-// enable or link in. Each row reuses the existing per-integration panel handlers on the `ui`
-// store (so the integrations themselves are unchanged); opening one closes the hub and
-// reveals that integration's own panel/modal.
+import { showOverrideField } from '~/utils/uiMode'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
+// The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
+// can enable or link in — the ones that feed a run its context (source control, documents,
+// trackers) or receive its output (chat, observability). Each row reuses the existing
+// per-integration panel handlers on the `ui` store (so the integrations themselves are
+// unchanged); opening one closes the hub and reveals that integration's own panel/modal.
 //
 // Sections gate on the same `available` probes the navbar used, so a system that the backend
 // has turned off simply doesn't appear here.
 //
-// Scope split: per-USER connections (a personal GitHub token, own-machine runners, personal
-// subscriptions) now live in the "My setup" hub (UserMenu → My setup), NOT here — keeping
-// this hub purely workspace-scoped. When auth is disabled there is no UserMenu to host them,
-// so a "Personal (only you)" group falls back into this hub so they stay reachable.
+// Scope split 1 — MODEL PROVIDERS are NOT integrations here. They are the engines the
+// harnesses run on (with none connected nothing runs at all), so they have their own
+// top-level hub, `ModelProvidersHub.vue`. Keeping them out is the point: an integration is
+// something a deployment can live without, and burying the one mandatory connection among a
+// dozen optional ones is what made this hub confusing.
+//
+// Scope split 2 — per-USER connections (a personal GitHub token, own-machine runners, personal
+// subscriptions) live in the "My setup" hub (UserMenu → My setup), NOT here, keeping this hub
+// workspace-scoped. When auth is disabled there is no UserMenu to host them, so a "Personal
+// (only you)" group falls back into this hub so the workspace-adjacent ones stay reachable
+// (the model-shaped ones fall back into the Model providers hub instead).
 const { t } = useI18n()
 const ui = useUiStore()
 const auth = useAuthStore()
@@ -20,10 +31,9 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
-const packageRegistries = usePackageRegistriesStore()
+const publicApiKeys = usePublicApiKeysStore()
 const userSecrets = useUserSecretsStore()
-const apiKeys = useApiKeysStore()
-const workspace = useWorkspaceStore()
+const uiMode = useUiModeStore()
 
 // True when the per-user "My setup" hub is reachable (UserMenu renders only when signed in).
 // When false (auth disabled / local mode) we fold the personal rows back into this hub so
@@ -50,10 +60,8 @@ watch(
     if (isOpen) {
       query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
-      void packageRegistries.ensureLoaded().catch(() => {})
+      void publicApiKeys.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
-      // Drives the OpenRouter row's "Key connected" badge.
-      if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
     }
   },
   // Lazy v-if mount: the hub mounts with `integrationsOpen` already true → load immediately.
@@ -109,33 +117,9 @@ function go(fn: () => void) {
 const groups = computed<IntegrationGroup[]>(() => {
   const out: IntegrationGroup[] = []
 
-  // --- Models & providers ----------------------------------------------------
-  // Top of the hub: an OpenRouter key is the fastest path to 300+ models, so it leads.
-  const openRouterKeyConnected = apiKeys.configuredProviders.has('openrouter')
-  out.push({
-    title: t('layout.integrationsHub.groups.models'),
-    items: [
-      {
-        key: 'openrouter',
-        icon: 'i-lucide-waypoints',
-        label: 'OpenRouter',
-        description: t('layout.integrationsHub.items.openrouter.description'),
-        status: openRouterKeyConnected
-          ? t('layout.integrationsHub.status.keyConnected')
-          : undefined,
-        connected: openRouterKeyConnected,
-        recommended: true,
-        onClick: () => go(ui.openOpenRouter),
-      },
-      {
-        key: 'vendors',
-        icon: 'i-lucide-key-round',
-        label: t('layout.integrationsHub.items.vendors.label'),
-        description: t('layout.integrationsHub.items.vendors.description'),
-        onClick: () => go(ui.openVendorCredentials),
-      },
-    ],
-  })
+  // NOTE: model providers (OpenRouter, vendor keys, personal subscriptions, local runners)
+  // are NOT listed here — they have their own top-level hub (`ModelProvidersHub.vue`, SideBar
+  // → "Model providers"). See the scope split at the top of this file.
 
   // --- Source control --------------------------------------------------------
   const code: IntegrationItem[] = []
@@ -167,6 +151,16 @@ const groups = computed<IntegrationGroup[]>(() => {
       onClick: () => go(ui.openSlack),
     })
   }
+  // The notification manager is always listed: it configures the channels every deployment has
+  // (the in-app inbox, and email once an account connects a sender), so unlike the integrations
+  // around it there is no connection to probe before it is useful.
+  comms.push({
+    key: 'notificationSettings',
+    icon: 'i-lucide-bell',
+    label: t('layout.integrationsHub.items.notificationSettings.label'),
+    description: t('layout.integrationsHub.items.notificationSettings.description'),
+    onClick: () => go(ui.openNotificationSettings),
+  })
   if (comms.length)
     out.push({ title: t('layout.integrationsHub.groups.communication'), items: comms })
 
@@ -191,7 +185,7 @@ const groups = computed<IntegrationGroup[]>(() => {
         icon: 'i-lucide-file-down',
         label: t('layout.integrationsHub.items.documentImport.label'),
         description: t('layout.integrationsHub.items.documentImport.description'),
-        onClick: () => go(() => ui.openDocumentImport(null)),
+        onClick: () => go(() => ui.openDocumentImport()),
       })
     }
     // Per-DocKind template + exemplar links are workspace CONFIG over the imported corpus, not an
@@ -230,6 +224,13 @@ const groups = computed<IntegrationGroup[]>(() => {
         description: t('layout.integrationsHub.items.taskImport.description'),
         onClick: () => go(() => ui.openTaskImport(null)),
       })
+      trackers.push({
+        key: 'task:bug-hunt',
+        icon: 'i-lucide-radar',
+        label: t('layout.integrationsHub.items.bugHunt.label'),
+        description: t('layout.integrationsHub.items.bugHunt.description'),
+        onClick: () => go(() => ui.openBugHunt(null)),
+      })
     }
     // Choosing the filing tracker / writeback is workspace CONFIG, not an integration, so it
     // sits as a quiet footer link under the sources rather than a competing row.
@@ -250,7 +251,17 @@ const groups = computed<IntegrationGroup[]>(() => {
   // Gated like every other backend-toggleable system: hidden until a probe confirms
   // the observability module is enabled (`available === true`), so a disabled backend
   // doesn't show a dead "Connect" row that only 503s.
-  if (releaseHealth.available) {
+  //
+  // Also an ADVANCED-tier row. Post-release health is the one integration here that acts
+  // AFTER delivery rather than during it — it watches monitors once a release ships and can
+  // spawn an on-call agent — so it sits outside the everyday loop the basic tier serves.
+  // Gated with `showOverrideField` rather than a bare `isAdvanced`: an already-connected
+  // Datadog is live behaviour on this workspace, and a tier must never conceal a connection a
+  // basic-mode user would then have no way to inspect or disconnect.
+  if (
+    releaseHealth.available &&
+    showOverrideField(uiMode.isAdvanced, releaseHealth.connection.connected || null)
+  ) {
     out.push({
       title: t('layout.integrationsHub.groups.observability'),
       items: [
@@ -269,34 +280,35 @@ const groups = computed<IntegrationGroup[]>(() => {
     })
   }
 
-  // --- Development (private package registries) -------------------------------
-  // Gated like observability: hidden until a probe confirms the module is wired
+  // --- Development (API access tokens) ---------------------------------------
+  // Gated like observability: hidden until a probe confirms its module is wired
   // (`available === true`), so an unconfigured backend doesn't show a dead row.
-  if (packageRegistries.available) {
-    const hasEntries = packageRegistries.entries.length > 0
-    out.push({
-      title: t('layout.integrationsHub.groups.development'),
-      items: [
-        {
-          key: 'package-registries',
-          icon: 'i-lucide-package',
-          label: t('layout.integrationsHub.items.packageRegistries.label'),
-          description: t('layout.integrationsHub.items.packageRegistries.description'),
-          status: hasEntries ? t('layout.integrationsHub.status.connected') : undefined,
-          connected: hasEntries,
-          onClick: () => go(ui.openPackageRegistries),
-        },
-      ],
+  const development: IntegrationItem[] = []
+  if (publicApiKeys.available) {
+    const hasKeys = publicApiKeys.keys.length > 0
+    development.push({
+      key: 'api-tokens',
+      icon: 'i-lucide-key-round',
+      label: t('layout.integrationsHub.items.apiTokens.label'),
+      description: t('layout.integrationsHub.items.apiTokens.description'),
+      status: hasKeys ? t('layout.integrationsHub.status.connected') : undefined,
+      connected: hasKeys,
+      onClick: () => go(ui.openApiTokens),
     })
   }
+  if (development.length)
+    out.push({ title: t('layout.integrationsHub.groups.development'), items: development })
 
   // NOTE: Infrastructure (agent-container execution + Tester environments + the local-mode
-  // warm pool/checkout) is no longer listed here — it moved to its OWN top-level navbar menu
-  // (SideBar → "Infrastructure" → the tabbed Infrastructure window). See `ui.openInfrastructure`.
+  // warm pool/checkout + the private package registries a checkout installs from) is no longer
+  // listed here — it moved to its OWN top-level navbar menu (SideBar → "Infrastructure" → the
+  // tabbed Infrastructure window). See `ui.openInfrastructure`.
 
   // --- Personal (only you) — fallback when there is no UserMenu to host "My setup" -------
   // Per-user connections normally live in the My-setup hub; with auth disabled they fold in
   // here so they stay reachable. (The badge reflects the signed-in user's stored secret.)
+  // Only the source-control one: the per-user MODEL connections are listed unconditionally
+  // in the Model providers hub, so they need no fallback.
   if (!personalHubReachable.value) {
     const pat = !!userSecrets.statusFor('github_pat')
     out.push({
@@ -310,13 +322,6 @@ const groups = computed<IntegrationGroup[]>(() => {
           status: pat ? t('layout.integrationsHub.status.connected') : undefined,
           connected: pat,
           onClick: () => go(ui.openUserSecrets),
-        },
-        {
-          key: 'local-runners',
-          icon: 'i-lucide-server',
-          label: t('layout.integrationsHub.items.localRunners.label'),
-          description: t('layout.integrationsHub.items.localRunners.description'),
-          onClick: () => go(ui.openLocalModels),
         },
       ],
     })
@@ -370,8 +375,10 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
     :ui="{ content: 'max-w-xl' }"
   >
     <template #body>
-      <div class="space-y-5">
-        <p class="text-xs text-slate-400">
+      <!-- Named for the same reason `model-providers-hub` is: the tutorial tour that explains
+           what a connection adds to a run points at this list. -->
+      <div class="space-y-5" data-testid="integrations-hub">
+        <p class="text-xs text-muted">
           {{ t('layout.integrationsHub.intro') }}
         </p>
 
@@ -379,13 +386,13 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
              run isn't blocked on hunting for them. Hidden once anything is connected. -->
         <div
           v-if="!anyConnected && recommendedActions.length"
-          class="rounded-lg border border-primary-500/40 bg-primary-500/10 p-3"
+          class="rounded-lg border border-primary/40 bg-primary/10 p-3"
         >
-          <div class="mb-2 flex items-center gap-2 text-sm font-medium text-primary-200">
+          <div class="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
             <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0" />
             <span>{{ t('layout.integrationsHub.getStarted.title') }}</span>
           </div>
-          <p class="mb-3 text-xs text-slate-300">
+          <p class="mb-3 text-xs text-toned">
             {{ t('layout.integrationsHub.getStarted.body') }}
           </p>
           <div class="flex flex-wrap gap-2">
@@ -411,33 +418,34 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
           class="w-full"
         />
 
-        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-slate-500">
+        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-dimmed">
           {{ t('layout.integrationsHub.noMatches', { query }) }}
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="item in group.items"
               :key="item.key"
-              type="button"
-              class="flex w-full items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-start transition hover:border-slate-700 hover:bg-slate-900"
+              class="flex w-full items-center gap-3 rounded-lg border border-default bg-default/50 px-3 py-2.5 text-start transition hover:border-muted hover:bg-default"
               @click="item.onClick()"
             >
-              <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-slate-300" />
+              <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-toned" />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
-                  <span class="truncate text-sm font-medium text-slate-100">{{ item.label }}</span>
+                  <span class="truncate text-sm font-medium text-app-100">{{ item.label }}</span>
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.integrationsHub.status.connected') }}
                   </UBadge>
                   <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
                     {{ item.attentionLabel || t('layout.integrationsHub.status.needsAttention') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-slate-500">{{
+                  <span v-else class="text-2xs text-dimmed">{{
                     t('layout.integrationsHub.status.notConnected')
                   }}</span>
                   <UBadge
@@ -449,32 +457,33 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                     {{ t('layout.integrationsHub.status.recommended') }}
                   </UBadge>
                 </div>
-                <p class="truncate text-xs text-slate-400">{{ item.description }}</p>
+                <p class="truncate text-xs text-muted">{{ item.description }}</p>
               </div>
               <UIcon
                 name="i-lucide-chevron-right"
-                class="h-4 w-4 shrink-0 text-slate-500 rtl:-scale-x-100"
+                class="h-4 w-4 shrink-0 text-dimmed rtl:-scale-x-100"
               />
-            </button>
+            </UButton>
           </div>
 
           <!-- De-emphasised workspace-config link (e.g. issue tracker settings). -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="group.footerLink"
-            type="button"
-            class="mt-1.5 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-start text-xs text-slate-400 transition hover:bg-slate-900/60 hover:text-slate-200"
+            class="mt-1.5 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-start text-xs text-muted transition hover:bg-default/60 hover:text-default"
             @click="group.footerLink.onClick()"
           >
             <UIcon :name="group.footerLink.icon" class="h-3.5 w-3.5 shrink-0" />
             <span class="flex-1 truncate">{{ group.footerLink.label }}</span>
-            <span v-if="group.footerLink.status" class="shrink-0 text-slate-500">{{
+            <span v-if="group.footerLink.status" class="shrink-0 text-dimmed">{{
               group.footerLink.status
             }}</span>
             <UIcon
               name="i-lucide-chevron-right"
-              class="h-3.5 w-3.5 shrink-0 text-slate-600 rtl:-scale-x-100"
+              class="h-3.5 w-3.5 shrink-0 text-app-600 rtl:-scale-x-100"
             />
-          </button>
+          </UButton>
         </section>
       </div>
     </template>

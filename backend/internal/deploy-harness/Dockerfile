@@ -20,13 +20,15 @@
 # standalone (the package's dev/test deps incl. pnpm `workspace:*` entries are irrelevant
 # here — the runtime uses only Node built-ins + the global k8s CLIs). Pinned by the
 # multi-arch index digest (valid for amd64 + arm64 via buildx); the mutable tag is kept
-# for readability. To bump: `docker buildx imagetools inspect node:26-trixie-slim`.
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS build
+# for readability and can name a newer image, because the digest takes the same 24h
+# supply-chain window as the workspace dependencies (currently node 26.8.2). To bump:
+# `docker buildx imagetools inspect node:26-trixie-slim` and check the tag's age.
+FROM node:26-trixie-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS build
 WORKDIR /app
 COPY tsconfig.json ./
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0'
+    npm install --no-save --no-package-lock typescript@^7.0.0 @types/node@^26.0.0'
 COPY src ./src
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
@@ -34,7 +36,7 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 
 # ---- runtime: git + the k8s CLIs + the compiled wrapper ------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS runtime
+FROM node:26-trixie-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS runtime
 ENV NODE_ENV=production
 # buildx sets TARGETARCH (amd64 | arm64) — the CLI release assets use the same names.
 ARG TARGETARCH
@@ -51,9 +53,9 @@ RUN groupadd --system harness \
 # silently break a deploy — bump deliberately, and bump the image tag (CONTRIBUTING /
 # CLAUDE.md) when you do. git's dubious-ownership guard is disabled system-wide because
 # the clone may be owned by another uid in some runtimes.
-ARG KUBECTL_VERSION=v1.36.2
+ARG KUBECTL_VERSION=v1.36.4
 ARG KUSTOMIZE_VERSION=v5.8.1
-ARG HELM_VERSION=v4.2.2
+ARG HELM_VERSION=v4.2.4
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export CURL_CA_BUNDLE=/tmp/extra_ca.crt; fi; \
     apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl tar && rm -rf /var/lib/apt/lists/*; \
@@ -79,5 +81,7 @@ RUN chmod +x ./entrypoint.sh
 ENV HOME=/home/harness
 USER harness
 
-EXPOSE 8080
+# The job server. Deliberately not 8080, and the same port the executor image binds: both are
+# addressed by one constant transport-side (see src/harness-port.ts).
+EXPOSE 27182
 ENTRYPOINT ["./entrypoint.sh"]

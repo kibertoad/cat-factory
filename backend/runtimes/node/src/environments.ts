@@ -1,5 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic ephemeral-environment TTL teardown for the Node facade — the analogue of
@@ -19,6 +19,8 @@ export function startEnvironmentSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   const environments = container.environments
   if (!environments) return () => {}
@@ -26,10 +28,11 @@ export function startEnvironmentSweeper(
     name: 'environment-ttl',
     intervalMs: ENVIRONMENT_SWEEP_INTERVAL_MS,
     log,
+    health,
     failureMessage: 'environment TTL sweep failed',
     tick: async () => {
       const torn = await environments.teardownService.sweepExpired(clock.now())
-      if (torn > 0) log.info({ torn }, 'tore down expired environments')
+      if (torn > 0) log.info('tore down expired environments', { torn })
     },
   })
 }

@@ -1,21 +1,28 @@
-import type { AgentKindDefinition, AgentKindRegistry } from '@cat-factory/agents'
+import type {
+  AgentKindDefinition,
+  AgentKindRegistry,
+  BundledSkillDefinition,
+} from '@cat-factory/agents'
 import { defineStructuredOutput } from '@cat-factory/agents'
 import type {
   GateProbe,
+  GateRegistry,
+  McpServerDefinition,
   InitiativePresetRegistration,
   InitiativePresetRegistry,
+  JudgeRegistry,
+  PipelineRegistry,
+  PromptFragmentRegistry,
+  ProviderRegistry,
   RepoOp,
   StepCompletionResolver,
+  StepResolverRegistry,
+  TaskTypeRegistry,
 } from '@cat-factory/kernel'
 import {
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   defineProviderToken,
-  isProviderWired,
-  registerGate,
-  registerPipeline,
-  registerStepResolver,
-  wireProvider,
 } from '@cat-factory/kernel'
 import * as v from 'valibot'
 
@@ -24,7 +31,7 @@ import * as v from 'valibot'
 //
 // This is what a proprietary "org agents" package looks like: it teaches the platform
 // two brand-new agent kinds and a pipeline that chains them — purely through the public
-// extension seams (the app-owned `AgentKindRegistry` + `registerPipeline`) — and ships its
+// extension seams (the app-owned `AgentKindRegistry` + `PipelineRegistry`) — and ships its
 // mechanical work as ordinary backend TypeScript. Crucially it requires ZERO changes to the
 // executor-harness image: the container runs the generic LLM-over-a-checkout `agent` kind,
 // and the deterministic "render a report file + commit it" step is a backend POST-OP over
@@ -34,16 +41,123 @@ import * as v from 'valibot'
 // the `AgentKindRegistry` instance it injects into the facade build, then passing that same
 // instance in:
 //
-//   const registry = defaultAgentKindRegistry()
-//   registerExampleCustomAgents(registry)        // registers the kinds + pipeline + gate
-//   start({ agentKindRegistry: registry })        // (or buildContainer / startLocal)
+//   const agentKindRegistry = defaultAgentKindRegistry()
+//   registerExampleCustomAgents({ agentKindRegistry, ...theOtherRegistries })
+//   start({ agentKindRegistry, ...theOtherRegistries })   // (or buildContainer / startLocal)
 //
 // See `backend/docs/custom-agents.md` for the full model.
 // ---------------------------------------------------------------------------
 
+// The custom JUDGE example (the fourth step-taxonomy bucket): a rubric-scored gate that can
+// BOUNCE a run back to the Coder or stop it for a human — the thing a step resolver cannot do.
+import { registerExampleScopeJudge, SCOPE_JUDGE_KIND } from './scope-judge.js'
+export {
+  SCOPE_JUDGE_KIND,
+  SCOPE_RUBRIC_FRAGMENT_ID,
+  type ScopeVerdict,
+  scopeAdherenceJudge,
+  registerExampleScopeJudge,
+} from './scope-judge.js'
+
+// The custom test-infrastructure PROVIDER example (autodetection over a multi-file signature).
+export {
+  STACK_DEPLOY_MANIFEST_ID,
+  detectStackDeployProvider,
+  registerExampleStackDeployProvider,
+} from './stack-deploy.js'
+
+// The REUSABLE OPERATION example: a custom task type bundling a per-case form, standing-context
+// fragments and its own canned pipeline (backend/docs/reusable-operations.md).
+import { registerIntroduceApiOperation } from './introduce-api.js'
+export {
+  INTRODUCE_API_FRAGMENT_IDS,
+  INTRODUCE_API_PIPELINE_ID,
+  INTRODUCE_API_TASK_TYPE,
+  INTRODUCE_API_TASK_TYPE_DEFINITION,
+  ORG_ARCHITECT_API_VARIANT_ID,
+  ORG_CODER_API_VARIANT_ID,
+  registerIntroduceApiOperation,
+} from './introduce-api.js'
+
+// ---------------------------------------------------------------------------
+// A WORKED EXAMPLE of agent CAPABILITIES: a bundled skill and a tool server (MCP).
+//
+// Both are registered on the SAME injected `AgentKindRegistry` and referenced by id from any
+// number of kinds — the skill/tool analogue of registering the kinds themselves.
+// ---------------------------------------------------------------------------
+
+/** The id the org's security-review playbook is registered under. */
+export const SECURITY_REVIEW_SKILL_ID = 'org-security-review'
+
+/**
+ * A BUNDLED skill: the org's procedural playbook, shipped in this package's own code. Unlike a
+ * repo-synced catalog skill it needs no skill library, no GitHub connection and no sync — a
+ * deployment that installs this package has the playbook. The claude-code harness installs it as
+ * a native Claude skill (so the CLI can invoke it on its own judgement); every other harness gets
+ * its instructions folded into the prompt and its resources on disk.
+ */
+const securityReviewSkill: BundledSkillDefinition = {
+  id: SECURITY_REVIEW_SKILL_ID,
+  name: 'org-security-review',
+  description:
+    'The org security-review playbook: what to check, in what order, and how to rate it.',
+  instructions: [
+    '# Org security review',
+    '',
+    '1. Start from the diff, not the whole repo — the change is what you are rating.',
+    '2. Check, in order: authentication boundaries, authorization checks, input validation at the',
+    '   trust boundary, secret handling, and dependency changes.',
+    '3. Rate each finding against `severity.md`, and never invent a finding to have something to',
+    '   report — an empty findings list on a clean change is the correct answer.',
+  ].join('\n'),
+  resources: [
+    {
+      relPath: 'severity.md',
+      content: [
+        '# Severity rubric',
+        '',
+        '- **critical** — exploitable remotely with no credentials.',
+        '- **high** — exploitable by an authenticated user outside their own scope.',
+        '- **medium** — needs an unusual precondition, or leaks non-credential data.',
+        '- **low** — defence-in-depth only.',
+      ].join('\n'),
+    },
+  ],
+}
+
+/** The id the org's advisory-database tool server is registered under. */
+export const ADVISORY_TOOL_SERVER_ID = 'org-advisories'
+
+/**
+ * A TOOL SERVER (MCP): the org's vulnerability-advisory lookup, run as a child process inside the
+ * run container. Its credential is declared BY NAME only — the platform resolves the value at
+ * dispatch (off the deployment environment by default) straight into the job body, so it never
+ * reaches a prompt or the run's telemetry snapshot.
+ *
+ * `guidance` is not decoration: an agent handed a tool it was not told the purpose of tends not to
+ * use it. `allowedTools` narrows what the agent may call — the server also exposes write verbs
+ * this read-only auditor has no business calling.
+ */
+const advisoryToolServer: McpServerDefinition = {
+  id: ADVISORY_TOOL_SERVER_ID,
+  label: 'Org advisory database',
+  guidance:
+    'Look up a dependency in the org advisory database before judging whether a version bump is ' +
+    'risky, instead of reasoning from the version number alone.',
+  transport: {
+    kind: 'stdio',
+    command: 'npx',
+    args: ['-y', '@example-org/advisories-mcp'],
+  },
+  allowedTools: ['lookup_advisory', 'search_advisories'],
+  secretKeys: [{ key: 'ORG_ADVISORY_TOKEN' }],
+}
+
 export const ORG_REVIEWER_KIND = 'org-reviewer'
 export const SECURITY_AUDITOR_KIND = 'security-auditor'
 export const ORG_AUDIT_PIPELINE_ID = 'pl_org_audit'
+/** A build pipeline that runs the org's scope-adherence JUDGE over the Coder's work. */
+export const ORG_SCOPE_PIPELINE_ID = 'pl_org_scope'
 
 /** The custom polling-gate step kind + the helper agent it escalates to on a red verdict. */
 export const LICENSE_CHECK_KIND = 'license-check'
@@ -289,6 +403,10 @@ export const EXAMPLE_AGENT_KINDS: AgentKindDefinition[] = [
       color: '#f59e0b',
       description: "Reviews a change against the company's engineering policies.",
       category: 'review',
+      // How specialist the kind is. `basic` puts it in the palette's DEFAULT view, beside the
+      // everyday kinds — right for a reviewer an org wants on most pipelines. Omit it (as the
+      // auditor below does) and the kind is treated as `intermediate`: shown one level up.
+      tier: 'basic',
     },
   },
   {
@@ -308,6 +426,12 @@ export const EXAMPLE_AGENT_KINDS: AgentKindDefinition[] = [
       clone: { branch: 'pr' },
     },
     structuredOutput: securityAssessment,
+    // The kind's CAPABILITIES: the org playbook it always applies, and the advisory lookup it may
+    // call. Both are references to the definitions registered below — several kinds can share
+    // them, and a deployment can repoint the tool server at its own endpoint by re-registering
+    // the id without touching this package.
+    skills: [SECURITY_REVIEW_SKILL_ID],
+    toolServers: [ADVISORY_TOOL_SERVER_ID],
     postOps: [renderReportPostOp],
     presentation: {
       label: 'Security Auditor',
@@ -404,9 +528,12 @@ export interface LicenseProvider {
 // the old `let provider; getProvider()!` pattern (and its unsafe non-null assertion) is gone.
 export const LICENSE_PROVIDER = defineProviderToken<LicenseProvider>('license')
 
-/** Wire (or clear) the license checker the {@link LICENSE_CHECK_KIND} gate probes. */
-export function wireLicenseProvider(provider: LicenseProvider | undefined): void {
-  wireProvider(LICENSE_PROVIDER, provider)
+/** Wire (or clear) the license checker the {@link LICENSE_CHECK_KIND} gate probes, on the app-owned registry. */
+export function wireLicenseProvider(
+  registry: ProviderRegistry,
+  provider: LicenseProvider | undefined,
+): void {
+  registry.wire(LICENSE_PROVIDER, provider)
 }
 
 /**
@@ -510,7 +637,7 @@ export const ORG_AUDIT_PRESET: InitiativePresetRegistration = {
         placeholder: 'e.g. the payments and identity services only',
       },
     ],
-    // Reuse the built-in generic planning pipeline — interviewer → analyst → planner(gate) →
+    // Reuse the built-in generic planning pipeline — analyst → interviewer → planner(gate) →
     // committer — so no new planning pipeline is registered; all deviation is descriptor data + hooks.
     planningPipelineId: 'pl_initiative',
     interview: 'full',
@@ -592,6 +719,21 @@ export const ORG_RESEARCH_PIPELINE_ID = 'pl_org_research'
 export const ORG_APPLY_PIPELINE_ID = 'pl_org_apply'
 
 /**
+ * A VARIATION of the built-in `coder` — the same agent kind, told to work test-first.
+ *
+ * This is the seam to reach for when the change you want is EDITORIAL: the step still clones,
+ * edits, commits and opens a PR exactly as a Coder step does, and every engine decision keyed on
+ * `coder` (the follow-up companion, the fork-decision phase, multi-repo fan-out, the merge tail)
+ * is unchanged. Registering a `coder-tdd` KIND instead would have quietly lost all of those.
+ *
+ * It uses `promptAddition` rather than `systemPrompt` on purpose: an addition rides on top of
+ * whatever base actually runs, so it keeps applying as the product edits the shipped Coder prompt
+ * AND on top of a workspace's own override of it. A `systemPrompt` replacement is the right tool
+ * only when the role genuinely differs, and it stops tracking both.
+ */
+export const ORG_CODER_TDD_VARIANT_ID = 'org:coder-tdd'
+
+/**
  * The two phase ids — shared VERBATIM by the phase template, the planner steering, and `seedPlan`
  * (the "define the phase id ONCE, reference it everywhere" contract: the planner must emit these
  * exact ids and the ingest normalizer matches on them). Mirrors `tech-migration/phases.ts`.
@@ -656,7 +798,7 @@ export const ORG_RESEARCH_PRESET: InitiativePresetRegistration = {
         default: DEFAULT_DOCS_ROOT,
       },
     ],
-    // Reuse the built-in generic planning pipeline (interviewer → analyst → planner(gate) →
+    // Reuse the built-in generic planning pipeline (analyst → interviewer → planner(gate) →
     // committer) — no new planning pipeline is registered; all deviation is descriptor data + hooks.
     planningPipelineId: 'pl_initiative',
     interview: 'full',
@@ -748,46 +890,106 @@ export function registerOrgResearchPreset(
 }
 
 /**
+ * The app-owned registries a deployment's composition root hands this package. ONE object rather
+ * than a positional list: the set grows with each seam the example demonstrates, and a caller
+ * silently transposing two same-typed registries would register everything in the wrong place.
+ */
+export interface ExampleRegistries {
+  agentKindRegistry: AgentKindRegistry
+  initiativePresetRegistry: InitiativePresetRegistry
+  gateRegistry: GateRegistry
+  stepResolverRegistry: StepResolverRegistry
+  pipelineRegistry: PipelineRegistry
+  judgeRegistry: JudgeRegistry
+  taskTypeRegistry: TaskTypeRegistry
+  /**
+   * The deployment's best-practice standards pool. Carried here for the same reason every other
+   * registry is: the operation's standing context has to land on the instance the FACADE was
+   * built with, and a module-global registration only appeared to do that.
+   */
+  promptFragmentRegistry: PromptFragmentRegistry
+}
+
+/**
  * Register the example kinds on the app-owned {@link AgentKindRegistry} the composition root
  * injects, and the `preset_org_audit` + `preset_org_research` initiative presets on the app-owned
  * {@link InitiativePresetRegistry}, plus the pipelines that chain the kinds (`pl_org_audit`,
  * `pl_org_research`, `pl_org_apply`) + the example `license-check` gate + the auditor-summary /
- * research-verdict step resolvers (the pipeline/gate/step-resolver registries are still
- * module-global — those have not migrated to app-owned DI yet). Idempotent (registries replace by
- * id/kind). Called explicitly from a facade/test — there is no module-load side effect any more,
- * since the agent-kind + preset registries are app-owned instances, not globals.
+ * research-verdict step resolvers on the app-owned {@link GateRegistry} /
+ * {@link StepResolverRegistry} + the app-owned {@link PipelineRegistry} the composition root
+ * injects, and the `org:introduce-api` REUSABLE OPERATION on the app-owned
+ * {@link TaskTypeRegistry} (see `./introduce-api.ts`). Idempotent (registries replace by id/kind).
+ * Called explicitly from a facade/test: there is no module-load side effect any more, since the
+ * agent-kind / preset / gate / step-resolver / pipeline / task-type registries are all app-owned
+ * instances.
  */
-export function registerExampleCustomAgents(
-  registry: AgentKindRegistry,
-  initiativePresetRegistry: InitiativePresetRegistry,
-): void {
+export function registerExampleCustomAgents(registries: ExampleRegistries): void {
+  const {
+    agentKindRegistry: registry,
+    initiativePresetRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    pipelineRegistry,
+    judgeRegistry,
+    taskTypeRegistry,
+    promptFragmentRegistry,
+  } = registries
+  // Capability definitions FIRST: a kind referencing an id registered later would be reported as
+  // an unresolved reference by the boot-time `validateRegistrations` check.
+  registry.registerSkill(securityReviewSkill)
+  registry.registerToolServer(advisoryToolServer)
   registry.registerAll(EXAMPLE_AGENT_KINDS)
-  registerPipeline({
+  // A VARIATION of a BUILT-IN kind (see ORG_CODER_TDD_VARIANT_ID): no new kind, no new dispatch
+  // path, no harness change — just different text on the Coder step that selects it.
+  registry.registerVariant({
+    id: ORG_CODER_TDD_VARIANT_ID,
+    baseKind: 'coder',
+    promptAddition:
+      'House rule for this step: work test-first. Before changing behaviour, add or extend a ' +
+      'test that FAILS for the reason the task describes, and say in your final report which ' +
+      'test that was and what it asserted. Only then make it pass. When the change is genuinely ' +
+      'untestable (a pure rename, a config value, generated output), say so explicitly rather ' +
+      'than writing a test that asserts nothing.',
+    presentation: {
+      label: 'TDD-first',
+      description: 'The Coder, required to land a failing test before the fix.',
+    },
+  })
+  // The apply pipeline runs its Coder step under that variant. A pipeline selects a variant
+  // through the step's OPTIONS, parallel to `agentKinds` like every other per-step knob — the
+  // step's kind is still `coder`.
+  pipelineRegistry.register({
     id: ORG_AUDIT_PIPELINE_ID,
     name: 'Org compliance audit',
+    // Two reviewing kinds and no producer: it judges an existing change and opens nothing.
+    purpose: 'review',
     agentKinds: [ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND],
   })
   // The `preset_org_research` pipelines: a research producer + an apply coder, each on the universal
   // `conflicts → ci → merger` merge tail so the committed report (and the follow-on change) land on
   // the default branch a later phase clones. The merge tail is what makes the research artifact a
   // cross-phase artifact (see `ORG_RESEARCH_PRESET`).
-  registerPipeline({
+  pipelineRegistry.register({
     id: ORG_RESEARCH_PIPELINE_ID,
     name: 'Org feasibility research',
+    // A timeboxed investigation whose product is a committed report, merge tail and all.
+    purpose: 'research',
     agentKinds: [ORG_RESEARCH_KIND, 'conflicts', 'ci', 'merger'],
   })
-  registerPipeline({
+  pipelineRegistry.register({
     id: ORG_APPLY_PIPELINE_ID,
     name: 'Org apply',
+    purpose: 'build',
     agentKinds: ['coder', 'conflicts', 'ci', 'merger'],
+    stepOptions: [{ agentVariantId: ORG_CODER_TDD_VARIANT_ID }, null, null, null],
   })
   registerOrgAuditPreset(initiativePresetRegistry)
   registerOrgResearchPreset(initiativePresetRegistry)
   // The custom polling gate — a deterministic precheck that escalates to `license-fixer`.
-  registerGate(LICENSE_CHECK_KIND, (ctx) => ({
+  gateRegistry.register(LICENSE_CHECK_KIND, (ctx) => ({
     kind: LICENSE_CHECK_KIND,
     helperKind: LICENSE_FIXER_KIND,
-    wired: () => isProviderWired(LICENSE_PROVIDER),
+    wired: () => ctx.isProviderWired(LICENSE_PROVIDER),
     unwiredOutput: 'License gate skipped (no license provider configured).',
     probe: async (workspaceId, blockId): Promise<GateProbe> => {
       // requireProvider is safe here: the engine only probes a gate whose wired() is true.
@@ -824,6 +1026,25 @@ export function registerExampleCustomAgents(
       }
     },
   }))
-  registerStepResolver(auditorSummaryResolver.kind, () => auditorSummaryResolver)
-  registerStepResolver(researchVerdictResolver.kind, () => researchVerdictResolver)
+  // The custom JUDGE — a rubric-scored verdict gate that bounces the Coder on a scope miss and
+  // parks a human once the rework budget is spent. Registered BY REFERENCE on the app-owned
+  // registry, exactly like the gate above; no module-global side effect.
+  registerExampleScopeJudge(judgeRegistry)
+  // A pipeline that places it after the Coder, so the judge has a producing step to bounce to.
+  pipelineRegistry.register({
+    id: ORG_SCOPE_PIPELINE_ID,
+    name: 'Org build + scope review',
+    purpose: 'build',
+    agentKinds: ['coder', SCOPE_JUDGE_KIND, 'conflicts', 'ci', 'merger'],
+  })
+  stepResolverRegistry.register(auditorSummaryResolver.kind, () => auditorSummaryResolver)
+  stepResolverRegistry.register(researchVerdictResolver.kind, () => researchVerdictResolver)
+  // The REUSABLE OPERATION: a canned unit of work invoked again and again with per-case form
+  // input, bundling its standing context and its own pipeline onto a custom task type.
+  registerIntroduceApiOperation(
+    registry,
+    pipelineRegistry,
+    taskTypeRegistry,
+    promptFragmentRegistry,
+  )
 }

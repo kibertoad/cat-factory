@@ -1,0 +1,1 @@
+ALTER TABLE "public_api_keys" ADD COLUMN "created_by_user_id" text;

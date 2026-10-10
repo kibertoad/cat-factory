@@ -1,3 +1,4 @@
+import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import { describe, expect, it, vi } from 'vitest'
 import { decideHarnessVersion, parseImageVersion, verifyHarnessVersion } from './harnessVersion.js'
 
@@ -84,7 +85,7 @@ describe('decideHarnessVersion', () => {
 })
 
 describe('verifyHarnessVersion', () => {
-  const endpoint = { host: '127.0.0.1', port: 8080 }
+  const endpoint = { host: '127.0.0.1', port: HARNESS_JOB_PORT }
   const source = { ref: 'ghcr.io/o/cat-factory-executor:1.40.0', kind: 'image' as const }
 
   const health = (body: unknown): typeof fetch =>

@@ -1,4 +1,4 @@
-# `@cat-factory/workspaces` — tenancy base services
+# `@cat-factory/workspaces`: tenancy base services
 
 Workspace + account services (the tenancy base the rest of the domain builds on).
 

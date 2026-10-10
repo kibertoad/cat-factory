@@ -20,16 +20,21 @@ import type {
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   extractJson,
+  getErrorMessage,
+  resolveInlineScope,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
+import type { PublicKaizenEntry } from '@cat-factory/contracts'
 import { generateText } from 'ai'
 import {
   catFactoryObservability,
   KAIZEN_SYSTEM_PROMPT,
   promptVersionForKind,
-  resolveInlineModelRef,
 } from '@cat-factory/agents'
+import type { KaizenAcknowledgement, KaizenEntryQuery } from './kaizenEntries.js'
+import { KaizenEntryReader } from './kaizenEntries.js'
 import type { AgentContextObservabilityService } from '../observability/AgentContextObservabilityService.js'
+import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import { comboKeyFor, isVerified, nextComboState } from './kaizen.logic.js'
 
 /** The agent kind keying the workspace default model + observability for the grader. */
@@ -57,19 +62,18 @@ export interface KaizenServiceDependencies {
   modelProvider?: ModelProvider
   /** Default model ref when nothing else resolves — the agents' routing default. */
   modelRef?: ModelRef
-  /** Resolve a pinned model id to a ref (the deployment-aware resolver). */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a pinned model id to a ref, under the preset's route order. */
+  resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /**
    * Whether a subscription harness ref can run as an INLINE call in this deployment (local
    * mode's ambient CLI). Keeps it instead of degrading to the routing default. Absent → degrade.
    */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-kind default model id for the `kaizen` kind. */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => Promise<string | undefined>
+  /**
+   * The workspace's per-kind default MODEL for `kaizen` and the ROUTE order the preset in force
+   * states, from ONE read. Absent ⇒ block pin plus the routing default, on the default order.
+   */
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
 }
 
 /**
@@ -84,7 +88,24 @@ export interface KaizenServiceDependencies {
  * agent step — for the `kaizen` kind — so operators configure it in Model Configuration.
  */
 export class KaizenService {
-  constructor(private readonly deps: KaizenServiceDependencies) {}
+  /**
+   * The public entry surface (list / read / acknowledge), a collaborator rather than more methods
+   * here: it shares none of the grading machinery below, and its whole job is the board + combo
+   * JOIN that makes an entry actionable outside the app.
+   */
+  private readonly entries: KaizenEntryReader
+
+  constructor(private readonly deps: KaizenServiceDependencies) {
+    this.entries = new KaizenEntryReader({
+      gradings: deps.kaizenGradingRepository,
+      combos: deps.kaizenVerifiedComboRepository,
+      // The reader walks ancestry itself and needs only the blocks; the home workspace and account
+      // service the batched read also carries answer questions it does not ask.
+      findBlocks: async (blockIds) =>
+        (await deps.blockRepository.findByIds(blockIds)).map((found) => found.block),
+      clock: deps.clock,
+    })
+  }
 
   /** Whether the LLM-backed grader is available (else gradings settle as `failed`). */
   get enabled(): boolean {
@@ -108,7 +129,19 @@ export class KaizenService {
       if (!step || !this.isGradeable(step) || !step.model) continue
       const model = step.model
       const promptVersion = promptVersionForKind(step.agentKind)
-      const comboKey = comboKeyFor(step.agentKind, model, promptVersion)
+      // Both prompt-text facts are read off the STEP, where the dispatch pinned them, rather than
+      // re-resolved here: the prompt log is append-only, so a later revision would re-key
+      // gradings of text the step never saw, and the variant registry can have moved on too.
+      // `promptVariant` is deliberately the PIN and not `stepOptions.agentVariantId` — the option
+      // is what the pipeline asked for, while the pin says what actually reached the prompt, and
+      // keying on the ask would credit a variant whose text a workspace override displaced.
+      const comboKey = comboKeyFor(
+        step.agentKind,
+        model,
+        promptVersion,
+        step.promptRevision,
+        step.promptVariant,
+      )
       const combo = await this.deps.kaizenVerifiedComboRepository.getByKey(workspaceId, comboKey)
       if (isVerified(combo)) continue
       const existing = await this.deps.kaizenGradingRepository.getByStep(
@@ -133,6 +166,11 @@ export class KaizenService {
         recommendations: [],
         graderModel: null,
         error: null,
+        // A fresh grading is nobody's business yet; the acknowledgement columns are written only
+        // by the public entry surface, and every later transition carries them through untouched.
+        acknowledgedAt: null,
+        acknowledgedBy: null,
+        acknowledgementNote: null,
         createdAt: now,
         updatedAt: now,
       }
@@ -243,7 +281,7 @@ export class KaizenService {
       await this.updateCombo(workspaceId, complete, now)
       await this.emit(workspaceId, complete)
     } catch (e) {
-      await this.fail(workspaceId, running, e instanceof Error ? e.message : String(e))
+      await this.fail(workspaceId, running, getErrorMessage(e))
     }
   }
 
@@ -261,6 +299,28 @@ export class KaizenService {
   /** The gradings recorded for a single run (the run-window status surface). */
   listForExecution(workspaceId: string, executionId: string): Promise<KaizenGrading[]> {
     return this.deps.kaizenGradingRepository.listByExecution(workspaceId, executionId)
+  }
+
+  // ---- the public entry surface (`/api/v1/kaizen/entries`) -----------------
+  // Thin delegates onto {@link KaizenEntryReader}; the reasoning lives there.
+
+  /** One keyset page of the workspace's entries, newest first, with their context joined on. */
+  listEntries(workspaceId: string, query: KaizenEntryQuery): Promise<PublicKaizenEntry[]> {
+    return this.entries.listEntries(workspaceId, query)
+  }
+
+  /** One entry by id, or null when this workspace holds no such grading. */
+  getEntry(workspaceId: string, entryId: string): Promise<PublicKaizenEntry | null> {
+    return this.entries.getEntry(workspaceId, entryId)
+  }
+
+  /** Record or clear an entry's acknowledgement, answering the entry as it now stands. */
+  acknowledgeEntry(
+    workspaceId: string,
+    entryId: string,
+    input: KaizenAcknowledgement,
+  ): Promise<PublicKaizenEntry> {
+    return this.entries.acknowledge(workspaceId, entryId, input)
   }
 
   // ---- internals ----------------------------------------------------------
@@ -296,40 +356,33 @@ export class KaizenService {
     blockId: string,
     executionId: string,
   ): Promise<{ provider: ModelProvider; ref: ModelRef }> {
-    // Carry the graded run's execution so a leased-per-run inline subscription backend can lease
-    // its activation. (No initiator id is threaded — the Kaizen grader is a background process;
-    // a pooled vendor needs only the workspace, and an individual vendor's activation is anyway
-    // deleted when the run completed, so it fails loudly rather than silently mis-grading.)
-    const provider = await resolveScopedModelProvider({ workspaceId, executionId }, this.deps)
+    // A run subject with no initiator, and the missing half is a CLAIM rather than an omission:
+    // the Kaizen grader is a background process that runs after the graded run settled, so there
+    // is no signed-in person on the request and the run's own personal activation has already
+    // been deleted. A pooled vendor needs only the workspace; an individual vendor fails loudly
+    // rather than silently mis-grading.
+    const scope = await resolveInlineScope({ kind: 'run', workspaceId, executionId })
+    const provider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, blockId)
     if (!provider || !ref) throw new Error('No model is configured for the Kaizen agent')
     return { provider, ref }
   }
 
   /**
-   * The grader's model. Kaizen grading is just another inline LLM step, so it resolves its
-   * model through the SAME shared seam every inline agent uses ({@link resolveInlineModelRef}
-   * — block pin > workspace per-kind default > routing default, keeping an ambient-eligible
-   * subscription harness ref instead of degrading it) rather than re-deriving that precedence
-   * here. Returns undefined only when no routing default is wired (grader disabled).
+   * The grader's model. Kaizen grading is just another inline LLM step, so it resolves its model
+   * through the SAME shared seam every inline agent uses ({@link resolveInlineBlockModelRef} —
+   * block pin > workspace per-kind default > routing default, under the preset's route order,
+   * keeping an ambient-eligible subscription harness ref instead of degrading it) rather than
+   * re-deriving that precedence here. Returns undefined only when no routing default is wired
+   * (grader disabled), which is why the guard short-circuits the block read.
    */
   private async modelFor(workspaceId: string, blockId: string): Promise<ModelRef | undefined> {
     if (!this.deps.modelRef) return undefined
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
-    return resolveInlineModelRef(
-      {
-        agentRouting: { default: { ref: this.deps.modelRef }, byKind: {} },
-        resolveBlockModel: this.deps.resolveBlockModel ?? (() => undefined),
-        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
-        ...(this.deps.runsInline ? { runsInline: this.deps.runsInline } : {}),
-      },
-      {
-        agentKind: KAIZEN_AGENT_KIND,
-        blockModelId: block?.modelId,
-        modelPresetId: block?.modelPresetId,
-        workspaceId,
-      },
-    )
+    return resolveInlineBlockModelRef(this.deps, workspaceId, KAIZEN_AGENT_KIND, {
+      ...(block?.modelId ? { modelId: block.modelId } : {}),
+      ...(block?.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
+    })
   }
 
   private async updateCombo(
@@ -393,7 +446,7 @@ function parseVerdict(text: string): KaizenVerdict {
 }
 
 /** Build the grader's user prompt: the provided context + an interaction-telemetry digest. */
-function buildKaizenPrompt(
+export function buildKaizenPrompt(
   grading: KaizenGrading,
   snapshot: AgentContextSnapshot | null,
   calls: LlmCallMetric[],
@@ -422,9 +475,17 @@ function buildKaizenPrompt(
       )
     }
   } else {
+    // Names no cause. It used to guess one ("prompt recording may be off"), which was wrong for
+    // every INLINE kind — nothing recorded snapshots for those at all until the inline executor
+    // gained a recorder — and a grader handed a cause duly recommended enabling a switch that was
+    // already enabled. Three causes remain reachable: recording genuinely off, a step whose dispatch
+    // predates the recorder, and a step whose work was an inline service call rather than a kind
+    // dispatch (the judges, the requirements reviewer, this grader itself — see
+    // `inline-context-record.ts`). Nothing here can tell them apart, so it says so.
     parts.push(
-      'No provided-context snapshot was captured for this step (prompt recording may be off). ' +
-        'Grade primarily from the interaction telemetry below.',
+      'No provided-context snapshot is available for this step, so the system prompt and ' +
+        'injected context CANNOT be assessed. Do not infer why, and do not grade their quality ' +
+        'either way: grade only what the interaction telemetry below supports.',
     )
   }
 
@@ -432,22 +493,68 @@ function buildKaizenPrompt(
   return parts.join('\n\n')
 }
 
-/** A compact, model-readable digest of the per-call telemetry for one step. */
+/**
+ * A compact, model-readable digest of the per-call telemetry for one step.
+ *
+ * Two things here are stated carefully because the grader REASONS about them and, told them
+ * loosely, spends a whole recommendation on a defect that does not exist.
+ *
+ * **The input side is three orthogonal classes, never `promptTokens` alone.** That field is FRESH
+ * (uncached) input by definition (`token-telemetry-per-class-and-cost.md` slice 1), so on a
+ * prompt-cached subscription run it is a handful of tokens per call while the real input is
+ * hundreds of thousands. Reported as "Prompt tokens (sum)" it read as 16 against a true 332,552,
+ * and the grader correctly concluded that no such call could exist and filed "fix prompt-token
+ * accounting" against telemetry that was in fact recording it exactly.
+ *
+ * **An absent finish reason is reported as absent, never folded into a value.** Neither
+ * subscription CLI reports one, so `truncated` is not 0 on those runs, it is UNKNOWABLE, and a
+ * flat "Truncated calls: 0" is the "absent is not zero" trap: it invites the grader to certify a
+ * step as cleanly completed on evidence nobody collected. That holds for the MIXED case too, which
+ * is why the truncation count carries its own denominator on the same line rather than an absolute
+ * over whichever subset happened to report: "0" beside "8 calls" reads as a clean step even when
+ * seven of the eight measured nothing.
+ */
 function digestCalls(calls: LlmCallMetric[]): string {
   if (calls.length === 0) return 'No LLM calls were recorded for this step.'
-  const truncated = calls.filter((c) => c.finishReason === 'length').length
   const errors = calls.filter((c) => !c.ok).length
-  const promptTokens = calls.reduce((s, c) => s + c.promptTokens, 0)
-  const completionTokens = calls.reduce((s, c) => s + c.completionTokens, 0)
-  const finishReasons = summarizeCounts(calls.map((c) => c.finishReason ?? 'unknown'))
+  const sum = (read: (call: LlmCallMetric) => number): number =>
+    calls.reduce((total, call) => total + read(call), 0)
+  const fresh = sum((c) => c.promptTokens)
+  const cacheRead = sum((c) => c.cacheReadTokens)
+  const cacheWrite = sum((c) => c.cacheWriteTokens)
+  const completionTokens = sum((c) => c.completionTokens)
+  // Narrowed by a predicate, so the finish reasons below are strings and there is no `?? ''` to
+  // read as a guard: an unlabelled histogram entry is exactly what this digest must not print.
+  const reported = calls.filter((c): c is LlmCallMetric & { finishReason: string } => {
+    return c.finishReason != null
+  })
+  const silent = calls.length - reported.length
   const lines = [
     `Total model calls: ${calls.length}`,
-    `Truncated calls (hit output limit): ${truncated}`,
     `Failed calls: ${errors}`,
-    `Prompt tokens (sum): ${promptTokens}`,
+    `Input tokens (sum): ${fresh + cacheRead + cacheWrite} ` +
+      `(${fresh} fresh + ${cacheRead} cache reads + ${cacheWrite} cache writes)`,
     `Completion tokens (sum): ${completionTokens}`,
-    `Finish reasons: ${finishReasons}`,
   ]
+  if (reported.length === 0) {
+    lines.push(
+      'Finish reasons: NOT REPORTED by this model backend for any call. Whether any call was ' +
+        'truncated at its output limit is therefore unknown, not known to be none. Do not treat ' +
+        'these calls as having completed cleanly, and do not report this as a telemetry defect: ' +
+        'the subscription agent CLIs expose no per-call stop reason.',
+    )
+  } else {
+    const truncated = reported.filter((c) => c.finishReason === 'length').length
+    lines.push(
+      `Truncated calls (hit output limit): ${truncated} of the ${reported.length} call(s) that ` +
+        `reported a finish reason` +
+        (silent > 0
+          ? `; the other ${silent} reported none, so truncation is UNKNOWN for those and this ` +
+            `count is not a step-wide total`
+          : ''),
+      `Finish reasons: ${summarizeCounts(reported.map((c) => c.finishReason))}`,
+    )
+  }
   const last = calls[0] // newest first
   if (last?.responseText) {
     lines.push(

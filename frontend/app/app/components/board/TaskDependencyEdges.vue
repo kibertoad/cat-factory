@@ -1,29 +1,34 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRafFn } from '@vueuse/core'
+import { ref, shallowRef, computed, watch } from 'vue'
+import { useBoardActivity } from '~/composables/useBoardActivity'
+import { useSettlingRaf } from '~/composables/useSettlingRaf'
+import { commitSegments, type EdgeSegment } from '~/utils/edgeSegments'
+import { measureBlocks, type BlockMeasurements } from '~/utils/blockRects'
 
 /**
  * Draws dependency arrows between task cards as an SVG overlay on top of the
  * board. Tasks are plain DOM nodes (inside frame cards), so we resolve their
- * on-screen rectangles by `[data-block-id]` every frame — this makes arrows
- * follow pan / zoom / drag / expand for free. When a task's frame is collapsed
- * (its card isn't rendered), the arrow anchors to the frame card instead.
+ * on-screen rectangles by `[data-block-id]` — this makes arrows follow pan /
+ * zoom / drag / expand for free. When a task's frame is collapsed (its card
+ * isn't rendered), the arrow anchors to the frame card instead.
+ *
+ * Measuring costs forced layout reads, so it runs only while something is actually
+ * moving: the board's activity pulse wakes it and `useSettlingRaf` parks it again
+ * once the resolved segments hold still. Within one pass the cards are resolved and
+ * measured through a single shared snapshot (`measureBlocks`), so a task with five
+ * dependencies is found and measured once rather than five times.
  */
 const board = useBoardStore()
 
 const svg = ref<SVGSVGElement | null>(null)
 
-type Seg = { id: string; x1: number; y1: number; x2: number; y2: number; done: boolean }
-const segments = ref<Seg[]>([])
+const segments = shallowRef<EdgeSegment[]>([])
 // Epic→member membership links (distinct style from dependency edges).
-type MemberSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
-const memberSegments = ref<MemberSeg[]>([])
+const memberSegments = shallowRef<EdgeSegment[]>([])
 // Frontend frame → bound service frame links (from a frontend's backend bindings).
-type FrontendSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
-const frontendSegments = ref<FrontendSeg[]>([])
+const frontendSegments = shallowRef<EdgeSegment[]>([])
 // Service frame → connected provider service frame links (from serviceConnections).
-type ConnectionSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
-const connectionSegments = ref<ConnectionSeg[]>([])
+const connectionSegments = shallowRef<EdgeSegment[]>([])
 
 // task → its dependencies, both ends being tasks
 const taskDeps = computed(() => {
@@ -89,10 +94,10 @@ const connectionLinks = computed(() => {
 
 /** Resolve a task's anchor: walk up task → module → service to the first card
  * that's actually rendered (a container may be collapsed). */
-function anchorEl(taskId: string): HTMLElement | null {
+function anchorEl(taskId: string, blocks: BlockMeasurements): HTMLElement | null {
   let cur = board.getBlock(taskId)
   while (cur) {
-    const el = document.querySelector(`[data-block-id="${cur.id}"]`) as HTMLElement | null
+    const el = blocks.elementFor(cur.id)
     if (el) return el
     cur = cur.parentId ? board.getBlock(cur.parentId) : undefined
   }
@@ -108,93 +113,72 @@ function border(cx: number, cy: number, hw: number, hh: number, tx: number, ty: 
   return { x: cx + dx * t, y: cy + dy * t }
 }
 
-function recompute() {
-  const el = svg.value
-  if (!el) return
-  const origin = el.getBoundingClientRect()
-  const next: Seg[] = []
-
-  for (const d of taskDeps.value) {
-    const a = anchorEl(d.source)
-    const b = anchorEl(d.target)
-    if (!a || !b || a === b) continue // missing, or both collapsed into the same frame
-
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-
-    next.push({
-      id: d.id,
-      x1: start.x,
-      y1: start.y,
-      x2: end.x,
-      y2: end.y,
-      done: board.getBlock(d.source)?.status === 'done',
-    })
-  }
-  segments.value = next
-
-  const members: MemberSeg[] = []
-  for (const link of epicLinks.value) {
-    const a = anchorEl(link.source)
-    const b = anchorEl(link.target)
-    if (!a || !b || a === b) continue
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-    members.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
-  }
-  memberSegments.value = members
-
-  const fes: FrontendSeg[] = []
-  for (const link of frontendLinks.value) {
-    const a = anchorEl(link.source)
-    const b = anchorEl(link.target)
-    if (!a || !b || a === b) continue
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-    fes.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
-  }
-  frontendSegments.value = fes
-
-  const conns: ConnectionSeg[] = []
-  for (const link of connectionLinks.value) {
-    const a = anchorEl(link.source)
-    const b = anchorEl(link.target)
-    if (!a || !b || a === b) continue
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-    conns.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
-  }
-  connectionSegments.value = conns
+/** Resolve the on-screen, origin-relative border-to-border segment between two blocks,
+ * or null when either end is missing or both collapsed into the same frame. */
+function segmentBetween(
+  sourceId: string,
+  targetId: string,
+  origin: DOMRect,
+  blocks: BlockMeasurements,
+) {
+  const a = anchorEl(sourceId, blocks)
+  const b = anchorEl(targetId, blocks)
+  if (!a || !b || a === b) return null // missing, or both collapsed into the same frame
+  const ra = blocks.rectFor(a)
+  const rb = blocks.rectFor(b)
+  const ax = ra.left + ra.width / 2 - origin.left
+  const ay = ra.top + ra.height / 2 - origin.top
+  const bx = rb.left + rb.width / 2 - origin.left
+  const by = rb.top + rb.height / 2 - origin.top
+  const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
+  const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
+  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y }
 }
 
-const { pause, resume } = useRafFn(recompute, { immediate: false })
-onMounted(resume)
-onBeforeUnmount(pause)
+/** Map a list of {id, source, target} links to their drawable (arrowhead-agnostic) segments. */
+function linkSegments(
+  links: { id: string; source: string; target: string }[],
+  origin: DOMRect,
+  blocks: BlockMeasurements,
+): EdgeSegment[] {
+  const out: EdgeSegment[] = []
+  for (const link of links) {
+    const seg = segmentBetween(link.source, link.target, origin, blocks)
+    if (seg) out.push({ id: link.id, ...seg })
+  }
+  return out
+}
+
+/** Re-measure every overlay link; reports whether any of them moved. */
+function recompute(): boolean {
+  const el = svg.value
+  if (!el) return false
+  const origin = el.getBoundingClientRect()
+  // One snapshot for the whole pass: every overlay below resolves and measures through it.
+  const blocks = measureBlocks()
+
+  const deps: EdgeSegment[] = []
+  for (const d of taskDeps.value) {
+    const seg = segmentBetween(d.source, d.target, origin, blocks)
+    if (!seg) continue
+    deps.push({ id: d.id, ...seg, done: board.getBlock(d.source)?.status === 'done' })
+  }
+
+  // An array literal, so every list is committed before the result is reduced: a `||` chain
+  // would short-circuit and leave the later overlays drawn at stale coordinates.
+  return [
+    commitSegments(segments, deps),
+    commitSegments(memberSegments, linkSegments(epicLinks.value, origin, blocks)),
+    commitSegments(frontendSegments, linkSegments(frontendLinks.value, origin, blocks)),
+    commitSegments(connectionSegments, linkSegments(connectionLinks.value, origin, blocks)),
+  ].some(Boolean)
+}
+
+const { poke } = useSettlingRaf(recompute)
+useBoardActivity(poke)
+// A link set can change with no visible change to any card (toggling a dependency between two
+// tasks draws an arrow and nothing else), which the DOM-level pulse would never see.
+watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
 </script>
 
 <template>
@@ -209,7 +193,7 @@ onBeforeUnmount(pause)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#f59e0b" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--ui-warning)" />
       </marker>
       <marker
         id="task-arrow-done"
@@ -220,7 +204,7 @@ onBeforeUnmount(pause)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#64748b" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--ui-text-muted)" />
       </marker>
       <marker
         id="frontend-arrow"
@@ -231,7 +215,7 @@ onBeforeUnmount(pause)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#22d3ee" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--app-hue-cyan)" />
       </marker>
       <marker
         id="service-connection-arrow"
@@ -242,7 +226,7 @@ onBeforeUnmount(pause)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#34d399" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--app-hue-emerald)" />
       </marker>
     </defs>
 
@@ -254,7 +238,7 @@ onBeforeUnmount(pause)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      stroke="#34d399"
+      stroke="var(--app-hue-emerald)"
       :stroke-width="1.5"
       stroke-dasharray="3 4"
       :stroke-opacity="0.55"
@@ -269,7 +253,7 @@ onBeforeUnmount(pause)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      stroke="#22d3ee"
+      stroke="var(--app-hue-cyan)"
       :stroke-width="1.5"
       stroke-dasharray="1 4"
       :stroke-opacity="0.6"
@@ -284,7 +268,7 @@ onBeforeUnmount(pause)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      stroke="#8b5cf6"
+      stroke="var(--app-hue-violet)"
       :stroke-width="1.5"
       stroke-dasharray="2 5"
       :stroke-opacity="0.5"
@@ -297,7 +281,7 @@ onBeforeUnmount(pause)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      :stroke="s.done ? '#64748b' : '#f59e0b'"
+      :stroke="s.done ? 'var(--ui-text-muted)' : 'var(--ui-warning)'"
       :stroke-width="2"
       :stroke-dasharray="s.done ? '0' : '5 4'"
       :stroke-opacity="0.85"

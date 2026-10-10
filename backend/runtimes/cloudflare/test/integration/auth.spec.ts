@@ -66,6 +66,7 @@ function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
     name: 'The Octocat',
     avatarUrl: 'https://example.com/a.png',
     exp: Date.now() + 60_000,
+    gen: 0,
     ...overrides,
   }
   return new HmacSigner(SECRET).sign(payload)
@@ -78,7 +79,7 @@ describe('auth', () => {
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({
         enabled: false,
-        providers: { github: false, password: false, google: false },
+        providers: { github: false, password: false, google: false, sso: false },
         // Hosted PAT login is always offered for GitHub (a user pastes their own PAT); it is
         // independent of the OAuth app being configured.
         patLogin: { providers: ['github'] },
@@ -90,7 +91,7 @@ describe('auth', () => {
       const res = await fetchWith(authEnv, { path: '/auth/config' })
       expect(await res.json()).toEqual({
         enabled: true,
-        providers: { github: true, password: false, google: false },
+        providers: { github: true, password: false, google: false, sso: false },
         patLogin: { providers: ['github'] },
         infrastructure: INFRASTRUCTURE,
       })
@@ -105,7 +106,7 @@ describe('auth', () => {
       })
       expect(await res.json()).toEqual({
         enabled: true,
-        providers: { github: true, password: false, google: false },
+        providers: { github: true, password: false, google: false, sso: false },
         patLogin: { providers: ['github', 'gitlab'] },
         infrastructure: INFRASTRUCTURE,
       })
@@ -118,7 +119,7 @@ describe('auth', () => {
       )
       expect(await res.json()).toEqual({
         enabled: false,
-        providers: { github: false, password: false, google: false },
+        providers: { github: false, password: false, google: false, sso: false },
         patLogin: { providers: ['github'] },
         testingNoAuth: true,
         infrastructure: INFRASTRUCTURE,

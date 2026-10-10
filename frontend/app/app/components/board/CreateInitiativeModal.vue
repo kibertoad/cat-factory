@@ -6,24 +6,33 @@
 // sanitized) preset inputs on the entity. Nothing is planned here: the user then runs the preset's
 // planning pipeline on the block from the inspector.
 //
-// The preset form is rendered GENERICALLY from `descriptor.fields` (InitiativePresetFields) — zero
+// The preset form is rendered GENERICALLY from `descriptor.fields` by the shared
+// `DescriptorFields` renderer (the same one a custom task type's per-case form uses): zero
 // per-preset frontend code. A preset with a repo-detection probe prefills its form from the frame's
 // repo on selection (best-effort; failures fall back to descriptor defaults and never block create).
-import { computed, ref, watch } from 'vue'
+//
+// The user can also attach CONTEXT — requirements, RFCs, PRDs, tracker issues — which the whole
+// planning pipeline then reads: the interviewer stops asking what an attached document already
+// answers, and the analyst and planner ground the plan in it. Linking needs a block id, so picks
+// are staged and committed once the initiative exists (the add-task flow's shared orchestration).
+import { computed, ref } from 'vue'
 import {
   sanitizeInitiativePresetInputs,
   validateInitiativePresetInputs,
 } from '@cat-factory/contracts'
 import type { InitiativePresetInputs, InitiativePresetInputValue } from '~/types/domain'
-import { defaultPresetInputs } from '~/utils/initiative'
+import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { GENERIC_PRESET_ID } from '~/stores/initiative'
-import InitiativePresetFields from '~/components/board/InitiativePresetFields.vue'
+import DescriptorFields from '~/components/common/DescriptorFields.vue'
+import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
+import type { PendingContext } from '~/composables/useContextLinking'
 
 const ui = useUiStore()
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
+const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
 
 const open = computed({
   get: () => ui.createInitiativeFrameId !== null,
@@ -45,6 +54,16 @@ const selectedPreset = computed(() => initiatives.presetById(selectedPresetId.va
 const title = ref('')
 const description = ref('')
 const inputs = ref<InitiativePresetInputs>({})
+// Context the user chose to attach, committed once the initiative block exists (see create()).
+const pendingContext = ref<PendingContext[]>([])
+/**
+ * Whether THIS form is mid-submit. `initiatives.creating` cannot answer that any more: it is set
+ * inside `initiatives.create`, which the attachment fetch in `create()` now runs several network
+ * round trips ahead of. Through those seconds the button looked idle and enabled, and a second click
+ * re-entered with the ORIGINAL `pendingContext` (reassigned only after every import settles),
+ * re-imported everything and created a SECOND initiative. The add-task form's `saving` is the model.
+ */
+const submitting = ref(false)
 
 // Monotonic token so a slow probe response from a since-changed preset/frame is discarded.
 let probeSeq = 0
@@ -52,7 +71,7 @@ let probeSeq = 0
 /** Seed the form to the selected preset's descriptor defaults, then fire its detection probe. */
 function applyPreset(): void {
   const descriptor = selectedPreset.value
-  inputs.value = descriptor ? defaultPresetInputs(descriptor) : {}
+  inputs.value = descriptor ? descriptorFieldDefaults(descriptor.fields) : {}
   void runProbe()
 }
 
@@ -93,10 +112,11 @@ function selectPreset(id: string): void {
   applyPreset()
 }
 
-watch(open, (o) => {
-  if (!o) return
+onModalOpen(open, () => {
   title.value = ''
   description.value = ''
+  submitting.value = false
+  pendingContext.value = []
   selectedPresetId.value = GENERIC_PRESET_ID
   applyPreset()
 })
@@ -107,14 +127,30 @@ const presetProblems = computed(() =>
   selectedPreset.value ? validateInitiativePresetInputs(selectedPreset.value, inputs.value) : [],
 )
 const canSubmit = computed(
-  () => title.value.trim().length > 0 && presetProblems.value.length === 0 && !initiatives.creating,
+  () =>
+    title.value.trim().length > 0 &&
+    presetProblems.value.length === 0 &&
+    !submitting.value &&
+    !initiatives.creating,
 )
 
 async function create() {
   const frameId = ui.createInitiativeFrameId
   if (!frameId || !canSubmit.value) return
   const descriptor = selectedPreset.value
+  submitting.value = true
   try {
+    // Attachments are fetched BEFORE the initiative is written, for the reason the add-task form
+    // does it: an unreachable page is a correction the user can still make here, where the same
+    // failure after the create leaves an initiative carrying context it never got.
+    const { resolved, failures } = await resolvePending(pendingContext.value)
+    pendingContext.value = resolved
+    if (failures.length) {
+      presentLinkFailures(failures, undefined, {
+        title: (count) => t('initiative.create.contextFailed', { count }, count),
+      })
+      return
+    }
     const { block } = await initiatives.create(frameId, {
       title: title.value.trim(),
       description: description.value.trim() || undefined,
@@ -123,16 +159,19 @@ async function create() {
         ? sanitizeInitiativePresetInputs(descriptor, inputs.value)
         : undefined,
     })
+    // Everything reachable was fetched above, so what can still fail here is the LINK itself (a
+    // doc another task already holds), surfaced with its specific cause rather than a bare count.
+    // The initiative is already created, so a failed link never costs the user the form.
+    presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id, {
+      title: (count) => t('initiative.create.linkFailed', { count }, count),
+    })
     ui.closeCreateInitiative()
     // Select the fresh block so the inspector offers "Run planning" right away.
     ui.select(block.id)
   } catch (e) {
-    toast.add({
-      title: t('initiative.create.failedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'initiative.create.failedTitle')
+  } finally {
+    submitting.value = false
   }
 }
 </script>
@@ -141,10 +180,10 @@ async function create() {
   <UModal v-model:open="open" :title="t('initiative.create.title')">
     <template #body>
       <div class="space-y-4" data-testid="create-initiative-modal">
-        <p v-if="frame" class="text-xs text-slate-400">
+        <p v-if="frame" class="text-xs text-muted">
           <i18n-t keypath="initiative.create.inFrame" tag="span" scope="global">
             <template #frame>
-              <span class="font-medium text-slate-200">{{ frame.title }}</span>
+              <span class="font-medium text-default">{{ frame.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -152,21 +191,20 @@ async function create() {
         <!-- Preset picker: only when a deployment registered presets beyond the built-in generic
              one, so a single-preset install keeps today's plain form. -->
         <div v-if="presets.length > 1" class="space-y-1.5">
-          <span class="text-xs font-medium text-slate-300">{{
-            t('initiative.create.preset')
-          }}</span>
+          <span class="text-xs font-medium text-toned">{{ t('initiative.create.preset') }}</span>
           <div class="grid gap-2" data-testid="initiative-preset-picker">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="p in presets"
               :key="p.id"
-              type="button"
               :data-testid="`initiative-preset-option-${p.id}`"
               :aria-pressed="p.id === selectedPresetId"
               class="flex items-start gap-3 rounded-md border px-3 py-2 text-left transition"
               :class="
                 p.id === selectedPresetId
-                  ? 'border-primary-500 bg-primary-950/30'
-                  : 'border-slate-700 hover:border-slate-600'
+                  ? 'border-primary bg-primary/10 hover:bg-primary/10 focus-visible:bg-primary/10 disabled:bg-primary/10'
+                  : 'border-muted hover:border-app-600'
               "
               @click="selectPreset(p.id)"
             >
@@ -176,14 +214,14 @@ async function create() {
                 :style="{ color: p.presentation.color }"
               />
               <span class="min-w-0">
-                <span class="block text-sm font-medium text-slate-200">
+                <span class="block text-sm font-medium text-default">
                   {{ p.presentation.label }}
                 </span>
-                <span class="block text-[11px] text-slate-400">
+                <span class="block text-2xs text-muted">
                   {{ p.presentation.description }}
                 </span>
               </span>
-            </button>
+            </UButton>
           </div>
         </div>
 
@@ -210,13 +248,24 @@ async function create() {
         </UFormField>
 
         <!-- The preset's descriptor-driven form (renders nothing for the fieldless generic preset). -->
-        <InitiativePresetFields
+        <DescriptorFields
           v-if="selectedPreset"
           v-model="inputs"
-          :descriptor="selectedPreset"
+          :fields="selectedPreset.fields"
+          testid-prefix="initiative-preset-field"
         />
 
-        <p class="text-[11px] text-slate-500">
+        <!-- Attached requirements / issues, staged here and linked once the block exists. The
+             issue search is scoped to the service frame, which is what resolves its repo. -->
+        <ContextAttachmentFields
+          v-if="ui.createInitiativeFrameId"
+          v-model="pendingContext"
+          :scope-block-id="ui.createInitiativeFrameId"
+          :docs-hint="t('initiative.create.contextDocsHint')"
+          :issues-hint="t('initiative.create.contextIssuesHint')"
+        />
+
+        <p class="text-2xs text-dimmed">
           {{ t('initiative.create.hint') }}
         </p>
       </div>
@@ -237,7 +286,7 @@ async function create() {
         <UButton
           data-testid="create-initiative-submit"
           color="primary"
-          :loading="initiatives.creating"
+          :loading="submitting || initiatives.creating"
           :disabled="!canSubmit"
           @click="create"
         >

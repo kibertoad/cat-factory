@@ -4,6 +4,24 @@ import { useExecutionStore } from '~/stores/execution'
 import { useInitiativesStore } from '~/stores/initiative'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
+import { agentKindMeta } from '~/utils/catalog'
+import { selectPlanApproval, type InitiativeAttentionKind } from '~/utils/initiative'
+import {
+  INITIATIVE_INTERVIEWER_KIND,
+  interviewGatePhase,
+  interviewStepReached,
+} from '~/utils/interviewGate'
+
+/**
+ * What an initiative's planning run needs from a human right now: which kind of park it is (the
+ * card + inspector resolve its icon/label from the shared `INITIATIVE_ATTENTION_*` maps, so the
+ * two surfaces word one park identically), and the action that opens the surface which can
+ * RESOLVE it — the step's own dedicated window, via `dispatchStepView`.
+ */
+export interface InitiativeAttention {
+  kind: InitiativeAttentionKind
+  open: () => void
+}
 
 /**
  * Shared planning affordances for an `initiative`-level block, used by BOTH the board card
@@ -37,13 +55,100 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
   const running = computed(() => !!block.value?.executionId)
 
   /**
-   * The interviewer has PARKED the planning run for the human. Keyed purely on the interview's
-   * parked `status` (`awaiting`) — NOT on whether individual questions are still blank — so the
-   * "Answer planning questions" affordance stays available even after every question is filled but
-   * before the human resumes. Gating on unanswered questions would hide the only path back to the
-   * interview window once all are answered, stranding the still-parked run.
+   * The live interview phase, derived from the entity AND the planning run (see
+   * {@link interviewGatePhase} for why the run status is load-bearing).
    */
-  const awaitingAnswers = computed(() => initiative.value?.interview?.status === 'awaiting')
+  const interviewPhase = computed(() => {
+    const run = execution.getByBlock(toValue(blockId))
+    return interviewGatePhase(
+      initiative.value?.interview?.status,
+      run?.status,
+      interviewStepReached(run, INITIATIVE_INTERVIEWER_KIND),
+    )
+  })
+
+  /**
+   * The interviewer has PARKED the planning run for the human. NOT keyed on whether individual
+   * questions are still blank — the "Answer planning questions" affordance must stay available
+   * after every question is filled but before the human resumes, or the only path back to the
+   * interview window disappears and the still-parked run is stranded.
+   *
+   * It IS keyed on the run not being mid-pass: after a continue/proceed the entity still reads
+   * `awaiting` for the whole (slow) interviewer pass, so an entity-only reading keeps the card
+   * pulsing and offering "Answer planning questions" over a question set that is already
+   * submitted and about to be replaced. {@link interviewing} covers that window instead, and a
+   * pass that fails takes the run out of `running`, so this comes back rather than stranding.
+   */
+  const awaitingAnswers = computed(() => interviewPhase.value === 'awaiting')
+
+  /**
+   * The planning run is mid-flight with nothing for the human to answer — either an interviewer
+   * pass is running (`working`) or the run has not reached the interview yet (`preparing`, the
+   * codebase analysis that now leads). BOTH phases, deliberately: this drives the card's and
+   * inspector's "Planning in progress" button, which is the only route into the planning window
+   * while a run owns the block. Narrowing it to `working` would drop that route for the whole of
+   * the analysis and fall through to a "Run planning" button for a run already running.
+   *
+   * The two phases are distinguished INSIDE the window, where there is room to say which is which;
+   * the affordance is the same either way.
+   */
+  const interviewing = computed(
+    () => interviewPhase.value === 'working' || interviewPhase.value === 'preparing',
+  )
+
+  /**
+   * The planner's parked plan-approval gate, or undefined. `pl_initiative` gates the planner step
+   * (`{ kind: 'initiative-planner', gate: true }`), so a finished planning pass PARKS the run on a
+   * pending `step.approval` until a human accepts the plan — the state this composable's other
+   * flags deliberately do NOT cover (the interview has converged, and the run is `blocked`, so
+   * `awaitingAnswers` and `interviewing` are both false and the card would otherwise sit on a
+   * disabled, spinning "Run planning").
+   *
+   * The interviewer's own park is excluded by the window its step routes to (see
+   * {@link selectPlanApproval}), not by the interview phase, so the two affordances can never both
+   * claim one park.
+   */
+  const planApproval = computed(() =>
+    selectPlanApproval(
+      execution.approvalsByBlock.get(toValue(blockId)) ?? [],
+      (kind) => agentKindMeta(kind).resultView,
+    ),
+  )
+
+  /** An agent-raised decision on the planning run (the analyst is an ordinary agent step). */
+  const pendingDecision = computed(() => execution.decisionsByBlock.get(toValue(blockId))?.[0])
+
+  /**
+   * The single thing a human has to act on, or null — the initiative dual of a task card's
+   * `attention`. A decision outranks an approval (a step never holds both; this is just a stable
+   * order). Opening always goes through the step-view dispatch, so the park lands in the window
+   * that can RESOLVE it (the plan gate → the tracker window's plan-review rail) rather than a
+   * generic panel that would refuse it.
+   */
+  const attention = computed<InitiativeAttention | null>(() => {
+    const id = toValue(blockId)
+    const decision = pendingDecision.value
+    if (decision) {
+      return {
+        kind: 'decision',
+        open: () => {
+          ui.select(id)
+          ui.openDecision(decision.instanceId, decision.decision.id)
+        },
+      }
+    }
+    const approval = planApproval.value
+    if (approval) {
+      return {
+        kind: 'approval',
+        open: () => {
+          ui.select(id)
+          ui.openApprovalDetail(approval.instanceId, approval.approval.id)
+        },
+      }
+    }
+    return null
+  })
 
   /**
    * Optimistic start flag: flip true the instant "Run planning" is clicked, before the stream
@@ -82,7 +187,12 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
   return {
     planningPipeline,
     running,
+    interviewPhase,
     awaitingAnswers,
+    interviewing,
+    planApproval,
+    pendingDecision,
+    attention,
     starting,
     runPlanning,
     openPlanning,

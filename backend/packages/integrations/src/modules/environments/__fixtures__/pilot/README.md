@@ -66,11 +66,12 @@ It requires a build first (`pnpm --filter @cat-factory/integrations build`).
 
 ## Known artifacts & limitations (faithful, documented)
 
-- **The consumer's `catalog-info.yaml`** parses as a `kind` + `apiVersion` document, so the
-  detector's k8s scan counts the repo root as a raw-manifest location and the compose
-  recommendation carries a low-confidence "Kubernetes manifests also exist" note. That is an
-  incidental artifact of the real repo shape, reproduced on purpose; if the detector later
-  stops treating a Backstage catalog as a manifest, the golden test flags it (correct drift).
+- **The consumer's `catalog-info.yaml`** is a Backstage document (`apiVersion: backstage.io/…`),
+  which the detector's manifest classifier now correctly rejects as a NON-Kubernetes decoy — so the
+  repo root is no longer counted as a raw-manifest location and the compose recommendation carries
+  NO "Kubernetes manifests also exist" note (the golden reflects this). This closed a false positive
+  that used to classify any Backstage-catalogued service's source dir as a raw-manifest deploy target;
+  see the manifest-classification tests in `../../provision-detect.logic.test.ts`.
 - **Env templates one level into monorepo service dirs ARE detected.** The real consumer keeps its
   `*-dist` templates under `services/app/` (outside the compose dir). The detector scans the compose
   dir + the root config dirs AND one level into the monorepo container dirs (`services/*`, `apps/*`,

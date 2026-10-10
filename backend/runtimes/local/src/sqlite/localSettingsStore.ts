@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { LocalSettingsRecord, LocalSettingsRepository } from '@cat-factory/kernel'
-import { openSqliteDb } from './db.js'
+import { openSqliteDb, queryOne } from './db.js'
 
 // The mothership-mode LOCAL settings store.
 //
@@ -49,9 +49,11 @@ class SqliteLocalSettingsRepository implements LocalSettingsRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async get(): Promise<LocalSettingsRecord | null> {
-    const row = this.db
-      .prepare('SELECT config, created_at, updated_at FROM local_settings WHERE id = ?')
-      .get(LOCAL_SETTINGS_ID) as unknown as LocalSettingsRow | undefined
+    const row = queryOne<LocalSettingsRow>(
+      this.db,
+      'SELECT config, created_at, updated_at FROM local_settings WHERE id = ?',
+      LOCAL_SETTINGS_ID,
+    )
     if (!row) return null
     return { config: row.config, createdAt: row.created_at, updatedAt: row.updated_at }
   }

@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import type {
+  ResolveBlockRunContext,
   Block,
   BlockRepository,
   Clock,
@@ -8,20 +9,30 @@ import type {
   ModelProviderResolver,
   ModelRef,
   NotificationType,
+  OwnServiceContext,
   RequirementConcernLevel,
   RequirementReviewItem,
   RequirementReviewStatus,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   assertFound,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
-  inlineModelRef,
+  describeOwnService,
+  getErrorMessage,
   resolveScopedModelProvider,
+  resolveServiceFrameBlock,
+  ReviewContendedError,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+import {
+  type BespokeSystemPrompt,
+  catFactoryObservability,
+  composeBespokePrompt,
+} from '@cat-factory/agents'
+
+import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import {
   type ReviewDisposition,
@@ -54,17 +65,36 @@ export interface ReviewCommon {
   model: string | null
   iteration: number
   maxIterations: number
+  /** Optimistic-concurrency token; see the contracts' `rev`. A fresh review starts at 0. */
+  rev: number
   createdAt: number
   updatedAt: number
 }
 
-/** The structural persistence port both review repositories satisfy. */
+/**
+ * The structural persistence port both review repositories satisfy. Deliberately NARROWER than
+ * the kernel ports: the force-write `upsert` is not on it, because no path in this service may
+ * use one — a whole-row write from a stale read is the bug this concurrency model exists to
+ * prevent, and a fresh review is published through `replaceForBlock`. The kernel ports keep
+ * `upsert` for the seeding/RPC surfaces that legitimately own the row outright.
+ */
 export interface ReviewRepository<TReview> {
   getByBlock(workspaceId: string, blockId: string): Promise<TReview | null>
   get(workspaceId: string, id: string): Promise<TReview | null>
-  upsert(workspaceId: string, review: TReview): Promise<void>
-  deleteByBlock(workspaceId: string, blockId: string): Promise<void>
+  /** Rev-guarded conditional update; false ⇒ another writer moved (or deleted) the row. */
+  compareAndSwap(workspaceId: string, review: TReview): Promise<boolean>
+  /** Atomically make this the block's (and, for brainstorm, the stage's) one live review. */
+  replaceForBlock(workspaceId: string, review: TReview): Promise<void>
 }
+
+/**
+ * How many times a contended {@link IterativeReviewService.mutateReview} reloads and re-applies
+ * before giving up with a {@link ReviewContendedError}. Matches the engine's
+ * `RunStateMachine.mutateInstance` budget: the contending writers here are human clicks and one
+ * durable-driver pass, so a handful of retries covers real contention while still failing loudly
+ * on a pathological hot row.
+ */
+const MAX_MUTATE_ATTEMPTS = 8
 
 /** The runtime dependencies shared by every iterative-review service. */
 export interface IterativeReviewDeps {
@@ -77,8 +107,8 @@ export interface IterativeReviewDeps {
   modelProvider?: ModelProvider
   /** Default model ref when the block pins none — the agents' routing default. */
   modelRef?: ModelRef
-  /** Resolve a block's selected model id to a ref (the deployment-aware resolver). */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a block's selected model id to a ref, under the preset's route order. */
+  resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /**
    * Whether a container-only subscription harness ref can run as an INLINE call in this
    * deployment (local mode's ambient CLI). Keeps an ambient-eligible harness ref instead of
@@ -86,12 +116,11 @@ export interface IterativeReviewDeps {
    * reviewer/rework on a subscription model. Absent → always degrade (Node/Worker).
    */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-agent-kind default model id (consulted when the block pins none). */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => Promise<string | undefined>
+  /**
+   * The workspace's per-kind default MODEL and the ROUTE order the preset in force states, from
+   * ONE read. Absent ⇒ block pin plus the routing default, on the deployment's default order.
+   */
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
   /**
    * Resolve the run/execution + initiator a reviewer pass belongs to, from the block under
    * review. Threaded into the model scope so a facade that serves an inline subscription ref
@@ -103,6 +132,19 @@ export interface IterativeReviewDeps {
   resolveRunContext?: ResolveBlockRunContext
   /** Raises a notification when a review yields findings. Optional. */
   notificationService?: NotificationService
+  /**
+   * The workspace's live system prompt for an agent kind, when it has edited one from the prompt
+   * editor — the same append-only revision log the engine reads per dispatch, reaching the inline
+   * review kinds here.
+   *
+   * They were the one prompt-assembly path that ignored it: the editor accepts any kind id, so a
+   * workspace could save an override for `requirements-review` and have it silently never run.
+   * Optional so a standalone/unit construction still works; absent ⇒ the shipped prompt.
+   */
+  resolveSystemPromptOverride?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
 }
 
 /** Output budget for the rework generation (a full standard-format document). */
@@ -152,8 +194,15 @@ export abstract class IterativeReviewService<
   protected abstract readonly reviewAgentKind: string
   /** The rework agent kind for observability (e.g. 'requirements-rework'). */
   protected abstract readonly reworkAgentKind: string
-  protected abstract readonly reviewSystemPrompt: string
-  protected abstract readonly reworkSystemPrompt: string
+  /**
+   * The reviewer's and rework editor's system prompts, each SPLIT into the role half a workspace
+   * override replaces and the directives half it may not (`BespokeSystemPrompt`). These kinds run
+   * as bare inline `generateText` calls and so never reach `systemPromptFor`, which is the seam
+   * that applies an override elsewhere AND re-appends what an override must not delete — here the
+   * JSON output contract this service parses and the scope rules the whole flow depends on.
+   */
+  protected abstract readonly reviewPrompt: BespokeSystemPrompt
+  protected abstract readonly reworkPrompt: BespokeSystemPrompt
   /** Id prefix for fresh reviews / items (e.g. 'rrv' / 'rri'). */
   protected abstract readonly reviewIdPrefix: string
   protected abstract readonly itemIdPrefix: string
@@ -259,11 +308,16 @@ export abstract class IterativeReviewService<
       model,
       iteration: 1,
       maxIterations: opts.maxIterations,
+      // A fresh review; the store re-stamps this on insert.
+      rev: 0,
       createdAt: now,
       updatedAt: now,
     })
-    await this.repository.deleteByBlock(workspaceId, block.id)
-    await this.repository.upsert(workspaceId, review)
+    // ATOMIC replace, never delete-then-insert: two review runs for one block (a double-submit,
+    // or a manual run racing the engine's gate) would otherwise interleave their delete/insert
+    // pairs and leave the block with TWO live reviews — the window then loads one while the
+    // parked run's decision keys to the other (race-audit 2.5).
+    await this.repository.replaceForBlock(workspaceId, review)
     if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
     return review
   }
@@ -291,20 +345,31 @@ export abstract class IterativeReviewService<
     const doc = this.readDoc(review)
     if (doc) this.applyIncorporatedDoc(context, doc)
     const { ref, items } = await this.runReviewer(workspaceId, block, context)
-    const now = this.deps.clock.now()
-    const iteration = (review.iteration ?? 1) + 1
-    const maxIterations = review.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
-    const disposition = disposeReview(items, { iteration, maxIterations, concernThreshold })
-    const updated: TReview = {
-      ...review,
-      status: statusForDisposition(disposition),
-      items,
-      model: `${ref.provider}:${ref.model}`,
-      iteration,
-      maxIterations,
-      updatedAt: now,
-    }
-    await this.repository.upsert(workspaceId, updated)
+    // The reviewer call is slow, so the snapshot loaded above is stale by the time it returns
+    // (a human can grant an extra round, or answer an item that this pass is about to replace).
+    // Re-derive the counters from the FRESH review under CAS rather than writing the pre-call
+    // snapshot back — a retry recomputes them against whichever snapshot it lands on.
+    const updated = await this.mutateReview(workspaceId, reviewId, (fresh) => {
+      const iteration = (fresh.iteration ?? 1) + 1
+      const maxIterations = fresh.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
+      Object.assign(fresh, {
+        status: statusForDisposition(
+          disposeReview(items, { iteration, maxIterations, concernThreshold }),
+        ),
+        items,
+        model: `${ref.provider}:${ref.model}`,
+        iteration,
+        maxIterations,
+      })
+    })
+    // Re-derived from what was actually PERSISTED, not smuggled out of the mutation on a closure
+    // variable: `disposeReview` is pure, so reading the committed counters back cannot disagree
+    // with the status the winning attempt wrote.
+    const disposition = disposeReview(updated.items, {
+      iteration: updated.iteration,
+      maxIterations: updated.maxIterations,
+      concernThreshold,
+    })
     if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
     return updated
   }
@@ -374,7 +439,7 @@ export abstract class IterativeReviewService<
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: this.reworkSystemPrompt,
+        system: await this.systemPromptFor(workspaceId, this.reworkAgentKind, this.reworkPrompt),
         prompt: this.buildReworkPrompt(context, review.items),
         temperature: 0.2,
         // The reworked doc is a full standard-format document that becomes the SOLE source of
@@ -397,11 +462,14 @@ export abstract class IterativeReviewService<
       throw new ValidationError(this.truncationMessage)
     }
 
-    const now = this.deps.clock.now()
     // `merged`: the document is produced and awaits the human's re-review / redo. It is NOT
-    // yet the final accepted document (that is `incorporated`, set on converge).
-    const updated = { ...this.withDoc(review, revised), status: 'merged' as const, updatedAt: now }
-    await this.repository.upsert(workspaceId, updated)
+    // yet the final accepted document (that is `incorporated`, set on converge). The snapshot
+    // read at the top of this method is stale — the incorporation LLM call is the longest
+    // window in the whole loop, and a human dismissal landing inside it was previously
+    // clobbered (race-audit 2.5) — so fold the document onto the FRESH review under CAS.
+    const updated = await this.mutateReview(workspaceId, reviewId, (fresh) => {
+      Object.assign(fresh, this.withDoc(fresh, revised), { status: 'merged' as const })
+    })
     return { review: updated }
   }
 
@@ -449,7 +517,10 @@ export abstract class IterativeReviewService<
     workspaceId: string,
     block: Block,
   ): Promise<ModelProvider | undefined> {
-    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId, block },
+      this.deps.resolveRunContext,
+    )
     return resolveScopedModelProvider(scope, this.deps)
   }
 
@@ -460,24 +531,48 @@ export abstract class IterativeReviewService<
    * because the reviewer is an INLINE LLM call with no provider key for the container harness
    * — the same seam the inline agent executor uses, so the two can't drift.
    */
-  protected async modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
-    const fallback = this.deps.modelRef
-    const runsInline = this.deps.runsInline
-    const resolve = (ref: ModelRef): ModelRef =>
-      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
-    const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
-    if (fromBlock) return resolve(fromBlock)
-    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
-      workspaceId,
-      this.reviewAgentKind,
-      block.modelPresetId,
-    )
-    const fromDefault = this.deps.resolveBlockModel?.(defaultId)
-    if (fromDefault) return resolve(fromDefault)
-    return fallback
+  protected modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
+    return resolveInlineBlockModelRef(this.deps, workspaceId, this.reviewAgentKind, block)
   }
 
   /** Resolve the provider + ref, throwing the kind's "no model configured" error if unavailable. */
+  /**
+   * Compose a bespoke inline prompt for one call, honouring the workspace's override of its ROLE
+   * half. The directives half is re-appended on top, so an edited prompt keeps the JSON output
+   * contract this service parses and the flow-wide rules (product/technical scope, the
+   * no-assumed-product rule) it is run under — the same guarantee `systemPromptFor` gives the
+   * kinds that go through it.
+   *
+   * Resolved per call rather than cached on the instance: the log is append-only and a human may
+   * edit the prompt between a reviewer pass and the incorporation that follows it, and one point
+   * read beside an LLM call costs nothing.
+   */
+  /**
+   * Which system the block under review belongs to (see kernel's `OwnServiceContext`). Walks the
+   * block's ancestry through the SAME shared helper the engine's `AgentContextBuilder` uses, so an
+   * inline reviewer and a container agent cannot answer "what am I working on" differently.
+   *
+   * On the base class because all three inline flows need it for the same reason: none has a
+   * checkout, so without it their entire notion of the subject is a block title.
+   */
+  protected async resolveOwnService(workspaceId: string, block: Block): Promise<OwnServiceContext> {
+    const serviceFrame = await resolveServiceFrameBlock(
+      (id) => this.deps.blockRepository.get(workspaceId, id),
+      block.id,
+      block,
+    )
+    return describeOwnService(block, serviceFrame)
+  }
+
+  protected async systemPromptFor(
+    workspaceId: string,
+    agentKind: string,
+    prompt: BespokeSystemPrompt,
+  ): Promise<string> {
+    const override = await this.deps.resolveSystemPromptOverride?.(workspaceId, agentKind)
+    return composeBespokePrompt(prompt, override?.trim() ? override : undefined)
+  }
+
   protected async resolveModel(
     workspaceId: string,
     block: Block,
@@ -493,9 +588,7 @@ export abstract class IterativeReviewService<
   private reviewerFailed(ref: ModelRef, e: unknown): string {
     // Surface the real cause (binding missing, rate limit, provider error) rather than
     // masking every failure behind one vague message.
-    return `The ${this.reviewerLabel} (${ref.provider}:${ref.model}) failed: ${
-      e instanceof Error ? e.message : String(e)
-    }`
+    return `The ${this.reviewerLabel} (${ref.provider}:${ref.model}) failed: ${getErrorMessage(e)}`
   }
 
   /** Run the reviewer LLM over the prepared context and coerce the JSON into review items. */
@@ -510,7 +603,7 @@ export abstract class IterativeReviewService<
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: this.reviewSystemPrompt,
+        system: await this.systemPromptFor(workspaceId, this.reviewAgentKind, this.reviewPrompt),
         prompt: this.buildReviewPrompt(context),
         temperature: 0.2,
         maxOutputTokens: 5000,
@@ -543,7 +636,11 @@ export abstract class IterativeReviewService<
       await this.deps.notificationService.raise(workspaceId, {
         type: this.notificationType,
         blockId: block.id,
-        executionId: null,
+        // Carry the run's id so `RunStateMachine.ensureWaitingNotification`'s executionId-scoped
+        // guard (F7) treats this as THIS run's richer card and suppresses the generic
+        // `decision_required` fallback — otherwise a review park raising findings would get a
+        // duplicate card. `block.executionId` is the active run during a step (see `merge_review`).
+        executionId: block.executionId ?? null,
         title: this.notificationTitle(block),
         body: `${this.notificationSubject} raised ${findingCount} finding${
           findingCount === 1 ? '' : 's'
@@ -566,15 +663,74 @@ export abstract class IterativeReviewService<
     return assertFound(await this.repository.get(workspaceId, reviewId), this.entityName, reviewId)
   }
 
+  /**
+   * Apply a pure in-memory mutation to a review under OPTIMISTIC CONCURRENCY: load it, run
+   * `mutate`, then `compareAndSwap`. A review is ONE JSON blob holding every finding, so two
+   * writers that each load it, edit a DIFFERENT item and write the whole row back would leave
+   * only the last writer's edit — and because `incorporate` refuses to run while any finding is
+   * still `open`, a lost dismissal blocks incorporation on a phantom open item (race-audit 2.5).
+   * On a lost race this reloads and re-applies `mutate` on the winning snapshot (bounded
+   * retries) rather than force-writing over it.
+   *
+   * `mutate` MUST be idempotent w.r.t. external systems — it can run several times, so do all
+   * non-idempotent work (notifications, driver signals, emits) AFTER this resolves, on the
+   * returned review. A domain error thrown from `mutate` (the fresh state no longer admits the
+   * action) propagates immediately and is NOT retried. `updatedAt` is stamped centrally, so a
+   * mutation never has to remember to. Returning `false` from `mutate` means "the fresh state
+   * already satisfies this" — no write happens at all, so an idempotent re-request doesn't
+   * churn `updatedAt` (and the live event it drives).
+   *
+   * Giving up throws {@link ReviewContendedError}, which is BOTH a 409 for an HTTP caller and the
+   * durable driver's re-drive signal — the driver owns the two paths whose mutation carries
+   * paid-for LLM output (`incorporate`, `reReview`), and failing the run there would throw that
+   * work away for good rather than re-deriving it on fresh state.
+   */
+  protected async mutateReview(
+    workspaceId: string,
+    reviewId: string,
+    mutate: (review: TReview, now: number) => boolean | void,
+  ): Promise<TReview> {
+    return assertFound(
+      await this.mutateReviewIfPresent(workspaceId, reviewId, mutate),
+      this.entityName,
+      reviewId,
+    )
+  }
+
+  /**
+   * {@link mutateReview} for a caller to whom a review that is GONE is an ordinary outcome rather
+   * than a 404 — resolving to null instead of throwing. The absence is re-checked on every
+   * attempt, so a fresh review run replacing the row mid-retry settles as "gone" rather than
+   * surfacing as a `NotFoundError` from a path that must not throw.
+   */
+  protected async mutateReviewIfPresent(
+    workspaceId: string,
+    reviewId: string,
+    mutate: (review: TReview, now: number) => boolean | void,
+  ): Promise<TReview | null> {
+    for (let attempt = 0; attempt < MAX_MUTATE_ATTEMPTS; attempt++) {
+      const review = await this.repository.get(workspaceId, reviewId)
+      if (!review) return null
+      const now = this.deps.clock.now()
+      if (mutate(review, now) === false) return review
+      review.updatedAt = now
+      if (await this.repository.compareAndSwap(workspaceId, review)) return review
+    }
+    throw new ReviewContendedError(this.entityName, reviewId)
+  }
+
   protected async patchReview(
     workspaceId: string,
     reviewId: string,
     patch: (review: TReview) => TReview,
   ): Promise<TReview> {
-    const review = await this.load(workspaceId, reviewId)
-    const updated = { ...patch(review), updatedAt: this.deps.clock.now() }
-    await this.repository.upsert(workspaceId, updated)
-    return updated
+    // The patch is expressed as a copy, so fold it back onto the loaded instance the CAS guards.
+    // NOTE: this OVERLAYS the copy's fields — a patch that returns an object with a field OMITTED
+    // does not delete it (unlike replacing the object wholesale). Patches here set fields; one
+    // that needs to clear a field must set it explicitly (to null/undefined), not drop the key.
+    return this.mutateReview(workspaceId, reviewId, (review) => {
+      Object.assign(review, patch(review))
+    })
   }
 
   private async mutateItem(
@@ -583,13 +739,13 @@ export abstract class IterativeReviewService<
     itemId: string,
     mutate: (item: RequirementReviewItem, now: number) => void,
   ): Promise<TReview> {
-    const review = await this.load(workspaceId, reviewId)
-    const item = review.items.find((i) => i.id === itemId)
-    if (!item) throw new ValidationError(`Review item '${itemId}' not found`)
-    const now = this.deps.clock.now()
-    mutate(item, now)
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    return review
+    return this.mutateReview(workspaceId, reviewId, (review, now) => {
+      const item = review.items.find((i) => i.id === itemId)
+      // Re-resolved on every attempt: a concurrent re-review replaces the item list wholesale,
+      // so an answer aimed at a finding that no longer exists must fail rather than be re-applied
+      // to a stale copy of the array.
+      if (!item) throw new ValidationError(`Review item '${itemId}' not found`)
+      mutate(item, now)
+    })
   }
 }

@@ -6,22 +6,28 @@
 // only the reusable primitives are exposed here.
 
 export {
-  PI_MAX_OUTPUT_TOKENS,
-  DEFAULT_PROGRESS_GUARD_LIMITS,
   writePiModelsConfig,
   writeAgentsContext,
   runPi,
-  summarizePiRun,
-  parsePiOutput,
   parseTodoProgress,
-  progressGuardLimitsFromEnv,
-  terminalRunError,
   type PiRunOutcome,
-  type PiRunStats,
-  type ProgressGuardLimits,
   type TodoItem,
   type TodoProgress,
 } from './pi.js'
+export { createPiAgentDir, type PiAgentDir } from './pi-agent-dir.js'
+export {
+  PI_MAX_OUTPUT_TOKENS,
+  parsePiOutput,
+  summarizePiRun,
+  terminalRunError,
+  type PiRunReduction,
+  type PiRunStats,
+} from './pi-reduction.js'
+export {
+  DEFAULT_PROGRESS_GUARD_LIMITS,
+  progressGuardLimitsFromEnv,
+  type ProgressGuardLimits,
+} from './progress-guard.js'
 export {
   cloneRepo,
   createBranch,

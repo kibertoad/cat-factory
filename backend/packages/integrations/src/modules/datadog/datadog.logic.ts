@@ -58,6 +58,30 @@ export function datadogApiBase(site: string): string {
 }
 
 /**
+ * Normalise a Datadog state string for comparison. The same vocabulary is spelled differently
+ * depending on where it is read (`Alert Recovery` on a group, `alert_recovery` on the monitor's
+ * `overall_state`), so a caller comparing raw strings matches one spelling and misses the other.
+ */
+function normalizeState(value: string | undefined): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+}
+
+/**
+ * Whether a Datadog state string means the thing it describes is CURRENTLY alerting.
+ *
+ * Shared by the monitor mapping below and by the per-group attribution read: a group's
+ * `last_triggered_ts` survives the group recovering, so only a group still in an alerting state
+ * says anything about the alert the gate is looking at.
+ */
+export function isAlertingState(value: string | undefined): boolean {
+  const state = normalizeState(value)
+  return state === 'alert' || state === 'alert_recovery'
+}
+
+/**
  * Map Datadog's monitor `overall_state` string onto a release signal state.
  *
  * `attribution` lets the post-release-health gate ignore an alert that PREDATES the
@@ -65,26 +89,27 @@ export function datadogApiBase(site: string): string {
  * flaky / never-recovered incident) is not attributable to this release, so it is
  * downgraded to `warn` (which does NOT regress the gate) rather than escalating an
  * on-call investigation that blames an innocent PR. When the transition timestamp is
- * unknown (Datadog didn't report `overall_state_modified`) we keep the alert — better
- * to investigate than to silently miss a real regression.
+ * unknown (no currently-alerting group carried one) we keep the alert: better to
+ * investigate than to silently miss a real regression.
  */
 export function mapMonitorState(
   overallState: string | undefined,
   attribution?: { stateModifiedMs?: number; since: number },
 ): ReleaseSignalState {
-  switch ((overallState ?? '').toLowerCase()) {
-    case 'alert':
-    case 'alert_recovery':
-      // A pre-existing alert (state last changed before the release marker) is not this
-      // release's regression — don't escalate on it.
-      if (
-        attribution &&
-        attribution.stateModifiedMs !== undefined &&
-        attribution.stateModifiedMs < attribution.since
-      ) {
-        return 'warn'
-      }
-      return 'alert'
+  const state = normalizeState(overallState)
+  if (isAlertingState(state)) {
+    // A pre-existing alert (last triggered before the release marker) is not this release's
+    // regression, so don't escalate on it.
+    if (
+      attribution &&
+      attribution.stateModifiedMs !== undefined &&
+      attribution.stateModifiedMs < attribution.since
+    ) {
+      return 'warn'
+    }
+    return 'alert'
+  }
+  switch (state) {
     case 'warn':
     case 'warn_recovery':
       return 'warn'

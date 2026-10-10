@@ -6,6 +6,7 @@ import {
   collectUnsupportedComposeRefs,
   composeConfigToManifest,
   composeFileDir,
+  composeProbeFailure,
   ensureServicePublishes,
   escapesCheckout,
   extractComposeProfiles,
@@ -24,6 +25,7 @@ import {
   composeExecArgs,
   matchesHttpExpectation,
   prepareRecipeComposeFiles,
+  composeSourceEscapeIssues,
   recipeCheckoutPathIssues,
   recipeProfilesEnv,
   recipeStepTimeoutMs,
@@ -357,6 +359,31 @@ describe('composeFileDir', () => {
     expect(composeFileDir('deploy/docker-compose.yml')).toBe('deploy')
     expect(composeFileDir('a/b/compose.yaml')).toBe('a/b')
     expect(composeFileDir('deploy\\compose.yaml')).toBe('deploy')
+  })
+})
+
+describe('composeProbeFailure', () => {
+  it('leads with the remedy and flattens the captured output onto one line', () => {
+    // The verdict renders as a paragraph that collapses newlines, so a multi-line stderr spliced
+    // mid-sentence ran together and glued its own trailing period onto the next clause.
+    const message = composeProbeFailure(
+      'Start Docker.',
+      'permission denied while trying to connect.\nIs the docker daemon running?\n',
+    )
+    expect(message).toBe(
+      'Start Docker. Docker reported: permission denied while trying to connect. Is the docker daemon running?',
+    )
+    expect(message).not.toContain('\n')
+  })
+
+  it('is the remedy alone when the command said nothing, with no dangling label', () => {
+    expect(composeProbeFailure('Start Docker.', '   \n\n')).toBe('Start Docker.')
+  })
+
+  it('names who is speaking, because a throw is not docker reporting anything', () => {
+    expect(
+      composeProbeFailure('Install Docker.', 'spawn docker ENOENT', 'The invocation failed with'),
+    ).toBe('Install Docker. The invocation failed with: spawn docker ENOENT')
   })
 })
 
@@ -857,6 +884,35 @@ describe('recipeCheckoutPathIssues', () => {
       teardownSteps: [{ kind: 'copy-file', name: 'td', from: '/etc/passwd', to: '.env' }],
     })
     expect(issues).toEqual([])
+  })
+})
+
+describe('composeSourceEscapeIssues', () => {
+  it('judges each layer on the path it will be MATERIALIZED at', () => {
+    // A generated path is escape-free by construction however hostile the source path is — it is
+    // reduced to a sanitized filename stem under the project dir — so only a layer that NAMES its
+    // own landing spot can escape.
+    expect(
+      composeSourceEscapeIssues([
+        'docker/dev.yml',
+        { kind: 'inline', content: 's' },
+        { kind: 'repo', repo: 'acme/infra', path: '../../../etc/passwd' },
+      ]),
+    ).toEqual([])
+
+    const escaping = composeSourceEscapeIssues([
+      { kind: 'inline', content: 's', path: '../../evil.yml' },
+    ])
+    expect(escaping).toHaveLength(1)
+    expect(escaping[0]).toContain('escapes the checkout')
+  })
+
+  it('is independent of layer ORDER — the verdict never depends on which layer wins the anchor', () => {
+    // Judged at the strictest anchor (project dir ''), so reordering a list can't turn an escaping
+    // layer into an allowed one by giving it a deeper directory to climb out of.
+    const inline = { kind: 'inline', content: 's', path: '../out.yml' } as const
+    expect(composeSourceEscapeIssues([inline, 'a/b/c/dev.yml'])).toHaveLength(1)
+    expect(composeSourceEscapeIssues(['a/b/c/dev.yml', inline])).toHaveLength(1)
   })
 })
 

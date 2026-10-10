@@ -14,9 +14,10 @@
 // pulls that pinned tag at boot (see server.ts `preflightHarnessImage`) so it can't go stale.
 //
 // RELEASE RULE: bump `RECOMMENDED_HARNESS_IMAGE` in lockstep with the harness image — see
-// CLAUDE.md "Any change that affects the runner image MUST bump the image tag". The image and
+// AGENTS.md "Any change that affects the runner image MUST bump the image tag". The image and
 // the backend are a matched set and must be released together.
 
+import { isImageVariantName, isPlatformImageVariant } from '@cat-factory/kernel'
 import { isOffValue } from './envFlags.js'
 
 /**
@@ -24,7 +25,17 @@ import { isOffValue } from './envFlags.js'
  * `@cat-factory/executor-harness`'s version (the value CI tags the published image with, and
  * the same tag `deploy/backend` pins). Bump it whenever the harness image bumps.
  */
-export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.43.4'
+export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.163.4'
+
+/**
+ * The UI-TESTER image this backend release is matched to: the same harness plus Playwright +
+ * Chromium, pnpm/yarn, `serve` and a headless JRE + WireMock. It carries the executor harness's
+ * version, because it IS that harness with more tooling, so the two tags bump together.
+ *
+ * A step declaring `image: 'ui'` (the browser-driven `tester-ui` kind) dispatches to its own
+ * container on this image, alongside the run's ordinary one.
+ */
+export const RECOMMENDED_UI_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor-ui:1.163.4'
 
 /**
  * The effective harness image ref: an explicit `LOCAL_HARNESS_IMAGE` wins (a custom build, a
@@ -32,6 +43,90 @@ export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor
  */
 export function resolveHarnessImage(env: NodeJS.ProcessEnv): string {
   return env.LOCAL_HARNESS_IMAGE?.trim() || RECOMMENDED_HARNESS_IMAGE
+}
+
+/**
+ * The effective UI-tester image ref, the `image: 'ui'` sibling of {@link resolveHarnessImage}:
+ * an explicit `LOCAL_HARNESS_IMAGE_UI` wins, else {@link RECOMMENDED_UI_HARNESS_IMAGE}.
+ *
+ * It has its OWN override rather than deriving a `-ui` suffix from `LOCAL_HARNESS_IMAGE`,
+ * because a developer pointing the base at a locally built tag has not thereby built a UI image
+ * too, and a derived ref would send them to a tag that does not exist with nothing saying why.
+ */
+export function resolveUiHarnessImage(env: NodeJS.ProcessEnv): string {
+  return env.LOCAL_HARNESS_IMAGE_UI?.trim() || RECOMMENDED_UI_HARNESS_IMAGE
+}
+
+/**
+ * The DEPLOYMENT's own image variants, parsed from `LOCAL_HARNESS_IMAGE_VARIANTS`:
+ * `name=image-ref` pairs, comma-separated (`pixel-tools=ghcr.io/acme/pixel:1,fonts=…`).
+ *
+ * A comma-separated list rather than one variable per variant, because the set is open: the
+ * platform cannot enumerate a deployment's own names, so it cannot pre-declare their variables
+ * either, and a `LOCAL_HARNESS_IMAGE_<NAME>` convention would put a slug through an
+ * env-var-name transformation that has to round-trip exactly (a `pixel-tools` variant and a
+ * `pixel_tools` one collide the moment it does not).
+ *
+ * A malformed entry is DROPPED rather than defaulted: an entry with no `=`, an empty name, an
+ * empty ref or a name that is not a variant SLUG says nothing about which image was meant, and
+ * inventing one would put the job on an image nobody chose. The platform's own `ui` / `default`
+ * names are ignored here too, since they have their own variables and a second place to set them
+ * would be a second answer.
+ *
+ * The name is held to `isImageVariantName`, the SAME rule the two DECLARING boundaries enforce (an
+ * agent kind's registration at boot, a Kubernetes pool's `imageVariants` schema). Left unchecked,
+ * `Pixel-Tools=…` or `pixel_tools=…` parsed into the map, matched no declaration a kind could have
+ * made, and the dispatch was then refused pointing at the variable the operator had already set.
+ * Case is NOT folded onto a lower-kebab name for the same reason: a declaration is refused in that
+ * spelling, so accepting it here would make this variable the one place a name the platform rejects
+ * appears to work.
+ *
+ * Rejections are RETURNED rather than swallowed, so boot can say which entries it ignored. Left to
+ * the dispatch, the only signal is a refusal naming this variable for a variant the operator can
+ * see in it, which reads as the platform losing an entry rather than refusing one.
+ */
+export function resolveHarnessImageVariants(env: NodeJS.ProcessEnv): {
+  variants: Record<string, string>
+  rejected: Array<{ entry: string; reason: string }>
+} {
+  const raw = env.LOCAL_HARNESS_IMAGE_VARIANTS?.trim()
+  if (!raw) return { variants: {}, rejected: [] }
+  const variants: Record<string, string> = {}
+  const rejected: Array<{ entry: string; reason: string }> = []
+  const reject = (entry: string, reason: string): void => {
+    rejected.push({ entry: entry.trim(), reason })
+  }
+  for (const entry of raw.split(',')) {
+    if (!entry.trim()) continue
+    const separator = entry.indexOf('=')
+    if (separator <= 0) {
+      reject(entry, 'it is not a `name=image-ref` pair')
+      continue
+    }
+    const name = entry.slice(0, separator).trim()
+    const image = entry.slice(separator + 1).trim()
+    if (!name) {
+      reject(entry, 'it names no variant')
+      continue
+    }
+    if (!image) {
+      reject(entry, `it maps "${name}" to no image ref`)
+      continue
+    }
+    // Not a rejection: the platform's own variants have their own variables, and an operator
+    // setting one here has said the same thing twice rather than said something wrong.
+    if (isPlatformImageVariant(name)) continue
+    if (!isImageVariantName(name)) {
+      reject(
+        entry,
+        `"${name}" is not a variant name: an agent kind can only declare a lower-kebab slug ` +
+          `(letters, digits and hyphens), so no registration could ask for this one`,
+      )
+      continue
+    }
+    variants[name] = image
+  }
+  return { variants, rejected }
 }
 
 /**

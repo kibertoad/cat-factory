@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import { linkRepo } from './linkRepo.js'
 
 // Small CLI to link a real GitHub repo to a board service frame in local mode:
@@ -20,6 +21,6 @@ linkRepo({ workspaceId, frameBlockId, repo })
     )
   })
   .catch((err: unknown) => {
-    console.error('link failed:', err instanceof Error ? err.message : String(err))
+    console.error('link failed:', getErrorMessage(err))
     process.exit(1)
   })

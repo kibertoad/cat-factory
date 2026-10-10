@@ -1,61 +1,41 @@
 <script setup lang="ts">
+import { PanelsOutlet } from '@modular-vue/core'
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
-import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
-import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
-import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
-import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
-import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
-import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
-import ServiceTestSecrets from '~/components/panels/inspector/ServiceTestSecrets.vue'
-import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
-import ServiceConnections from '~/components/panels/inspector/ServiceConnections.vue'
-import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
-import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
-import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
-import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
-import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
-import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
-import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
-import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
+import { inspectorPanels } from '~/modular/panels/inspector.logic'
 import IconButton from '~/components/common/IconButton.vue'
-import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
+import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
+import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
-const documents = useDocumentsStore()
-const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const recurring = useRecurringPipelinesStore()
 const requirements = useRequirementsStore()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
-
-// When the selected task block backs a recurring pipeline, the inspector shows the
-// schedule controls + history, and "Delete" removes the schedule (block + history).
-const schedule = computed(() => (block.value ? recurring.byBlock(block.value.id) : undefined))
 
 onMounted(() => {
   fragments.ensureLoaded()
   github.ensureLoaded()
 })
 
-/** Open the document import/spawn flow, targeting this container's frame. */
-function spawnFromDocument() {
-  if (!block.value) return
-  const frameId = isFrame.value ? block.value.id : (board.serviceOf(block.value)?.id ?? null)
-  ui.openDocumentImport(frameId)
-}
-
 const block = computed<Block | undefined>(() =>
   ui.selectedBlockId ? board.getBlock(ui.selectedBlockId) : undefined,
 )
+
+// When the selected task block backs a recurring pipeline, the inspector shows the
+// schedule controls + history, and "Delete" removes the schedule (block + history).
+const schedule = computed(() => (block.value ? recurring.byBlock(block.value.id) : undefined))
 const level = computed(() => block.value?.level ?? 'frame')
 const isFrame = computed(() => level.value === 'frame')
 
@@ -75,8 +55,14 @@ watch(
 )
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
-const isEpic = computed(() => level.value === 'epic')
 const isInitiative = computed(() => level.value === 'initiative')
+/**
+ * Blocks whose inspector carries a pipeline RUN — a task, and an initiative (whose planning
+ * pipeline is an ordinary run of ordinary agent steps). Both get the execution panel and the
+ * Focus view; what differs is only how the run is STARTED (a task picks any pipeline, an
+ * initiative may only run its planning one, so it keeps its own "Run planning" control).
+ */
+const hasRuns = computed(() => isTask.value || isInitiative.value)
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
@@ -105,18 +91,26 @@ const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) 
 const unmetDepTitles = computed(() =>
   block.value && isTask.value ? board.unmetDeps(block.value.id).map((b) => b.title) : [],
 )
-const runBlockedReason = computed(() =>
-  unmetDepTitles.value.length
+const runBlockedReason = computed(() => {
+  // A read-only viewer can inspect a task but never start/re-run it — surface WHY on the
+  // locked trigger, exactly like an unmet-dependency lock (the backend rejects it anyway).
+  if (!access.canExecuteRuns.value) return t('access.noRunExecute')
+  return unmetDepTitles.value.length
     ? t(
         'panels.inspector.runBlocked',
         { count: unmetDepTitles.value.length, names: unmetDepTitles.value.join(', ') },
         unmetDepTitles.value.length,
       )
-    : null,
-)
+    : null
+})
+// The Run trigger is enabled only when the task is runnable AND the caller may execute runs.
+const canRun = computed(() => runnable.value && access.canExecuteRuns.value)
 
 // The delete control names what it removes, so selecting a task and deleting it
-// reads as "Delete task" rather than ambiguously removing the whole service.
+// reads as "Delete task" rather than ambiguously removing the whole service. An
+// initiative is its own level (it hangs off a frame like a module does), so it must
+// name ITSELF — offering to "delete service" there describes the wrong blast radius
+// entirely: the frame and every other thing under it survive.
 const deleteLabel = computed(() =>
   schedule.value
     ? t('panels.inspector.deleteRecurringPipeline')
@@ -124,7 +118,9 @@ const deleteLabel = computed(() =>
       ? t('panels.inspector.deleteTask')
       : level.value === 'module'
         ? t('panels.inspector.deleteModule')
-        : t('panels.inspector.deleteService'),
+        : isInitiative.value
+          ? t('panels.inspector.deleteInitiative')
+          : t('panels.inspector.deleteService'),
 )
 
 // A task is "started" once a pipeline has been launched on it (it has an
@@ -171,34 +167,101 @@ const serviceRepo = computed(() =>
 const serviceRepoUrl = computed(() =>
   serviceRepo.value ? github.repoUrl(serviceRepo.value.githubId) : null,
 )
+// The repo link wears its own provider's mark, off the projection row rather than the
+// workspace connection, so a row is never labelled with a brand it does not belong to.
+const serviceRepoIcon = computed(() => VCS_PROVIDER_ICONS[serviceRepo.value?.provider ?? 'github'])
 
-// A task's work branch on GitHub, once the agent has pushed one (a PR branch is
-// recorded on the block). Repo linkage lives on the owning service frame, not the
-// task, so resolve the repo by walking up to the frame; fall back to deriving the
-// repo base from the PR url when the projection hasn't loaded. Null until a branch
-// exists, so the link only appears after one is created.
+// A task's work branch on the connected host, once the agent has pushed one (a PR branch is
+// recorded on the block). Repo linkage lives on the owning service frame, not the task, so
+// resolve the repo by walking up to the frame, and let the store build the branch path for the
+// repo's own provider (GitLab addresses a tree under `/-/`). Null until a branch exists, so the
+// link only appears after one is created, and null while the projection has not loaded: the
+// former fallback sliced `/pull/<n>` off the PR url, which silently yields nothing on a GitLab
+// merge-request url and would need a second provider guess to fix.
 const taskBranchUrl = computed(() => {
   const pr = isTask.value ? block.value?.pullRequest : undefined
   if (!pr?.branch || !block.value) return null
   const frame = board.serviceOf(block.value)
   const repo = frame ? github.repoForBlock(frame.id) : undefined
-  const base = repo ? github.repoUrl(repo.githubId) : pr.url.replace(/\/pull\/\d+$/, '')
-  return base ? `${base}/tree/${pr.branch}` : null
+  return repo ? github.branchUrl(repo.githubId, pr.branch) : null
 })
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise, and `'recurring'`-only
-// pipelines (a manual run of one is refused server-side) — they'd be refused at run start (see
-// utils/pipeline + the backend gate).
+// The run MODE, shared with the focus view's Run picker so the two surfaces offer (and force)
+// the same thing.
+const runStart = useRunStart(() => block.value?.id)
+
+// Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
+// pipelines (a manual run of one is refused server-side), and every pipeline whose purpose doesn't
+// match this block's task type or LEVEL — they'd be refused at run start (see utils/pipeline + the
+// backend gate). The level is what keeps the planning presets on initiative blocks and off
+// everything else, so this menu never offers a run the engine answers with a 409; it applies to
+// frames and modules too, which is why it reads `block.level` rather than assuming a task.
 const runMenu = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
-  return pipelines.pipelines
-    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks))
+  const runnable = pipelines.pipelines
+    .filter((p) =>
+      pipelineAllowedForManualStart(
+        p,
+        frame,
+        board.blocks,
+        block.value?.taskType,
+        block.value?.level,
+      ),
+    )
     .map((p) => ({
       label: p.name,
       icon: 'i-lucide-play',
-      onSelect: () => block.value && execution.start(block.value.id, p),
+      onSelect: () => void runStart.start(p),
     }))
+  // The run MODE leads the menu, because it changes what every row below it does. A policy
+  // sandbox is stated in both interface tiers as a disabled row: there is nothing to choose, and
+  // a menu that said nothing would leave the user to discover it from a run that never merges.
+  if (runStart.forced.value) {
+    return [
+      [
+        {
+          label: t('panels.inspector.dryRunForced'),
+          icon: 'i-lucide-shield',
+          disabled: true,
+          type: 'label' as const,
+        },
+      ],
+      runnable,
+    ]
+  }
+  if (!runStart.canRequest.value) return runnable
+  return [
+    [
+      {
+        label: t('panels.inspector.dryRun'),
+        icon: 'i-lucide-shield',
+        type: 'checkbox' as const,
+        checked: runStart.requested.value,
+        // Keep the menu open: the choice is a modifier on the pipeline row the user is about to
+        // pick, so closing here would make them reopen the menu to act on it.
+        onSelect: (e: Event) => e.preventDefault(),
+        onUpdateChecked: (checked: boolean) => runStart.setRequested(checked),
+      },
+    ],
+    runnable,
+  ]
 })
+
+// Mapping a service: one run of the mapping agent against this frame, started by KIND (no
+// pipeline). The button owns only its in-flight state — a refusal is already surfaced as a toast
+// by the command, and the run itself then reports through the ordinary board/run projection, so
+// there is nothing for this component to remember about it afterwards.
+const mappingService = ref(false)
+async function mapService() {
+  const id = block.value?.id
+  if (!id) return
+  mappingService.value = true
+  try {
+    await execution.startAgentKind(id, BLUEPRINT_AGENT_KIND)
+  } finally {
+    mappingService.value = false
+  }
+}
 
 // Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
 // (Delete/Backspace) follow the exact same prompt + optimistic-delete + rollback path.
@@ -258,10 +321,29 @@ const showOriginalDescription = ref(false)
 </script>
 
 <template>
+  <!-- On lg+ the panel is a rail in the board pane's end corner, and it CLEARS the board's top
+       overlay region rather than sitting beside it (`top-16`, below the region's toolbar pill).
+       That region has one owner, `BoardTopOverlays`, and this rail is deliberately not a member:
+       it is an end-anchored side panel, not centred chrome. Clearing the region is how a
+       non-member stays out of the owner's way.
+       Overlapping is not a cosmetic problem. The toolbar is centred and grows with its contents,
+       so at some width its end reaches this corner, and whichever of the two is on top covers the
+       other's controls and EATS THEIR CLICKS: the click lands on the box above and no handler
+       runs, which reads as a dead button rather than as two overlapping boxes. Adding the
+       swimlane view control was the width that finally did it, to the notifications bell (then
+       with the panel on top; the region now paints above at `z-40`, which only swaps which side
+       loses). Sitting the panel below fixes it whichever way the stacking goes, and needs no
+       left/right arithmetic to stay correct under RTL. -->
+  <!-- `data-inspector-block` names WHICH block the panel is showing, so a caller can tell a
+       panel left open on the previous selection from one that followed a new click. Deliberately
+       NOT `data-block-id`: that attribute is the board's card selector, which the canvas drivers
+       measure geometry through (`utils/blockRects.ts`), and a panel answering to it would offer
+       the arrows a rect that is not on the canvas at all. -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
-    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-4 lg:w-80 lg:rounded-2xl"
+    :data-inspector-block="block.id"
+    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-muted bg-default/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-16 lg:w-80 lg:rounded-2xl"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />
     <!-- A tall task (execution steps + scenarios + docs) can overflow the
@@ -270,24 +352,27 @@ const showOriginalDescription = ref(false)
          On compact viewports the panel is a bottom sheet capped to the visible
          height (dvh excludes mobile browser chrome). -->
     <div
-      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-5rem)]"
+      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-7rem)]"
     >
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2">
           <div
             class="flex h-9 w-9 items-center justify-center rounded-lg"
-            :style="{ backgroundColor: typeMeta.accent + '22' }"
+            :style="{ backgroundColor: tint(typeMeta.accent) }"
           >
             <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
           </div>
           <div>
-            <div class="text-sm font-semibold text-white">{{ block.title }}</div>
+            <div class="text-sm font-semibold text-highlighted">{{ block.title }}</div>
             <div class="mt-0.5 flex items-center gap-1.5">
-              <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">
+              <UBadge :color="statusMeta.chip" variant="subtle" size="sm">
                 {{ statusLabel }}
               </UBadge>
-              <span class="text-[10px] uppercase tracking-wide text-slate-500">{{ level }}</span>
+              <!-- The block's LEVEL, beside its status chip: a category this block is in, not a
+                   heading over what follows, so it keeps its own classes rather than adopting the
+                   eyebrow recipe (`common/SectionLabel.vue`). -->
+              <span class="text-3xs uppercase tracking-wide text-dimmed">{{ level }}</span>
             </div>
           </div>
         </div>
@@ -320,18 +405,18 @@ const showOriginalDescription = ref(false)
         <!-- reworked: the standardized requirements document takes focus; the raw
              description is frozen and tucked behind an expander. -->
         <template v-if="frozenByRework">
-          <div class="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3">
+          <div class="rounded-lg border border-app-success-900/60 bg-app-success-950/20 p-3">
             <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+              class="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.reworkedRequirements') }}
             </div>
-            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+            <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>
             <div class="mt-2 flex items-center justify-between gap-2">
-              <p class="text-[11px] text-slate-500">
+              <p class="text-2xs text-dimmed">
                 {{ t('panels.inspector.agentStepsUseDocument') }}
               </p>
               <UButton
@@ -383,23 +468,21 @@ const showOriginalDescription = ref(false)
             @change="saveDescription"
             @blur="saveDescription"
           />
-          <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-slate-500">
+          <p v-if="isTask && !editable" class="flex items-center gap-1 text-2xs text-dimmed">
             <UIcon name="i-lucide-lock" class="h-3 w-3" />
             {{ t('panels.inspector.taskStartedLocked') }}
           </p>
 
           <!-- prior incorporated requirements kept as a base after a review-driven reset -->
-          <div v-if="reqHasPriorDoc" class="rounded-lg border border-slate-700 bg-slate-800/40 p-3">
-            <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-            >
+          <div v-if="reqHasPriorDoc" class="rounded-lg border border-muted bg-elevated/40 p-3">
+            <SectionLabel class="mb-1.5 flex items-center gap-1.5">
               <UIcon name="i-lucide-history" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.lastIncorporatedRequirements') }}
-            </div>
-            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+            </SectionLabel>
+            <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>
-            <p class="mt-2 text-[11px] text-slate-500">
+            <p class="mt-2 text-2xs text-dimmed">
               {{ t('panels.inspector.priorDocHint') }}
             </p>
           </div>
@@ -409,16 +492,33 @@ const showOriginalDescription = ref(false)
       <!-- failed run (bootstrap or execution): shared failure banner + retry -->
       <AgentFailureCard v-if="failedRun" :run="failedRun" />
 
-      <!-- running bootstrap: let the user stop it (kills the container) -->
+      <!-- running bootstrap: show the steps, let the user inspect it, let them stop it -->
       <div
         v-else-if="runningRun"
-        class="flex items-center justify-between gap-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2"
+        class="space-y-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 px-3 py-2"
       >
-        <span class="flex items-center gap-1.5 text-xs text-amber-300">
-          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
-          {{ t('panels.inspector.bootstrapping') }}
-        </span>
-        <AgentStopButton :run-id="runningRun.runId" :kind="runningRun.kind" size="xs" />
+        <div class="flex items-center justify-between gap-2">
+          <span class="flex items-center gap-1.5 text-xs text-app-warning-300">
+            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+            {{ t('panels.inspector.bootstrapping') }}
+          </span>
+          <div class="flex items-center gap-1.5">
+            <!-- A bootstrap has no step surface of its own, so this is where its run details are
+                 reached from: the same panel every task run opens, over the same four sinks. -->
+            <UButton
+              v-if="runningRun.kind === 'bootstrap'"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-activity"
+              @click="ui.openObservability(runningRun.runId)"
+            >
+              {{ t('observability.modelActivity') }}
+            </UButton>
+            <AgentStopButton :run-id="runningRun.runId" :kind="runningRun.kind" size="xs" />
+          </div>
+        </div>
+        <BootstrapRunSteps v-if="runningRun.kind === 'bootstrap'" :run-id="runningRun.runId" />
       </div>
 
       <!-- external links -->
@@ -431,7 +531,7 @@ const showOriginalDescription = ref(false)
           color="neutral"
           variant="soft"
           size="xs"
-          icon="i-lucide-github"
+          :icon="serviceRepoIcon"
           trailing-icon="i-lucide-external-link"
         >
           {{ serviceRepo!.owner }}/{{ serviceRepo!.name }}
@@ -449,40 +549,15 @@ const showOriginalDescription = ref(false)
         >
           {{ block!.pullRequest!.branch }}
         </UButton>
-        <UButton
-          v-if="tasks.available"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-ticket"
-          @click="ui.openTaskImport()"
-        >
-          {{
-            tasks.anyOffered
-              ? t('panels.inspector.importIssue')
-              : t('panels.inspector.connectTracker')
-          }}
-        </UButton>
-        <UButton
-          v-if="isContainer && documents.available && documents.anyConnected"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-wand-sparkles"
-          @click="spawnFromDocument"
-        >
-          {{ t('panels.inspector.spawnFromDocument') }}
-        </UButton>
+        <!-- Tracker entry points (import an issue, hunt bugs) live on the service frame's
+             header, where they are already scoped to a frame — the inspector doesn't
+             duplicate them. Document spawn is board-level only (command bar, Integrations
+             hub, templates modal), since planning is target-blind. -->
       </div>
 
-      <!-- task: context documents -->
-      <TaskContextDocs v-if="isTask" :key="`context-docs-${block.id}`" :block="block" />
-
-      <!-- task: context issues (tracker) -->
-      <TaskContextIssues v-if="isTask" :key="`context-issues-${block.id}`" :block="block" />
-
       <!-- service (frame): navigate the prescriptive spec tree (+ Gherkin scenarios when
-           the spec is on the repo's default branch) -->
+           the spec is on the repo's default branch). A shell affordance, not a
+           level-keyed body panel, so it stays here above the panel outlet. -->
       <UButton
         v-if="isFrame"
         block
@@ -495,59 +570,44 @@ const showOriginalDescription = ref(false)
         {{ t('panels.inspector.viewRequirements') }}
       </UButton>
 
-      <!-- service / module: tasks summary -->
-      <ContainerSummary v-if="isContainer" :key="`container-${block.id}`" :block="block" />
-      <!-- frontend (frame): build/serve/mock config + backend bindings (board links) -->
-      <FrontendConfig
-        v-if="isFrame && block.type === 'frontend'"
-        :key="`frontend-${block.id}`"
-        :block="block"
-      />
-
-      <!-- service (frame): directed connections to the other services it uses (board links) -->
-      <ServiceConnections
-        v-if="isFrame && block.type === 'service'"
-        :key="`connections-${block.id}`"
-        :block="block"
-      />
-
-      <!-- service (frame): test infra + provisioning configuration -->
-      <ServiceTestConfig v-if="isFrame" :key="`test-config-${block.id}`" :block="block" />
-
-      <!-- service (frame): SENSITIVE test credentials (sealed, injected out of band) -->
-      <ServiceTestSecrets v-if="isFrame" :key="`test-secrets-${block.id}`" :block="block" />
-
-      <!-- service (frame): best-practice fragments for code-aware agents -->
-      <ServiceFragments v-if="isFrame" :key="`fragments-${block.id}`" :block="block" />
-
-      <!-- service (frame): post-release-health monitor/SLO mapping -->
-      <ServiceReleaseHealthConfig
+      <!-- service (frame): (re)map the repository into the service → modules blueprint and
+           populate the board. A SINGLE-KIND run of the mapping agent, not a pipeline — the
+           preset that used to wrap this one step is retired. Needs a linked repo to read, so it
+           is disabled (with the reason) until the frame has one. -->
+      <UButton
         v-if="isFrame"
-        :key="`release-health-${block.id}`"
-        :block="block"
+        block
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-map"
+        :loading="mappingService"
+        :disabled="!serviceRepo || mappingService"
+        :title="serviceRepo ? undefined : t('panels.inspector.mapServiceNoRepo')"
+        @click="mapService"
+      >
+        {{ t('panels.inspector.mapService') }}
+      </UButton>
+      <p v-if="isFrame && !serviceRepo" class="text-2xs text-dimmed">
+        {{ t('panels.inspector.mapServiceNoRepo') }}
+      </p>
+
+      <!-- The level/type-keyed inspector body: the `inspectorPanels` panel group
+           (slice 4 of the modular-vue adoption). `<PanelsOutlet>` renders every
+           panel whose `when(block)` matches, ordered, with the selected block
+           injected as the subject (read via `usePanelSubject` in each panel's
+           wrapper). Replaces the pre-slice-4 `v-if` fan; `subject-key` is the block
+           id, so switching selections remounts panel content (matching the old
+           per-panel `:key`). A consumer contributes its own panels to the SAME
+           group via `registerAppModule`. `subject` used to need an `as any`: the
+           outlet's `default: null` narrowed the declared `PropType<unknown>` to
+           `null`, rejecting a typed `Block | null`. The published prop type now
+           resolves to `unknown`, so the binding passes through unasserted. -->
+      <PanelsOutlet
+        :group="inspectorPanels"
+        :subject="block ?? null"
+        :subject-key="block?.id ?? ''"
       />
-
-      <!-- task: the live execution surface first (open by default), then the estimate,
-           then the collapsed configuration sections (dependencies, run settings, agent
-           config, structure) so a running task reads top-down without scrolling. -->
-      <!-- Keyed by block id so a manual collapse/expand doesn't leak across task
-           selections: switching tasks re-mounts each section back to its default state
-           (e.g. the live Execution section is open again for the newly selected task). -->
-      <template v-else-if="isTask">
-        <RecurringScheduleSettings :key="`schedule-${block.id}`" :block="block" />
-        <TaskExecution :key="`execution-${block.id}`" :block="block" />
-        <TaskEstimateBadge :key="`estimate-${block.id}`" :block="block" />
-        <TaskDependencies :key="`deps-${block.id}`" :block="block" />
-        <TaskRunSettings :key="`run-settings-${block.id}`" :block="block" />
-        <TaskAgentConfig :key="`agent-config-${block.id}`" :block="block" />
-        <TaskStructure :key="`structure-${block.id}`" :block="block" />
-      </template>
-
-      <!-- epic: the full tree of member tasks, grouped by service → module -->
-      <EpicChildren v-else-if="isEpic" :key="`epic-${block.id}`" :block="block" />
-
-      <!-- initiative: status + goal, run-planning + tracker controls -->
-      <InitiativeInspector v-else-if="isInitiative" :block="block" />
 
       <!-- Locked-run explanation: a disabled task Run button reads as a dead lock unless
            it says what's holding it. Named here (and on the button title) so the blocking
@@ -555,7 +615,7 @@ const showOriginalDescription = ref(false)
            on a disabled button doesn't fire hover events. -->
       <p
         v-if="isTask && runBlockedReason"
-        class="flex items-start gap-1.5 text-[11px] text-amber-300/90"
+        class="flex items-start gap-1.5 text-2xs text-app-warning-300/90"
         data-testid="run-blocked-reason"
       >
         <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />
@@ -564,25 +624,36 @@ const showOriginalDescription = ref(false)
 
       <!-- actions -->
       <div class="flex items-center gap-2">
-        <UDropdownMenu v-if="isTask" :items="runMenu">
+        <UDropdownMenu v-if="isTask" :items="runMenu" :disabled="!canRun">
           <UButton
-            :color="runnable ? 'primary' : 'neutral'"
+            :color="canRun ? 'primary' : 'neutral'"
             variant="soft"
             size="sm"
-            :icon="runnable ? 'i-lucide-play' : 'i-lucide-lock'"
+            :icon="
+              !canRun
+                ? 'i-lucide-lock'
+                : runStart.dryRun.value
+                  ? 'i-lucide-shield'
+                  : 'i-lucide-play'
+            "
             trailing-icon="i-lucide-chevron-down"
-            :disabled="!runnable"
-            :title="runBlockedReason ?? undefined"
+            :disabled="!canRun"
+            :title="
+              runBlockedReason ??
+              (runStart.dryRun.value ? t('panels.inspector.dryRunHint') : undefined)
+            "
+            data-testid="run-start"
           >
             {{ instance ? t('panels.inspector.reRun') : t('panels.inspector.run') }}
           </UButton>
         </UDropdownMenu>
         <UButton
-          v-if="isTask"
+          v-if="hasRuns"
           color="neutral"
           variant="soft"
           size="sm"
           icon="i-lucide-maximize-2"
+          data-testid="inspector-focus"
           @click="ui.focus(block.id)"
         >
           {{ t('panels.inspector.focus') }}
@@ -595,7 +666,12 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-archive"
           :class="isServiceFrame ? 'ms-auto' : ''"
           data-testid="inspector-archive"
-          :title="t('panels.inspector.archiveService')"
+          :disabled="!access.canWriteBoard.value"
+          :title="
+            access.canWriteBoard.value
+              ? t('panels.inspector.archiveService')
+              : t('access.noBoardWrite')
+          "
           @click="archive"
         >
           {{ t('panels.inspector.archiveService') }}
@@ -607,7 +683,8 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-trash-2"
           :class="isServiceFrame ? '' : 'ms-auto'"
           data-testid="inspector-delete"
-          :title="deleteLabel"
+          :disabled="!access.canWriteBoard.value"
+          :title="access.canWriteBoard.value ? deleteLabel : t('access.noBoardWrite')"
           @click="remove"
         >
           {{ deleteLabel }}

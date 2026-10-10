@@ -6,6 +6,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
 } from '../domain/types.js'
+import type { VcsProvider } from '../domain/vcs-types.js'
 import type { RateLimitSnapshot } from './github-client.js'
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,14 @@ export interface GitHubInstallation {
   accountLogin: string
   targetType: 'Organization' | 'User'
   /**
+   * Which VCS this connection talks to (github / gitlab). The projection tables are still
+   * GitHub-named but VCS-neutral in shape, so a connection records its provider here; the
+   * repos reached through it inherit it, and the connect/repo wire types surface it so the
+   * SPA can switch presentation. GitHub-App and local-GitHub-PAT connections are `'github'`;
+   * a local GitLab-PAT deployment's synthetic connection is `'gitlab'`.
+   */
+  provider: VcsProvider
+  /**
    * Which GitHub App registration owns this installation (ADR 0005). null for
    * rows created before the multi-App tier — treated as the default App. An
    * installation id belongs to exactly one App on GitHub, so this is immutable.
@@ -39,6 +48,15 @@ export interface GitHubInstallation {
   cachedToken: string | null
   /** Token expiry (epoch ms), or null. */
   tokenExpiresAt: number | null
+  /**
+   * A durable, sealed access credential the connection authenticates with, or null when the
+   * provider mints its own tokens (the GitHub-App path, which keeps its key in env and caches
+   * minted tokens in {@link cachedToken}). Populated for a per-workspace PAT connection — a
+   * hosted GitLab connect seals the user's PAT here (sealed with the deployment `SecretCipher`,
+   * never plaintext) so the per-connection token source can decrypt it at call time. Unlike
+   * {@link cachedToken} this is the long-lived credential, not an ephemeral minted token.
+   */
+  accessToken: string | null
   createdAt: number
   /** Set when the installation is suspended/uninstalled (tombstone). */
   deletedAt: number | null
@@ -65,8 +83,16 @@ export interface GitHubInstallationRepository {
   listWorkspacesForInstallation(installationId: number): Promise<string[]>
   /** List every live installation across accounts (used by the cron pass). */
   listActive(): Promise<GitHubInstallation[]>
+  /**
+   * The live installations ONE account can read repos through: rows bound to the account
+   * directly, plus rows bound to any of the account's own boards. The account-scoped form of
+   * {@link listActive}, and what `createTierInstallationResolvers.forAccount` uses — the global
+   * list plus a JS filter both read every tenant's rows to answer a single-account question and
+   * cannot be exposed over the account-scoped machine API. Ordered oldest-first
+   * (`createdAt`, then `installationId`) so two runtimes pick the same row.
+   */
+  listActiveForAccount(accountId: string): Promise<GitHubInstallation[]>
   upsert(installation: GitHubInstallation): Promise<void>
-  updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void>
   softDelete(installationId: number, at: number): Promise<void>
 }
 

@@ -1,6 +1,28 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { PromptFragment } from '~/types/domain'
 
+/** One category bucket: its heading plus the pool fragments that fall under it, in pool order. */
+export interface FragmentCategoryGroup {
+  category: string
+  fragments: PromptFragment[]
+}
+
+/**
+ * Bucket the pool fragments by `category`, preserving first-appearance category order and
+ * per-category pool order. Unlike {@link buildFragmentPickerGroups} this keeps ALL fragments
+ * (selected included) and returns the raw fragments, so a multi-select surface can render each
+ * as a toggle that stays visible whether or not it is currently picked.
+ */
+export function buildFragmentCategoryGroups(pool: PromptFragment[]): FragmentCategoryGroup[] {
+  const groups = new Map<string, PromptFragment[]>()
+  for (const f of pool) {
+    const items = groups.get(f.category) ?? []
+    items.push(f)
+    groups.set(f.category, items)
+  }
+  return [...groups.entries()].map(([category, fragments]) => ({ category, fragments }))
+}
+
 /**
  * Build the category-grouped groups for a fragment "add" dropdown: the pool fragments not
  * already selected, bucketed by `category`, each bucket prefixed with a non-interactive
@@ -18,15 +40,12 @@ export function buildFragmentPickerGroups(
   isSelected: (id: string) => boolean,
   onSelect: (id: string) => void,
 ): DropdownMenuItem[][] {
-  const groups = new Map<string, DropdownMenuItem[]>()
-  for (const f of pool) {
-    if (isSelected(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => onSelect(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.entries()].map(([category, items]): DropdownMenuItem[] => [
-    { type: 'label', label: category },
-    ...items,
-  ])
+  return buildFragmentCategoryGroups(pool)
+    .map(({ category, fragments }): DropdownMenuItem[] => {
+      const items = fragments
+        .filter((f) => !isSelected(f.id))
+        .map((f): DropdownMenuItem => ({ label: f.title, onSelect: () => onSelect(f.id) }))
+      return items.length ? [{ type: 'label', label: category }, ...items] : []
+    })
+    .filter((group) => group.length > 0)
 }

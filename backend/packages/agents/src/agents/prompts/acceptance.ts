@@ -1,8 +1,10 @@
 import type { AgentKind, BlockType } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
+// The acceptance runner READS a provisioned environment, so its slug is part of the
+// environment-lifecycle vocabulary the SPA and the save boundary share.
+import { ACCEPTANCE_AGENT_KIND } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { PLAYWRIGHT_E2E_TARGET_CONFIG_ID } from '../kinds/configs.js'
-import { STANDARDS_FOOTER } from './shared.js'
 
 /** The acceptance/e2e execution targets the `playwright.e2eTarget` config offers. */
 type E2eTarget = 'ci' | 'ephemeral'
@@ -20,13 +22,13 @@ type E2eTarget = 'ci' | 'ephemeral'
 //
 // Like the standard solution phases, "what the agent should do" lives here and
 // "which extra standards apply" stays in @cat-factory/prompt-fragments: the prompt
-// closes by deferring to the best-practice fragments that `composeSystemPrompt`
-// appends below it.
+// leaves the best-practice fragments to `composeSystemPrompt`, which folds them in
+// below under its own heading.
 
 /** The agent kinds that make up the acceptance-testing track. */
-export type AcceptanceAgentKind = 'playwright'
+export type AcceptanceAgentKind = typeof ACCEPTANCE_AGENT_KIND
 
-export const ACCEPTANCE_AGENT_KINDS: readonly AcceptanceAgentKind[] = ['playwright']
+export const ACCEPTANCE_AGENT_KINDS: readonly AcceptanceAgentKind[] = [ACCEPTANCE_AGENT_KIND]
 
 // The runnable-tests step commits tests through a pull request. Tests only earn
 // their keep once they actually run in CI, so "done" means the suite is wired into
@@ -59,8 +61,6 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
     '- Output the test files to commit, each in the conventional test directory for its tool (e.g. the e2e/Playwright directory for UI tests), ready to run in CI.',
     '',
     PLAYWRIGHT_DELIVERY_GATE,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
 }
 

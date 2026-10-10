@@ -59,6 +59,9 @@ async function startRealProxy() {
       totalsSinceForAccount: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 0 }),
       totalsSinceForUser: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 0 }),
       usageBreakdownForWorkspace: async () => [],
+      // The forecast sweep's batched reads; this proxy test never exercises them.
+      meteredSpendByWorkspaceSince: async () => new Map(),
+      meteredSpendByAccountSince: async () => new Map(),
       deleteOlderThan: async () => 0,
     },
     idGenerator: { next: (p: string) => `${p}-${ledger.length}` },
@@ -197,6 +200,8 @@ describe('real proxy (in-process LlmProxyController)', () => {
         totalsSinceForAccount: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 999 }),
         totalsSinceForUser: async () => ({ inputTokens: 0, outputTokens: 0, costEstimate: 999 }),
         usageBreakdownForWorkspace: async () => [],
+        meteredSpendByWorkspaceSince: async () => new Map(),
+        meteredSpendByAccountSince: async () => new Map(),
         deleteOlderThan: async () => 0,
       },
       idGenerator: { next: (p: string) => p },

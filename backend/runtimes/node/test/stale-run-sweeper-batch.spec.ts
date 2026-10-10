@@ -1,8 +1,14 @@
+import { noopOperationalMetrics } from '@cat-factory/kernel'
+import { createSweepHealthTracker } from '@cat-factory/server'
 import type { AgentRunRef, StaleAgentRun } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { JobInsert, PgBoss } from 'pg-boss'
 import { describe, expect, it, vi } from 'vitest'
-import { type AdvanceQueueOptions, startStaleRunSweeper } from '../src/execution/pgBossRunner.js'
+import {
+  type AdvanceQueueOptions,
+  driveJobOptions,
+  startStaleRunSweeper,
+} from '../src/execution/pgBossRunner.js'
 import type { JobStore } from '../src/execution/reclaim.js'
 
 // Unit coverage for the sweeper's batch-queuing change (pg-boss initiative items B1 + B2):
@@ -58,6 +64,9 @@ function fakeContainer(opts: {
     agentRunRepository: {
       listStale: async () => opts.stale ?? [],
       listPausedExecutions: async () => opts.paused ?? [],
+      // The sweeper persists a re-drive count per run; stubbed so the assertions below exercise
+      // the real path rather than the best-effort catch that a missing method would trip.
+      recordRedrive: async () => 1,
     },
     workspaceService: { accountOf: async () => 'acct-1' },
     spendService: { isOverBudget: async (ws: string) => opts.overBudget?.(ws) ?? false },
@@ -72,7 +81,11 @@ async function runOneTick(
   container: ServerContainer,
   seen: () => boolean,
 ): Promise<void> {
-  const stop = startStaleRunSweeper(boss, jobs, container, cfg, queueOptions, noopLog)
+  const stop = startStaleRunSweeper(boss, jobs, container, cfg, queueOptions, {
+    log: noopLog,
+    metrics: noopOperationalMetrics,
+    health: createSweepHealthTracker(),
+  })
   await vi.waitFor(() => expect(seen()).toBe(true))
   stop()
 }
@@ -82,6 +95,7 @@ const staleRun = (id: string): StaleAgentRun => ({
   workspaceId: `ws_${id}`,
   kind: 'execution',
   updatedAt: Date.now() - 60_000,
+  redriveCount: 0,
 })
 
 describe('stale-run sweeper batches execution.advance re-drives', () => {
@@ -99,15 +113,12 @@ describe('stale-run sweeper batches execution.advance re-drives', () => {
       { workspaceId: 'ws_b', executionId: 'b' },
       { workspaceId: 'ws_c', executionId: 'c' },
     ])
-    // Each row carries the same options a single `send` would.
-    expect(inserts[0]!.jobs[0]).toMatchObject({
-      singletonKey: 'a',
-      expireInSeconds: 900,
-      heartbeatSeconds: 60,
-      retryLimit: 3,
-      retryDelay: 5,
-      retryBackoff: true,
-    })
+    // Each row carries the same options a single `send` would, DERIVED from the one builder both
+    // enqueue paths go through rather than restated here. Restated, this assertion pinned the
+    // retry policy of the day (it still demanded `retryBackoff: true` after the policy went flat)
+    // while saying nothing about the property it exists for: that the batch and the `send` cannot
+    // drift apart.
+    expect(inserts[0]!.jobs[0]).toMatchObject(driveJobOptions('a', queueOptions))
     // Execution re-drives no longer round-trip one `send` per run.
     expect(sends).toHaveLength(0)
   })
@@ -149,7 +160,11 @@ describe('stale-run sweeper batches execution.advance re-drives', () => {
     const container = fakeContainer({})
 
     // No re-drives to observe, so let the immediate tick settle then assert it stayed empty.
-    const stop = startStaleRunSweeper(boss, jobs, container, cfg, queueOptions, noopLog)
+    const stop = startStaleRunSweeper(boss, jobs, container, cfg, queueOptions, {
+      log: noopLog,
+      metrics: noopOperationalMetrics,
+      health: createSweepHealthTracker(),
+    })
     await new Promise((resolve) => setTimeout(resolve, 30))
     stop()
 

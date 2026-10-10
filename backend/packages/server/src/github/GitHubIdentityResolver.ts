@@ -1,4 +1,5 @@
-import type { VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import type { Logger, VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import { VcsIdentityError } from '@cat-factory/kernel'
 
 // Resolves a GitHub PAT to its account via `GET /user` — the same identity (the numeric
 // user id) the OAuth login path keys on, so a PAT login and a GitHub OAuth login for the
@@ -24,7 +25,7 @@ export interface GitHubIdentityResolverOptions {
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
   /** Optional sink, warned when org enumeration hits the page cap (see {@link resolveOrgs}). */
-  logger?: { warn: (message: string) => void }
+  logger?: Logger
 }
 
 // Bound on org pagination for the PAT-login allowlist: ~1000 orgs. A user in more orgs than
@@ -35,7 +36,7 @@ const MAX_PAGES = 10
 export class GitHubIdentityResolver implements VcsIdentityResolver {
   private readonly apiBase: string
   private readonly fetchImpl: typeof fetch
-  private readonly logger?: { warn: (message: string) => void }
+  private readonly logger?: Logger
 
   constructor(options: GitHubIdentityResolverOptions) {
     this.apiBase = options.apiBase.replace(/\/+$/, '')
@@ -54,7 +55,10 @@ export class GitHubIdentityResolver implements VcsIdentityResolver {
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new Error(`GitHub /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+      throw new VcsIdentityError(
+        `GitHub /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
+        res.status,
+      )
     }
     const user = (await res.json()) as GitHubUserResponse
     if (user.id == null || !user.login) {

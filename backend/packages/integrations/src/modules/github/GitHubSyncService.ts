@@ -4,6 +4,7 @@ import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
+  GitHubInstallation,
   GitHubInstallationRepository,
   GroupCacheHandle,
   IssueProjectionRepository,
@@ -15,6 +16,20 @@ import type {
   UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
+import { normalizeRepoSearchQuery, parseOwnerRepoSlug } from '@cat-factory/contracts'
+import pMap from 'p-map'
+
+// How many repos one workspace resyncs at once, and how many workspaces one installation
+// backfills at once. These bound the concurrent call fan-out to stay well under GitHub's
+// secondary (abuse) rate limits while still collapsing the old serial chains. Modest on
+// purpose because the products STACK — and the true ceiling is a THREE-factor product, not
+// two: each `syncRepo` itself fires a fixed 4-wide resource wave (branches/PRs/issues/commits
+// in one `Promise.all`), so a full `backfillInstallation` peaks at
+// WORKSPACE_BACKFILL_CONCURRENCY × REPO_SYNC_CONCURRENCY × 4 = 3 × 4 × 4 = 48 concurrent GitHub
+// reads. That is comfortably under GitHub's ~100-concurrent guidance, but if either cap is ever
+// raised, multiply in the ×4 wave when re-checking the headroom.
+const REPO_SYNC_CONCURRENCY = 4
+const WORKSPACE_BACKFILL_CONCURRENCY = 3
 
 // ---------------------------------------------------------------------------
 // GitHubSyncService: keeps the local projections (repos/branches, PRs/issues,
@@ -27,6 +42,20 @@ import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factor
 // Pure orchestration over its ports, so it runs identically from an HTTP
 // resync, the queue consumer, the backfill Workflow and the cron reconciler.
 // ---------------------------------------------------------------------------
+
+/**
+ * What a workspace's connection can reach right now, and whether that is all of it.
+ *
+ * A result object rather than a bare array because the caps behind the read are real: the App
+ * enumeration stops at a page cap and a name search at a result cap, so on a wide installation the
+ * rows are a PREFIX. The two facts have to travel together, or the caller that publishes them
+ * reports an absent repository as unreachable when the truth is that the walk stopped first.
+ */
+export interface AvailableRepoListing {
+  repos: GitHubAvailableRepo[]
+  /** True when a provider leg stopped at its cap, so reachable repositories are missing. */
+  truncated: boolean
+}
 
 export interface GitHubSyncServiceDependencies {
   githubClient: GitHubClient
@@ -61,6 +90,15 @@ export interface GitHubSyncServiceDependencies {
    * Worker's pass-through profile) ⇒ the invalidations are no-ops.
    */
   repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
+  /**
+   * Per-user cache of the signed-in viewer's PAT-reachable repo enumeration
+   * (`AppCaches.viewerRepos`), grouped AND keyed by user id. The add-service picker's typeahead
+   * filters this cached set in memory instead of re-walking the whole `/user/repos` set (up to a
+   * bounded page count, one request per page) on every keystroke. Invalidated when the user's
+   * stored PAT changes; the short TTL backstops repos created straight on GitHub. Absent (tests /
+   * the Worker's pass-through profile) ⇒ the enumeration runs live per request.
+   */
+  viewerReposCache?: GroupCacheHandle<Paged<GitHubRepo>>
 }
 
 export class GitHubSyncService {
@@ -82,34 +120,58 @@ export class GitHubSyncService {
    * filtering in memory both truncates at the enumeration cap (dropping matches beyond it)
    * and re-fetches every page on each keystroke. A blank/whitespace query returns every
    * accessible repo (the repo-link panel's browse-all), so existing callers are unchanged.
+   *
+   * Answers an {@link AvailableRepoListing} rather than an array because every leg here has a cap
+   * and a caller that renders the result owes its reader the difference between "not reachable" and
+   * "not listed".
    */
   async listAvailableRepos(
     workspaceId: string,
     opts: { q?: string; userId?: string; userToken?: string } = {},
-  ): Promise<GitHubAvailableRepo[]> {
+  ): Promise<AvailableRepoListing> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
-    if (!installation || installation.deletedAt) return []
-    const tracked = new Map(
-      (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => [r.githubId, r]),
-    )
-    const query = opts.q?.trim()
-    // With a query, search server-side in REALTIME (one bounded request) instead of
-    // enumerating the whole installation and filtering in memory: a wide install can
-    // expose far more repos than the enumeration cap, so a match beyond it would be
+    // No connection reaches nothing, and reaches nothing COMPLETELY: there is no cap involved, so
+    // the empty answer is the whole answer.
+    if (!installation || installation.deletedAt) return { repos: [], truncated: false }
+    // A pasted repository URL must never depend on the provider's name search (which
+    // tokenizes names — a full URL matches nothing): collapse it to its `owner/name` slug
+    // BEFORE searching, and point-read that slug directly alongside the search below.
+    const query = opts.q?.trim() ? normalizeRepoSearchQuery(opts.q.trim()) : undefined
+    // The tracked-projection read, the App-side lookup and the viewer-PAT expansion are three
+    // independent reads, so run them as one concurrent wave: serially, a cold PAT enumeration
+    // would stack its full multi-page walk on top of the App lookup's latency.
+    //
+    // With a query, the App side searches server-side in REALTIME (one bounded request)
+    // instead of enumerating the whole installation and filtering in memory: a wide install
+    // can expose far more repos than the enumeration cap, so a match beyond it would be
     // silently dropped — the exact "no results for a repo I have access to" bug. Without
     // a query, browse the whole accessible set (the repo-link panel's browse-all).
-    const appRepos = query
-      ? await this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
-          owner: installation.accountLogin || undefined,
-          ownerType: installation.targetType,
-        })
-      : (await this.deps.githubClient.listInstallationRepos(installation.installationId)).items
-
-    // Expand with repos the signed-in user's own PAT can reach beyond the App's grant — even
-    // on the hosted facades. The App repos win on a github-id collision (they're shared, so a
-    // repo reachable both ways is NOT personal). Personal-only repos are badged so the user
-    // knows linking one makes a frame others may not see.
-    const personalRepos = await this.viewerPatRepos(workspaceId, opts, query)
+    //
+    // The viewer-PAT expansion covers repos the signed-in user's own PAT can reach beyond the
+    // App's grant — even on the hosted facades. The App repos win on a github-id collision
+    // (they're shared, so a repo reachable both ways is NOT personal). Personal-only repos are
+    // badged so the user knows linking one makes a frame others may not see.
+    const [trackedRows, searched, directRepo, personal] = await Promise.all([
+      this.deps.repoProjectionRepository.list(workspaceId),
+      query
+        ? this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
+            owner: installation.accountLogin || undefined,
+            ownerType: installation.targetType,
+          })
+        : this.deps.githubClient.listInstallationRepos(installation.installationId),
+      // An exact `owner/name` query (typed, or collapsed from a pasted URL) is ALSO resolved
+      // by a direct point-read, because the search leg alone is not sufficient: the GitHub-App
+      // adapter delegates to GitHub's tokenized name search, which can miss an exact slug
+      // (interior tokens, indexing lag). The point-read is authoritative for reachability.
+      query ? this.directRepoLookup(installation.installationId, query) : null,
+      this.viewerPatRepos(workspaceId, opts, query),
+    ])
+    // The direct hit leads so an exact match is first in the picker; search rows dedup onto it.
+    const appRepos = [
+      ...(directRepo ? [directRepo] : []),
+      ...searched.items.filter((r) => r.githubId !== directRepo?.githubId),
+    ]
+    const tracked = new Map(trackedRows.map((r) => [r.githubId, r]))
     const appIds = new Set(appRepos.map((r) => r.githubId))
     const merged: GitHubAvailableRepo[] = appRepos.map((r) => ({
       githubId: r.githubId,
@@ -120,8 +182,11 @@ export class GitHubSyncService {
       linked: tracked.has(r.githubId),
       isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
       personal: false,
+      // Every listed repo is reachable through the workspace's one connection, so it carries
+      // that connection's provider.
+      provider: installation.provider,
     }))
-    for (const r of personalRepos) {
+    for (const r of personal.repos) {
       if (appIds.has(r.githubId)) continue
       merged.push({
         githubId: r.githubId,
@@ -132,9 +197,30 @@ export class GitHubSyncService {
         linked: tracked.has(r.githubId),
         isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
         personal: true,
+        provider: installation.provider,
       })
     }
-    return merged
+    // A fact about the LIST, not about the query: either provider leg can stop at a cap, and a
+    // caller reading a row's absence has to know which of "not reachable" and "not listed" it is
+    // looking at. It says nothing about the point-read leg, which resolves an exact `owner/name`
+    // directly and so answers about THAT slug completely either way.
+    return { repos: merged, truncated: searched.truncated === true || personal.truncated }
+  }
+
+  /**
+   * Point-read an exact `owner/name` query through the installation, so a repo the token can
+   * reach resolves even when the provider's name search misses it (a pasted URL collapsed to
+   * its slug, a single-token name the search tokenizer splits differently, indexing lag).
+   * A non-slug query, or a repo the installation can't see (404/403), resolves to null and
+   * the picker falls back to whatever the search leg found — an expected miss, not an error.
+   */
+  private async directRepoLookup(
+    installationId: number,
+    query: string,
+  ): Promise<GitHubRepo | null> {
+    const slug = parseOwnerRepoSlug(query)
+    if (!slug) return null
+    return this.deps.githubClient.getRepo(installationId, slug).catch(() => null)
   }
 
   /**
@@ -148,18 +234,49 @@ export class GitHubSyncService {
     workspaceId: string,
     opts: { q?: string; userId?: string; userToken?: string },
     query: string | undefined,
-  ): Promise<GitHubRepo[]> {
+  ): Promise<{ repos: GitHubRepo[]; truncated: boolean }> {
     const { userToken, userId } = opts
-    if (!userToken || !this.deps.githubClient.listReposForToken) return []
+    const listReposForToken = this.deps.githubClient.listReposForToken
+    // No token supplied, or a client that cannot enumerate by one: this leg contributes nothing and
+    // omitted nothing, which is not the same as an enumeration that stopped early.
+    if (!userToken || !listReposForToken) return { repos: [], truncated: false }
+
+    // Hot path — the add-service picker's typeahead (a query is always present). Serve the token's
+    // repo enumeration from the per-user cache and filter it in memory, so a keystroke costs a
+    // substring scan of a cached complete set rather than re-walking the whole `/user/repos` set on
+    // every request. A transient enumeration failure caches NOTHING (the load rejects, so `get`
+    // rejects) and degrades to App-only here — never 500s the picker. The blank browse-all below
+    // stays uncached: it also refreshes the fail-closed access projection and wants fresh data.
+    if (query && userId && this.deps.viewerReposCache) {
+      const q = query.toLowerCase()
+      let cached: Paged<GitHubRepo>
+      try {
+        // The whole page is cached, not its items: an enumeration that stopped at the cap is an
+        // incomplete prefix, and a cache that kept only the rows would serve that prefix to every
+        // later keystroke as though it were the complete set.
+        cached = await this.deps.viewerReposCache.get(userId, userId, () =>
+          listReposForToken(userToken),
+        )
+      } catch {
+        // A personal-token failure degrades to App-only, and the App legs are complete on their own
+        // terms: nothing was dropped from a listing this leg never produced.
+        return { repos: [], truncated: false }
+      }
+      return {
+        repos: cached.items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)),
+        truncated: cached.truncated === true,
+      }
+    }
+
     // A stored PAT can be expired/revoked while still decrypting fine (or GitHub can be
     // unreachable). Enumerating with it must NOT 500 the whole available-repos listing — the App
     // repos still have to render — so degrade to App-only on any failure (mirrors the link path's
     // `getRepoForToken` best-effort contract).
     let page: Paged<GitHubRepo>
     try {
-      page = await this.deps.githubClient.listReposForToken(userToken)
+      page = await listReposForToken(userToken)
     } catch {
-      return []
+      return { repos: [], truncated: false }
     }
     const { items, truncated } = page
     // Refresh the fail-closed access cache only on a blank browse-all (the picker's initial
@@ -173,9 +290,13 @@ export class GitHubSyncService {
       if (truncated) await this.deps.userRepoAccessRepository.recordAccessible(userId, records)
       else await this.deps.userRepoAccessRepository.replaceForUser(userId, records)
     }
-    if (!query) return items
+    const capped = truncated === true
+    if (!query) return { repos: items, truncated: capped }
     const q = query.toLowerCase()
-    return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    return {
+      repos: items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)),
+      truncated: capped,
+    }
   }
 
   private toAccessRecord(userId: string, repo: GitHubRepo): UserRepoAccessRecord {
@@ -251,6 +372,76 @@ export class GitHubSyncService {
   }
 
   /**
+   * List every FILE in a tracked repo (its whole tree on the default branch, in one
+   * recursive read), so a picker can search files by path without walking the tree
+   * directory-by-directory. Directories are dropped — only file leaves are useful as a
+   * context-document reference. Sorted by path; the listing is best-effort (a very large
+   * tree may be truncated by the provider).
+   */
+  async listRepoFiles(workspaceId: string, repoGithubId: number): Promise<RepoTreeEntry[]> {
+    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return []
+    // Lazily link the repo if the workspace doesn't track it yet (parity with listRepoDirectory —
+    // the doc-context picker browses the tree before the repo is added to the board).
+    const repo = await this.linkRepo(workspaceId, repoGithubId)
+    if (!repo) {
+      throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
+    }
+    const { entries } = await this.deps.githubClient.listTree(
+      installation.installationId,
+      { owner: repo.owner, repo: repo.name },
+      repo.defaultBranch ?? undefined,
+    )
+    return entries
+      .filter((e) => e.type === 'file')
+      .map((e) => ({ path: e.path, name: e.name, type: e.type }))
+      .sort((a, b) => a.path.localeCompare(b.path))
+  }
+
+  /**
+   * Link a repo named as `owner/name`, resolving the provider id here rather than in the caller.
+   *
+   * The door a HEADLESS caller comes through (`POST /api/v1/repos/link`): a browser-driven flow
+   * picks a repo out of {@link listAvailableRepos} and already holds a provider id, but a setup
+   * script holds the name a person typed and cannot know an id for a repo no public read lists.
+   *
+   * Resolution goes through `listAvailableRepos` with an exact-slug query rather than a bare
+   * `getRepo`, so it reaches everything the picker can reach: the App/PAT point-read, the provider
+   * search, and the viewer expansion when a token is supplied. Null means UNREACHABLE, which is the
+   * one thing the caller must not report as "linked": there is nothing here that could tell an
+   * unreachable repo from one that does not exist, so the refusal names both.
+   *
+   * **A repository this workspace ALREADY links resolves off the projection, before any of that.**
+   * Reachability and linkage are different facts and the second does not imply the first: a
+   * personal repository linked through somebody's own token, or one an App grant has since been
+   * narrowed away from, is listed by `GET /api/v1/repos` and reached by nothing this method could
+   * ask. Resolving only through the provider made re-running an idempotent adopt answer `404` for a
+   * repository the platform is already using, which is the one answer a setup script acts on by
+   * telling its operator to go create it. That mirrors {@link linkRepo}, which short-circuits on the
+   * same row by id; this is the same short-circuit keyed by the name a caller holds.
+   */
+  async linkRepoBySlug(
+    workspaceId: string,
+    owner: string,
+    name: string,
+    opts: { userId?: string; userToken?: string } = {},
+  ): Promise<GitHubRepo | null> {
+    const linked = await this.deps.repoProjectionRepository.list(workspaceId)
+    const already = linked.find((repo) => sameSlug(repo, owner, name))
+    if (already) return already
+    const { repos: available } = await this.listAvailableRepos(workspaceId, {
+      ...opts,
+      q: `${owner}/${name}`,
+    })
+    // Matched case-insensitively, as both providers treat a repository name, and against the OWNER
+    // too: a slug search can surface a same-named repository under another account, and linking that
+    // one would be a silent substitution rather than the miss it is.
+    const match = available.find((repo) => sameSlug(repo, owner, name))
+    if (!match) return null
+    return this.linkRepo(workspaceId, match.githubId, opts)
+  }
+
+  /**
    * Link a single repo into this workspace without disturbing the rest (unlike
    * {@link setLinkedRepos}, which sets the exact set and tombstones the others).
    * Projects + deep-syncs the repo the first time it's seen, and is a no-op that
@@ -279,6 +470,7 @@ export class GitHubSyncService {
         ...match,
         installationId,
         linkedVia: 'app',
+        provider: installation.provider,
         syncedAt: this.deps.clock.now(),
       }
       await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
@@ -293,13 +485,13 @@ export class GitHubSyncService {
     // it, but marked `user_pat`), record the linker's access, and SKIP the App-based sync (the
     // App token can't read its branches/PRs). Runs against it use the initiator's PAT (already
     // wired via the PAT-preferring token mint).
-    return this.linkPersonalRepo(workspaceId, repoGithubId, installationId, opts)
+    return this.linkPersonalRepo(workspaceId, repoGithubId, installation, opts)
   }
 
   private async linkPersonalRepo(
     workspaceId: string,
     repoGithubId: number,
-    installationId: number,
+    installation: GitHubInstallation,
     opts: { userId?: string; userToken?: string },
   ): Promise<GitHubRepo | null> {
     const { userToken, userId } = opts
@@ -308,8 +500,9 @@ export class GitHubSyncService {
     if (!personal) return null
     const repo: GitHubRepo = {
       ...personal,
-      installationId,
+      installationId: installation.installationId,
       linkedVia: 'user_pat',
+      provider: installation.provider,
       syncedAt: this.deps.clock.now(),
     }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
@@ -335,7 +528,12 @@ export class GitHubSyncService {
     const { items } = await this.deps.githubClient.listInstallationRepos(installationId)
     const selected = items
       .filter((r) => wanted.has(r.githubId))
-      .map((r) => ({ ...r, installationId, syncedAt: this.deps.clock.now() }))
+      .map((r) => ({
+        ...r,
+        installationId,
+        provider: installation.provider,
+        syncedAt: this.deps.clock.now(),
+      }))
 
     if (selected.length > 0) {
       await this.deps.repoProjectionRepository.upsertMany(workspaceId, selected)
@@ -367,16 +565,19 @@ export class GitHubSyncService {
     repoGithubId: number,
     kind: SyncCursorKind,
     full: boolean,
-    fetch: (
-      cursor: SyncCursor | null,
-    ) => Promise<{ items: T[]; etag?: string | null; notModified?: boolean }>,
-    upsert: (items: T[]) => Promise<void>,
-    nextCursor: (
-      prev: SyncCursor | null,
-      etag: string | null | undefined,
-      now: number,
-    ) => SyncCursor,
+    handlers: {
+      fetch: (
+        cursor: SyncCursor | null,
+      ) => Promise<{ items: T[]; etag?: string | null; notModified?: boolean }>
+      upsert: (items: T[]) => Promise<void>
+      nextCursor: (
+        prev: SyncCursor | null,
+        etag: string | null | undefined,
+        now: number,
+      ) => SyncCursor
+    },
   ): Promise<{ items: T[]; etag?: string | null; notModified?: boolean }> {
+    const { fetch, upsert, nextCursor } = handlers
     const repos = this.deps.repoProjectionRepository
     // The cursor is installation-scoped (shared across the org's workspaces). A `full`
     // pass ignores it (treats it as empty) so a newly-linked workspace gets fully
@@ -415,8 +616,12 @@ export class GitHubSyncService {
     const installationId = repo.installationId
     const client = this.deps.githubClient
     const workspaces = await this.linkedWorkspaces(installationId, id)
+    // Fan a resource's projected rows out to every workspace that links the repo. The
+    // per-workspace applies are independent writes (each to its own workspace's projection),
+    // so run them concurrently rather than one-after-another — a repo shared by N workspaces
+    // then costs one write's latency per resource, not N.
     const fanOut = async (apply: (ws: string) => Promise<void>) => {
-      for (const ws of workspaces) await apply(ws)
+      await Promise.all(workspaces.map(apply))
     }
 
     // ETag-conditional cursor: carry the prior ETag forward when the fetch
@@ -430,72 +635,68 @@ export class GitHubSyncService {
         sinceIso: stampSince ? new Date(now).toISOString() : null,
       })
 
-    // Branches — conditional GET via ETag.
-    const branches = await this.syncResource(
-      installationId,
-      id,
-      'branches',
-      full,
-      (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
-      (items) => fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
-      etagCursor(false),
-    )
-    const defaultBranchSha =
-      branches.items.find((b) => b.name === repo.defaultBranch)?.headSha ?? null
-
-    // Pull requests — delta by `since` (GitHub's updated_at lower bound).
-    await this.syncResource(
-      installationId,
-      id,
-      'pulls',
-      full,
-      (cursor) =>
-        client.listPullRequests(installationId, ref, {
-          since: cursor?.sinceIso ?? undefined,
-          etag: cursor?.etag ?? undefined,
-        }),
-      (items) => fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
-      etagCursor(true),
-    )
-
-    // Issues — delta by `since`.
-    await this.syncResource(
-      installationId,
-      id,
-      'issues',
-      full,
-      (cursor) =>
-        client.listIssues(installationId, ref, {
-          since: cursor?.sinceIso ?? undefined,
-          etag: cursor?.etag ?? undefined,
-        }),
-      (items) => fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
-      etagCursor(true),
-    )
-
-    // Commits — delta by `since` on the default branch. On the first sync there
-    // is no cursor, so fall back to the backfill horizon (if configured) instead
-    // of fetching the repo's entire commit history in one step.
+    // Commits fall back to the backfill horizon on the first sync (no cursor) instead of
+    // fetching the repo's entire history in one step — a plain sync computation, so hoist it
+    // out of the wave below.
     const commitBackfillSince =
       this.deps.commitBackfillHorizonMs !== undefined
         ? new Date(this.deps.clock.now() - this.deps.commitBackfillHorizonMs).toISOString()
         : undefined
-    await this.syncResource(
-      installationId,
-      id,
-      'commits',
-      full,
-      (cursor) =>
-        client.listCommits(installationId, ref, {
-          since: cursor?.sinceIso ?? commitBackfillSince,
-        }),
-      (items) => fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
-      (_prev, _etag, now) => ({
-        etag: null,
-        lastSyncedAt: now,
-        sinceIso: new Date(now).toISOString(),
+
+    // Branches, PRs, issues and commits are independent GitHub resources, each on its OWN
+    // installation-scoped cursor (no cross-kind ordering — `syncResource` reads+writes a single
+    // per-kind cursor), so fetch+upsert them in one concurrent wave rather than serially. This
+    // is a fixed 4-wide fan-out per repo (not data-scaled), so it doesn't risk the secondary
+    // rate limits the data-scaled loops below stay bounded against. Checks alone must wait: it
+    // needs the default-branch head resolved from the branch fetch.
+    const [branches] = await Promise.all([
+      // Branches — conditional GET via ETag.
+      this.syncResource(installationId, id, 'branches', full, {
+        fetch: (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
+        nextCursor: etagCursor(false),
       }),
-    )
+      // Pull requests — delta by `since` (GitHub's updated_at lower bound).
+      this.syncResource(installationId, id, 'pulls', full, {
+        fetch: (cursor) =>
+          client.listPullRequests(installationId, ref, {
+            since: cursor?.sinceIso ?? undefined,
+            etag: cursor?.etag ?? undefined,
+          }),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
+        nextCursor: etagCursor(true),
+      }),
+      // Issues — delta by `since`.
+      this.syncResource(installationId, id, 'issues', full, {
+        fetch: (cursor) =>
+          client.listIssues(installationId, ref, {
+            since: cursor?.sinceIso ?? undefined,
+            etag: cursor?.etag ?? undefined,
+          }),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
+        nextCursor: etagCursor(true),
+      }),
+      // Commits — delta by `since` on the default branch. On the first sync there is no
+      // cursor, so fall back to the backfill horizon (if configured).
+      this.syncResource(installationId, id, 'commits', full, {
+        fetch: (cursor) =>
+          client.listCommits(installationId, ref, {
+            since: cursor?.sinceIso ?? commitBackfillSince,
+          }),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
+        nextCursor: (_prev, _etag, now) => ({
+          etag: null,
+          lastSyncedAt: now,
+          sinceIso: new Date(now).toISOString(),
+        }),
+      }),
+    ])
+    const defaultBranchSha =
+      branches.items.find((b) => b.name === repo.defaultBranch)?.headSha ?? null
 
     // Check runs for the default-branch head (CI gating signal). Not cursor-based.
     if (defaultBranchSha) {
@@ -518,7 +719,7 @@ export class GitHubSyncService {
     await fanOut((ws) =>
       this.deps.repoProjectionRepository.upsertMany(ws, [{ ...repo, syncedAt: now }]),
     )
-    if (full) for (const ws of workspaces) await this.invalidateRepoProjection(ws)
+    if (full) await Promise.all(workspaces.map((ws) => this.invalidateRepoProjection(ws)))
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */
@@ -530,7 +731,11 @@ export class GitHubSyncService {
   /** Incremental resync of every repo this workspace links. */
   async resyncWorkspace(workspaceId: string): Promise<void> {
     const repos = await this.deps.repoProjectionRepository.list(workspaceId)
-    for (const repo of repos) await this.syncRepo(repo)
+    // Resync repos with bounded concurrency, not a serial chain nor an unbounded `Promise.all`:
+    // each `syncRepo` issues several GitHub reads, so a workspace linking many repos would
+    // otherwise crawl (serial) or burst enough concurrent calls to trip GitHub's secondary
+    // (abuse) rate limits (unbounded).
+    await pMap(repos, (repo) => this.syncRepo(repo), { concurrency: REPO_SYNC_CONCURRENCY })
   }
 
   /**
@@ -545,6 +750,25 @@ export class GitHubSyncService {
     if (!installation || installation.deletedAt) return
     const workspaceIds =
       await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
-    for (const ws of workspaceIds) await this.resyncWorkspace(ws)
+    // Bounded per-workspace concurrency (each `resyncWorkspace` itself bounds its per-repo
+    // reads), so a large installation backfills in parallel without an unbounded GitHub burst.
+    await pMap(workspaceIds, (ws) => this.resyncWorkspace(ws), {
+      concurrency: WORKSPACE_BACKFILL_CONCURRENCY,
+    })
   }
+}
+
+/**
+ * Whether a row IS the named repository, folding case on both halves.
+ *
+ * One rule for the two populations `linkRepoBySlug` consults (the workspace's own projection and
+ * what the connection reaches), because both providers treat a repository name case-insensitively:
+ * an operator who created `Catalog-Api` and typed `catalog-api` named one repository, and a second
+ * copy of that judgement is where one of the two comparisons quietly becomes exact.
+ */
+function sameSlug(repo: { owner: string; name: string }, owner: string, name: string): boolean {
+  return (
+    repo.owner.toLowerCase() === owner.toLowerCase() &&
+    repo.name.toLowerCase() === name.toLowerCase()
+  )
 }

@@ -1,0 +1,23 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    // Same shape as the TypeScript SDK's: this is a published library, resolved and emitted for
+    // Node's ESM resolver rather than for this repo's build graph.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2022"],
+    // Unlike the SDK next door, this package ships a Node PROCESS: `bin.ts` reads the environment
+    // and the filesystem, writes to stderr and speaks a stdio transport, so `@types/node` belongs
+    // in the shipped config rather than only in the dev one. It is also what types the Web globals
+    // (`Request`, `Response`, `fetch`) the hosted endpoint is written against, since `lib` here
+    // deliberately excludes `DOM`.
+    //
+    // So this does NOT mean every module may reach for a Node built-in: `http.ts` and everything it
+    // pulls in is bundled into deployments' Workers, where `node:fs` does not resolve at build time.
+    // `test/runtime-neutral.test.ts` is what enforces that, since the typecheck cannot.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

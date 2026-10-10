@@ -3,8 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // The Requirement Writer LLM is reached through `generateText` from the `ai` package; mock it so
 // the auto-recommendation path runs end-to-end without a provider. `vi.hoisted` lets the (hoisted)
 // `vi.mock` factory reference the spy we assert on below.
+//
+// PARTIAL, over `importOriginal`, rather than a factory listing the one export this file uses:
+// the module graph pulled in here is the whole `@cat-factory/agents` barrel, so any sibling that
+// reaches for another `ai` export at import time (`jsonSchema`, for the monorepo survey's tool
+// definitions) dies here on a mock that never claimed to be complete.
 const { generateTextMock } = vi.hoisted(() => ({ generateTextMock: vi.fn() }))
-vi.mock('ai', () => ({ generateText: generateTextMock }))
+vi.mock('ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ai')>()),
+  generateText: generateTextMock,
+}))
 
 import type { Block, RequirementReview, RequirementReviewItem } from '@cat-factory/kernel'
 import { RequirementReviewService } from './RequirementReviewService.js'
@@ -15,6 +23,9 @@ const BLOCK = {
   title: 'Widgets endpoint',
   type: 'service',
   description: 'expose a widgets list endpoint',
+  // The active run: the review notification must carry it (F7 — so the executionId-scoped
+  // waiting-card guard treats it as THIS run's richer card).
+  executionId: 'exec_active',
 } as unknown as Block
 
 let idCounter = 0
@@ -43,6 +54,7 @@ function reviewOf(items: RequirementReviewItem[]): RequirementReview {
     model: 'cloudflare:test',
     iteration: 1,
     maxIterations: 6,
+    rev: 0,
     createdAt: NOW,
     updatedAt: NOW,
     incorporatedRequirements: null,
@@ -59,7 +71,16 @@ function makeService(review: RequirementReview) {
     upsert: vi.fn(async (_ws: string, r: RequirementReview) => {
       store.review = r
     }),
-    deleteByBlock: vi.fn(async () => {}),
+    // The service's read-modify-writes ride the rev-guarded conditional write; this fake is
+    // single-writer, so the CAS always lands (and bumps `rev` like the real stores do).
+    compareAndSwap: vi.fn(async (_ws: string, r: RequirementReview) => {
+      r.rev = (r.rev ?? 0) + 1
+      store.review = r
+      return true
+    }),
+    replaceForBlock: vi.fn(async (_ws: string, r: RequirementReview) => {
+      store.review = r
+    }),
   }
   const notificationService = { raise: vi.fn(async () => {}) }
   const svc = new RequirementReviewService({
@@ -152,7 +173,7 @@ describe('RequirementReviewService.autoRecommend', () => {
     expect(notificationService.raise).toHaveBeenCalledTimes(1)
     expect(notificationService.raise).toHaveBeenCalledWith(
       'ws',
-      expect.objectContaining({ type: 'requirement_review' }),
+      expect.objectContaining({ type: 'requirement_review', executionId: 'exec_active' }),
     )
   })
 })

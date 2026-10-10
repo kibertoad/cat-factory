@@ -1,5 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic Kaizen grading sweep for the Node facade — the analogue of the Worker's
@@ -23,6 +23,8 @@ export function startKaizenSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   const kaizen = container.kaizen
   if (!kaizen) return () => {}
@@ -30,13 +32,14 @@ export function startKaizenSweeper(
     name: 'kaizen',
     intervalMs: KAIZEN_SWEEP_INTERVAL_MS,
     log,
+    health,
     failureMessage: 'kaizen sweep failed',
     tick: async () => {
       const processed = await kaizen.service.runPending(
         clock.now() - KAIZEN_STALE_MS,
         KAIZEN_SWEEP_BATCH,
       )
-      if (processed > 0) log.info({ processed }, 'ran pending kaizen gradings')
+      if (processed > 0) log.info('ran pending kaizen gradings', { processed })
     },
   })
 }

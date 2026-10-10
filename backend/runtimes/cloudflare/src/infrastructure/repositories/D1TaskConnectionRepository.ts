@@ -1,8 +1,7 @@
 import type {
-  TaskConnectionRecord,
+  SealedTaskConnectionRecord,
   TaskConnectionRepository,
   TaskSourceKind,
-  SecretCipher,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -15,52 +14,25 @@ interface TaskConnectionRow {
   deleted_at: number | null
 }
 
-function parseCredentials(json: string): Record<string, string> {
-  try {
-    const parsed = JSON.parse(json)
-    if (parsed && typeof parsed === 'object') return parsed as Record<string, string>
-  } catch {
-    // A malformed bag is treated as empty; the import path then fails closed.
-  }
-  return {}
-}
-
 /**
  * D1-backed store of workspace → task-source connections (migration 0014).
  *
- * Source credentials (e.g. a Jira API token) are third-party secrets, so they
- * are encrypted at rest with the same AES-256-GCM envelope the documents /
- * environments integrations use — never written to D1 in plaintext. A row whose
- * `credentials` column predates encryption (no `v1.` envelope) is still read as
- * legacy plaintext JSON, then re-encrypted on the next write.
+ * Source credentials (e.g. a Jira API token) cross this repository as the AES-256-GCM ENVELOPE
+ * they are stored as; opening one belongs to `createTaskConnectionStore`
+ * (`@cat-factory/integrations`). Same shape, and the same reason, as its document-source sibling.
  */
 export class D1TaskConnectionRepository implements TaskConnectionRepository {
   private readonly db: D1Database
-  private readonly cipher: SecretCipher
 
-  constructor({ db, cipher }: { db: D1Database; cipher: SecretCipher }) {
+  constructor({ db }: { db: D1Database }) {
     this.db = db
-    this.cipher = cipher
   }
 
-  /** Decode the stored credential blob, decrypting the envelope when present. */
-  private async decodeCredentials(stored: string): Promise<Record<string, string>> {
-    // Legacy plaintext rows (written before encryption) lack the envelope tag.
-    if (!stored.startsWith('v1.')) return parseCredentials(stored)
-    try {
-      return parseCredentials(await this.cipher.decrypt(stored))
-    } catch {
-      // Wrong key / corrupt envelope: fail closed with an empty bag so the
-      // import path errors rather than leaking a decrypt exception.
-      return {}
-    }
-  }
-
-  private async rowToRecord(row: TaskConnectionRow): Promise<TaskConnectionRecord> {
+  private rowToRecord(row: TaskConnectionRow): SealedTaskConnectionRecord {
     return {
       workspaceId: row.workspace_id,
       source: row.source as TaskSourceKind,
-      credentials: await this.decodeCredentials(row.credentials),
+      credentialsCipher: row.credentials,
       label: row.label,
       createdAt: row.created_at,
       deletedAt: row.deleted_at,
@@ -70,7 +42,7 @@ export class D1TaskConnectionRepository implements TaskConnectionRepository {
   async getByWorkspace(
     workspaceId: string,
     source: TaskSourceKind,
-  ): Promise<TaskConnectionRecord | null> {
+  ): Promise<SealedTaskConnectionRecord | null> {
     const row = await this.db
       .prepare(
         'SELECT * FROM task_connections WHERE workspace_id = ? AND source = ? AND deleted_at IS NULL',
@@ -80,17 +52,17 @@ export class D1TaskConnectionRepository implements TaskConnectionRepository {
     return row ? this.rowToRecord(row) : null
   }
 
-  async listByWorkspace(workspaceId: string): Promise<TaskConnectionRecord[]> {
+  async listByWorkspace(workspaceId: string): Promise<SealedTaskConnectionRecord[]> {
     const { results } = await this.db
       .prepare(
         'SELECT * FROM task_connections WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
       )
       .bind(workspaceId)
       .all<TaskConnectionRow>()
-    return Promise.all(results.map((row) => this.rowToRecord(row)))
+    return results.map((row) => this.rowToRecord(row))
   }
 
-  async upsert(record: TaskConnectionRecord): Promise<void> {
+  async upsert(record: SealedTaskConnectionRecord): Promise<void> {
     // A workspace has a single live connection per source: clear any prior
     // binding (live or tombstoned) before inserting, so reconnecting can't
     // collide on the (workspace_id, source) primary key.
@@ -98,14 +70,19 @@ export class D1TaskConnectionRepository implements TaskConnectionRepository {
       .prepare('DELETE FROM task_connections WHERE workspace_id = ? AND source = ?')
       .bind(record.workspaceId, record.source)
       .run()
-    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
     await this.db
       .prepare(
         `INSERT INTO task_connections
           (workspace_id, source, credentials, label, created_at, deleted_at)
          VALUES (?, ?, ?, ?, ?, NULL)`,
       )
-      .bind(record.workspaceId, record.source, credentials, record.label, record.createdAt)
+      .bind(
+        record.workspaceId,
+        record.source,
+        record.credentialsCipher,
+        record.label,
+        record.createdAt,
+      )
       .run()
   }
 

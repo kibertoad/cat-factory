@@ -6,6 +6,8 @@ import {
   type GroupCacheHandle,
   type RepoProjectionRepository,
   type ServiceRepository,
+  type VcsProvider,
+  type WorkspaceMountRepository,
 } from '@cat-factory/kernel'
 import type { RepoTarget, ResolveRepoTarget } from './ContainerAgentExecutor.js'
 
@@ -93,11 +95,37 @@ function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarge
     resolved.repo.isMonorepo && resolved.directory ? resolved.directory : undefined
   return {
     installationId,
+    // The projection row's id IS the provider's repo id, stringified into the neutral
+    // `VcsRepoRef.repoId` vocabulary — the same shape a webhook delivery names.
+    repoId: String(resolved.repo.githubId),
+    ...(resolved.repo.provider ? { provider: resolved.repo.provider } : {}),
     owner: resolved.repo.owner,
     name: resolved.repo.name,
     baseBranch: resolved.repo.defaultBranch ?? 'main',
     ...(serviceDirectory ? { serviceDirectory } : {}),
   }
+}
+
+/**
+ * The workspace's whole repo projection, read through the per-workspace cache when one is
+ * wired.
+ *
+ * Shared by BOTH builders below rather than open-coded in each: this is the hot, unbounded read
+ * on every dispatch, poll tick and report publish, and a resolver that misses the cache costs a
+ * full re-list every time while looking identical at the call site. The installation lookup and
+ * the ancestry walk stay live (both cheap / tree-depth-bounded), so a reparent or a service
+ * repo-link change needs no invalidation; only the projection's own writes do.
+ */
+async function listProjection(
+  deps: Pick<ResolveRepoTargetDependencies, 'repoProjectionRepository' | 'repoProjectionCache'>,
+  workspaceId: string,
+): Promise<GitHubRepo[]> {
+  const { repoProjectionRepository, repoProjectionCache } = deps
+  return repoProjectionCache
+    ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
+        repoProjectionRepository.list(workspaceId),
+      )
+    : await repoProjectionRepository.list(workspaceId)
 }
 
 /**
@@ -118,19 +146,11 @@ function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarge
  * because each wires its own resolver).
  */
 export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): ResolveRepoTarget {
-  const { installationRepository, repoProjectionRepository, repoProjectionCache } = deps
+  const { installationRepository } = deps
   return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
-    // The whole-projection re-list is the hot, unbounded read here — cache it per
-    // workspace. The installation lookup above and the block ancestry walk below stay
-    // live (both cheap / tree-depth-bounded), so a reparent or service repo-link
-    // change needs no cache invalidation; only the projection's own writes do.
-    const repos = repoProjectionCache
-      ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
-          repoProjectionRepository.list(workspaceId),
-        )
-      : await repoProjectionRepository.list(workspaceId)
+    const repos = await listProjection(deps, workspaceId)
     if (repos.length === 0) return null
     const resolved = await walkToRepo(deps, workspaceId, blockId, indexRepos(repos))
     if (!resolved) {
@@ -145,6 +165,74 @@ export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): Res
       )
     }
     return toRepoTarget(installation.installationId, resolved)
+  }
+}
+
+// ── The workspace's whole run-target set ─────────────────────────────────────────────
+
+/** A repository some service on a board targets, with the provider it is reached through. */
+export interface WorkspaceRunRepo {
+  owner: string
+  name: string
+  /** Rows written before the column existed carry none; those predate GitLab, so `github`. */
+  provider: VcsProvider
+}
+
+/**
+ * Every repository this workspace's runs would push to, deduped, or empty when none would.
+ *
+ * The PLURAL, block-free counterpart of {@link ResolveRepoTarget}: where that answers "which
+ * repository does THIS block's work belong in", this answers "which repositories does work on
+ * this board reach at all", which is the question a credential check has to ask — a credential
+ * is judged before any block is picked.
+ */
+export type ListWorkspaceRunRepos = (workspaceId: string) => Promise<WorkspaceRunRepo[]>
+
+export interface ListWorkspaceRunReposDependencies extends Pick<
+  ResolveRepoTargetDependencies,
+  'repoProjectionRepository' | 'repoProjectionCache'
+> {
+  /** The services a board mounts: every frame it shows, its own homed ones included. */
+  workspaceMountRepository: Pick<WorkspaceMountRepository, 'listByWorkspace'>
+  /** Those services' repo links, in ONE query rather than a point-read per mount. */
+  serviceRepository: Pick<ServiceRepository, 'listByIds'>
+}
+
+/**
+ * Build {@link ListWorkspaceRunRepos}.
+ *
+ * It reads the SERVICES a board mounts rather than the repository projection alone, and the
+ * difference is the whole point: the projection lists every repository the workspace's
+ * connection can see, while a run can only ever target one a service frame is linked to
+ * (`resolveRepoTarget` walks to that service and refuses when the chain is unlinked, with no
+ * first-repo fallback). A consumer reading the projection directly is therefore answering a
+ * strictly wider question than the run path asks, and ordering that wider list by anything
+ * other than relevance — the projection is ordered by owner and name — makes any cap over it
+ * a sample of the alphabet rather than of the work.
+ *
+ * Empty is a meaningful answer, not a degraded one: a board with no repo-linked service starts
+ * no run that reaches a VCS, so there is nothing for a caller to judge or report.
+ */
+export function buildListWorkspaceRunRepos(
+  deps: ListWorkspaceRunReposDependencies,
+): ListWorkspaceRunRepos {
+  return async (workspaceId) => {
+    const mounts = await deps.workspaceMountRepository.listByWorkspace(workspaceId)
+    if (mounts.length === 0) return []
+    const services = await deps.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
+    const targeted = new Set(
+      services.map((service) => service.repoGithubId).filter((id): id is number => id != null),
+    )
+    if (targeted.size === 0) return []
+    // One repository, however many services target it: a monorepo hosting several services is
+    // still a single credential question.
+    return (await listProjection(deps, workspaceId))
+      .filter((repo) => targeted.has(repo.githubId))
+      .map((repo) => ({
+        owner: repo.owner,
+        name: repo.name,
+        provider: repo.provider ?? 'github',
+      }))
   }
 }
 
@@ -211,7 +299,7 @@ export interface ResolveRepoTargetsDependencies extends ResolveRepoTargetDepende
  * primary must resolve or we throw, exactly like the singular resolver.
  */
 export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): ResolveRepoTargets {
-  const { installationRepository, repoProjectionRepository, serviceRepository } = deps
+  const { installationRepository, serviceRepository } = deps
   return async (workspaceId, primaryBlockId, involvedFrameIds, primaryTarget) => {
     // The installation id: reuse the pre-resolved primary target's when provided (skips a second
     // installation read), else read it here.
@@ -228,7 +316,7 @@ export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): R
       }
       installationId = installation.installationId
     }
-    const repos = await repoProjectionRepository.list(workspaceId)
+    const repos = await listProjection(deps, workspaceId)
     const index = indexRepos(repos)
 
     // The primary checkout: reuse the caller's already-resolved target when given (no ancestry

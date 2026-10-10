@@ -1,6 +1,49 @@
-import type { HarnessCallMetric, PiRunStats } from './pi.js'
+import type { HarnessCallMetric } from './pi.js'
+import type { PiRunStats } from './pi-reduction.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
+import type { EffortReport } from './effort.js'
+import {
+  parseValidationChecksSpec,
+  type ValidationChecksSpec,
+  type ValidationReport,
+} from './validation-checks.js'
+import {
+  parseReproductionSpec,
+  type ReproductionReport,
+  type ReproductionSpec,
+} from './reproduction-proof.js'
+import { parseDependencyInstallSpec, type DependencyInstallSpec } from './dependency-install.js'
+import {
+  parseMcpServerSpecs,
+  parseSkillSpecs,
+  type McpServerSpec,
+  type SkillResourceSpec,
+  type SkillSpec,
+} from './agent-capabilities.js'
+import { type TestSecretSpec, parseInfraEnv, parseSecretEnvPairs, str } from './job-env.js'
+import {
+  parseContextFiles,
+  parseImageManifest,
+  type ContextFileSpec,
+  type ImageFileSpec,
+  type ImageManifestSpec,
+} from './context-manifests.js'
+import { parseArtifactUpload, type ArtifactUploadSpec } from './artifact-upload.js'
+
+// Re-exported so a handler describing a job keeps ONE import site (the env-pair shape is a job
+// body field like any other; only its VALIDATION moved out).
+export type { TestSecretSpec }
+
+// Re-exported so the job body stays the one import site for a harness handler describing a job.
+export type { McpServerSpec, SkillResourceSpec, SkillSpec }
+
+// Same rule for the two staged-file manifests: their shapes and their defensive parsing moved to
+// `context-manifests.ts`, but they remain job body fields, so this stays the import site.
+export type { ContextFileSpec, ImageFileSpec, ImageManifestSpec }
+
+// The return leg of the same seam, for the same reason (`artifact-upload.ts`).
+export type { ArtifactUploadSpec }
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -17,6 +60,20 @@ export interface HarnessAuthFields {
   harness?: HarnessKind
   /** Worker LLM proxy base URL, including /v1 (Pi harness only). */
   proxyBaseUrl?: string
+  /**
+   * The backend declaring that it serves the phase-tagged completions route
+   * (`${proxyBaseUrl}/phase/<phase>/chat/completions`), so this run may attribute each model
+   * call to the phase that spent it (`docs/initiatives/token-burn-instrumentation.md`). The
+   * same shape as {@link AgentJob.webSearch}: the backend states what IT serves, and the
+   * harness points Pi accordingly.
+   *
+   * Not a capability handshake — the harness never asks and never adapts to an answer. It
+   * exists because the harness image and the backend are only a matched set on the Cloudflare
+   * deployment: a runner pool pins its own image and `LOCAL_HARNESS_IMAGE` overrides the
+   * recommended pin, so an image ahead of its backend would otherwise 404 every model call.
+   * Absent ⇒ the plain path, and the run's calls are recorded as unattributed.
+   */
+  proxyPhasePath?: boolean
   /** Signed, model-locked proxy session token (Pi harness only). */
   sessionToken?: string
   /** Leased subscription credential (Claude Code OAuth token / Codex auth.json). */
@@ -70,8 +127,13 @@ export interface PrSpec {
  */
 export interface PeerRepoSpec {
   repo: RepoSpec
-  /** The involved service frame this repo resolved from, echoed back on the peer PR. */
-  frameId?: string
+  /**
+   * The involved service frames this repo resolved from, echoed back on the peer PR verbatim.
+   * More than one when the peer is a monorepo hosting several of the run's involved services:
+   * they share this ONE checkout, its work branch and its pull request. Opaque to the harness,
+   * which decides no frame attribution of its own.
+   */
+  frameIds?: string[]
   /**
    * The work branch to create off the peer's base and push (the shared `cat-factory/<block>`).
    * Present for a COING fan-out (coder / ci-fixer). Absent for a READ-ONLY explore fan-out
@@ -104,13 +166,6 @@ export interface ReferenceRepoSpec {
   repo: RepoSpec
   /** Per-repo GitHub token; defaults to the job's `ghToken` (one installation per workspace today). */
   ghToken?: string
-}
-
-function str(value: unknown, path: string): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Invalid job: '${path}' must be a non-empty string`)
-  }
-  return value
 }
 
 /** A positive finite integer, or undefined for any other input (silently ignored). */
@@ -147,10 +202,34 @@ function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
   const noEdit = posInt(o.maxToolCallsWithoutEdit)
   const errors = posInt(o.maxConsecutiveErrors)
   const web = posInt(o.maxConsecutiveWebCalls)
+  const mcp = posInt(o.maxConsecutiveMcpCalls)
+  const nonAction = posInt(o.maxConsecutiveNonActionCalls)
   if (noEdit !== undefined) spec.maxToolCallsWithoutEdit = noEdit
   if (errors !== undefined) spec.maxConsecutiveErrors = errors
   if (web !== undefined) spec.maxConsecutiveWebCalls = web
+  if (mcp !== undefined) spec.maxConsecutiveMcpCalls = mcp
+  if (nonAction !== undefined) spec.maxConsecutiveNonActionCalls = nonAction
   return Object.keys(spec).length > 0 ? spec : undefined
+}
+
+/**
+ * Parse the optional Ralph-loop validation spec. Requires a non-empty `command` string (the
+ * completion criterion the harness runs); `progressPath`/`iteration` are optional metadata.
+ * Returns undefined when absent or malformed (a coding run then behaves like any other — no
+ * post-commit validation). See {@link ValidationSpec}.
+ */
+function parseValidationSpec(value: unknown): ValidationSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  if (typeof o.command !== 'string' || o.command.trim() === '') return undefined
+  const iteration = posInt(o.iteration)
+  return {
+    command: o.command,
+    ...(typeof o.progressPath === 'string' && o.progressPath
+      ? { progressPath: o.progressPath }
+      : {}),
+    ...(iteration !== undefined ? { iteration } : {}),
+  }
 }
 
 /**
@@ -181,6 +260,8 @@ function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
     harness,
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
+    // Opt-IN, so a backend that doesn't serve the phase route (or predates it) is the default.
+    ...(o.proxyPhasePath === true ? { proxyPhasePath: true } : {}),
   }
 }
 
@@ -247,7 +328,10 @@ function parsePeerRepos(value: unknown): PeerRepoSpec[] {
     if (e.cloneBranch !== undefined) {
       spec.cloneBranch = str(e.cloneBranch, `peerRepos[${i}].cloneBranch`)
     }
-    if (typeof e.frameId === 'string' && e.frameId) spec.frameId = e.frameId
+    if (Array.isArray(e.frameIds)) {
+      const frameIds = e.frameIds.filter((f): f is string => typeof f === 'string' && !!f)
+      if (frameIds.length) spec.frameIds = frameIds
+    }
     if (typeof e.ghToken === 'string' && e.ghToken) spec.ghToken = e.ghToken
     if (typeof e.pr === 'object' && e.pr !== null) {
       const p = e.pr as Record<string, unknown>
@@ -363,7 +447,7 @@ export interface PackageRegistrySpec {
   ecosystem: 'npm'
   /** Registry host, e.g. `registry.npmjs.org` — allowlisted, never a full URL. */
   host: string
-  /** npm scopes (`@org`) routed to this registry. */
+  /** npm scopes (`@org`) routed to this registry; EMPTY ⇒ authenticate the host only. */
   scopes: string[]
   token: string
 }
@@ -411,8 +495,12 @@ export function parsePackageRegistries(
         `Invalid job: 'packageRegistries[${i}].host' '${host}' is not an allowed npm registry host`,
       )
     }
-    if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
-      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be a non-empty array`)
+    // An EMPTY scope list is valid and deliberate: the entry then only authenticates its
+    // host, leaving every package to resolve from the default registry unless a dependency
+    // pins this one itself. Mapping a scope is all-or-nothing, so a workspace mixing private
+    // and public packages under one scope must be able to skip it.
+    if (!Array.isArray(entry.scopes)) {
+      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be an array`)
     }
     const scopes = entry.scopes.map((scope, j) => {
       const s = str(scope, `packageRegistries[${i}].scopes[${j}]`).trim()
@@ -428,49 +516,6 @@ export function parsePackageRegistries(
       )
     }
     entries.push({ ecosystem: 'npm', host, scopes, token })
-  }
-  return entries
-}
-
-/**
- * One sensitive test credential the tester receives: an env-var name + its (secret) value.
- * The backend seals these at rest and decrypts them at dispatch; the harness injects each as an
- * environment variable the tester's shell can read (out of band — the value is NEVER in the
- * prompt/telemetry). See {@link parseTestSecrets}.
- */
-export interface TestSecretSpec {
-  key: string
-  value: string
-}
-
-/** A valid POSIX shell variable name (letters, digits, underscore; not starting with a digit). */
-const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-/**
- * Validate the optional tester `testSecrets` list — `{ key, value }` env pairs the harness
- * injects into the run environment. Keys must be valid env-var names; toolchain-critical /
- * reserved names ({@link isReservedEnvName}) and duplicates are dropped so a drifted body can't
- * clobber PATH/NODE_OPTIONS/etc. Absent ⇒ no secrets injected.
- */
-export function parseTestSecrets(value: unknown): TestSecretSpec[] {
-  if (value === undefined || value === null) return []
-  if (!Array.isArray(value)) throw new Error("Invalid job: 'testSecrets' must be an array")
-  const entries: TestSecretSpec[] = []
-  const seen = new Set<string>()
-  for (const [i, raw] of value.entries()) {
-    if (typeof raw !== 'object' || raw === null) {
-      throw new Error(`Invalid job: 'testSecrets[${i}]' must be an object`)
-    }
-    const entry = raw as Record<string, unknown>
-    const key = str(entry.key, `testSecrets[${i}].key`).trim()
-    if (!ENV_VAR_NAME_PATTERN.test(key)) {
-      throw new Error(
-        `Invalid job: 'testSecrets[${i}].key' must be a valid environment variable name`,
-      )
-    }
-    if (isReservedEnvName(key) || seen.has(key)) continue
-    seen.add(key)
-    entries.push({ key, value: str(entry.value, `testSecrets[${i}].value`) })
   }
   return entries
 }
@@ -588,19 +633,6 @@ export interface AgentBootstrapSpec {
   fromScratch?: boolean
 }
 
-/**
- * A linked-context file the backend prepared (requirements / RFC / PRD / tracker issue)
- * for the harness to materialise under CONTEXT_DIR in the checkout, so the agent can read
- * it on demand. The harness can't reach Jira/GitHub itself, so all such context is fetched
- * and shipped here up front. `path` is sanitised to a safe basename on parse.
- */
-export interface ContextFileSpec {
-  path: string
-  title: string
-  url: string
-  content: string
-}
-
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -627,8 +659,36 @@ export interface AgentOutputSpec {
  * RUNNING — no agent runs and the serve is deliberately not torn down when the job returns
  * (see {@link AgentResult.preview}).
  */
+/**
+ * Coding mode (Ralph loop): the programmatic completion criterion. After the coding agent
+ * commits + pushes, the harness runs {@link command} in the checkout and reports its exit
+ * code back on {@link AgentResult.ralphVerdict} — exit 0 means the loop is done. This is the
+ * whole point of a Ralph loop's exit condition being a REAL check: the harness runs it, not
+ * the model. The command runs only inside the sandboxed run container (same trust boundary
+ * as the coding agent). Absent for every non-`ralph` coding run.
+ */
+export interface ValidationSpec {
+  /** The shell command the harness runs against the checkout (exit 0 = the criterion is met). */
+  command: string
+  /** Repo-relative progress-log path the agent maintains (informational; the harness doesn't write it). */
+  progressPath?: string
+  /** 1-based iteration number, echoed back on the verdict for the engine's attempt log. */
+  iteration?: number
+}
+
 export interface AgentJob extends HarnessAuthFields {
   jobId: string
+  /**
+   * The backend run this job belongs to, bound onto the per-job logger beside `jobId` and used
+   * for NOTHING else. The container is the far side of the platform's longest seam: the backend
+   * knows a run as `executionId` and the harness knew it only as `jobId`, so a container log line
+   * could not be joined to the run that dispatched it except through the
+   * `${executionId}-${agentKind}` job-id naming convention. Optional because a body predating the
+   * field (or a hand-rolled acceptance fixture) must still run — an absent id costs correlation,
+   * never the job.
+   */
+  workspaceId?: string
+  executionId?: string
   mode: AgentMode
   systemPrompt: string
   userPrompt: string
@@ -663,6 +723,36 @@ export interface AgentJob extends HarnessAuthFields {
    */
   contextFiles?: ContextFileSpec[]
   /**
+   * The task's reference design images, downloaded into `.cat-context/reference-screenshots/`
+   * before the agent runs (see {@link ImageManifestSpec}). Sent only for a kind that
+   * CAPTURES views and only when the task actually has references, so absent is the normal case
+   * and means the agent names its own views.
+   */
+  referenceScreenshots?: ImageManifestSpec
+  /**
+   * The PICTURES of the task's designs, for a kind that builds or plans a screen. Downloaded into
+   * `.cat-context/design-renders/` before the run; the agent's prompt (composed by the backend)
+   * names each file and its view, and the agent opens them with its own image-reading tool.
+   *
+   * The same wire shape and the same download seam as {@link AgentJob.referenceScreenshots}, and a
+   * separate field with a separate directory because the two are opposite instructions: that one
+   * names the views to CAPTURE, this one is the design to BUILD. Sent only when the backend
+   * decided this harness can read an image at all, so absent is the normal case and means the run
+   * works from the textual design description (its prompt says which).
+   */
+  designImages?: ImageManifestSpec
+  /**
+   * Where this job uploads the artifacts it PRODUCES (see {@link ArtifactUploadSpec}) — the
+   * outbound leg of the seam {@link AgentJob.referenceScreenshots} and {@link
+   * AgentJob.designImages} are the inbound legs of. Surfaced to the agent as
+   * `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, which the capturing prompts already name.
+   *
+   * Sent only for a kind the backend gave a browser image to, so absent is the NORMAL case and
+   * means this run produces no platform-held bytes. SECRET-BEARING (`token` is the run's container
+   * session token), so it is registered for redaction before it reaches any child.
+   */
+  artifactUpload?: ArtifactUploadSpec
+  /**
    * Private package-registry auth (npm private orgs, GitHub Packages), rendered into
    * `~/.npmrc` before the run so the checkout's installs — the agent's own and the
    * frontend-infra stand-up's — resolve private dependencies. Hosts are hard-allowlisted
@@ -671,12 +761,47 @@ export interface AgentJob extends HarnessAuthFields {
    */
   packageRegistries?: PackageRegistrySpec[]
   /**
+   * The skills to make available for this run (see {@link SkillSpec}) — a `skill` step's picked
+   * skill and/or the playbooks the running agent kind declares. Materialised harness-aware before
+   * the run: natively into `CLAUDE_CONFIG_DIR/skills/<name>/` for claude-code, or
+   * `.cat-context/skill/<name>/<relPath>` for Pi/codex. Absent ⇒ no skills installed.
+   */
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the agent CLI for this run (see {@link McpServerSpec}). The
+   * backend has already dropped anything this harness cannot serve, so every entry here is
+   * expected to work. SECRET-BEARING (`env`/`headers` carry resolved credentials), so the config
+   * files written from it live outside the checkout and are never logged. Absent ⇒ the CLI's
+   * built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
+  /**
+   * Enable the codex CLI's own `image_gen` tool for this job, and stage what it writes into
+   * `.cat-context/binary-output/generated/` where the agent can reach it.
+   *
+   * Set when the dispatch resolved a HARNESS-transport binary generator served by codex. Opt-in
+   * per job because the tool bills the leased ChatGPT plan at several times an ordinary turn, so
+   * an always-on image capability would charge every run for one it never uses. Ignored by the
+   * Pi and claude-code runners, neither of which has such a tool. Absent ⇒ no image tool.
+   */
+  generateImages?: boolean
+  /**
    * Tester kinds only: sensitive test credentials injected into the run's ENVIRONMENT (out of
    * band) as `{ key, value }` env pairs, so the tester's shell can read `$KEY` without the value
    * ever appearing in the prompt or telemetry. Reserved/toolchain env names are dropped at parse.
    * Absent ⇒ no secrets injected.
    */
   testSecrets?: TestSecretSpec[]
+  /**
+   * The resolved credentials of the step's GENERATIVE BINARY INTEGRATIONS (the image / music /
+   * video generation APIs its `binaryOutput` selection named), as env pairs the harness injects
+   * into the agent's own process — where the agent's brief has already told it to read them from.
+   * Distinct from {@link testSecrets} because the two have different producers and different
+   * lifetimes: tester secrets are workspace state a human stored, these are a deployment's
+   * registration resolved per dispatch. Absent ⇒ no integration declared a credential, or none
+   * resolved (which the agent is told to report rather than work around).
+   */
+  capabilitySecrets?: TestSecretSpec[]
   /**
    * Explore mode: stand the service's dependencies up before the agent runs (the
    * tester). Brings the docker-compose infra up on localhost for the duration of the
@@ -722,6 +847,15 @@ export interface AgentJob extends HarnessAuthFields {
    */
   referenceBranches?: string[]
   /**
+   * Explore mode (the `pr-reviewer`): the reviewed PR/MR number. Present ⇒ after the base
+   * checkout the harness fetches that PR's HEAD into `origin/pr-head` (best-effort) so the
+   * read-only reviewer can diff/read the PROPOSED code — files the PR adds are otherwise absent
+   * from the base checkout, and the agent has no git credential to fetch the head itself. The
+   * GitHub-vs-GitLab pull ref is chosen from `repo.provider` (host-inferred when absent). Absent
+   * ⇒ no head fetch (every non-review run). See {@link file://./git.ts} `fetchPullRequestHead`.
+   */
+  reviewPrNumber?: number
+  /**
    * Coding mode: whether a no-op run (nothing changed) is a failure. The implementer
    * fails on a no-op; the in-place fixers (ci-fix / fix-tests) treat it as a non-fatal
    * no-op. Default true.
@@ -753,6 +887,41 @@ export interface AgentJob extends HarnessAuthFields {
    * killed for a kind's normal working pattern. Absent ⇒ env/default for all knobs.
    */
   guardLimits?: GuardLimitsSpec
+  /**
+   * Coding mode (Ralph loop): the programmatic completion command the harness runs after the
+   * agent commits + pushes. Present only for a `ralph` iteration. See {@link ValidationSpec}.
+   */
+  validation?: ValidationSpec
+  /**
+   * Coding mode: the service's PRE-PR VALIDATION CHECKS — commands the harness runs against the
+   * checkout after the agent settles and BEFORE opening a PR, feeding a failure back to the agent
+   * until they pass or the budget is spent. Present only on a dispatch that opens a PR and whose
+   * service configured checks; absent ⇒ the run behaves exactly as before. Deliberately keyed off
+   * job DATA, not the agent kind. See {@link ValidationChecksSpec}.
+   */
+  validationChecks?: ValidationChecksSpec
+  /**
+   * Coding mode: the run's BUGFIX REPRODUCTION PROOF — the declared reproduction command, the
+   * test file(s) that constitute it, and an optional setup command. When set, the harness runs
+   * that command against the pre-fix tree AND the tree the PR will open from, and reports both
+   * exit codes: only red-then-green is proof. Present only on a dispatch that opens a PR and
+   * whose run carries a reproduction declaration; absent ⇒ the run behaves exactly as before.
+   * Deliberately keyed off job DATA, not the agent kind. See
+   * `docs/initiatives/bugfix-reproduction-proof.md`.
+   */
+  reproduction?: ReproductionSpec
+  /**
+   * DEPENDENCY PREPOPULATION: the service's install command, run against the checkout BEFORE the
+   * agent's first turn so it reads a tree whose dependencies are present rather than inferring
+   * them from a manifest. Applies to EVERY mode that gets a checkout (explore as well as coding)
+   * — unlike {@link validationChecks}, which is a pre-PR gate — because an agent reading or
+   * reviewing a tree needs its dependencies as much as one changing it.
+   *
+   * Best-effort: a failure becomes a note in the agent's prompt, never a failed job. Absent ⇒ the
+   * run behaves exactly as before. Deliberately keyed off job DATA, not the agent kind. See
+   * `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: DependencyInstallSpec
 }
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
@@ -760,6 +929,8 @@ export interface GuardLimitsSpec {
   maxToolCallsWithoutEdit?: number
   maxConsecutiveErrors?: number
   maxConsecutiveWebCalls?: number
+  maxConsecutiveMcpCalls?: number
+  maxConsecutiveNonActionCalls?: number
 }
 
 /**
@@ -774,6 +945,36 @@ export interface GuardLimitsSpec {
 export interface InfraSetupRecord {
   /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
   started: boolean
+  /**
+   * Whether this container had a Docker daemon to talk to at all, when it knows.
+   *
+   * The distinction `started` alone cannot make: a stack that failed to come up and a container
+   * with no daemon are the same `started: false` and opposite problems (one is the service's
+   * compose file, the other is the executor image or the sandbox it runs in). ABSENT means this
+   * container's probe reached no verdict — never assume `false` from absence, which is the exact
+   * mistake that let a daemon-less image read as an ordinary infra failure for months.
+   */
+  dockerAvailable?: boolean
+  /**
+   * What a real container DID on that daemon, when the platform measured it.
+   *
+   * The third diagnosis, and the one `dockerAvailable` structurally cannot carry: a rootless
+   * daemon nested in a sandbox answers throughout while unable to mount any image layer, so it is
+   * `dockerAvailable: true` and no stack can come up on it (issue #2120). Reporting that as an
+   * absent daemon sends a human to restart one that is already up. `undetermined` is a check that
+   * ran and could not tell; ABSENT means nothing was measured at all.
+   */
+  dockerWorkload?: 'usable' | 'unusable' | 'undetermined'
+  /**
+   * What a container started ON that daemon could REACH, when the platform measured it.
+   *
+   * The fourth diagnosis, and the one `dockerWorkload: 'usable'` structurally cannot carry: a
+   * rootless daemon started with `--iptables=false` installs no MASQUERADE rule for its bridge,
+   * so it runs containers perfectly and none of them has a route out. The stack comes up and
+   * every `docker build` that fetches a dependency fails, slowly. Present only alongside
+   * `usable`, which is the one verdict with an egress half; absent means nothing measured it.
+   */
+  dockerEgress?: 'reachable' | 'blocked' | 'undetermined'
   /** The repo-relative compose file that was stood up. */
   composePath?: string
   /** Epoch ms the stand-up attempt finished. */
@@ -799,6 +1000,22 @@ export interface AgentResult {
    */
   infraSetup?: InfraSetupRecord
   /**
+   * The PRE-PR VALIDATION report: the outcome of running the service's configured check commands
+   * against the checkout after the agent settled and before opening a PR, plus how many repair
+   * rounds the harness spent. Present on BOTH outcomes — a passing report accompanies the opened
+   * PR (the captured proof), and a failing one accompanies the run's `error` (no PR was opened).
+   * Absent when the job carried no {@link AgentJob.validationChecks}.
+   */
+  validationReport?: ValidationReport
+  /**
+   * The BUGFIX REPRODUCTION PROOF: the declared reproduction command's verdict across the pre-fix
+   * tree and the final tree, computed by the harness from exit codes. Present on every outcome of
+   * a job that carried {@link AgentJob.reproduction} — a verdict is evidence, not a gate, so an
+   * `inconclusive` one accompanies the opened PR exactly like a `reproduced` one does. Absent
+   * when the job carried no reproduction declaration.
+   */
+  reproductionReport?: ReproductionReport
+  /**
    * Preview mode: the in-container URL the built app is served at (e.g. `http://localhost:4173`).
    * This is NOT host-reachable on its own — the container runtime publishes the serve port to an
    * ephemeral host port and the backend forms the browsable URL from that; this is echoed for
@@ -810,12 +1027,34 @@ export interface AgentResult {
   prUrl?: string
   branch?: string
   /**
+   * Coding mode (Ralph loop): the harness-computed verdict of the post-commit validation
+   * command — whether it exited 0, its exit code, and a bounded, redacted output tail. The
+   * engine reads this (never a model self-report) to decide whether the loop is done or must
+   * iterate again. Present only for a `ralph` iteration ({@link AgentJob.validation} set).
+   */
+  ralphVerdict?: {
+    validationPassed: boolean
+    exitCode: number
+    validationOutputTail?: string
+    iteration?: number
+    /**
+     * The work-branch HEAD the command was judged against. The engine compares it across
+     * consecutive failing iterations to end a loop that has stopped committing anything,
+     * instead of spending the rest of its budget re-learning that. Absent when unreadable.
+     */
+    headSha?: string
+  }
+  /**
    * Coding mode (multi-repo): the PRs opened in the connected services' PEER repos, one per
    * repo the run actually changed (service-connections phase 3). Beside the own-service
    * `prUrl`/`branch`; the backend lifts these onto the block's `peerPullRequests`. Absent for
    * a single-repo run.
+   *
+   * `frameIds` is the dispatch's own attribution echoed back untouched (see
+   * {@link PeerRepoSpec.frameIds}): one entry per repo, carrying every involved frame that
+   * repo hosts.
    */
-  peerPullRequests?: { repo: string; frameId?: string; prUrl: string; branch: string }[]
+  peerPullRequests?: { repo: string; frameIds?: string[]; prUrl: string; branch: string }[]
   /** Coding mode (bootstrap): the default branch the bootstrapped contents were pushed to. */
   defaultBranch?: string
   error?: string
@@ -832,6 +1071,12 @@ export interface AgentResult {
    * {@link HarnessCallMetric}.
    */
   callMetrics?: HarnessCallMetric[]
+  /**
+   * The agent's effort self-assessment (how hard the work was, what reduced its effectiveness,
+   * the key obstacles), lifted from its sentinel file after the run. The backend forwards it onto
+   * the job result and records it on the step for run details. Absent when the agent wrote none.
+   */
+  effortReport?: EffortReport
 }
 
 /** Parse the coding-mode bootstrap spec, or undefined when absent. Validates the target. */
@@ -852,41 +1097,6 @@ function parseAgentBootstrapSpec(value: unknown): AgentBootstrapSpec | undefined
     target,
     ...(o.fromScratch === true ? { fromScratch: true } : {}),
   }
-}
-
-/**
- * Sanitise a body-supplied context filename to a safe basename within CONTEXT_DIR:
- * strip any directory part, allow only `[A-Za-z0-9._-]`, and reject empties / dotfiles
- * / `..` so a hostile value can't escape the directory or clobber repo files.
- */
-function sanitizeContextFileName(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
-  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
-  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
-  return cleaned
-}
-
-/** Parse the linked-context files, dropping any malformed/unsafe entry. */
-function parseContextFiles(value: unknown): ContextFileSpec[] {
-  if (!Array.isArray(value)) return []
-  const files: ContextFileSpec[] = []
-  const used = new Set<string>()
-  for (const entry of value) {
-    if (typeof entry !== 'object' || entry === null) continue
-    const e = entry as Record<string, unknown>
-    const path = sanitizeContextFileName(e.path)
-    if (!path || used.has(path)) continue
-    if (typeof e.content !== 'string') continue
-    used.add(path)
-    files.push({
-      path,
-      title: typeof e.title === 'string' ? e.title : path,
-      url: typeof e.url === 'string' ? e.url : '',
-      content: e.content,
-    })
-  }
-  return files
 }
 
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
@@ -921,48 +1131,6 @@ function parseStringMap(value: unknown): Record<string, string> | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
-/**
- * Env-var names never injected from a frontend binding: spread over `process.env` at build
- * time, so any of these would break the toolchain (or enable code execution / cert overrides)
- * rather than name an upstream URL. Matched exactly (Linux env is case-sensitive); the
- * {@link RESERVED_ENV_PREFIXES} below cover whole families (`npm_config_*`, `GIT_*`, …).
- */
-const RESERVED_ENV_NAMES = new Set([
-  'PATH',
-  'HOME',
-  'NODE_OPTIONS',
-  'NODE_PATH',
-  'NODE_EXTRA_CA_CERTS',
-  'LD_PRELOAD',
-  'LD_LIBRARY_PATH',
-  'BASH_ENV',
-  'ENV',
-  'SHELL',
-  'IFS',
-])
-
-/**
- * Env-var name PREFIXES never injected from a frontend binding. `npm_config_*` reconfigures the
- * package manager (registry, scripts, prefix), and `GIT_*` reconfigures git — both run during a
- * frontend install/build, so a binding in either family is toolchain control, not an upstream URL.
- * Compared case-INSENSITIVELY (lower-cased here, matched lower-cased below): npm reads its config
- * env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY` is honoured just like
- * `npm_config_registry` — a case-sensitive prefix match would let the upper-cased form slip through.
- */
-const RESERVED_ENV_PREFIXES = ['npm_config_', 'git_']
-
-/**
- * Whether an env-var name is reserved (an exact name, or a reserved family prefix). The exact
- * names are canonical upper-case env vars matched verbatim (Linux env is case-sensitive, so a
- * distinct lower-cased `home` is a different, harmless var); the family PREFIXES are matched
- * case-insensitively because npm interprets `npm_config_*` regardless of case (see above).
- */
-function isReservedEnvName(key: string): boolean {
-  if (RESERVED_ENV_NAMES.has(key)) return true
-  const lower = key.toLowerCase()
-  return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
-}
-
 /** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
 function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const packageManager =
@@ -972,17 +1140,7 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const serveMode = o.serveMode === 'static' || o.serveMode === 'command' ? o.serveMode : undefined
   const envInjection =
     o.envInjection === 'build' || o.envInjection === 'runtime' ? o.envInjection : undefined
-  // Only string→string entries survive; a non-string value is dropped so a malformed
-  // binding can't inject `[object Object]` (or undefined) as an upstream URL. Reserved names
-  // that would break the toolchain or enable injection (PATH, NODE_OPTIONS, LD_PRELOAD, …) are
-  // dropped too: they are spread over `process.env` at build time, so a binding named `PATH`
-  // would replace it with a URL and the build would no longer find its tools.
-  const env: Record<string, string> = {}
-  if (typeof o.env === 'object' && o.env !== null) {
-    for (const [key, val] of Object.entries(o.env as Record<string, unknown>)) {
-      if (key && !isReservedEnvName(key) && typeof val === 'string') env[key] = val
-    }
-  }
+  const env = parseInfraEnv(o.env)
   const servePort = port(o.servePort)
   const wiremockPort = port(o.wiremockPort)
   // The app's monorepo subdirectory becomes the install/build/serve cwd, so it goes through the
@@ -1023,7 +1181,7 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
 /** The one-shot inline completion job. `harness` must be a subscription harness. */
 export interface InlineJob extends HarnessAuthFields {
   jobId: string
-  /** Real vendor model id, e.g. `claude-opus-4-8` / `gpt-5.5-codex`. */
+  /** The vendor's own model id (what the agent CLI is invoked with), never a catalog id. */
   model: string
   /** Composed role + best-practice fragments (Claude: `--append-system-prompt`; Codex: prepended). */
   systemPrompt: string
@@ -1036,9 +1194,29 @@ export interface InlineJob extends HarnessAuthFields {
 /** The inline completion result: the reply text plus lifted token usage / per-call telemetry. */
 export interface InlineResult {
   text: string
-  /** `length` when the model hit its output cap (the reviewer rejects a truncated doc). */
+  /**
+   * `length` when the model hit its output cap (the reviewer rejects a truncated doc), `stop`
+   * when it finished of its own accord, ABSENT when the CLI reported no stop reason at all.
+   *
+   * Absent is the normal case today: neither subscription CLI exposes a per-call stop reason on
+   * its parent stream, and the three states must stay distinct because a reader that takes
+   * absent for `stop` is asserting the one thing a truncation check exists to disprove.
+   */
   finishReason?: 'stop' | 'length'
-  usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * The job's token usage with the input side split into its three ORTHOGONAL classes:
+   * `inputTokens` is FRESH input only, so the total input is
+   * `inputTokens + cacheReadTokens + cacheWriteTokens`. Folded from the per-call metrics below,
+   * which is the only channel that knows the split; a CLI that streamed none falls back to the
+   * coarse total with both cache classes 0 — honest, since on that shape nothing is known to
+   * have been cached.
+   */
+  usage?: {
+    inputTokens: number
+    cacheReadTokens: number
+    cacheWriteTokens: number
+    outputTokens: number
+  }
   /** Per-model-call telemetry lifted from the CLI stream (recorded into `llm_call_metrics`). */
   callMetrics?: HarnessCallMetric[]
   /** A structured failure marks a job-level failure even on a clean HTTP exit (see JobResultBase). */
@@ -1096,75 +1274,33 @@ export function parseAgentJob(input: unknown): AgentJob {
   // requires them (throws when missing/empty), exactly as before.
   const agentField = (value: unknown, path: string): string =>
     mode === 'preview' ? (typeof value === 'string' ? value : '') : str(value, path)
-  const repo = (o.repo ?? {}) as Record<string, unknown>
-  const output =
-    typeof o.output === 'object' && o.output !== null
-      ? (() => {
-          const so = o.output as Record<string, unknown>
-          const kind = so.kind === 'structured' ? 'structured' : 'prose'
-          const spec: AgentOutputSpec = { kind }
-          if (typeof so.shapeHint === 'string') spec.shapeHint = so.shapeHint
-          // Carry an explicit `repair: false` through — the handler defaults to repair-on
-          // when absent, so dropping `false` would silently re-enable the repair call for a
-          // kind that opted out (it keys off `output.repair === false`).
-          if (typeof so.repair === 'boolean') spec.repair = so.repair
-          // Carry the opt-in truncation gate through (document producers set it); dropping
-          // it would silently re-enable laundering a cut-off reply into a half-baked doc.
-          if (so.failOnUnusableFinal === true) spec.failOnUnusableFinal = true
-          return spec
-        })()
-      : undefined
-  const pr =
-    typeof o.pr === 'object' && o.pr !== null
-      ? (() => {
-          const p = o.pr as Record<string, unknown>
-          return { title: str(p.title, 'pr.title'), body: typeof p.body === 'string' ? p.body : '' }
-        })()
-      : undefined
-  const infra = parseAgentInfraSpec(o.infra)
-  const peerRepos = parsePeerRepos(o.peerRepos)
-  const referenceRepos = parseReferenceRepos(o.referenceRepos)
-  const referenceBranches = parseReferenceBranches(o.referenceBranches)
-  const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
-  const contextFiles = parseContextFiles(o.contextFiles)
-  const packageRegistries = parsePackageRegistries(o.packageRegistries)
-  const testSecrets = parseTestSecrets(o.testSecrets)
-  const guardLimits = parseGuardLimits(o.guardLimits)
-  const job: AgentJob = {
-    jobId: str(o.jobId, 'jobId'),
-    mode,
-    systemPrompt: agentField(o.systemPrompt, 'systemPrompt'),
-    userPrompt: agentField(o.userPrompt, 'userPrompt'),
-    model: agentField(o.model, 'model'),
-    ...parseHarnessAuth(o),
-    ghToken: str(o.ghToken, 'ghToken'),
-    repo: parseRepoSpec(repo),
-    branch: str(o.branch, 'branch'),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-    ...(o.full === true ? { full: true } : {}),
-    ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
-    ...(bootstrap ? { bootstrap } : {}),
-    ...(output ? { output } : {}),
-    ...(contextFiles.length ? { contextFiles } : {}),
-    ...(packageRegistries.length ? { packageRegistries } : {}),
-    ...(testSecrets.length ? { testSecrets } : {}),
-    ...(infra ? { infra } : {}),
-    ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
-    ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),
-    ...(typeof o.commitMessage === 'string' && o.commitMessage
-      ? { commitMessage: o.commitMessage }
-      : {}),
-    ...(pr ? { pr } : {}),
-    ...(peerRepos.length ? { peerRepos } : {}),
-    ...(referenceRepos.length ? { referenceRepos } : {}),
-    ...(referenceBranches.length ? { referenceBranches } : {}),
-    ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
-    ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
-    ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
-    ...(guardLimits ? { guardLimits } : {}),
-  }
+  // Parse each field, then hand the pieces to `assembleAgentJob` for the (large) object literal —
+  // the parse/assemble split keeps both within the cyclomatic-complexity budget. Behaviour is
+  // byte-identical (the literal + host validation moved verbatim).
+  const job = assembleAgentJob(o, mode, agentField, {
+    output: parseAgentOutputSpec(o.output),
+    pr: parseAgentPrSpec(o.pr),
+    infra: parseAgentInfraSpec(o.infra),
+    peerRepos: parsePeerRepos(o.peerRepos),
+    referenceRepos: parseReferenceRepos(o.referenceRepos),
+    referenceBranches: parseReferenceBranches(o.referenceBranches),
+    bootstrap: parseAgentBootstrapSpec(o.bootstrap),
+    contextFiles: parseContextFiles(o.contextFiles),
+    referenceScreenshots: parseImageManifest(o.referenceScreenshots),
+    designImages: parseImageManifest(o.designImages),
+    artifactUpload: parseArtifactUpload(o.artifactUpload),
+    packageRegistries: parsePackageRegistries(o.packageRegistries),
+    skills: parseSkillSpecs(o.skills),
+    mcpServers: parseMcpServerSpecs(o.mcpServers),
+    testSecrets: parseSecretEnvPairs(o.testSecrets, 'testSecrets'),
+    capabilitySecrets: parseSecretEnvPairs(o.capabilitySecrets, 'capabilitySecrets'),
+    guardLimits: parseGuardLimits(o.guardLimits),
+    validation: parseValidationSpec(o.validation),
+    validationChecks: parseValidationChecksSpec(o.validationChecks),
+    reproduction: parseReproductionSpec(o.reproduction),
+    dependencyInstall: parseDependencyInstallSpec(o.dependencyInstall),
+    reviewPrNumber: posInt(o.reviewPrNumber),
+  })
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
   // Bootstrap pushes the result to a SEPARATE target repo, so its clone URL must be an
@@ -1183,4 +1319,153 @@ export function parseAgentJob(input: unknown): AgentJob {
     assertAllowedHost(ref.repo.cloneUrl, `referenceRepos[${i}].repo.cloneUrl`)
   }
   return job
+}
+
+/** The pre-parsed field bundle {@link parseAgentJob} hands to {@link assembleAgentJob}. */
+interface ParsedAgentJobParts {
+  output: AgentOutputSpec | undefined
+  pr: { title: string; body: string } | undefined
+  infra: ReturnType<typeof parseAgentInfraSpec>
+  peerRepos: ReturnType<typeof parsePeerRepos>
+  referenceRepos: ReturnType<typeof parseReferenceRepos>
+  referenceBranches: ReturnType<typeof parseReferenceBranches>
+  bootstrap: ReturnType<typeof parseAgentBootstrapSpec>
+  contextFiles: ReturnType<typeof parseContextFiles>
+  referenceScreenshots: ReturnType<typeof parseImageManifest>
+  designImages: ReturnType<typeof parseImageManifest>
+  artifactUpload: ReturnType<typeof parseArtifactUpload>
+  packageRegistries: ReturnType<typeof parsePackageRegistries>
+  skills: ReturnType<typeof parseSkillSpecs>
+  mcpServers: ReturnType<typeof parseMcpServerSpecs>
+  testSecrets: ReturnType<typeof parseSecretEnvPairs>
+  capabilitySecrets: ReturnType<typeof parseSecretEnvPairs>
+  guardLimits: ReturnType<typeof parseGuardLimits>
+  validation: ReturnType<typeof parseValidationSpec>
+  validationChecks: ReturnType<typeof parseValidationChecksSpec>
+  reproduction: ReturnType<typeof parseReproductionSpec>
+  dependencyInstall: ReturnType<typeof parseDependencyInstallSpec>
+  reviewPrNumber: number | undefined
+}
+
+/** Parse the optional structured-output spec (`{ kind, shapeHint?, repair?, failOnUnusableFinal? }`). */
+function parseAgentOutputSpec(raw: unknown): AgentOutputSpec | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const so = raw as Record<string, unknown>
+  const kind = so.kind === 'structured' ? 'structured' : 'prose'
+  const spec: AgentOutputSpec = { kind }
+  if (typeof so.shapeHint === 'string') spec.shapeHint = so.shapeHint
+  // Carry an explicit `repair: false` through — the handler defaults to repair-on
+  // when absent, so dropping `false` would silently re-enable the repair call for a
+  // kind that opted out (it keys off `output.repair === false`).
+  if (typeof so.repair === 'boolean') spec.repair = so.repair
+  // Carry the opt-in truncation gate through (document producers set it); dropping
+  // it would silently re-enable laundering a cut-off reply into a half-baked doc.
+  if (so.failOnUnusableFinal === true) spec.failOnUnusableFinal = true
+  return spec
+}
+
+/** Parse the optional PR spec (`{ title, body }`). */
+function parseAgentPrSpec(raw: unknown): { title: string; body: string } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const p = raw as Record<string, unknown>
+  return { title: str(p.title, 'pr.title'), body: typeof p.body === 'string' ? p.body : '' }
+}
+
+/**
+ * Assemble the {@link AgentJob} object from the request `o` + the pre-parsed {@link
+ * ParsedAgentJobParts}. Extracted from {@link parseAgentJob} so the large conditional-spread
+ * literal doesn't blow the complexity budget; behaviour is byte-identical (spread order preserved).
+ */
+function assembleAgentJob(
+  o: Record<string, unknown>,
+  mode: AgentJob['mode'],
+  agentField: (value: unknown, path: string) => string,
+  parts: ParsedAgentJobParts,
+): AgentJob {
+  const {
+    output,
+    pr,
+    infra,
+    peerRepos,
+    referenceRepos,
+    referenceBranches,
+    bootstrap,
+    contextFiles,
+    referenceScreenshots,
+    designImages,
+    artifactUpload,
+    packageRegistries,
+    skills,
+    mcpServers,
+    testSecrets,
+    guardLimits,
+    validation,
+    validationChecks,
+    reproduction,
+    dependencyInstall,
+    reviewPrNumber,
+    capabilitySecrets,
+  } = parts
+  const repo = (o.repo ?? {}) as Record<string, unknown>
+  return {
+    jobId: str(o.jobId, 'jobId'),
+    mode,
+    systemPrompt: agentField(o.systemPrompt, 'systemPrompt'),
+    userPrompt: agentField(o.userPrompt, 'userPrompt'),
+    model: agentField(o.model, 'model'),
+    ...parseHarnessAuth(o),
+    ghToken: str(o.ghToken, 'ghToken'),
+    repo: parseRepoSpec(repo),
+    branch: str(o.branch, 'branch'),
+    ...collectOptionalRequestFields(o),
+    ...(bootstrap ? { bootstrap } : {}),
+    ...(output ? { output } : {}),
+    ...(contextFiles.length ? { contextFiles } : {}),
+    ...(referenceScreenshots ? { referenceScreenshots } : {}),
+    ...(designImages ? { designImages } : {}),
+    ...(artifactUpload ? { artifactUpload } : {}),
+    ...(packageRegistries.length ? { packageRegistries } : {}),
+    ...(skills ? { skills } : {}),
+    ...(mcpServers ? { mcpServers } : {}),
+    ...(testSecrets.length ? { testSecrets } : {}),
+    ...(capabilitySecrets.length ? { capabilitySecrets } : {}),
+    ...(infra ? { infra } : {}),
+    ...(pr ? { pr } : {}),
+    ...(peerRepos.length ? { peerRepos } : {}),
+    ...(referenceRepos.length ? { referenceRepos } : {}),
+    ...(referenceBranches.length ? { referenceBranches } : {}),
+    ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
+    ...(guardLimits ? { guardLimits } : {}),
+    ...(validation ? { validation } : {}),
+    ...(validationChecks ? { validationChecks } : {}),
+    ...(reproduction ? { reproduction } : {}),
+    ...(dependencyInstall ? { dependencyInstall } : {}),
+  }
+}
+
+/**
+ * The optional {@link AgentJob} fields read directly off the request `o` (booleans + trimmed
+ * strings). Extracted from {@link assembleAgentJob} to keep its cyclomatic complexity down; every
+ * key is unique so grouping the conditional spreads is behaviour-neutral (spread order is
+ * irrelevant with no colliding keys).
+ */
+function collectOptionalRequestFields(o: Record<string, unknown>): Partial<AgentJob> {
+  return {
+    ...(typeof o.workspaceId === 'string' && o.workspaceId ? { workspaceId: o.workspaceId } : {}),
+    ...(typeof o.executionId === 'string' && o.executionId ? { executionId: o.executionId } : {}),
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
+    ...(o.generateImages === true ? { generateImages: true } : {}),
+    ...(o.full === true ? { full: true } : {}),
+    ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
+    ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
+    ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),
+    ...(typeof o.commitMessage === 'string' && o.commitMessage
+      ? { commitMessage: o.commitMessage }
+      : {}),
+    ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
+    ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
+    ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
+  }
 }

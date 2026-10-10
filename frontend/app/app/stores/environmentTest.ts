@@ -1,18 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { EnvironmentTestMode } from '@cat-factory/contracts'
 import type { EnvironmentTestRun } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 
 /**
- * Ephemeral-environment self-test runs. A developer starts one from a service frame's inspector
- * (`POST …/blocks/:id/environment-test`); the backend drives the create-branch → provision →
- * tear-down → delete-branch cycle durably and pushes live `envTest` stage events, which
+ * Ephemeral-environment self-test runs, in both modes: the provisioning self-test and the AGENT
+ * DRY RUN, which adds a `probing` stage and comes back with a report. A developer starts one from
+ * a service frame's inspector (`POST …/blocks/:id/environment-test`); the backend drives the
+ * create-branch → provision → [probe] → tear-down → delete-branch cycle durably and pushes live
+ * `envTest` stage events, which
  * `useWorkspaceStream` folds in via {@link upsert}. In-flight runs also arrive in the workspace
  * snapshot ({@link hydrate}) so the inspector re-attaches to a running test after a reconnect.
  *
  * Runs are keyed by their FRAME block id for the inspector's per-service lookup ({@link runForBlock}
- * returns the newest run for a block). Terminal runs are kept in memory for the session so the
- * inspector can show the last outcome; the snapshot only carries running ones.
+ * returns the newest run for a block IN ONE MODE, since the two self-tests render side by side).
+ * Terminal runs are kept in memory for the session so the inspector can show the last outcome; the
+ * snapshot only carries running ones.
  */
 export const useEnvironmentTestStore = defineStore('environmentTest', () => {
   const api = useApi()
@@ -62,14 +67,38 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
     }
   }
 
+  /**
+   * Runs whose point-read is already out, and whether a later hydrate asked again while it was.
+   * Overlapping refreshes preserve the same still-running runs and would each re-issue the same
+   * GET, so the reads multiply with refresh frequency exactly when the board is busiest.
+   *
+   * Dropping the later ask outright would be wrong for the same reason plain single-flight is wrong
+   * for `workspace.refresh()`: the outstanding read may have been ISSUED before the run reached
+   * terminal, and it is the later ask that would have observed the outcome. Nothing asks again after
+   * that (terminal runs emit no event and the snapshot omits them), so the inspector would sit on
+   * "testing" for the rest of the session. One queued follow-up per run keeps the dedupe while
+   * leaving the newest ask an answer: N overlapping hydrates cost one extra read between them.
+   */
+  const reconciling = new Map<string, { again: boolean }>()
+
   /** Best-effort point-read of one run, folded in through the monotonic {@link upsert}. */
   async function reconcileRun(workspaceId: string, id: string) {
+    const outstanding = reconciling.get(id)
+    if (outstanding) {
+      outstanding.again = true
+      return
+    }
+    const state = { again: false }
+    reconciling.set(id, state)
     try {
       upsert(await api.getEnvironmentTest(workspaceId, id))
     } catch {
       // Best-effort: a transient fetch failure just leaves the cached state; the next
       // snapshot/event reconciles it.
+    } finally {
+      reconciling.delete(id)
     }
+    if (state.again) await reconcileRun(workspaceId, id)
   }
 
   /**
@@ -89,17 +118,43 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
     return runs.value.find((r) => r.id === id)
   }
 
-  /** The newest run for a service frame — the inspector's per-service attach point. */
-  function runForBlock(blockId: string): EnvironmentTestRun | undefined {
-    return runs.value.find((r) => r.blockId === blockId)
+  /**
+   * The newest run for a service frame IN ONE MODE: the inspector's per-service attach point.
+   *
+   * Scoped by mode because the inspector shows the two self-tests side by side and each owns its
+   * own status line: an unscoped read would have a provisioning test's outcome appear under the
+   * agent dry run's button (and vice versa) whenever the other one ran more recently, which is
+   * the reading a developer would act on.
+   */
+  function runForBlock(blockId: string, mode: EnvironmentTestMode): EnvironmentTestRun | undefined {
+    return runs.value.find((r) => r.blockId === blockId && r.mode === mode)
   }
 
-  /** Start a self-test against a service frame; the returned run is tracked immediately. */
-  async function start(blockId: string): Promise<EnvironmentTestRun> {
+  /**
+   * Start a self-test against a service frame; the returned run is tracked immediately.
+   *
+   * Gated through `withCredential`, like every other surface that starts agent work: an AGENT DRY
+   * RUN resolves its model from the workspace's model preset, which can name an individual-usage
+   * subscription (Claude), and such a credential is only leasable with the owner's unlock
+   * password. The cached password rides the first attempt and a `428` opens the modal; the
+   * provisioning self-test spends no model call, so the backend never consults it there.
+   *
+   * `null` when the person cancels the prompt: the run never started, so the caller reverts its
+   * spinner rather than waiting for a run that is not coming.
+   */
+  async function start(
+    blockId: string,
+    mode: EnvironmentTestMode,
+  ): Promise<EnvironmentTestRun | null> {
     const ws = useWorkspaceStore()
-    const run = await api.startEnvironmentTest(ws.requireId(), blockId)
-    upsert(run)
-    return run
+    const personal = usePersonalSubscriptionsStore()
+    let started: EnvironmentTestRun | null = null
+    const ok = await personal.withCredential(async (password) => {
+      const run = await api.startEnvironmentTest(ws.requireId(), blockId, mode, password)
+      upsert(run)
+      started = run
+    })
+    return ok ? started : null
   }
 
   /** Stop a running self-test (best-effort cleanup, then failed). */

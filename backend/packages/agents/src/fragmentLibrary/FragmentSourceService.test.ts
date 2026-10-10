@@ -6,6 +6,7 @@ import type {
   PromptFragmentRecord,
   PromptFragmentRepository,
 } from '@cat-factory/kernel'
+import { MAX_FRAGMENT_ID_LENGTH } from '@cat-factory/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FragmentSourceService } from './FragmentSourceService.js'
 
@@ -38,6 +39,14 @@ class FakeFragmentRepo implements PromptFragmentRepository {
   }
   async listBySource(sourceId: string) {
     return [...this.rows.values()].filter((r) => r.sourceId === sourceId && r.deletedAt === null)
+  }
+  /** Counts the calls so a test can pin that unlink retires the set in ONE write, not per row. */
+  softDeleteBySourceCalls = 0
+  async softDeleteBySource(sourceId: string, at: number) {
+    this.softDeleteBySourceCalls += 1
+    for (const r of this.rows.values()) {
+      if (r.sourceId === sourceId && r.deletedAt === null) r.deletedAt = at
+    }
   }
 }
 
@@ -156,6 +165,25 @@ describe('FragmentSourceService.sync', () => {
     expect(harness.invalidations).toHaveLength(3)
   })
 
+  it('retires a source’s whole fragment set in ONE write on unlink', async () => {
+    // Not a style point: in mothership mode every repository call is an HTTPS round trip, so a
+    // per-fragment `softDelete` loop costs one request per fragment against a library a repo can
+    // grow without bound. The sibling skill / foundational-service libraries retire by source too.
+    const live = await harness.fragments.listBySource(sourceId)
+    expect(live.length).toBeGreaterThan(1)
+
+    await harness.service.unlink('workspace', 'ws1', sourceId)
+
+    expect(harness.fragments.softDeleteBySourceCalls).toBe(1)
+    expect(await harness.fragments.listBySource(sourceId)).toEqual([])
+    // A hand-authored fragment under the same owner is not swept: the predicate is the SOURCE.
+    expect(
+      (await harness.fragments.listByOwner('workspace', 'ws1')).every(
+        (f) => f.sourceId !== sourceId,
+      ),
+    ).toBe(true)
+  })
+
   it('keeps an explicit-id fragment live (and preserves createdAt) when its file is RENAMED', async () => {
     // Rename: same explicit frontmatter id, new path. A path-keyed sweep would
     // tombstone the row the rename just updated; the id-keyed sweep must not — and the
@@ -216,5 +244,46 @@ describe('FragmentSourceService.sync', () => {
     })
     await counting.service.sync('workspace', 'ws1', source.id)
     expect(counting.installations()).toBe(1)
+  })
+
+  it('mints an id a public create can name back, however deep the file sits', async () => {
+    // The id ceiling is what keeps `GET /api/v1/prompt-fragments` and the `fragmentIds` a task
+    // names from disagreeing: an id this sync writes is one the catalog publishes.
+    const deep = `guidelines/${'a-rather-long-directory-name/'.repeat(9)}error-handling.md`
+    github.files[deep] = { sha: 'sha-deep', content: '- Wrap every cause.' }
+
+    await harness.service.sync('workspace', 'ws1', sourceId)
+
+    const minted = [...harness.fragments.rows.values()].map((row) => row.fragmentId)
+    const sourced = minted.filter((id) => id.startsWith('src:'))
+    expect(sourced.length).toBeGreaterThan(0)
+    for (const id of sourced) expect(id.length).toBeLessThanOrEqual(MAX_FRAGMENT_ID_LENGTH)
+    // Truncated ids stay DISTINCT: two files sharing a long directory prefix differ only in the
+    // filename, which is the half a prefix cut throws away, so the digest is what separates them.
+    const sibling = deep.replace('error-handling.md', 'retries.md')
+    github.files[sibling] = { sha: 'sha-sib', content: '- Retry with backoff.' }
+    await harness.service.sync('workspace', 'ws1', sourceId)
+    const after = [...harness.fragments.rows.values()]
+      .filter((row) => row.deletedAt === null && row.fragmentId.startsWith('src:'))
+      .map((row) => row.fragmentId)
+    expect(new Set(after).size).toBe(after.length)
+  })
+
+  it('declines a file whose DECLARED id is over the ceiling rather than shortening it', async () => {
+    // An explicit frontmatter id shadows a built-in, so it is the author's own choice: quietly
+    // truncating it would produce a fragment that shadows nothing and reads, from the library,
+    // exactly like the one the author asked for.
+    const overlong = `org.${'x'.repeat(MAX_FRAGMENT_ID_LENGTH)}`
+    github.files['guidelines/huge-id.md'] = {
+      sha: 'sha-huge',
+      content: EXPLICIT_ID_FILE(overlong),
+    }
+
+    await harness.service.sync('workspace', 'ws1', sourceId)
+
+    expect(await harness.fragments.get('workspace', 'ws1', overlong)).toBeNull()
+    // Nothing else was disturbed: the decline is per FILE, the same disposition an unparseable
+    // one gets, and it never retires a neighbour.
+    expect((await harness.fragments.get('workspace', 'ws1', 'org.perf'))?.deletedAt).toBeNull()
   })
 })

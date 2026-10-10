@@ -2,7 +2,10 @@ import type {
   BranchUpdateOutcome,
   Clock,
   CommitFilesResult,
+  CreateReviewInput,
+  CreateReviewResult,
   GitHubBranch,
+  GitHubChangedFile,
   GitHubCheckRun,
   GitHubCodeSearchHit,
   GitHubCommit,
@@ -15,18 +18,23 @@ import type {
   GitHubRepo,
   GitHubReviewThread,
   ListOptions,
+  Logger,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
   VcsClient,
   VcsConnectionRef,
   VcsRepoRef,
 } from '@cat-factory/kernel'
-import { describeVcsApiError } from '@cat-factory/kernel'
+import { VcsApiError, describeVcsApiError, noopLogger } from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
 } from '@cat-factory/contracts'
 import type { GitLabTokenSource } from './tokenSource.js'
@@ -36,15 +44,19 @@ import {
   type GlCommitStatusPayload,
   type GlIssuePayload,
   type GlMergeRequestPayload,
+  type GlMrDiffPayload,
   type GlProjectPayload,
   mergeabilityFromStatus,
+  mergeRequestIsCrossProject,
   toBranchProjection,
+  toChangedFileProjection,
   toCheckRunProjection,
   toCommitProjection,
   toIssueProjection,
   toMergeRequestProjection,
   toRepoProjection,
 } from './projection.js'
+import { postMrReview } from './reviewPosting.js'
 
 // ---------------------------------------------------------------------------
 // Thin `fetch`-based VcsClient for GitLab (REST v4), the GitLab analogue of the
@@ -71,11 +83,14 @@ export interface FetchGitLabClientDependencies {
   /** Injected for tests; defaults to a `setTimeout`-based delay (used between rebase polls). */
   sleep?: (ms: number) => Promise<void>
   /**
-   * Optional sink, warned when a listing hits the {@link MAX_PAGES} page cap with more
-   * results still available — so a truncated sync is surfaced rather than silently dropped
-   * (CLAUDE.md "no silent caps"). Defaults to no-op.
+   * Warned when a listing hits the {@link MAX_PAGES} page cap with more results still available,
+   * and when a read falls back to a deprecated endpoint — so a truncated sync is surfaced rather
+   * than silently dropped (AGENTS.md "no silent caps"). Optional so the client stays constructible
+   * standalone in a unit test; normalised ONCE to `noopLogger`, never null-checked per call. The
+   * FACADE-facing builders in `index.ts` take it as REQUIRED, which is what stops a composition
+   * root from quietly running the whole GitLab path on a no-op.
    */
-  logger?: { warn: (message: string) => void }
+  logger?: Logger
 }
 
 interface RequestOptions {
@@ -92,19 +107,25 @@ interface GitLabResponse {
 }
 
 export class FetchGitLabClient implements VcsClient {
-  constructor(private readonly deps: FetchGitLabClientDependencies) {}
+  /** Normalised once (AGENTS.md's logging convention), so no call site null-checks the sink. */
+  private readonly log: Logger
+
+  constructor(private readonly deps: FetchGitLabClientDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   // ---- reads --------------------------------------------------------------
 
   async listRepos(connection: VcsConnectionRef): Promise<Paged<GitHubRepo>> {
     const syncedAt = this.deps.clock.now()
     const numericId = connectionNumericId(connection)
-    const items = await this.paginate<GitHubRepo>(
+    // Paged rather than flattened: this listing is served to a caller that publishes it, and a
+    // project missing because the walk hit its cap must not read as one the token cannot reach.
+    return this.paginatePage<GitHubRepo>(
       `/projects?membership=true&per_page=${PER_PAGE}`,
       { connection },
       (json) => (json as GlProjectPayload[]).map((p) => toRepoProjection(p, numericId, syncedAt)),
     )
-    return { items }
   }
 
   async getRepo(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<GitHubRepo> {
@@ -234,6 +255,49 @@ export class FetchGitLabClient implements VcsClient {
     }))
   }
 
+  async listTree(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    gitRef?: string,
+  ): Promise<RepoTreeListing> {
+    // GitLab's tree endpoint lists recursively in one paginated sweep, so file search
+    // never walks the tree directory-by-directory. Bounded by MAX_PAGES like every other
+    // listing, and the cap is REPORTED: a caller partitioning a codebase out of this tree
+    // has to know it is holding a prefix rather than the repository.
+    const params = new URLSearchParams({ per_page: String(PER_PAGE), recursive: 'true' })
+    if (gitRef) params.set('ref', gitRef)
+    try {
+      const { items, truncated } = await this.paginatePage(
+        `/projects/${projectPath(ref)}/repository/tree?${params.toString()}`,
+        { connection },
+        (json) => {
+          const entries = (Array.isArray(json) ? json : []) as Array<{
+            path?: string
+            name?: string
+            type?: string
+            id?: string
+          }>
+          // GitLab tree `type` is `tree` | `blob` | `commit` (submodule). Normalise to the
+          // neutral dir/file vocabulary and drop submodules (they have no browsable content
+          // here), matching FetchGitHubClient.listTree so both providers surface the same set.
+          return entries
+            .filter((e) => e.type === 'tree' || e.type === 'blob')
+            .map((e) => ({
+              path: e.path ?? e.name ?? '',
+              name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
+              type: e.type === 'tree' ? 'dir' : 'file',
+              sha: e.id ?? '',
+            }))
+        },
+      )
+      return { entries: items, truncated }
+    } catch (err) {
+      if (err instanceof GitLabApiError && err.status === 404)
+        return { entries: [], truncated: false }
+      throw err
+    }
+  }
+
   async getFileContent(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
@@ -258,8 +322,11 @@ export class FetchGitLabClient implements VcsClient {
     }
     const file = json as { content?: string; encoding?: string; blob_id?: string }
     if (typeof file.content !== 'string') return null
-    const content = file.encoding === 'base64' ? decodeBase64Utf8(file.content) : file.content
-    return { content, sha: file.blob_id ?? '' }
+    const { content, lossy } =
+      file.encoding === 'base64'
+        ? decodeRepoFileBase64(file.content)
+        : { content: file.content, lossy: false }
+    return { content, sha: file.blob_id ?? '', ...(lossy ? { lossy: true } : {}) }
   }
 
   async listPullRequests(
@@ -376,6 +443,76 @@ export class FetchGitLabClient implements VcsClient {
     return hits.slice(0, limit)
   }
 
+  /**
+   * Predicate-search ONE project's issues through `GET /projects/:id/issues`, which is the
+   * endpoint that actually carries a scope: the global `/search?scope=issues` backing
+   * {@link FetchGitLabClient.searchIssues} has no project qualifier, so a caller that must
+   * confine its hits to one project cannot express that as search text (it would be matched
+   * as prose against every issue the token can read).
+   *
+   * Every predicate is a request PARAMETER GitLab evaluates, and the response carries the
+   * body, labels, creation time, comment count and assignee, so a candidate listing is one
+   * call rather than one call per candidate. `owner` / `repo` are read back off each issue's
+   * own `web_url` rather than echoed from the ref, so a hit reported under a subgroup path
+   * round-trips as the path GitLab itself uses.
+   *
+   * ONE page, unlike the `paginate` reads around it: the caller is walking pages itself (to get
+   * past a run of already-worked issues), so following `Link` here would fetch the whole board
+   * on every step of that walk. What it does carry out is GitLab's own answer to "is there
+   * another page", which is the fact a caller cannot re-derive: a short page proves nothing on
+   * an instance whose `max_page_size` is below the requested `per_page`.
+   */
+  async searchProjectIssues(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<ProjectIssuePage> {
+    const params = new URLSearchParams({
+      per_page: String(Math.min(Math.max(query.limit, 1), 100)),
+    })
+    if (query.page && query.page > 1) params.set('page', String(query.page))
+    if (query.text) params.set('search', query.text)
+    // GitLab searches title AND description by default; `in=title` is how it narrows, which is
+    // what an intake title-fragment predicate asks for.
+    if (query.text && query.textIn === 'title') params.set('in', 'title')
+    if (query.openOnly) params.set('state', 'opened')
+    // GitLab takes the label set as one comma-joined value, matched as AND.
+    if (query.labels?.length) params.set('labels', query.labels.join(','))
+    // `assignee_id=None` is GitLab's unassigned filter (the literal string, not an id).
+    if (query.unassignedOnly) params.set('assignee_id', 'None')
+    if (query.order === 'created-asc') {
+      params.set('order_by', 'created_at')
+      params.set('sort', 'asc')
+    }
+    const { json, next } = await this.request(`/projects/${projectPath(ref)}/issues?${params}`, {
+      connection,
+    })
+    const items = (Array.isArray(json) ? json : []) as GlProjectIssuePayload[]
+    const hits: GitHubIssueSearchHit[] = []
+    for (const item of items) {
+      const parts = parseProjectWebUrl(item.web_url ?? '')
+      if (!parts) continue
+      hits.push({
+        owner: parts.owner,
+        repo: parts.repo,
+        number: item.iid ?? 0,
+        title: item.title ?? '(untitled)',
+        state: item.state === 'opened' ? 'open' : 'closed',
+        url: item.web_url ?? '',
+        body: item.description ?? '',
+        labels: (item.labels ?? [])
+          .map((l) => (typeof l === 'string' ? l : (l?.name ?? '')))
+          .filter(Boolean),
+        createdAt: item.created_at ?? '',
+        commentCount: item.user_notes_count ?? 0,
+        assignee: item.assignee?.username ?? null,
+      })
+    }
+    // Two ways there is more: GitLab said so, or it filled the page past what the caller asked
+    // for and the slice below is dropping the tail. Either one makes the next page real.
+    return { hits: hits.slice(0, query.limit), hasMore: !!next || hits.length > query.limit }
+  }
+
   async searchCode(): Promise<GitHubCodeSearchHit[]> {
     // GitLab blob (code) search needs the instance's Advanced Search (Elasticsearch) and
     // does not return a usable `owner/repo/url` per hit on the basic API. The neutral
@@ -418,18 +555,89 @@ export class FetchGitLabClient implements VcsClient {
 
   // ---- review reads (the human-review gate) -------------------------------
 
+  // A missing MR degrades differently per caller, but always to null: no base to gate against
+  // (the human-review gate falls back to its default), no source branch to push to (the
+  // deep-review "fix" reports it unresolvable rather than cloning the wrong ref), no head sha to
+  // compare against (the drift check skips) — the same dispositions as the GitHub half.
   async getPullRequestBaseRef(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null> {
+    return (await this.readMergeRequest(connection, ref, number))?.target_branch ?? null
+  }
+
+  async getPullRequestHeadRef(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.readMergeRequest(connection, ref, number))?.source_branch ?? null
+  }
+
+  async getPullRequestHeadSha(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const mr = await this.readMergeRequest(connection, ref, number)
+    // `diff_refs.head_sha` is the authoritative source-branch head; the top-level `sha` is the
+    // same value on an open MR but goes stale once it merges, so prefer the former.
+    return mr?.diff_refs?.head_sha ?? mr?.sha ?? null
+  }
+
+  /**
+   * The MR's changed files, read through `/diffs` — the PAGINATED form, so a large MR is bounded by
+   * the same page cap every other listing here obeys instead of arriving as one unbounded payload.
+   *
+   * `/diffs` only exists from GitLab 15.7, and a self-managed instance older than that answers 404.
+   * That 404 falls back to the long-standing `/changes`, because the alternative is worse than a
+   * deprecated read: this method is OPTIONAL on the port precisely so a provider that cannot
+   * enumerate a PR's files degrades to the reviewer's git fallback, but it is only ABSENCE that
+   * degrades — a present method that throws propagates out of `prReviewerDiffPreOp` and FAILS the
+   * step. Version-tolerance is the adapter's job, the same way {@link mergeabilityFromStatus}
+   * prefers 15.6+ `detailed_merge_status` and falls back to the deprecated field.
+   */
+  async listChangedFiles(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]> {
+    const base = `/projects/${projectPath(ref)}/merge_requests/${number}`
+    const mapDiffs = (json: unknown): GitHubChangedFile[] =>
+      (Array.isArray(json) ? (json as GlMrDiffPayload[]) : []).map(toChangedFileProjection)
     try {
-      const mr = await this.getMergeRequest(connection, ref, number)
-      return mr.target_branch ?? null
-    } catch (err) {
-      if (err instanceof GitLabApiError && err.status === 404) return null
-      throw err
+      return await this.paginate<GitHubChangedFile>(
+        `${base}/diffs?per_page=${PER_PAGE}`,
+        { connection },
+        mapDiffs,
+      )
+    } catch (error) {
+      if (!(error instanceof GitLabApiError && error.status === 404)) throw error
+      // A 404 here is EITHER "this instance predates /diffs" OR "no such MR". `/changes` tells
+      // the two apart for us: it exists on every version, so a missing MR 404s again and rethrows.
+      this.log.warn('GitLab /diffs unavailable; falling back to the deprecated /changes read', {
+        mergeRequest: number,
+        project: projectPath(ref),
+      })
+      const { json } = await this.request(`${base}/changes`, { connection })
+      return mapDiffs((json as { changes?: unknown } | null)?.changes)
     }
+  }
+
+  createReview(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<CreateReviewResult> {
+    // The per-comment posting + partial-success reporting lives in `reviewPosting.ts` (the mirror
+    // of the GitHub half); this stays a thin transport delegate, bound to this project.
+    return postMrReview(
+      (path, opts) => this.request(`/projects/${projectPath(ref)}${path}`, { ...opts, connection }),
+      number,
+      input,
+    )
   }
 
   async listRequestedReviewers(
@@ -458,10 +666,14 @@ export class FetchGitLabClient implements VcsClient {
     const approvedBy =
       ((json ?? {}) as { approved_by?: Array<{ user?: { username?: string } | null }> })
         .approved_by ?? []
-    return approvedBy
-      .map((a) => a.user?.username ?? '')
-      .filter(Boolean)
-      .map((author) => ({ author, state: 'APPROVED', submittedAt: 0, commitId: null }))
+    return (
+      approvedBy
+        .map((a) => a.user?.username ?? '')
+        .filter(Boolean)
+        // GitLab's approvals API models only current approvers (no change-requests, no review
+        // summary body), so each maps to a bodyless standing APPROVED review.
+        .map((author) => ({ author, state: 'APPROVED', body: '', submittedAt: 0, commitId: null }))
+    )
   }
 
   async getRequiredApprovingReviewCount(
@@ -566,10 +778,9 @@ export class FetchGitLabClient implements VcsClient {
     body: string,
   ): Promise<void> {
     const { iid, discussionId } = parseThreadId(threadId)
-    const params = new URLSearchParams({ body })
     await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes`,
+      { connection, method: 'POST', body: { body } },
     )
   }
 
@@ -580,12 +791,21 @@ export class FetchGitLabClient implements VcsClient {
   ): Promise<void> {
     const { iid, discussionId } = parseThreadId(threadId)
     await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}?resolved=true`,
-      { connection, method: 'PUT' },
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}`,
+      { connection, method: 'PUT', body: { resolved: true } },
     )
   }
 
   // ---- writes -------------------------------------------------------------
+  //
+  // Every write sends its parameters as a JSON BODY, never in the query string, even where the
+  // value is short. GitLab accepts both, so the query form works until a caller passes something
+  // long: a note body is capped at 30,000 characters and percent-encodes to several times that,
+  // which blows past the ~8KB request line most GitLab deployments sit behind (nginx's default
+  // `large_client_header_buffers`) and comes back 414. That failure is worse than loud, because
+  // it is SIZE-dependent: the short notices land, so the endpoint reads as working right up to
+  // the parked-review question echo, the one write that is always long. Keeping the rule uniform
+  // is what stops the next write being added in the shape that fails.
 
   async createBranch(
     connection: VcsConnectionRef,
@@ -593,10 +813,10 @@ export class FetchGitLabClient implements VcsClient {
     name: string,
     fromSha: string,
   ): Promise<void> {
-    const params = new URLSearchParams({ branch: name, ref: fromSha })
-    await this.request(`/projects/${projectPath(ref)}/repository/branches?${params.toString()}`, {
+    await this.request(`/projects/${projectPath(ref)}/repository/branches`, {
       connection,
       method: 'POST',
+      body: { branch: name, ref: fromSha },
     })
   }
 
@@ -646,19 +866,57 @@ export class FetchGitLabClient implements VcsClient {
     ref: VcsRepoRef,
     input: { title: string; body: string },
   ): Promise<{ number: number; url: string }> {
-    const params = new URLSearchParams({ title: input.title, description: input.body })
-    const { json } = await this.request(
-      `/projects/${projectPath(ref)}/issues?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    const { json } = await this.request(`/projects/${projectPath(ref)}/issues`, {
+      connection,
+      method: 'POST',
+      body: { title: input.title, description: input.body },
+    })
     const issue = (json ?? {}) as { iid?: number; web_url?: string }
     return { number: issue.iid ?? 0, url: issue.web_url ?? '' }
   }
 
   async closeIssue(connection: VcsConnectionRef, ref: VcsRepoRef, number: number): Promise<void> {
-    await this.request(`/projects/${projectPath(ref)}/issues/${number}?state_event=close`, {
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}`, {
       connection,
       method: 'PUT',
+      body: { state_event: 'close' },
+    })
+  }
+
+  /**
+   * Comment on an ISSUE, which on GitLab is a different endpoint from {@link comment} (merge
+   * request notes) over a different `iid` space. See the port doc for why they cannot be one
+   * call. Both are "notes"; only the noteable differs.
+   */
+  async commentOnIssue(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+    body: string,
+  ): Promise<void> {
+    await this.request(`/projects/${projectPath(ref)}/issues/${issueNumber}/notes`, {
+      connection,
+      method: 'POST',
+      body: { body },
+    })
+  }
+
+  /**
+   * Apply a label to an issue. `add_labels` is additive server-side (unlike `labels`, which
+   * REPLACES the whole set), so an existing label survives the call and re-applying one is a
+   * no-op. GitLab also creates a project label on first use, so there is no create-then-attach
+   * pair to mirror the GitHub client's.
+   */
+  async applyIssueLabel(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void> {
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}`, {
+      connection,
+      method: 'PUT',
+      body: { add_labels: label },
     })
   }
 
@@ -666,22 +924,58 @@ export class FetchGitLabClient implements VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
-    const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests`, {
-      connection,
-      method: 'POST',
-      body: {
-        source_branch: input.head,
-        target_branch: input.base,
-        title: input.title,
-        description: input.body ?? '',
-      },
-    })
-    return toMergeRequestProjection(
-      json as GlMergeRequestPayload,
-      numericRepoId(ref),
-      this.deps.clock.now(),
+  ): Promise<OpenedPullRequest> {
+    try {
+      const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests`, {
+        connection,
+        method: 'POST',
+        body: {
+          source_branch: input.head,
+          target_branch: input.base,
+          title: input.title,
+          description: input.body ?? '',
+        },
+      })
+      return this.toOpenedMergeRequest(ref, json)
+    } catch (err) {
+      // Idempotency (see the RepoFiles/VcsClient port doc): GitLab rejects a second MR for the
+      // same source/target branch with a 409 ("Another open merge request already exists"). A
+      // durable-driver replay of a committing post-op (e.g. the `spike` findings PR) hits this,
+      // so treat it as a success: look up and return the existing open MR instead of failing.
+      if (!(err instanceof GitLabApiError) || err.status !== 409) throw err
+      const existing = await this.findOpenMergeRequest(connection, ref, input.head, input.base)
+      if (!existing) throw err
+      return existing
+    }
+  }
+
+  /** Map an MR create/list payload to the {@link OpenedPullRequest} (projection + web url). */
+  private toOpenedMergeRequest(ref: VcsRepoRef, json: unknown): OpenedPullRequest {
+    const payload = json as GlMergeRequestPayload & { web_url?: string }
+    // GitLab returns the MR `web_url`; surface it as `OpenedPullRequest.url` (the GitHub
+    // analogue of `html_url`) so a backend post-op records a real link, provider-agnostically.
+    return {
+      ...toMergeRequestProjection(payload, numericRepoId(ref), this.deps.clock.now()),
+      url: payload.web_url ?? '',
+      crossRepository: mergeRequestIsCrossProject(payload),
+    }
+  }
+
+  /** The open MR matching `head`/`base` (for {@link openPullRequest}'s idempotent replay), or null. */
+  private async findOpenMergeRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    head: string,
+    base: string,
+  ): Promise<OpenedPullRequest | null> {
+    const { json } = await this.request(
+      `/projects/${projectPath(ref)}/merge_requests?state=opened` +
+        `&source_branch=${encodeURIComponent(head)}&target_branch=${encodeURIComponent(base)}` +
+        '&per_page=1',
+      { connection },
     )
+    const first = (json as (GlMergeRequestPayload & { web_url?: string })[] | null)?.[0]
+    return first ? this.toOpenedMergeRequest(ref, first) : null
   }
 
   async updatePullRequest(
@@ -706,6 +1000,44 @@ export class FetchGitLabClient implements VcsClient {
       numericRepoId(ref),
       this.deps.clock.now(),
     )
+  }
+
+  /**
+   * The MR's current description — GitLab's analogue of a PR body — for the verification
+   * report's read-splice-write upsert.
+   */
+  /**
+   * A merge request by iid — the projection plus its `web_url` — or null when the project has NO
+   * such MR (a 404). Any other failure throws, so "does not exist" stays distinguishable from
+   * "could not be read": the review-task create validation refuses only on the former, and never
+   * turns a GitLab outage into a false "no such merge request".
+   */
+  async getPullRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null> {
+    try {
+      const { json } = await this.request(
+        `/projects/${projectPath(ref)}/merge_requests/${number}`,
+        { connection },
+      )
+      return this.toOpenedMergeRequest(ref, json)
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
+  async getPullRequestBody(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests/${number}`, {
+      connection,
+    })
+    return ((json ?? {}) as { description?: string | null }).description ?? null
   }
 
   async getPullRequestMergeability(
@@ -799,7 +1131,7 @@ export class FetchGitLabClient implements VcsClient {
       // No advance, no error ⇒ already up to date (a clean no-op).
       return 'merged'
     }
-    // Still in progress after the cap: surface it (CLAUDE.md "no silent caps") and treat the
+    // Still in progress after the cap: surface it (AGENTS.md "no silent caps") and treat the
     // branch as updated — a genuine conflict still surfaces on the gate's next mergeability
     // probe, so we never wedge the gate on a slow rebase.
     this.deps.logger?.warn(
@@ -829,11 +1161,11 @@ export class FetchGitLabClient implements VcsClient {
     // GitLab issues and MRs have SEPARATE iid spaces and distinct notes endpoints, so the
     // neutral `comment(number)` is ambiguous. The platform uses `comment` for PR/MR
     // conversation (the gates), so route to merge-request notes.
-    const params = new URLSearchParams({ body })
-    await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${issueOrPrNumber}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    await this.request(`/projects/${projectPath(ref)}/merge_requests/${issueOrPrNumber}/notes`, {
+      connection,
+      method: 'POST',
+      body: { body },
+    })
   }
 
   // ---- internals ----------------------------------------------------------
@@ -850,6 +1182,25 @@ export class FetchGitLabClient implements VcsClient {
     return (json ?? {}) as GlMrDetail
   }
 
+  /**
+   * {@link getMergeRequest}, but a 404 (the project has no such MR: never opened, or hard-deleted)
+   * answers null while ANY other failure throws — so a caller can tell "this MR does not exist"
+   * from "the provider could not answer". Every single-MR accessor that degrades to null is a
+   * projection of this one read, the mirror of the GitHub client's `readPullRequest`.
+   */
+  private async readMergeRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GlMrDetail | null> {
+    try {
+      return await this.getMergeRequest(connection, ref, number)
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
   /** Resolve a project's default branch (for the files API, which needs a concrete ref). */
   private async defaultBranch(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<string> {
     const repo = await this.getRepo(connection, ref)
@@ -861,6 +1212,22 @@ export class FetchGitLabClient implements VcsClient {
     opts: Omit<RequestOptions, 'method' | 'body'>,
     map: (json: unknown) => T[],
   ): Promise<T[]> {
+    const { items } = await this.paginatePage(path, opts, map)
+    return items
+  }
+
+  /**
+   * The walk itself, reporting whether it stopped at the cap.
+   *
+   * Split from {@link paginate} rather than replacing it because a caller that PUBLISHES its listing
+   * has to say the list is a prefix, and one that consumes it internally has nothing to do with the
+   * fact. The log line below is a record for an operator; only a returned flag can reach a caller.
+   */
+  private async paginatePage<T>(
+    path: string,
+    opts: Omit<RequestOptions, 'method' | 'body'>,
+    map: (json: unknown) => T[],
+  ): Promise<{ items: T[]; truncated: boolean }> {
     const all: T[] = []
     let url: string | undefined = path
     let page = 0
@@ -870,12 +1237,16 @@ export class FetchGitLabClient implements VcsClient {
       url = response.next
     }
     // A `next` link still set at the cap means GitLab had more pages we did not fetch.
-    if (url) {
-      this.deps.logger?.warn(
-        `GitLab listing truncated at MAX_PAGES=${MAX_PAGES} (~${PER_PAGE * MAX_PAGES} items) for "${path}"; remaining results were dropped.`,
-      )
+    const truncated = Boolean(url)
+    if (truncated) {
+      this.log.warn('GitLab listing truncated at the page cap; remaining results were dropped', {
+        path,
+        maxPages: MAX_PAGES,
+        approxItemCap: PER_PAGE * MAX_PAGES,
+        fetched: all.length,
+      })
     }
-    return all
+    return { items: all, truncated }
   }
 
   private async request(pathOrUrl: string, opts: RequestOptions): Promise<GitLabResponse> {
@@ -914,13 +1285,17 @@ export class FetchGitLabClient implements VcsClient {
   }
 }
 
-/** Carries the HTTP status so callers can decide whether to retry. */
-export class GitLabApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message)
+/**
+ * Carries the HTTP status so callers can decide whether to retry.
+ *
+ * A subclass of kernel's `VcsApiError`, the identity a consumer above the adapters branches on:
+ * a caller classifying "the provider refused this credential" must reach the same verdict on a
+ * GitLab deployment as on a GitHub one, and only the shared base gives it one check to write.
+ * GitLab reports an exhausted quota as a plain 429, so it carries no separate rate-limit flag.
+ */
+export class GitLabApiError extends VcsApiError {
+  constructor(status: number, message: string) {
+    super('gitlab', status, message)
     this.name = 'GitLabApiError'
   }
 }
@@ -954,11 +1329,28 @@ function parseProjectWebUrl(url: string): { owner: string; repo: string } | null
   return { owner: full.slice(0, idx), repo: full.slice(idx + 1) }
 }
 
-function decodeBase64Utf8(value: string): string {
+/**
+ * Decode the files API's base64 payload, SAYING when the bytes were not text.
+ *
+ * Strict first, so `lossy` is the decoder's own verdict rather than a scan for a character a text file
+ * may legitimately contain. The lossy rendering is still answered, because what to do about it belongs
+ * to the caller: a pre-op folding a file into a prompt wants the best available text, and a read whose
+ * job is byte-exact grading refuses (see `RepoFileContent.lossy`).
+ *
+ * `githubHttpHelpers.ts` holds the same function, because there is no home below both: kernel names no
+ * web globals by design (its `lib` is ES2022 alone, where both clients add DOM for `atob` and
+ * `TextDecoder`), and neither client package can see the other. Change one, change the other.
+ */
+function decodeRepoFileBase64(value: string): { content: string; lossy: boolean } {
   const binary = atob(value.replace(/\s+/g, ''))
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder().decode(bytes)
+  try {
+    return { content: new TextDecoder('utf-8', { fatal: true }).decode(bytes), lossy: false }
+  } catch {
+    // Not a swallow: the throw IS the answer, reported as `lossy` rather than lost.
+    return { content: new TextDecoder().decode(bytes), lossy: true }
+  }
 }
 
 function parseNextLink(link: string | null): string | undefined {
@@ -991,9 +1383,27 @@ function parseThreadId(threadId: string): { iid: number; discussionId: string } 
   return { iid: Number(threadId.slice(0, idx)) || 0, discussionId: threadId.slice(idx + 1) }
 }
 
+/**
+ * One entry of `GET /projects/:id/issues` — the richer per-issue payload the project-scoped
+ * search reads, beside the leaner {@link GlIssuePayload} the projection mapper takes.
+ */
+interface GlProjectIssuePayload {
+  iid?: number
+  title?: string
+  state?: string
+  web_url?: string
+  description?: string
+  labels?: Array<string | { name?: string }>
+  created_at?: string
+  user_notes_count?: number
+  assignee?: { username?: string } | null
+}
+
 /** A merge-request detail object — the fields the review + rebase reads consume. */
 interface GlMrDetail {
   target_branch?: string
+  /** The MR's source branch — the head the deep-review "fix" pass clones and pushes back onto. */
+  source_branch?: string
   reviewers?: Array<{ username?: string }>
   /** The source-branch head commit (top-level field). */
   sha?: string | null

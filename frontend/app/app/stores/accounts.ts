@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useUpsertList } from '~/composables/useUpsertList'
+import type { AuditEventWire } from '@cat-factory/contracts'
 import type {
   Account,
   AccountInvitation,
@@ -23,7 +25,7 @@ export const useAccountsStore = defineStore(
   () => {
     const api = useApi()
 
-    const accounts = ref<Account[]>([])
+    const { items: accounts, upsert: upsertAccount } = useUpsertList<Account>({ key: (a) => a.id })
     /** Active account id (persisted so a reload keeps the same context). */
     const activeAccountId = ref<string | null>(null)
     const ready = ref(false)
@@ -46,7 +48,7 @@ export const useAccountsStore = defineStore(
     /** Create a shared org account and make it active. */
     async function createOrg(name: string) {
       const account = await api.createAccount({ name })
-      accounts.value.push(account)
+      upsertAccount(account)
       activeAccountId.value = account.id
       return account
     }
@@ -62,8 +64,7 @@ export const useAccountsStore = defineStore(
      */
     async function setDefaultCloudProvider(id: string, provider: CloudProvider) {
       const updated = await api.updateAccount(id, { defaultCloudProvider: provider })
-      const i = accounts.value.findIndex((a) => a.id === id)
-      if (i >= 0) accounts.value[i] = updated
+      upsertAccount(updated)
       return updated
     }
 
@@ -73,14 +74,15 @@ export const useAccountsStore = defineStore(
      */
     async function setSpendMonthlyLimit(id: string, limit: number | null) {
       const updated = await api.updateAccount(id, { spendMonthlyLimit: limit })
-      const i = accounts.value.findIndex((a) => a.id === id)
-      if (i >= 0) accounts.value[i] = updated
+      upsertAccount(updated)
       return updated
     }
 
     // ---- members + invitations -------------------------------------------
 
-    const members = ref<AccountMember[]>([])
+    const { items: members, upsert: upsertMember } = useUpsertList<AccountMember>({
+      key: (m) => m.userId,
+    })
     const invitations = ref<AccountInvitation[]>([])
 
     /** Load the active account's member roster + pending invitations. */
@@ -108,9 +110,75 @@ export const useAccountsStore = defineStore(
     /** Set a member's role set (admin-only); patches the loaded roster in place. */
     async function setMemberRoles(accountId: string, userId: string, roles: AccountRole[]) {
       const updated = await api.setMemberRoles(accountId, userId, roles)
-      const i = members.value.findIndex((m) => m.userId === userId)
-      if (i >= 0) members.value[i] = updated
+      upsertMember(updated)
       return updated
+    }
+
+    // ---- audit log + session revocation -----------------------------------
+    // The audit log is a paginated, append-only feed, so it is kept OUT of `useUpsertList`: the
+    // rows never change and never arrive out of band, and a keyed upsert list would quietly
+    // reorder a page whose whole meaning is its order. Pages are appended in the order the server
+    // served them, and `auditCursor` is opaque — it round-trips verbatim, never inspected.
+    const auditEvents = ref<AuditEventWire[]>([])
+    const auditCursor = ref<string | null>(null)
+    const auditLoading = ref(false)
+
+    /**
+     * The audit feed has fallen behind something this session did. Set by the writers below and
+     * cleared by whoever reloads; the audit viewer watches it.
+     *
+     * A flag rather than a reload, because reloading here is what conflated two outcomes: the
+     * revocation and the feed refresh are separate calls that fail separately, and awaiting the
+     * second inside the first reported a revocation that HAD succeeded as "could not sign the
+     * member out" whenever the read failed after it. It also fired on surfaces with no audit
+     * panel rendered (basic mode, and any account whose deployment wires no audit store), paying
+     * for a read nothing was going to show and turning its 503 into an error about the write.
+     *
+     * The viewer owns the reload instead, which is where it belongs: it already distinguishes a
+     * failed page from an empty one, and a refresh failure now renders in that slot rather than
+     * as a false report about the revocation.
+     */
+    const auditStale = ref(false)
+
+    /**
+     * Load the newest page, replacing whatever was held. Used on open and on refresh, so a reader
+     * is never shown a feed spliced from two different moments.
+     */
+    async function loadAuditEvents(accountId: string) {
+      auditLoading.value = true
+      // Cleared on ATTEMPT, not on success. A failed reload is reported by the viewer's own error
+      // slot, and leaving the flag set would re-trigger the watch that just failed.
+      auditStale.value = false
+      try {
+        const page = await api.listAuditEvents(accountId)
+        auditEvents.value = page.events
+        auditCursor.value = page.nextCursor
+      } finally {
+        auditLoading.value = false
+      }
+    }
+
+    /** Append the next (older) page. A no-op at the end of the log. */
+    async function loadMoreAuditEvents(accountId: string) {
+      if (!auditCursor.value || auditLoading.value) return
+      auditLoading.value = true
+      try {
+        const page = await api.listAuditEvents(accountId, { cursor: auditCursor.value })
+        auditEvents.value = [...auditEvents.value, ...page.events]
+        auditCursor.value = page.nextCursor
+      } finally {
+        auditLoading.value = false
+      }
+    }
+
+    /**
+     * End every session a member holds. Their membership and roles are untouched, so the roster
+     * needs no patching — what changed is not visible in it, which is why the audit feed is
+     * marked stale instead: the revocation's only lasting trace is the row it wrote.
+     */
+    async function revokeMemberSessions(accountId: string, userId: string) {
+      await api.revokeMemberSessions(accountId, userId)
+      auditStale.value = true
     }
 
     // ---- email sender connection -----------------------------------------
@@ -144,6 +212,10 @@ export const useAccountsStore = defineStore(
       ready,
       members,
       invitations,
+      auditEvents,
+      auditCursor,
+      auditLoading,
+      auditStale,
       emailConnection,
       emailConfigured,
       load,
@@ -155,6 +227,9 @@ export const useAccountsStore = defineStore(
       invite,
       revokeInvite,
       setMemberRoles,
+      loadAuditEvents,
+      loadMoreAuditEvents,
+      revokeMemberSessions,
       loadEmailConnection,
       connectEmail,
       disconnectEmail,

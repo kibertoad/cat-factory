@@ -1,5 +1,6 @@
 import { DOCS } from '@cat-factory/server'
-import type { PropagatorLogger } from './propagator.js'
+import type { Logger } from '@cat-factory/kernel'
+import { runBestEffort } from '@cat-factory/kernel'
 
 // Boot-time reachability probe for the optional Redis bus (error-message coverage A7).
 //
@@ -143,16 +144,31 @@ export async function probeRedisReachable(
  */
 export async function warnIfRedisUnreachable(
   env: NodeJS.ProcessEnv,
-  log: PropagatorLogger,
+  log: Logger,
   opts: { connectProbe?: RedisConnectProbe; timeoutMs?: number } = {},
 ): Promise<void> {
   const url = env.REDIS_URL?.trim()
   if (!url) return
   const reachable = await probeRedisReachable(url, opts)
   if (reachable === false) {
-    log.warn(
-      { target: redisTargetLabel(url) },
-      describeRedisUnreachable(url, opts.timeoutMs ?? DEFAULT_REDIS_PROBE_TIMEOUT_MS),
-    )
+    log.warn(describeRedisUnreachable(url, opts.timeoutMs ?? DEFAULT_REDIS_PROBE_TIMEOUT_MS), {
+      target: redisTargetLabel(url),
+    })
   }
+}
+
+/**
+ * Fire {@link warnIfRedisUnreachable} WITHOUT blocking the caller (app-startup initiative, item 5).
+ * Returns immediately; the warning (if any) fires when the bounded probe later resolves. The probe
+ * is diagnostics-only — ioredis retries the bus in the background regardless — so a set-but-down
+ * bus must NOT hold the boot path for the probe's full timeout. Mirrors the blessed
+ * `preflightHarnessImage` fire-and-forget shape (`void runBestEffort(...)`); never throws
+ * (`warnIfRedisUnreachable` already swallows probe failures, the `.catch` is belt-and-suspenders).
+ */
+export function warnIfRedisUnreachableInBackground(
+  env: NodeJS.ProcessEnv,
+  log: Logger,
+  opts: { connectProbe?: RedisConnectProbe; timeoutMs?: number } = {},
+): void {
+  void runBestEffort(log, 'redis.backgroundProbe', () => warnIfRedisUnreachable(env, log, opts))
 }

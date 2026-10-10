@@ -1,9 +1,12 @@
 import type {
+  BugCandidate,
   IssueIntakeQuery,
   TaskDependencyLink,
   TaskSearchResult,
   TaskSourceDescriptor,
+  TrackerBoard,
 } from '@cat-factory/kernel'
+import { MAX_CANDIDATE_DESCRIPTION_CHARS } from './tasks.logic.js'
 
 // Jira-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing an issue key out of user input and converting an
@@ -70,11 +73,93 @@ export function buildJiraIntakeJql(query: IssueIntakeQuery): string {
     clauses.push(`project = "${escapeJql(query.board.jiraProjectKey)}"`)
   clauses.push('statusCategory != Done')
   if (query.issueType) clauses.push(`issuetype = "${escapeJql(query.issueType)}"`)
+  // `assignee IS EMPTY` is JQL's unassigned predicate — pushed down like every other, so a
+  // hunt never pays for (or truncates on) issues somebody already owns.
+  if (query.unassignedOnly) clauses.push('assignee IS EMPTY')
   for (const label of query.labels ?? []) clauses.push(`labels = "${escapeJql(label)}"`)
   if (query.titleFragment) clauses.push(`summary ~ "${escapeJql(query.titleFragment)}"`)
   const excluded = (query.excludeExternalIds ?? []).filter((id) => JIRA_KEY.test(id))
   if (excluded.length > 0) clauses.push(`issuekey NOT IN (${excluded.join(', ')})`)
   return `${clauses.join(' AND ')} ORDER BY created ASC`
+}
+
+/**
+ * The issue fields a bug-hunt candidate needs, as ONE `fields=` selection. Everything the
+ * ranking reasons over comes back in the same search response — there is deliberately no
+ * per-issue detail fetch, which at 40 candidates would be 40 extra round trips against a
+ * rate-limited API for data the search endpoint already returns.
+ */
+export const JIRA_CANDIDATE_FIELDS =
+  'summary,description,status,issuetype,priority,labels,created,comment'
+
+interface JiraCandidateResponse {
+  issues?: {
+    key?: string
+    fields?: {
+      summary?: string
+      description?: unknown
+      status?: { name?: string }
+      issuetype?: { name?: string }
+      priority?: { name?: string } | null
+      labels?: string[]
+      created?: string
+      comment?: { total?: number; comments?: unknown[] }
+    }
+  }[]
+}
+
+/**
+ * Map a candidate search response onto {@link BugCandidate} rows. The ADF description is
+ * converted with the same {@link adfToMarkdown} the import path uses (so the ranking reads
+ * the body a human would) and then truncated.
+ *
+ * `comment.total` is Jira's own count and is preferred over the returned array's length,
+ * which is only the page the `fields` selection happened to include — reporting "2 comments"
+ * for a 40-comment argument would understate exactly the contested bugs worth flagging.
+ */
+export function parseJiraBugCandidates(json: unknown, base: string): BugCandidate[] {
+  const body = (json ?? {}) as JiraCandidateResponse
+  const cleanBase = base.replace(/\/+$/, '')
+  const out: BugCandidate[] = []
+  for (const issue of Array.isArray(body.issues) ? body.issues : []) {
+    if (!issue.key) continue
+    const f = issue.fields ?? {}
+    out.push({
+      source: 'jira',
+      externalId: issue.key,
+      title: f.summary ?? '(untitled)',
+      url: `${cleanBase}/browse/${issue.key}`,
+      status: f.status?.name ?? '',
+      type: f.issuetype?.name ?? '',
+      priority: f.priority?.name ?? null,
+      labels: Array.isArray(f.labels) ? f.labels : [],
+      description: adfToMarkdown(f.description).trim().slice(0, MAX_CANDIDATE_DESCRIPTION_CHARS),
+      createdAt: f.created ?? '',
+      commentCount:
+        typeof f.comment?.total === 'number' ? f.comment.total : (f.comment?.comments?.length ?? 0),
+    })
+  }
+  return out
+}
+
+interface JiraProjectsResponse {
+  values?: { key?: string; name?: string }[]
+}
+
+/**
+ * Map the paginated project-search response onto boards. A Jira board scope is the project
+ * KEY (what `buildJiraIntakeJql` puts in `project = …`), so `id` and `key` are the same value
+ * here — the picker still shows both because `name` alone is ambiguous across similarly-named
+ * projects, which is the whole reason the key exists.
+ */
+export function parseJiraBoards(json: unknown): TrackerBoard[] {
+  const body = (json ?? {}) as JiraProjectsResponse
+  const out: TrackerBoard[] = []
+  for (const project of Array.isArray(body.values) ? body.values : []) {
+    if (!project.key) continue
+    out.push({ id: project.key, name: project.name ?? project.key, key: project.key })
+  }
+  return out
 }
 
 interface JiraSearchResponse {
@@ -213,12 +298,36 @@ export function adfToMarkdown(node: unknown): string {
   // Older issues / some fields come back as a plain string already.
   if (typeof node === 'string') return node.trim()
   if (typeof node !== 'object') return ''
-  const out = renderNode(node as AdfNode)
-  return out
+  const renderer = createAdfRenderer()
+  const out = renderer.render(node as AdfNode)
+  const body = out
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+  // A cap that stays quiet is indistinguishable from a document that simply ended there, and this
+  // text is read by people and by models: a reader who cannot see the cut concludes the rest was
+  // considered and found empty. Both callers want the note: an issue description folded into a
+  // prompt, and a webhook comment whose commands may be past the cut.
+  return renderer.truncated() ? `${body}\n\n${ADF_TRUNCATION_NOTE}`.trim() : body
 }
+
+/** What {@link adfToMarkdown} appends when it stopped short of the end of the document. */
+export const ADF_TRUNCATION_NOTE =
+  '[truncated: this document is larger or more deeply nested than the renderer will walk]'
+
+/**
+ * How much of one document the walk will render.
+ *
+ * ADF arrives from two directions and only one of them is a document a person typed: an issue
+ * body read on the import path, and a comment body on the inbound webhook path, where the JSON is
+ * whatever the delivery carried. A recursive descent over unbounded, externally-authored
+ * structure is an unbounded stack and unbounded CPU, and on the Worker that is a request budget
+ * rather than a machine. Both caps are far above anything Jira's own editor produces (its comment
+ * field is capped near 32k characters), so a real document is unaffected and only a pathological
+ * one is stopped.
+ */
+const MAX_ADF_NODES = 20_000
+const MAX_ADF_DEPTH = 100
 
 interface AdfNode {
   type?: string
@@ -227,45 +336,127 @@ interface AdfNode {
   attrs?: Record<string, unknown>
 }
 
-/** Render a node's children, concatenated. */
-function renderChildren(node: AdfNode): string {
-  if (!Array.isArray(node.content)) return ''
-  return node.content.map((child) => renderNode(child as AdfNode)).join('')
-}
+/**
+ * A single document's walk, with its budget held per call rather than in module state. Two
+ * renders can be in flight at once (a Worker isolate serves concurrent requests), and a shared
+ * counter would let one document's size truncate another's.
+ */
+function createAdfRenderer(): { render(node: AdfNode): string; truncated(): boolean } {
+  let remaining = MAX_ADF_NODES
+  let truncated = false
 
-/** Render the inline text of a node (no block markers), for headings/list items. */
-function renderInline(node: AdfNode): string {
-  if (node.type === 'text') return node.text ?? ''
-  if (node.type === 'hardBreak') return ' '
-  return Array.isArray(node.content)
-    ? node.content.map((child) => renderInline(child as AdfNode)).join('')
-    : ''
-}
-
-function renderNode(node: AdfNode): string {
-  if (typeof node !== 'object' || node === null) return ''
-  switch (node.type) {
-    case 'text':
-      return node.text ?? ''
-    case 'hardBreak':
-      return '\n'
-    case 'paragraph':
-      return `${renderChildren(node)}\n\n`
-    case 'heading': {
-      const level = Math.min(Math.max(Number(node.attrs?.level ?? 1) || 1, 1), 3)
-      return `${'#'.repeat(level)} ${renderInline(node).trim()}\n\n`
+  /** Spend one node of the budget, or report that the walk must stop here. */
+  const admit = (depth: number): boolean => {
+    if (depth > MAX_ADF_DEPTH || remaining <= 0) {
+      truncated = true
+      return false
     }
-    case 'bulletList':
-    case 'orderedList':
-      return `${renderChildren(node)}\n`
-    case 'listItem':
-      return `- ${renderInline(node).trim()}\n`
-    case 'codeBlock':
-      return `\`\`\`\n${renderInline(node)}\n\`\`\`\n\n`
-    case 'blockquote':
-      return renderChildren(node)
-    default:
-      // 'doc', 'mediaGroup', panels, tables, unknown marks: recurse into content.
-      return renderChildren(node)
+    remaining -= 1
+    return true
   }
+
+  /** Render a node's children, concatenated. */
+  const renderChildren = (node: AdfNode, depth: number): string => {
+    if (!Array.isArray(node.content)) return ''
+    return node.content.map((child) => render(child as AdfNode, depth + 1)).join('')
+  }
+
+  /** Render one node's inline text (no block markers). */
+  const renderInline = (node: AdfNode, depth: number): string => {
+    if (!admit(depth)) return ''
+    if (node.type === 'text') return node.text ?? ''
+    if (node.type === 'hardBreak') return ' '
+    const atom = atomicText(node)
+    if (atom !== null) return atom
+    return renderInlineChildren(node, depth)
+  }
+
+  /**
+   * The inline text of a node's CHILDREN, for a container the caller has already admitted
+   * (a heading, a list item, a code block). Taking the children rather than the node keeps one
+   * node charged to the budget once, whichever arm reaches it.
+   */
+  const renderInlineChildren = (node: AdfNode, depth: number): string => {
+    if (!Array.isArray(node.content)) return ''
+    return node.content.map((child) => renderInline(child as AdfNode, depth + 1)).join('')
+  }
+
+  const render = (node: AdfNode, depth = 0): string => {
+    if (typeof node !== 'object' || node === null) return ''
+    if (!admit(depth)) return ''
+    switch (node.type) {
+      case 'text':
+        return node.text ?? ''
+      case 'hardBreak':
+        return '\n'
+      case 'mention':
+      case 'status':
+      case 'emoji':
+      case 'inlineCard':
+        return atomicText(node) ?? ''
+      case 'blockCard':
+        return `${atomicText(node) ?? ''}\n\n`
+      case 'paragraph':
+        return `${renderChildren(node, depth)}\n\n`
+      case 'heading': {
+        const level = Math.min(Math.max(Number(node.attrs?.level ?? 1) || 1, 1), 3)
+        return `${'#'.repeat(level)} ${renderInlineChildren(node, depth).trim()}\n\n`
+      }
+      case 'bulletList':
+      case 'orderedList':
+        return `${renderChildren(node, depth)}\n`
+      case 'listItem':
+        return `- ${renderInlineChildren(node, depth).trim()}\n`
+      case 'codeBlock':
+        return `\`\`\`\n${renderInlineChildren(node, depth)}\n\`\`\`\n\n`
+      case 'blockquote':
+        return renderChildren(node, depth)
+      default:
+        // 'doc', 'mediaGroup', panels, tables, unknown marks: recurse into content.
+        return renderChildren(node, depth)
+    }
+  }
+
+  return { render: (node) => render(node), truncated: () => truncated }
+}
+
+/**
+ * The text of a LEAF node that carries it in `attrs` instead of in children: a mention, an
+ * emoji, a status lozenge, or a smart link (a URL Jira's editor upgrades to a card).
+ *
+ * They need naming explicitly because the default arm above walks CONTENT, and these have none,
+ * so an unlisted one renders as nothing at all rather than as something degraded, dropping a
+ * name, a link or a state out of the middle of a sentence with no trace that it was there.
+ *
+ * `null` means "not one of these types" and is what sends `renderInline` on to walk children;
+ * a recognised type whose attrs carry nothing usable answers `''` instead. Collapsing the two
+ * would be harmless today only because every type here is childless, which is a fact about
+ * today's ADF rather than about this function.
+ */
+function atomicText(node: AdfNode): string | null {
+  const attrs = node.attrs ?? {}
+  const text = typeof attrs.text === 'string' ? attrs.text : null
+  switch (node.type) {
+    case 'mention':
+    case 'status':
+      return text ?? ''
+    case 'emoji':
+      return text ?? (typeof attrs.shortName === 'string' ? attrs.shortName : '')
+    case 'inlineCard':
+    case 'blockCard':
+      // A smart link carries its target as either a bare `url` or an embedded JSON-LD `data`
+      // object, depending on whether Jira has resolved the card yet. Reading only the first
+      // renders the unresolved half as nothing, which is the same silent mid-sentence loss the
+      // atoms above are listed to prevent.
+      return typeof attrs.url === 'string' ? attrs.url : (smartLinkUrl(attrs.data) ?? '')
+    default:
+      return null
+  }
+}
+
+/** The `url` of a smart link's embedded JSON-LD payload, when it carries one. */
+function smartLinkUrl(data: unknown): string | null {
+  if (typeof data !== 'object' || data === null) return null
+  const url = (data as { url?: unknown }).url
+  return typeof url === 'string' ? url : null
 }

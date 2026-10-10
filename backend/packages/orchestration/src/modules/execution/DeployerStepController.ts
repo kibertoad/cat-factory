@@ -1,0 +1,1308 @@
+import type {
+  AgentFailureKind,
+  AgentRunResult,
+  Block,
+  BlockRepository,
+  Clock,
+  EnvironmentHandle,
+  EnvironmentRouteProof,
+  ExecutionInstance,
+  Logger,
+  PipelineStep,
+  ProvisionContext,
+  RunnerJobRef,
+  ServiceProvisioning,
+} from '@cat-factory/kernel'
+import {
+  describeInconclusiveRoute,
+  describeUnreachableEnvironment,
+  describeWaitedFor,
+  getErrorMessage,
+  getErrorReason,
+  judgeEnvironmentReadiness,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
+import { frameProfile, frontendOriginsForService } from '@cat-factory/contracts'
+import { moduleSlug } from '@cat-factory/agents'
+import type {
+  EnvironmentProvisioningService,
+  ProvisionArgs,
+  ProvisionDispatch,
+  SettledProvision,
+} from '@cat-factory/integrations'
+import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
+import { type ContainerFailureView, containerShutdownFailure } from './job.logic.js'
+import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
+import type { DeployFixController } from './DeployFixController.js'
+import type {
+  EnvironmentInvestigationController,
+  EnvironmentReadinessWait,
+} from './EnvironmentInvestigationController.js'
+import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
+import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import type { RunStateMachine } from './RunStateMachine.js'
+import type { AdvanceResult } from './advance.js'
+import { awaitingJob } from './awaitingJob.logic.js'
+
+/**
+ * Step kinds whose run details surface the ephemeral-environment lifecycle: the
+ * `deployer` provisions it and the `tester`/`playwright` exercise it. Used to gate
+ * the per-poll env projection so the `getByBlock` read never hits the hot path for
+ * the many container steps that have no env to show (see attachEnvironmentProjection).
+ */
+const ENV_PROJECTION_KINDS = new Set<string>([
+  'deployer',
+  TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  'playwright',
+])
+
+/**
+ * Whether the environment projection is unchanged, compared over EVERY field it carries.
+ *
+ * Derived from the objects rather than a hand-listed subset, because the list is what went wrong:
+ * a field the projection carried but the comparison did not was projected onto the step and never
+ * emitted, so the panel showed the value from whichever poll last differed on something else. The
+ * note (the one field that moves while an environment comes up), the TTL and the resolved
+ * provision type were each in that position. A field added above now joins the comparison with no
+ * second edit.
+ *
+ * Every field is a primitive (`runEnvironmentSchema` carries no nested object), so identity is
+ * the right comparison; `?? null` folds the absent/null pair, which the two write paths differ on.
+ */
+function sameEnvironmentProjection(
+  a: PipelineStep['environment'] | null,
+  b: PipelineStep['environment'] | null,
+): boolean {
+  if (!a || !b) return !a && !b
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
+    if ((left[key] ?? null) !== (right[key] ?? null)) return false
+  }
+  return true
+}
+
+/** One service frame a `deployer` step provisions an environment for (own or an involved peer). */
+interface DeployTarget {
+  frameId: string
+  /** The task's OWN service frame (implicitly involved); false for a connected involved service. */
+  isPrimary: boolean
+  provisioning: ServiceProvisioning | undefined
+  frame: Block
+}
+
+/**
+ * The loop-invariant context of a single `deployer` fan-out — the run + step being advanced, the
+ * task block, whether the deployer is the run's final step, and the already-resolved ordered
+ * target set. Threaded unchanged through {@link DeployerStepController.advanceDeployerFrames} and
+ * every per-frame settle so those methods take one context object rather than the same six
+ * positional args (resolved ONCE per fan-out in `runDeployerStep` / `pollDeployerJob`).
+ */
+interface DeployerFanOut {
+  workspaceId: string
+  instance: ExecutionInstance
+  step: PipelineStep
+  block: Block
+  isFinalStep: boolean
+  targets: readonly DeployTarget[]
+}
+
+/**
+ * The `peerEnvUrls` provision input for the frame about to be provisioned: a comma-joined set of
+ * `slug=url` pairs for every target frame whose env is ALREADY ready this run — so a later
+ * provider (own frame, provisioned last in provider-before-consumer order) can template a
+ * connected service's URL into its manifest via `{{input.peerEnvUrls}}`. Empty when no peer is
+ * ready yet. Documented limitation: a provider needing its consumer's URL (a cyclic env
+ * dependency) is out of scope — there is no reconfigure pass.
+ */
+function buildPeerEnvUrls(
+  targets: readonly DeployTarget[],
+  done: NonNullable<PipelineStep['deployEnvs']>,
+): string {
+  const parts: string[] = []
+  const seen = new Map<string, number>()
+  for (const target of targets) {
+    const env = done[target.frameId]
+    if (env?.status !== 'ready' || !env.url) continue
+    // Two ready providers can slugify to the same name; suffix the collision with an ordinal so a
+    // second provider's URL isn't silently dropped (or its entry made ambiguous) in the joined set.
+    const base = moduleSlug(target.frame.title)
+    const count = seen.get(base) ?? 0
+    seen.set(base, count + 1)
+    const slug = count === 0 ? base : `${base}-${count + 1}`
+    parts.push(`${slug}=${env.url}`)
+  }
+  return parts.join(',')
+}
+
+/**
+ * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
+ * Returns undefined for any URL that doesn't carry both segments. Host-agnostic on
+ * purpose (GitHub Enterprise hosts work too); only the `/owner/repo/...` shape matters.
+ */
+function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | undefined {
+  const match = /^https?:\/\/[^/]+\/([^/]+)\/([^/]+)\//.exec(url)
+  if (!match) return undefined
+  return { owner: match[1]!, repo: match[2]! }
+}
+
+/**
+ * Collaborators + the {@link RunDispatcher} seams the deployer step family needs. The
+ * completion hub (`recordStepResult`) and the shared poll folds / eviction recovery stay on
+ * the dispatcher (the agent path uses them too) and are injected as callbacks, so the two
+ * paths can't drift on budgets or fold semantics.
+ */
+export interface DeployerStepControllerDeps {
+  blockRepository: BlockRepository
+  contextBuilder: AgentContextBuilder
+  runStateMachine: RunStateMachine
+  /**
+   * The engine clock. It anchors the environment-readiness wait, which is the one deployer
+   * decision measured in elapsed TIME rather than in attempts, so it is injected rather than read
+   * off `Date.now()` — a test drives the whole readiness ceiling without waiting through it.
+   */
+  clock: Clock
+  environmentProvisioning?: EnvironmentProvisioningService
+  recordStepResult: (
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    result: AgentRunResult,
+  ) => Promise<AdvanceResult>
+  applyContainerRunning: (
+    step: PipelineStep,
+    update: { phase?: string; container?: { id?: string; url?: string } },
+  ) => boolean
+  applySubtaskProgress: (step: PipelineStep, counts: PipelineStep['subtasks']) => boolean
+  recoverContainerEviction: (
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    failure: ContainerFailureView,
+    onBeforeRedispatch?: () => Promise<void>,
+  ) => Promise<AdvanceResult | null>
+  /**
+   * The remediation loop a failed PRIMARY-frame provision is offered to before it is reported as
+   * terminal. Absent means every provisioning failure is terminal exactly as before.
+   */
+  deployFix?: DeployFixController
+  /**
+   * The other half of the remediation story: a provisioning failure NO checkout edit can address
+   * is diagnosed against the provider's own evidence and, where there is something to try, tried.
+   * Absent ⇒ every such failure is terminal and unexplained, exactly as before it existed.
+   */
+  environmentInvestigation?: EnvironmentInvestigationController
+  /**
+   * Where the two provisioning-lease releases below report a failure. Both are best-effort by
+   * design, so without this a leaked lease (billed-but-useless compute, or a permanently held
+   * self-hosted pool slot) is invisible. Absent ⇒ `noopLogger`.
+   */
+  logger?: Logger
+}
+
+/**
+ * The deterministic `deployer` step family, extracted out of {@link RunDispatcher}: the
+ * multi-frame provision fan-out (own frame + involved-service peers, provider-before-consumer),
+ * the async container-backed deploy-job poll, the per-frame settle/failure bookkeeping on
+ * `step.deployEnvs`, and the environment projection every env-aware step surfaces on its run
+ * details. No LLM and no token usage anywhere in this family — the deployer provisions
+ * environments through the {@link EnvironmentProvisioningService} provider only. Pure code
+ * movement from the dispatcher; no behaviour changes.
+ */
+export class DeployerStepController {
+  private readonly blockRepository: BlockRepository
+  private readonly contextBuilder: AgentContextBuilder
+  private readonly runStateMachine: RunStateMachine
+  private readonly clock: Clock
+  private readonly environmentProvisioning?: EnvironmentProvisioningService
+  private readonly recordStepResult: DeployerStepControllerDeps['recordStepResult']
+  private readonly applyContainerRunning: DeployerStepControllerDeps['applyContainerRunning']
+  private readonly applySubtaskProgress: DeployerStepControllerDeps['applySubtaskProgress']
+  private readonly recoverContainerEviction: DeployerStepControllerDeps['recoverContainerEviction']
+  private readonly deployFix?: DeployFixController
+  private readonly environmentInvestigation?: EnvironmentInvestigationController
+  private readonly log: Logger
+
+  constructor(deps: DeployerStepControllerDeps) {
+    this.blockRepository = deps.blockRepository
+    this.contextBuilder = deps.contextBuilder
+    this.runStateMachine = deps.runStateMachine
+    this.clock = deps.clock
+    this.environmentProvisioning = deps.environmentProvisioning
+    this.recordStepResult = deps.recordStepResult
+    this.applyContainerRunning = deps.applyContainerRunning
+    this.applySubtaskProgress = deps.applySubtaskProgress
+    this.recoverContainerEviction = deps.recoverContainerEviction
+    this.deployFix = deps.deployFix
+    this.environmentInvestigation = deps.environmentInvestigation
+    this.log = (deps.logger ?? noopLogger).child({ scope: 'deployerStep' })
+  }
+
+  /**
+   * Stamp `step.environment` from the block's live ephemeral environment so a run's
+   * details show its spinning-up / running / shut-down / errored state + the exact
+   * error. Best-effort: a no-op when the env integration isn't wired, and never
+   * throws (a projection failure must not break the run). Returns whether it changed,
+   * so the poll path can fold it into its single emit. The `human-test` gate keeps
+   * its own `humanTest.environment`, so this is for the other env-consuming steps
+   * (tester/coder/deployer).
+   */
+  async attachEnvironmentProjection(
+    workspaceId: string,
+    blockId: string,
+    step: PipelineStep,
+    frameId?: string,
+  ): Promise<boolean> {
+    if (!this.environmentProvisioning) return false
+    // Only the env-aware kinds run against an ephemeral environment (the `deployer`
+    // provisions it; the `tester`/`playwright` exercise it). Gating here keeps the
+    // per-poll `getByBlock` read off the hot path for the many container steps
+    // (coder/merger/ci-fixer/…) that never have an env to surface.
+    if (!ENV_PROJECTION_KINDS.has(step.agentKind)) return false
+    try {
+      // Project the SPECIFIED service frame's env when given (the in-flight / failed frame of a
+      // multi-env deploy); otherwise the task's OWN frame (a task provisions several envs under
+      // one block, so an un-keyed newest-wins read could surface a peer's). Absent frame ⇒ own.
+      const resolvedFrameId =
+        frameId ??
+        (await this.contextBuilder.resolveServiceFrameId(workspaceId, blockId)) ??
+        undefined
+      const handle = await this.environmentProvisioning.getHandleForBlock(
+        workspaceId,
+        blockId,
+        resolvedFrameId,
+      )
+      const next = handle
+        ? {
+            id: handle.id,
+            url: handle.url,
+            status: handle.status,
+            expiresAt: handle.expiresAt,
+            lastError: handle.lastError,
+            statusNote: handle.statusNote ?? null,
+            provisionType: handle.provisionType ?? null,
+            engine: handle.engine ?? null,
+          }
+        : null
+      const prev = step.environment ?? null
+      if (sameEnvironmentProjection(prev, next)) return false
+      step.environment = next
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Deterministically provision an ephemeral environment for a `deployer` step and turn the
+   * outcome into the step's advance result (no LLM, no token usage). On success the env
+   * summary is recorded as the step output. On a provisioning failure — the provider threw
+   * OR returned `status:'failed'` — the breakage is surfaced as a real, DISPLAYED step
+   * failure rather than a green step with the error buried in its prose output: `step.environment`
+   * is stamped with the errored env (its `lastError` renders in the step's Environment panel)
+   * and a structured `environment` failure is returned (the board's failure card). A deployer
+   * that can't provision IS failed — the downstream tester/coder steps need that environment.
+   *
+   * The failure is TERMINAL and surfaced for a human/`Retry`, NOT auto-retried by the durable
+   * driver — DELIBERATELY, and symmetric with `handleAgentStep`'s dispatch-failure path
+   * (a container that never started is likewise terminal regardless of `rethrowAgentErrors`).
+   * Environment provisioning is infra spin-up, not agent execution: treating it like the
+   * `dispatch` failure (surface the verbatim cause + one-click retry) keeps the `environment`
+   * classification and the provider's real error visible, where rethrowing for the driver's
+   * per-step retry would re-collapse it into a generic `agent` failure on exhaustion and bury
+   * the root cause. So do NOT reintroduce a `rethrowAgentErrors` branch here.
+   */
+  async runDeployerStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    // A set `jobId` means a prior (possibly replayed) dispatch already started an async deploy
+    // job for the IN-FLIGHT frame — re-attach by polling instead of re-provisioning (mirrors
+    // `handleAgentStep`). Short-circuit BEFORE resolving targets so a parked re-attach
+    // skips the workspace block-list read.
+    if (step.jobId) {
+      return awaitingJob(step, instance.currentStep, step.jobId)
+    }
+    // The same re-attach rule for the OTHER park this step owns. A live `deployWait` means a
+    // frame's environment is already provisioned and still coming up, so re-park on it rather than
+    // re-entering the fan-out. `deployEnvs` records TERMINAL outcomes only, so a waiting frame is
+    // deliberately absent from it and {@link advanceDeployerFrames} would pick that same frame as
+    // the next un-settled one: any re-advance while a wait is live (a durable replay, a Node worker
+    // restart, the stale-run sweeper re-driving) would stand a SECOND environment up for it and
+    // leak the first, which nothing would then be pointing at to reclaim. Checked AFTER `jobId`
+    // only for symmetry of reading: the two are mutually exclusive, since `pollDeployerJob` clears
+    // `jobId` before the settle that can enter a wait.
+    if (step.deployWait) {
+      return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
+    }
+    // Fan out over every service frame this run provisions an env for — the task's OWN frame plus
+    // each still-valid involved-service frame (the connections initiative), ordered provider-
+    // before-consumer. Resolve the target set ONCE here (one workspace block-list read); the
+    // synchronous/infraless recursion threads it rather than re-reading per frame.
+    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
+    // Pin the primary (own) frame once, so every later re-entry/replay classifies it identically
+    // regardless of a mid-flight reparent (see {@link resolveDeployTargets}). Persisted with the
+    // first synchronous-settle / async-park upsert below.
+    step.deployPrimaryFrameId ??= targets.find((t) => t.isPrimary)?.frameId
+    return this.advanceDeployerFrames({ workspaceId, instance, step, block, isFinalStep, targets })
+  }
+
+  /**
+   * Advance a `deployer` fan-out over its already-resolved `targets`: dispatch the first un-settled
+   * frame (parking on an async deploy job) or, once every frame has settled, complete the step. One
+   * deploy job per frame, dispatched SEQUENTIALLY (parking between) so a later provider can receive
+   * the already-ready peers' URLs. `step.deployEnvs` records each frame's TERMINAL outcome, so a
+   * replay resumes at the first un-settled frame. Re-entered (with the SAME targets) after each
+   * synchronous/infraless/failed-peer frame settles — never re-reading the block list per frame.
+   */
+  private async advanceDeployerFrames(ctx: DeployerFanOut): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block, targets } = ctx
+    const done = step.deployEnvs ?? {}
+    const next = targets.find((t) => !done[t.frameId])
+    if (!next) {
+      // Every frame settled: finish the step (all ready → done; a primary failure short-circuited).
+      return this.completeDeployerStep(ctx)
+    }
+    // The deployer is the SINGLE environment provisioner: it stands the frame's env up whenever
+    // there is genuinely one to stand up, so every downstream consumer (tester / human-test /
+    // playwright) can depend on a pre-provisioned env rather than standing infra up itself:
+    //  - a DECLARED `kubernetes`/`custom` type (resolved through its per-type handler), OR
+    //  - a DECLARED `docker-compose` type on a workspace with a compose handler configured (the
+    //    setup wizard saves one) — the per-PR compose stack is provisioned HERE (attaching shared
+    //    stacks / running preflights), and the tester then targets that provisioned env (see
+    //    `testerInfraSpec`). A compose chain that reaches a tester with no resolvable handler is now
+    //    refused at run start (`assertTesterInfraConfigured`), so this stays the sole compose path, OR
+    //  - an UNDECLARED frame on a workspace with a legacy single-connection registered (the compat
+    //    bridge — preserved so existing single-connection deployments keep provisioning).
+    // Every other frame stands nothing up HERE — `infraless`/none, an undeclared frame with NO
+    // connection, or a frontend frame — so the deployer records `{status:'skipped'}` and re-enters
+    // for the next frame. This makes the deployer a safe NO-OP prefix that can be injected before
+    // every tester/human-test step without failing services that never configured provisioning.
+    // A `library` frame (not `deployable`) is never deployed — a declared compose path is repo-local
+    // TEST infra, not an environment — so it stands nothing up here regardless of its provisioning.
+    // Gating every env branch on `deployable` forces the skip record below (mirroring `infraless`).
+    const deployable = frameProfile(next.frame.type).deployable
+    const provisionType = next.provisioning?.type
+    const declaresEnv = deployable && (provisionType === 'kubernetes' || provisionType === 'custom')
+    const composeEnv =
+      deployable &&
+      provisionType === 'docker-compose' &&
+      next.provisioning !== undefined &&
+      // Thread the run initiator so a local per-user handler OVERRIDE resolves exactly as it does at
+      // provision time (and in the start-time gate) — else an override-only compose setup that
+      // passed `assertDeployerConfigured` would silently no-op here (the very dead-end the gate closes).
+      ((
+        await this.environmentProvisioning?.canProvision(
+          workspaceId,
+          next.provisioning,
+          instance.initiatedBy,
+        )
+      )?.ok ??
+        false)
+    const legacyEnv =
+      deployable &&
+      provisionType === undefined &&
+      (await this.environmentProvisioning?.hasLegacyConnection(workspaceId))
+    if (!declaresEnv && !composeEnv && !legacyEnv) {
+      await this.environmentProvisioning?.supersedeForBlock(workspaceId, block.id, next.frameId)
+      step.deployEnvs = { ...done, [next.frameId]: { status: 'skipped' } }
+      // Persist this frame's TERMINAL outcome BEFORE processing the next frame, so a crash/replay
+      // mid-fan-out resumes at the first un-settled frame rather than re-doing an already-settled
+      // one (which, on the synchronous REST path, would re-hit the provider — no idempotency guard
+      // there, unlike the deterministic async job ref).
+      await this.runStateMachine.casPersist(workspaceId, instance)
+      return this.advanceDeployerFrames(ctx)
+    }
+    // Start provisioning the next frame: a raw-manifest config provisions SYNCHRONOUSLY over REST
+    // (a final handle); a config that needs rendering dispatches a CONTAINER-backed deploy job we
+    // park on and poll. The job ref is DETERMINISTIC (run id + deployer kind + FRAME + eviction
+    // epoch), so a Workflows replay reproduces the same id and the transport re-attaches instead
+    // of double-dispatching. The frame discriminator keeps each fanned-out job distinct.
+    const ref: RunnerJobRef = {
+      runId: instance.id,
+      jobId: deployJobId(instance.id, deployDispatchEpoch(step), next.frameId),
+    }
+    const peerEnvUrls = buildPeerEnvUrls(targets, done)
+    let dispatch: ProvisionDispatch
+    try {
+      dispatch = await this.environmentProvisioning!.startProvision(
+        await this.deployerProvisionArgs(workspaceId, instance, block, next, peerEnvUrls),
+        ref,
+      )
+    } catch (error) {
+      return this.settleDeployerFailure(ctx, next, {
+        error: getErrorMessage(error),
+        // Propagate the provider's machine-readable cause (e.g. `deploy_runner_unwired`) so the
+        // SPA can render precise, runtime-specific guidance rather than string-matching the prose.
+        reason: getErrorReason(error),
+      })
+    }
+    if (dispatch.kind === 'completed') {
+      // Synchronous provision: record this frame's outcome, then continue to the next frame.
+      return this.settleDeployerFrame(ctx, next, dispatch)
+    }
+    // An async deploy job was dispatched: park on this frame. `dispatch` blocked until the job was
+    // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
+    // deployer poll branch. Surface the frame's env spinning up alongside the parked step.
+    step.jobId = dispatch.ref.jobId
+    step.deployFrameId = next.frameId
+    step.container = { status: 'up' }
+    // Pin the provisioning config the container was built from, so the later poll/finalize maps
+    // the job against THIS config rather than a fresh read of the frame (which a person may edit
+    // mid-flight). Absent for the undeclared legacy path, which re-resolution handles harmlessly.
+    step.deployProvisioning = next.provisioning
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, next.frameId)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
+    return awaitingJob(step, instance.currentStep, step.jobId)
+  }
+
+  /**
+   * Resolve the ordered set of service frames a `deployer` step provisions environments for: the
+   * task's OWN service frame (always, `isPrimary`) plus each involved-service frame (read-time
+   * stale-filtered to ids that are still a connection neighbour AND resolve to a `service` frame
+   * WITH declared provisioning — an involved frame with none stands nothing up here). Ordered
+   * PROVIDER-before-CONSUMER over the connection edges among the targets (see
+   * {@link orderProvisionTargets}) so a later provision can receive its ready peers' URLs. One
+   * workspace block-list read; no per-frame point read.
+   *
+   * `pinnedPrimaryFrameId` (from {@link PipelineStep.deployPrimaryFrameId}, set on the first
+   * resolution) keeps the OWN/primary frame STABLE across re-entries: once the fan-out has started,
+   * a mid-flight reparent must not re-classify which frame is primary — that would flip an
+   * own-frame failure from terminal to a non-terminal peer failure. Prefer the pinned frame when it
+   * still resolves; fall back to a fresh `frameOf` walk otherwise.
+   */
+  private async resolveDeployTargets(
+    workspaceId: string,
+    block: Block,
+    pinnedPrimaryFrameId?: string,
+  ): Promise<DeployTarget[]> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const byId = new Map(blocks.map((b) => [b.id, b]))
+    const ownFrame =
+      (pinnedPrimaryFrameId ? byId.get(pinnedPrimaryFrameId) : undefined) ??
+      frameOf(byId, block.id) ??
+      block
+    const targets: DeployTarget[] = [
+      {
+        frameId: ownFrame.id,
+        isPrimary: true,
+        provisioning: ownFrame.provisioning,
+        frame: ownFrame,
+      },
+    ]
+    // The connected involved-service frames, read-time stale-filtered by the shared helper (kept in
+    // sync with `AgentContextBuilder.resolveInvolvedServices`). Include each regardless of declared
+    // provisioning — like the OWN frame, an undeclared service falls through to the legacy
+    // single-connection compat bridge, and an `infraless` one is skipped by the dispatch loop. Only
+    // the dispatch decides what actually stands up.
+    for (const frame of validInvolvedServiceFrames(blocks, block, ownFrame.id)) {
+      if (targets.some((t) => t.frameId === frame.id)) continue
+      targets.push({
+        frameId: frame.id,
+        isPrimary: false,
+        provisioning: frame.provisioning,
+        frame,
+      })
+    }
+    const targetIds = new Set(targets.map((t) => t.frameId))
+    const providersOf = new Map<string, Set<string>>()
+    for (const target of targets) {
+      const providers = new Set<string>()
+      for (const connection of target.frame.serviceConnections ?? []) {
+        if (
+          connection.serviceBlockId !== target.frameId &&
+          targetIds.has(connection.serviceBlockId)
+        ) {
+          providers.add(connection.serviceBlockId)
+        }
+      }
+      providersOf.set(target.frameId, providers)
+    }
+    const order = orderProvisionTargets(
+      targets.map((t) => ({ frameId: t.frameId, isPrimary: t.isPrimary })),
+      providersOf,
+    )
+    const byFrame = new Map(targets.map((t) => [t.frameId, t]))
+    return order.map((id) => byFrame.get(id)!)
+  }
+
+  /**
+   * Record one frame's TERMINAL deploy outcome onto `step.deployEnvs`, then continue the fan-out.
+   * A `ready` handle records the env and re-enters {@link advanceDeployerFrames} for the next
+   * frame; a `failed` handle routes to {@link settleDeployerFailure} (terminal only for the own
+   * frame). Shared by the synchronous-provision and async-finalized paths.
+   */
+  private async settleDeployerFrame(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    settled: SettledProvision,
+  ): Promise<AdvanceResult> {
+    const { handle, reason } = settled
+    if (handle.status === 'failed') {
+      return this.settleDeployerFailure(ctx, target, {
+        url: handle.url,
+        environmentId: handle.id,
+        error: handle.lastError ?? 'Provisioning failed.',
+        // The classification the provider stated on a failure it did NOT throw. Carried here for
+        // the same reason the thrown path carries `getErrorReason(error)`: it is what decides
+        // whether the remediation loop may run, and a handle-borne failure that dropped it read as
+        // unclassified no matter what the provider had determined. Absent stays absent, which is
+        // never repo-fixable.
+        ...(reason ? { reason } : {}),
+      })
+    }
+    if (handle.status !== 'ready') {
+      // The provider answered without a live environment. `deployEnvs` records TERMINAL outcomes
+      // only, so there is nothing honest to write here yet: `provisioning` means the environment
+      // is still coming (park and re-read the provider), and every other state means it never
+      // will be (record the frame failed, naming the state).
+      //
+      // The OWN frame used to be recorded `ready` regardless, which is the defect this replaces:
+      // it advertised "Provisioned ephemeral environment … (pending)" to the run summary and to
+      // every downstream env-consuming step, while the environment itself was still being built.
+      //
+      // A PEER frame takes the SAME route, which is a deliberate change from the fast-drop this
+      // replaces (a not-`ready` peer was recorded failed on the spot, as non-terminal enrichment
+      // the run could proceed without). It is not only enrichment: {@link buildPeerEnvUrls} feeds
+      // every already-ready peer into the NEXT frame's provision inputs, and
+      // {@link orderProvisionTargets} runs providers BEFORE consumers precisely so a consumer can
+      // template its provider's URL into its own manifest. Dropping a peer that is still building
+      // therefore does not lose a URL from a prompt, it provisions the consumer — usually the OWN
+      // frame, which goes last — against a provider address that is silently absent, which is the
+      // same class of defect as the one above. Under an async provider the fast-drop made that
+      // ordering guarantee vacuous, since every peer answers `provisioning` first. The cost is
+      // that a peer stuck coming up now holds the run up to the readiness ceiling rather than
+      // being dropped instantly; the ceiling is what bounds it, and the frame still settles
+      // `failed` (non-terminal for a peer) at the end of it.
+      return this.judgeSettledEnvironment(ctx, target, handle)
+    }
+    return this.recordReadyFrame(ctx, target, handle)
+  }
+
+  /**
+   * Decide what a NOT-`ready` provider answer means for the frame it settled, and act on it: a
+   * `provisioning` environment enters the readiness wait below, anything else is recorded as a
+   * failed frame carrying the state it is stuck in. Shared by the initial settle and by every
+   * readiness poll, so both read the same rule out of kernel rather than re-deriving it.
+   */
+  private async judgeSettledEnvironment(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    handle: EnvironmentHandle,
+    waitedMs = 0,
+  ): Promise<AdvanceResult> {
+    const verdict = judgeEnvironmentReadiness(handle, waitedMs)
+    if (verdict.kind === 'waiting') return this.enterEnvironmentWait(ctx, target, handle)
+    if (verdict.kind === 'ready') return this.recordReadyFrame(ctx, target, handle)
+    return this.settleDeployerFailure(ctx, target, {
+      url: handle.url,
+      environmentId: handle.id,
+      // The initial settle passes zero, and "the readiness wait ran for 0 seconds" is a different
+      // (and false) statement from "there was a live verdict and nothing waited on it".
+      wait: waitedMs > 0 ? { kind: 'waited', waitedMs } : { kind: 'verdict_without_wait' },
+      error: verdict.error,
+      // The two are different faults and the vocabulary keeps them apart: `timeout` is OUR
+      // deadline expiring on a provider still answering `provisioning`, `environment_not_ready`
+      // is the provider's own verdict on an environment that will never become ready. Neither is
+      // repo-fixable, so the remediation loop stays out of both.
+      reason: verdict.kind === 'timed_out' ? 'timeout' : 'environment_not_ready',
+    })
+  }
+
+  /**
+   * Record one frame's READY environment on `step.deployEnvs` and continue the fan-out. The env's
+   * ID rides the record beside its URL: it is what the `disposer` reclaims by at the other end of
+   * the lifecycle, and this is the only moment the run can state WHICH environment it stood up
+   * for this frame without re-resolving (and mis-resolving) it later.
+   */
+  private async recordReadyFrame(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    handle: EnvironmentHandle,
+  ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
+    const proof = await this.proveEnvironmentRoute(ctx, handle)
+    if (proof?.state === 'not_reached') {
+      return this.settleDeployerFailure(ctx, target, {
+        url: handle.url,
+        environmentId: handle.id,
+        error: describeUnreachableEnvironment(handle.url, proof),
+        // A DNS zone, a security group or a load balancer, none of which is in the checkout, which
+        // is why this reason is not repo-fixable and the remediation loop stays out of it.
+        reason: 'environment_unreachable',
+      })
+    }
+    if (proof?.state === 'inconclusive') {
+      // The frame ADVANCES: `inconclusive` is the platform saying it could not tell, and failing a
+      // frame on it would make the diagnostic a second way for a healthy deploy to die. Logged
+      // rather than silent, because a probe that stops being able to classify anything (a runtime
+      // restriction, a resolver fault) otherwise degrades to "the feature does nothing" with the
+      // rows to prove it and nobody looking. The agent is told separately, off the stored proof.
+      this.log.warn(describeInconclusiveRoute(handle.url, proof), {
+        workspaceId,
+        executionId: instance.id,
+        environmentId: handle.id,
+        reason: proof.reason,
+      })
+    }
+    step.deployEnvs = {
+      ...step.deployEnvs,
+      [target.frameId]: { status: 'ready', url: handle.url, environmentId: handle.id },
+    }
+    // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
+    // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
+    await this.runStateMachine.casPersist(workspaceId, instance)
+    return this.advanceDeployerFrames(ctx)
+  }
+
+  /**
+   * Dial the environment once, at the moment its frame settles `ready`, and record what carried.
+   *
+   * Here rather than at dispatch because a bridge classifier that made a DNS call would put
+   * network I/O and a new failure mode on the container-dispatch path, and here rather than in a
+   * gate because the deployer owns provisioning through to a terminal verdict (the withdrawn
+   * `deploy-health` gate, `docs/initiatives/deployment-failure-remediation.md`). This is the one
+   * moment where the I/O is free and the answer still changes what happens next.
+   *
+   * BEST-EFFORT, and the asymmetry is deliberate. A `not_reached` verdict is evidence and fails the
+   * frame in about two minutes rather than letting a tester spend ten and a model budget arriving
+   * at a confident diagnosis of the wrong layer. A proof that could not be TAKEN (no prober wired,
+   * the persistence write failed) is not evidence of anything and returns null, which advances
+   * exactly as before this existed: the failure mode to avoid is a diagnostic that becomes a second
+   * way for a healthy deploy to die.
+   */
+  private async proveEnvironmentRoute(
+    ctx: DeployerFanOut,
+    handle: EnvironmentHandle,
+  ): Promise<EnvironmentRouteProof | null> {
+    const provisioning = this.environmentProvisioning
+    if (!provisioning) return null
+    let proved: EnvironmentHandle | undefined
+    await runBestEffort(
+      this.log,
+      'prove environment route',
+      async () => {
+        proved = await provisioning.proveReachability(ctx.workspaceId, handle.id)
+      },
+      { workspaceId: ctx.workspaceId, executionId: ctx.instance.id, environmentId: handle.id },
+    )
+    return proved?.reachability?.proof ?? null
+  }
+
+  /**
+   * Park the step on one frame's environment becoming ready. The wait is pinned to the
+   * environment's ID (never re-resolved from the frame, which can fall back to a frame-less row
+   * belonging to another provision) and anchored at the engine clock, so a durable replay
+   * re-attaches to the same environment with the same deadline.
+   */
+  private async enterEnvironmentWait(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    handle: EnvironmentHandle,
+  ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
+    step.deployWait = {
+      frameId: target.frameId,
+      environmentId: handle.id,
+      startedAt: this.clock.now(),
+      polls: 0,
+    }
+    // The waiting state is VISIBLE rather than a silent park: the frame's env projects onto the
+    // step (status `provisioning`, no URL yet), which is what the run's Environment panel renders
+    // beside the parked deployer.
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, target.frameId)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
+    this.log.info('waiting for environment to become ready', {
+      workspaceId,
+      executionId: instance.id,
+      frameId: target.frameId,
+      environmentId: handle.id,
+    })
+    return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
+  }
+
+  /**
+   * Re-read the provider for the environment a parked `deployer` step is waiting on, and settle
+   * or keep waiting. The durable driver calls this between sleeps while the step reports
+   * `awaiting_environment`; it is safe under replay because every decision is derived from the
+   * persisted `step.deployWait` plus the provider's current answer.
+   *
+   * A status read that THROWS propagates, exactly as the deploy-job poll lets `pollProvisionJob`
+   * throw: the driver counts consecutive unreadable polls and fails the run once its tolerance is
+   * spent. Swallowing it here would hide every read failure from that counter.
+   */
+  async pollDeployerEnvironment(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    const wait = step.deployWait
+    if (!wait || !this.environmentProvisioning) return { kind: 'continue' }
+    const handle = await this.environmentProvisioning.refreshStatus(workspaceId, wait.environmentId)
+    const waitedMs = Math.max(0, this.clock.now() - wait.startedAt)
+    const verdict = judgeEnvironmentReadiness(handle, waitedMs)
+    if (verdict.kind === 'waiting') {
+      step.deployWait = { ...wait, polls: wait.polls + 1 }
+      await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, wait.frameId)
+      await this.runStateMachine.casPersist(workspaceId, instance)
+      // A readiness tick makes no LLM calls, so skip the per-run metrics rollup (same reason as
+      // the deploy-job running fold).
+      await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
+      return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
+    }
+    const resumed = await this.resumeFanOut(workspaceId, instance, step, wait.frameId)
+    if (!resumed) return { kind: 'noop' }
+    // Clear the wait BEFORE settling: the settle paths persist, and a `deployWait` surviving a
+    // settled frame would re-route the next poll here instead of advancing the fan-out.
+    step.deployWait = undefined
+    if (verdict.kind === 'ready') {
+      this.log.info('environment became ready', {
+        workspaceId,
+        executionId: instance.id,
+        frameId: wait.frameId,
+        environmentId: handle.id,
+        waitedFor: describeWaitedFor(waitedMs),
+      })
+    }
+    return this.judgeSettledEnvironment(resumed.ctx, resumed.target, handle, waitedMs)
+  }
+
+  /**
+   * Rebuild the fan-out context for a frame the step parked on, so a poll can settle that frame
+   * and continue with the remaining ones. Mirrors the reconstruction {@link pollDeployerJob} does
+   * after its job settles, for the same reason: a poll has no dispatch in scope, so the block, the
+   * ordered target set and the pinned primary frame are re-resolved from storage. Null when the
+   * run's block is gone (a cancelled/removed run mid-poll).
+   */
+  private async resumeFanOut(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    frameId: string,
+  ): Promise<{ ctx: DeployerFanOut; target: DeployTarget } | null> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return null
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
+    const ownFrameId =
+      step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId ?? block.id
+    // Recover the waiting frame's real service-frame block from the target set; fall back to a
+    // point-read (then the task block) if a connection was removed mid-flight so the frame is no
+    // longer a target — the frame still has an environment this step must settle.
+    const known = targets.find((t) => t.frameId === frameId)
+    const frame = known?.frame ?? (await this.blockRepository.get(workspaceId, frameId)) ?? block
+    const target: DeployTarget = {
+      frameId,
+      isPrimary: frameId === ownFrameId,
+      provisioning: known?.provisioning ?? step.deployProvisioning,
+      frame,
+    }
+    return { ctx: { workspaceId, instance, step, block, isFinalStep, targets }, target }
+  }
+
+  /**
+   * Record a frame's FAILED deploy outcome and decide whether it is terminal. The task's OWN
+   * (primary) service frame failing fails the whole deploy step (unchanged from the single-env
+   * path). An involved PEER frame failing is NON-terminal — the peer's env is best-effort context
+   * enrichment, so the run proceeds to the remaining frames without that peer's URL rather than
+   * failing a task because a service it merely "involves" has a misconfigured provider. The failed
+   * outcome is still recorded (surfaced in {@link completeDeployerStep}).
+   */
+  private async settleDeployerFailure(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    failure: {
+      url?: string | null
+      /**
+       * The environment the provision broke ON, where one was recorded before it broke. Kept
+       * beside the cause because it is what an operator greps the provider for, and because the
+       * run's own evidence reductions otherwise cannot tell that the failed environment their
+       * steps projected IS this frame's: unnamed, it reads as a second environment nothing
+       * accounts for.
+       */
+      environmentId?: string | null
+      error: string
+      /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
+      reason?: string
+      /**
+       * What the readiness wait contributed to this failure. Evidence for the investigation
+       * rather than for the record: a ceiling that expired seconds after the provider's own work
+       * began, one that expired after twenty minutes of silence, and a failure that never reached
+       * a readiness judgement at all are three different faults, and nothing else on the failure
+       * says which happened. Defaults to `not_reached`, which is what every route that is not the
+       * readiness judge is: a caller that forgets it states no wait rather than inventing one.
+       */
+      wait?: EnvironmentReadinessWait
+      /**
+       * The kind a PRIMARY frame's failure is reported under, when this failure is not the
+       * provisioning itself going wrong. Defaults to `environment`, which is what a provider
+       * refusing, timing out or returning a broken env is; a deploy container whose harness was
+       * stopped under it is not, and reporting it as one sends an operator to their provisioning
+       * config for a fault that is nowhere near it.
+       */
+      failureKind?: AgentFailureKind
+    },
+  ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
+    const { url, environmentId, error, reason, failureKind } = failure
+    const wait = failure.wait ?? { kind: 'not_reached' }
+    const done = step.deployEnvs ?? {}
+    step.deployEnvs = {
+      ...done,
+      [target.frameId]: {
+        status: 'failed',
+        url: url ?? null,
+        environmentId: environmentId ?? null,
+        error,
+      },
+    }
+    if (target.isPrimary) {
+      // Offer the failure to the remediation loop before reporting it as terminal. It escalates
+      // ONLY for a cause the provider classified as fixable in the checkout; every other cause
+      // (an unset connection setting, an unpublished image, a refused credential) answers `null`
+      // and takes the terminal path below byte-for-byte as it did before the loop existed. That
+      // precondition is the feature, not a refinement: see `DeployFixController`.
+      const remediated = await this.deployFix?.escalate({
+        workspaceId,
+        instance,
+        step,
+        block: ctx.block,
+        isFinalStep: ctx.isFinalStep,
+        failure: {
+          frameId: target.frameId,
+          frameTitle: target.frame.title,
+          provisioning: target.provisioning,
+          error,
+          reason,
+        },
+      })
+      if (remediated) return remediated
+      // Everything the fixer declined is now offered to the INVESTIGATION, which is the other half
+      // of the same decision: the fixer runs for the one cause a checkout edit can fix, this for
+      // every other, and between them a failed provision gets a repair or an explanation instead
+      // of a run that ends at the tester with nobody able to say why.
+      const investigated = await this.environmentInvestigation?.investigate({
+        workspaceId,
+        instance,
+        step,
+        block: ctx.block,
+        failure: {
+          frameId: target.frameId,
+          frameTitle: target.frame.title,
+          environmentId: environmentId ?? null,
+          error,
+          reason,
+          wait,
+        },
+      })
+      if (investigated?.kind === 'retrying') return investigated.advance
+      return this.failDeployerStep(workspaceId, instance, step, target.frameId, {
+        // A reported verdict REPLACES the message (it leads with the same provider error and adds
+        // the cause underneath), so the run's recorded failure names what was actually wrong.
+        message: investigated?.kind === 'reported' ? investigated.message : error,
+        reason,
+        failureKind,
+      })
+    }
+    // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
+    // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
+    await this.runStateMachine.casPersist(workspaceId, instance)
+    return this.advanceDeployerFrames(ctx)
+  }
+
+  /**
+   * Reclaim a finished (or evicted) deploy job's runner. Best-effort and idempotent — a failure
+   * here must never fail the run — but NOT silent: the lease is what holds billed compute or a
+   * self-hosted pool slot, so an un-released one is a resource leak whose only other symptom is
+   * a pool that mysteriously runs out of capacity.
+   *
+   * The provisioning SERVICE is a PARAMETER rather than read off `this`, because both callers sit
+   * on paths that have already established it exists. Taking it as an argument makes the
+   * typechecker carry that fact here instead of a `!` asserting it from a guard in another method
+   * — which is the assertion that silently stops being true when a third caller appears. (Named
+   * in full to keep it distinct from the `provisioning` CONFIG the fan-out threads around.)
+   */
+  private async releaseProvisionJob(
+    provisioningService: EnvironmentProvisioningService,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    ref: RunnerJobRef,
+    at: 'eviction-recovery' | 'terminal',
+  ): Promise<void> {
+    await runBestEffort(
+      this.log,
+      'deployer.releaseProvisionJob',
+      () => provisioningService.releaseProvisionJob(workspaceId, ref),
+      { workspaceId, executionId: instance.id, jobId: ref.jobId, at },
+    )
+  }
+
+  /**
+   * Poll a `deployer` step's dispatched CONTAINER-backed deploy job (the async kustomize/helm
+   * path) through the environment provisioning service — NOT the agent executor. Mirrors
+   * `pollAgentJob`: surfaces live container/subtask progress while running, recovers a
+   * container eviction by re-dispatching a fresh deploy job (within the same budgets), and on a
+   * genuine terminal state finalizes the job into an environment record + the step result.
+   */
+  async pollDeployerJob(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    const ref: RunnerJobRef = { runId: instance.id, jobId: step.jobId! }
+    // Resolved ONCE for the whole poll: a step only reaches here after `runDeployerStep`
+    // established the service is wired, and binding it to a local means the two lease releases
+    // below take it as a value rather than re-asserting it at each call.
+    const provisioningService = this.environmentProvisioning!
+    // The service frame this in-flight deploy job is provisioning (a multi-env fan-out dispatches
+    // one job per frame). Falls back to the own frame for a single-frame deploy that predates the
+    // discriminator / never fanned out.
+    const inFlightFrameId = step.deployFrameId ?? undefined
+    // Let a status-read failure THROW to the driver, exactly as `pollAgentJob` lets
+    // `executor.pollJob` throw: the driver counts consecutive read failures and fast-fails the
+    // run as `timeout` once `jobPollFailureTolerance` is hit. Swallowing it here would hide every
+    // read failure from that counter, so an unreachable deploy container would only stop at the
+    // full `jobMaxPolls` budget with a misleading "did not finish" message.
+    const view = await provisioningService.pollProvisionJob(workspaceId, ref)
+    if (view.state === 'running') {
+      let changed = false
+      if (this.applyContainerRunning(step, view)) changed = true
+      if (this.applySubtaskProgress(step, view.progress)) changed = true
+      if (
+        await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, inFlightFrameId)
+      ) {
+        changed = true
+      }
+      if (changed) {
+        await this.runStateMachine.casPersist(workspaceId, instance)
+        // Progress-only deploy-job fold: skip the LLM-metrics rollup (same reason as the
+        // agent running fold — a deploy job makes no LLM calls anyway).
+        await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
+      }
+      return awaitingJob(step, instance.currentStep, step.jobId!)
+    }
+
+    // The deploy container vanished (evicted/crashed). The shared recovery re-dispatches a fresh
+    // deploy job (the driver loops back into `runDeployerStep`, which re-provisions the same
+    // un-settled frame since `step.jobId` is cleared) within the same per-flavour budgets as the
+    // agent path, reclaiming the dead job's runner first. Null for a non-eviction failure.
+    if (view.state === 'failed') {
+      const recovered = await this.recoverContainerEviction(workspaceId, instance, step, view, () =>
+        this.releaseProvisionJob(
+          provisioningService,
+          workspaceId,
+          instance,
+          ref,
+          'eviction-recovery',
+        ),
+      )
+      if (recovered) return recovered
+    }
+
+    // Genuine terminal (done, or a non-eviction failure): finalize the deploy job into an
+    // environment record and record this frame's outcome. A `failed` view maps to a failed env,
+    // which `settleDeployerFrame` surfaces as a displayed step failure.
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return { kind: 'noop' }
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Resolve the full target set once (also drives the remaining-frames fan-out after this one
+    // settles), honouring the pinned primary frame. Derive the own/primary frame id from that set
+    // rather than a SECOND `resolveServiceFrameId` point-read walk — the primary target's frame id
+    // is the own frame (pinned, so a mid-flight reparent can't flip an own failure to a peer one).
+    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
+    const ownFrameId =
+      step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId ?? block.id
+    const frameId = inFlightFrameId ?? ownFrameId
+    // Recover the in-flight frame's real service-frame block from the target set so finalize
+    // provisions with the FRAME's identity/inputs (a peer's env must not reuse the task block's —
+    // see {@link deployerProvisionArgs}); fall back to a point-read (then the task block) if a
+    // connection was removed mid-flight so the frame is no longer a target.
+    const known = targets.find((t) => t.frameId === frameId)
+    const frame = known?.frame ?? (await this.blockRepository.get(workspaceId, frameId)) ?? block
+    // Map the job against the provisioning config the container was BUILT from (pinned at
+    // dispatch), not a fresh read of the frame a person may have edited mid-flight — else a
+    // config flip (e.g. → `infraless`) would fail a deploy whose container already succeeded. The
+    // pinned config is the in-flight frame's; the fallback resolution is only ever hit for the
+    // undeclared-own compat path (which resolves the own frame correctly).
+    const provisioning =
+      step.deployProvisioning ?? (await this.resolveServiceProvisioning(workspaceId, block))
+    const target: DeployTarget = { frameId, isPrimary: frameId === ownFrameId, provisioning, frame }
+    const ctx: DeployerFanOut = { workspaceId, instance, step, block, isFinalStep, targets }
+    step.jobId = undefined
+    step.deployFrameId = undefined
+    step.subtasks = undefined
+    // The one-shot deploy container reached a terminal state: reclaim its runner now rather than
+    // letting it idle out its sleepAfter window (billed-but-useless compute) / leak a self-hosted
+    // pool slot. The deploy job is dispatched SEPARATELY from the shared per-run container, so the
+    // agent path's `stopRunContainer` (final step only, run-id keyed) never reclaims it.
+    // Best-effort/idempotent.
+    await this.releaseProvisionJob(provisioningService, workspaceId, instance, ref, 'terminal')
+    // The deploy harness was SHUT DOWN mid-job (it runs the same SIGTERM-then-exit-0 handler the
+    // agent harness does, on the same transports). Settled here rather than through the provider:
+    // `finalizeProvision` would map it to an ordinary failed environment, so an operator would be
+    // sent to look at their provisioning config for a container that something stopped. It stays a
+    // per-FRAME settlement, so a peer service's drained deploy still does not fail the run.
+    const shutdown = containerShutdownFailure(view)
+    if (shutdown) {
+      if (step.container) step.container = { ...step.container, status: 'errored' }
+      step.deployProvisioning = undefined
+      return this.settleDeployerFailure(ctx, target, {
+        // Both halves: the one-liner names what happened, the transport's post-mortem is the only
+        // account of HOW (its exit state, its log tail) that outlives the reclaimed container.
+        // They collapse to one when the transport had nothing to add.
+        error:
+          shutdown.detail === shutdown.error
+            ? shutdown.error
+            : `${shutdown.error}\n${shutdown.detail}`,
+        failureKind: shutdown.failureKind,
+      })
+    }
+    let settled: SettledProvision
+    try {
+      settled = await this.environmentProvisioning!.finalizeProvision(
+        await this.deployerProvisionArgs(workspaceId, instance, block, target, ''),
+        view,
+      )
+    } catch (error) {
+      // The deploy container is gone (released above) but finalize failed: stamp the container
+      // errored so the failed details don't keep showing it "up". A primary failure is terminal; a
+      // peer's is not (the fan-out proceeds), so route through `settleDeployerFailure`.
+      if (step.container) step.container = { ...step.container, status: 'errored' }
+      step.deployProvisioning = undefined
+      return this.settleDeployerFailure(ctx, target, { error: getErrorMessage(error) })
+    }
+    step.deployProvisioning = undefined
+    // Reflect the container's terminal state from the RESOLVED outcome, not the raw view: a `done`
+    // view the provider maps to a FAILED env (e.g. the harness exited 0 but the namespace is
+    // missing) must still show the container errored — keying off `view.state` alone missed that.
+    if (settled.handle.status === 'failed' && step.container) {
+      step.container = { ...step.container, status: 'errored' }
+    }
+    return this.settleDeployerFrame(ctx, target, settled)
+  }
+
+  /**
+   * The {@link ProvisionArgs} for provisioning ONE target frame's environment (synchronous or
+   * async). The env is keyed by the task `block.id` + the target `frameId` — so a task's own env
+   * and each involved-service env coexist under the same block, discriminated by frame (see the
+   * per-`(blockId, frameId)` supersede). The repo/clone the provider resolves is the TARGET
+   * FRAME's (via `frameId`), so an involved-service env clones that peer's repo at its default
+   * branch, while the OWN frame targets the task's PR branch (its git/PR context); a peer carries
+   * no PR context. The `{{input.*}}` identity (blockId/title/…) is the TARGET FRAME's for a peer
+   * (see {@link deployTargetInputs}) so each peer's provider namespace is distinct — the task-
+   * scoped inputs would collapse every peer onto one namespace. Injects `frontendOrigins` (the
+   * browser origins binding this service) and `peerEnvUrls` (the already-ready peers) too.
+   */
+  private async deployerProvisionArgs(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    target: DeployTarget,
+    peerEnvUrls: string,
+  ): Promise<ProvisionArgs> {
+    const frontendOrigins = await this.frontendOriginsInput(workspaceId, target.frameId)
+    // The OWN frame deploys the task's PR branch (its git/PR context); an involved peer carries no
+    // PR context, so its clone target falls back to that repo's default branch.
+    const context = target.isPrimary ? this.deployContext(block) : { blockId: block.id }
+    return {
+      workspaceId,
+      blockId: block.id,
+      frameId: target.frameId,
+      executionId: instance.id,
+      inputs: {
+        ...this.deployTargetInputs(block, target),
+        ...(frontendOrigins ? { frontendOrigins } : {}),
+        ...(peerEnvUrls ? { peerEnvUrls } : {}),
+      },
+      context,
+      ...(target.provisioning ? { serviceProvisioning: target.provisioning } : {}),
+      initiatedBy: instance.initiatedBy,
+    }
+  }
+
+  /**
+   * The `{{input.*}}` identity a target frame provisions with. The OWN frame keeps the historical
+   * task-scoped inputs (its namespace is uniquified by the task's PR repo/number). An involved PEER
+   * frame is scoped to the PEER FRAME's identity, with a `(task, peer)` composite `blockId` — so
+   * the provider namespace derived from `{{input.blockId}}` is distinct per peer AND per task,
+   * where the task-scoped inputs would collapse every peer of a task onto ONE namespace (each
+   * clobbering the previous, teardown deleting the wrong one).
+   */
+  private deployTargetInputs(block: Block, target: DeployTarget): Record<string, string> {
+    if (target.isPrimary) return this.deployInputs(block)
+    return {
+      blockId: `${block.id}-${target.frameId}`,
+      title: target.frame.title,
+      type: target.frame.type,
+      description: target.frame.description,
+    }
+  }
+
+  /**
+   * The `frontendOrigins` provision input for a service frame: the comma-joined browser origins
+   * of every `frontend` frame that binds this service (see `frontendOriginsForService`), for a
+   * manifest to fold into the backend's CORS allow-list via `{{input.frontendOrigins}}`. Empty
+   * string when no frontend binds it (the key is then omitted). One workspace block-list read —
+   * no per-frame point read (mirrors the visual-pipeline gate).
+   */
+  async frontendOriginsInput(workspaceId: string, serviceFrameId: string): Promise<string> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    return frontendOriginsForService(serviceFrameId, blocks).join(',')
+  }
+
+  /**
+   * Turn a provisioned environment handle into the `deployer` step's advance result: a `failed`
+   * env is surfaced as a displayed step failure (its `lastError` renders in the Environment
+   * panel); otherwise the env summary (status / URL / provision type / engine) is recorded as the
+   * step output. Shared by the synchronous and async-finalized provision paths.
+   */
+  private async completeDeployerStep(ctx: DeployerFanOut): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, isFinalStep, targets } = ctx
+    const byFrame = new Map(targets.map((t) => [t.frameId, t]))
+    const primaryFrameId = step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId
+    // Re-project the now-final OWN environment (ready/expired + URL) so the deployer step's
+    // Environment panel + the downstream tester see the task's own service env, not a peer's or the
+    // dispatch-time `provisioning` snapshot the async poll last wrote. Pass the pinned primary frame
+    // so it needn't re-walk the tree to find the own frame.
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, primaryFrameId)
+    // Summarise from the recorded per-frame OUTCOMES (`deployEnvs`), NOT the current `targets`: a
+    // mid-flight involved-services / connection edit can drop a frame from `targets` while its env
+    // is still recorded and live, so iterating outcomes keeps that env visible (never silently
+    // orphaned). Titles come from the target set when the frame is still resolvable, else the id.
+    const done = step.deployEnvs ?? {}
+    const titleOf = (frameId: string): string => byFrame.get(frameId)?.frame.title ?? frameId
+    const isPrimaryFrame = (frameId: string): boolean =>
+      byFrame.get(frameId)?.isPrimary ?? frameId === primaryFrameId
+    const readyEntries = Object.entries(done).filter(([, env]) => env.status === 'ready')
+    if (readyEntries.length === 0) {
+      // Every target was `infraless`/library/skipped — nothing stood up (the single-service
+      // infraless case plus the all-infraless fan-out). A `library` frame reports its own reason
+      // (it is never deployed) so the run timeline stays explainable, per the frame profile.
+      const primaryFrame = primaryFrameId ? byFrame.get(primaryFrameId)?.frame : undefined
+      const output =
+        primaryFrame && !frameProfile(primaryFrame.type).deployable
+          ? 'Library frame; no deployment or environment provisioned.'
+          : 'Service is infraless; no environment provisioned.'
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        output,
+        model: 'environment:none',
+      })
+    }
+    const own = step.environment
+    const lines: string[] = []
+    for (const [frameId, env] of readyEntries) {
+      const url = env.url ?? '(pending)'
+      lines.push(
+        isPrimaryFrame(frameId)
+          ? `Provisioned ephemeral environment for '${titleOf(frameId)}': ${url}`
+          : `Provisioned involved-service environment for '${titleOf(frameId)}': ${url}`,
+      )
+    }
+    // A PEER frame that failed is non-terminal (the own deploy proceeded); note it so the failure
+    // is visible rather than silently absent from the fan-out summary. (A primary failure never
+    // reaches here — it fails the step in `settleDeployerFailure`.)
+    for (const [frameId, env] of Object.entries(done)) {
+      if (env.status !== 'failed' || isPrimaryFrame(frameId)) continue
+      lines.push(
+        `Involved-service environment for '${titleOf(frameId)}' failed: ${env.error ?? 'unknown error'}`,
+      )
+    }
+    if (own?.expiresAt) lines.push(`Expires: ${new Date(own.expiresAt).toISOString()}`)
+    if (own?.provisionType) lines.push(`Provision type: ${own.provisionType}`)
+    if (own?.engine) lines.push(`Engine: ${own.engine}`)
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+      output: lines.join('\n'),
+      model: `environment:${readyEntries.length > 1 ? 'multi' : (own?.engine ?? 'single')}`,
+    })
+  }
+
+  /**
+   * Resolve the SERVICE frame's declared provisioning for a run block. The run may target a
+   * task/module nested under the frame, so walk up to the frame (mirrors the blueprint /
+   * tester-gate resolution) and read its `provisioning`. Returns null when undeclared.
+   */
+  private async resolveServiceProvisioning(
+    workspaceId: string,
+    block: Block,
+  ): Promise<ServiceProvisioning | undefined> {
+    const frameId =
+      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
+    const frame =
+      frameId === block.id ? block : await this.blockRepository.get(workspaceId, frameId)
+    return frame?.provisioning
+  }
+
+  /**
+   * Stamp the errored environment onto the deployer step (so its details show the verbatim
+   * `lastError`), persist + emit, then return a structured `environment` failure carrying the
+   * provider's message as the detail. Mirrors `handleAgentStep`'s dispatch-failure path.
+   */
+  private async failDeployerStep(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    frameId: string,
+    failure: {
+      message: string
+      /** Machine-readable cause (e.g. `deploy_runner_unwired`) surfaced on the failure so the SPA
+       *  renders precise guidance without string-matching the prose. */
+      reason?: string
+      /** What KIND of failure this is; `environment` unless the caller knows better. */
+      failureKind?: AgentFailureKind
+    },
+  ): Promise<AdvanceResult> {
+    const { message, reason, failureKind } = failure
+    // Project the FAILED frame's env (so its `lastError` renders in the Environment panel) — for a
+    // single-frame deploy that is the own env; for a failed involved-service env it surfaces the
+    // peer's error rather than a sibling's healthy env.
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, frameId)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
+    return {
+      kind: 'job_failed',
+      error: 'Environment provisioning failed.',
+      failureKind: failureKind ?? 'environment',
+      detail: message,
+      ...(reason ? { reason } : {}),
+    }
+  }
+
+  /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
+  deployInputs(block: Block): Record<string, string> {
+    const inputs: Record<string, string> = {
+      blockId: block.id,
+      title: block.title,
+      type: block.type,
+      description: block.description,
+    }
+    return inputs
+  }
+
+  /**
+   * Typed git/PR/repo context for the deployer, derived from the block's PR ref. A
+   * PR-environment provider (e.g. an in-house adapter) needs the branch/repo to target
+   * the right environment; the same values are also flattened into `{{input.*}}` for
+   * the manifest path. `owner`/`repo` are parsed from the PR url when present.
+   */
+  deployContext(block: Block): ProvisionContext {
+    const context: ProvisionContext = { blockId: block.id }
+    const pr = block.pullRequest
+    if (!pr) return context
+    if (pr.branch) context.branch = pr.branch
+    if (pr.number !== undefined) context.pullNumber = pr.number
+    if (pr.url) {
+      context.pullUrl = pr.url
+      const repo = parseRepoFromPullUrl(pr.url)
+      if (repo) {
+        context.repoOwner = repo.owner
+        context.repoName = repo.repo
+      }
+    }
+    return context
+  }
+}

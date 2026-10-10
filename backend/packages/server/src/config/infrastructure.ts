@@ -5,6 +5,21 @@ import type {
 } from '@cat-factory/contracts'
 
 /**
+ * Whether the deployment ALREADY has a zero-config test-environment backend — one that stands
+ * the Tester's dependencies up with NO provider connection to register. Today that is the local
+ * in-container `local-compose` (docker-compose inside the run's container), which local mode
+ * offers on a Docker-family runtime. When present, a missing ephemeral-environment PROVIDER
+ * connection is NOT a setup gap (docker-compose already works out of the box), so the infra-setup
+ * "test environment not configured" nag must stay quiet — see `snapshotInfraSetup`. A deployment
+ * whose only test-env backend is the `environment-provider` (the Worker, stock Node, and local
+ * Apple `container`, which can't nest a Docker daemon) genuinely needs a provider, so the nag
+ * still fires there.
+ */
+export function testEnvHasZeroConfigDefault(caps: InfrastructureCapabilities | undefined): boolean {
+  return caps?.testEnv.available.includes('local-compose') ?? false
+}
+
+/**
  * Build the deployment's {@link InfrastructureCapabilities} descriptor (surfaced via
  * `/auth/config`). Each facade calls this with the backends IT can build, so the SPA can
  * present a clear "where agents run" selector instead of a bare delegation toggle. Keeping

@@ -74,6 +74,54 @@ export function defineSharedStackSuite(name: string, makeRepo: () => SharedStack
       expect(await repo.list(ws)).toEqual([entity])
     })
 
+    it('round-trips MIXED compose layers — a bare path beside inline + other-repo sources', async () => {
+      // The three source shapes share one JSON column, and a bare path is a first-class
+      // shorthand rather than a legacy form — so a store that normalised, dropped or re-ordered
+      // any of them (or lost an optional `ref`/`provider`/`path`) fails here rather than at a
+      // bring-up that silently runs the wrong layers.
+      const repo = makeRepo()
+      const { ws, id } = ids()
+      const mixed = stack({
+        id,
+        workspaceId: ws,
+        composeFiles: [
+          'docker/dev.yml',
+          { kind: 'path', path: 'docker/dev.override.yml' },
+          { kind: 'inline', content: 'services:\n  cache:\n    image: valkey:8\n' },
+          { kind: 'inline', content: 'services: {}\n', path: 'docker/extra.yml' },
+          { kind: 'repo', repo: 'acme/infra', path: 'compose/shared.yml' },
+          {
+            kind: 'repo',
+            repo: 'acme/infra',
+            path: 'compose/edge.yml',
+            ref: 'v2',
+            provider: 'gitlab',
+          },
+        ],
+      })
+      await repo.upsert(ws, mixed)
+      expect(await repo.get(ws, id)).toEqual(mixed)
+    })
+
+    it('round-trips a REPO-LESS stack (no clone URL — every layer supplied directly)', async () => {
+      // The shape a deployment declares programmatically: no repo of its own, so `clone_url` is
+      // NULL. A store that kept the column NOT NULL (or coerced the null to '') fails here.
+      const repo = makeRepo()
+      const { ws, id } = ids()
+      const repoless = stack({
+        id,
+        workspaceId: ws,
+        cloneUrl: null,
+        gitRef: null,
+        composeFiles: [{ kind: 'inline', content: 'services:\n  db:\n    image: postgres:17\n' }],
+        envFiles: [],
+        setupSteps: [],
+      })
+      await repo.upsert(ws, repoless)
+      expect(await repo.get(ws, id)).toEqual(repoless)
+      expect((await repo.list(ws))[0]!.cloneUrl).toBeNull()
+    })
+
     it('round-trips the minimal shape (no networks / steps / gate, host commands on)', async () => {
       const repo = makeRepo()
       const { ws, id } = ids()

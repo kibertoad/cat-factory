@@ -1,4 +1,9 @@
-import { DatadogApiError, datadogApiBase, datadogAuthRemedy } from './datadog.logic.js'
+import {
+  DatadogApiError,
+  datadogApiBase,
+  datadogAuthRemedy,
+  isAlertingState,
+} from './datadog.logic.js'
 
 // A thin, runtime-neutral wrapper over the Datadog API (plain `fetch`, no SDK), so it
 // runs identically in a Workers isolate and under Node. Only the handful of reads the
@@ -19,7 +24,7 @@ export interface DatadogMonitorState {
   id: string
   name: string
   overallState: string | undefined
-  /** When `overall_state` last changed (epoch ms), if Datadog reported it. */
+  /** When the monitor's still-alerting groups last triggered (epoch ms), if any reported it. */
   stateModifiedMs?: number
 }
 
@@ -69,17 +74,44 @@ function pickSloTarget(thresholds: Record<string, { target?: number }>): number 
   return null
 }
 
+/** One entry of a monitor's `state.groups` map, as far as the attribution read cares. */
+interface DatadogMonitorGroup {
+  status?: string
+  last_triggered_ts?: number
+}
+
+/** Datadog reports monitor state timestamps in epoch SECONDS. Undefined when absent or unusable. */
+function epochSecondsToMs(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return value * 1000
+}
+
 /**
- * Parse a Datadog timestamp (`overall_state_modified` is an ISO-8601 string, but some
- * endpoints report epoch seconds) into epoch ms. Returns undefined when absent/unparseable.
+ * The most recent trigger among a monitor's CURRENTLY ALERTING groups, in epoch ms.
+ *
+ * Two rules, and the second is what makes the first safe. A multi-group monitor alerts per group,
+ * so "did this start after the release marker?" is answered by the LATEST trigger: one group that
+ * triggered after the release makes the alert this release's, whatever the others did earlier. But
+ * `last_triggered_ts` is a high-water mark that SURVIVES the group recovering, so folding it over
+ * every group lets a group that triggered and recovered after the release pull the attribution
+ * forward and hand a week-old standing alert on a different group to the release being watched:
+ * the exact misattribution this read exists to prevent. Only a group whose own `status` is still
+ * alerting says anything about the alert the caller is looking at.
+ *
+ * Undefined when no alerting group carries a timestamp, which the caller reads as unknown rather
+ * than as old, and so escalates. That covers a monitor whose groups Datadog reported without a
+ * status as well: unattributable is not the same fact as attributable-to-something-old.
  */
-function parseDatadogTimestamp(value: string | number | undefined): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value * 1000 : undefined
-  if (typeof value === 'string' && value.trim() !== '') {
-    const ms = Date.parse(value)
-    return Number.isNaN(ms) ? undefined : ms
+function latestTriggeredMs(
+  groups: Record<string, DatadogMonitorGroup> | undefined,
+): number | undefined {
+  let latest: number | undefined
+  for (const group of Object.values(groups ?? {})) {
+    if (!isAlertingState(group.status)) continue
+    const ms = epochSecondsToMs(group.last_triggered_ts)
+    if (ms !== undefined && (latest === undefined || ms > latest)) latest = ms
   }
-  return undefined
+  return latest
 }
 
 export class DatadogClient {
@@ -92,14 +124,25 @@ export class DatadogClient {
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
-  /** Read a monitor's overall state + when it last changed (`GET /api/v1/monitor/{id}`). */
+  /**
+   * Read a monitor's overall state and when it last triggered (`GET /api/v1/monitor/{id}`).
+   *
+   * `group_states=all` is what makes the second half answerable. This used to read
+   * `overall_state_modified`, a field Datadog's v1 `Monitor` schema does not define (it appears
+   * only on Synthetics v2), so the transition time was silently ALWAYS absent: the gate then
+   * attributed every standing alert to the release it was watching, because "unknown" is
+   * deliberately treated as "escalate". The documented timestamps are per GROUP, under
+   * `state.groups.<group>.last_triggered_ts` in epoch seconds, and `state` is populated only when
+   * the request asks for it. Which groups those timestamps are folded over is the other half of
+   * the same attribution question: see `latestTriggeredMs`.
+   */
   async getMonitor(id: string): Promise<DatadogMonitorState> {
     const data = await this.get<{
       name?: string
       overall_state?: string
-      overall_state_modified?: string | number
-    }>(`/api/v1/monitor/${id}`)
-    const stateModifiedMs = parseDatadogTimestamp(data.overall_state_modified)
+      state?: { groups?: Record<string, DatadogMonitorGroup> }
+    }>(`/api/v1/monitor/${id}?group_states=all`)
+    const stateModifiedMs = latestTriggeredMs(data.state?.groups)
     return {
       id,
       name: data.name ?? `monitor ${id}`,

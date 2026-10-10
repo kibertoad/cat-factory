@@ -1,5 +1,15 @@
 import * as v from 'valibot'
 import { stepGatingSchema } from './consensus.js'
+import {
+  changeClassSchema,
+  RULEABLE_CHANGE_CLASSES,
+  type ChangeClass,
+  type RuleableChangeClass,
+} from './mergeTrackRecord.js'
+import { DEFAULT_COMPANION_MAX_ATTEMPTS } from './companion.js'
+import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
+import { DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE } from './requirements.js'
+import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
 // Merge-policy wire contracts. After a pipeline's implementation work is done
@@ -37,6 +47,312 @@ export const REQUIREMENT_CONCERN_RANK: Record<RequirementConcernLevel, number> =
   high: 3,
 }
 
+// ---------------------------------------------------------------------------
+// Per-CLASS auto-merge rules. The score ceilings below apply uniformly to every
+// change, which leaves a workspace unable to express "auto-merge dependency bumps
+// and docs, always review schema changes". A preset therefore also carries an
+// optional rule per {@link ChangeClass}, resolved against the run's deterministic,
+// path-derived classification. See `backend/docs/adr/0046-merge-track-record.md`.
+// ---------------------------------------------------------------------------
+
+/**
+ * What a preset does with a pull request of a given change class:
+ *
+ *  - `thresholds` — compare the merger's scores against this preset's ceilings (the default,
+ *    and what an ABSENT entry means, so `{}` behaves exactly like no rules at all).
+ *  - `always`     — auto-merge regardless of the scores.
+ *  - `never`      — always route to a human, regardless of the scores.
+ */
+export const MERGE_CLASS_RULES = ['thresholds', 'always', 'never'] as const
+
+export const mergeClassRuleSchema = v.picklist(MERGE_CLASS_RULES)
+export type MergeClassRule = v.InferOutput<typeof mergeClassRuleSchema>
+
+/**
+ * A preset's per-class rules: a PARTIAL map from change class to its rule. An absent class
+ * means `thresholds`, so an empty object is the "behave exactly as before" identity.
+ *
+ * `unknown` is deliberately NOT a member: an unclassifiable diff (no VCS client wired, a
+ * transient provider outage) must fall back to the score thresholds rather than silently
+ * adopt a widened policy. See `RULEABLE_CHANGE_CLASSES`.
+ */
+export const mergeClassRulesSchema = v.partial(
+  // STRICT: an unknown key (notably `unknown`, which no rule may ever match) is a 400 rather than
+  // being silently stripped. A caller who thinks they authored a rule must not be told it worked.
+  v.strictObject(
+    Object.fromEntries(RULEABLE_CHANGE_CLASSES.map((c) => [c, mergeClassRuleSchema])) as {
+      [K in (typeof RULEABLE_CHANGE_CLASSES)[number]]: typeof mergeClassRuleSchema
+    },
+  ),
+)
+export type MergeClassRules = v.InferOutput<typeof mergeClassRulesSchema>
+
+/**
+ * ROLE-SCOPED per-class rules: the rules above, narrowed by WHO started the run.
+ *
+ * A partial map from {@link workspaceRoleSchema} to that role's own {@link mergeClassRulesSchema}.
+ * The base `classRules` say what the WORK may do; this says what a given tier of person may do
+ * with it, so a workspace can widen `dependency` to `always` for everyone and still hold a
+ * non-developer's runs to review on `source`.
+ *
+ * Composition is NARROW-ONLY ({@link narrowMergeClassRule}): a role entry may only make a
+ * class MORE restrictive than the base rule, never less. That is the whole safety property — an
+ * allowlist authored per role can subtract capability but can never hand a role something the
+ * preset itself withholds, so a role entry can be reviewed on its own without re-reading the base
+ * map. `unknown` stays unruleable here for the same reason it is in the base map.
+ *
+ * A role with no entry is exactly the base rules, so `{}` is the identity. So is a run with no
+ * pinned role (a schedule fire, a public-API start, auth-disabled dev): see
+ * {@link ExecutionInstance.initiatedByRole} for why those are left on the base policy rather than
+ * guessed onto a tier.
+ */
+export const classRulesByRoleSchema = v.partial(
+  // STRICT for the same reason the base map is: a caller who thinks they authored a rule for a
+  // role must not be told it worked when the role name was a typo.
+  v.strictObject(
+    Object.fromEntries(WORKSPACE_ROLES.map((r) => [r, mergeClassRulesSchema])) as {
+      [K in (typeof WORKSPACE_ROLES)[number]]: typeof mergeClassRulesSchema
+    },
+  ),
+)
+export type ClassRulesByRole = v.InferOutput<typeof classRulesByRoleSchema>
+
+/**
+ * The roles whose runs are FORCED into dry-run mode ({@link RunMode}) by this preset: every run
+ * such a role starts does the work and opens its PR, but nothing merges — not automatically, and
+ * not through the manual merge endpoint either.
+ *
+ * This is the "sandboxed run for a non-developer" setting. It is expressed on the preset rather
+ * than on the role catalog because it is a POLICY about a body of work (this service's tasks),
+ * not a capability of the person: the same product manager may be trusted to land copy changes on
+ * one service and nothing at all on another, and the preset is already what a task selects.
+ *
+ * Empty on every built-in, so the default is byte-for-byte the historical behaviour. A role that
+ * cannot start runs at all (`viewer`, which holds no `runs.execute`) may be listed without effect.
+ */
+export const dryRunRolesSchema = v.array(workspaceRoleSchema)
+export type DryRunRoles = v.InferOutput<typeof dryRunRolesSchema>
+
+/** A picklist over the classes a rule (or an allowlist entry) may be authored for. */
+const ruleableChangeClassSchema = v.picklist(RULEABLE_CHANGE_CLASSES)
+
+/**
+ * The change classes a preset will LAND at all for a given role: a partial map from
+ * {@link workspaceRoleSchema} to the list of classes that role's runs may submit.
+ *
+ * This is the third role-scoped setting, and it answers a question neither of its siblings can.
+ * `classRulesByRole` with `never` routes a class to a human, but the human it routes to may be
+ * the initiator themselves: the review card carries a merge button and the RBAC write floor is
+ * `member`, so a member's run can raise its own card and land on the next tap. `dryRunRoles`
+ * closes that by refusing both exits, but only for EVERY class at once. Between them sits the
+ * thing a workspace most often wants to say: a product manager may land copy and dependency
+ * bumps on this service, and may not land source, however good the scores look.
+ *
+ * Three readings define it, and each is deliberate:
+ *
+ *  - **An ALLOWLIST, never a denylist.** A class nobody thought about is OUTSIDE the list, so a
+ *    class added to the vocabulary in a later release is refused for a scoped role rather than
+ *    silently landed by it. Same safety property as {@link narrowMergeClassRule}: authoring one
+ *    can subtract capability, never add it.
+ *  - **Absent means UNRESTRICTED, not empty.** Silence is not an empty allowlist, exactly as an
+ *    absent class is not a `thresholds` rule in {@link classRulesByRoleSchema}. Only a role
+ *    somebody wrote an entry for is scoped, so `{}` is the identity the wire contract says it is
+ *    (and an EMPTY array is a real, different policy: that role lands nothing).
+ *  - **`unknown` is INERT.** An unreadable diff must not hold back a run that would otherwise
+ *    have landed, the same reading `resolveMergeClassRule` takes: a VCS outage cannot change
+ *    policy. This is the OPPOSITE direction from the first reading, and deliberately so: a class
+ *    we have never heard of is a policy gap, while a class we could not READ is an outage, and
+ *    only one of those is evidence about the change.
+ */
+export const submissionClassesByRoleSchema = v.partial(
+  // STRICT for the same reason both rule maps are: a caller who thinks they authored an
+  // allowlist must not be told it worked when the role name was a typo.
+  v.strictObject(
+    Object.fromEntries(WORKSPACE_ROLES.map((r) => [r, v.array(ruleableChangeClassSchema)])) as {
+      [K in (typeof WORKSPACE_ROLES)[number]]: v.ArraySchema<
+        typeof ruleableChangeClassSchema,
+        undefined
+      >
+    },
+  ),
+)
+export type SubmissionClassesByRole = v.InferOutput<typeof submissionClassesByRoleSchema>
+
+/**
+ * How much review a rule DEMANDS, higher is stricter. The ordering is the point of the scale:
+ * `always` merges with nothing consulted, `thresholds` merges only within the score ceilings, and
+ * `never` merges nothing, so it is total and every pair has a strictest member.
+ *
+ * A plain rank rather than a `Record<MergeClassRule, number>` of opaque numbers used once: this is
+ * the only place the three rules are ORDERED, and {@link narrowMergeClassRule} is the only
+ * consumer, so the two are kept adjacent and a new rule fails the typecheck here first.
+ */
+const MERGE_CLASS_RULE_STRICTNESS: Record<MergeClassRule, number> = {
+  always: 0,
+  thresholds: 1,
+  never: 2,
+}
+
+/**
+ * Compose a base rule with a ROLE's rule, taking the STRICTER of the two.
+ *
+ * Narrow-only is the whole safety property of role-scoped rules, and it is enforced here rather
+ * than trusted to whoever authors a preset: a role entry can subtract capability but can never add
+ * it, so `{ source: 'always' }` under `viewer` on a preset whose base holds `source` at
+ * `thresholds` grants a viewer nothing. It reads as a mistake and behaves as a no-op, instead of
+ * quietly becoming the widest rule in the preset for its least-trusted tier.
+ *
+ * The consequence worth stating: a role entry is REVIEWABLE ON ITS OWN. Reading one tells you what
+ * that role at most may do, with no need to hold the base map in your head at the same time.
+ *
+ * It lives in contracts rather than in kernel because the SPA's preset editor has to agree with the
+ * engine about it: an authoring surface that offered a role a rule the engine will discard would be
+ * telling an operator they had written a policy that does nothing.
+ */
+export function narrowMergeClassRule(base: MergeClassRule, role: MergeClassRule): MergeClassRule {
+  return MERGE_CLASS_RULE_STRICTNESS[role] > MERGE_CLASS_RULE_STRICTNESS[base] ? role : base
+}
+
+/**
+ * Whether `next` demands LESS review than `held`, over the same ordering
+ * {@link narrowMergeClassRule} composes on. Derived from that one function rather than from a
+ * second read of the strictness table, so the rules can never be ordered one way for narrowing
+ * and another way for the comparison that refuses a relaxation.
+ */
+export function mergeClassRuleRelaxes(held: MergeClassRule, next: MergeClassRule): boolean {
+  return next !== held && narrowMergeClassRule(next, held) === held
+}
+
+/**
+ * The rule a preset applies to a given change class: the explicit entry when there is one, else
+ * `thresholds` (so an empty/absent rule map behaves exactly as it did before per-class rules).
+ *
+ * `unknown` ALWAYS resolves to `thresholds` — no rule may match it. This is the invariant that
+ * keeps a classification failure inert: a transient VCS outage falls back to the score
+ * comparison instead of silently adopting a widened (or tightened) policy.
+ */
+export function resolveMergeClassRule(
+  rules: MergeClassRules | null | undefined,
+  changeClass: ChangeClass,
+): MergeClassRule {
+  if (changeClass === 'unknown') return 'thresholds'
+  return rules?.[changeClass] ?? 'thresholds'
+}
+
+/** The rule that governs a run, before and after its initiator's role narrowed it. */
+export interface RoleScopedMergeClassRule {
+  /** What the preset's base `classRules` say for this change class. */
+  base: MergeClassRule
+  /** What actually applies: `base` narrowed by the initiator's role entry. */
+  effective: MergeClassRule
+  /**
+   * Whether the role CHANGED the outcome. False both when no role was pinned and when the role's
+   * entry was no stricter than the base, so a caller can report "a role narrowed this" without
+   * re-comparing — and never attributes to a role a refusal the base map would have made anyway.
+   */
+  narrowedByRole: boolean
+}
+
+/**
+ * Resolve the per-class rule that governs one run: the preset's base rule for the run's change
+ * class, narrowed by the entry (if any) its initiator's ROLE carries.
+ *
+ * Two absences pass straight through to the base rule, deliberately and for the same reason:
+ * an unattributed run (no pinned role — a schedule fire, a public-API start, auth-disabled dev)
+ * and a role with no authored entry. Neither is evidence about how much review the work needs,
+ * and inventing a tier for the first would either hand it the preset's widest rules or sandbox
+ * every scheduled run in the deployment the day someone first authors a role entry.
+ *
+ * `unknown` remains inert through both layers: {@link resolveMergeClassRule} already forces it to
+ * `thresholds`, and narrowing `thresholds` by a rule authored for some OTHER class cannot reach
+ * it, so a diff we could not read still falls back to the score comparison whoever started it.
+ *
+ * It lives here rather than in kernel for the reason {@link narrowMergeClassRule} does, and it
+ * moved here the day the SPA acquired a second question that needs the same answer: which presets
+ * a task may be re-pointed at (`refuseRiskPolicySelection`). The picker has to agree with the
+ * engine about what a role's entry actually costs that role, and a rule the SPA cannot import is
+ * a rule the SPA reimplements.
+ */
+export function resolveRoleScopedMergeClassRule(input: {
+  rules: MergeClassRules | null | undefined
+  byRole: ClassRulesByRole | null | undefined
+  role: WorkspaceRole | null | undefined
+  changeClass: ChangeClass
+}): RoleScopedMergeClassRule {
+  const base = resolveMergeClassRule(input.rules, input.changeClass)
+  if (!input.role || input.changeClass === 'unknown') {
+    return { base, effective: base, narrowedByRole: false }
+  }
+  // Read the role's entry as an OPTIONAL lookup, NOT through `resolveMergeClassRule`. That helper
+  // substitutes `thresholds` for an absent class, which is right when it IS the policy and wrong
+  // here: a role that authored nothing has said nothing, and folding its silence in as
+  // `thresholds` would narrow every `always` in the base map the moment a preset gained its first
+  // role entry — for the roles that entry is not even about. Absent is not a rule.
+  const roleRule = input.byRole?.[input.role]?.[input.changeClass]
+  if (!roleRule) return { base, effective: base, narrowedByRole: false }
+  const effective = narrowMergeClassRule(base, roleRule)
+  return { base, effective, narrowedByRole: effective !== base }
+}
+
+/**
+ * Whether a preset's {@link dryRunRolesSchema} sandboxes a run started under `role`.
+ *
+ * The rule worth naming is the null case: an unattributed run (a schedule fire, a public-API start,
+ * auth-disabled dev) pins no role, cannot match an entry, and is therefore never force-sandboxed.
+ * Shared with the SPA so a start control can say "your runs on this task are sandboxed" using the
+ * same reading the engine makes at admission, rather than a restated `includes` that would have to
+ * re-decide what an absent role means.
+ */
+export function dryRunForcedForRole(
+  dryRunRoles: readonly WorkspaceRole[] | null | undefined,
+  role: WorkspaceRole | null | undefined,
+): boolean {
+  return !!role && !!dryRunRoles?.includes(role)
+}
+
+/**
+ * The allowlist that governs one run, or `undefined` when nothing does.
+ *
+ * Kept apart from {@link submissionAllowedForRole} because the two questions differ: "is this run
+ * scoped at all" decides whether the merge path owes a classification (one VCS call), and only
+ * then does "may it land THIS class" have anything to compare. Reading the boolean first and the
+ * verdict second is what keeps an unscoped preset paying for neither.
+ */
+export function submissionAllowlistForRole(
+  byRole: SubmissionClassesByRole | null | undefined,
+  role: WorkspaceRole | null | undefined,
+): readonly RuleableChangeClass[] | undefined {
+  // A run with no pinned role matches no entry, exactly as `dryRunForcedForRole` reads one: a
+  // schedule fire / public-API start / auth-disabled dev is not a tier, and treating it as one
+  // would scope every unattributed run in a deployment the day somebody first scopes a role.
+  if (!role) return undefined
+  return byRole?.[role]
+}
+
+/**
+ * Whether a preset lets a run started by `role` LAND a change of `changeClass`.
+ *
+ * Every absence answers `true`, and each for its own reason: no pinned role matches no entry, a
+ * role with no authored entry is unrestricted, and an `unknown` class is an unreadable diff
+ * rather than evidence about the change. Only a role that HAS an allowlist, on a diff that
+ * classified, can be refused, and then the list is exhaustive, so a class outside it is refused
+ * whether the operator excluded it on purpose or the vocabulary gained it after they wrote the
+ * policy.
+ *
+ * It lives in contracts, beside the map it reads, because the SPA has to state the same verdict:
+ * a merge control that offered to land a change the engine will refuse would be advertising a
+ * capability the person does not have.
+ */
+export function submissionAllowedForRole(
+  byRole: SubmissionClassesByRole | null | undefined,
+  role: WorkspaceRole | null | undefined,
+  changeClass: ChangeClass,
+): boolean {
+  if (changeClass === 'unknown') return true
+  const allowed = submissionAllowlistForRole(byRole, role)
+  return !allowed || allowed.includes(changeClass)
+}
+
 export const mergeAssessmentSchema = v.object({
   /** How intricate the change is (size, coupling, subtlety). */
   complexity: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
@@ -50,10 +366,34 @@ export const mergeAssessmentSchema = v.object({
 export type MergeAssessment = v.InferOutput<typeof mergeAssessmentSchema>
 
 /**
+ * How a policy answers a park that one of the engine's AUTOMATIC quality loops raised.
+ *
+ * The platform stops a run on a person for two structurally different reasons, and only one of
+ * them is a judgement call somebody asked for:
+ *
+ *  - a step whose whole PURPOSE is to consult a human (a `requiresApproval` gate, `human-test`,
+ *    visual confirmation, the human/PR review gate, a brainstorm or interview, the fork choice,
+ *    the pre-dispatch input gate). Somebody put it in the pipeline, or a policy asked for it.
+ *  - a loop that ran out of BUDGET without converging (a companion at its rework cap, an
+ *    iterative review at its pass cap) or that produced items nobody triaged (the Coder's
+ *    follow-ups). Nobody asked to be interrupted here; the run stopped because the automation
+ *    gave up, and every one of these parks already offers a person a documented "proceed anyway".
+ *
+ * `attended` (every policy before this existed) parks on both. `unattended` takes the "proceed
+ * anyway" answer for the SECOND class only, records that policy took it, and never touches the
+ * first: a pipeline that asks for a human still gets one. That is the whole distinction, and it
+ * is why this is a policy field rather than a per-gate toggle — a deployment that starts its work
+ * over the API has nobody in the app to answer a cap, and a run parked there waits forever.
+ */
+export const runAutonomySchema = v.picklist(['attended', 'unattended'])
+export type RunAutonomy = v.InferOutput<typeof runAutonomySchema>
+
+/**
  * A named, per-workspace merge policy: the upper bounds (0..1) a PR's assessment
- * must stay within to auto-merge, plus the CI-fixer attempt budget. Exactly one
- * preset per workspace is the default (`isDefault`), used by any task that has not
- * picked one explicitly.
+ * must stay within to auto-merge, plus the CI-fixer attempt budget. A workspace carries TWO
+ * defaults, one per `runDefaultScopeSchema` (`run-provenance.ts`): `isDefault` governs a task somebody
+ * started in the app, `isUnattendedDefault` one nothing is watching. Either is used by any task
+ * that has not picked a policy explicitly.
  */
 export const riskPolicySchema = v.object({
   id: v.string(),
@@ -90,6 +430,29 @@ export const riskPolicySchema = v.object({
    */
   maxTesterQualityIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
   /**
+   * How many automatic REWORK rounds a companion (`reviewer`, `architect-companion`,
+   * `spec-companion`, a deployment's own) may drive before it stops grading and parks for a person
+   * to pick (one more round / proceed anyway / stop and reset). One round = the producing step
+   * re-runs with the verdict's findings folded in and the companion re-grades, so this is the
+   * number of RE-RUNS, not of gradings: the first grading is free.
+   *
+   * `0` means the loop never runs on its own: the first verdict BELOW the bar goes straight to the
+   * park (or, under `autonomy: 'unattended'`, straight to `proceed`), and one at or above it
+   * advances, comments and all. It is a real posture rather than a disabled feature, and the reason
+   * this budget has a floor of 0 where `maxRequirementIterations` has 1: an iterative review with no
+   * passes has graded nothing, while a companion with no rework rounds has still delivered its
+   * verdict.
+   *
+   * The rule that a first batch of comments always buys a round, whatever it scored, is subordinate
+   * to this number rather than beside it. Otherwise `0` parked every companion step (a review with
+   * nothing at all to say is the rare one) instead of the ones that missed their bar.
+   *
+   * A HUMAN-granted extra round is charged to nobody: `resolveCompanionExceeded` raises the step's
+   * own budget by one, so this caps what the platform spends unasked and never what a person may
+   * ask for.
+   */
+  companionMaxReworks: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
    * How long (minutes) the post-release-health gate watches the deployed release's
    * Datadog monitors/SLOs before declaring it healthy and advancing.
    */
@@ -108,6 +471,19 @@ export const riskPolicySchema = v.object({
    */
   humanReviewGraceMinutes: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /**
+   * The minimum score (0..1) a JUDGE step's verdict must reach for the run to advance
+   * without a human. Below it, the judge applies its registration's `onFail` disposition
+   * (park / bounce / fail). The per-task counterpart of `maxRequirementConcernAllowed`:
+   * how much rubric deviation THIS task tolerates. See `docs/initiatives/judge-registry.md`.
+   */
+  judgeMinScore: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /**
+   * How many BOUNCE rounds a judge may spend — re-arming the preceding producing step with
+   * the verdict's findings as rework feedback — before it must stop and ask a human. `0`
+   * means never bounce (a failing verdict goes straight to the registration's park/fail).
+   */
+  judgeMaxBounces: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
    * When false the `merger` step never auto-merges: every PR is routed to a human
    * `merge_review` notification regardless of the assessment scores. The built-in
    * "Manual review only" preset sets this; a custom preset may too. Defaults to true
@@ -125,8 +501,63 @@ export const riskPolicySchema = v.object({
    * built-in presets.
    */
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
-  /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
+  /**
+   * Per-change-class auto-merge rules ({@link mergeClassRulesSchema}). An absent class — and
+   * therefore an empty object — means "use the score ceilings above", so `{}` is the identity.
+   * A rule NEVER overrides `autoMergeEnabled: false`: that master switch wins first.
+   */
+  classRules: mergeClassRulesSchema,
+  /**
+   * Per-ROLE narrowing of `classRules` ({@link classRulesByRoleSchema}), keyed on the workspace
+   * role the run's initiator held when it was admitted. Narrow-only, so an empty map is the
+   * identity and a role entry can never widen what `classRules` already allows.
+   */
+  classRulesByRole: classRulesByRoleSchema,
+  /**
+   * Roles whose runs are forced into dry-run mode ({@link dryRunRolesSchema}) — the work happens
+   * and the PR opens, but nothing merges. Empty on the built-ins.
+   */
+  dryRunRoles: dryRunRolesSchema,
+  /**
+   * Per-ROLE allowlist of the change classes this preset will land at all
+   * ({@link submissionClassesByRoleSchema}). Orthogonal to `classRulesByRole`, and both apply: a
+   * class may be `always` under the role's class rules and still outside its allowlist, and the
+   * allowlist wins, because it bars landing rather than deciding how much review landing takes.
+   * A role with no entry is unrestricted, so `{}` is the identity. Empty on the built-ins.
+   */
+  submissionClassesByRole: submissionClassesByRoleSchema,
+  /**
+   * Whether a run governed by this policy answers its own automatic-loop caps
+   * ({@link runAutonomySchema}). `attended` on every built-in but the unattended default.
+   */
+  autonomy: runAutonomySchema,
+  /**
+   * The minimum confidence (0..1) a Requirement-Writer recommendation must REPORT for an
+   * `unattended` run to take it as a review finding's answer and carry on with no person.
+   *
+   * Read ONLY on the unattended path, and inert under `attended` for the reason `dryRunRoles` is
+   * inert without a role policy: an attended run's auto-recommendations are drafts a human is
+   * about to read, so grading them changes nothing about who decides. Under `unattended` the same
+   * suggestion is the final answer, so the grade is the whole bar.
+   *
+   * It gates only the findings the REVIEWER classified `autoAnswerable` — a genuine product
+   * judgement is never eligible however confident the Writer sounds — and an UNREPORTED
+   * confidence is below every floor above 0, so a garbled Writer reply parks the run rather than
+   * quietly answering it. `0` accepts anything the Writer produces for that class of finding.
+   */
+  minAutoAnswerConfidence: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /**
+   * The workspace's fallback preset for a run somebody started IN THE APP, used by tasks that
+   * pick none. Exactly one per workspace is true.
+   */
   isDefault: v.boolean(),
+  /**
+   * The workspace's fallback preset for a run nothing is watching (the public API, a tracker
+   * dispatch, a schedule fire), used by tasks that pick none. Exactly one per workspace is true,
+   * and it may be the same row as `isDefault`: a deployment that wants one posture everywhere
+   * flags one policy both ways.
+   */
+  isUnattendedDefault: v.boolean(),
   /**
    * Monotonic seed version for a BUILT-IN preset (`seedRiskPolicies()` assigns it). When the
    * current catalog version for this id exceeds the persisted copy's `version`, the SPA offers
@@ -138,15 +569,89 @@ export const riskPolicySchema = v.object({
 })
 export type RiskPolicy = v.InferOutput<typeof riskPolicySchema>
 
+/**
+ * Which tier a risk policy in a board's visible library is STORED at, and therefore who may edit
+ * it. `account` policies are authored once for the whole account and every board under it
+ * inherits them read-only; `workspace` policies belong to the board that holds them.
+ *
+ * There is deliberately no `builtin` member, unlike the fragment and foundational-service tiers.
+ * The built-in catalog (`seedRiskPolicies()`) is COPIED into each board at creation and reconciled
+ * against the catalog from there, so a built-in is a `workspace` row a board owns outright: it can
+ * be edited, deleted and reseeded. A tier that carried no rows would have to answer what a reseed
+ * means, and the answer is already "the row this board owns".
+ */
+export const riskPolicyTierSchema = v.picklist(['account', 'workspace'])
+export type RiskPolicyTier = v.InferOutput<typeof riskPolicyTierSchema>
+
+/**
+ * One entry of the library a board actually picks from: the merge of its own policies with the
+ * ones it inherits from its account, each carrying the tier that owns it.
+ *
+ * The tier is what every reader needs and none can re-derive: a board's editor renders an
+ * inherited policy read-only beside a clone action, and the engine resolves a task's pin through
+ * the same merged view, so a pinned account policy governs a run exactly as a local one does.
+ * A workspace row WINS over an account row of the same id, and a board's suppression drops an
+ * inherited id from this list outright (`riskPolicySuppressionSchema`).
+ */
+export const riskPolicyLibraryEntrySchema = v.object({
+  ...riskPolicySchema.entries,
+  tier: riskPolicyTierSchema,
+})
+export type RiskPolicyLibraryEntry = v.InferOutput<typeof riskPolicyLibraryEntrySchema>
+
+/**
+ * One policy a board is HIDING: an account policy id it has opted out of, so the policy loses the
+ * merge and no task on that board can pin it.
+ *
+ * A hidden id is by construction absent from the merged library, which is what makes this a
+ * separate read rather than a flag on the entry — without it, hiding would be a one-way door with
+ * nothing on screen to undo.
+ *
+ * `inherited` is the honest half: `false` says the suppression currently hides NOTHING, because
+ * the account has since deleted the policy it named. A reader must not conclude a posture is
+ * being withheld when there is none to withhold, and the name is then the id, which is the only
+ * thing left that identifies what was hidden.
+ */
+export const riskPolicySuppressionSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  inherited: v.boolean(),
+})
+export type RiskPolicySuppression = v.InferOutput<typeof riskPolicySuppressionSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
-const presetNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))
+/**
+ * How long a risk policy's name may be.
+ *
+ * Exported because the SPA has to AGREE about it, not merely be validated against it: cloning an
+ * inherited policy composes the copy's name client-side (the label is localized copy, and the
+ * backend does not localize prose), so the composer needs the same ceiling the schema enforces.
+ * Without it a long enough source name pushed the composed `{name} (copy)` past the limit and the
+ * clone action answered a 422 the operator had no field to act on.
+ */
+export const RISK_POLICY_NAME_MAX_LENGTH = 60
+
+const presetNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(RISK_POLICY_NAME_MAX_LENGTH),
+)
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(50))
 const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))
 const releaseWindowSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(720))
 const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 const graceMinutesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1440))
+const bouncesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
+/**
+ * The companion rework budget. Same bounds as {@link bouncesSchema} today and deliberately its own
+ * schema, like every sibling budget above: a judge bounce buys another verdict on work that already
+ * exists, a companion round buys a container dispatch that rewrites it, so an operator who later
+ * asks for more of one is not asking for more of the other.
+ */
+const companionReworksSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createRiskPolicySchema = v.object({
@@ -158,15 +663,36 @@ export const createRiskPolicySchema = v.object({
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   maxTesterQualityIterations: v.optional(iterationsSchema, 3),
+  /** Automatic companion rework rounds; absent ⇒ {@link DEFAULT_COMPANION_MAX_ATTEMPTS}. */
+  companionMaxReworks: v.optional(companionReworksSchema, DEFAULT_COMPANION_MAX_ATTEMPTS),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
+  judgeMinScore: v.optional(scoreSchema, DEFAULT_JUDGE_MIN_SCORE),
+  judgeMaxBounces: v.optional(bouncesSchema, DEFAULT_JUDGE_MAX_BOUNCES),
   /** Allow auto-merge of a within-threshold, explained assessment (default true). */
   autoMergeEnabled: v.optional(v.boolean(), true),
   /** Estimate gating for the implementation-fork decision phase; absent ⇒ off in `auto` mode. */
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
-  /** Make this the workspace default (demotes the previous default). */
+  /** Per-change-class auto-merge rules; absent ⇒ every class uses the score ceilings. */
+  classRules: v.optional(mergeClassRulesSchema, {}),
+  /** Per-role narrowing of `classRules`; absent ⇒ every role uses the rules above unchanged. */
+  classRulesByRole: v.optional(classRulesByRoleSchema, {}),
+  /** Roles whose runs are forced into dry-run mode; absent ⇒ nobody is sandboxed. */
+  dryRunRoles: v.optional(dryRunRolesSchema, []),
+  /** Per-role allowlist of landable change classes; absent ⇒ every role is unrestricted. */
+  submissionClassesByRole: v.optional(submissionClassesByRoleSchema, {}),
+  /** Whether this policy answers its own automatic-loop caps; absent ⇒ it parks for a person. */
+  autonomy: v.optional(runAutonomySchema, 'attended'),
+  /**
+   * Confidence floor for an unattended run taking a Writer recommendation as a finding's answer;
+   * absent ⇒ {@link DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE}. Inert under `attended`.
+   */
+  minAutoAnswerConfidence: v.optional(scoreSchema, DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE),
+  /** Make this the workspace's in-app default (demotes the previous one). */
   isDefault: v.optional(v.boolean(), false),
+  /** Make this the workspace's unattended default (demotes the previous one). */
+  isUnattendedDefault: v.optional(v.boolean(), false),
 })
 export type CreateRiskPolicyInput = v.InferOutput<typeof createRiskPolicySchema>
 
@@ -180,14 +706,46 @@ export const updateRiskPolicySchema = v.object({
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
   maxTesterQualityIterations: v.optional(iterationsSchema),
+  companionMaxReworks: v.optional(companionReworksSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
+  judgeMinScore: v.optional(scoreSchema),
+  judgeMaxBounces: v.optional(bouncesSchema),
   autoMergeEnabled: v.optional(v.boolean()),
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
+  /** Replaces the whole rule map (not merged), so clearing a class is a plain omission. */
+  classRules: v.optional(mergeClassRulesSchema),
+  /** Replaces the whole per-role map (not merged), so clearing a role is a plain omission. */
+  classRulesByRole: v.optional(classRulesByRoleSchema),
+  /** Replaces the whole list, so un-sandboxing a role is a plain omission. */
+  dryRunRoles: v.optional(dryRunRolesSchema),
+  /** Replaces the whole map, so un-scoping a role is a plain omission (never an empty array). */
+  submissionClassesByRole: v.optional(submissionClassesByRoleSchema),
+  autonomy: v.optional(runAutonomySchema),
+  minAutoAnswerConfidence: v.optional(scoreSchema),
   isDefault: v.optional(v.boolean()),
+  isUnattendedDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
+
+/**
+ * Copy an INHERITED account policy into the board's own tier, so the board can edit its numbers
+ * without an account admin and without changing the posture of every other board.
+ *
+ * The copy gets a FRESH id rather than shadowing the account id. An override sharing the id reads
+ * as the same policy in every picker and on every task that pinned it, so a board editing its copy
+ * would silently re-point work that was filed against the account's posture; a new id moves nothing
+ * that already exists and says what it is.
+ *
+ * `name` is optional and defaults to the source policy's, because two policies may share a name
+ * (nothing keys off it) and the backend does not localize prose — a caller that wants the copy
+ * marked as one sends the marked name itself.
+ */
+export const cloneRiskPolicySchema = v.object({
+  name: v.optional(presetNameSchema),
+})
+export type CloneRiskPolicyInput = v.InferOutput<typeof cloneRiskPolicySchema>
 
 /** Parse-or-throw an assessment payload an agent returned (the engine validates it). */
 export function parseMergeAssessment(value: unknown): MergeAssessment {
@@ -214,6 +772,39 @@ export const mergeDecisionThresholdsSchema = v.object({
   maxRisk: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   maxImpact: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   autoMergeEnabled: v.boolean(),
+  /**
+   * The rule the preset carried for the run's resolved change class, when one applied —
+   * so the decision banner can say "auto-merged because this preset always auto-merges
+   * dependency bumps" rather than implying the scores did it. Absent when the class was
+   * `unknown` (rules never match it) or the preset left the class on `thresholds`.
+   */
+  classRule: v.optional(mergeClassRuleSchema),
+  /**
+   * The workspace role the run's initiator held when the run was ADMITTED, when one was pinned.
+   * Absent for an unattributed run (a schedule fire, a public-API start, auth-disabled dev), which
+   * is a real and different state from "started by a viewer" — see
+   * {@link ExecutionInstance.initiatedByRole}. Recorded so the banner can attribute a narrowed
+   * decision to the tier it was narrowed for rather than implying the scores did it.
+   */
+  initiatorRole: v.optional(workspaceRoleSchema),
+  /**
+   * The rule after the initiator's role narrowed it, recorded ONLY when the narrowing actually
+   * changed the outcome (`roleRule` more restrictive than `classRule`). Absent when the role left
+   * the class alone, so its presence always means "this decision would have gone differently for
+   * someone else".
+   */
+  roleRule: v.optional(mergeClassRuleSchema),
+  /**
+   * The change classes the initiator's role may land at all, recorded whenever that role carried
+   * a submission allowlist, not only when the allowlist is what held the PR back.
+   *
+   * Present-means-scoped is the useful reading here (the opposite of `roleRule` above, which is
+   * recorded only when it changed the outcome): an allowlist that PERMITTED this class is the
+   * fact that explains why an otherwise identical PR on another class will not land, and a
+   * banner that mentioned the scope only on the refusal would make the permission look like an
+   * absence of policy.
+   */
+  submissionClasses: v.optional(v.array(ruleableChangeClassSchema)),
 })
 export type MergeDecisionThresholds = v.InferOutput<typeof mergeDecisionThresholdsSchema>
 
@@ -225,6 +816,13 @@ export const mergeDecisionSchema = v.object({
    *  - `within_thresholds`: auto-merged; every axis at/below the preset ceiling.
    *  - `exceeded_thresholds`: review; one or more axes over the ceiling (`exceededAxes`).
    *  - `auto_merge_disabled`: review; the preset routes every PR to a human.
+   *  - `no_policy_configured`: review; NO preset resolved at all (no preset library is wired),
+   *    so the run fell back to the built-in `FALLBACK_RISK_POLICY`, which auto-merges nothing. A
+   *    board's library is written when it is created, so this is a deployment-level fact rather
+   *    than a board nobody had opened yet. Kept apart from `auto_merge_disabled`
+   *    because the remedies have nothing in common: that one names a preset somebody chose and is
+   *    fixed by editing it, while this one says the deployment has stated no merge policy, and a
+   *    reader sent looking for the preset that held their PR back would not find one.
    *  - `no_rationale`: review; the merger returned scores but no rationale, so the verdict
    *    can't be trusted to auto-merge (the assessment IS present, just not credible).
    *  - `no_assessment`: review; the merger produced no parseable assessment at all.
@@ -233,20 +831,53 @@ export const mergeDecisionSchema = v.object({
    *  - `merge_partial`: review; a MULTI-REPO task auto-merged some of its PRs but an
    *    intermediate merge failed (cross-repo merges are non-atomic), so the block is left
    *    blocked with a notification enumerating the merged vs unmerged repos.
+   *  - `class_auto_merge`: auto-merged because the preset's rule for the run's change class
+   *    is `always` — the scores (and the rationale-credibility backstop) were bypassed by an
+   *    explicit operator policy keyed on the DETERMINISTIC backend classification.
+   *  - `class_requires_review`: review; the preset's rule for the change class is `never`,
+   *    regardless of how low the scores were.
+   *  - `role_requires_review`: review; the preset's rule for the change class is permissive
+   *    enough, but the initiator's ROLE narrows that class to `never`. Kept distinct from
+   *    `class_requires_review` because the two need opposite fixes: one is a policy about the
+   *    KIND of change (edit the class rule), the other about WHO started it (a teammate on a
+   *    higher tier can merge this PR as it stands).
+   *  - `submission_not_allowed`: review; the initiator's role carries a submission allowlist and
+   *    this run's change class is outside it, so the platform will not land the work whatever the
+   *    scores or the class rules say. Kept apart from `role_requires_review` because the remedies
+   *    differ in kind: that one is satisfied by ANY reviewer merging the PR through this
+   *    platform, while this one refuses the platform merge path outright (the PR is still a real
+   *    PR, and someone with write access on the host can merge it there).
+   *  - `dry_run`: review; the run was a DRY RUN, so no outcome of the assessment could have
+   *    merged it. The master switch above every other reason, including `auto_merge_disabled`:
+   *    a preset that would otherwise auto-merge must not report a dry run's PR as "held back by
+   *    the scores", which would send someone editing thresholds that were never consulted.
    */
   reason: v.picklist([
     'within_thresholds',
     'exceeded_thresholds',
     'auto_merge_disabled',
+    'no_policy_configured',
     'no_rationale',
     'no_assessment',
     'merge_failed',
     'merge_partial',
+    'class_auto_merge',
+    'class_requires_review',
+    'role_requires_review',
+    'submission_not_allowed',
+    'dry_run',
   ]),
   /** The merger's assessment (absent only when it produced no parseable one). */
   assessment: v.optional(mergeAssessmentSchema),
   thresholds: mergeDecisionThresholdsSchema,
   /** The axes that exceeded their ceiling (empty unless `reason` is `exceeded_thresholds`). */
   exceededAxes: v.array(mergeAxisSchema),
+  /**
+   * The run's deterministic change class, when classification resolved one. Recorded on the
+   * step so the SPA can show WHAT KIND of change the decision was made about (and, with the
+   * class's rollup, how that class has historically fared). Absent ⇒ classification did not
+   * run (no VCS client wired) — the same state `unknown` denotes on a track record.
+   */
+  changeClass: v.optional(changeClassSchema),
 })
 export type MergeDecision = v.InferOutput<typeof mergeDecisionSchema>

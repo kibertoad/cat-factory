@@ -23,6 +23,10 @@ import {
   setServiceFragmentDefaultsContract,
   storePersonalSubscriptionContract,
   testLocalModelEndpointContract,
+  updateAccountApiKeyContract,
+  updateUserApiKeyContract,
+  updateVendorCredentialContract,
+  updateWorkspaceApiKeyContract,
   upsertLocalModelEndpointContract,
   upsertOpenRouterCatalogContract,
 } from '@cat-factory/contracts'
@@ -30,6 +34,8 @@ import type {
   AddApiKeyInput,
   StorePersonalSubscriptionInput,
   SubscriptionVendor,
+  UpdateApiKeyInput,
+  UpdateVendorCredentialInput,
 } from '~/types/domain'
 import type {
   LocalRunner,
@@ -60,16 +66,26 @@ export function modelsApi({ send, ws }: ApiContext) {
       send(listWorkspaceApiKeysContract, { pathPrefix: ws(workspaceId) }),
     addWorkspaceApiKey: (workspaceId: string, body: AddApiKeyInput) =>
       send(addWorkspaceApiKeyContract, { pathPrefix: ws(workspaceId), body }),
+    updateWorkspaceApiKey: (workspaceId: string, id: string, body: UpdateApiKeyInput) =>
+      send(updateWorkspaceApiKeyContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { id },
+        body,
+      }),
     removeWorkspaceApiKey: (workspaceId: string, id: string) =>
       send(removeWorkspaceApiKeyContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
     listMyApiKeys: () => send(listUserApiKeysContract, {}),
     addMyApiKey: (body: AddApiKeyInput) => send(addUserApiKeyContract, { body }),
+    updateMyApiKey: (id: string, body: UpdateApiKeyInput) =>
+      send(updateUserApiKeyContract, { pathParams: { id }, body }),
     removeMyApiKey: (id: string) => send(removeUserApiKeyContract, { pathParams: { id } }),
     // Account-scoped keys (shared by every workspace in the account); admin-only.
     listAccountApiKeys: (accountId: string) =>
       send(listAccountApiKeysContract, { pathParams: { accountId } }),
     addAccountApiKey: (accountId: string, body: AddApiKeyInput) =>
       send(addAccountApiKeyContract, { pathParams: { accountId }, body }),
+    updateAccountApiKey: (accountId: string, id: string, body: UpdateApiKeyInput) =>
+      send(updateAccountApiKeyContract, { pathParams: { accountId, id }, body }),
     removeAccountApiKey: (accountId: string, id: string) =>
       send(removeAccountApiKeyContract, { pathParams: { accountId, id } }),
 
@@ -80,6 +96,12 @@ export function modelsApi({ send, ws }: ApiContext) {
       workspaceId: string,
       body: { vendor: SubscriptionVendor; label: string; token: string },
     ) => send(addVendorCredentialContract, { pathPrefix: ws(workspaceId), body }),
+    updateVendorCredential: (workspaceId: string, id: string, body: UpdateVendorCredentialInput) =>
+      send(updateVendorCredentialContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { id },
+        body,
+      }),
     removeVendorCredential: (workspaceId: string, id: string) =>
       send(removeVendorCredentialContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
 

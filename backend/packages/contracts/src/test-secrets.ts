@@ -130,3 +130,29 @@ export type ServiceTestSecretsView = v.InferOutput<typeof serviceTestSecretsView
 export function serviceTestSecretsSummary(entries: TestSecretEntry[]): TestSecretRef[] {
   return entries.map((e) => ({ key: e.key, description: e.description }))
 }
+
+/**
+ * What the platform can say about a service frame's test credentials, as a STATE rather than a
+ * list.
+ *
+ * Three outcomes that a bare `TestSecretRef[]` collapses into one, and the collapse points an
+ * operator at the wrong fix:
+ *
+ *  - `resolved`: the sealed store was read. An EMPTY `refs` here means this service genuinely has
+ *    no test credentials configured on the board, which is a board fact and a board fix.
+ *  - `unreadable`: credentials may well be configured, and the platform could not open its own
+ *    sealed store to fetch them (a bad `ENCRYPTION_KEY`, a store that would not answer). The work
+ *    still runs, because a report naming what was missing is worth more than a refused dispatch,
+ *    but the agent must be told the PLATFORM failed, or it files an outage as "nobody configured
+ *    credentials" and sends someone to re-enter secrets that are already there.
+ *  - `unwired`: this deployment has no sealed credential store at all, so no service on this board
+ *    can be handed test credentials. A deployment fact, and again not something to fix on the frame.
+ *
+ * Shared by the tester step and the environment DRY RUN, which is the point: the dry run exists to
+ * predict what a tester will be handed, and two states rendered from two shapes would let a dry run
+ * report credentials as fine while the tester step is handed nothing.
+ */
+export type TestCredentialBrief =
+  | { status: 'resolved'; refs: readonly TestSecretRef[] }
+  | { status: 'unreadable' }
+  | { status: 'unwired' }

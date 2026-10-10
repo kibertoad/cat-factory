@@ -3,13 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type {
   Block,
   CloudProvider,
-  EnvironmentTestStage,
   InstanceSize,
   ProvisionType,
   ServiceProvisioning,
 } from '~/types/domain'
 import type {
-  ConflictReason,
   KubernetesManifestSource,
   KubernetesRenderer,
   ProvisioningComposeServiceCandidate,
@@ -20,8 +18,9 @@ import type {
 } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import ServiceSelfTests from '~/components/panels/inspector/ServiceSelfTests.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
-import { parseConflict } from '~/composables/usePipelineErrorToast'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -104,6 +103,7 @@ const PROVISION_TYPES = computed<{ value: ProvisionType; label: string }[]>(() =
   { value: 'infraless', label: t('inspector.testConfig.provisionTypes.infraless') },
   { value: 'docker-compose', label: t('inspector.testConfig.provisionTypes.docker-compose') },
   { value: 'kubernetes', label: t('inspector.testConfig.provisionTypes.kubernetes') },
+  { value: 'cloudflare', label: t('inspector.testConfig.provisionTypes.cloudflare') },
   { value: 'custom', label: t('inspector.testConfig.provisionTypes.custom') },
 ])
 
@@ -189,6 +189,18 @@ function rootUnderDirectory(directory: string | null | undefined, path: string):
   return segs.join('/')
 }
 
+// The repo + service subdirectory backing this frame (the manifest prefills, the fixer
+// run, and the compose-file browser all root paths under it). A monorepo service isn't
+// on the `github_repos` blockId link (that stays null), so fall back to the service
+// catalog mapping, which carries the repo + directory.
+const repoContext = computed<{ githubId: number; directory?: string | null } | undefined>(() => {
+  if (props.repo) return props.repo
+  const svc = services.serviceByFrameBlock[props.block.id]
+  if (svc?.repoGithubId != null) return { githubId: svc.repoGithubId, directory: svc.directory }
+  const r = github.repoForBlock(props.block.id)
+  return r ? { githubId: r.githubId } : undefined
+})
+
 function setCustomManifestId(value: string) {
   // Prefill the manifest path with the selected type's default, rooted under the service subtree
   // (repo-root-relative, editable afterwards) so a monorepo service targets the right location
@@ -250,94 +262,9 @@ async function generateOrFixManifest() {
   }
 }
 
-// Ephemeral-environment self-test: run the whole create-branch → provision → tear-down →
-// delete-branch cycle against this service's provisioning config and report success / the stage
-// it failed at. The returned run is tracked live (by frame id) via the workspace stream store.
-const envTest = useEnvironmentTestStore()
-const envTestStarting = ref(false)
-const envTestError = ref<string | null>(null)
-// The newest self-test run for this frame — re-attaches after a reconnect (the run is carried in
-// the snapshot while running), so the live stage keeps showing without a locally-held id.
-const envTestRun = computed(() => envTest.runForBlock(props.block.id))
-const envTestRunning = computed(() => envTestRun.value?.status === 'running')
-// Nothing to provision for an `infraless` service, so there is nothing to test.
-const canTestEnv = computed(() => provisionType.value !== 'infraless')
-
-// Per-stage label KEYS, exhaustive over the contracts `EnvironmentTestStage` union: a new
-// backend stage fails THIS typecheck until mapped (the key is resolved at runtime, so the
-// typed-message-keys check can't see the `t()` lookup — the map's exhaustiveness is the
-// drift guard, same pattern as `CONFLICT_TITLE_KEYS`).
-const ENV_TEST_STAGE_KEYS: Record<EnvironmentTestStage, string> = {
-  creating_branch: 'inspector.testConfig.envTest.stage.creating_branch',
-  provisioning: 'inspector.testConfig.envTest.stage.provisioning',
-  tearing_down: 'inspector.testConfig.envTest.stage.tearing_down',
-  deleting_branch: 'inspector.testConfig.envTest.stage.deleting_branch',
-  done: 'inspector.testConfig.envTest.stage.done',
-}
-
-function envTestStageLabel(stage: EnvironmentTestStage): string {
-  const key = ENV_TEST_STAGE_KEYS[stage]
-  // `te`-guarded so a locale missing the key shows the raw stage id, never a raw message key.
-  return te(key) ? t(key) : stage
-}
-
-// The start preflight's machine-readable 409 reasons, mapped to their localized titles —
-// exhaustive over the contracts `env_test_*` conflict reasons (same drift guard as above).
-// The raw backend `message` is only the last-resort fallback for unmapped/non-conflict errors.
-const ENV_TEST_CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}`>, string> = {
-  env_test_not_a_frame: 'errors.conflict.title.env_test_not_a_frame',
-  env_test_infraless: 'errors.conflict.title.env_test_infraless',
-  env_test_not_provisionable: 'errors.conflict.title.env_test_not_provisionable',
-  env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
-}
-
-function envTestErrorText(e: unknown): string {
-  const reason = parseConflict(e)?.reason
-  const key =
-    reason && reason in ENV_TEST_CONFLICT_KEYS
-      ? ENV_TEST_CONFLICT_KEYS[reason as keyof typeof ENV_TEST_CONFLICT_KEYS]
-      : undefined
-  if (key && te(key)) return t(key)
-  return apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e))
-}
-
-async function startEnvTest() {
-  if (!canTestEnv.value || envTestStarting.value || envTestRunning.value) return
-  envTestStarting.value = true
-  envTestError.value = null
-  try {
-    await envTest.start(props.block.id)
-  } catch (e) {
-    envTestError.value = envTestErrorText(e)
-  } finally {
-    envTestStarting.value = false
-  }
-}
-
-async function stopEnvTest() {
-  const run = envTestRun.value
-  if (!run || run.status !== 'running') return
-  try {
-    await envTest.stop(run.id)
-  } catch (e) {
-    envTestError.value = envTestErrorText(e)
-  }
-}
-
 // The provisioning hints (cloud provider + instance size) are advisory inputs to the
 // ephemeral-environment provisioner, not commonly tuned — keep them collapsed by default.
 const showProvisioning = ref(false)
-
-// The repo + service subdirectory backing this frame, for the compose-file browser.
-// A monorepo service isn't on the `github_repos` blockId link (that stays null), so
-// fall back to the service catalog mapping, which carries the repo + directory.
-const repoContext = computed<{ githubId: number; directory?: string | null } | undefined>(() => {
-  if (props.repo) return props.repo
-  const svc = services.serviceByFrameBlock[props.block.id]
-  if (svc?.repoGithubId != null) return { githubId: svc.repoGithubId, directory: svc.directory }
-  const r = github.repoForBlock(props.block.id)
-  return r ? { githubId: r.githubId } : undefined
-})
 
 // Repo-path picker, shared by the compose file (`docker compose -f <path>`) and the
 // kubernetes colocated manifests path. The stored path is relative to the repo root (the
@@ -503,7 +430,7 @@ function setSize(value: InstanceSize) {
     :default-open="props.defaultOpen"
   >
     <div class="space-y-1">
-      <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.provisionType') }}</span>
+      <span class="text-2xs text-muted">{{ t('inspector.testConfig.provisionType') }}</span>
       <div class="flex flex-wrap gap-1">
         <UButton
           v-for="p in PROVISION_TYPES"
@@ -516,7 +443,7 @@ function setSize(value: InstanceSize) {
           {{ p.label }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-slate-500">
+      <p class="text-2xs leading-snug text-dimmed">
         {{ t('inspector.testConfig.provisionTypeHint') }}
       </p>
     </div>
@@ -526,14 +453,14 @@ function setSize(value: InstanceSize) {
          provisions the compose stack, rather than editing the raw path inline. -->
     <div
       v-if="provisionType === 'docker-compose'"
-      class="flex items-center justify-between gap-2 rounded border border-primary-800/40 bg-primary-950/20 p-2"
+      class="flex items-center justify-between gap-2 rounded-sm border border-primary/40 bg-primary/10 p-2"
       data-testid="env-setup-nudge"
     >
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-primary-200/90">
+        <p class="text-2xs font-medium text-primary/90">
           {{ t('inspector.testConfig.envWizard.title') }}
         </p>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.envWizard.hint') }}
         </p>
       </div>
@@ -551,9 +478,9 @@ function setSize(value: InstanceSize) {
 
     <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
          it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
-    <div v-if="repoContext" class="space-y-2 rounded border border-slate-800 bg-slate-900/40 p-2">
+    <div v-if="repoContext" class="space-y-2 rounded-sm border border-default bg-default/40 p-2">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.detect.title') }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.testConfig.detect.title') }}</span>
         <UButton
           size="xs"
           variant="soft"
@@ -565,23 +492,23 @@ function setSize(value: InstanceSize) {
           {{ t('inspector.testConfig.detect.button') }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-slate-500">
+      <p class="text-2xs leading-snug text-dimmed">
         {{ t('inspector.testConfig.detect.hint') }}
       </p>
 
-      <p v-if="detectError" class="text-[11px] text-rose-300/80">
+      <p v-if="detectError" class="text-2xs text-app-error-300/80">
         {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">
         <p
           v-if="!detectResult.detected && detectResult.provisioning.type !== 'custom'"
-          class="text-[11px] text-amber-300/80"
+          class="text-2xs text-app-warning-300/80"
         >
           {{ t('inspector.testConfig.detect.none') }}
         </p>
         <template v-else>
-          <p class="text-[11px] text-emerald-300/80">
+          <p class="text-2xs text-app-success-300/80">
             {{
               t('inspector.testConfig.detect.applied', {
                 type: provisionTypeLabel(detectResult.provisioning.type),
@@ -590,7 +517,7 @@ function setSize(value: InstanceSize) {
           </p>
 
           <div v-if="detectResult.serviceDirCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-2xs text-muted">{{
               t('inspector.testConfig.detect.serviceDirTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -608,7 +535,7 @@ function setSize(value: InstanceSize) {
           </div>
 
           <div v-if="detectResult.manifestRootCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-2xs text-muted">{{
               t('inspector.testConfig.detect.manifestRootTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -626,7 +553,7 @@ function setSize(value: InstanceSize) {
           </div>
 
           <div v-if="detectResult.overlayCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-2xs text-muted">{{
               t('inspector.testConfig.detect.overlayTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -644,7 +571,7 @@ function setSize(value: InstanceSize) {
           </div>
 
           <div v-if="detectResult.composeServiceCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-2xs text-muted">{{
               t('inspector.testConfig.detect.composeServiceTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -661,12 +588,12 @@ function setSize(value: InstanceSize) {
             </div>
           </div>
 
-          <p v-if="detectResult.urlSource" class="text-[11px] text-slate-500">
+          <p v-if="detectResult.urlSource" class="text-2xs text-dimmed">
             {{
               t('inspector.testConfig.detect.urlSource', { source: detectResult.urlSource.source })
             }}
           </p>
-          <p v-if="detectResult.namespace" class="text-[11px] text-slate-500">
+          <p v-if="detectResult.namespace" class="text-2xs text-dimmed">
             {{ t('inspector.testConfig.detect.namespace', { namespace: detectResult.namespace }) }}
           </p>
 
@@ -674,9 +601,13 @@ function setSize(value: InstanceSize) {
             <li
               v-for="(n, i) in detectResult.notes"
               :key="i"
-              class="flex items-start gap-1.5 text-[11px] leading-snug text-slate-500"
+              class="flex items-start gap-1.5 text-2xs leading-snug text-dimmed"
             >
-              <span :class="n.confidence === 'high' ? 'text-emerald-400/70' : 'text-amber-400/70'">
+              <span
+                :class="
+                  n.confidence === 'high' ? 'text-app-success-400/70' : 'text-app-warning-400/70'
+                "
+              >
                 {{
                   n.confidence === 'high'
                     ? t('inspector.testConfig.detect.confidenceHigh')
@@ -692,9 +623,7 @@ function setSize(value: InstanceSize) {
 
     <div v-if="provisionType === 'docker-compose'" class="space-y-2">
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.composePath')
-        }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.testConfig.composePath') }}</label>
         <div class="flex items-center gap-1">
           <UInput
             :model-value="composePath"
@@ -706,17 +635,17 @@ function setSize(value: InstanceSize) {
               (e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)
             "
           />
-          <UButton
+          <IconButton
             v-if="repoContext"
             size="xs"
             variant="soft"
             color="neutral"
             icon="i-lucide-folder-search"
-            :title="t('inspector.testConfig.browseRepo')"
+            :label="t('inspector.testConfig.browseRepo')"
             @click="openBrowse('compose')"
           />
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.composeHint') }}
         </p>
       </div>
@@ -732,9 +661,7 @@ function setSize(value: InstanceSize) {
          connection (the "how") is configured per-type in the Infrastructure window. -->
     <div v-if="provisionType === 'kubernetes'" class="space-y-2">
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestSourceLabel')
-        }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.testConfig.manifestSourceLabel') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             :color="kubeSourceType === 'colocated' ? 'primary' : 'neutral'"
@@ -756,9 +683,7 @@ function setSize(value: InstanceSize) {
       </div>
 
       <div v-if="kubeSourceType === 'separate'" class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestRepo')
-        }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.testConfig.manifestRepo') }}</label>
         <UInput
           :model-value="kubeRepo"
           size="xs"
@@ -769,9 +694,7 @@ function setSize(value: InstanceSize) {
         />
       </div>
       <div v-if="kubeSourceType === 'separate'" class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestRef')
-        }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.testConfig.manifestRef') }}</label>
         <UInput
           :model-value="kubeRef"
           size="xs"
@@ -783,9 +706,7 @@ function setSize(value: InstanceSize) {
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestPath')
-        }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.testConfig.manifestPath') }}</label>
         <div class="flex items-center gap-1">
           <UInput
             :model-value="kubePath"
@@ -795,25 +716,23 @@ function setSize(value: InstanceSize) {
             @blur="(e: FocusEvent) => setKubePath((e.target as HTMLInputElement).value)"
             @keydown.enter="(e: KeyboardEvent) => setKubePath((e.target as HTMLInputElement).value)"
           />
-          <UButton
+          <IconButton
             v-if="repoContext && kubeSourceType === 'colocated'"
             size="xs"
             variant="soft"
             color="neutral"
             icon="i-lucide-folder-search"
-            :title="t('inspector.testConfig.browseRepo')"
+            :label="t('inspector.testConfig.browseRepo')"
             @click="openBrowse('k8s')"
           />
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.manifestPathHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.rendererLabel')
-        }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.testConfig.rendererLabel') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="r in RENDERERS"
@@ -826,48 +745,55 @@ function setSize(value: InstanceSize) {
             {{ r.label }}
           </UButton>
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.rendererHint') }}
         </p>
       </div>
     </div>
 
+    <!-- cloudflare: nothing to collect. Unlike compose (a path) or kubernetes (a manifest
+         source), the per-PR recipe lives in the target repository's own preview workflow, so
+         declaring the type IS the whole service-side configuration. Say so explicitly rather
+         than rendering an empty panel that reads like something failed to load. -->
+    <p v-if="provisionType === 'cloudflare'" class="text-2xs text-dimmed">
+      {{ t('inspector.testConfig.cloudflareHint') }}
+    </p>
+
     <!-- custom: pin the custom manifest type this service produces (matched to a remote-custom
          handler the workspace configures). -->
     <div v-if="provisionType === 'custom'" class="space-y-2">
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.customManifestId')
-        }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.testConfig.customManifestId') }}</label>
         <USelect
           v-if="customTypeItems.length"
           :model-value="customManifestId"
           :items="customTypeItems"
           size="xs"
+          class="w-full"
           :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
           @update:model-value="(v: string) => setCustomManifestId(v)"
         />
-        <p v-else class="text-[11px] leading-snug text-amber-300/80">
+        <p v-else class="text-2xs leading-snug text-app-warning-300/80">
           {{ t('inspector.testConfig.customNoTypes') }}
         </p>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.customManifestIdHint') }}
         </p>
       </div>
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-2xs text-muted">{{
           t('inspector.testConfig.customManifestPath')
         }}</label>
         <UInput
           :model-value="customManifestPath"
           size="xs"
-          class="font-mono"
+          class="w-full font-mono"
           @blur="(e: FocusEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)"
           @keydown.enter="
             (e: KeyboardEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)
           "
         />
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.customManifestPathHint') }}
         </p>
       </div>
@@ -876,10 +802,10 @@ function setSize(value: InstanceSize) {
            shown when the selected type declares a fixer prompt. -->
       <div
         v-if="manifestFixerAvailable && repoContext"
-        class="space-y-1.5 rounded border border-slate-800 bg-slate-900/40 p-2"
+        class="space-y-1.5 rounded-sm border border-default bg-default/40 p-2"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[11px] text-slate-400">{{
+          <span class="text-2xs text-muted">{{
             t('inspector.testConfig.generateManifest.title')
           }}</span>
           <UButton
@@ -894,24 +820,24 @@ function setSize(value: InstanceSize) {
             {{ t('inspector.testConfig.generateManifest.button') }}
           </UButton>
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.testConfig.generateManifest.hint') }}
         </p>
-        <p v-if="manifestRepairError" class="text-[11px] text-rose-300/80">
+        <p v-if="manifestRepairError" class="text-2xs text-app-error-300/80">
           {{ t('inspector.testConfig.generateManifest.error') }}
         </p>
         <p
           v-else-if="manifestRepairJob"
-          class="text-[11px]"
+          class="text-2xs"
           :class="{
-            'text-sky-300/80': manifestRepairJob.status === 'running',
-            'text-emerald-300/80': manifestRepairJob.status === 'succeeded',
-            'text-rose-300/80': manifestRepairJob.status === 'failed',
+            'text-app-info-300/80': manifestRepairJob.status === 'running',
+            'text-app-success-300/80': manifestRepairJob.status === 'succeeded',
+            'text-app-error-300/80': manifestRepairJob.status === 'failed',
           }"
         >
           {{ t(`inspector.testConfig.generateManifest.status.${manifestRepairJob.status}`) }}
         </p>
-        <p v-else-if="manifestRepairJobId" class="text-[11px] text-sky-300/80">
+        <p v-else-if="manifestRepairJobId" class="text-2xs text-app-info-300/80">
           {{ t('inspector.testConfig.generateManifest.dispatched') }}
         </p>
       </div>
@@ -927,7 +853,7 @@ function setSize(value: InstanceSize) {
     >
       <template #body>
         <div v-if="repoContext" class="space-y-3">
-          <p class="text-xs text-slate-400">
+          <p class="text-xs text-muted">
             {{
               browseTarget === 'compose'
                 ? t('inspector.testConfig.selectComposeHint')
@@ -941,11 +867,11 @@ function setSize(value: InstanceSize) {
             :start-path="repoContext.directory ?? ''"
           />
           <div class="flex items-center justify-between gap-2">
-            <p class="truncate text-xs text-slate-400">
+            <p class="truncate text-xs text-muted">
               <template v-if="pickedPath">
                 <i18n-t keypath="inspector.testConfig.selected" tag="span" scope="global">
                   <template #path>
-                    <code class="text-slate-200">{{ pickedPath }}</code>
+                    <code class="text-default">{{ pickedPath }}</code>
                   </template>
                 </i18n-t>
               </template>
@@ -967,9 +893,7 @@ function setSize(value: InstanceSize) {
       :hint="t('inspector.testConfig.provisioningHint')"
     >
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.cloudProvider')
-        }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.testConfig.cloudProvider') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="p in PROVIDERS"
@@ -985,7 +909,7 @@ function setSize(value: InstanceSize) {
       </div>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.instanceSize') }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.testConfig.instanceSize') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="s in SIZES"
@@ -1001,79 +925,10 @@ function setSize(value: InstanceSize) {
       </div>
     </InspectorSection>
 
-    <!-- Ephemeral-environment self-test: exercise the whole provisioning lifecycle against a
-         throwaway branch and report success / the failing stage. Disabled for `infraless`. -->
-    <div class="mt-3 space-y-2 border-t border-white/5 pt-3" data-testid="env-test-section">
-      <div class="flex items-center justify-between gap-2">
-        <div class="min-w-0">
-          <p class="text-[11px] font-medium text-slate-300">
-            {{ t('inspector.testConfig.envTest.title') }}
-          </p>
-          <p class="text-[11px] text-slate-400">{{ t('inspector.testConfig.envTest.hint') }}</p>
-        </div>
-        <UButton
-          v-if="!envTestRunning"
-          icon="i-lucide-flask-conical"
-          size="xs"
-          color="primary"
-          variant="soft"
-          data-testid="env-test-start"
-          :loading="envTestStarting"
-          :disabled="!canTestEnv"
-          @click="startEnvTest"
-        >
-          {{ t('inspector.testConfig.envTest.start') }}
-        </UButton>
-        <UButton
-          v-else
-          icon="i-lucide-square"
-          size="xs"
-          color="neutral"
-          variant="ghost"
-          data-testid="env-test-stop"
-          @click="stopEnvTest"
-        >
-          {{ t('inspector.testConfig.envTest.stop') }}
-        </UButton>
-      </div>
-
-      <p v-if="!canTestEnv" class="text-[11px] text-slate-500">
-        {{ t('inspector.testConfig.envTest.infraless') }}
-      </p>
-
-      <!-- Live stage + terminal outcome of the tracked run (pushed via the workspace stream). -->
-      <p
-        v-if="envTestRun"
-        class="text-[11px]"
-        :class="{
-          'text-sky-300/80': envTestRun.status === 'running',
-          'text-emerald-300/80': envTestRun.status === 'succeeded',
-          'text-rose-300/80': envTestRun.status === 'failed',
-        }"
-        data-testid="env-test-status"
-      >
-        <template v-if="envTestRun.status === 'running'">
-          {{
-            t('inspector.testConfig.envTest.running', {
-              stage: envTestStageLabel(envTestRun.stage),
-            })
-          }}
-        </template>
-        <template v-else-if="envTestRun.status === 'succeeded'">
-          {{ t('inspector.testConfig.envTest.succeeded') }}
-        </template>
-        <template v-else>
-          {{ t('inspector.testConfig.envTest.failed') }}
-          <template v-if="envTestRun.failedStage">
-            ({{ envTestStageLabel(envTestRun.failedStage) }})
-          </template>
-          <span v-if="envTestRun.error" class="block text-rose-300/70">{{ envTestRun.error }}</span>
-        </template>
-      </p>
-
-      <p v-if="envTestError" class="text-[11px] text-rose-400" data-testid="env-test-error">
-        {{ envTestError }}
-      </p>
-    </div>
+    <!-- The two self-tests this service offers: does its provisioning stand an environment up,
+         and could an agent handed that environment actually operate the service. Their own
+         collaborator (they share every piece of state and every refusal), so this view stays
+         about the provisioning CONFIG. -->
+    <ServiceSelfTests :block="block" />
   </InspectorSection>
 </template>

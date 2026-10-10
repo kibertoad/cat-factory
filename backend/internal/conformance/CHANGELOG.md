@@ -1,3894 +1,1418 @@
 # @cat-factory/conformance
 
-## 0.10.116
-
-### Patch Changes
-
-- Updated dependencies [c1028cc]
-  - @cat-factory/orchestration@0.107.4
-  - @cat-factory/server@0.113.6
-
-## 0.10.115
-
-### Patch Changes
-
-- Updated dependencies [2ce396d]
-  - @cat-factory/kernel@0.123.2
-  - @cat-factory/contracts@0.128.1
-  - @cat-factory/agents@0.54.10
-  - @cat-factory/gates@0.5.30
-  - @cat-factory/integrations@0.81.18
-  - @cat-factory/orchestration@0.107.3
-  - @cat-factory/server@0.113.5
-  - @cat-factory/prompt-fragments@0.13.16
-
-## 0.10.114
-
-### Patch Changes
-
-- Updated dependencies [2c7ca2e]
-  - @cat-factory/orchestration@0.107.2
-  - @cat-factory/kernel@0.123.1
-  - @cat-factory/server@0.113.4
-  - @cat-factory/agents@0.54.9
-  - @cat-factory/gates@0.5.29
-  - @cat-factory/integrations@0.81.17
-
-## 0.10.113
-
-### Patch Changes
-
-- Updated dependencies [85bf0ef]
-  - @cat-factory/server@0.113.3
-
-## 0.10.112
-
-### Patch Changes
-
-- Updated dependencies [17c6808]
-  - @cat-factory/server@0.113.2
-
-## 0.10.111
-
-### Patch Changes
-
-- e4c5abe: Type the harness failure-cause wire and consolidate its classifiers (error-message initiative I4).
-  The kernel now owns the structured cause vocabulary — `HARNESS_FAILURE_CAUSES` /
-  `HarnessFailureCause` / `isHarnessFailureCause` / `failureKindFromHarnessCause`
-  (`kernel/src/domain/harness-failure.ts`), kept in step by hand with the dependency-free container
-  payloads (executor-harness `FailureCause` plus deploy-harness `DeployFailureCause`, hence the
-  `deploy` member) — and the three job-view ports carry the union instead of a bare string
-  (`RunnerJobView.failureCause`, the failed `AgentJobUpdate` variant, `PreviewView.failureCause`).
-  The mapper's internal `Record<HarnessFailureCause, 'timeout' | 'agent'>` is the drift guard: a new
-  union member without a mapping fails the typecheck.
-
-  The three per-flow copies of the cause switch are deleted in favour of that one kernel mapper:
-  orchestration's `agentFailureKindFromCause` (a module export of `job.logic.ts`, now removed —
-  `RunDispatcher` calls the kernel mapper), the bootstrapper's `bootstrapFailureKindFromCause`, and
-  the repairer's `repairFailureKindFromCause`. Each flow keeps its own error-string regex purely as
-  the no-cause fallback. `HttpRunnerPoolProvider` now narrows the pool's dot-path-mapped cause
-  through `isHarnessFailureCause` (an unknown free-form value degrades to the regex fallback instead
-  of riding the wire untyped), and the conformance `FakeAgentExecutor.pollFailCause` option is typed
-  to the union. Container eviction stays outside the union (a transport signal —
-  `RunnerJobView.evicted`). No executor-harness image bump: the harness sources are untouched.
-
-- Updated dependencies [e4c5abe]
-- Updated dependencies [e4c5abe]
-  - @cat-factory/kernel@0.123.0
-  - @cat-factory/orchestration@0.107.1
-  - @cat-factory/server@0.113.1
-  - @cat-factory/integrations@0.81.16
-  - @cat-factory/agents@0.54.8
-  - @cat-factory/gates@0.5.28
-
-## 0.10.110
-
-### Patch Changes
-
-- Updated dependencies [1e684b7]
-- Updated dependencies [1e684b7]
-  - @cat-factory/contracts@0.128.0
-  - @cat-factory/kernel@0.122.0
-  - @cat-factory/orchestration@0.107.0
-  - @cat-factory/integrations@0.81.15
-  - @cat-factory/server@0.113.0
-  - @cat-factory/agents@0.54.7
-  - @cat-factory/gates@0.5.27
-  - @cat-factory/prompt-fragments@0.13.15
-
-## 0.10.109
-
-### Patch Changes
-
-- Updated dependencies [5a3fe5d]
-- Updated dependencies [2a13ece]
-  - @cat-factory/server@0.112.10
-  - @cat-factory/kernel@0.121.8
-  - @cat-factory/integrations@0.81.14
-  - @cat-factory/agents@0.54.6
-  - @cat-factory/gates@0.5.26
-  - @cat-factory/orchestration@0.106.8
-
-## 0.10.108
-
-### Patch Changes
-
-- Updated dependencies [3ce997d]
-  - @cat-factory/kernel@0.121.7
-  - @cat-factory/orchestration@0.106.7
-  - @cat-factory/server@0.112.9
-  - @cat-factory/integrations@0.81.13
-  - @cat-factory/agents@0.54.5
-  - @cat-factory/gates@0.5.25
-
-## 0.10.107
-
-### Patch Changes
-
-- Updated dependencies [67dccb6]
-  - @cat-factory/kernel@0.121.6
-  - @cat-factory/orchestration@0.106.6
-  - @cat-factory/server@0.112.8
-  - @cat-factory/agents@0.54.4
-  - @cat-factory/gates@0.5.24
-  - @cat-factory/integrations@0.81.12
-
-## 0.10.106
-
-### Patch Changes
-
-- Updated dependencies [f8f1aa8]
-  - @cat-factory/agents@0.54.3
-  - @cat-factory/contracts@0.127.1
-  - @cat-factory/gates@0.5.23
-  - @cat-factory/integrations@0.81.11
-  - @cat-factory/kernel@0.121.5
-  - @cat-factory/orchestration@0.106.5
-  - @cat-factory/prompt-fragments@0.13.14
-  - @cat-factory/server@0.112.7
-
-## 0.10.105
-
-### Patch Changes
-
-- Updated dependencies [e68c958]
-  - @cat-factory/integrations@0.81.10
-  - @cat-factory/server@0.112.6
-  - @cat-factory/orchestration@0.106.4
-
-## 0.10.104
-
-### Patch Changes
-
-- Updated dependencies [e61c980]
-  - @cat-factory/server@0.112.5
-
-## 0.10.103
-
-### Patch Changes
-
-- Updated dependencies [4810353]
-  - @cat-factory/kernel@0.121.4
-  - @cat-factory/orchestration@0.106.3
-  - @cat-factory/integrations@0.81.9
-  - @cat-factory/agents@0.54.2
-  - @cat-factory/gates@0.5.22
-  - @cat-factory/server@0.112.4
-
-## 0.10.102
-
-### Patch Changes
-
-- Updated dependencies [6fc42ed]
-  - @cat-factory/server@0.112.3
-
-## 0.10.101
-
-### Patch Changes
-
-- Updated dependencies [edad6e6]
-  - @cat-factory/kernel@0.121.3
-  - @cat-factory/orchestration@0.106.2
-  - @cat-factory/server@0.112.2
-  - @cat-factory/agents@0.54.1
-  - @cat-factory/gates@0.5.21
-  - @cat-factory/integrations@0.81.8
-
-## 0.10.100
-
-### Patch Changes
-
-- Updated dependencies [3b3bdc8]
-  - @cat-factory/server@0.112.1
-  - @cat-factory/integrations@0.81.7
-  - @cat-factory/orchestration@0.106.1
-
-## 0.10.99
-
-### Patch Changes
-
-- Updated dependencies [d1a4129]
-  - @cat-factory/contracts@0.127.0
-  - @cat-factory/agents@0.54.0
-  - @cat-factory/orchestration@0.106.0
-  - @cat-factory/server@0.112.0
-  - @cat-factory/gates@0.5.20
-  - @cat-factory/integrations@0.81.6
-  - @cat-factory/kernel@0.121.2
-  - @cat-factory/prompt-fragments@0.13.13
-
-## 0.10.98
-
-### Patch Changes
-
-- Updated dependencies [df7a489]
-  - @cat-factory/server@0.111.0
-
-## 0.10.97
-
-### Patch Changes
-
-- Updated dependencies [473e849]
-  - @cat-factory/kernel@0.121.1
-  - @cat-factory/server@0.110.5
-  - @cat-factory/orchestration@0.105.6
-  - @cat-factory/agents@0.53.6
-  - @cat-factory/gates@0.5.19
-  - @cat-factory/integrations@0.81.5
-
-## 0.10.96
-
-### Patch Changes
-
-- Updated dependencies [f4482c7]
-  - @cat-factory/kernel@0.121.0
-  - @cat-factory/server@0.110.4
-  - @cat-factory/agents@0.53.5
-  - @cat-factory/gates@0.5.18
-  - @cat-factory/integrations@0.81.4
-  - @cat-factory/orchestration@0.105.5
-
-## 0.10.95
-
-### Patch Changes
-
-- Updated dependencies [cc6d554]
-  - @cat-factory/agents@0.53.4
-  - @cat-factory/server@0.110.3
-  - @cat-factory/orchestration@0.105.4
-
-## 0.10.94
-
-### Patch Changes
-
-- Updated dependencies [22a4d9e]
-  - @cat-factory/kernel@0.120.0
-  - @cat-factory/agents@0.53.3
-  - @cat-factory/gates@0.5.17
-  - @cat-factory/integrations@0.81.3
-  - @cat-factory/orchestration@0.105.3
-  - @cat-factory/server@0.110.2
-
-## 0.10.93
-
-### Patch Changes
-
-- Updated dependencies [dbfe2e8]
-  - @cat-factory/server@0.110.1
-
-## 0.10.92
-
-### Patch Changes
-
-- Updated dependencies [8d65179]
-- Updated dependencies [a5dcf7d]
-  - @cat-factory/server@0.110.0
-  - @cat-factory/kernel@0.119.0
-  - @cat-factory/agents@0.53.2
-  - @cat-factory/gates@0.5.16
-  - @cat-factory/integrations@0.81.2
-  - @cat-factory/orchestration@0.105.2
-
-## 0.10.91
-
-### Patch Changes
-
-- Updated dependencies [5072999]
-  - @cat-factory/contracts@0.126.0
-  - @cat-factory/server@0.109.0
-  - @cat-factory/agents@0.53.1
-  - @cat-factory/gates@0.5.15
-  - @cat-factory/integrations@0.81.1
-  - @cat-factory/kernel@0.118.1
-  - @cat-factory/orchestration@0.105.1
-  - @cat-factory/prompt-fragments@0.13.12
-
-## 0.10.90
-
-### Patch Changes
-
-- Updated dependencies [4f936de]
-  - @cat-factory/contracts@0.125.0
-  - @cat-factory/kernel@0.118.0
-  - @cat-factory/agents@0.53.0
-  - @cat-factory/orchestration@0.105.0
-  - @cat-factory/integrations@0.81.0
-  - @cat-factory/server@0.108.0
-  - @cat-factory/gates@0.5.14
-  - @cat-factory/prompt-fragments@0.13.11
-
-## 0.10.89
-
-### Patch Changes
-
-- Updated dependencies [4b8fc5f]
-  - @cat-factory/server@0.107.10
-
-## 0.10.88
-
-### Patch Changes
-
-- Updated dependencies [e254ef5]
-  - @cat-factory/orchestration@0.104.1
-  - @cat-factory/server@0.107.9
-
-## 0.10.87
-
-### Patch Changes
-
-- 127fe3e: Apriori branches (slice 2): working mode.
-
-  A task's single optional `working` apriori branch now drives the run — the agents start from
-  and keep committing into that pre-existing branch instead of minting `cat-factory/<blockId>`,
-  and the PR opens from it, the CI gate polls it, and the merger merges it. See
-  `docs/initiatives/apriori-branches.md`.
-
-  - **Context**: the engine lifts the block's `aprioriBranches` verbatim onto the agent run
-    context (`AgentRunContext.aprioriBranches`), a pure projection like `referenceRepos`.
-  - **Work-branch swap**: `ContainerAgentExecutor.buildJobBody` and the two `RunDispatcher`
-    repo-op sites (`resolveRepoOpBranch` + the spec-writer `builtInRepoOpBranch`) resolve the
-    work branch as `resolveAprioriWorkingBranch(...) ?? cat-factory/<blockId>`, so every
-    downstream builder (`newBranch` / `pushBranch` / explore fallback / PR head) rides the
-    user's branch. The base-branch rejection is a single shared `resolveAprioriWorkingBranch`
-    helper (`@cat-factory/contracts`) so the executor and dispatcher rejections can't drift.
-  - **Probe, never create**: an apriori working branch must already exist — it is probed
-    (`ensureWorkBranch(..., { create: false })`, or a checkout-free `headSha`), and a missing
-    branch fails the dispatch loudly rather than being silently created off base. A working
-    branch equal to the repo base is rejected.
-  - **Merge teardown guard**: `GitHubPullRequestMerger` only deletes a merged head branch when
-    it is a platform `cat-factory/*` branch — a user-provided apriori branch is never torn down
-    (reusing a merged apriori branch on a later task intentionally resumes it).
-  - **Conformance**: a cross-runtime assertion that a custom kind's post-op commits onto the
-    task's apriori working branch instead of `cat-factory/<blockId>` on both stores.
-
-- Updated dependencies [127fe3e]
-  - @cat-factory/orchestration@0.104.0
-  - @cat-factory/contracts@0.124.1
-  - @cat-factory/kernel@0.117.6
-  - @cat-factory/server@0.107.8
-  - @cat-factory/agents@0.52.9
-  - @cat-factory/gates@0.5.13
-  - @cat-factory/integrations@0.80.6
-  - @cat-factory/prompt-fragments@0.13.10
-
-## 0.10.86
-
-### Patch Changes
-
-- Updated dependencies [774908c]
-  - @cat-factory/kernel@0.117.5
-  - @cat-factory/server@0.107.7
-  - @cat-factory/orchestration@0.103.1
-  - @cat-factory/agents@0.52.8
-  - @cat-factory/gates@0.5.12
-  - @cat-factory/integrations@0.80.5
-
-## 0.10.85
-
-### Patch Changes
-
-- 08a7da2: Apriori branches (slice 1): data model + write-boundary + persistence.
-
-  A task (`Block`) can now name pre-existing branches of its primary target repo via a new
-  optional `aprioriBranches` field — an array of `{ name, mode: 'reference' | 'working' }`.
-  `reference` branches are read-only context; the single optional `working` branch is the one
-  the run keeps building inside (later slices). See `docs/initiatives/apriori-branches.md`.
-
-  - **Contracts**: `aprioriBranchSchema` + `AprioriBranch`, the `aprioriWorkingBranch` /
-    `aprioriReferenceBranches` helpers, an `isSafeGitBranchName` git-ref-safety check, the new
-    `blockSchema` field, and `aprioriBranches` on `updateBlockSchema` (capped at 20). Re-exported
-    from `@cat-factory/kernel`.
-  - **Persistence**: a shared `apriori_branches` JSON text column mirroring `reference_repos`
-    (empty-array-is-NULL) — D1 migration `0048_apriori_branches.sql` ⇄ Drizzle schema column +
-    generated migration, picked up by both stores through the shared `blockFields` mapper.
-  - **Write boundary**: `BoardService.updateBlock` drops the field on non-task blocks and enforces
-    the cross-entry invariants via `aprioriBranchesError` — at most one `working` entry, no
-    duplicate names, the working entry frozen once a PR exists, and no working entry on a
-    multi-repo (`involvedServiceIds`) task.
-  - **Conformance**: a cross-runtime round-trip asserting the column survives PATCH + snapshot
-    read on both stores, clears to absent, and rejects the invalid shapes.
-
-- Updated dependencies [08a7da2]
-  - @cat-factory/contracts@0.124.0
-  - @cat-factory/orchestration@0.103.0
-  - @cat-factory/kernel@0.117.4
-  - @cat-factory/server@0.107.6
-  - @cat-factory/agents@0.52.7
-  - @cat-factory/gates@0.5.11
-  - @cat-factory/integrations@0.80.4
-  - @cat-factory/prompt-fragments@0.13.9
-
-## 0.10.84
-
-### Patch Changes
-
-- 5a4d356: test(conformance): reusable fake gate providers + an on-call assessment channel on the fake agent
-
-  Extract the inline `ci` / `doc-quality` fake gate providers into a shared
-  `fakeGateProviders` module (`makeFakeCi` / `makeFakeMergeability` / `makeFakeReleaseHealth` /
-  `makeFakeDocQuality`), exported from the package index so both the cross-runtime conformance
-  suite and the e2e test backend reuse one implementation instead of copy-pasting per-probe
-  verdict queues. `FakeAgentExecutor` gains an `onCallAssessment` option and an `on-call` branch
-  so the post-release-health gate's INVESTIGATE-don't-fix helper returns a structured assessment
-  (the generic prose fall-through left it null). These back the new operational-gate + agent-loop
-  e2e specs (CI→ci-fixer, conflicts→conflict-resolver, post-release-health→on-call, Tester→Fixer,
-  companion rework, follow-up gate).
-
-  Adds a cross-runtime conformance assertion for the post-release-health gate: a merged release
-  (merger auto-merges → block `done`) whose observability signal probes `regressed` escalates the
-  `on-call` helper and raises a `release_regression` notification, driven over the shared
-  `makeFakeReleaseHealth`. Both facades enable the observability integration in their test env so the
-  gate + its wire-handle + the on-call assessment channel can't drift on only one runtime.
-
-- Updated dependencies [87f835a]
-  - @cat-factory/server@0.107.5
-
-## 0.10.83
-
-### Patch Changes
-
-- Updated dependencies [6b968bb]
-  - @cat-factory/kernel@0.117.3
-  - @cat-factory/orchestration@0.102.8
-  - @cat-factory/server@0.107.4
-  - @cat-factory/agents@0.52.6
-  - @cat-factory/gates@0.5.10
-  - @cat-factory/integrations@0.80.3
-
-## 0.10.82
-
-### Patch Changes
-
-- Updated dependencies [a650396]
-  - @cat-factory/orchestration@0.102.7
-  - @cat-factory/server@0.107.3
-
-## 0.10.81
-
-### Patch Changes
-
-- Updated dependencies [eeadc97]
-  - @cat-factory/kernel@0.117.2
-  - @cat-factory/contracts@0.123.1
-  - @cat-factory/orchestration@0.102.6
-  - @cat-factory/server@0.107.2
-  - @cat-factory/agents@0.52.5
-  - @cat-factory/gates@0.5.9
-  - @cat-factory/integrations@0.80.2
-  - @cat-factory/prompt-fragments@0.13.8
-
-## 0.10.80
-
-### Patch Changes
-
-- Updated dependencies [cb7fd14]
-  - @cat-factory/server@0.107.1
-  - @cat-factory/integrations@0.80.1
-  - @cat-factory/kernel@0.117.1
-  - @cat-factory/orchestration@0.102.5
-  - @cat-factory/agents@0.52.4
-  - @cat-factory/gates@0.5.8
-
-## 0.10.79
-
-### Patch Changes
-
-- Updated dependencies [be54a32]
-  - @cat-factory/kernel@0.117.0
-  - @cat-factory/integrations@0.80.0
-  - @cat-factory/server@0.107.0
-  - @cat-factory/agents@0.52.3
-  - @cat-factory/gates@0.5.7
-  - @cat-factory/orchestration@0.102.4
-
-## 0.10.78
-
-### Patch Changes
-
-- Updated dependencies [51869b8]
-- Updated dependencies [2924e32]
-  - @cat-factory/kernel@0.116.0
-  - @cat-factory/orchestration@0.102.3
-  - @cat-factory/agents@0.52.2
-  - @cat-factory/gates@0.5.6
-  - @cat-factory/integrations@0.79.3
-  - @cat-factory/server@0.106.3
-
-## 0.10.77
-
-### Patch Changes
-
-- @cat-factory/orchestration@0.102.2
-- @cat-factory/server@0.106.2
-
-## 0.10.76
-
-### Patch Changes
-
-- Updated dependencies [a51a498]
-  - @cat-factory/orchestration@0.102.1
-  - @cat-factory/kernel@0.115.1
-  - @cat-factory/server@0.106.1
-  - @cat-factory/agents@0.52.1
-  - @cat-factory/gates@0.5.5
-  - @cat-factory/integrations@0.79.2
-
-## 0.10.75
-
-### Patch Changes
-
-- Updated dependencies [b83bcc8]
-- Updated dependencies [b83bcc8]
-- Updated dependencies [a0c6934]
-  - @cat-factory/contracts@0.123.0
-  - @cat-factory/kernel@0.115.0
-  - @cat-factory/agents@0.52.0
-  - @cat-factory/orchestration@0.102.0
-  - @cat-factory/server@0.106.0
-  - @cat-factory/gates@0.5.4
-  - @cat-factory/integrations@0.79.1
-  - @cat-factory/prompt-fragments@0.13.7
-
-## 0.10.74
-
-### Patch Changes
-
-- Updated dependencies [0f3c88b]
-  - @cat-factory/contracts@0.122.0
-  - @cat-factory/kernel@0.114.0
-  - @cat-factory/agents@0.51.0
-  - @cat-factory/integrations@0.79.0
-  - @cat-factory/orchestration@0.101.0
-  - @cat-factory/server@0.105.0
-  - @cat-factory/gates@0.5.3
-  - @cat-factory/prompt-fragments@0.13.6
-
-## 0.10.73
-
-### Patch Changes
-
-- Updated dependencies [ed77be6]
-  - @cat-factory/kernel@0.113.0
-  - @cat-factory/agents@0.50.0
-  - @cat-factory/orchestration@0.100.2
-  - @cat-factory/server@0.104.2
-  - @cat-factory/contracts@0.121.2
-  - @cat-factory/gates@0.5.2
-  - @cat-factory/integrations@0.78.8
-  - @cat-factory/prompt-fragments@0.13.5
-
-## 0.10.72
-
-### Patch Changes
-
-- Updated dependencies [7ee2530]
-  - @cat-factory/agents@0.49.3
-  - @cat-factory/gates@0.5.1
-  - @cat-factory/integrations@0.78.7
-  - @cat-factory/kernel@0.112.1
-  - @cat-factory/orchestration@0.100.1
-  - @cat-factory/server@0.104.1
-
-## 0.10.71
-
-### Patch Changes
-
-- Updated dependencies [f25d5e2]
-  - @cat-factory/kernel@0.112.0
-  - @cat-factory/gates@0.5.0
-  - @cat-factory/orchestration@0.100.0
-  - @cat-factory/server@0.104.0
-  - @cat-factory/agents@0.49.2
-  - @cat-factory/integrations@0.78.6
-
-## 0.10.70
-
-### Patch Changes
-
-- Updated dependencies [9aa9e19]
-  - @cat-factory/contracts@0.121.1
-  - @cat-factory/orchestration@0.99.1
-  - @cat-factory/agents@0.49.1
-  - @cat-factory/gates@0.4.34
-  - @cat-factory/integrations@0.78.5
-  - @cat-factory/kernel@0.111.1
-  - @cat-factory/prompt-fragments@0.13.4
-  - @cat-factory/server@0.103.1
-
-## 0.10.69
-
-### Patch Changes
-
-- Updated dependencies [63f7881]
-  - @cat-factory/kernel@0.111.0
-  - @cat-factory/agents@0.49.0
-  - @cat-factory/server@0.103.0
-  - @cat-factory/orchestration@0.99.0
-  - @cat-factory/contracts@0.121.0
-  - @cat-factory/gates@0.4.33
-  - @cat-factory/integrations@0.78.4
-  - @cat-factory/prompt-fragments@0.13.3
-
-## 0.10.68
-
-### Patch Changes
-
-- Updated dependencies [bcc843d]
-  - @cat-factory/orchestration@0.98.1
-  - @cat-factory/agents@0.48.5
-  - @cat-factory/server@0.102.1
-  - @cat-factory/kernel@0.110.1
-  - @cat-factory/gates@0.4.32
-  - @cat-factory/integrations@0.78.3
-
-## 0.10.67
-
-### Patch Changes
-
-- Updated dependencies [a2db337]
-- Updated dependencies [a2db337]
-  - @cat-factory/orchestration@0.98.0
-  - @cat-factory/agents@0.48.4
-  - @cat-factory/contracts@0.120.0
-  - @cat-factory/kernel@0.110.0
-  - @cat-factory/server@0.102.0
-  - @cat-factory/gates@0.4.31
-  - @cat-factory/integrations@0.78.2
-  - @cat-factory/prompt-fragments@0.13.2
-
-## 0.10.66
-
-### Patch Changes
-
-- Updated dependencies [35636d5]
-  - @cat-factory/agents@0.48.3
-  - @cat-factory/orchestration@0.97.2
-  - @cat-factory/server@0.101.2
-
-## 0.10.65
-
-### Patch Changes
-
-- 8319e52: Fix a first-sign-in race in `AccountService.ensurePersonalAccount` that 500'd
-  `GET /accounts` ("cannot reach backend") on a fresh DB.
-
-  The method was a non-atomic check-then-act: concurrent first-load requests all read
-  "no personal account yet", then all `INSERT`, so all but one failed with a duplicate-key
-  violation on the personal-account partial unique index (`idx_accounts_personal`) and the
-  error surfaced as an unhandled 500.
-
-  The create path is now atomic. A new `AccountRepository.ensurePersonal(account)` port
-  inserts-or-returns the surviving row — D1 via `INSERT OR IGNORE`, Postgres via
-  `ON CONFLICT DO NOTHING` — so concurrent first-sign-in callers all converge on the same
-  account with no rejection. Both runtimes implement it and a cross-runtime conformance
-  assertion fires the concurrent resolution and asserts a single account results.
-
-  The sibling paths are unaffected: `createOrg` is a deliberate non-idempotent create (org
-  accounts have no such unique index), and `ensureMembership` already writes through an
-  idempotent `upsert`.
-
-- Updated dependencies [8319e52]
-  - @cat-factory/kernel@0.109.1
-  - @cat-factory/agents@0.48.2
-  - @cat-factory/gates@0.4.30
-  - @cat-factory/integrations@0.78.1
-  - @cat-factory/orchestration@0.97.1
-  - @cat-factory/server@0.101.1
-
-## 0.10.64
-
-### Patch Changes
-
-- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
-  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
-
-  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
-    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
-    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
-    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
-    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
-    merge-preset ones.
-  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
-    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
-    (local runs subscription models via the ambient CLI / a leased personal credential). The
-    deployment default is applied only at first seed, so a user's later manual default choice is
-    always preserved.
-
-  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
-  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
-  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
-  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
-
-- Updated dependencies [8728bf7]
-- Updated dependencies [7157908]
-  - @cat-factory/contracts@0.119.0
-  - @cat-factory/kernel@0.109.0
-  - @cat-factory/server@0.101.0
-  - @cat-factory/orchestration@0.97.0
-  - @cat-factory/integrations@0.78.0
-  - @cat-factory/agents@0.48.1
-  - @cat-factory/gates@0.4.29
-  - @cat-factory/prompt-fragments@0.13.1
-
-## 0.10.63
-
-### Patch Changes
-
-- 629cf90: Initiative presets slice 9: the E2E baseline + a worked-example deployment preset.
-
-  - `@cat-factory/conformance`: `FakeAgentExecutor` gains an `initiativePlan` option so a
-    fake-driven initiative-planner step returns a plan draft (the planner otherwise faults a
-    planning run) — the seam an e2e/integration test uses to drive create-with-preset → auto-plan
-    → spawn.
-  - `@cat-factory/node-server`: the initiative-loop sweep interval is now overridable via
-    `INITIATIVE_LOOP_INTERVAL_MS` (default 60s unchanged).
-  - `@cat-factory/app`: `TaskCard` exposes a behaviour-neutral `data-task-type` attribute (the e2e
-    asserts a spawned document task carries its preset decoration).
-  - `@cat-factory/example-custom-agent`: adds `preset_org_audit`, a worked-example initiative preset
-    registered through the public `registerInitiativePreset` seam.
-
-## 0.10.62
-
-### Patch Changes
-
-- Updated dependencies [4775c40]
-  - @cat-factory/agents@0.48.0
-  - @cat-factory/orchestration@0.96.3
-  - @cat-factory/server@0.100.2
-
-## 0.10.61
-
-### Patch Changes
-
-- Updated dependencies [f97d5d3]
-  - @cat-factory/agents@0.47.0
-  - @cat-factory/prompt-fragments@0.13.0
-  - @cat-factory/orchestration@0.96.2
-  - @cat-factory/server@0.100.1
-
-## 0.10.60
-
-### Patch Changes
-
-- Updated dependencies [cb088c7]
-- Updated dependencies [b3bd653]
-  - @cat-factory/agents@0.46.0
-  - @cat-factory/server@0.100.0
-  - @cat-factory/orchestration@0.96.1
-
-## 0.10.59
-
-### Patch Changes
-
-- Updated dependencies [09a1c85]
-  - @cat-factory/agents@0.45.0
-  - @cat-factory/orchestration@0.96.0
-  - @cat-factory/server@0.99.8
-
-## 0.10.58
-
-### Patch Changes
-
-- Updated dependencies [785576b]
-  - @cat-factory/agents@0.44.1
-  - @cat-factory/orchestration@0.95.3
-  - @cat-factory/server@0.99.7
-
-## 0.10.57
-
-### Patch Changes
-
-- Updated dependencies [f1906cb]
-  - @cat-factory/agents@0.44.0
-  - @cat-factory/kernel@0.108.0
-  - @cat-factory/prompt-fragments@0.12.0
-  - @cat-factory/orchestration@0.95.2
-  - @cat-factory/server@0.99.6
-  - @cat-factory/gates@0.4.28
-  - @cat-factory/integrations@0.77.8
-
-## 0.10.56
-
-### Patch Changes
-
-- Updated dependencies [4a7fca0]
-  - @cat-factory/prompt-fragments@0.11.0
-  - @cat-factory/agents@0.43.1
-  - @cat-factory/orchestration@0.95.1
-  - @cat-factory/server@0.99.5
-
-## 0.10.55
-
-### Patch Changes
-
-- Updated dependencies [44fafa4]
-  - @cat-factory/orchestration@0.95.0
-  - @cat-factory/kernel@0.107.0
-  - @cat-factory/agents@0.43.0
-  - @cat-factory/server@0.99.4
-  - @cat-factory/gates@0.4.27
-  - @cat-factory/integrations@0.77.7
-
-## 0.10.54
-
-### Patch Changes
-
-- Updated dependencies [cd60892]
-  - @cat-factory/orchestration@0.94.0
-  - @cat-factory/server@0.99.3
-
-## 0.10.53
-
-### Patch Changes
-
-- Updated dependencies [89c861a]
-  - @cat-factory/agents@0.42.0
-  - @cat-factory/kernel@0.106.0
-  - @cat-factory/orchestration@0.93.1
-  - @cat-factory/server@0.99.2
-  - @cat-factory/gates@0.4.26
-  - @cat-factory/integrations@0.77.6
-
-## 0.10.52
-
-### Patch Changes
-
-- f7f9a9e: Technological-migration initiative — slice T2: phase-template ingest normalization.
-
-  The generic counterpart to T1's planner prompt fold: when an initiative preset declares a
-  `phaseTemplate`, the plan draft is now normalized against it at ingest, BEFORE the preset's own
-  `seedPlan` hook. This is plan-SHAPE enforcement only (which phases the plan presents, and in what
-  order) and stays deliberately separate from `seedPlan`'s per-item decoration.
-
-  - **orchestration**: new pure `normalizeDraftAgainstPhaseTemplate(template, draft)`
-    (`initiative.logic.ts`) — matches planned phases to template phases by `id` VERBATIM, reorders
-    them into template order (preserving the planner's `title`/`goal`), appends any extra phases
-    after the template ones when `allowAdditionalPhases` is set, and throws `ValidationError` on a
-    missing `required` phase or a disallowed extra (an id-less phase counts as an extra). Wired into
-    `InitiativeService.seedPlanDraft` ahead of the `seedPlan` hook and gated on the resolved preset's
-    `phaseTemplate`, so a preset with no template (including `preset_generic`) ingests byte-for-byte
-    as before. Pure + deterministic, so re-ingesting the same draft stays idempotent.
-  - **orchestration**: `validatePlanDraft` now also rejects a dependency that points FORWARD into a
-    later phase. Phases execute in declared order, so an earlier-phase item depending on a
-    later-phase one can never resolve and deadlocks the loop — a general invariant, but the T2 phase
-    reorder can turn a planner-consistent draft into a violating one, so it's caught loudly at the
-    ingest trust boundary instead of stalling silently at run time.
-  - **orchestration**: `seedPlanDraft` now RE-NORMALIZES the `seedPlan` hook's output against the
-    template (idempotent), symmetric with the existing re-parse-for-path-safety: a hook that touched
-    phases can no longer bypass the template's shape enforcement.
-  - **conformance**: `defineInitiativeSuite` now drives `InitiativeService.ingestPlan` over each
-    facade's real store — asserting an out-of-order plan is reordered into template order and
-    persisted, and a plan missing a required phase is rejected with nothing written — so the two
-    stores can't drift on a template-shaped plan.
-
-- Updated dependencies [f7f9a9e]
-  - @cat-factory/orchestration@0.93.0
-  - @cat-factory/server@0.99.1
-
-## 0.10.51
-
-### Patch Changes
-
-- Updated dependencies [2d97812]
-- Updated dependencies [b35e1a0]
-  - @cat-factory/agents@0.41.0
-  - @cat-factory/kernel@0.105.0
-  - @cat-factory/integrations@0.77.5
-  - @cat-factory/contracts@0.118.0
-  - @cat-factory/orchestration@0.92.0
-  - @cat-factory/server@0.99.0
-  - @cat-factory/gates@0.4.25
-  - @cat-factory/prompt-fragments@0.10.27
-
-## 0.10.50
-
-### Patch Changes
-
-- Updated dependencies [8f7af8e]
-- Updated dependencies [8f7af8e]
-  - @cat-factory/integrations@0.77.4
-  - @cat-factory/server@0.98.3
-  - @cat-factory/orchestration@0.91.1
-
-## 0.10.49
-
-### Patch Changes
-
-- 4a3e536: Initiative presets — slice 5: loop/ingest glue (spawn decoration + `seedPlan` at ingest).
-
-  - **contracts** (`initiativeItemSpawnSchema`): the spawn bag now carries an optional `taskType`, so
-    a preset's `seedPlan` can declare a spawned item's kind (`document`/`bug`/`spike`/…) exactly as
-    the create-task form does.
-  - **orchestration** (`InitiativeLoopService.buildTaskBlock`): a spawned item's preset-authored
-    `spawn` bag is now folded onto the task block, so a planned item comes out as a first-class
-    TYPED task rather than a bare description block — its `taskType` (so a doc task classifies as
-    `document`, not the default `feature` — `taskType`-keyed per-type task limits and the SPA's
-    document affordances now apply), the doc task's `taskTypeFields` (`docKind`/`targetPath`/…),
-    best-practice `fragmentIds`, and per-agent `agentConfig`. Each is additive + sparse (an empty bag
-    is omitted), mirroring `BoardService.addTask`, so a decoration-less item (the generic / no-preset
-    case) spawns a block byte-identical to before. A `document`-typed spawn with no explicit
-    `fragmentIds` inherits the default writing-style fragments, exactly as `BoardService.addTask`
-    seeds them for a board-created document task. The per-run gate override (`spawn.gates`, slice 2)
-    is unchanged.
-  - **orchestration** (`applyPlanDraft`): the draft item's `spawn` decoration is now carried onto the
-    persisted item (it follows the draft like the other content fields), so `buildTaskBlock` can read
-    it. A re-plan refreshing an already-materialised item is harmless — its block was decorated when
-    it spawned.
-  - **orchestration** (`InitiativeService.ingestPlan`): runs the resolved initiative preset's
-    `seedPlan` post-processor over the parsed draft BEFORE `applyPlanDraft`. The preset is resolved
-    from the entity's FROZEN `presetId`/`presetInputs`, so reading it outside the CAS `mutate` is
-    race-free and (being pure) replay-safe. The hook's output is RE-PARSED through the strict schema:
-    a `seedPlan` bug can't persist a malformed draft, and an unsafe spawn `targetPath` (from a hook OR
-    the planner) is rejected by `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape
-    the repo. Absent preset / no `seedPlan` ⇒ the draft is applied unchanged (byte-for-byte the
-    pre-slice-5 path).
-  - **conformance**: asserts a preset-authored item `spawn` bag (task type, typed-task fields,
-    fragments, agent config, gate override) round-trips through the initiative store intact on both
-    runtimes — a store that dropped it would silently spawn a bare block instead of a first-class doc
-    task.
-
-- Updated dependencies [4a3e536]
-  - @cat-factory/orchestration@0.91.0
-  - @cat-factory/contracts@0.117.0
-  - @cat-factory/server@0.98.2
-  - @cat-factory/agents@0.40.13
-  - @cat-factory/gates@0.4.24
-  - @cat-factory/integrations@0.77.3
-  - @cat-factory/kernel@0.104.4
-  - @cat-factory/prompt-fragments@0.10.26
-
-## 0.10.48
-
-### Patch Changes
-
-- Updated dependencies [18a9cb5]
-  - @cat-factory/contracts@0.116.1
-  - @cat-factory/agents@0.40.12
-  - @cat-factory/gates@0.4.23
-  - @cat-factory/integrations@0.77.2
-  - @cat-factory/kernel@0.104.3
-  - @cat-factory/orchestration@0.90.1
-  - @cat-factory/prompt-fragments@0.10.25
-  - @cat-factory/server@0.98.1
-
-## 0.10.47
-
-### Patch Changes
-
-- bc77f89: Initiative presets — slice 3: create/planning integration.
-
-  - **contracts**: `createInitiativeSchema` gains optional `presetId` + `presetInputs` (validated
-    against the resolved descriptor at create and frozen on the entity). New
-    `probeInitiativePresetContract` (`POST /workspaces/:ws/initiative-presets/:presetId/probe`,
-    body `{ frameId }` → the detected `InitiativePresetInputs`). The workspace snapshot gains
-    `initiativePresets: InitiativePresetDescriptor[]`. New pure helpers
-    `sanitizeInitiativePresetInputs` (reduce a form to its known, visible fields) and
-    `renderInitiativePresetValue` (option-label-aware value rendering), shared by the create flow.
-  - **orchestration** (`InitiativeService.create`): resolves + validates the preset (an unknown id
-    or an invalid form is a create-time `ValidationError`, so nothing is written), and — only when a
-    preset resolves — persists `presetId` + the SANITIZED `presetInputs` (known, currently-visible
-    fields only, so a hidden field's unvalidated value can never freeze, and a form posted with no
-    `presetId` is dropped). For a `skip`-interview preset it seeds the `qa` digest from the filled
-    form (one answered exchange per visible, filled field via the new pure `seedPresetInterviewQa`)
-    and templates the goal (the human's description wins, else the preset's stated purpose). Absent
-    `presetId` ⇒ today's behaviour byte-for-byte.
-  - **orchestration** (`AgentContextBuilder`): an initiative planning step's context now folds in the
-    preset `{ label, promptAddition }` resolved for the RUNNING kind — set ONLY when that kind has
-    steering — so the analyst/planner prompts carry the preset's per-kind steering. The generic
-    preset registers no steering, so the generic planning prompt is unchanged.
-  - **kernel**: `AgentRunContext.initiative` gains an optional `preset` sub-object carrying the
-    preset `label` + the per-kind `promptAddition` (the frozen form reaches the prompt via `qa`).
-  - **server**: the shared `WorkspaceController` attaches `initiativePresets`
-    (`initiativePresetDescriptors()`) to the snapshot on both the create + read handlers (so both
-    facades advertise it), and `InitiativeController` serves the probe endpoint — resolving the
-    frame's repo through the existing `resolveRunRepoContext` seam and running the preset's `detect`
-    hook, returning `{}` (descriptor defaults) whenever GitHub is unwired / the frame has no linked
-    repo / the preset has no probe hook, so it never blocks create. The initiative planning prompts
-    render the folded-in preset steering.
-  - **app**: the SPA hydrates `initiativePresets` from the snapshot and starts planning with the
-    initiative's preset descriptor's `planningPipelineId` (the generic/absent preset keeps
-    `pl_initiative`) instead of a hardcoded id. A NAMED preset that hasn't hydrated resolves to
-    `null` (not the generic pipeline), so "Run planning" stays disabled rather than silently
-    launching the interviewer over an already-seeded skip-interview initiative.
-
-  Conformance: a shared assertion that both facades advertise the built-in generic preset on the
-  snapshot (create + read), binding `pl_initiative` and the interviewer.
-
-- Updated dependencies [bc77f89]
-  - @cat-factory/contracts@0.116.0
-  - @cat-factory/orchestration@0.90.0
-  - @cat-factory/server@0.98.0
-  - @cat-factory/kernel@0.104.2
-  - @cat-factory/agents@0.40.11
-  - @cat-factory/gates@0.4.22
-  - @cat-factory/integrations@0.77.1
-  - @cat-factory/prompt-fragments@0.10.24
-
-## 0.10.46
-
-### Patch Changes
-
-- Updated dependencies [802fc05]
-  - @cat-factory/orchestration@0.89.0
-  - @cat-factory/integrations@0.77.0
-  - @cat-factory/contracts@0.115.0
-  - @cat-factory/server@0.97.2
-  - @cat-factory/agents@0.40.10
-  - @cat-factory/gates@0.4.21
-  - @cat-factory/kernel@0.104.1
-  - @cat-factory/prompt-fragments@0.10.23
-
-## 0.10.45
-
-### Patch Changes
-
-- a869ae9: Initiative presets — slice 2: the per-run gate-override engine seam.
-
-  - **orchestration** (`ExecutionService.start`): a new optional `gatesOverride` argument — one
-    boolean per pipeline step, indexed by the pipeline's ORIGINAL step index exactly like
-    `pipeline.gates` — that REPLACES the pipeline's declared approval gates for a single run. It is
-    copied onto the run's steps (`requiresApproval`, `gatesOverride?.[i] ?? pipeline.gates?.[i]`), so
-    a retry/restart — which re-drive the STORED steps — preserve it with no extra persistence. A
-    length that doesn't match the pipeline's step count is rejected up front (a `ValidationError`)
-    before any side effects. Absent ⇒ today's behaviour byte-for-byte.
-  - **orchestration** (`InitiativeLoopService`): a spawned item's preset-authored `spawn.gates` is
-    threaded straight into `ExecutionService.start` as that run's gate override, so a spawned task
-    gates (or doesn't) per the preset's human-review mapping instead of the pipeline default.
-
-  Conformance: a new `startExecution` harness probe (start a run through the real `ExecutionService`
-  with an optional gate override — a path no HTTP route exposes) plus shared assertions that an
-  override flips a step's approval gate on/off, round-trips `requiresApproval` through each store, and
-  rejects a mismatched-length override — run identically on the Cloudflare (D1) and Node/local
-  (Postgres) facades.
-
-- Updated dependencies [a869ae9]
-  - @cat-factory/orchestration@0.88.0
-  - @cat-factory/server@0.97.1
-
-## 0.10.44
-
-### Patch Changes
-
-- Updated dependencies [6198b08]
-- Updated dependencies [37d1517]
-  - @cat-factory/contracts@0.114.0
-  - @cat-factory/server@0.97.0
-  - @cat-factory/kernel@0.104.0
-  - @cat-factory/integrations@0.76.0
-  - @cat-factory/orchestration@0.87.0
-  - @cat-factory/agents@0.40.9
-  - @cat-factory/gates@0.4.20
-  - @cat-factory/prompt-fragments@0.10.22
-
-## 0.10.43
-
-### Patch Changes
-
-- Updated dependencies [14eac27]
-  - @cat-factory/contracts@0.113.0
-  - @cat-factory/kernel@0.103.0
-  - @cat-factory/server@0.96.0
-  - @cat-factory/orchestration@0.86.0
-  - @cat-factory/agents@0.40.8
-  - @cat-factory/gates@0.4.19
-  - @cat-factory/integrations@0.75.1
-  - @cat-factory/prompt-fragments@0.10.21
-
-## 0.10.42
-
-### Patch Changes
-
-- Updated dependencies [ecbcbec]
-  - @cat-factory/contracts@0.112.0
-  - @cat-factory/kernel@0.102.0
-  - @cat-factory/integrations@0.75.0
-  - @cat-factory/orchestration@0.85.0
-  - @cat-factory/server@0.95.0
-  - @cat-factory/agents@0.40.7
-  - @cat-factory/gates@0.4.18
-  - @cat-factory/prompt-fragments@0.10.20
-
-## 0.10.41
-
-### Patch Changes
-
-- Updated dependencies [fdba1ea]
-  - @cat-factory/contracts@0.111.0
-  - @cat-factory/integrations@0.74.0
-  - @cat-factory/orchestration@0.84.0
-  - @cat-factory/agents@0.40.6
-  - @cat-factory/gates@0.4.17
-  - @cat-factory/kernel@0.101.2
-  - @cat-factory/prompt-fragments@0.10.19
-  - @cat-factory/server@0.94.3
-
-## 0.10.40
-
-### Patch Changes
-
-- Updated dependencies [6a701ef]
-  - @cat-factory/integrations@0.73.6
-  - @cat-factory/orchestration@0.83.2
-  - @cat-factory/server@0.94.2
-
-## 0.10.39
-
-### Patch Changes
-
-- Updated dependencies [10787c4]
-  - @cat-factory/contracts@0.110.1
-  - @cat-factory/kernel@0.101.1
-  - @cat-factory/orchestration@0.83.1
-  - @cat-factory/integrations@0.73.5
-  - @cat-factory/agents@0.40.5
-  - @cat-factory/gates@0.4.16
-  - @cat-factory/prompt-fragments@0.10.18
-  - @cat-factory/server@0.94.1
-
-## 0.10.38
-
-### Patch Changes
-
-- Updated dependencies [c66362f]
-  - @cat-factory/server@0.94.0
-
-## 0.10.37
-
-### Patch Changes
-
-- Updated dependencies [f596090]
-  - @cat-factory/contracts@0.110.0
-  - @cat-factory/kernel@0.101.0
-  - @cat-factory/orchestration@0.83.0
-  - @cat-factory/server@0.93.0
-  - @cat-factory/agents@0.40.4
-  - @cat-factory/gates@0.4.15
-  - @cat-factory/integrations@0.73.4
-  - @cat-factory/prompt-fragments@0.10.17
-
-## 0.10.36
-
-### Patch Changes
-
-- Updated dependencies [9ea1e77]
-  - @cat-factory/contracts@0.109.0
-  - @cat-factory/kernel@0.100.0
-  - @cat-factory/orchestration@0.82.0
-  - @cat-factory/server@0.92.0
-  - @cat-factory/agents@0.40.3
-  - @cat-factory/gates@0.4.14
-  - @cat-factory/integrations@0.73.3
-  - @cat-factory/prompt-fragments@0.10.16
-
-## 0.10.35
-
-### Patch Changes
-
-- Updated dependencies [e66accb]
-  - @cat-factory/orchestration@0.81.0
-  - @cat-factory/server@0.91.0
-  - @cat-factory/contracts@0.108.1
-  - @cat-factory/agents@0.40.2
-  - @cat-factory/gates@0.4.13
-  - @cat-factory/integrations@0.73.2
-  - @cat-factory/kernel@0.99.1
-  - @cat-factory/prompt-fragments@0.10.15
-
-## 0.10.34
-
-### Patch Changes
-
-- Updated dependencies [9cc02a0]
-  - @cat-factory/integrations@0.73.1
-  - @cat-factory/orchestration@0.80.1
-  - @cat-factory/server@0.90.3
-
-## 0.10.33
-
-### Patch Changes
-
-- Updated dependencies [1afa003]
-- Updated dependencies [f91b99d]
-  - @cat-factory/kernel@0.99.0
-  - @cat-factory/orchestration@0.80.0
-  - @cat-factory/integrations@0.73.0
-  - @cat-factory/contracts@0.108.0
-  - @cat-factory/agents@0.40.1
-  - @cat-factory/gates@0.4.12
-  - @cat-factory/server@0.90.2
-  - @cat-factory/prompt-fragments@0.10.14
-
-## 0.10.32
-
-### Patch Changes
-
-- Updated dependencies [eef8612]
-- Updated dependencies [bf31df7]
-  - @cat-factory/integrations@0.72.1
-  - @cat-factory/contracts@0.107.0
-  - @cat-factory/agents@0.40.0
-  - @cat-factory/kernel@0.98.0
-  - @cat-factory/orchestration@0.79.1
-  - @cat-factory/server@0.90.1
-  - @cat-factory/gates@0.4.11
-  - @cat-factory/prompt-fragments@0.10.13
-
-## 0.10.31
-
-### Patch Changes
-
-- Updated dependencies [6f9d935]
-  - @cat-factory/contracts@0.106.0
-  - @cat-factory/kernel@0.97.0
-  - @cat-factory/integrations@0.72.0
-  - @cat-factory/orchestration@0.79.0
-  - @cat-factory/server@0.90.0
-  - @cat-factory/agents@0.39.4
-  - @cat-factory/gates@0.4.10
-  - @cat-factory/prompt-fragments@0.10.12
-
-## 0.10.30
-
-### Patch Changes
-
-- Updated dependencies [5490103]
-- Updated dependencies [e5b9462]
-- Updated dependencies [dd6df12]
-  - @cat-factory/contracts@0.105.0
-  - @cat-factory/kernel@0.96.0
-  - @cat-factory/server@0.89.0
-  - @cat-factory/orchestration@0.78.0
-  - @cat-factory/integrations@0.71.0
-  - @cat-factory/agents@0.39.3
-  - @cat-factory/gates@0.4.9
-  - @cat-factory/prompt-fragments@0.10.11
-
-## 0.10.29
-
-### Patch Changes
-
-- Updated dependencies [accb8ec]
-  - @cat-factory/contracts@0.104.0
-  - @cat-factory/kernel@0.95.0
-  - @cat-factory/server@0.88.0
-  - @cat-factory/orchestration@0.77.0
-  - @cat-factory/agents@0.39.2
-  - @cat-factory/gates@0.4.8
-  - @cat-factory/integrations@0.70.1
-  - @cat-factory/prompt-fragments@0.10.10
-
-## 0.10.28
-
-### Patch Changes
-
-- Updated dependencies [cd435d1]
-  - @cat-factory/contracts@0.103.0
-  - @cat-factory/kernel@0.94.0
-  - @cat-factory/integrations@0.70.0
-  - @cat-factory/orchestration@0.76.0
-  - @cat-factory/server@0.87.0
-  - @cat-factory/agents@0.39.1
-  - @cat-factory/gates@0.4.7
-  - @cat-factory/prompt-fragments@0.10.9
-
-## 0.10.27
-
-### Patch Changes
-
-- Updated dependencies [c435c09]
-  - @cat-factory/server@0.86.0
-
-## 0.10.26
-
-### Patch Changes
-
-- Updated dependencies [77bc73c]
-- Updated dependencies [076d02f]
-  - @cat-factory/agents@0.39.0
-  - @cat-factory/integrations@0.69.1
-  - @cat-factory/kernel@0.93.0
-  - @cat-factory/orchestration@0.75.0
-  - @cat-factory/server@0.85.0
-  - @cat-factory/contracts@0.102.0
-  - @cat-factory/gates@0.4.6
-  - @cat-factory/prompt-fragments@0.10.8
-
-## 0.10.25
-
-### Patch Changes
-
-- Updated dependencies [029a689]
-- Updated dependencies [029a689]
-  - @cat-factory/contracts@0.101.1
-  - @cat-factory/integrations@0.69.0
-  - @cat-factory/kernel@0.92.0
-  - @cat-factory/agents@0.38.2
-  - @cat-factory/gates@0.4.5
-  - @cat-factory/orchestration@0.74.3
-  - @cat-factory/prompt-fragments@0.10.7
-  - @cat-factory/server@0.84.3
-
-## 0.10.24
-
-### Patch Changes
-
-- Updated dependencies [f6399cf]
-  - @cat-factory/integrations@0.68.0
-  - @cat-factory/orchestration@0.74.2
-  - @cat-factory/server@0.84.2
-
-## 0.10.23
-
-### Patch Changes
-
-- Updated dependencies [2e4d883]
-  - @cat-factory/contracts@0.101.0
-  - @cat-factory/kernel@0.91.0
-  - @cat-factory/agents@0.38.1
-  - @cat-factory/gates@0.4.4
-  - @cat-factory/integrations@0.67.1
-  - @cat-factory/orchestration@0.74.1
-  - @cat-factory/prompt-fragments@0.10.6
-  - @cat-factory/server@0.84.1
-
-## 0.10.22
-
-### Patch Changes
-
-- Updated dependencies [773695b]
-  - @cat-factory/contracts@0.100.0
-  - @cat-factory/kernel@0.90.0
-  - @cat-factory/agents@0.38.0
-  - @cat-factory/integrations@0.67.0
-  - @cat-factory/orchestration@0.74.0
-  - @cat-factory/server@0.84.0
-  - @cat-factory/gates@0.4.3
-  - @cat-factory/prompt-fragments@0.10.5
-
-## 0.10.21
-
-### Patch Changes
-
-- Updated dependencies [3981bbb]
-  - @cat-factory/contracts@0.99.0
-  - @cat-factory/agents@0.37.2
-  - @cat-factory/gates@0.4.2
-  - @cat-factory/integrations@0.66.1
-  - @cat-factory/kernel@0.89.1
-  - @cat-factory/orchestration@0.73.1
-  - @cat-factory/prompt-fragments@0.10.4
-  - @cat-factory/server@0.83.2
-
-## 0.10.20
-
-### Patch Changes
-
-- Updated dependencies [cfcb6c7]
-- Updated dependencies [48f9d97]
-  - @cat-factory/kernel@0.89.0
-  - @cat-factory/contracts@0.98.0
-  - @cat-factory/orchestration@0.73.0
-  - @cat-factory/integrations@0.66.0
-  - @cat-factory/agents@0.37.1
-  - @cat-factory/gates@0.4.1
-  - @cat-factory/server@0.83.1
-  - @cat-factory/prompt-fragments@0.10.3
-
-## 0.10.19
-
-### Patch Changes
-
-- Updated dependencies [f4c321e]
-  - @cat-factory/kernel@0.88.0
-  - @cat-factory/agents@0.37.0
-  - @cat-factory/gates@0.4.0
-  - @cat-factory/server@0.83.0
-  - @cat-factory/integrations@0.65.3
-  - @cat-factory/orchestration@0.72.1
-
-## 0.10.18
-
-### Patch Changes
-
-- Updated dependencies [13a284f]
-  - @cat-factory/kernel@0.87.0
-  - @cat-factory/agents@0.36.0
-  - @cat-factory/orchestration@0.72.0
-  - @cat-factory/server@0.82.0
-  - @cat-factory/gates@0.3.2
-  - @cat-factory/integrations@0.65.2
-
-## 0.10.17
-
-### Patch Changes
-
-- Updated dependencies [102c049]
-  - @cat-factory/contracts@0.97.0
-  - @cat-factory/agents@0.35.0
-  - @cat-factory/gates@0.3.1
-  - @cat-factory/integrations@0.65.1
-  - @cat-factory/kernel@0.86.1
-  - @cat-factory/orchestration@0.71.1
-  - @cat-factory/prompt-fragments@0.10.2
-  - @cat-factory/server@0.81.1
-
-## 0.10.16
-
-### Patch Changes
-
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-- Updated dependencies [c20a69a]
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-  - @cat-factory/contracts@0.96.0
-  - @cat-factory/kernel@0.86.0
-  - @cat-factory/integrations@0.65.0
-  - @cat-factory/orchestration@0.71.0
-  - @cat-factory/server@0.81.0
-  - @cat-factory/agents@0.34.0
-  - @cat-factory/gates@0.3.0
-  - @cat-factory/prompt-fragments@0.10.1
-
-## 0.10.15
-
-### Patch Changes
-
-- Updated dependencies [1f6d9fc]
-  - @cat-factory/kernel@0.85.0
-  - @cat-factory/server@0.80.0
-  - @cat-factory/integrations@0.64.0
-  - @cat-factory/orchestration@0.70.1
-  - @cat-factory/agents@0.33.1
-  - @cat-factory/gates@0.2.88
-
-## 0.10.14
-
-### Patch Changes
-
-- Updated dependencies [8eaa3f2]
-  - @cat-factory/prompt-fragments@0.10.0
-  - @cat-factory/agents@0.33.0
-  - @cat-factory/orchestration@0.70.0
-  - @cat-factory/server@0.79.4
-
-## 0.10.13
-
-### Patch Changes
-
-- Updated dependencies [e5ddaa4]
-- Updated dependencies [6213771]
-  - @cat-factory/kernel@0.84.0
-  - @cat-factory/integrations@0.63.0
-  - @cat-factory/agents@0.32.0
-  - @cat-factory/orchestration@0.69.1
-  - @cat-factory/gates@0.2.87
-  - @cat-factory/server@0.79.3
-
-## 0.10.12
-
-### Patch Changes
-
-- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
-  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
-
-  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
-    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
-    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
-    invalidation bus, never a data tier; with no notification factory injected the
-    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
-    machinery so ioredis never enters the module graph outside the Node facade's
-    REDIS_URL-gated wiring.
-  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
-    (group = workspace id), and every fragment write path — create / update / remove /
-    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
-    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
-    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
-  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
-    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
-    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
-    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
-    write — the same gating and resilience pattern as the realtime propagator. Local
-    mode stays bare in-memory (single-node by construction).
-  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
-    cross-instance state) is pass-through, since an isolate has no cross-isolate
-    invalidation bus. Documented in the caching package README.
-  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
-    catalog on all three runtimes (Worker/Node/local).
-  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
-    in-memory `isEntryStillCurrentFn` support: a cache profile may set
-    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
-    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
-    the probe reports the source unmoved, and fall back to a full background reload
-    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
-    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
-
-- Updated dependencies [9bac054]
-  - @cat-factory/kernel@0.83.0
-  - @cat-factory/agents@0.31.0
-  - @cat-factory/orchestration@0.69.0
-  - @cat-factory/gates@0.2.86
-  - @cat-factory/integrations@0.62.1
-  - @cat-factory/server@0.79.2
-
-## 0.10.11
-
-### Patch Changes
-
-- Updated dependencies [6c1efd1]
-  - @cat-factory/contracts@0.95.0
-  - @cat-factory/kernel@0.82.0
-  - @cat-factory/integrations@0.62.0
-  - @cat-factory/agents@0.30.5
-  - @cat-factory/gates@0.2.85
-  - @cat-factory/orchestration@0.68.1
-  - @cat-factory/prompt-fragments@0.9.55
-  - @cat-factory/server@0.79.1
-
-## 0.10.10
-
-### Patch Changes
-
-- Updated dependencies [6edcce0]
-  - @cat-factory/contracts@0.94.0
-  - @cat-factory/kernel@0.81.0
-  - @cat-factory/integrations@0.61.0
-  - @cat-factory/server@0.79.0
-  - @cat-factory/orchestration@0.68.0
-  - @cat-factory/agents@0.30.4
-  - @cat-factory/gates@0.2.84
-  - @cat-factory/prompt-fragments@0.9.54
-
-## 0.10.9
-
-### Patch Changes
-
-- Updated dependencies [ef57cb1]
-  - @cat-factory/contracts@0.93.0
-  - @cat-factory/kernel@0.80.0
-  - @cat-factory/orchestration@0.67.0
-  - @cat-factory/server@0.78.0
-  - @cat-factory/agents@0.30.3
-  - @cat-factory/gates@0.2.83
-  - @cat-factory/integrations@0.60.2
-  - @cat-factory/prompt-fragments@0.9.53
-
-## 0.10.8
-
-### Patch Changes
-
-- Updated dependencies [1d738f7]
-  - @cat-factory/contracts@0.92.0
-  - @cat-factory/orchestration@0.66.0
-  - @cat-factory/server@0.77.0
-  - @cat-factory/agents@0.30.2
-  - @cat-factory/gates@0.2.82
-  - @cat-factory/integrations@0.60.1
-  - @cat-factory/kernel@0.79.1
-  - @cat-factory/prompt-fragments@0.9.52
-
-## 0.10.7
-
-### Patch Changes
-
-- Updated dependencies [47a2975]
-  - @cat-factory/contracts@0.91.0
-  - @cat-factory/kernel@0.79.0
-  - @cat-factory/integrations@0.60.0
-  - @cat-factory/orchestration@0.65.0
-  - @cat-factory/server@0.76.0
-  - @cat-factory/agents@0.30.1
-  - @cat-factory/gates@0.2.81
-  - @cat-factory/prompt-fragments@0.9.51
-
-## 0.10.6
-
-### Patch Changes
-
-- Updated dependencies [0477068]
-  - @cat-factory/server@0.75.2
-
-## 0.10.5
-
-### Patch Changes
-
-- Updated dependencies [4a59f45]
-  - @cat-factory/server@0.75.1
-
-## 0.10.4
-
-### Patch Changes
-
-- Updated dependencies [b928904]
-  - @cat-factory/orchestration@0.64.0
-  - @cat-factory/contracts@0.90.0
-  - @cat-factory/kernel@0.78.0
-  - @cat-factory/integrations@0.59.0
-  - @cat-factory/agents@0.30.0
-  - @cat-factory/server@0.75.0
-  - @cat-factory/gates@0.2.80
-  - @cat-factory/prompt-fragments@0.9.50
-
-## 0.10.3
-
-### Patch Changes
-
-- Updated dependencies [7fa7578]
-- Updated dependencies [f372f4e]
-  - @cat-factory/contracts@0.89.0
-  - @cat-factory/kernel@0.77.0
-  - @cat-factory/orchestration@0.63.0
-  - @cat-factory/server@0.74.0
-  - @cat-factory/agents@0.29.1
-  - @cat-factory/gates@0.2.79
-  - @cat-factory/integrations@0.58.1
-  - @cat-factory/prompt-fragments@0.9.49
-
-## 0.10.2
-
-### Patch Changes
-
-- Updated dependencies [6917962]
-  - @cat-factory/server@0.73.1
-
-## 0.10.1
-
-### Patch Changes
-
-- Updated dependencies [55661f4]
-  - @cat-factory/contracts@0.88.0
-  - @cat-factory/kernel@0.76.0
-  - @cat-factory/agents@0.29.0
-  - @cat-factory/integrations@0.58.0
-  - @cat-factory/server@0.73.0
-  - @cat-factory/orchestration@0.62.0
-  - @cat-factory/gates@0.2.78
-  - @cat-factory/prompt-fragments@0.9.48
-
-## 0.10.0
+## 0.64.0
 
 ### Minor Changes
 
-- ca5c3e8: Initiatives (slice 1 of 4): the long-running, multi-task counterpart to a task — see
-  `docs/initiatives/initiatives-feature.md` for the full multi-slice plan.
-
-  - **New `initiative` block level** — a container block under a service frame (created via the
-    new "Create initiative" button in the frame header, next to add-task/import-task). Tasks a
-    later slice's execution loop spawns link back via the new `blocks.initiative_id` membership
-    column (epic-style). D1 migration `0035_initiatives.sql` ⇄ Drizzle schema, shared mapper.
-  - **New `initiatives` entity + store** — the DB row is the source of truth (phases, items with
-    planner-authored estimates + dependencies, the execution policy with estimate→pipeline rules,
-    decisions / deviations / follow-ups / caveats), guarded by a `rev` compare-and-swap so the
-    loop has a single logical writer. Mirrored D1 ⇄ Drizzle repositories with a cross-runtime
-    conformance suite (CRUD, doc round-trip, CAS conflict, `blocks.initiative_id`).
-  - **Initiative Planning pipeline skeleton (`pl_initiative`)** — `initiative-planner` (a
-    read-only structured container explore that drafts the multi-phase plan, gated for human
-    approval) + `initiative-committer` (a deterministic engine step that flips the entity to
-    `executing` and commits the rendered tracker to `docs/initiatives/<slug>/` — canonical
-    `initiative.json` + human `tracker.md` + `version.json`, hash-short-circuited and
-    replay-safe, following the blueprint artifact pattern). A bidirectional guard in the
-    engine's shared `assertRunnable` makes `pl_initiative` the ONLY pipeline runnable on an
-    initiative block (and vice versa), across start/retry/restart.
-  - **API + snapshot + realtime** — `POST/GET /workspaces/:ws/initiatives` (+ by-block read),
-    the snapshot's optional `initiatives` field, and a new `initiative` WorkspaceEvent pushed
-    from both runtimes' publishers.
-  - **Frontend** — the Create Initiative modal + frame-header button, the initiative board card,
-    an inspector body (run planning / open tracker) and the read-only Initiative Tracker window
-    (`initiative-tracker` result view), with the `initiative.*` i18n namespace across all 8
-    locales.
-
-  Later slices add the interactive planning interview, the execution loop (just-in-time task
-  spawning with estimate-gated pipeline selection), and follow-up/deviation harvesting.
-
-### Patch Changes
-
-- Updated dependencies [ca5c3e8]
-  - @cat-factory/contracts@0.87.0
-  - @cat-factory/kernel@0.75.0
-  - @cat-factory/agents@0.28.0
-  - @cat-factory/orchestration@0.61.0
-  - @cat-factory/server@0.72.0
-  - @cat-factory/gates@0.2.77
-  - @cat-factory/integrations@0.57.2
-  - @cat-factory/prompt-fragments@0.9.47
-
-## 0.9.102
-
-### Patch Changes
-
-- Updated dependencies [cc924a9]
-  - @cat-factory/agents@0.27.1
-  - @cat-factory/orchestration@0.60.4
-  - @cat-factory/server@0.71.2
-
-## 0.9.101
-
-### Patch Changes
-
-- Updated dependencies [803fa76]
-  - @cat-factory/server@0.71.1
-
-## 0.9.100
-
-### Patch Changes
-
-- Updated dependencies [b216fdc]
-  - @cat-factory/kernel@0.74.0
-  - @cat-factory/contracts@0.86.0
-  - @cat-factory/agents@0.27.0
-  - @cat-factory/server@0.71.0
-  - @cat-factory/gates@0.2.76
-  - @cat-factory/integrations@0.57.1
-  - @cat-factory/orchestration@0.60.3
-  - @cat-factory/prompt-fragments@0.9.46
-
-## 0.9.99
-
-### Patch Changes
-
-- Updated dependencies [7fd6a19]
-  - @cat-factory/kernel@0.73.0
-  - @cat-factory/server@0.70.0
-  - @cat-factory/integrations@0.57.0
-  - @cat-factory/agents@0.26.18
-  - @cat-factory/gates@0.2.75
-  - @cat-factory/orchestration@0.60.2
-
-## 0.9.98
-
-### Patch Changes
-
-- Updated dependencies [0ac0dc4]
-  - @cat-factory/contracts@0.85.0
-  - @cat-factory/kernel@0.72.0
-  - @cat-factory/gates@0.2.74
-  - @cat-factory/orchestration@0.60.1
-  - @cat-factory/agents@0.26.17
-  - @cat-factory/integrations@0.56.5
-  - @cat-factory/prompt-fragments@0.9.45
-  - @cat-factory/server@0.69.1
-
-## 0.9.97
-
-### Patch Changes
-
-- Updated dependencies [36f4cf6]
-- Updated dependencies [b78adf5]
-  - @cat-factory/contracts@0.84.0
-  - @cat-factory/orchestration@0.60.0
-  - @cat-factory/kernel@0.71.0
-  - @cat-factory/server@0.69.0
-  - @cat-factory/agents@0.26.16
-  - @cat-factory/gates@0.2.73
-  - @cat-factory/integrations@0.56.4
-  - @cat-factory/prompt-fragments@0.9.44
-
-## 0.9.96
-
-### Patch Changes
-
-- Updated dependencies [e0aab3f]
-  - @cat-factory/contracts@0.83.0
-  - @cat-factory/kernel@0.70.2
-  - @cat-factory/orchestration@0.59.2
-  - @cat-factory/server@0.68.2
-  - @cat-factory/agents@0.26.15
-  - @cat-factory/gates@0.2.72
-  - @cat-factory/integrations@0.56.3
-  - @cat-factory/prompt-fragments@0.9.43
-
-## 0.9.95
-
-### Patch Changes
-
-- Updated dependencies [0d51638]
-- Updated dependencies [0d51638]
-- Updated dependencies [0d51638]
-  - @cat-factory/integrations@0.56.2
-  - @cat-factory/server@0.68.1
-  - @cat-factory/kernel@0.70.1
-  - @cat-factory/orchestration@0.59.1
-  - @cat-factory/agents@0.26.14
-  - @cat-factory/gates@0.2.71
-
-## 0.9.94
-
-### Patch Changes
-
-- Updated dependencies [eb67d40]
-  - @cat-factory/kernel@0.70.0
-  - @cat-factory/orchestration@0.59.0
-  - @cat-factory/server@0.68.0
-  - @cat-factory/agents@0.26.13
-  - @cat-factory/gates@0.2.70
-  - @cat-factory/integrations@0.56.1
-
-## 0.9.93
-
-### Patch Changes
-
-- Updated dependencies [5ce03c6]
-  - @cat-factory/contracts@0.82.0
-  - @cat-factory/integrations@0.56.0
-  - @cat-factory/server@0.67.0
-  - @cat-factory/agents@0.26.12
-  - @cat-factory/gates@0.2.69
-  - @cat-factory/kernel@0.69.8
-  - @cat-factory/orchestration@0.58.1
-  - @cat-factory/prompt-fragments@0.9.42
-
-## 0.9.92
-
-### Patch Changes
-
-- Updated dependencies [7f9d215]
-- Updated dependencies [05d1b08]
-  - @cat-factory/kernel@0.69.7
-  - @cat-factory/orchestration@0.58.0
-  - @cat-factory/server@0.66.7
-  - @cat-factory/integrations@0.55.0
-  - @cat-factory/agents@0.26.11
-  - @cat-factory/gates@0.2.68
-
-## 0.9.91
-
-### Patch Changes
-
-- Updated dependencies [4955639]
-  - @cat-factory/agents@0.26.10
-  - @cat-factory/orchestration@0.57.7
-  - @cat-factory/server@0.66.6
-
-## 0.9.90
-
-### Patch Changes
-
-- Updated dependencies [4a7a3f1]
-  - @cat-factory/contracts@0.81.3
-  - @cat-factory/server@0.66.5
-  - @cat-factory/orchestration@0.57.6
-  - @cat-factory/agents@0.26.9
-  - @cat-factory/gates@0.2.67
-  - @cat-factory/integrations@0.54.3
-  - @cat-factory/kernel@0.69.6
-  - @cat-factory/prompt-fragments@0.9.41
-
-## 0.9.89
-
-### Patch Changes
-
-- Updated dependencies [6347d0e]
-- Updated dependencies [6439181]
-  - @cat-factory/server@0.66.4
-
-## 0.9.88
-
-### Patch Changes
-
-- Updated dependencies [6243bea]
-  - @cat-factory/contracts@0.81.2
-  - @cat-factory/integrations@0.54.2
-  - @cat-factory/server@0.66.3
-  - @cat-factory/agents@0.26.8
-  - @cat-factory/gates@0.2.66
-  - @cat-factory/kernel@0.69.5
-  - @cat-factory/orchestration@0.57.5
-  - @cat-factory/prompt-fragments@0.9.40
-
-## 0.9.87
-
-### Patch Changes
-
-- Updated dependencies [fc8df61]
-  - @cat-factory/agents@0.26.7
-  - @cat-factory/server@0.66.2
-  - @cat-factory/orchestration@0.57.4
-
-## 0.9.86
-
-### Patch Changes
-
-- Updated dependencies [2a91615]
-  - @cat-factory/contracts@0.81.1
-  - @cat-factory/orchestration@0.57.3
-  - @cat-factory/integrations@0.54.1
-  - @cat-factory/server@0.66.1
-  - @cat-factory/agents@0.26.6
-  - @cat-factory/gates@0.2.65
-  - @cat-factory/kernel@0.69.4
-  - @cat-factory/prompt-fragments@0.9.39
-
-## 0.9.85
-
-### Patch Changes
-
-- Updated dependencies [67d3876]
-  - @cat-factory/contracts@0.81.0
-  - @cat-factory/integrations@0.54.0
-  - @cat-factory/server@0.66.0
-  - @cat-factory/agents@0.26.5
-  - @cat-factory/gates@0.2.64
-  - @cat-factory/kernel@0.69.3
-  - @cat-factory/orchestration@0.57.2
-  - @cat-factory/prompt-fragments@0.9.38
-
-## 0.9.84
-
-### Patch Changes
-
-- d7f6e1c: Correctness fixes across the engine, the Node facade, and the SPA stores:
-
-  - **Engine:** `finalizeMerge` and the merger resolver are now idempotent under
-    durable-driver replays — a re-resolved merger step on an already-`done` (= merged)
-    block is a no-op instead of re-merging, downgrading the block to `pr_ready`, and
-    raising a spurious `merge_review` notification. `approveStep` now runs under the same
-    optimistic-concurrency write as its siblings (`resolveDecision`/`requestStepChanges`),
-    so an approve holding a stale snapshot can no longer resurrect a run a racing reject
-    already failed (it now returns 409).
-  - **CI gate (behavior change):** a check run concluding `stale` (superseded by GitHub)
-    no longer fails the CI gate — previously it looped the `ci-fixer` against a check it
-    could never fix until the attempt budget failed the run. `cancelled`/`timed_out`/
-    `action_required` still fail the gate.
-  - **Node facade parity:** the retention sweep now prunes the `github_commits`
-    projection to `retention.commitMs` (previously it grew without bound; the Worker
-    already pruned it), and a new every-2-min GitHub reconcile sweeper re-syncs stale
-    repo projections and tombstones uninstalled installations — the backstop for missed
-    webhooks the Worker's `github-reconcile` cron already provided.
-  - **SPA stores:** the execution store now reconciles snapshots/events monotonically by
-    the run's `rev` (a lagging refresh can no longer revert a just-terminal run to
-    `running`), the requirements/clarity/brainstorm stores guard live-event upserts by
-    `updatedAt` (out-of-order events no longer revert just-submitted answers), and
-    `board.moveBlock`/`updateBlock` roll their optimistic mutation back on API failure.
-
-- Updated dependencies [d7f6e1c]
-- Updated dependencies [63cf6de]
-  - @cat-factory/kernel@0.69.2
-  - @cat-factory/orchestration@0.57.1
-  - @cat-factory/contracts@0.80.1
-  - @cat-factory/integrations@0.53.2
-  - @cat-factory/server@0.65.2
-  - @cat-factory/agents@0.26.4
-  - @cat-factory/gates@0.2.63
-  - @cat-factory/prompt-fragments@0.9.37
-
-## 0.9.83
-
-### Patch Changes
-
-- Updated dependencies [120de05]
-  - @cat-factory/contracts@0.80.0
-  - @cat-factory/orchestration@0.57.0
-  - @cat-factory/kernel@0.69.1
-  - @cat-factory/agents@0.26.3
-  - @cat-factory/gates@0.2.62
-  - @cat-factory/integrations@0.53.1
-  - @cat-factory/prompt-fragments@0.9.36
-  - @cat-factory/server@0.65.1
-
-## 0.9.82
-
-### Patch Changes
-
-- Updated dependencies [dcc8b32]
-  - @cat-factory/orchestration@0.56.0
-  - @cat-factory/integrations@0.53.0
-  - @cat-factory/contracts@0.79.0
-  - @cat-factory/kernel@0.69.0
-  - @cat-factory/server@0.65.0
-  - @cat-factory/agents@0.26.2
-  - @cat-factory/gates@0.2.61
-  - @cat-factory/prompt-fragments@0.9.35
-
-## 0.9.81
-
-### Patch Changes
-
-- Updated dependencies [16ee6cc]
-- Updated dependencies [16ee6cc]
-  - @cat-factory/orchestration@0.55.1
-  - @cat-factory/contracts@0.78.1
-  - @cat-factory/kernel@0.68.1
-  - @cat-factory/server@0.64.4
-  - @cat-factory/agents@0.26.1
-  - @cat-factory/gates@0.2.60
-  - @cat-factory/integrations@0.52.2
-  - @cat-factory/prompt-fragments@0.9.34
-
-## 0.9.80
-
-### Patch Changes
-
-- Updated dependencies [6da6637]
-  - @cat-factory/server@0.64.3
-
-## 0.9.79
-
-### Patch Changes
-
-- Updated dependencies [16621f8]
-  - @cat-factory/contracts@0.78.0
-  - @cat-factory/kernel@0.68.0
-  - @cat-factory/agents@0.26.0
-  - @cat-factory/orchestration@0.55.0
-  - @cat-factory/gates@0.2.59
-  - @cat-factory/integrations@0.52.1
-  - @cat-factory/prompt-fragments@0.9.33
-  - @cat-factory/server@0.64.2
-
-## 0.9.78
-
-### Patch Changes
-
-- Updated dependencies [08be94c]
-  - @cat-factory/orchestration@0.54.1
-  - @cat-factory/server@0.64.1
-
-## 0.9.77
-
-### Patch Changes
-
-- Updated dependencies [9e93fe8]
-- Updated dependencies [9b26ff1]
-- Updated dependencies [e0aa45e]
-- Updated dependencies [f70c273]
-- Updated dependencies [edf4e69]
-- Updated dependencies [f21279e]
-- Updated dependencies [ab7d589]
-- Updated dependencies [6c51e31]
-- Updated dependencies [456a992]
-- Updated dependencies [1d2684f]
-- Updated dependencies [33687cf]
-  - @cat-factory/contracts@0.77.0
-  - @cat-factory/server@0.64.0
-  - @cat-factory/kernel@0.67.0
-  - @cat-factory/integrations@0.52.0
-  - @cat-factory/orchestration@0.54.0
-  - @cat-factory/agents@0.25.0
-  - @cat-factory/gates@0.2.58
-  - @cat-factory/prompt-fragments@0.9.32
-
-## 0.9.76
-
-### Patch Changes
-
-- Updated dependencies [3135ae8]
-  - @cat-factory/server@0.63.3
-
-## 0.9.75
-
-### Patch Changes
-
-- Updated dependencies [39534d6]
-  - @cat-factory/server@0.63.2
-
-## 0.9.74
-
-### Patch Changes
-
-- Updated dependencies [eab2b60]
-  - @cat-factory/server@0.63.1
-
-## 0.9.73
-
-### Patch Changes
-
-- Updated dependencies [762fe66]
-  - @cat-factory/contracts@0.76.0
-  - @cat-factory/server@0.63.0
-  - @cat-factory/agents@0.24.16
-  - @cat-factory/gates@0.2.57
-  - @cat-factory/integrations@0.51.4
-  - @cat-factory/kernel@0.66.1
-  - @cat-factory/orchestration@0.53.2
-  - @cat-factory/prompt-fragments@0.9.31
-
-## 0.9.72
-
-### Patch Changes
-
-- Updated dependencies [fb53662]
-  - @cat-factory/kernel@0.66.0
-  - @cat-factory/contracts@0.75.0
-  - @cat-factory/orchestration@0.53.1
-  - @cat-factory/agents@0.24.15
-  - @cat-factory/gates@0.2.56
-  - @cat-factory/integrations@0.51.3
-  - @cat-factory/server@0.62.3
-  - @cat-factory/prompt-fragments@0.9.30
-
-## 0.9.71
-
-### Patch Changes
-
-- Updated dependencies [6f95aff]
-  - @cat-factory/contracts@0.74.0
-  - @cat-factory/kernel@0.65.0
-  - @cat-factory/orchestration@0.53.0
-  - @cat-factory/agents@0.24.14
-  - @cat-factory/gates@0.2.55
-  - @cat-factory/integrations@0.51.2
-  - @cat-factory/prompt-fragments@0.9.29
-  - @cat-factory/server@0.62.2
-
-## 0.9.70
-
-### Patch Changes
-
-- Updated dependencies [d4d4cbc]
-  - @cat-factory/server@0.62.1
-  - @cat-factory/integrations@0.51.1
-  - @cat-factory/orchestration@0.52.1
-
-## 0.9.69
-
-### Patch Changes
-
-- Updated dependencies [3643708]
-  - @cat-factory/contracts@0.73.0
-  - @cat-factory/kernel@0.64.0
-  - @cat-factory/integrations@0.51.0
-  - @cat-factory/server@0.62.0
-  - @cat-factory/orchestration@0.52.0
-  - @cat-factory/agents@0.24.13
-  - @cat-factory/gates@0.2.54
-  - @cat-factory/prompt-fragments@0.9.28
-
-## 0.9.68
-
-### Patch Changes
-
-- Updated dependencies [70e321b]
-  - @cat-factory/contracts@0.72.0
-  - @cat-factory/server@0.61.0
-  - @cat-factory/agents@0.24.12
-  - @cat-factory/gates@0.2.53
-  - @cat-factory/integrations@0.50.2
-  - @cat-factory/kernel@0.63.4
-  - @cat-factory/orchestration@0.51.7
-  - @cat-factory/prompt-fragments@0.9.27
-
-## 0.9.67
-
-### Patch Changes
-
-- Updated dependencies [37c488f]
-  - @cat-factory/server@0.60.3
-
-## 0.9.66
-
-### Patch Changes
-
-- Updated dependencies [b744822]
-- Updated dependencies [c40736e]
-  - @cat-factory/integrations@0.50.1
-  - @cat-factory/orchestration@0.51.6
-  - @cat-factory/server@0.60.2
-
-## 0.9.65
-
-### Patch Changes
-
-- Updated dependencies [77c6842]
-  - @cat-factory/contracts@0.71.0
-  - @cat-factory/integrations@0.50.0
-  - @cat-factory/agents@0.24.11
-  - @cat-factory/gates@0.2.52
-  - @cat-factory/kernel@0.63.3
-  - @cat-factory/orchestration@0.51.5
-  - @cat-factory/prompt-fragments@0.9.26
-  - @cat-factory/server@0.60.1
-
-## 0.9.64
-
-### Patch Changes
-
-- Updated dependencies [79a0f48]
-- Updated dependencies [91f876b]
-  - @cat-factory/integrations@0.49.0
-  - @cat-factory/server@0.60.0
-  - @cat-factory/orchestration@0.51.4
-
-## 0.9.63
-
-### Patch Changes
-
-- Updated dependencies [2e1354f]
-  - @cat-factory/contracts@0.70.1
-  - @cat-factory/kernel@0.63.2
-  - @cat-factory/integrations@0.48.2
-  - @cat-factory/server@0.59.2
-  - @cat-factory/agents@0.24.10
-  - @cat-factory/gates@0.2.51
-  - @cat-factory/orchestration@0.51.3
-  - @cat-factory/prompt-fragments@0.9.25
-
-## 0.9.62
-
-### Patch Changes
-
-- Updated dependencies [66a8c71]
-  - @cat-factory/integrations@0.48.1
-  - @cat-factory/orchestration@0.51.2
-  - @cat-factory/server@0.59.1
-
-## 0.9.61
-
-### Patch Changes
-
-- Updated dependencies [b4c7e60]
-  - @cat-factory/contracts@0.70.0
-  - @cat-factory/integrations@0.48.0
-  - @cat-factory/server@0.59.0
-  - @cat-factory/agents@0.24.9
-  - @cat-factory/gates@0.2.50
-  - @cat-factory/kernel@0.63.1
-  - @cat-factory/orchestration@0.51.1
-  - @cat-factory/prompt-fragments@0.9.24
-
-## 0.9.60
-
-### Patch Changes
-
-- Updated dependencies [f568a8c]
-  - @cat-factory/kernel@0.63.0
-  - @cat-factory/contracts@0.69.0
-  - @cat-factory/orchestration@0.51.0
-  - @cat-factory/server@0.58.0
-  - @cat-factory/agents@0.24.8
-  - @cat-factory/gates@0.2.49
-  - @cat-factory/integrations@0.47.1
-  - @cat-factory/prompt-fragments@0.9.23
-
-## 0.9.59
-
-### Patch Changes
-
-- Updated dependencies [41203db]
-  - @cat-factory/contracts@0.68.0
-  - @cat-factory/integrations@0.47.0
-  - @cat-factory/server@0.57.0
-  - @cat-factory/agents@0.24.7
-  - @cat-factory/gates@0.2.48
-  - @cat-factory/kernel@0.62.4
-  - @cat-factory/orchestration@0.50.1
-  - @cat-factory/prompt-fragments@0.9.22
-
-## 0.9.58
-
-### Patch Changes
-
-- Updated dependencies [3ec9c90]
-  - @cat-factory/server@0.56.1
-
-## 0.9.57
-
-### Patch Changes
-
-- Updated dependencies [cb9e2e3]
-  - @cat-factory/contracts@0.67.0
-  - @cat-factory/integrations@0.46.0
-  - @cat-factory/orchestration@0.50.0
-  - @cat-factory/server@0.56.0
-  - @cat-factory/agents@0.24.6
-  - @cat-factory/gates@0.2.47
-  - @cat-factory/kernel@0.62.3
-  - @cat-factory/prompt-fragments@0.9.21
-
-## 0.9.56
-
-### Patch Changes
-
-- Updated dependencies [1e55e77]
-  - @cat-factory/contracts@0.66.1
-  - @cat-factory/integrations@0.45.0
-  - @cat-factory/orchestration@0.49.0
-  - @cat-factory/agents@0.24.5
-  - @cat-factory/gates@0.2.46
-  - @cat-factory/kernel@0.62.2
-  - @cat-factory/prompt-fragments@0.9.20
-  - @cat-factory/server@0.55.2
-
-## 0.9.55
-
-### Patch Changes
-
-- Updated dependencies [ecf4cc1]
-  - @cat-factory/contracts@0.66.0
-  - @cat-factory/orchestration@0.48.2
-  - @cat-factory/agents@0.24.4
-  - @cat-factory/gates@0.2.45
-  - @cat-factory/integrations@0.44.1
-  - @cat-factory/kernel@0.62.1
-  - @cat-factory/prompt-fragments@0.9.19
-  - @cat-factory/server@0.55.1
-
-## 0.9.54
-
-### Patch Changes
-
-- Updated dependencies [f9678df]
-- Updated dependencies [f9678df]
-- Updated dependencies [f9678df]
-- Updated dependencies [f9678df]
-- Updated dependencies [f9678df]
-- Updated dependencies [858799e]
-  - @cat-factory/server@0.55.0
-  - @cat-factory/contracts@0.65.0
-  - @cat-factory/orchestration@0.48.1
-  - @cat-factory/kernel@0.62.0
-  - @cat-factory/integrations@0.44.0
-  - @cat-factory/agents@0.24.3
-  - @cat-factory/gates@0.2.44
-  - @cat-factory/prompt-fragments@0.9.18
-
-## 0.9.53
-
-### Patch Changes
-
-- Updated dependencies [9bb75b0]
-  - @cat-factory/contracts@0.64.0
-  - @cat-factory/integrations@0.43.0
-  - @cat-factory/orchestration@0.48.0
-  - @cat-factory/server@0.54.0
-  - @cat-factory/agents@0.24.2
-  - @cat-factory/gates@0.2.43
-  - @cat-factory/kernel@0.61.1
-  - @cat-factory/prompt-fragments@0.9.17
-
-## 0.9.52
-
-### Patch Changes
-
-- Updated dependencies [15c5894]
-  - @cat-factory/server@0.53.0
-  - @cat-factory/contracts@0.63.0
-  - @cat-factory/kernel@0.61.0
-  - @cat-factory/agents@0.24.1
-  - @cat-factory/gates@0.2.42
-  - @cat-factory/integrations@0.42.1
-  - @cat-factory/orchestration@0.47.1
-  - @cat-factory/prompt-fragments@0.9.16
-
-## 0.9.51
-
-### Patch Changes
-
-- Updated dependencies [f383515]
-  - @cat-factory/kernel@0.60.0
-  - @cat-factory/contracts@0.62.0
-  - @cat-factory/agents@0.24.0
-  - @cat-factory/orchestration@0.47.0
-  - @cat-factory/integrations@0.42.0
-  - @cat-factory/server@0.52.0
-  - @cat-factory/gates@0.2.41
-  - @cat-factory/prompt-fragments@0.9.15
-
-## 0.9.50
-
-### Patch Changes
-
-- Updated dependencies [e4cddb4]
-  - @cat-factory/kernel@0.59.0
-  - @cat-factory/contracts@0.61.0
-  - @cat-factory/agents@0.23.4
-  - @cat-factory/gates@0.2.40
-  - @cat-factory/integrations@0.41.1
-  - @cat-factory/orchestration@0.46.1
-  - @cat-factory/server@0.51.3
-  - @cat-factory/prompt-fragments@0.9.14
-
-## 0.9.49
-
-### Patch Changes
-
-- Updated dependencies [337d94d]
-  - @cat-factory/kernel@0.58.0
-  - @cat-factory/integrations@0.41.0
-  - @cat-factory/orchestration@0.46.0
-  - @cat-factory/agents@0.23.3
-  - @cat-factory/gates@0.2.39
-  - @cat-factory/server@0.51.2
-  - @cat-factory/prompt-fragments@0.9.13
-
-## 0.9.48
-
-### Patch Changes
-
-- Updated dependencies [6009266]
-  - @cat-factory/agents@0.23.2
-  - @cat-factory/integrations@0.40.1
-  - @cat-factory/kernel@0.57.1
-  - @cat-factory/orchestration@0.45.3
-  - @cat-factory/server@0.51.1
-  - @cat-factory/gates@0.2.38
-
-## 0.9.47
-
-### Patch Changes
-
-- Updated dependencies [bd23c46]
-- Updated dependencies [1952d6b]
-- Updated dependencies [1952d6b]
-  - @cat-factory/server@0.51.0
-  - @cat-factory/kernel@0.57.0
-  - @cat-factory/integrations@0.40.0
-  - @cat-factory/agents@0.23.1
-  - @cat-factory/gates@0.2.37
-  - @cat-factory/orchestration@0.45.2
-  - @cat-factory/prompt-fragments@0.9.12
-
-## 0.9.46
-
-### Patch Changes
-
-- Updated dependencies [2ac148d]
-  - @cat-factory/integrations@0.39.0
-  - @cat-factory/orchestration@0.45.1
-  - @cat-factory/server@0.50.3
-
-## 0.9.45
-
-### Patch Changes
-
-- Updated dependencies [5fd0ffa]
-  - @cat-factory/orchestration@0.45.0
-  - @cat-factory/agents@0.23.0
-  - @cat-factory/server@0.50.2
-  - @cat-factory/gates@0.2.36
-  - @cat-factory/integrations@0.38.1
-  - @cat-factory/kernel@0.56.1
-  - @cat-factory/prompt-fragments@0.9.11
-
-## 0.9.44
-
-### Patch Changes
-
-- Updated dependencies [1ff013f]
-  - @cat-factory/server@0.50.1
-  - @cat-factory/orchestration@0.44.1
-  - @cat-factory/gates@0.2.35
-
-## 0.9.43
-
-### Patch Changes
-
-- Updated dependencies [f9a173f]
-  - @cat-factory/kernel@0.56.0
-  - @cat-factory/server@0.50.0
-  - @cat-factory/orchestration@0.44.0
-  - @cat-factory/integrations@0.38.0
-  - @cat-factory/agents@0.22.6
-  - @cat-factory/gates@0.2.34
-  - @cat-factory/prompt-fragments@0.9.10
-
-## 0.9.42
-
-### Patch Changes
-
-- Updated dependencies [fdeb466]
-  - @cat-factory/kernel@0.55.4
-  - @cat-factory/orchestration@0.43.4
-  - @cat-factory/integrations@0.37.1
-  - @cat-factory/agents@0.22.5
-  - @cat-factory/gates@0.2.33
-  - @cat-factory/server@0.49.6
-
-## 0.9.41
-
-### Patch Changes
-
-- Updated dependencies [0dd9532]
-  - @cat-factory/server@0.49.5
-
-## 0.9.40
-
-### Patch Changes
-
-- Updated dependencies [21b2096]
-  - @cat-factory/integrations@0.37.0
-  - @cat-factory/orchestration@0.43.3
-  - @cat-factory/server@0.49.4
-  - @cat-factory/agents@0.22.4
-  - @cat-factory/gates@0.2.32
-  - @cat-factory/kernel@0.55.3
-  - @cat-factory/prompt-fragments@0.9.9
-
-## 0.9.39
-
-### Patch Changes
-
-- Updated dependencies [123336c]
-  - @cat-factory/server@0.49.3
-
-## 0.9.38
-
-### Patch Changes
-
-- Updated dependencies [4ec514a]
-  - @cat-factory/server@0.49.2
-
-## 0.9.37
-
-### Patch Changes
-
-- Updated dependencies [ad5d3e0]
-  - @cat-factory/server@0.49.1
-  - @cat-factory/agents@0.22.3
-  - @cat-factory/gates@0.2.31
-  - @cat-factory/integrations@0.36.1
-  - @cat-factory/kernel@0.55.2
-  - @cat-factory/orchestration@0.43.2
-  - @cat-factory/prompt-fragments@0.9.8
-
-## 0.9.36
-
-### Patch Changes
-
-- Updated dependencies [4897078]
-  - @cat-factory/integrations@0.36.0
-  - @cat-factory/server@0.49.0
-  - @cat-factory/agents@0.22.2
-  - @cat-factory/gates@0.2.30
-  - @cat-factory/kernel@0.55.1
-  - @cat-factory/orchestration@0.43.1
-  - @cat-factory/prompt-fragments@0.9.7
-
-## 0.9.35
-
-### Patch Changes
-
-- d5a0637: Close the GitLab-vs-GitHub provider parity gaps so a GitLab deployment behaves like a GitHub
-  one across every runtime facade.
-
-  - **Facade parity (the showstopper):** the engine's CI / mergeability / PR-review gate
-    providers, the PR merger, the branch updater and the checkout-free `RepoFiles` resolvers are
-    now wired from a GitLab-backed client on the **Node and Cloudflare** facades too — previously
-    only local mode bridged GitLab into the gates, so a stock GitLab-only Node/CF deployment did
-    not gate on real CI or merge for real. Both facades now build the engine VCS client via the
-    shared `buildGitLabEngineClient` (GitHub App wins when both are configured).
-  - **Review provider:** `FetchGitLabClient` now implements the human-review reads
-    (`getPullRequestBaseRef`, `listRequestedReviewers`, `listPullRequestReviews` +
-    `getRequiredApprovingReviewCount` from GitLab approvals, `listReviewThreads` /
-    `replyToReviewThread` / `resolveReviewThread` over resolvable MR discussions, plus
-    `listIssueComments`).
-  - **Branch update:** new optional `VcsClient.rebasePullRequest` / `GitHubClient.rebasePullRequest`
-    — GitLab has no server-side merge-branch-into-branch endpoint, so the conflicts / human-testing
-    gate's "pull latest base" action advances a GitLab MR branch by rebasing it; `GitHubBranchUpdater`
-    prefers rebase when the client exposes it and falls back to `mergeBranch` (GitHub) otherwise.
-  - **Conformance:** the cross-provider VCS client suite now asserts GitHub and GitLab normalise the
-    human-review gate inputs identically and exposes the correct branch-advancing capability per
-    provider; a reusable `FakeVcsClient` drives the real gate / merge / branch-update providers
-    through the GitLab-backed adapter.
-  - **Rebase verdict robustness:** the GitLab MR-rebase poll now sleeps before each status read (so
-    a not-yet-started async rebase is never mistaken for a finished one) and decides the outcome by
-    whether the source-branch head actually advanced, ignoring the persisted `merge_error` field
-    (shared with merge attempts) unless the branch did not move. Covered by poll-transition,
-    stale-`merge_error`, conflict and up-to-date tests.
-  - **Accurate required-approval count:** `getRequiredApprovingReviewCount` now reads the effective
-    per-MR `approvals_required` (it accounts for the rule on the MR's target branch) when the PR
-    number is known, falling back to the project default; the port carries the PR number alongside
-    the branch (GitHub still reads branch protection and ignores it).
-  - **Node facade wiring:** the GitLab-backed engine client feeds only the gate / merge / RepoFiles
-    seams; GitHub-issue-specific consumers (the GitHub Issues task source, issue writeback) stay
-    gated on a real GitHub client, so a GitLab-only Node deployment no longer offers a
-    non-functional "GitHub Issues" task source (parity with the Worker).
-
-- Updated dependencies [d5a0637]
-- Updated dependencies [915861c]
-  - @cat-factory/kernel@0.55.0
-  - @cat-factory/server@0.48.4
-  - @cat-factory/orchestration@0.43.0
-  - @cat-factory/agents@0.22.1
-  - @cat-factory/gates@0.2.29
-  - @cat-factory/integrations@0.35.4
-  - @cat-factory/prompt-fragments@0.9.6
-
-## 0.9.34
-
-### Patch Changes
-
-- Updated dependencies [b76f303]
-  - @cat-factory/orchestration@0.42.1
-  - @cat-factory/server@0.48.3
-
-## 0.9.33
-
-### Patch Changes
-
-- Updated dependencies [48a3df6]
-- Updated dependencies [48a3df6]
-  - @cat-factory/kernel@0.54.0
-  - @cat-factory/orchestration@0.42.0
-  - @cat-factory/server@0.48.2
-  - @cat-factory/agents@0.22.0
-  - @cat-factory/gates@0.2.28
-  - @cat-factory/integrations@0.35.3
-  - @cat-factory/prompt-fragments@0.9.5
-
-## 0.9.32
-
-### Patch Changes
-
-- Updated dependencies [614e985]
-  - @cat-factory/integrations@0.35.2
-  - @cat-factory/orchestration@0.41.4
-  - @cat-factory/server@0.48.1
-
-## 0.9.31
-
-### Patch Changes
-
-- Updated dependencies [0577404]
-  - @cat-factory/server@0.48.0
-  - @cat-factory/agents@0.21.17
-  - @cat-factory/gates@0.2.27
-  - @cat-factory/integrations@0.35.1
-  - @cat-factory/kernel@0.53.1
-  - @cat-factory/orchestration@0.41.3
-  - @cat-factory/prompt-fragments@0.9.4
-
-## 0.9.30
-
-### Patch Changes
-
-- Updated dependencies [69558f9]
-  - @cat-factory/kernel@0.53.0
-  - @cat-factory/integrations@0.35.0
-  - @cat-factory/server@0.47.0
-  - @cat-factory/orchestration@0.41.2
-  - @cat-factory/agents@0.21.16
-  - @cat-factory/gates@0.2.26
-  - @cat-factory/prompt-fragments@0.9.3
-
-## 0.9.29
-
-### Patch Changes
-
-- Updated dependencies [29d8b5d]
-  - @cat-factory/kernel@0.52.0
-  - @cat-factory/server@0.46.3
-  - @cat-factory/orchestration@0.41.1
-  - @cat-factory/integrations@0.34.1
-  - @cat-factory/agents@0.21.15
-  - @cat-factory/gates@0.2.25
-  - @cat-factory/prompt-fragments@0.9.2
-
-## 0.9.28
-
-### Patch Changes
-
-- Updated dependencies [40f687d]
-  - @cat-factory/kernel@0.51.0
-  - @cat-factory/integrations@0.34.0
-  - @cat-factory/orchestration@0.41.0
-  - @cat-factory/agents@0.21.14
-  - @cat-factory/gates@0.2.24
-  - @cat-factory/prompt-fragments@0.9.1
-  - @cat-factory/server@0.46.2
-
-## 0.9.27
-
-### Patch Changes
-
-- Updated dependencies [e0f1149]
-  - @cat-factory/kernel@0.50.0
-  - @cat-factory/integrations@0.33.0
-  - @cat-factory/prompt-fragments@0.9.0
-  - @cat-factory/server@0.46.1
-  - @cat-factory/orchestration@0.40.2
-  - @cat-factory/agents@0.21.13
-  - @cat-factory/gates@0.2.23
-
-## 0.9.26
-
-### Patch Changes
-
-- Updated dependencies [fc324d2]
-  - @cat-factory/kernel@0.49.0
-  - @cat-factory/integrations@0.32.0
-  - @cat-factory/server@0.46.0
-  - @cat-factory/orchestration@0.40.1
-  - @cat-factory/agents@0.21.12
-  - @cat-factory/gates@0.2.22
-  - @cat-factory/prompt-fragments@0.8.9
-
-## 0.9.25
-
-### Patch Changes
-
-- Updated dependencies [e3b3540]
-  - @cat-factory/kernel@0.48.0
-  - @cat-factory/server@0.45.0
-  - @cat-factory/integrations@0.31.0
-  - @cat-factory/orchestration@0.40.0
-  - @cat-factory/agents@0.21.11
-  - @cat-factory/gates@0.2.21
-  - @cat-factory/prompt-fragments@0.8.8
-
-## 0.9.24
-
-### Patch Changes
-
-- Updated dependencies [704c99e]
-  - @cat-factory/integrations@0.30.0
-  - @cat-factory/server@0.44.0
-  - @cat-factory/orchestration@0.39.2
-  - @cat-factory/agents@0.21.10
-  - @cat-factory/gates@0.2.20
-  - @cat-factory/kernel@0.47.2
-  - @cat-factory/prompt-fragments@0.8.7
-
-## 0.9.23
-
-### Patch Changes
-
-- Updated dependencies [2961b05]
-  - @cat-factory/server@0.43.0
-
-## 0.9.22
-
-### Patch Changes
-
-- Updated dependencies [5ad45de]
-  - @cat-factory/orchestration@0.39.1
-  - @cat-factory/server@0.42.1
-
-## 0.9.21
-
-### Patch Changes
-
-- Updated dependencies [3d0b85c]
-  - @cat-factory/server@0.42.0
-  - @cat-factory/integrations@0.29.0
-  - @cat-factory/orchestration@0.39.0
-
-## 0.9.20
-
-### Patch Changes
-
-- Updated dependencies [c2ec53b]
-  - @cat-factory/server@0.41.1
-  - @cat-factory/agents@0.21.9
-  - @cat-factory/gates@0.2.19
-  - @cat-factory/integrations@0.28.1
-  - @cat-factory/kernel@0.47.1
-  - @cat-factory/orchestration@0.38.1
-  - @cat-factory/prompt-fragments@0.8.6
-
-## 0.9.19
-
-### Patch Changes
-
-- Updated dependencies [4b5d267]
-  - @cat-factory/kernel@0.47.0
-  - @cat-factory/integrations@0.28.0
-  - @cat-factory/server@0.41.0
-  - @cat-factory/orchestration@0.38.0
-  - @cat-factory/agents@0.21.8
-  - @cat-factory/gates@0.2.18
-  - @cat-factory/prompt-fragments@0.8.5
-
-## 0.9.18
-
-### Patch Changes
-
-- Updated dependencies [0784fe0]
-- Updated dependencies [0784fe0]
-  - @cat-factory/orchestration@0.37.3
-  - @cat-factory/server@0.40.3
-
-## 0.9.17
-
-### Patch Changes
-
-- Updated dependencies [5e54936]
-- Updated dependencies [5e54936]
-  - @cat-factory/orchestration@0.37.2
-  - @cat-factory/server@0.40.2
-
-## 0.9.16
-
-### Patch Changes
-
-- Updated dependencies [cc101a7]
-  - @cat-factory/orchestration@0.37.1
-  - @cat-factory/server@0.40.1
-
-## 0.9.15
-
-### Patch Changes
-
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [8727f2b]
-- Updated dependencies [56e6ce6]
-  - @cat-factory/orchestration@0.37.0
-  - @cat-factory/kernel@0.46.0
-  - @cat-factory/integrations@0.27.0
-  - @cat-factory/server@0.40.0
-  - @cat-factory/agents@0.21.7
-  - @cat-factory/gates@0.2.17
-  - @cat-factory/prompt-fragments@0.8.4
-
-## 0.9.14
-
-### Patch Changes
-
-- Updated dependencies [8fad695]
-  - @cat-factory/integrations@0.26.5
-  - @cat-factory/orchestration@0.36.5
-  - @cat-factory/kernel@0.45.5
-  - @cat-factory/agents@0.21.6
-  - @cat-factory/gates@0.2.16
-  - @cat-factory/prompt-fragments@0.8.3
-
-## 0.9.13
-
-### Patch Changes
-
-- @cat-factory/agents@0.21.5
-- @cat-factory/gates@0.2.15
-- @cat-factory/integrations@0.26.4
-- @cat-factory/kernel@0.45.4
-- @cat-factory/orchestration@0.36.4
-- @cat-factory/prompt-fragments@0.8.2
-
-## 0.9.12
-
-### Patch Changes
-
-- Updated dependencies [ab146e5]
-  - @cat-factory/kernel@0.45.3
-  - @cat-factory/orchestration@0.36.3
-  - @cat-factory/agents@0.21.4
-  - @cat-factory/gates@0.2.14
-  - @cat-factory/integrations@0.26.3
-
-## 0.9.11
-
-### Patch Changes
-
-- Updated dependencies [c11a0cc]
-  - @cat-factory/agents@0.21.3
-  - @cat-factory/gates@0.2.13
-  - @cat-factory/integrations@0.26.2
-  - @cat-factory/kernel@0.45.2
-  - @cat-factory/orchestration@0.36.2
-  - @cat-factory/prompt-fragments@0.8.1
-
-## 0.9.10
-
-### Patch Changes
-
-- Updated dependencies [5363166]
-- Updated dependencies [5363166]
-  - @cat-factory/orchestration@0.36.1
-  - @cat-factory/kernel@0.45.1
-  - @cat-factory/agents@0.21.2
-  - @cat-factory/gates@0.2.12
-  - @cat-factory/integrations@0.26.1
-
-## 0.9.9
-
-### Patch Changes
-
-- Updated dependencies [eab73b8]
-- Updated dependencies [eab73b8]
-  - @cat-factory/kernel@0.45.0
-  - @cat-factory/integrations@0.26.0
-  - @cat-factory/orchestration@0.36.0
-  - @cat-factory/prompt-fragments@0.8.0
-  - @cat-factory/agents@0.21.1
-  - @cat-factory/gates@0.2.11
-
-## 0.9.8
-
-### Patch Changes
-
-- Updated dependencies [67c7196]
-  - @cat-factory/orchestration@0.35.1
-
-## 0.9.7
-
-### Patch Changes
-
-- Updated dependencies [e641417]
-  - @cat-factory/kernel@0.44.0
-  - @cat-factory/agents@0.21.0
-  - @cat-factory/orchestration@0.35.0
-  - @cat-factory/gates@0.2.10
-  - @cat-factory/integrations@0.25.2
-  - @cat-factory/prompt-fragments@0.7.41
-
-## 0.9.6
-
-### Patch Changes
-
-- Updated dependencies [bbafec9]
-- Updated dependencies [bbafec9]
-  - @cat-factory/kernel@0.43.0
-  - @cat-factory/agents@0.20.3
-  - @cat-factory/gates@0.2.9
-  - @cat-factory/integrations@0.25.1
-  - @cat-factory/orchestration@0.34.1
-
-## 0.9.5
-
-### Patch Changes
-
-- Updated dependencies [63e2177]
-  - @cat-factory/integrations@0.25.0
-  - @cat-factory/orchestration@0.34.0
-  - @cat-factory/agents@0.20.2
-  - @cat-factory/gates@0.2.8
-  - @cat-factory/kernel@0.42.2
-  - @cat-factory/prompt-fragments@0.7.40
-
-## 0.9.4
-
-### Patch Changes
-
-- Updated dependencies [6903cd7]
-  - @cat-factory/orchestration@0.33.0
-
-## 0.9.3
-
-### Patch Changes
-
-- Updated dependencies [d1027ec]
-  - @cat-factory/kernel@0.42.1
-  - @cat-factory/agents@0.20.1
-  - @cat-factory/gates@0.2.7
-  - @cat-factory/integrations@0.24.1
-  - @cat-factory/orchestration@0.32.1
-  - @cat-factory/prompt-fragments@0.7.39
-
-## 0.9.2
-
-### Patch Changes
-
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-  - @cat-factory/kernel@0.42.0
-  - @cat-factory/agents@0.20.0
-  - @cat-factory/orchestration@0.32.0
-  - @cat-factory/integrations@0.24.0
-  - @cat-factory/gates@0.2.6
-  - @cat-factory/prompt-fragments@0.7.38
-
-## 0.9.1
-
-### Patch Changes
-
-- Updated dependencies [b5231b0]
-  - @cat-factory/kernel@0.41.0
-  - @cat-factory/agents@0.19.0
-  - @cat-factory/orchestration@0.31.0
-  - @cat-factory/gates@0.2.5
-  - @cat-factory/integrations@0.23.5
-  - @cat-factory/prompt-fragments@0.7.37
-
-## 0.9.0
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/gates@0.12.0
+  - @cat-factory/orchestration@0.320.0
+  - @cat-factory/integrations@0.175.0
+  - @cat-factory/server@0.332.0
+  - @cat-factory/agents@0.171.2
+  - @cat-factory/prompt-fragments@1.1.60
+
+## 0.63.1
+
+### Patch Changes
+
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
+  - @cat-factory/integrations@0.174.12
+  - @cat-factory/orchestration@0.319.1
+  - @cat-factory/server@0.331.1
+  - @cat-factory/gates@0.11.63
+  - @cat-factory/prompt-fragments@1.1.59
+
+## 0.63.0
 
 ### Minor Changes
 
-- 6d829bb: Make invalid-state pipelines more robust. On app open, a startup advisory surfaces pipelines that
-  reference a nonexistent agent kind or have an invalid shape (delete a custom one, reseed a built-in)
-  and built-in pipelines whose seeded definition is newer than the stored copy (reseed to adopt it).
-
-  Built-in pipelines now carry a per-pipeline `version` (persisted on both runtimes via a new D1
-  migration and a Drizzle column), the snapshot ships the current catalog versions
-  (`pipelineCatalogVersions`), and a new `POST /workspaces/:ws/pipelines/:id/reseed` endpoint restores a
-  built-in's canonical definition while preserving its labels/archive state.
-
-  BREAKING: existing workspaces' persisted built-in pipelines have no stored `version`, so they read as
-  "update available" once until reseeded — intentional adoption of the now-versioned definitions.
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
 
 ### Patch Changes
 
-- Updated dependencies [6d829bb]
-  - @cat-factory/kernel@0.40.0
-  - @cat-factory/orchestration@0.30.0
-  - @cat-factory/agents@0.18.5
-  - @cat-factory/gates@0.2.4
-  - @cat-factory/integrations@0.23.4
-  - @cat-factory/prompt-fragments@0.7.36
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+  - @cat-factory/orchestration@0.319.0
+  - @cat-factory/server@0.331.0
+  - @cat-factory/gates@0.11.62
+  - @cat-factory/integrations@0.174.11
+  - @cat-factory/prompt-fragments@1.1.58
 
-## 0.8.7
-
-### Patch Changes
-
-- Updated dependencies [714b7c9]
-  - @cat-factory/kernel@0.39.0
-  - @cat-factory/orchestration@0.29.0
-  - @cat-factory/agents@0.18.4
-  - @cat-factory/gates@0.2.3
-  - @cat-factory/integrations@0.23.3
-  - @cat-factory/prompt-fragments@0.7.35
-
-## 0.8.6
+## 0.62.2
 
 ### Patch Changes
 
-- @cat-factory/agents@0.18.3
-- @cat-factory/gates@0.2.2
-- @cat-factory/integrations@0.23.2
-- @cat-factory/kernel@0.38.1
-- @cat-factory/orchestration@0.28.3
-- @cat-factory/prompt-fragments@0.7.34
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/orchestration@0.318.0
+  - @cat-factory/server@0.330.0
+  - @cat-factory/agents@0.170.1
+  - @cat-factory/gates@0.11.61
+  - @cat-factory/integrations@0.174.10
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/prompt-fragments@1.1.57
 
-## 0.8.5
-
-### Patch Changes
-
-- Updated dependencies [692ccb4]
-  - @cat-factory/agents@0.18.2
-  - @cat-factory/orchestration@0.28.2
-
-## 0.8.4
+## 0.62.1
 
 ### Patch Changes
 
-- Updated dependencies [a4ea607]
-  - @cat-factory/kernel@0.38.0
-  - @cat-factory/agents@0.18.1
-  - @cat-factory/gates@0.2.1
-  - @cat-factory/integrations@0.23.1
-  - @cat-factory/orchestration@0.28.1
-  - @cat-factory/prompt-fragments@0.7.33
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/orchestration@0.317.1
+  - @cat-factory/gates@0.11.60
+  - @cat-factory/integrations@0.174.9
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
+  - @cat-factory/server@0.329.1
 
-## 0.8.3
-
-### Patch Changes
-
-- Updated dependencies [76543fa]
-  - @cat-factory/kernel@0.37.0
-  - @cat-factory/gates@0.2.0
-  - @cat-factory/agents@0.18.0
-  - @cat-factory/orchestration@0.28.0
-  - @cat-factory/integrations@0.23.0
-  - @cat-factory/prompt-fragments@0.7.32
-
-## 0.8.2
-
-### Patch Changes
-
-- Updated dependencies [17adf4c]
-  - @cat-factory/integrations@0.22.0
-  - @cat-factory/kernel@0.36.0
-  - @cat-factory/orchestration@0.27.1
-  - @cat-factory/agents@0.17.2
-  - @cat-factory/gates@0.1.13
-  - @cat-factory/prompt-fragments@0.7.31
-
-## 0.8.1
-
-### Patch Changes
-
-- Updated dependencies [eb48652]
-  - @cat-factory/kernel@0.35.0
-  - @cat-factory/orchestration@0.27.0
-  - @cat-factory/agents@0.17.1
-  - @cat-factory/gates@0.1.12
-  - @cat-factory/integrations@0.21.7
-  - @cat-factory/prompt-fragments@0.7.30
-
-## 0.8.0
+## 0.62.0
 
 ### Minor Changes
 
-- 9f7ee39: Add "Requirements brainstorm" and "Architecture brainstorm" agents — structured-dialogue
-  gates that PROPOSE options with explicit trade-offs and let a human converge on a direction,
-  rather than doing all the work themselves or expecting the work done upfront.
-
-  - One shared, stage-discriminated engine (`BrainstormService` over the existing
-    `IterativeReviewService`), driven through the generic `ReviewGateController`. Two agent kinds
-    (`requirements-brainstorm`, `architecture-brainstorm`) reuse it via a stage-bound repository
-    adapter.
-  - Persistence: a new `brainstorm_sessions` table keyed per (block, **stage**) — a block may hold
-    a live requirements AND a live architecture session at once — mirrored across both runtimes
-    (D1 + Drizzle/Postgres) with a cross-runtime conformance suite.
-  - Handoffs (DB session state → next stage's prompt): `requirements-brainstorm` → the
-    requirements review (its converged direction becomes the reviewed subject);
-    `architecture-brainstorm` → the architect (surfaced additively as a prior output).
-  - Pipelines: both steps are added to `pl_full` and `pl_fullstack` but **disabled by default**
-    (opt-in per pipeline) — existing runs are unchanged.
-  - Frontend: a shared brainstorm window (option cards with trade-offs → choose/steer/dismiss →
-    incorporate → re-run), wired through the result-view seam, the workspace stream, and the
-    palette catalog.
-
-  Breaking: adds a new required table on both runtimes (`brainstorm_sessions` D1 migration +
-  Drizzle migration) and a new optional `ExecutionEventPublisher.brainstormSessionChanged` event.
-  No data migration — pre-1.0, stale state is acceptable.
-
-  The brainstorm iteration cap reuses the merge preset's `maxRequirementIterations` /
-  `maxRequirementConcernAllowed` knobs (no new preset field).
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+- 0ea28b8: The guided review store binds every settle to the claim that won it. `claimOverview` and `claimMessage` return a `GuidedReviewClaim` (or null), and `settleOverview`, `settleMessage` and `settleDrafts` require it, so a driver whose lease lapsed cannot land over the driver that took the work over. Every write is checked against the contracts schema the reads decode with, so an oversized outcome is refused at its writer instead of making the thread unreadable; `guidedReviewFailure` builds a failure whose raw detail fits. `settleDrafts` takes `GuidedReviewDraftProposal` and the store fills in the ids it owns. Deleting a session removes threads before messages and drafts on both runtimes, and a node recovers its own jobs from its local durable queue.
 
 ### Patch Changes
 
-- Updated dependencies [9f7ee39]
-- Updated dependencies [81b60d4]
-  - @cat-factory/kernel@0.34.0
-  - @cat-factory/agents@0.17.0
-  - @cat-factory/orchestration@0.26.0
-  - @cat-factory/integrations@0.21.6
-  - @cat-factory/gates@0.1.11
-  - @cat-factory/prompt-fragments@0.7.29
-
-## 0.7.44
-
-### Patch Changes
-
-- Updated dependencies [4dd6e97]
-  - @cat-factory/agents@0.16.1
-  - @cat-factory/orchestration@0.25.1
-
-## 0.7.43
-
-### Patch Changes
-
-- Updated dependencies [ea59e91]
-  - @cat-factory/kernel@0.33.0
-  - @cat-factory/agents@0.16.0
-  - @cat-factory/orchestration@0.25.0
-  - @cat-factory/gates@0.1.10
-  - @cat-factory/integrations@0.21.5
-  - @cat-factory/prompt-fragments@0.7.28
-
-## 0.7.42
-
-### Patch Changes
-
-- Updated dependencies [18f6b3b]
-  - @cat-factory/integrations@0.21.4
-  - @cat-factory/orchestration@0.24.2
-
-## 0.7.41
-
-### Patch Changes
-
-- Updated dependencies [b82304e]
-  - @cat-factory/kernel@0.32.0
-  - @cat-factory/orchestration@0.24.1
-  - @cat-factory/agents@0.15.2
-  - @cat-factory/gates@0.1.9
-  - @cat-factory/integrations@0.21.3
-  - @cat-factory/prompt-fragments@0.7.27
-
-## 0.7.40
-
-### Patch Changes
-
-- Updated dependencies [765cc42]
-  - @cat-factory/kernel@0.31.0
-  - @cat-factory/orchestration@0.24.0
-  - @cat-factory/agents@0.15.1
-  - @cat-factory/gates@0.1.8
-  - @cat-factory/integrations@0.21.2
-  - @cat-factory/prompt-fragments@0.7.26
-
-## 0.7.39
-
-### Patch Changes
-
-- Updated dependencies [52d886a]
-  - @cat-factory/kernel@0.30.0
-  - @cat-factory/agents@0.15.0
-  - @cat-factory/orchestration@0.23.0
-  - @cat-factory/gates@0.1.7
-  - @cat-factory/integrations@0.21.1
-  - @cat-factory/prompt-fragments@0.7.25
-
-## 0.7.38
-
-### Patch Changes
-
-- Updated dependencies [a639189]
-  - @cat-factory/kernel@0.29.0
-  - @cat-factory/integrations@0.21.0
-  - @cat-factory/orchestration@0.22.0
-  - @cat-factory/agents@0.14.9
-  - @cat-factory/gates@0.1.6
-  - @cat-factory/prompt-fragments@0.7.24
-
-## 0.7.37
-
-### Patch Changes
-
-- Updated dependencies [ed3a673]
-  - @cat-factory/orchestration@0.21.1
-  - @cat-factory/agents@0.14.8
-  - @cat-factory/gates@0.1.5
-  - @cat-factory/integrations@0.20.1
-  - @cat-factory/kernel@0.28.1
-  - @cat-factory/prompt-fragments@0.7.23
-
-## 0.7.36
-
-### Patch Changes
-
-- Updated dependencies [69d2270]
-  - @cat-factory/orchestration@0.21.0
-  - @cat-factory/kernel@0.28.0
-  - @cat-factory/integrations@0.20.0
-  - @cat-factory/agents@0.14.7
-  - @cat-factory/gates@0.1.4
-  - @cat-factory/prompt-fragments@0.7.22
-
-## 0.7.35
-
-### Patch Changes
-
-- Updated dependencies [3546e3d]
-  - @cat-factory/kernel@0.27.0
-  - @cat-factory/integrations@0.19.0
-  - @cat-factory/orchestration@0.20.0
-  - @cat-factory/agents@0.14.6
-  - @cat-factory/gates@0.1.3
-  - @cat-factory/prompt-fragments@0.7.21
-
-## 0.7.34
-
-### Patch Changes
-
-- Updated dependencies [a62044d]
-  - @cat-factory/kernel@0.26.1
-  - @cat-factory/orchestration@0.19.2
-  - @cat-factory/agents@0.14.5
-  - @cat-factory/gates@0.1.2
-  - @cat-factory/integrations@0.18.3
-
-## 0.7.33
-
-### Patch Changes
-
-- Updated dependencies [2aae8bc]
-  - @cat-factory/kernel@0.26.0
-  - @cat-factory/agents@0.14.4
-  - @cat-factory/gates@0.1.1
-  - @cat-factory/integrations@0.18.2
-  - @cat-factory/orchestration@0.19.1
-
-## 0.7.32
-
-### Patch Changes
-
-- f4f954b: Dogfood the extensible-gates seam: the built-in polling-gate suite (`ci`, `conflicts`,
-  `post-release-health` + the `on-call` escalation) is no longer hard-coded in the engine —
-  it ships as a new **`@cat-factory/gates`** package authored ENTIRELY through the public
-  `registerGate` seam, depending only on kernel + contracts. If the platform's own gates can
-  be expressed as an external package, so can any deployment's.
-
-  **Breaking (pre-1.0, no migration):** the `ci` / `conflicts` / `post-release-health`
-  providers leave the engine. `ciStatusProvider`, `mergeabilityProvider`,
-  `releaseHealthProvider` and `incidentEnrichment` are removed from
-  `ExecutionServiceDependencies` / `CoreDependencies`; a deployment now wires them into the
-  gate suite via the exported `wireCiStatusProvider` / `wireMergeabilityProvider` /
-  `wireReleaseHealthProvider` / `wireIncidentEnrichment` handles after
-  `import '@cat-factory/gates'`. The merge collaborators (`pullRequestMerger`,
-  `branchUpdater`) stay on the engine.
-
-  - **gates (new)**: the three gate factories + the four provider wire-handles +
-    `registerBuiltinGates()`, registered as an import side effect. Each gate is a
-    pass-through until its provider is wired, so a bare import is always safe. Also exports
-    `applyGateProviders(overrides)` + the `GateProviderOverrides` bag: a facade build resets
-    the deployment-global providers up-front then re-wires from config, and this is the seam
-    that re-applies explicit/faked providers AFTER that wiring (so they survive the Worker's
-    per-request rebuild and override a config-wired provider) — used by the cross-runtime
-    conformance suite to drive the externalized `ci` gate over a controlled verdict.
-  - **kernel**: the pure gate logic (`aggregateCi`/`classifyReleaseHealth`/… +
-    `renderReleaseEvidence`) and the gate/helper agent-kind constants move into
-    `domain/gate-logic.ts` so a gate package can author a gate without depending on the
-    engine. New `GateDefinition.resolveHelperCompletion` hook (+ `GateHelperJobResult` /
-    `GateHelperCompletionArgs`): the seam an INVESTIGATE-don't-fix helper (`on-call`) needs
-    to settle a gate without re-probing — the real gap the dogfood surfaced.
-  - **orchestration**: the three inline gates + the bespoke `resolveOnCallStep` /
-    `raiseReleaseRegression` / `enrichIncident` / `raiseCiFailed` branches are deleted; the
-    engine builds its gate registry purely from what's registered, and drives an on-call-style
-    helper completion through the generic `resolveHelperCompletion` hook. The **`merger`**
-    step resolver stays a privileged built-in (reclassified): it owns terminal block status
-    and executes a policy-gated real merge — a different archetype from the light, externally
-    authorable resolvers, so it keeps its engine-internal access rather than the public seam.
-  - **worker / node-server**: each facade `import`s `@cat-factory/gates` and wires its
-    existing provider impls (`GitHubCiStatusProvider`, `RegistryReleaseHealthProvider`, …)
-    via the `wireX` handles instead of threading them through the engine. `local-server`
-    inherits this through `buildNodeContainer`.
-  - **conformance**: a new cross-runtime assertion drives the externalized built-in `ci`
-    gate (green pass-through, red → ci-fixer → re-probe) over a faked provider on both
-    runtimes; the registered-gate test now restores the built-ins after clearing the shared
-    registry.
-
-- Updated dependencies [f4f954b]
-  - @cat-factory/gates@0.1.0
-  - @cat-factory/kernel@0.25.0
-  - @cat-factory/orchestration@0.19.0
-  - @cat-factory/agents@0.14.3
-  - @cat-factory/integrations@0.18.1
-
-## 0.7.31
-
-### Patch Changes
-
-- Updated dependencies [ce81233]
-  - @cat-factory/kernel@0.24.0
-  - @cat-factory/integrations@0.18.0
-  - @cat-factory/agents@0.14.2
-  - @cat-factory/orchestration@0.18.1
-  - @cat-factory/prompt-fragments@0.7.20
-
-## 0.7.30
-
-### Patch Changes
-
-- 7346a4f: Make the polling **Gate** and **StepCompletionResolver** mechanisms externally
-  extensible, so a company-authored deployment package can register its OWN full-blown gate
-  (deterministic probe + helper/companion agent + exhaustion handling) or step resolver
-  purely via an import side effect — exactly the way it already registers a custom agent
-  kind. No fork, no engine patch, and no executor-harness image change (pure backend TS).
-
-  - **kernel**: new `domain/gate-registry.ts` (`registerGate(kind, factory)` +
-    `GateDefinition`/`GateContext`/`GateProbe`/`recordGateAttempt`/…) and
-    `domain/step-resolver-registry.ts` (`registerStepResolver(kind, factory)` +
-    `StepCompletionResolver`/`ResolverContext`/…), moved out of orchestration so an
-    extension package depends only on kernel + agents. `RaiseNotificationInput` moved to
-    `ports/notification-channel.ts` so the runtime-neutral `GateContext` can build one. A
-    registered gate/resolver is a `(ctx) => Definition` factory the engine invokes once at
-    registry-build time — solving the `this`-capture the built-in gates rely on while
-    keeping them inline and unchanged.
-  - **orchestration**: `ExecutionService.buildGateRegistry()` /
-    `buildStepResolverRegistry()` now merge the deployment-registered factories with the
-    built-ins (registered replaces built-in of the same kind, last-wins) via new
-    `makeGateContext()`/`makeResolverContext()` seams; the gate/resolver types are
-    re-exported from the package index for discovery.
-  - **example-custom-agent**: registers a `license-check` gate (escalating to a new
-    `license-fixer` agent kind) + an auditor step resolver + a `wireLicenseProvider` seam,
-    proving a custom gate ships with zero engine changes.
-  - **conformance**: a new cross-runtime assertion drives a registered custom gate
-    (pass-through, escalate-then-pass) and a registered step resolver on both runtimes.
-
-- Updated dependencies [7346a4f]
-  - @cat-factory/kernel@0.23.0
-  - @cat-factory/orchestration@0.18.0
-  - @cat-factory/agents@0.14.1
-  - @cat-factory/integrations@0.17.1
-
-## 0.7.29
-
-### Patch Changes
-
-- Updated dependencies [6ff1f10]
-  - @cat-factory/kernel@0.22.0
-  - @cat-factory/agents@0.14.0
-  - @cat-factory/integrations@0.17.0
-  - @cat-factory/orchestration@0.17.0
-  - @cat-factory/prompt-fragments@0.7.19
-
-## 0.7.28
-
-### Patch Changes
-
-- Updated dependencies [04befe8]
-  - @cat-factory/kernel@0.21.0
-  - @cat-factory/agents@0.13.0
-  - @cat-factory/orchestration@0.16.0
-  - @cat-factory/integrations@0.16.1
-  - @cat-factory/prompt-fragments@0.7.18
-
-## 0.7.27
-
-### Patch Changes
-
-- Updated dependencies [be182e8]
-  - @cat-factory/kernel@0.20.0
-  - @cat-factory/agents@0.12.0
-  - @cat-factory/integrations@0.16.0
-  - @cat-factory/orchestration@0.15.0
-
-## 0.7.26
-
-### Patch Changes
-
-- Updated dependencies [2c24da8]
-  - @cat-factory/kernel@0.19.0
-  - @cat-factory/orchestration@0.14.0
-  - @cat-factory/integrations@0.15.0
-  - @cat-factory/agents@0.11.16
-  - @cat-factory/prompt-fragments@0.7.17
-
-## 0.7.25
-
-### Patch Changes
-
-- Updated dependencies [4120ac5]
-  - @cat-factory/kernel@0.18.0
-  - @cat-factory/orchestration@0.13.0
-  - @cat-factory/integrations@0.14.0
-  - @cat-factory/agents@0.11.15
-  - @cat-factory/prompt-fragments@0.7.16
-
-## 0.7.24
-
-### Patch Changes
-
-- Updated dependencies [25efe48]
-  - @cat-factory/kernel@0.17.0
-  - @cat-factory/integrations@0.13.0
-  - @cat-factory/orchestration@0.12.0
-  - @cat-factory/agents@0.11.14
-  - @cat-factory/prompt-fragments@0.7.15
-
-## 0.7.23
-
-### Patch Changes
-
-- Updated dependencies [c7b8012]
-  - @cat-factory/kernel@0.16.2
-  - @cat-factory/agents@0.11.13
-  - @cat-factory/orchestration@0.11.1
-  - @cat-factory/integrations@0.12.4
-  - @cat-factory/prompt-fragments@0.7.14
-
-## 0.7.22
-
-### Patch Changes
-
-- Updated dependencies [aa06003]
-  - @cat-factory/orchestration@0.11.0
-  - @cat-factory/kernel@0.16.1
-  - @cat-factory/agents@0.11.12
-  - @cat-factory/integrations@0.12.3
-  - @cat-factory/prompt-fragments@0.7.13
-
-## 0.7.21
-
-### Patch Changes
-
-- Updated dependencies [208c933]
-  - @cat-factory/kernel@0.16.0
-  - @cat-factory/agents@0.11.11
-  - @cat-factory/integrations@0.12.2
-  - @cat-factory/orchestration@0.10.9
-
-## 0.7.20
-
-### Patch Changes
-
-- Updated dependencies [494fb34]
-  - @cat-factory/kernel@0.15.1
-  - @cat-factory/integrations@0.12.1
-  - @cat-factory/agents@0.11.10
-  - @cat-factory/orchestration@0.10.8
-
-## 0.7.19
-
-### Patch Changes
-
-- Updated dependencies [0ac64b8]
-  - @cat-factory/kernel@0.15.0
-  - @cat-factory/integrations@0.12.0
-  - @cat-factory/agents@0.11.9
-  - @cat-factory/orchestration@0.10.7
-  - @cat-factory/prompt-fragments@0.7.12
-
-## 0.7.18
-
-### Patch Changes
-
-- Updated dependencies [7d1f829]
-  - @cat-factory/agents@0.11.8
-  - @cat-factory/orchestration@0.10.6
-
-## 0.7.17
-
-### Patch Changes
-
-- Updated dependencies [fde0437]
-  - @cat-factory/kernel@0.14.0
-  - @cat-factory/integrations@0.11.0
-  - @cat-factory/agents@0.11.7
-  - @cat-factory/orchestration@0.10.5
-  - @cat-factory/prompt-fragments@0.7.11
-
-## 0.7.16
-
-### Patch Changes
-
-- Updated dependencies [77b7d31]
-  - @cat-factory/agents@0.11.6
-  - @cat-factory/orchestration@0.10.4
-  - @cat-factory/kernel@0.13.4
-  - @cat-factory/integrations@0.10.4
-
-## 0.7.15
-
-### Patch Changes
-
-- @cat-factory/agents@0.11.5
-- @cat-factory/integrations@0.10.3
-- @cat-factory/kernel@0.13.3
-- @cat-factory/orchestration@0.10.3
-- @cat-factory/prompt-fragments@0.7.10
-
-## 0.7.14
-
-### Patch Changes
-
-- Updated dependencies [ce27690]
-  - @cat-factory/kernel@0.13.2
-  - @cat-factory/agents@0.11.4
-  - @cat-factory/orchestration@0.10.2
-  - @cat-factory/integrations@0.10.2
-  - @cat-factory/prompt-fragments@0.7.9
-
-## 0.7.13
-
-### Patch Changes
-
-- Updated dependencies [c8bd144]
-  - @cat-factory/orchestration@0.10.1
-  - @cat-factory/kernel@0.13.1
-  - @cat-factory/agents@0.11.3
-  - @cat-factory/integrations@0.10.1
-
-## 0.7.12
-
-### Patch Changes
-
-- Updated dependencies [5c915fd]
-  - @cat-factory/kernel@0.13.0
-  - @cat-factory/integrations@0.10.0
-  - @cat-factory/orchestration@0.10.0
-  - @cat-factory/agents@0.11.2
-  - @cat-factory/prompt-fragments@0.7.8
-
-## 0.7.11
-
-### Patch Changes
-
-- Updated dependencies [22d7fff]
-  - @cat-factory/agents@0.11.1
-  - @cat-factory/orchestration@0.9.1
-
-## 0.7.10
-
-### Patch Changes
-
-- Updated dependencies [128e12e]
-- Updated dependencies [4de2f5f]
-- Updated dependencies [4de2f5f]
-  - @cat-factory/kernel@0.12.0
-  - @cat-factory/agents@0.11.0
-  - @cat-factory/orchestration@0.9.0
-  - @cat-factory/integrations@0.9.0
-  - @cat-factory/prompt-fragments@0.7.7
-
-## 0.7.9
-
-### Patch Changes
-
-- Updated dependencies [f8a24e0]
-  - @cat-factory/agents@0.10.1
-  - @cat-factory/integrations@0.8.3
-  - @cat-factory/kernel@0.11.1
-  - @cat-factory/orchestration@0.8.1
-
-## 0.7.8
-
-### Patch Changes
-
-- Updated dependencies [1e31cbc]
-  - @cat-factory/kernel@0.11.0
-  - @cat-factory/orchestration@0.8.0
-  - @cat-factory/agents@0.10.0
-  - @cat-factory/integrations@0.8.2
-  - @cat-factory/prompt-fragments@0.7.6
-
-## 0.7.7
-
-### Patch Changes
-
-- Updated dependencies [d0081e1]
-  - @cat-factory/agents@0.9.0
-  - @cat-factory/integrations@0.8.1
-  - @cat-factory/kernel@0.10.1
-  - @cat-factory/orchestration@0.7.7
-  - @cat-factory/prompt-fragments@0.7.5
-
-## 0.7.6
-
-### Patch Changes
-
-- Updated dependencies [ae29687]
-  - @cat-factory/kernel@0.10.0
-  - @cat-factory/integrations@0.8.0
-  - @cat-factory/agents@0.8.2
-  - @cat-factory/orchestration@0.7.6
-  - @cat-factory/prompt-fragments@0.7.4
-
-## 0.7.5
-
-### Patch Changes
-
-- Updated dependencies [5c20968]
-  - @cat-factory/kernel@0.9.0
-  - @cat-factory/agents@0.8.1
-  - @cat-factory/integrations@0.7.5
-  - @cat-factory/orchestration@0.7.5
-
-## 0.7.4
-
-### Patch Changes
-
-- Updated dependencies [c70df09]
-  - @cat-factory/agents@0.8.0
-  - @cat-factory/kernel@0.8.0
-  - @cat-factory/orchestration@0.7.4
-  - @cat-factory/integrations@0.7.4
-  - @cat-factory/prompt-fragments@0.7.3
-
-## 0.7.3
-
-### Patch Changes
-
-- Updated dependencies [a0a1bcc]
-  - @cat-factory/kernel@0.7.3
-  - @cat-factory/agents@0.7.3
-  - @cat-factory/integrations@0.7.3
-  - @cat-factory/orchestration@0.7.3
-
-## 0.7.2
-
-### Patch Changes
-
-- Updated dependencies [4fa5ed9]
-  - @cat-factory/agents@0.7.2
-  - @cat-factory/integrations@0.7.2
-  - @cat-factory/kernel@0.7.2
-  - @cat-factory/orchestration@0.7.2
-  - @cat-factory/prompt-fragments@0.7.2
-
-## 0.7.1
-
-### Patch Changes
-
-- Updated dependencies [7463cf2]
-  - @cat-factory/agents@0.7.1
-  - @cat-factory/integrations@0.7.1
-  - @cat-factory/kernel@0.7.1
-  - @cat-factory/orchestration@0.7.1
-  - @cat-factory/prompt-fragments@0.7.1
-
-## 0.7.0
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+  - @cat-factory/orchestration@0.317.0
+  - @cat-factory/server@0.329.0
+  - @cat-factory/gates@0.11.59
+  - @cat-factory/integrations@0.174.8
+  - @cat-factory/prompt-fragments@1.1.55
+
+## 0.61.0
 
 ### Minor Changes
 
-- 7cf2a2d: Improve the pipeline builder experience:
-
-  - **Grouped, collapsible agent palette** — archetypes are now organized into
-    meaningful categories (Review & triage, Design & research, Implementation,
-    Testing, Documentation, Gates & observability) that collapse/expand, with the
-    collapsed state remembered across builder opens.
-  - **Pipeline labels + archive/unarchive** — pipelines (built-in and custom) carry
-    free-form labels and an archived flag for organizing the library: filter by
-    label, hide archived behind a toggle, and archive without deleting. Exposed via
-    a new `PATCH /workspaces/:ws/pipelines/:id/organize` endpoint (the only mutation
-    a read-only built-in accepts). New `pipelines.labels` / `pipelines.archived`
-    columns mirror across D1 and Drizzle/Postgres.
-  - **Dependent companions are now gated toggles on their producer** — the three
-    companions (reviewer→coder, architect-companion→architect, spec-companion→
-    spec-writer) leave the free palette and are attached to their producer step in
-    the builder. Each can be optionally **gated on the task estimate** (run only when
-    complexity/risk/impact ≥ a threshold, OR across axes) via a new per-step
-    `gating` array; a gated step is transparently skipped at runtime when the
-    estimate falls below the bar. A pipeline with any enabled gating **requires a
-    `task-estimator` earlier in the chain** or it refuses to save/start. Gating is
-    additionally restricted to **companion steps** (skipping a producer would starve
-    its downstream steps) and **requires at least one axis threshold** (an enabled gate
-    with none would always skip); both are enforced by the shared `validatePipelineShape`
-    at save, clone, and run start. A companion must now run **immediately after** an
-    enabled producer it can review — `validatePipelineShape` enforces strict adjacency
-    (over the enabled subset) on every facade, matching the builder, which surfaces
-    companions as toggles attached to their producer. A pipeline that slips another step
-    between a producer and its companion is rejected at save / clone / run start.
-
-  **Breaking (pre-1.0, no migration):** the `Pipeline` wire shape gains optional
-  `gating`, `labels`, and `archived` fields, and `PipelineStep` gains `gating` /
-  `skipped`. The built-in pipelines are unchanged in behaviour.
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
 
 ### Patch Changes
 
-- 7d5e060: Bridge the Cloudflare ⇄ Node/local runtime feature-parity gaps: seven product
-  features that worked on the Worker but `503`'d on the Node + local facades (their
-  repositories were never wired) now work identically on all three, each landed with
-  a cross-runtime conformance assertion.
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/orchestration@0.316.0
+  - @cat-factory/server@0.328.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/gates@0.11.58
+  - @cat-factory/integrations@0.174.7
+  - @cat-factory/prompt-fragments@1.1.54
 
-  - **Merge threshold presets** — `merge_threshold_presets` + `DrizzleMergePresetRepository`.
-  - **Board-scan repository blueprints** — `repo_blueprints` + `DrizzleRepoBlueprintRepository`
-    (the blueprint reads; the `blueprints` pipeline step already ran on Node).
-  - **Document sources** — `document_connections`/`documents` + repos; the Confluence /
-    Notion / GitHub-docs provider shells are promoted into `@cat-factory/integrations`
-    so both facades compose the same providers.
-  - **Ephemeral environments** — `environment_connections`/`environments` + repos;
-    `HttpEnvironmentProvider` promoted into `@cat-factory/integrations`; a Node
-    `setInterval` TTL-teardown sweeper mirrors the Worker's expiry cron.
-  - **GitHub projections + inline sync** — `github_branches`/`github_pull_requests`/
-    `github_issues`/`github_commits`/`github_check_runs` + `github_sync_cursors` and the
-    full read/write projection repos, so the runtime-neutral `GitHubSyncService`'s inline
-    webhook/backfill ingest persists on Node; `WebCryptoWebhookVerifier` promoted into
-    `@cat-factory/server`.
-  - **Repo bootstrap** — `reference_architectures` + bootstrap runs stored as
-    `kind='bootstrap'` rows of `agent_runs`; `ContainerRepoBootstrapper` promoted into
-    `@cat-factory/server`; a **pg-boss durable bootstrap driver** (the analogue of the
-    Worker's `BootstrapWorkflow`) replaces the previous "bootstrap isn't durable on Node
-    yet" gap, and the stale-run sweeper now re-drives orphaned bootstrap runs too. The
-    self-hosted runner pool (`RunnerPoolTransport`) now accepts the `bootstrap` dispatch
-    kind — the harness `/bootstrap` route needs no Cloudflare primitive, so a pool runner
-    serves it just like the local Docker transport — so a real bootstrap run dispatches +
-    pushes for real on Node, not just on local.
-  - **Prompt-fragment library (ADR 0006)** — `prompt_fragments`/`fragment_sources` +
-    `DrizzlePromptFragmentRepository`/`DrizzleFragmentSourceRepository`; the runtime-neutral
-    `LlmFragmentSelector` promoted into `@cat-factory/agents`. Opt-in via
-    `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`, wired exactly like the Worker's
-    `selectFragmentLibraryDeps` (repos + installation resolver + selector), so the managed
-    tenant fragment catalog feeding every agent run works identically on all three.
+## 0.60.0
 
-  The Worker keeps the same behaviour (it gains the new conformance assertions and the
-  shared promoted classes). **Breaking on Node/local:** these features now require their
-  new tables — boot-time `migrate()` applies them; there is no data to preserve.
+### Minor Changes
 
-  The Node/local Drizzle migration lineage was re-baselined to a single fresh
-  `drizzle-kit generate` migration off the current `schema.ts` (the prior hand-authored
-  folders had no snapshots, which blocked `db:generate`); `db:generate`/`db:check` are
-  green again. Safe because no deployed database depends on the old lineage.
+- 57d9db3: A delegated executor's reported usage now reaches the step it belongs to. The step's metrics, the run totals and the "usage not reported by <executor>" gap all read `llm_call_metrics`, while a result's `usage` was written only to the usage ledger, so a `self-reported` executor's step still read as unreported. The delegated arm now files the figure as one job-level call metric through the same recorder a subscription harness uses (`standsForJob`, counted as the job's call), keyed on the dispatch's job id so a replayed poll records nothing twice.
+  
+  That row is filed under kernel's new `DELEGATED_USAGE_PROVIDER` and is never priced: `LlmObservabilityService` answers no rate for it, so the step and the run totals show the tokens with an unknown cost instead of the deployment's fallback rate.
+  
+  `DelegationUpdate`'s `failed` arm gains `usage`, with the meaning it has on a result. A run that fails late has usually spent most of its tokens, and it previously had no way to say so. `AgentJobUpdate`'s `failed` arm gains `usage` and `usageBilling` to carry it, and the failed-poll path meters it into the usage ledger and stamps the step's `usageBilling`, as the completion path does for a result.
+  
+  Each settled delegation attempt records `usageReported`, and `delegatedSpendUnreported` reports a gap when the FINAL attempt reported nothing, even if an earlier attempt's row put calls in the step's metrics.
+  
+  `RecordHarnessCalls` is exported from `@cat-factory/orchestration` as the one recorder type. `buildDelegatedAgentExecutor` takes a required `recordHarnessCalls` (its value may be `undefined`), so a facade cannot wire it on one runtime and forget it on the other. The Worker builds one recorder and hands it to both the container and the delegated arm; `buildWorkerJobAccountingDeps` now takes that recorder instead of building its own. Conformance's `withDelegatedArm` takes the facade's recorder, and a new conformance assertion checks on every runtime that a self-reported usage lands on the step unpriced.
 
-  Deferred (still Worker-only, flagged for follow-up): real-time push (Node `realtime`
-  gateway still `501`s — needs a WebSocket hub over Postgres `LISTEN/NOTIFY`),
-  queue-backed async GitHub ingest (Node ingests inline rather than via a pg-boss queue),
-  and GitHub rate-limit telemetry (Node keeps the no-op repository).
+### Patch Changes
 
-- Updated dependencies [fe53445]
-- Updated dependencies [8eed38c]
-- Updated dependencies [d94e75c]
-- Updated dependencies [6406c8c]
-- Updated dependencies [3d9a9d8]
-- Updated dependencies [db77061]
-- Updated dependencies [a48c620]
-- Updated dependencies [3bc8c79]
-- Updated dependencies [9d3a956]
-- Updated dependencies [8d11833]
-- Updated dependencies [ad9ba9e]
-- Updated dependencies [3e0d753]
-- Updated dependencies [f83ffd7]
-- Updated dependencies [3e7ab89]
-- Updated dependencies [8065fed]
-- Updated dependencies [385bd93]
-- Updated dependencies [e50e78a]
-- Updated dependencies [0972696]
-- Updated dependencies [b48c455]
-- Updated dependencies [e9b9356]
-- Updated dependencies [e8005ba]
-- Updated dependencies [3a12f15]
-- Updated dependencies [3a12f15]
-- Updated dependencies [b40da13]
-- Updated dependencies [3a12f15]
-- Updated dependencies [ec0c416]
-- Updated dependencies [8eed38c]
-- Updated dependencies [084bf43]
-- Updated dependencies [14840ec]
-- Updated dependencies [4030da2]
-- Updated dependencies [268c15d]
-- Updated dependencies [c9d3f49]
-- Updated dependencies [8eed38c]
-- Updated dependencies [157cd02]
-- Updated dependencies [794b628]
-- Updated dependencies [7c37653]
-- Updated dependencies [db77061]
-- Updated dependencies [f49fa30]
-- Updated dependencies [6406c8c]
-- Updated dependencies [57d70fa]
-- Updated dependencies [1a0686f]
-- Updated dependencies [6406c8c]
-- Updated dependencies [918764f]
-- Updated dependencies [918764f]
-- Updated dependencies [88b3170]
-- Updated dependencies [fe0b7f8]
-- Updated dependencies [f73652c]
-- Updated dependencies [db336b1]
-- Updated dependencies [f9d3647]
-- Updated dependencies [8807f5c]
-- Updated dependencies [9be11e1]
-- Updated dependencies [5ec0d25]
-- Updated dependencies [197264e]
-- Updated dependencies [a691853]
-- Updated dependencies [c664fe6]
-- Updated dependencies [7d5e060]
-- Updated dependencies [4a08935]
-- Updated dependencies [2796a42]
-- Updated dependencies [6406c8c]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [b287996]
-- Updated dependencies [b156b4b]
-- Updated dependencies [5c8ca33]
-- Updated dependencies [7cf2a2d]
-- Updated dependencies [2d66d34]
-- Updated dependencies [197264e]
-- Updated dependencies [3a12f15]
-- Updated dependencies [37baa7f]
-- Updated dependencies [c664fe6]
-- Updated dependencies [553a67d]
-- Updated dependencies [b80d657]
-- Updated dependencies [4026793]
-- Updated dependencies [311a110]
-- Updated dependencies [f16ae62]
-- Updated dependencies [ba1c0cf]
-- Updated dependencies [36018cb]
-- Updated dependencies [799be66]
-- Updated dependencies [cc39497]
-- Updated dependencies [d65c979]
-- Updated dependencies [75a0441]
-- Updated dependencies [7157fd7]
-- Updated dependencies [2ab06b5]
-- Updated dependencies [21ca647]
-- Updated dependencies [8eed95b]
-- Updated dependencies [0b38aa6]
-- Updated dependencies [a97e485]
-- Updated dependencies [de5a9d7]
-- Updated dependencies [f647733]
-- Updated dependencies [d5e9141]
-- Updated dependencies [2dd7e56]
-- Updated dependencies [2d66d34]
-- Updated dependencies [86a5843]
-- Updated dependencies [a54ada2]
-- Updated dependencies [2dd7e56]
-- Updated dependencies [5ca8086]
-- Updated dependencies [d0697d1]
-- Updated dependencies [e0230a0]
-- Updated dependencies [0090313]
-- Updated dependencies [7dc8e57]
-- Updated dependencies [cc8d96a]
-- Updated dependencies [7c37653]
-- Updated dependencies [43f2443]
-- Updated dependencies [acac735]
-- Updated dependencies [b98923c]
-- Updated dependencies [3841315]
-- Updated dependencies [48d2f0d]
-- Updated dependencies [3e6a844]
-  - @cat-factory/integrations@0.7.0
-  - @cat-factory/orchestration@0.7.0
-  - @cat-factory/kernel@0.7.0
-  - @cat-factory/agents@0.7.0
-  - @cat-factory/prompt-fragments@0.7.0
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/orchestration@0.315.0
+  - @cat-factory/server@0.327.0
+  - @cat-factory/agents@0.168.3
+  - @cat-factory/gates@0.11.57
+  - @cat-factory/integrations@0.174.6
+  - @cat-factory/prompt-fragments@1.1.53
+
+## 0.59.3
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/integrations@0.174.5
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/orchestration@0.314.3
+  - @cat-factory/server@0.326.3
+  - @cat-factory/gates@0.11.56
+  - @cat-factory/prompt-fragments@1.1.52
+
+## 0.59.2
+
+### Patch Changes
+
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/orchestration@0.314.2
+  - @cat-factory/integrations@0.174.4
+  - @cat-factory/agents@0.168.1
+  - @cat-factory/server@0.326.2
+  - @cat-factory/gates@0.11.55
+  - @cat-factory/prompt-fragments@1.1.51
+
+## 0.59.1
+
+### Patch Changes
+
+- Updated dependencies [7760397]
+  - @cat-factory/agents@0.168.0
+  - @cat-factory/orchestration@0.314.1
+  - @cat-factory/server@0.326.1
+
+## 0.59.0
+
+### Minor Changes
+
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
+
+### Patch Changes
+
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/orchestration@0.314.0
+  - @cat-factory/integrations@0.174.3
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/agents@0.167.0
+  - @cat-factory/server@0.326.0
+  - @cat-factory/gates@0.11.54
+  - @cat-factory/prompt-fragments@1.1.50
+
+## 0.58.3
+
+### Patch Changes
+
+- Updated dependencies [30d08c7]
+  - @cat-factory/agents@0.166.3
+  - @cat-factory/integrations@0.174.2
+  - @cat-factory/kernel@0.348.1
+  - @cat-factory/orchestration@0.313.2
+  - @cat-factory/server@0.325.2
+  - @cat-factory/gates@0.11.53
+  - @cat-factory/prompt-fragments@1.1.49
+
+## 0.58.2
+
+### Patch Changes
+
+- 9f8cabc: Re-point the DeepSeek Flash route at the model DeepSeek actually serves, take the agent CLIs at
+  their newest, and refresh the dependency tree.
+  
+  **A retired model behind a live alias.** DeepSeek retired V4-Flash and V4-Flash-Vision-Exp on
+  2026-09-10 and made `deepseek-flash` the canonical, unversioned name for V4.1-Flash. The old
+  `deepseek-v4-flash` id still resolves, but only as a TEMPORARY compatibility alias onto the new
+  model, which is the quietest shape this catalog's failures take: nothing throws and nothing fails
+  to dispatch, so the picker went on saying "DeepSeek V4 Flash" while a different model answered, at
+  a rate the spend table did not carry, and the route dies outright whenever the alias is withdrawn.
+  All three DeepSeek-served arms of the `deepseek` entry (direct, subscription, and the OpenRouter
+  one, which must name the same model or the entry straddles two) now name the live model. The entry
+  keeps its `deepseek` id: that id is what a workspace persists against a block, and this is the same
+  slot following the vendor's own successor, so re-minting it would invalidate every stored pick to
+  say nothing new. `acceptsImages` is new on both refs and is a real capability gain rather than a
+  correction, since V4.1-Flash folds the vision line back into the main model.
+  
+  Two adjacent claims were re-read rather than trusted. The 2026-09-10 release note said
+  `deepseek-v4-pro` would route to V4.1-Flash from 2026-09-14, which would have silently demoted that
+  entry to a cheaper, weaker model; DeepSeek has since decided to keep serving V4 Pro with billing
+  unchanged, so it is untouched. And OpenRouter still serves a separate `deepseek/deepseek-v4-flash`
+  at a fifth of the price, which this entry deliberately does not keep: it is the retired build, and
+  an entry whose direct and gateway arms named different models is the neighbouring-version trap the
+  catalog header bans. Both retired price keys stay in the table so historical spend rows keep
+  costing correctly.
+  
+  **No other catalog gap.** Every frontier launch since the last sweep was checked against its
+  serving provider and is already here: Claude Fable 5.1, Gemini 3.8 Flash, Muse Spark 1.3 and GPT-6
+  Astra. Claude Mythos 5.1 stays out on purpose. It is the same model as Fable 5.1 at identical
+  pricing, offered by invitation only through Project Glasswing with no public route on any provider
+  this platform reaches, so an entry could only be a re-badge that `effectiveVariant` would pick and
+  then fail to dispatch. "Astra Pro" stays out for the reason recorded last time, re-checked here:
+  OpenRouter mints a slug for it, but reasoning effort is a parameter on the single `gpt-6-astra` id.
+  
+  **Agent CLIs at their newest**, ahead of the 24h `minimumReleaseAge` window, as the Dockerfile's
+  standing note allows for those three pins alone: Claude Code 2.1.265 to 2.1.270 and Codex 0.153.4
+  to 0.154.0 (still above the 0.153.0 floor `gpt-6-astra` needs). Pi holds at 0.85.1, already newest.
+  The two Pi extensions do NOT take that exemption and hold at 2.9.0: 2.10.0 published three hours
+  before this change and has not aged past the window. Both harness images move to the newest
+  `node:26-trixie-slim` digest that has (node 26.8.2), and the executor image tag rolls to 1.158.0
+  with the deploy image at 0.6.8.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, 31 resolved names moved, no
+  package name dropped. `pg-boss` 12.31.0 brings `rrule-temporal` and `temporal-spec` in as new
+  transitive deps, the only additions. A `pnpm dedupe` follows the bump because the partial
+  re-resolution left `@types/node` resolved at two patch versions. Four holds are unchanged and were
+  re-verified at HEAD rather than assumed: `vitest` at 4.1.11 and `wrangler` at 4.124.0
+  (`@cloudflare/vitest-pool-workers` 0.22.0 is still newest, peers `vitest: ^4.1.0` and pins that
+  wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date, which
+  that pool pins), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 reaches for
+  `typescript/lib/tsc`, absent from TS 7's exports map). pnpm moves 11.24.0 to 11.26.0, staying on
+  its major. WireMock holds at 3.13.1, still its newest non-prerelease. Actions: `setup-java` v6.0.0
+  to v6.0.1 and `zizmor-action` v0.6.3 to v0.6.4; every other pinned action is already newest.
+- Updated dependencies [9f8cabc]
+  - @cat-factory/agents@0.166.2
+  - @cat-factory/contracts@0.355.1
+  - @cat-factory/integrations@0.174.1
+  - @cat-factory/kernel@0.348.0
+  - @cat-factory/orchestration@0.313.1
+  - @cat-factory/server@0.325.1
+  - @cat-factory/gates@0.11.52
+  - @cat-factory/prompt-fragments@1.1.48
+
+## 0.58.1
+
+### Patch Changes
+
+- Updated dependencies [69fc66c]
+  - @cat-factory/contracts@0.355.0
+  - @cat-factory/kernel@0.347.0
+  - @cat-factory/integrations@0.174.0
+  - @cat-factory/orchestration@0.313.0
+  - @cat-factory/server@0.325.0
+  - @cat-factory/agents@0.166.1
+  - @cat-factory/gates@0.11.51
+  - @cat-factory/prompt-fragments@1.1.47
+
+## 0.58.0
+
+### Minor Changes
+
+- 2cf867d: Pick the best-practice standards a task is judged against, over `/api/v1`
+  
+  A workspace curates best-practice standards, merged across the deployment's shipped catalog, the
+  account's library and the board's own; an agent working under one is held to it, and a reviewer
+  additionally rates how closely the change followed each. Which of them apply is a real per-task
+  question (a security sweep, a migration, a pull request in a repository whose rules differ from its
+  service's), and it was answerable from the app and from the internal API and nowhere else. A caller
+  filing a review headlessly could name the pull request, the focus, the pipeline and the model, and
+  could not say what the reviewer was to judge it against. Its only lever was the enclosing SERVICE's
+  standing set, which is the right default and aims any change at every other task under that service.
+  
+  `GET /api/v1/prompt-fragments` serves the merged catalog and `fragmentIds` on task creation names
+  ids from it, the same pairing `GET /api/v1/task-types` has with `fields`. `PublicTask` reads back
+  `fragmentIds`, which is the one pin a caller cannot predict from what it sent: the platform unions
+  the list with the service's standards and the task type's defaults and freezes the result.
+  
+  **The catalog carries each standard's identity, not its `body`.** Naming a standard needs the id,
+  the title, the category, the one-line summary and the tags, which is also exactly what the
+  platform's own relevance selector decides from; the body is the authored text of an organisation's
+  engineering guidelines, which is a different thing to publish than a list of what it has written
+  down. Each entry also says which `tier` it won on, because an account-wide rule and one this board
+  authored need different fixes when a standard is wrong.
+  
+  **The read sits at `write`, not at `read`.** Withholding the body is not enough to make the lower
+  floor honest: a standard imported from a repo of Markdown guidelines carries no authored summary,
+  so the importer derives one from the opening of the file, and for those entries the published
+  `summary` is a capped slice of the guidance itself. `write` is the scope that NAMES a standard on a
+  task, which keeps the discovery pairing exact (a key that can fill `fragmentIds` can read the
+  vocabulary it fills it from) with nothing derived from an org's guidelines below it. It stays under
+  the `admin` the preset libraries take, because naming a standard is not managing one.
+  
+  **The list is keyset-paginated from this first release** (`?limit=`, `?cursor=`, `nextCursor`),
+  ordered by `fragmentId`. A catalog is not self-limiting: a tier can link a repo directory and get
+  one standard per Markdown file, so an unbounded first release would have left only a `/v2` or a
+  silent truncation as the way to add the bound afterwards.
+  
+  **Fragment ids have ONE ceiling now** (`MAX_FRAGMENT_ID_LENGTH`), shared by the hand-authored `id`,
+  the repo-source mint and this public field, which is what makes "the catalog serves it ⇒ the create
+  accepts it" structural rather than a coincidence of two numbers. A sourced id is
+  `src:<sourceId>:<slugified path>` and had no bound at all, so a deep enough guidelines directory
+  produced ids the create door would have refused with a generic length error. The mint now truncates
+  with a stable digest of the slug (a prefix cut alone drops the filename, which is the half that
+  distinguishes siblings in a deep tree), and a file whose FRONTMATTER declares an over-long id is
+  declined with a warning rather than shortened, since that id is the author's own choice and a
+  rewritten one shadows nothing. Existing sourced fragments with an over-long id are re-minted on the
+  next sync: the old id tombstones and the new one starts at version `1.0.0`.
+  
+  **An id the board does not resolve is refused** (`422`, `details.reason:
+  'prompt_fragment_not_found'`, `details.fragmentIds` naming every one that missed) where the RUN path
+  drops it. The run path is right to drop: a standard deleted after a task was filed must not break
+  the run. At the door it is the wrong disposition, because a typo would answer `201` for a review
+  that folded nothing, which reads afterwards exactly like a review nobody asked to be judged against
+  anything. The check lives at this door rather than on `BoardService` beside the preset-pin guard,
+  and the reason is not the store it reads: the app's create form submits the service's inherited
+  standards verbatim alongside the person's own picks, so the same refusal there would turn one stale
+  library id into a service nobody can file a task under. Here every id was named by the caller, in
+  the same request cycle it read the catalog in. The route now checks the CONTAINER before any of
+  this: every other refusal on it presumes a service that exists, so answering an unknown-standard
+  `422` for a typo'd `serviceId` sent an integrator to fix the wrong end of a two-part mistake.
+  
+  The `blockTypes` value set is now pinned in the SDK IR's enum table. It is shared with
+  `publicService.type` and is walked first alphabetically under its new home, so leaving it positional
+  would have respelled the published `PublicServiceType` in four clients as a side effect of adding an
+  unrelated endpoint, arriving as a clean generated diff nobody reads.
+  
+  OpenAPI `info.version` 1.72.0 -> 1.73.0. The Python and Java clients (Kotlin with them) carry the
+  new operation and models, so their manifests move 0.7.0 -> 0.8.0: for those two the version change
+  IS the release, so regenerating without it would have shipped the catalog in two clients of four.
+
+### Patch Changes
+
+- Updated dependencies [2cf867d]
+  - @cat-factory/contracts@0.354.0
+  - @cat-factory/agents@0.166.0
+  - @cat-factory/orchestration@0.312.0
+  - @cat-factory/server@0.324.0
+  - @cat-factory/gates@0.11.50
+  - @cat-factory/integrations@0.173.2
+  - @cat-factory/kernel@0.346.2
+  - @cat-factory/prompt-fragments@1.1.46
+
+## 0.57.0
+
+### Minor Changes
+
+- 5dc7506: Drive the whole PR deep review through `/api/v1`
+  
+  Triggering a review of an existing GitHub or GitLab pull request, reading back its prioritized
+  findings and posting the ones a person kept as inline comments was already reachable over the
+  public API, one call at a time. Driving it end to end was not, for three reasons that only show up
+  once something goes wrong.
+  
+  **A `post` that failed reported nothing.** A partial or total failure re-parks the review at
+  `awaiting_selection` with its resolution cleared, which is byte-for-byte a review nobody has
+  curated yet: a caller that posted seven comments and landed none read back the state it held a
+  moment before, and either looped or reported success. The `pr-review` decision now carries
+  `postReport` (what was attempted, what posted, what was folded into the summary comment because its
+  line falls outside the diff or the branch moved, and the provider's own error per finding) and
+  `postedFindingIds` (what a retry skips, so re-posting the same selection never double-comments).
+  The report names the PASS it describes (`attempt`, against the decision's `postAttempts`), because
+  a retry that fails identically leaves an otherwise byte-identical report and the defect would
+  reappear one level in; `postedBody` states whether the summary comment has landed, so
+  `bodyPosted: null` is readable as "suppressed, it already went" rather than "there was none". A
+  finding dismissed after a failed pass loses its `failures[]` row with it, so no id on this surface
+  names a finding the caller can no longer see.
+  
+  **A wedged review had no exit but throwing the work away.** The reviewer fans its slices out across
+  parallel subagents and emits findings only in a final aggregation turn, which can hang with every
+  slice finished; the watchdogs cannot see it and the 60-minute kill discards the lot. The app could
+  already re-dispatch only the slices that never reported, and now so can a key:
+  `POST /api/v1/runs/{runId}/decisions/pr-review/resume`. BOUNDED, unlike the app's own resume, and
+  projecting the evidence a bound needs (`resumeAttempts` / `maxResumeAttempts`, `reportedSlices`,
+  `lastActivityAt`): each call stops the running reviewer and starts a fresh container, so a poller
+  resuming on a timer shorter than the review takes would otherwise kill it forever, each time it
+  was about to finish. A person clicking Resume in the window is watching what they nudged, which is
+  the judgement a headless caller cannot supply.
+  
+  **A `write` key could start a review it could not finish.** Both `pl_review` and `pl_bug_fishing`
+  are single-step pipelines whose step parks the run for a person to curate what it found, and public
+  admission could not see that park: the two kinds park through machinery of their own rather than
+  through anything a registry declared, so a `write` key was admitted and then held a run whose every
+  verb needs `decide`. Both kinds now carry a `curation-gate` trait, which is the sixth park mechanism
+  admission enumerates and the fourth it derives from a registration, so a deployment's own curating
+  kind is seen with no edit there. **Starting either preset now needs a `decide` key**
+  (`403 pipeline_requires_decide_scope`), and so does RETRYING a run whose stored steps carry one: a
+  start path is not the only way to set a park in motion. The refusal names `pr-review` as answerable
+  through the decision surface and `bug-fisher` as not, and it names the DECISION KINDS rather than
+  the park surfaces, three of which are spelled differently in the two places (a `pr-reviewer` step
+  is answered by a `pr-review` decision, both brainstorm kinds by one `brainstorm`), so an
+  integration mapping the refusal onto `decisions[]` no longer hunts for an entry that is never
+  there. A run parked on the curation this API cannot answer now NAMES that wait
+  (`unanswerable[].reason = "curation_gate"`), which is what makes "honestly reported as parked with
+  nothing to answer" true rather than an empty list plus an approval that would end the run.
+  
+  OpenAPI `info.version` 1.71.0 → 1.72.0. The Python and Java clients (Kotlin with them) carry the
+  new operation and models too, so their manifests move 0.6.0 → 0.7.0: for those two the version
+  change IS the release, so regenerating without it would have shipped the loop in two clients of
+  four.
+
+### Patch Changes
+
+- Updated dependencies [5dc7506]
+  - @cat-factory/contracts@0.353.0
+  - @cat-factory/agents@0.165.0
+  - @cat-factory/orchestration@0.311.0
+  - @cat-factory/server@0.323.0
+  - @cat-factory/gates@0.11.49
+  - @cat-factory/integrations@0.173.1
+  - @cat-factory/kernel@0.346.1
+  - @cat-factory/prompt-fragments@1.1.45
+
+## 0.56.0
+
+### Minor Changes
+
+- 44b27a7: Run every inline LLM call on the model the workspace actually picked
+  
+  An inline call resolves its credentials from a `ModelScope`, and each caller built one by hand.
+  Several of them dropped a tier they were holding: the in-app assistant had the asker's id and
+  passed only the workspace, and so did the bug hunt, the document planner and the sandbox launch,
+  each of them a signed-in member's own synchronous request. Nothing failed. The call resolved,
+  answered, and landed on the deployment's routing default instead of the model the workspace's
+  preset names, so on a Claude-preset workspace the assistant quietly ran on something else and only
+  the bill said so.
+  
+  Every inline caller now goes through kernel's `resolveInlineScope`, whose subject is discriminated
+  (`block` / `run` / `user` / `workspace`), so a caller states what it holds rather than omitting it.
+  `kind: 'workspace'` stays legal and is now a claim: several callers legitimately make it, and the
+  ones with reasoned omissions say why (the Kaizen grader and the fragment-brief generator keep
+  theirs; the monorepo adoption advisor's `runId` is a bootstrap job id, which is a telemetry key
+  rather than an activation scope). `agentRunScopeSubject` is the shared dispatch fold, so a
+  consensus participant and the same step run alone cannot disagree about whose pool they draw on,
+  and `scripts/check-inline-model-scope.mjs` keeps the whole thing that way.
+  
+  Run-less surfaces can now reach a personal subscription. A credential activation was keyed by run,
+  so the assistant and the bug hunt could not lease one at all; the key was never really a run id
+  (an environment test already wrote its own into it), so it is now an `ActivationScopeId` that a run
+  or a USER mints. The assistant and the bug hunt carry the personal password header like a run start
+  does, and the SPA's existing credential modal collects it on the first turn that needs one. Both
+  surfaces re-map or swallow model failures by design, so each now rethrows `credential_required`
+  first, or the refusal never reaches the modal. Removing a subscription drops its user-scope
+  activations, which the soft delete alone left leasable for the rest of the TTL.
+  
+  BREAKING (internal): `subscription_activations.execution_id` becomes `scope_id` and existing rows
+  are dropped, on all three stores (D1, Postgres, and the local-sqlite credential store, which
+  declares the table rebuildable so the rename reaches a file that predates it). Scope ids are now
+  prefixed by kind, so an old unprefixed row would never be looked up again, and nothing records
+  which kind it was. An activation is a 12-hour cache of a credential the user can re-unlock with
+  their password, so the cost is one password prompt.
+  `SubscriptionActivationRepository.deleteByExecution` becomes `deleteByScope`, and
+  `PersonalSubscriptionService.activateForRun` / `leaseForRun` become `activate` / `lease`.
+
+### Patch Changes
+
+- Updated dependencies [44b27a7]
+  - @cat-factory/kernel@0.346.0
+  - @cat-factory/agents@0.164.0
+  - @cat-factory/orchestration@0.310.0
+  - @cat-factory/integrations@0.173.0
+  - @cat-factory/server@0.322.0
+  - @cat-factory/gates@0.11.48
+  - @cat-factory/prompt-fragments@1.1.44
+
+## 0.55.0
+
+### Minor Changes
+
+- b75fa3c: Let a service say, in its own words, how it should be tested
+  
+  A Tester was handed two things about a service it did not stand up: where to reach it, and which
+  credentials its shell carries. Neither says which flows matter, which of the seeded accounts is the
+  one to sign in as, what the demo data means, or which flow charges a real card. That knowledge
+  exists, it is short, and until now there was nowhere to put it, so every Tester run rediscovered it
+  from the repository or guessed.
+  
+  **Testing context** is a freeform text box on the service frame's inspector, directly beneath the
+  sealed test credentials (advanced interface tier, and shown at either tier once a service records
+  one, so nobody is left unable to read or clear what their testers are being told). It is stored on
+  the service and injected verbatim into every tester prompt for it. The environment self-test's agent dry run is handed the same text through the same renderer:
+  a dry run's whole claim is that it predicts what a real Tester will be able to do here, and it cannot
+  predict that from a different briefing.
+  
+  Three decisions worth knowing:
+  
+  - **It is non-sensitive by contract**, because it is rendered INTO the prompt. Secrets stay in the
+    sealed panel above, which never renders a value into a prompt or into telemetry, and this prose
+    refers to them by variable name. The panel says so.
+  - **The empty case is stated to the agent, never omitted.** A Tester told nothing cannot tell "this
+    platform has nowhere to write that down" from "the place exists and nobody filled it in", so it
+    either reports no gap at all or reports one against the service. Told, it reports what it had to
+    guess at, which is what tells an operator what to type. A tester running on work that sits under
+    no service frame is told THAT instead, so an empty field and an absent owner cannot be reported
+    as the same neglect.
+  - **It is a `blocks` column, not a table**, for the reason `provisioning` and `service_connections`
+    are columns: one service-frame-owned value the engine reads off the frame it has already walked
+    to. Both runtimes gain the column and a conformance assertion drives the frame-chain walk on both
+    stores; the write boundary drops the field on any non-frame block rather than persisting dead data.
+  
+  Only the two tester kinds are handed it, so every other agent's prompt is byte-for-byte unchanged,
+  and a service that records nothing keeps the prompts it had.
+
+### Patch Changes
+
+- Updated dependencies [b75fa3c]
+  - @cat-factory/contracts@0.352.0
+  - @cat-factory/kernel@0.345.0
+  - @cat-factory/agents@0.163.0
+  - @cat-factory/orchestration@0.309.0
+  - @cat-factory/server@0.321.0
+  - @cat-factory/gates@0.11.47
+  - @cat-factory/integrations@0.172.16
+  - @cat-factory/prompt-fragments@1.1.43
+
+## 0.54.0
+
+### Minor Changes
+
+- bba4beb: Meter a streamed inline LLM call rather than refuse to make one
+  
+  The LiteLLM gateway lane, added in this same change, is what found this: LiteLLM forwards an
+  upstream's usage chunk only when the client sends `stream_options: { include_usage: true }`, and
+  `openAiCompatibleResolver` never set the SDK's `includeUsage`. Every streamed call through an
+  OpenAI-compatible provider (both operator-hosted gateways, plus qwen / deepseek / moonshot / xai
+  and the Cloudflare REST resolver) would therefore have arrived with no counts and been booked at
+  zero tokens, which downstream is the same absence as a step that spent nothing. The option is now
+  set once, in the resolver, and is inert on a buffered call: the SDK only emits `stream_options`
+  from `doStream`, which is why nothing short of a real gateway could tell the two settings apart.
+  
+  The other half was that no inline caller could stream at all. `InstrumentedModelProvider.wrapStream`
+  threw, deliberately, because a streamed call would otherwise have passed the wrap and reached no
+  sink; the refusal named the two things a streaming caller had to build first. Both are built here.
+  `wrapStream` folds a stream's parts into the shape a buffered reply already has, so `readUsage`,
+  `readFinishReason`, `readOutputText` and the gateway-attribution reader parse a stream through the
+  SAME code that parses a generate result rather than a second implementation that could disagree
+  with it. Every exit settles the row exactly once: the stream ending, the caller abandoning it (the
+  tokens were spent regardless, and the row names the cancellation rather than letting it read as a
+  model failure), an error part mid-flight, and a stream that never opens.
+  
+  `InlineLlmCall.streaming` is a new REQUIRED field, so the flag is the producer's answer instead of
+  the constant `false` the recorder used to write. That is a breaking change to an internal port with
+  one first-party producer per runtime; the conformance suite now records one streamed row, since
+  every fixture writing `false` would let a store that flattened the flag round-trip clean. The
+  subscription-CLI inline model files its rows as streamed too, which is what the container half of
+  that same producer (`makeHarnessCallRecorder`) has always called them.
+
+### Patch Changes
+
+- Updated dependencies [bba4beb]
+  - @cat-factory/kernel@0.344.0
+  - @cat-factory/agents@0.162.0
+  - @cat-factory/orchestration@0.308.0
+  - @cat-factory/gates@0.11.46
+  - @cat-factory/integrations@0.172.15
+  - @cat-factory/prompt-fragments@1.1.42
+  - @cat-factory/server@0.320.2
+
+## 0.53.1
+
+### Patch Changes
+
+- Updated dependencies [afd09af]
+  - @cat-factory/contracts@0.351.1
+  - @cat-factory/agents@0.161.1
+  - @cat-factory/gates@0.11.45
+  - @cat-factory/integrations@0.172.14
+  - @cat-factory/kernel@0.343.1
+  - @cat-factory/orchestration@0.307.1
+  - @cat-factory/prompt-fragments@1.1.41
+  - @cat-factory/server@0.320.1
+
+## 0.53.0
+
+### Minor Changes
+
+- 2ae7e2b: Add a bugfix preset that proves the fix from the repository and spends the environment on one question
+  
+  Every way the platform had of establishing that a change works needs a running system: the API and
+  UI testers read a provisioned ephemeral environment, and the acceptance author writes tests that
+  target one. On a deployment whose preview environments are slow, costly or not representative, that
+  makes a bugfix wait on infrastructure to answer a question a committed test answers better, and it
+  leaves nothing behind: the environment goes away and the next regression is found the same way.
+  
+  `pl_bugfix_tested` ("Fix bug, verified by tests") is `pl_bugfix`'s investigate, triage, reproduce,
+  fix, review spine with the verification moved into the checkout:
+  
+  - **`mocker` then `integration-test`**, both after the fix and both before the `ci` gate. The mock
+    step is the existing one (WireMock stubs the repo owns, wired into compose and CI); the
+    integration step is a new registered kind that drives the fix through the seam a caller uses
+    against those stubs, commits the tests, and reports what it could NOT cover. CI re-running them
+    is the enforcement, which is why the step is a `container-coding` kind rather than a tester: only
+    the tester family is handed environment coordinates, so tests written here cannot come to depend
+    on a URL even by accident.
+  - **`deployer` then `disposer`, with nothing between them**, as a LAUNCH CHECK. The deployer
+    provisions the pull-request branch and settles on a reachability verdict, so a service that no
+    longer starts fails the run; a service that stands nothing up records a clean no-op as always.
+    That verdict is the only thing this preset asks an environment for, so the reclaim is adjacent
+    rather than terminal: holding the environment through the merge tail would bill for a URL no step
+    is going to open.
+  
+  Three things about the new step are deliberate and worth knowing before editing it. Committing no
+  test never fails the run (the fix is already pushed by the time it runs, so a failure would throw
+  the work away rather than name the gap): it reports `outcome: 'uncovered'` with the reason, and an
+  unreadable reply degrades to the same value rather than to a claim it never made. The gaps it
+  states are rendered even under a `covered` verdict, because the reported behaviour being covered
+  says nothing about the neighbouring case that is not. And its verdict is a claim about FILES, which
+  tolerating a no-op makes uncheckable by anything else, so the platform records on the step whether
+  the run committed anything and withdraws a `covered` claim an empty push contradicts, naming the
+  claim rather than quietly showing it.
+  
+  `mocker` gains the same no-op tolerance, which is a fix to every preset that carries it rather than
+  a concession to this one. Its own prompt tells it to add stubs only for calls not yet mocked, so an
+  empty diff is the ordinary outcome on a repository whose upstreams are already stubbed, and the
+  harness cannot tell that apart from an agent that did nothing. Failing there was also late: every
+  preset runs the mocker after the coder has opened the pull request. That prompt now sizes the work
+  to the change in flight too, instead of treating the block's whole external surface as mandatory.
+  
+  **Behaviour change: a marked BUG-FISHING finding now spawns onto this preset by default** instead of
+  `pl_bugfix`. A fished defect has no reporter to reproduce it with and no environment anybody is
+  watching it in, so the regression test committed beside the fix is the whole deliverable. Selection
+  is unchanged and was already there at two tiers: the board's `bugFishingFixPipelineId` overrides the
+  platform default for every spawn, and a single marking overrides both through the request's
+  `pipelineId`. A workspace that had set the board field is unaffected.
+  
+  Two costs come with that default, both the launch check's, and both are documented rather than
+  worked around: every marked finding provisions and reclaims an environment (a recorded no-op on an
+  `infraless` service), and a marking is refused outright when the service declares provisioning it
+  has not finished wiring, because a pipeline carrying an enabled `deployer` meets
+  `RunAdmission.assertDeployerConfigured` and the marking propagates that refusal rather than
+  answering 200 over a fix task that will never appear. `pl_bugfix` reached neither. A board that
+  wants neither pins something else in `bugFishingFixPipelineId`.
+  
+  Existing workspaces pick the preset up the way every catalog addition arrives: the new-pipeline
+  advisory offers it, a reseed inserts it, and a run that pins it by id adopts it. The bug-fishing
+  spawn resolves its fix pipeline through that same adoption seam rather than a point read at the
+  workspace's rows, which is what lets a board older than a built-in mark a finding at all.
+  
+  The run outcome summary gains one additive `/api/v1` value for the same reason (surface version
+  1.71.0): `tests.gap: 'verified_by_committed_tests'`, so a run that verified through committed tests
+  stops being reported as one where "nothing was exercised" on the one surface a person reads, while
+  its pull request says the opposite.
+
+### Patch Changes
+
+- Updated dependencies [2ae7e2b]
+  - @cat-factory/contracts@0.351.0
+  - @cat-factory/kernel@0.343.0
+  - @cat-factory/agents@0.161.0
+  - @cat-factory/orchestration@0.307.0
+  - @cat-factory/server@0.320.0
+  - @cat-factory/gates@0.11.44
+  - @cat-factory/integrations@0.172.13
+  - @cat-factory/prompt-fragments@1.1.40
+
+## 0.52.3
+
+### Patch Changes
+
+- Updated dependencies [6ff632f]
+  - @cat-factory/contracts@0.350.0
+  - @cat-factory/agents@0.160.0
+  - @cat-factory/orchestration@0.306.0
+  - @cat-factory/server@0.319.0
+  - @cat-factory/gates@0.11.43
+  - @cat-factory/integrations@0.172.12
+  - @cat-factory/kernel@0.342.1
+  - @cat-factory/prompt-fragments@1.1.39
+
+## 0.52.2
+
+### Patch Changes
+
+- Updated dependencies [ca5be97]
+- Updated dependencies [333b967]
+  - @cat-factory/kernel@0.342.0
+  - @cat-factory/orchestration@0.305.0
+  - @cat-factory/server@0.318.0
+  - @cat-factory/agents@0.159.1
+  - @cat-factory/gates@0.11.42
+  - @cat-factory/integrations@0.172.11
+  - @cat-factory/prompt-fragments@1.1.38
+
+## 0.52.1
+
+### Patch Changes
+
+- Updated dependencies [5f06bfb]
+  - @cat-factory/contracts@0.349.0
+  - @cat-factory/kernel@0.341.0
+  - @cat-factory/agents@0.159.0
+  - @cat-factory/orchestration@0.304.0
+  - @cat-factory/server@0.317.0
+  - @cat-factory/gates@0.11.41
+  - @cat-factory/integrations@0.172.10
+  - @cat-factory/prompt-fragments@1.1.37
+
+## 0.52.0
+
+### Minor Changes
+
+- 8dc6677: Test whether an agent can actually operate a service's ephemeral environment, before a pipeline finds out
+  
+  "Test environment creation" answers whether a service's provisioning stands an environment up and
+  takes it down again. The expensive failure is the one after that, and it is a GREEN deploy: the
+  environment is up, the tester reaches it, and the agent then spends its whole step
+  reverse-engineering an auth flow, guessing a base path, or reporting the service as broken because
+  nobody told it which credential to send. That is a full run spent to discover a missing sentence of
+  configuration.
+  
+  "Test agent dry run" sits beside it on the same service and buys the same finding for one
+  container. It runs the identical lifecycle against a throwaway branch and adds one stage in the
+  middle. The environment is handed to an agent (HTTP for a backend service, a browser for a
+  frontend frame) together with the frame's sealed test credentials, the provider's own access
+  handle and a read-only checkout of the branch the environment was built from. The agent picks a few
+  simple but meaningful operations, at least one of which must go through authentication, attempts
+  them, and reports each one: what it was, how it was performed, whether it exercised auth, and what
+  happened. Then the run tears the environment down and deletes the branch exactly as before.
+  
+  The report's most valuable field is the one listing what the PLATFORM failed to supply (a
+  credential with no reference, an endpoint that could not be discovered, an auth flow that had to
+  be reverse-engineered), because each entry is a thing to fix before a real run spends a step on
+  it. An operation the agent could not even attempt is a first-class outcome carrying the reason,
+  not a failed call, and the failure vocabulary is grouped by whose problem each kind is: "no credential
+  was supplied" and "the credential I was given was refused" are different fixes and therefore
+  different members.
+  
+  The verdict is computed by the platform from the agent's per-operation judgements, never read off
+  the reply, and it will not call a service operable unless something that worked went through
+  authentication: a healthcheck answering 200 proves an ingress exists and nothing about whether an
+  agent can work there.
+  
+  Two things to watch when reviewing. The run's `status` deliberately stays a statement about the
+  LIFECYCLE, so a dry run reporting `inoperable` is a SUCCEEDED run that found something. Folding
+  the verdict in would make the one interesting outcome indistinguishable from a broken diagnostic
+  and leave a real teardown failure with nothing to say. And everything knowable before the first
+  side effect is refused there rather than mid-run: a deployment that cannot drive a dry run at all,
+  one whose runner backend has no image for THIS frame's surface, a workspace over its spend budget,
+  and a frame that already has a self-test running. Each of those otherwise costs a branch, a full
+  provision and a teardown to discover.
+  
+  Internal break: `environment_test_runs` gains `mode`, `probe_surface`, `probe_dispatched_at`,
+  `probe_progress` and `probe` on both runtimes, and the start endpoint takes an optional `{ mode }`
+  body (absent is the provisioning self-test, so an existing client is unchanged). The reasoning, the
+  traps and the wiring: `backend/docs/environment-self-tests.md`.
+
+### Patch Changes
+
+- Updated dependencies [8dc6677]
+  - @cat-factory/contracts@0.348.0
+  - @cat-factory/kernel@0.340.0
+  - @cat-factory/agents@0.158.0
+  - @cat-factory/orchestration@0.303.0
+  - @cat-factory/server@0.316.0
+  - @cat-factory/gates@0.11.40
+  - @cat-factory/integrations@0.172.9
+  - @cat-factory/prompt-fragments@1.1.36
+
+## 0.51.11
+
+### Patch Changes
+
+- Updated dependencies [636fcf3]
+  - @cat-factory/agents@0.157.2
+  - @cat-factory/integrations@0.172.8
+  - @cat-factory/kernel@0.339.0
+  - @cat-factory/orchestration@0.302.2
+  - @cat-factory/server@0.315.2
+  - @cat-factory/gates@0.11.39
+  - @cat-factory/prompt-fragments@1.1.35
+
+## 0.51.10
+
+### Patch Changes
+
+- Updated dependencies [386c4a2]
+  - @cat-factory/agents@0.157.1
+  - @cat-factory/integrations@0.172.7
+  - @cat-factory/kernel@0.338.0
+  - @cat-factory/orchestration@0.302.1
+  - @cat-factory/server@0.315.1
+  - @cat-factory/gates@0.11.38
+  - @cat-factory/prompt-fragments@1.1.34
+
+## 0.51.9
+
+### Patch Changes
+
+- Updated dependencies [76e2c1d]
+  - @cat-factory/orchestration@0.302.0
+  - @cat-factory/contracts@0.347.0
+  - @cat-factory/kernel@0.337.0
+  - @cat-factory/agents@0.157.0
+  - @cat-factory/server@0.315.0
+  - @cat-factory/integrations@0.172.6
+  - @cat-factory/gates@0.11.37
+  - @cat-factory/prompt-fragments@1.1.33
+
+## 0.51.8
+
+### Patch Changes
+
+- Updated dependencies [5c50d30]
+  - @cat-factory/agents@0.156.3
+  - @cat-factory/contracts@0.346.2
+  - @cat-factory/integrations@0.172.5
+  - @cat-factory/kernel@0.336.1
+  - @cat-factory/orchestration@0.301.3
+  - @cat-factory/prompt-fragments@1.1.32
+  - @cat-factory/server@0.314.3
+  - @cat-factory/gates@0.11.36
+
+## 0.51.7
+
+### Patch Changes
+
+- Updated dependencies [cd220f2]
+  - @cat-factory/agents@0.156.2
+  - @cat-factory/integrations@0.172.4
+  - @cat-factory/kernel@0.336.0
+  - @cat-factory/orchestration@0.301.2
+  - @cat-factory/server@0.314.2
+  - @cat-factory/gates@0.11.35
+  - @cat-factory/prompt-fragments@1.1.31
+
+## 0.51.6
+
+### Patch Changes
+
+- Updated dependencies [d36d0a8]
+  - @cat-factory/kernel@0.335.1
+  - @cat-factory/contracts@0.346.1
+  - @cat-factory/orchestration@0.301.1
+  - @cat-factory/server@0.314.1
+  - @cat-factory/agents@0.156.1
+  - @cat-factory/gates@0.11.34
+  - @cat-factory/integrations@0.172.3
+  - @cat-factory/prompt-fragments@1.1.30
+
+## 0.51.5
+
+### Patch Changes
+
+- Updated dependencies [0f3fb10]
+  - @cat-factory/contracts@0.346.0
+  - @cat-factory/kernel@0.335.0
+  - @cat-factory/agents@0.156.0
+  - @cat-factory/orchestration@0.301.0
+  - @cat-factory/server@0.314.0
+  - @cat-factory/gates@0.11.33
+  - @cat-factory/integrations@0.172.2
+  - @cat-factory/prompt-fragments@1.1.29
+
+## 0.51.4
+
+### Patch Changes
+
+- Updated dependencies [745eae8]
+  - @cat-factory/contracts@0.345.0
+  - @cat-factory/kernel@0.334.0
+  - @cat-factory/agents@0.155.0
+  - @cat-factory/orchestration@0.300.0
+  - @cat-factory/server@0.313.0
+  - @cat-factory/gates@0.11.32
+  - @cat-factory/integrations@0.172.1
+  - @cat-factory/prompt-fragments@1.1.28
+
+## 0.51.3
+
+### Patch Changes
+
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/contracts@0.344.0
+  - @cat-factory/kernel@0.333.0
+  - @cat-factory/agents@0.154.0
+  - @cat-factory/orchestration@0.299.0
+  - @cat-factory/integrations@0.172.0
+  - @cat-factory/server@0.312.0
+  - @cat-factory/gates@0.11.31
+  - @cat-factory/prompt-fragments@1.1.27
+
+## 0.51.2
+
+### Patch Changes
+
+- Updated dependencies [3b11b10]
+  - @cat-factory/contracts@0.343.0
+  - @cat-factory/kernel@0.332.0
+  - @cat-factory/agents@0.153.1
+  - @cat-factory/gates@0.11.30
+  - @cat-factory/integrations@0.171.2
+  - @cat-factory/orchestration@0.298.1
+  - @cat-factory/prompt-fragments@1.1.26
+  - @cat-factory/server@0.311.3
+
+## 0.51.1
+
+### Patch Changes
+
+- Updated dependencies [9dfd40b]
+  - @cat-factory/contracts@0.342.0
+  - @cat-factory/kernel@0.331.0
+  - @cat-factory/agents@0.153.0
+  - @cat-factory/orchestration@0.298.0
+  - @cat-factory/gates@0.11.29
+  - @cat-factory/integrations@0.171.1
+  - @cat-factory/prompt-fragments@1.1.25
+  - @cat-factory/server@0.311.2
+
+## 0.51.0
+
+### Minor Changes
+
+- 1c79070: An environment provider can state a balancer by NAME, and the platform resolves it when it dials
+  
+  A route candidate had to be an IP literal, on the reasoning that "a name would just be the lookup
+  that already failed". That is true of the environment's own hostname and false of the name the
+  deployments this feature exists for actually have: a per-PR environment whose record lives in an
+  internal view is fronted by load balancers that are ordinary public names, and those names resolve
+  from anywhere. A provider had to resolve them itself and state the result, which pins a snapshot of
+  a set that rotates as the balancer scales, forces DNS into a pure response mapping, and asks every
+  such provider to get bounded resolution and partial failure right on its own.
+  
+  A candidate may now state `host` instead of `address`, and a manifest declares one through the new
+  `response.hostsPath` beside `addressesPath`. The platform resolves each stated name at the moment
+  it dials, expands it in place into the addresses it answered with (so the provider's preference
+  order still means what it says), and grades every one of those addresses by exactly the rule that
+  governs a stated address, so an address a bridge may not name is still refused and the destination
+  a container is bridged to is still a literal the platform itself proved. The proof publishes the
+  address that carried plus the name it came from, and the stored candidate stays the stable identity
+  rather than today's answer, which is also what lets a proof survive the balancer changing addresses.
+  
+  Which kind a candidate names is stated, never inferred from the value. The address rule refuses
+  `2130706433` precisely because it is loopback in a disguise, and a resolver handed the same string
+  answers loopback without complaint, so a bare string means an address under `addressesPath` and a
+  name under `hostsPath`.
+  
+  Every way a name fails to become an address is recorded as its own attempt rather than dropped: a
+  name that resolves nowhere rules that candidate out and the proof moves to the next, a lookup that
+  failed (or a resolver that rejected, which the port forbids and nothing can enforce) carries the
+  resolver's own words, and a deployment with nothing wired to resolve records the new
+  `resolver_unavailable` reason, which settles nothing either way and can never fail a frame. Both
+  facades wire a resolver (Node through `dns.lookup`, the Worker over DNS-over-HTTPS, which is the
+  view its own outbound connections already resolve through).
+  
+  The platform also says when it stopped reading: the plan bounds how many names it looks up and how
+  many addresses it dials, and a list longer than that now ends in one `not_attempted` attempt naming
+  how many were passed over. That is a second new reason, and it leaves the route unruled-out for the
+  same reason the first does. A verdict that nothing reaches an environment may not be graded against
+  candidates nobody looked at, and the deployer fails a frame on that verdict.
+  
+  Two proofs that used to stand forever are now re-taken by the status poll: one recording that this
+  deployment could not resolve a name (once one is wired), and a `reached` proof whose address was
+  RESOLVED rather than stated. The second is the price of surviving a balancer rescale, which is what
+  `viaHost` is for: the name stays good while the literal beside it, the one a container host bridge
+  is built from, can be released by the same scale event.
+  
+  Internal breaks, no migration: `EnvironmentAddress` / `environmentAddressSchema` are renamed to
+  `EnvironmentRouteCandidate` / `environmentRouteCandidateSchema` with `address` now optional;
+  `planRouteProbes` takes an options object in place of its bare timeout argument;
+  `RouteProbeTarget`'s `refused` member is generalized to `undialled` and `recordRefusedAttempt` to
+  `recordUndialledAttempt`; and `reduceRouteProof` takes the carrying target rather than its address.
+  A stored candidate or proof written before this parses and behaves exactly as it did.
+
+### Patch Changes
+
+- Updated dependencies [1c79070]
+  - @cat-factory/contracts@0.341.0
+  - @cat-factory/kernel@0.330.0
+  - @cat-factory/integrations@0.171.0
+  - @cat-factory/agents@0.152.0
+  - @cat-factory/orchestration@0.297.0
+  - @cat-factory/gates@0.11.28
+  - @cat-factory/prompt-fragments@1.1.24
+  - @cat-factory/server@0.311.1
+
+## 0.50.3
+
+### Patch Changes
+
+- Updated dependencies [8b015a3]
+  - @cat-factory/contracts@0.340.0
+  - @cat-factory/kernel@0.329.0
+  - @cat-factory/agents@0.151.0
+  - @cat-factory/orchestration@0.296.0
+  - @cat-factory/server@0.311.0
+  - @cat-factory/gates@0.11.27
+  - @cat-factory/integrations@0.170.1
+  - @cat-factory/prompt-fragments@1.1.23
+
+## 0.50.2
+
+### Patch Changes
+
+- Updated dependencies [ec0aba1]
+  - @cat-factory/contracts@0.339.0
+  - @cat-factory/kernel@0.328.0
+  - @cat-factory/integrations@0.170.0
+  - @cat-factory/agents@0.150.0
+  - @cat-factory/orchestration@0.295.0
+  - @cat-factory/gates@0.11.26
+  - @cat-factory/prompt-fragments@1.1.22
+  - @cat-factory/server@0.310.2
+
+## 0.50.1
+
+### Patch Changes
+
+- Updated dependencies [436f373]
+- Updated dependencies [720bad0]
+  - @cat-factory/contracts@0.338.0
+  - @cat-factory/kernel@0.327.0
+  - @cat-factory/orchestration@0.294.0
+  - @cat-factory/agents@0.149.1
+  - @cat-factory/gates@0.11.25
+  - @cat-factory/integrations@0.169.1
+  - @cat-factory/prompt-fragments@1.1.21
+  - @cat-factory/server@0.310.1
+
+## 0.50.0
+
+### Minor Changes
+
+- a745ee2: An environment now carries an address as well as a name, and the platform proves the route before a tester is pointed at it
+  
+  An environment reached an agent as one nullable URL, so "reachable" meant "a URL exists" and
+  nothing between the provider stating it and a tester dialling it ever checked. The tester then got
+  `curl` code 000, which covers a DNS failure, a missing route and a refused connection as one
+  symptom, and reported the hypothesis its own task made salient: that the environment was down.
+  
+  Three things change together, because landing any one alone is incoherent or worse than today. A
+  host bridge can now map a name to an ADDRESS as well as to the container runtime's host gateway,
+  which is what a per-PR environment whose DNS record lives in an internal view needs. The deployer
+  DIALS the environment once when its frame settles ready, publishing the candidate that carried
+  rather than the first that resolved and recording every attempt either way. And what it proved
+  rides the handle into the tester's prompt, so an agent that cannot resolve a name is told which
+  layer the platform already ruled out and which address carried.
+  
+  An environment nothing can reach now settles the frame `failed` with the new
+  `environment_unreachable` reason, in about two minutes, rather than being handed on for a tester to
+  spend ten minutes and a model budget misdiagnosing. That failing verdict is deliberately the narrow
+  one, because a wrong "unreachable" kills a healthy deploy while a wrong "could not tell" costs one
+  diagnostic: a probe that could not classify its own failure, an environment with no address to dial
+  (a `ready` service that publishes no ingress), and a facade with nothing wired to open a socket are
+  `inconclusive` or `unproved`, and neither fails anything. The agent is told when a check was
+  inconclusive; a deployment with no prober carries no reachability line at all.
+  
+  The addresses the platform will dial are limited to those a host bridge may name, applied when the
+  probe is PLANNED rather than only when a bridge is built, so a provider-authored address list
+  cannot aim the platform's own outbound socket at loopback or a cloud metadata endpoint. A refused
+  address is recorded on the proof rather than silently dropped.
+  
+  Internal breaks, both deliberate: `RunnerDispatchOptions.environmentUrls` becomes `environments`,
+  a list of `{ url, address? }` (the pairing is what keeps the host side of a bridge a host the job
+  was actually handed), and `planEnvironmentBridges` moves from the local runtime into
+  `@cat-factory/integrations`, where the Kubernetes runner transport builds the same bridges as pod
+  `hostAliases`. Existing environment rows carry no addresses and no proof, which reads exactly as it
+  should: nothing has looked yet.
+
+### Patch Changes
+
+- Updated dependencies [a745ee2]
+  - @cat-factory/contracts@0.337.0
+  - @cat-factory/kernel@0.326.0
+  - @cat-factory/integrations@0.169.0
+  - @cat-factory/agents@0.149.0
+  - @cat-factory/orchestration@0.293.0
+  - @cat-factory/server@0.310.0
+  - @cat-factory/gates@0.11.24
+  - @cat-factory/prompt-fragments@1.1.20
+
+## 0.49.0
+
+### Minor Changes
+
+- 92232a6: Let a provider say WHY an environment is not ready yet, so the readiness ceiling stops reporting only its own duration
+  
+  `judgeEnvironmentReadiness` formatted the provider's `lastError` into its `timed_out` message, and
+  `lastError` is structurally always `null` on the one status that can reach that branch. Both
+  persistence sites write it on `failed` alone and null it otherwise, so every poll that keeps a
+  readiness wait alive cleared it and any poll that would have filled it settled the wait as `failed`
+  first. The clause was unreachable, and the platform's whole account of a 20-minute wait was that it
+  had waited 20 minutes.
+  
+  The missing thing was not the clause. `ProvisionedEnvironment` had no channel at all for a
+  non-terminal explanation, so a provider that could name the stage an environment was stuck at had
+  nowhere to put it. `ProvisionedEnvironment.statusNote` is that channel: one sentence, persisted on
+  every provision and every poll whatever the status, surfaced in the step's Environment panel while
+  the run is parked, in the run outcome's environment row, and in the `timed_out` failure detail.
+  
+  **A sibling field rather than `lastError` widened to every status**, which was the cheaper option
+  and the wrong one. The note is rendered, and under the error's name a healthy environment
+  mid-rollout would show an operator a "last error" it does not have. The two are read by different
+  readers for opposite reasons and only one of them is a fault, so each keeps its own column and its
+  own label wherever it is shown.
+  
+  **A recorded fault outranks a note on every reader, and neither is ever dropped for the other.**
+  The `timed_out` message states both when both are present, fault first, each under its own label.
+  The Environment panel withholds the note whenever a `lastError` is recorded, whatever the status
+  (a torn-down environment carries the fault of the failure that preceded it), and says nothing
+  beside a status that has already left the state a note describes. And where the run OUTCOME's
+  environment row shows one of them, it says which: `OutcomeEnvironment.detailKind` is `fault` or
+  `note`, because the two arrive through one slot, read identically as prose, and send a reader to
+  opposite conclusions. Public API surface 1.63.0, additive.
+  
+  **The note is bounded where it is written**, not where it is read: provider-authored prose reaches
+  three surfaces, and a code adapter answering with a controller dump would otherwise push each of
+  them off screen. A capped note says it was capped.
+  
+  **The note is the current account, never a log.** It is re-read and rewritten on every poll,
+  including back to `null`, so a note a provider stops returning stops being stored and cannot outlive
+  the state it described. A deployment whose providers never set one keeps today's behaviour byte for
+  byte, including the exact wording of both refusals.
+  
+  The built-in Kubernetes adapter is the first producer, at the two places it already knew and said
+  nothing: which Deployments have not finished rolling out (capped, and the cap says it is capped),
+  and a workload that is healthy behind an Ingress no controller has routed yet, where the ceiling
+  previously reported a bare twenty-minute wait on an environment that had been up for nineteen of
+  them. `IngressAdmission`'s `pending` verdict gained the prose that distinguishes its two causes.
+  
+  Its FAULT channel had the same hole, one status over, and it is closed here too: a rollout that
+  gave up and a namespace that no longer exists were both reported as the generic `Provisioning
+  failed` literal, though the reduction computing the verdict was holding the workload's own name.
+  Both now name what happened.
+  
+  Watch for: the new `status_note` column lands as a nullable add on both runtimes (D1 migration 0098
+  and the Drizzle mirror), and the deployer's projection comparison is now derived from the projected
+  object rather than a hand-listed subset of its fields. During a wait the note is the only field that
+  moves, so leaving it off the list would have meant the one update the projection exists to deliver
+  was the one it never pushed; the TTL, provision type and engine beside it were already in that
+  position, and now a field added to the projection joins the comparison with no second edit.
+  
+  The Node Drizzle schema's ephemeral-environment tables moved into `db/tables/environments.ts` to
+  keep `schema.ts` inside its size budget, re-exported so no importer changes.
+
+### Patch Changes
+
+- Updated dependencies [92232a6]
+- Updated dependencies [a08d2ad]
+  - @cat-factory/contracts@0.336.0
+  - @cat-factory/kernel@0.325.0
+  - @cat-factory/integrations@0.168.0
+  - @cat-factory/orchestration@0.292.0
+  - @cat-factory/server@0.309.0
+  - @cat-factory/agents@0.148.0
+  - @cat-factory/gates@0.11.23
+  - @cat-factory/prompt-fragments@1.1.19
+
+## 0.48.0
+
+### Minor Changes
+
+- dc4a5d9: Import an organisation's Backstage catalog, so triage agents know which services exist and who owns them
+  
+  The platform knew a great deal about the service being built and, since ADR 0031, about the shared
+  capabilities a deployment registered by hand. It knew nothing about the rest of the estate. That
+  cost most on the triage path: a bug investigator looking at a cross-service report had the
+  repositories it was handed and no record of what else the organisation runs, who owns it, or what
+  it exposes, so "which service is this?" was answered from repository names.
+  
+  Most organisations already record exactly that, in a developer portal. A workspace can now point
+  the platform at its Backstage instance and have its components arrive as `workspace`-tier
+  foundational services: identity, owner, system, domain and lifecycle composed into the
+  description, tags as capabilities, and each API entity's definition stored as one of the service's
+  contracts.
+  
+  **It feeds the EXISTING catalog rather than standing beside it**, which is the decision the rest
+  follows from. A parallel mechanism would have meant a second `.cat-context/` directory, a second
+  set of trait guidance, a second tiered merge and a second suppression surface, all describing the
+  same organisation to the same agents. So an imported service is an ordinary catalog row carrying
+  `sourceId: 'service-catalog'`, and the tier merge, the suppression sub-resource, the lazily-read
+  contract documents and the SPA's catalog list are untouched.
+  
+  **Triage agents read it under a new `service-estate` trait, deliberately not the design one.**
+  `foundational-catalog` asks its kind to prefer consuming a shared service and to end its reply
+  with a machine-read declaration block; both are wrong for an agent whose job is to locate a fault,
+  and the second is worse than wrong, because `bug-investigator` and its peers are structured-output
+  kinds whose reply IS a JSON object. The estate file states ownership and interface surface and
+  asks for nothing back. `bug-investigator` and `on-call` carry it; a deployment's own kind opts in
+  through `registerAgentKind({ traits })`. It carries no contract DOCUMENTS: an orientation read
+  happens on every triage dispatch, and folding every service's OpenAPI document into one would make
+  the prompt scale with the size of the organisation's specs, which is what the catalog/contracts
+  split exists to prevent.
+  
+  **The auth modes are a closed vocabulary of the shapes a self-hosted portal actually runs
+  behind**: a static service token, the legacy shared secret (a short-lived HS256 token the platform
+  mints per pass), OAuth2 client credentials for an instance behind an IdP or an identity-aware
+  proxy, HTTP Basic for a reverse proxy, an explicit header list for a gateway that authenticates on
+  its own names, and none at all for an instance reachable only inside a VPN. Free-form headers
+  alone would have covered the mechanics and lost every remedy an operator needs when one fails. Two
+  details are load-bearing: the legacy secret is base64-DECODED into an HMAC key rather than used as
+  UTF-8 (which is what decides whether the token verifies at all, so a secret that is not base64 is
+  refused rather than signed with the wrong key), and the header mode takes a LIST because the
+  common case needs two: a Cloudflare Access service token is an id plus a secret, and a
+  single-pair shape would have sent half a credential.
+  
+  Reviewers may want to look hardest at three things.
+  
+  **Widening the URL guard is the ordinary case here, not an exception.** A self-hosted portal
+  usually lives on an internal host, so `SERVICE_CATALOG_ALLOW_URL_HOSTS` /
+  `SERVICE_CATALOG_ALLOW_HTTP_URLS` exist and are scoped to this integration alone. Redirects are
+  followed by hand and re-checked per hop, with the body and `Authorization` dropped on a
+  cross-origin one, because the base URL is operator-supplied.
+  
+  **A partial import must never read as the estate.** An import reports `complete` / `truncated` /
+  `empty` coverage plus three skip counts, and stamps `ok` / `partial` / `failed` with a sentence on
+  the connection. `empty` is `partial` rather than a healthy import of zero services, because a
+  filter that matched nothing is a configuration problem with a remedy. EVERY failure past the
+  connection lookup is stamped before it propagates, including one raised before the portal is
+  contacted: `lastSyncedAt` is what the autorefresh sweep orders on and it sorts nulls first, so an
+  unstamped failure would pin that connection to the head of the stale queue and starve the sweep.
+  A failure tombstones nothing: an unreachable portal and an empty one are opposite facts.
+  
+  **The import YIELDS to a service the workspace already registered by another route**, counting the
+  refusal as `skippedConflicts` rather than taking the id over. An upsert there would replace a
+  hand-authored row, delete its uploaded contracts and strip any platform capability it was granted,
+  and disconnecting would then tombstone the original.
+  
+  **Two size ratchets moved DOWN, both by splitting.** The Worker's `container.ts` lost its three
+  content-library selectors to a new `container-content-library-deps.ts`, the twin of the file the
+  Node facade already had, so both facades now hold the same selectors in the same place (874 → 800).
+  `orchestration`'s `dependencies.ts` lost the same three libraries' declarations to
+  `content-library-dependencies.ts`, which `CoreDependencies` extends (1514 → 1301, under the
+  default).
+  
+  Also in here, because the import needs them: `asyncapi`, `graphql` and `grpc` join the
+  contract-format vocabulary, with AsyncAPI indexed (its channels are a parse, not a guess) and the
+  other two answering through `operationsAreIndexable` as formats nobody reads. That widened what a
+  linked-repository SCAN picks up too, so `detectContractFormat` requires a type-system definition of
+  a `.graphql`/`.gql` file and a `service` block of a `.proto` one: the common `.gql` in a repo is a
+  client's query text and the common `.proto` is generated message shapes, and neither is an
+  interface the service publishes. `ApiContractManifestEntry` gains `sourceSha`, so a sync can decide
+  whether a document changed without reading a body. The rendered catalog and estate blocks gained a
+  total size cap that states what it dropped, because an imported estate is the first catalog whose
+  size is decided by the organisation rather than by this deployment; the catalog's per-service
+  heading now reads `id (Name)`, the form the estate block already used.
+  
+  Four batched repository methods land with it (`upsertMany`, `softDeleteByIds`,
+  `replaceForServices`, `deleteForServices`, all on the mothership allow-list): reconciling a
+  thousand-service estate one row at a time is two thousand sequential round trips inside one
+  request. The `ownerFieldList` scope rule is new beside them, binding every record of a batched
+  write rather than the first.
+
+### Patch Changes
+
+- 4d999cb: Treat OpenRouter as the gateway it is, rather than as one more OpenAI-compatible vendor.
+  
+  **Its own client.** `openrouter` now resolves through `@openrouter/ai-sdk-provider`
+  (`openRouterResolver`) instead of the generic `createOpenAICompatible`; every other
+  OpenAI-compatible provider is unchanged. The dispatch is made once, in
+  `directOpenAiCompatibleResolver`, which both entry points that build a provider from a leased key
+  route through.
+  
+  **Cost and upstream are now RECORDED rather than derived.** Usage accounting is requested on both
+  model paths, so `llm_call_metrics` gains `reported_cost_usd` (the gateway's own USD ledger figure)
+  and `upstream_provider` (which vendor actually served the call). Both are nullable and null is
+  load-bearing: every other cost on the table is derived from the spend price table, so a 0 would
+  report an unpriced call as free. **Break:** the two columns are added to the D1 telemetry store, the
+  Postgres `telemetry` schema and local mode's SQLite store; existing rows read NULL, which is the
+  correct answer for them.
+  
+  **`supportsStructuredOutputs` is now set** on the generic OpenAI-compatible client for the cloud
+  VENDORS. Without it the SDK silently rewrites a schema-carrying request to `{ type: 'json_object' }`
+  and drops the schema. Nothing in this repo passes a schema today, so this closes a trap rather than
+  changing behaviour. It is withheld from the upstreams nobody here can vouch for: per-user local
+  runners (which never come through this path anyway) and the operator-hosted `bifrost` / `litellm`
+  gateways, whose model ids are the operator's own aliases and routinely front an Ollama or vLLM
+  model that answers a `json_schema` request with a 400.
+  
+  **The `/models` catalog reads what it was dropping**: the conditional `overrides` pricing bands
+  (folded to their maximum), both cache classes and the 1-hour write fallback, `expiration_date` and
+  `canonical_slug`. A published cache rate now reaches the spend table instead of the derived
+  multiplier, unless it is zero, which cannot be told apart from a placeholder for a class the
+  gateway does not bill separately and would meter every cache hit free. A model's withdrawal date
+  is shown in the catalog picker.
+  
+  **Prompt caching is no longer reported as absent for every gateway model.** `providerCachePolicy`
+  takes the model, so an `openrouter:deepseek/…` slug resolves to the policy stated for its vendor
+  prefix. Those are stated per prefix rather than borrowed from the direct provider of the same
+  name, because the two genuinely differ: OpenRouter's Moonshot route caches automatically while our
+  direct `moonshot` does not, and its Alibaba route needs explicit breakpoints while direct Qwen
+  does not. Anthropic (and now Qwen) behind a gateway stays `none`, because nothing on that path
+  sends `cache_control`. **Break:** the rule moved from `@cat-factory/kernel` to
+  `@cat-factory/contracts` (kernel re-exports it unchanged) so the SPA can read the same function
+  instead of mirroring it in a Vue constant, which had already drifted.
+  
+  **Two new env vars, because both routing constraints can empty the upstream pool.**
+  `OPENROUTER_DATA_COLLECTION` (default `deny`, stricter than the vendor's own) is whether OpenRouter
+  may route to a prompt-retaining upstream; `OPENROUTER_REQUIRE_PARAMETERS` (default `true`) is
+  whether it must route only to an upstream advertising every parameter the request carries. A pool
+  narrowed to nothing is a 404, not a degraded call, so the proxy recognises that refusal and records
+  which constraint could have caused it: the gateway cannot say, since our request is the only place
+  both are stated.
+  
+  **New check `scripts/check-openrouter-pins.mjs`** re-reads the live catalogue against the spend
+  table's pinned slugs, comparing all three pinned classes: input, output, and the cache-READ rate a
+  row names only where the vendor departs from the derived floor (so nothing else follows it when the
+  vendor moves). Its runs found four pins metering below the live rate, one
+  (`deepseek/deepseek-v4-pro`) by nearly 3x; all four are repinned here.
+  
+  **Reported cost and upstream are rendered**, in the observability panel's call list: the upstream
+  beside `provider:model`, the gateway's own figure in the expanded row. They stay out of the spend
+  rollups, which remain derived end to end, because a rollup mixing a measured figure for one
+  provider's rows with an estimate for the rest answers a different question per row.
+  
+  **The inline instrumented provider now REFUSES to stream** rather than passing an unrecorded call
+  through. Nothing inline streams today (the recorder hard-codes `streaming: false` for that reason),
+  and a streamed call would have reached no sink at all, which downstream is indistinguishable from a
+  step that spent nothing.
+- Updated dependencies [dc4a5d9]
+- Updated dependencies [4d999cb]
+  - @cat-factory/contracts@0.335.0
+  - @cat-factory/kernel@0.324.0
+  - @cat-factory/integrations@0.167.0
+  - @cat-factory/agents@0.147.0
+  - @cat-factory/orchestration@0.291.0
+  - @cat-factory/server@0.308.0
+  - @cat-factory/gates@0.11.22
+  - @cat-factory/prompt-fragments@1.1.18
+
+## 0.47.19
+
+### Patch Changes
+
+- Updated dependencies [0f426b3]
+  - @cat-factory/agents@0.146.6
+  - @cat-factory/integrations@0.166.22
+  - @cat-factory/kernel@0.323.2
+  - @cat-factory/orchestration@0.290.2
+  - @cat-factory/server@0.307.9
+  - @cat-factory/gates@0.11.21
+  - @cat-factory/prompt-fragments@1.1.17
+
+## 0.47.18
+
+### Patch Changes
+
+- Updated dependencies [332ef26]
+  - @cat-factory/agents@0.146.5
+  - @cat-factory/integrations@0.166.21
+  - @cat-factory/kernel@0.323.1
+  - @cat-factory/orchestration@0.290.1
+  - @cat-factory/server@0.307.8
+  - @cat-factory/gates@0.11.20
+  - @cat-factory/prompt-fragments@1.1.16
+
+<!-- archived-releases -->
+
+Older releases: [`CHANGELOG-ARCHIVE.md`](./CHANGELOG-ARCHIVE.md).

@@ -2,7 +2,6 @@ import type { TaskSearchRepoScope, TaskSourceKind } from '@cat-factory/kernel'
 import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '@cat-factory/kernel'
 import type { TaskRecord } from '@cat-factory/kernel'
 import { markdownToText, buildExcerpt, MapSourceRegistry } from '@cat-factory/kernel'
-import { parseGitHubIssueExternalId } from './github-issues.logic.js'
 
 export type { TaskContextView } from '@cat-factory/kernel'
 export { renderTaskContext } from '@cat-factory/kernel'
@@ -18,6 +17,13 @@ export class MapTaskSourceRegistry
   extends MapSourceRegistry<TaskSourceKind, TaskSourceProvider>
   implements TaskSourceRegistry {}
 
+/**
+ * Cap on a bug-hunt candidate's rendered body, shared by EVERY source's candidate mapper: the
+ * ranking judges actionability rather than the full trace, and a per-source cap would silently
+ * hand the model more of one tracker's bugs than another's to reason about.
+ */
+export const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
+
 /** A short plain-text excerpt of an issue: its summary + the start of its description. */
 export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): string {
   const description = markdownToText(content.description)
@@ -26,25 +32,28 @@ export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): 
 }
 
 /**
- * Whether an imported task belongs to a repo scope. Only GitHub issues carry a
- * repo (their `owner/repo#number` external id), so a repo-less source (Jira,
- * Linear) always passes — the scope narrows the GitHub view without hiding
- * trackers that have no repo notion. Matching is case-insensitive (GitHub
- * owner/repo names are), mirroring the `repo:owner/name` search qualifier. A
- * GitHub id that doesn't parse (a stale/hand-edited row) is treated as
- * out-of-scope rather than leaking into every repo's list.
+ * Whether an imported task belongs to a repo scope, asked of the source that minted its
+ * external id: a repo-backed provider (GitHub Issues, GitLab Issues) declares `repoScope` and
+ * owns the comparison, because the id GRAMMAR and its case rules are the source's own.
+ *
+ * A source with no `repoScope` passes unfiltered, and that covers two different situations that
+ * happen to want the same answer. A repo-LESS source (Jira, Linear) has no repository to be
+ * narrowed to, so the scope simply does not apply to its rows. An UNREGISTERED source (a row
+ * left behind by a provider this deployment no longer wires) has no rule available to judge it
+ * by, and dropping a row a scope cannot evaluate would silently shrink the list rather than
+ * narrow it: the reader would read the absence as "this service has no such issue".
+ *
+ * Passing the provider rather than looking it up here keeps this pure, and lets the caller
+ * resolve each source ONCE for a whole list instead of per row.
  */
 export function taskInRepoScope(
   record: Pick<TaskRecord, 'source' | 'externalId'>,
   scope: TaskSearchRepoScope,
+  provider: TaskSourceProvider | undefined,
 ): boolean {
-  if (record.source !== 'github') return true
-  const parts = parseGitHubIssueExternalId(record.externalId)
-  if (!parts) return false
-  return (
-    parts.owner.toLowerCase() === scope.owner.toLowerCase() &&
-    parts.repo.toLowerCase() === scope.repo.toLowerCase()
-  )
+  const rules = provider?.repoScope
+  if (!rules) return true
+  return rules.matches(record.externalId, scope)
 }
 
 /**

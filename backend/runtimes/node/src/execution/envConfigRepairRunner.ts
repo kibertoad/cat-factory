@@ -1,7 +1,10 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { EnvConfigRepairRunner } from '@cat-factory/kernel'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
+import { driveJobOptions, sleep } from './pgBossRunner.js'
 import type { DriveConfig } from './drive.js'
 
 // Durable env-config-repair driving on pg-boss: the analogue of the Worker's
@@ -24,17 +27,11 @@ interface EnvConfigRepairJob {
 }
 
 function sendOptions(jobId: string, opts: AdvanceQueueOptions): SendOptions {
-  return {
-    singletonKey: jobId,
-    expireInSeconds: opts.expireInSeconds,
-    heartbeatSeconds: opts.heartbeatSeconds,
-    retryLimit: opts.retryLimit,
-    retryDelay: opts.retryDelaySeconds,
-    retryBackoff: true,
-  }
+  // Shared with the execution advance queue rather than restated: the singleton/expiry/heartbeat
+  // semantics and the flat (non-exponential) retry delay are one policy for every drive queue, and
+  // this file used to hold its own copy of it. See {@link driveJobOptions}.
+  return driveJobOptions(jobId, opts)
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
  * Poll an env-config-repair run to a terminal state, sleeping between polls — the Node
@@ -58,10 +55,10 @@ async function driveEnvConfigRepair(
     if (result.state === 'done' || result.state === 'failed') return
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn(
-    { workspaceId, jobId },
-    'env-config-repair drive exhausted its poll budget; sweeper will re-drive',
-  )
+  log.warn('env-config-repair drive exhausted its poll budget; sweeper will re-drive', {
+    workspaceId,
+    jobId,
+  })
 }
 
 export class PgBossEnvConfigRepairRunner implements EnvConfigRepairRunner {
@@ -89,7 +86,7 @@ export async function startEnvConfigRepairWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
-  await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
+  await createQueueWithDeadLetter(boss, QUEUE, { policy: QUEUE_POLICY })
   await boss.work<EnvConfigRepairJob>(
     QUEUE,
     { localConcurrency: concurrency },
@@ -99,10 +96,11 @@ export async function startEnvConfigRepairWorker(
         try {
           await driveEnvConfigRepair(container, workspaceId, jobId, cfg, log)
         } catch (error) {
-          log.error(
-            { workspaceId, jobId, err: error instanceof Error ? error.message : String(error) },
-            'env-config-repair drive failed',
-          )
+          log.error('env-config-repair drive failed', {
+            workspaceId,
+            jobId,
+            err: getErrorMessage(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

@@ -1,0 +1,725 @@
+// Drizzle/Postgres implementations of the core kernel repository ports, split by
+// domain (mirrors the Cloudflare D1 per-repository layout). The row<->domain mapping
+// is the SAME shared mapping the D1 repos use (@cat-factory/server), so behaviour
+// matches across stores; this layer only owns the Drizzle queries. Assembled into the
+// CoreRepositories set by ./drizzle.ts (the barrel).
+
+import type {
+  AccountInvitationRecord,
+  AccountInvitationRepository,
+  AccountRecord,
+  AccountRepository,
+  AccountRole,
+  AccountSettingsPatch,
+  AuditEventPage,
+  AuditEventRecord,
+  AuditEventRepository,
+  AuthAttemptRecord,
+  AuthAttemptRepository,
+  CloudProvider,
+  EmailConnectionRecord,
+  EmailConnectionRepository,
+  EmailProviderKind,
+  IdentityProvider,
+  MachineNodeMint,
+  MachineNodeMintOutcome,
+  MachineNodeRecord,
+  MachineNodeRepository,
+  Membership,
+  MembershipRepository,
+  PasswordResetTokenRecord,
+  PasswordResetTokenRepository,
+  PasswordResetTokenStatus,
+  UserIdentityRecord,
+  UserRecord,
+  UserRepository,
+} from '@cat-factory/kernel'
+import {
+  auditEventColumns,
+  auditPageLimit,
+  decodeAuditCursor,
+  encodeAuditCursor,
+  rowToAuditEventView,
+} from '@cat-factory/kernel'
+import { and, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import type { DrizzleDb } from '../../db/client.js'
+import {
+  accountInvitations,
+  accounts,
+  auditEvents,
+  authAttempts,
+  emailConnections,
+  machineNodes,
+  memberships,
+  passwordResetTokens,
+  userIdentities,
+  users,
+} from '../../db/schema.js'
+
+function rowToAccount(row: typeof accounts.$inferSelect): AccountRecord {
+  return {
+    id: row.id,
+    type: row.type === 'org' ? 'org' : 'personal',
+    name: row.name,
+    githubAccountLogin: row.github_account_login,
+    ownerUserId: row.owner_user_id,
+    createdAt: row.created_at,
+    ...(row.default_cloud_provider
+      ? { defaultCloudProvider: row.default_cloud_provider as CloudProvider }
+      : {}),
+    ...(row.spend_monthly_limit != null ? { spendMonthlyLimit: row.spend_monthly_limit } : {}),
+  }
+}
+
+export class DrizzleAccountRepository implements AccountRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(id: string): Promise<AccountRecord | null> {
+    const [row] = await this.db.select().from(accounts).where(eq(accounts.id, id))
+    return row ? rowToAccount(row) : null
+  }
+
+  async listByIds(ids: string[]): Promise<AccountRecord[]> {
+    if (ids.length === 0) return []
+    const out: AccountRecord[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(accounts)
+        .where(inArray(accounts.id, ids.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToAccount(row))
+    }
+    return out
+  }
+
+  async create(account: AccountRecord): Promise<void> {
+    await this.db.insert(accounts).values({
+      id: account.id,
+      type: account.type,
+      name: account.name,
+      github_account_login: account.githubAccountLogin,
+      owner_user_id: account.ownerUserId,
+      created_at: account.createdAt,
+      default_cloud_provider: account.defaultCloudProvider ?? null,
+      spend_monthly_limit: account.spendMonthlyLimit ?? null,
+    })
+  }
+
+  async ensurePersonal(account: AccountRecord): Promise<AccountRecord> {
+    // Atomic get-or-create: `ON CONFLICT DO NOTHING` no-ops when a personal account already
+    // exists for this owner (the partial unique index `idx_accounts_personal` arbitrates), so
+    // concurrent first-sign-in callers converge on the one surviving row instead of racing to
+    // a duplicate-key error. Re-select to return whichever row won.
+    await this.db
+      .insert(accounts)
+      .values({
+        id: account.id,
+        type: account.type,
+        name: account.name,
+        github_account_login: account.githubAccountLogin,
+        owner_user_id: account.ownerUserId,
+        created_at: account.createdAt,
+        default_cloud_provider: account.defaultCloudProvider ?? null,
+        spend_monthly_limit: account.spendMonthlyLimit ?? null,
+      })
+      .onConflictDoNothing()
+    const row = await this.findPersonalByUser(account.ownerUserId ?? '')
+    if (!row) {
+      throw new Error(
+        `ensurePersonal: personal account missing after insert for ${account.ownerUserId}`,
+      )
+    }
+    return row
+  }
+
+  async rename(id: string, name: string): Promise<void> {
+    await this.db.update(accounts).set({ name }).where(eq(accounts.id, id))
+  }
+
+  async updateSettings(id: string, patch: AccountSettingsPatch): Promise<void> {
+    const set: Partial<typeof accounts.$inferInsert> = {}
+    if ('defaultCloudProvider' in patch) {
+      set.default_cloud_provider = patch.defaultCloudProvider ?? null
+    }
+    if ('spendMonthlyLimit' in patch) {
+      set.spend_monthly_limit = patch.spendMonthlyLimit ?? null
+    }
+    if (Object.keys(set).length === 0) return
+    await this.db.update(accounts).set(set).where(eq(accounts.id, id))
+  }
+
+  async findPersonalByUser(userId: string): Promise<AccountRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.type, 'personal'), eq(accounts.owner_user_id, userId)))
+    return row ? rowToAccount(row) : null
+  }
+}
+
+/** Parse the CSV `roles` column into a non-empty role set (defaults to developer). */
+
+function parseRoles(csv: string | null): AccountRole[] {
+  const roles = (csv ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter((r): r is AccountRole => r === 'admin' || r === 'developer' || r === 'product')
+  return roles.length > 0 ? [...new Set(roles)] : ['developer']
+}
+
+function rowToMembership(row: typeof memberships.$inferSelect): Membership {
+  return {
+    accountId: row.account_id,
+    userId: row.user_id,
+    roles: parseRoles(row.roles),
+    createdAt: row.created_at,
+  }
+}
+
+export class DrizzleMembershipRepository implements MembershipRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByUser(userId: string): Promise<Membership[]> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(eq(memberships.user_id, userId))
+      .orderBy(memberships.created_at)
+    return rows.map(rowToMembership)
+  }
+
+  async listByAccount(accountId: string): Promise<Membership[]> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(eq(memberships.account_id, accountId))
+      .orderBy(memberships.created_at)
+    return rows.map(rowToMembership)
+  }
+
+  async get(accountId: string, userId: string): Promise<Membership | null> {
+    const [row] = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+    return row ? rowToMembership(row) : null
+  }
+
+  async upsert(membership: Membership): Promise<void> {
+    await this.db
+      .insert(memberships)
+      .values({
+        account_id: membership.accountId,
+        user_id: membership.userId,
+        roles: membership.roles.join(','),
+        created_at: membership.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [memberships.account_id, memberships.user_id],
+        set: { roles: membership.roles.join(',') },
+      })
+  }
+
+  async remove(accountId: string, userId: string): Promise<void> {
+    await this.db
+      .delete(memberships)
+      .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+  }
+}
+
+function rowToUser(row: typeof users.$inferSelect): UserRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    avatarUrl: row.avatar_url,
+    createdAt: row.created_at,
+  }
+}
+
+function rowToIdentity(row: typeof userIdentities.$inferSelect): UserIdentityRecord {
+  return {
+    userId: row.user_id,
+    provider: row.provider as IdentityProvider,
+    subject: row.subject,
+    secret: row.secret,
+    metadata: row.metadata,
+    createdAt: row.created_at,
+  }
+}
+
+export class DrizzleUserRepository implements UserRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(id: string): Promise<UserRecord | null> {
+    const [row] = await this.db.select().from(users).where(eq(users.id, id))
+    return row ? rowToUser(row) : null
+  }
+
+  async create(user: UserRecord): Promise<void> {
+    await this.db.insert(users).values({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatar_url: user.avatarUrl,
+      created_at: user.createdAt,
+    })
+  }
+
+  async update(
+    id: string,
+    patch: Partial<Pick<UserRecord, 'name' | 'email' | 'avatarUrl'>>,
+  ): Promise<void> {
+    const set: Record<string, unknown> = {}
+    if ('name' in patch) set.name = patch.name
+    if ('email' in patch) set.email = patch.email
+    if ('avatarUrl' in patch) set.avatar_url = patch.avatarUrl
+    if (Object.keys(set).length === 0) return
+    await this.db.update(users).set(set).where(eq(users.id, id))
+  }
+
+  async findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(users)
+      .innerJoin(userIdentities, eq(userIdentities.user_id, users.id))
+      .where(and(eq(userIdentities.provider, provider), eq(userIdentities.subject, subject)))
+    return row ? rowToUser(row.users) : null
+  }
+
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase().trim()))
+    return row ? rowToUser(row) : null
+  }
+
+  async listByIds(ids: string[]): Promise<UserRecord[]> {
+    if (ids.length === 0) return []
+    const rows = await this.db.select().from(users).where(inArray(users.id, ids))
+    return rows.map(rowToUser)
+  }
+
+  async getIdentity(
+    provider: IdentityProvider,
+    subject: string,
+  ): Promise<UserIdentityRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(userIdentities)
+      .where(and(eq(userIdentities.provider, provider), eq(userIdentities.subject, subject)))
+    return row ? rowToIdentity(row) : null
+  }
+
+  async linkIdentity(identity: UserIdentityRecord): Promise<void> {
+    await this.db
+      .insert(userIdentities)
+      .values({
+        user_id: identity.userId,
+        provider: identity.provider,
+        subject: identity.subject,
+        secret: identity.secret,
+        metadata: identity.metadata,
+        created_at: identity.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [userIdentities.provider, userIdentities.subject],
+        set: { user_id: identity.userId, secret: identity.secret, metadata: identity.metadata },
+      })
+  }
+
+  async listIdentities(userId: string): Promise<UserIdentityRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(userIdentities)
+      .where(eq(userIdentities.user_id, userId))
+    return rows.map(rowToIdentity)
+  }
+
+  async sessionGeneration(userId: string): Promise<number | null> {
+    // The ONE column, not the whole row: this is the per-request read behind session
+    // verification, so it stays as narrow as the store can make it.
+    const [row] = await this.db
+      .select({ generation: users.session_generation })
+      .from(users)
+      .where(eq(users.id, userId))
+    return row ? row.generation : null
+  }
+
+  async bumpSessionGeneration(userId: string): Promise<number> {
+    // `session_generation + 1` evaluated by the database and RETURNED, never read-modify-written
+    // here: two concurrent revocations would otherwise read the same value and write the same
+    // successor, and a bump racing a mint could hand back a generation the row never held.
+    const [row] = await this.db
+      .update(users)
+      .set({ session_generation: sql`${users.session_generation} + 1` })
+      .where(eq(users.id, userId))
+      .returning({ generation: users.session_generation })
+    if (!row) {
+      // Matching no row is not success: an offboarding caller must hear that it withdrew nothing.
+      throw new Error(`Cannot revoke sessions for unknown user '${userId}'`)
+    }
+    return row.generation
+  }
+}
+
+function rowToInvitation(row: typeof accountInvitations.$inferSelect): AccountInvitationRecord {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    email: row.email,
+    roles: parseRoles(row.roles),
+    tokenHash: row.token_hash,
+    invitedBy: row.invited_by,
+    status: row.status as AccountInvitationRecord['status'],
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  }
+}
+
+export class DrizzleAccountInvitationRepository implements AccountInvitationRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async create(record: AccountInvitationRecord): Promise<void> {
+    await this.db.insert(accountInvitations).values({
+      id: record.id,
+      account_id: record.accountId,
+      email: record.email,
+      roles: record.roles.join(','),
+      token_hash: record.tokenHash,
+      invited_by: record.invitedBy,
+      status: record.status,
+      expires_at: record.expiresAt,
+      created_at: record.createdAt,
+    })
+  }
+
+  async get(id: string): Promise<AccountInvitationRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(accountInvitations)
+      .where(eq(accountInvitations.id, id))
+    return row ? rowToInvitation(row) : null
+  }
+
+  async findByTokenHash(tokenHash: string): Promise<AccountInvitationRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(accountInvitations)
+      .where(eq(accountInvitations.token_hash, tokenHash))
+    return row ? rowToInvitation(row) : null
+  }
+
+  async listByAccount(accountId: string): Promise<AccountInvitationRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(accountInvitations)
+      .where(eq(accountInvitations.account_id, accountId))
+      .orderBy(desc(accountInvitations.created_at))
+    return rows.map(rowToInvitation)
+  }
+
+  async setStatus(id: string, status: AccountInvitationRecord['status']): Promise<void> {
+    await this.db.update(accountInvitations).set({ status }).where(eq(accountInvitations.id, id))
+  }
+}
+
+function rowToPasswordResetToken(
+  row: typeof passwordResetTokens.$inferSelect,
+): PasswordResetTokenRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tokenHash: row.token_hash,
+    status: row.status as PasswordResetTokenStatus,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  }
+}
+
+export class DrizzlePasswordResetTokenRepository implements PasswordResetTokenRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async create(record: PasswordResetTokenRecord): Promise<void> {
+    await this.db.insert(passwordResetTokens).values({
+      id: record.id,
+      user_id: record.userId,
+      token_hash: record.tokenHash,
+      status: record.status,
+      expires_at: record.expiresAt,
+      created_at: record.createdAt,
+    })
+  }
+
+  async findByTokenHash(tokenHash: string): Promise<PasswordResetTokenRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token_hash, tokenHash))
+    return row ? rowToPasswordResetToken(row) : null
+  }
+
+  async listPendingByUser(userId: string): Promise<PasswordResetTokenRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(eq(passwordResetTokens.user_id, userId), eq(passwordResetTokens.status, 'pending')),
+      )
+      .orderBy(desc(passwordResetTokens.created_at))
+    return rows.map(rowToPasswordResetToken)
+  }
+
+  async setStatus(id: string, status: PasswordResetTokenStatus): Promise<void> {
+    await this.db.update(passwordResetTokens).set({ status }).where(eq(passwordResetTokens.id, id))
+  }
+
+  async consume(id: string): Promise<boolean> {
+    // Conditional on `status='pending'` so concurrent redemptions can't both win.
+    const result = await this.db
+      .update(passwordResetTokens)
+      .set({ status: 'used' })
+      .where(and(eq(passwordResetTokens.id, id), eq(passwordResetTokens.status, 'pending')))
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async deleteExpired(before: number): Promise<number> {
+    const result = await this.db
+      .delete(passwordResetTokens)
+      .where(lt(passwordResetTokens.expires_at, before))
+    return result.rowCount ?? 0
+  }
+}
+
+/** Postgres auth-attempt ledger for the password-endpoint throttle (SEC-4). Mirror of the D1 repo. */
+export class DrizzleAuthAttemptRepository implements AuthAttemptRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(attempt: AuthAttemptRecord): Promise<void> {
+    await this.db.insert(authAttempts).values({
+      id: `atmpt_${randomUUID()}`,
+      key: attempt.key,
+      ip: attempt.ip,
+      at: attempt.at,
+    })
+  }
+
+  async countByKeySince(key: string, sinceMs: number): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(authAttempts)
+      .where(and(eq(authAttempts.key, key), gte(authAttempts.at, sinceMs)))
+    return row?.n ?? 0
+  }
+
+  async countByIpSince(ip: string, sinceMs: number): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(authAttempts)
+      .where(and(eq(authAttempts.ip, ip), gte(authAttempts.at, sinceMs)))
+    return row?.n ?? 0
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const result = await this.db.delete(authAttempts).where(lt(authAttempts.at, epochMs))
+    return result.rowCount ?? 0
+  }
+}
+
+function rowToMachineNode(row: typeof machineNodes.$inferSelect): MachineNodeRecord {
+  return {
+    nodeId: row.node_id,
+    userId: row.user_id,
+    accountIds: JSON.parse(row.account_ids) as string[],
+    createdAt: row.created_at,
+    lastMintedAt: row.last_minted_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    revokedByUserId: row.revoked_by,
+  }
+}
+
+/** Postgres machine-node roster + revocation tombstones (SEC-5). Mirror of the D1 repo. */
+export class DrizzleMachineNodeRepository implements MachineNodeRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async recordMint(mint: MachineNodeMint): Promise<MachineNodeMintOutcome> {
+    // The upsert refreshes only the mint-shaped columns: `user_id`, `created_at` and the
+    // revocation tombstone never change here. `GREATEST` keeps `expires_at` the latest exp
+    // ever signed, so a shorter re-mint cannot make the roster forget a longer token.
+    //
+    // `setWhere` is what makes ownership atomic rather than check-then-write: a concurrent
+    // first mint of the same node id by another user updates nothing instead of stamping its
+    // scope onto the winner's row, and a revoked id can never be resurrected.
+    const result = await this.db
+      .insert(machineNodes)
+      .values({
+        node_id: mint.nodeId,
+        user_id: mint.userId,
+        account_ids: JSON.stringify(mint.accountIds),
+        created_at: mint.mintedAt,
+        last_minted_at: mint.mintedAt,
+        expires_at: mint.expiresAt,
+      })
+      .onConflictDoUpdate({
+        target: machineNodes.node_id,
+        set: {
+          account_ids: JSON.stringify(mint.accountIds),
+          last_minted_at: mint.mintedAt,
+          expires_at: sql`GREATEST(${machineNodes.expires_at}, ${mint.expiresAt})`,
+        },
+        setWhere: and(eq(machineNodes.user_id, mint.userId), isNull(machineNodes.revoked_at)),
+      })
+    // A guarded no-op and a successful refresh are both "no error", so the write count is the
+    // only thing that distinguishes them.
+    return (result.rowCount ?? 0) > 0 ? 'recorded' : 'refused'
+  }
+
+  async get(nodeId: string): Promise<MachineNodeRecord | null> {
+    const [row] = await this.db.select().from(machineNodes).where(eq(machineNodes.node_id, nodeId))
+    return row ? rowToMachineNode(row) : null
+  }
+
+  async listByUser(userId: string): Promise<MachineNodeRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(machineNodes)
+      .where(eq(machineNodes.user_id, userId))
+      .orderBy(desc(machineNodes.last_minted_at))
+    return rows.map(rowToMachineNode)
+  }
+
+  async revoke(nodeId: string, revokedAt: number, revokedByUserId: string): Promise<boolean> {
+    // Idempotent kill switch: only the FIRST revocation writes (the tombstone keeps its
+    // original timestamp/actor), but re-revoking an already-revoked node still reports true.
+    const result = await this.db
+      .update(machineNodes)
+      .set({ revoked_at: revokedAt, revoked_by: revokedByUserId })
+      .where(and(eq(machineNodes.node_id, nodeId), isNull(machineNodes.revoked_at)))
+    if ((result.rowCount ?? 0) > 0) return true
+    return (await this.get(nodeId)) !== null
+  }
+
+  async isRevoked(nodeId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ revoked_at: machineNodes.revoked_at })
+      .from(machineNodes)
+      .where(eq(machineNodes.node_id, nodeId))
+    return row?.revoked_at != null
+  }
+
+  async deleteExpired(before: number): Promise<number> {
+    const result = await this.db.delete(machineNodes).where(lt(machineNodes.expires_at, before))
+    return result.rowCount ?? 0
+  }
+}
+
+/** Postgres append-only account audit log. Mirror of the D1 repo. */
+export class DrizzleAuditEventRepository implements AuditEventRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async append(event: AuditEventRecord): Promise<void> {
+    // No conflict clause: an id collision is an id-generator bug, and quietly folding one append
+    // onto another would lose an audited action, the one outcome this table exists to prevent.
+    await this.db.insert(auditEvents).values(auditEventColumns(event))
+  }
+
+  async deleteOlderThan(cutoff: number): Promise<number> {
+    // By AGE and nothing else — no account, actor or action predicate — so the retention sweep
+    // cannot be turned into a way to remove the record of one particular thing.
+    const result = await this.db.delete(auditEvents).where(lt(auditEvents.at, cutoff))
+    return result.rowCount ?? 0
+  }
+
+  async listByAccount(
+    accountId: string,
+    options?: { cursor?: string | null; limit?: number },
+  ): Promise<AuditEventPage> {
+    const limit = auditPageLimit(options?.limit)
+    const after = decodeAuditCursor(options?.cursor)
+    // One extra row tells us whether another page exists, with no second COUNT query. The keyset
+    // predicate is the (at, id) pair, matching the index's ordering exactly: an OFFSET would
+    // re-read every earlier row and skip a row that arrived mid-pagination.
+    const rows = await this.db
+      .select()
+      .from(auditEvents)
+      .where(
+        after
+          ? and(
+              eq(auditEvents.account_id, accountId),
+              or(
+                lt(auditEvents.at, after.at),
+                and(eq(auditEvents.at, after.at), lt(auditEvents.id, after.id)),
+              ),
+            )
+          : eq(auditEvents.account_id, accountId),
+      )
+      .orderBy(desc(auditEvents.at), desc(auditEvents.id))
+      .limit(limit + 1)
+
+    const page = rows.slice(0, limit).map(rowToAuditEventView)
+    const last = page.at(-1)
+    return {
+      events: page,
+      nextCursor: rows.length > limit && last ? encodeAuditCursor(last) : null,
+    }
+  }
+}
+
+function rowToEmailConnection(row: typeof emailConnections.$inferSelect): EmailConnectionRecord {
+  return {
+    accountId: row.account_id,
+    provider: row.provider as EmailProviderKind,
+    fromAddress: row.from_address,
+    apiKeyCipher: row.api_key_cipher,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  }
+}
+
+export class DrizzleEmailConnectionRepository implements EmailConnectionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByAccount(accountId: string): Promise<EmailConnectionRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(emailConnections)
+      .where(and(eq(emailConnections.account_id, accountId), isNull(emailConnections.deleted_at)))
+    return row ? rowToEmailConnection(row) : null
+  }
+
+  async upsert(record: EmailConnectionRecord): Promise<void> {
+    await this.db
+      .insert(emailConnections)
+      .values({
+        account_id: record.accountId,
+        provider: record.provider,
+        from_address: record.fromAddress,
+        api_key_cipher: record.apiKeyCipher,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+        deleted_at: record.deletedAt,
+      })
+      .onConflictDoUpdate({
+        target: emailConnections.account_id,
+        set: {
+          provider: record.provider,
+          from_address: record.fromAddress,
+          api_key_cipher: record.apiKeyCipher,
+          updated_at: record.updatedAt,
+          deleted_at: record.deletedAt,
+        },
+      })
+  }
+
+  async softDelete(accountId: string, at: number): Promise<void> {
+    await this.db
+      .update(emailConnections)
+      .set({ deleted_at: at, updated_at: at })
+      .where(eq(emailConnections.account_id, accountId))
+  }
+}

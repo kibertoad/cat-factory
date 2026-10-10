@@ -72,6 +72,26 @@ describe('reviewableArtifactOutput', () => {
     expect(out).not.toContain('raw chatter')
   })
 
+  // The initiative plan is DELIBERATELY not handled here, and this pins that rather than
+  // leaving it to be "fixed" by a future reader who spots the missing artifact. This seam
+  // renders the agent's RAW result, which is only sound while the committed artifact IS that
+  // result. The plan is reshaped at ingest (a preset's phase template reorders phases; its
+  // `seedPlan` hook adds and drops items), so rendering the raw draft here would show a
+  // reviewer a document their approval does not govern. Its rendering is authored by the
+  // `initiative-planner` step resolver, off the INGESTED entity.
+  it('leaves the initiative plan alone — its rendering is authored at ingest', () => {
+    const result: AgentRunResult = {
+      output: 'Initiative plan drafted.',
+      initiativePlan: {
+        goal: 'Migrate every repository off the legacy client.',
+        phases: [{ id: 'phase-one', title: 'Introduce the adapter' }],
+        items: [{ id: 'item-1', phaseId: 'phase-one', title: 'Add the adapter port' }],
+        policy: { maxConcurrent: 2, defaultPipelineId: 'pl_simple' },
+      },
+    }
+    expect(reviewableArtifactOutput(result)).toBeUndefined()
+  })
+
   it('falls back to undefined for a prose producer (no artifact)', () => {
     expect(
       reviewableArtifactOutput({ output: 'An architecture proposal in prose.' }),

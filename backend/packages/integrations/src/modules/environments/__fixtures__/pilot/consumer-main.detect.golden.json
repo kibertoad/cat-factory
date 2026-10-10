@@ -222,11 +222,6 @@
       "message": "This compose stack builds its images from source (build:). Recommending build-from-source mode, which clones the PR head and runs `docker compose build` — available only on a local (Docker-capable) deployment."
     },
     {
-      "field": "kubernetes",
-      "confidence": "low",
-      "message": "Kubernetes manifests also exist in this repo; recommending docker-compose because it is your selected provision type. Switch to kubernetes if that is the test target."
-    },
-    {
       "field": "composeService",
       "confidence": "low",
       "message": "The compose file declares 28 services; pre-selected \"app\" for this block. The file is the deploy target — the service choice is advisory; pick another if that's wrong."

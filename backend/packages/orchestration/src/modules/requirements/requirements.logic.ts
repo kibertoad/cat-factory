@@ -1,11 +1,16 @@
 import type {
   Block,
+  DocumentFreshness,
+  OwnServiceContext,
   RequirementConcernLevel,
   RequirementReviewItem,
   ReviewItemCategory,
   ReviewItemSeverity,
 } from '@cat-factory/kernel'
+import { freshnessHeaderLines } from '@cat-factory/kernel'
+import type { RecommendationSource } from '@cat-factory/contracts'
 import { REQUIREMENT_CONCERN_RANK } from '@cat-factory/contracts'
+import { productIsIdentifiedFrom, renderProductContextLines } from '../review/product-context.js'
 
 // Pure logic for the requirements-review agent: assembling the "collected
 // requirements" text from a block + its linked context, building the review and
@@ -22,6 +27,12 @@ export interface ReviewContextDoc {
   title: string
   url: string
   excerpt: string
+  /**
+   * What the dispatch-time refresh concluded about this excerpt's currency, rendered exactly as it
+   * is for every other reader of a linked document. Absent when no refresher is wired, which the
+   * renderer treats as "nothing to state", which is the prior behaviour, byte for byte.
+   */
+  freshness?: DocumentFreshness
 }
 
 /** A tracker issue linked to the block as context. */
@@ -39,10 +50,30 @@ export interface RequirementsContext {
   docs: ReviewContextDoc[]
   tasks: ReviewContextTask[]
   /**
+   * Which system this work belongs to — the enclosing service frame, or the positive reason there
+   * is none. The reviewer runs INLINE with no checkout, so this is its only means of knowing what
+   * software is under discussion; `renderProductContext` states the unresolved case rather than
+   * omitting it. Absent only for a caller that does not resolve it (a test fake), which renders
+   * nothing either way.
+   */
+  service?: OwnServiceContext
+  /**
+   * One-paragraph intent lifted from the service repo's committed `spec/overview.md`, when the
+   * repo is readable. Grounds the reviewer in what the service actually is, beyond its board
+   * title. Absent when unwired, unreadable or empty.
+   */
+  specIntent?: string
+  /**
+   * The converged direction an upstream `requirements-brainstorm` dialogue settled on. When
+   * present it is the primary subject the reviewer critiques — the rough description that fed the
+   * dialogue is kept ALONGSIDE it (see {@link renderRequirements}) rather than replaced.
+   */
+  refinedDirection?: string
+  /**
    * The standardized requirements document produced by a prior incorporation. When
    * present (a re-review or a redo), it is the authoritative requirements text the
-   * reviewer/rework reasons over — the original description + linked context become
-   * background reference. Absent on the first pass.
+   * reviewer/rework reasons over — the original description + linked context stay in the prompt
+   * as background reference. Absent on the first pass.
    */
   incorporatedDoc?: string
   /**
@@ -53,28 +84,70 @@ export interface RequirementsContext {
 }
 
 /**
- * Render the block's "collected requirements" as a single Markdown document — the
- * standardized incorporated document when one exists (a later review/rework cycle),
- * else the block description, plus any linked PRD/RFC pages and tracker issues. Used
- * both as the reviewer's input and as the base the incorporate step rewrites.
+ * Render the system this work belongs to (shared renderer — see `review/product-context.ts`, which
+ * holds why the unresolved case is stated rather than omitted), plus the service's own statement of
+ * intent from its committed `spec/overview.md` when one was readable.
+ */
+function renderProductContext(ctx: RequirementsContext): string[] {
+  return renderProductContextLines(ctx.service, 'reason', {
+    label: 'From the service specification (`spec/overview.md`):',
+    body: ctx.specIntent ?? '',
+  })
+}
+
+/**
+ * Render the block's "collected requirements" as a single Markdown document — the system the work
+ * belongs to, the current subject (the standardized incorporated document on a later cycle, else
+ * the brainstormed direction, else the raw description), and any linked PRD/RFC pages and tracker
+ * issues. Used both as the reviewer's input and as the base the incorporate step rewrites.
+ *
+ * A derived subject (an incorporated document, a brainstormed direction) NEVER displaces the
+ * requester's own words: it is rendered above them, and the original description stays in the
+ * prompt labelled as the original request. Displacement was how a single stray assumption became
+ * permanent — the incorporated document is authoritative on the next pass, so once one pass wrote
+ * an assumed product into it, no later pass could see the request it came from, and every
+ * re-review re-derived from the drifted text. Keeping the original in view is what lets both the
+ * reviewer and a human notice the drift.
  */
 export function renderRequirements(ctx: RequirementsContext): string {
-  const lines: string[] = ctx.incorporatedDoc?.trim()
+  const heading = [`# ${ctx.block.title} (${ctx.block.type})`, ...renderProductContext(ctx)]
+  const original = ctx.block.description?.trim()
+  const derived = ctx.incorporatedDoc?.trim()
+    ? {
+        title: 'Current standardized requirements (under review)',
+        body: ctx.incorporatedDoc.trim(),
+      }
+    : ctx.refinedDirection?.trim()
+      ? {
+          title: 'Requirements direction (agreed in the brainstorm)',
+          body: ctx.refinedDirection.trim(),
+        }
+      : undefined
+  const lines: string[] = derived
     ? [
-        `# ${ctx.block.title} (${ctx.block.type})`,
+        ...heading,
         '',
-        '## Current standardized requirements (under review)',
-        ctx.incorporatedDoc.trim(),
-      ]
-    : [
-        `# ${ctx.block.title} (${ctx.block.type})`,
+        `## ${derived.title}`,
+        derived.body,
         '',
-        '## Description',
-        ctx.block.description?.trim() || '(no description provided)',
+        '## Original request (as written by the requester)',
+        original || '(no description provided)',
+        '',
+        'The section above is derived from this original request. Where the two disagree about ' +
+          'what is being built, treat the derived document as the current subject but FLAG the ' +
+          'divergence — it means an earlier pass drifted.',
       ]
+    : [...heading, '', '## Description', original || '(no description provided)']
   if (ctx.docs.length) {
     lines.push('', '## Linked requirement / PRD / RFC documents')
-    for (const d of ctx.docs) lines.push('', `### ${d.title} (${d.url})`, d.excerpt)
+    for (const d of ctx.docs) {
+      // The same freshness note every other reader of a linked document gets. This review is the
+      // step a HUMAN signs off on, so an unconfirmed excerpt reaching it unmarked is the worst
+      // version of the omission: the sign-off is recorded against a revision nobody verified, and
+      // the build two steps later runs on a body the reviewer never saw.
+      const freshness = freshnessHeaderLines(d.freshness).trimEnd()
+      lines.push('', `### ${d.title} (${d.url})`, ...(freshness ? [freshness] : []), d.excerpt)
+    }
   }
   if (ctx.tasks.length) {
     lines.push('', '## Linked tracker issues')
@@ -85,12 +158,30 @@ export function renderRequirements(ctx: RequirementsContext): string {
   return lines.join('\n')
 }
 
+/**
+ * Whether the context identifies the system under discussion. Read by the Requirement Writer path
+ * to decide whether a product-specific WEB SEARCH is legitimate: searching about a product the
+ * model had to guess at launders an invention into cited fact, which is far more convincing to a
+ * human than the guess would have been.
+ */
+export function productIsIdentified(ctx: RequirementsContext): boolean {
+  return productIsIdentifiedFrom(ctx.service)
+}
+
 export function buildReviewPrompt(ctx: RequirementsContext): string {
   return [
     'Here are the collected requirements to review:',
     '',
     renderRequirements(ctx),
     '',
+    ...(productIsIdentified(ctx)
+      ? []
+      : [
+          'Note: the context above does not identify which system this work belongs to. Do not ' +
+            'pick one. If knowing it matters for this work, raise THAT as a finding (a `gap` — ' +
+            'which service / product is this for?) instead of assuming an answer.',
+          '',
+        ]),
     'Produce a JSON object of this exact shape:',
     '{',
     '  "items": [',
@@ -104,15 +195,30 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
     '  ]',
     '}',
     '',
-    'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
+    'Every item must be a PRODUCT / BUSINESS question — user-visible behaviour, business ' +
+      'rules and their edge cases, actors and permissions, the meaning of business data, ' +
+      'scope boundaries, or a business-level quality expectation stated as an outcome. Do ' +
+      'NOT raise technical design questions: technology / framework / library choice, ' +
+      'architecture or component decomposition, API, endpoint, schema or data-model shape, ' +
+      'algorithms, caching, performance techniques, infrastructure and deployment, or coding ' +
+      'and test approach. The Architect and Researcher steps own those and settle them later ' +
+      'with the codebase and the technical specification in hand. Before raising an item, ' +
+      'apply the test: could a product owner who does not read code answer it from business ' +
+      'knowledge alone? If not, leave it out entirely — do not downgrade its severity to ' +
+      'squeeze it in. ' +
+      'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
       'ambiguity that would block correct implementation, `medium` for one that risks ' +
       'rework or a wrong assumption, and `low` for a minor clarification or nice-to-have. ' +
-      'Set `autoAnswerable` on EVERY item: true only when a confident answer follows from ' +
-      'universal best practice or the context already provided (no product owner needed), ' +
-      'false when it needs a real business / product / domain decision or missing information ' +
-      '(when unsure, false). ' +
+      'Set `autoAnswerable` on EVERY item, sorting it into one of two groups: true when a ' +
+      'confident answer follows from universal best practice, from the idiomatic approach of a ' +
+      'stack this work already uses, or from the context already provided (no product owner ' +
+      'needed), false when it needs a real business / product / domain decision, a judgement call ' +
+      'somebody should own, or information that is missing (when unsure, false — a run with nobody ' +
+      'watching may answer the first group on its own and always stops for the second). ' +
       'Raise between 0 and 20 items, ordered by severity (high first). If the requirements ' +
-      'are genuinely complete and unambiguous, return an empty items array. Output JSON only.',
+      'are complete and unambiguous at the product level, or the work is purely technical ' +
+      'and changes no user-visible behaviour or business rule, return an empty items array. ' +
+      'Output JSON only.',
   ].join('\n')
 }
 
@@ -227,8 +333,11 @@ export function buildReworkPrompt(
   }
   lines.push(
     'Rewrite the requirements as a single self-contained Markdown document in the standard ' +
-      'structure described in your instructions, folding in every answer above. Output the ' +
-      'revised requirements only.',
+      'structure described in your instructions, folding in every answer above. Keep it at ' +
+      'the product / business level: what the software must do and the rules that govern it, ' +
+      'never how it will be built. The Architect step designs that afterwards, using this ' +
+      'document as its input — so a technical decision you write in here pre-empts a step ' +
+      'that knows the codebase and you do not. Output the revised requirements only.',
   )
   return lines.join('\n')
 }
@@ -309,25 +418,74 @@ export function buildRecommendationPrompt(
   }
   lines.push(
     '',
+    'Each recommendation must be a product / business decision the owner can accept or reject ' +
+      '— a behaviour, rule, limit or scope boundary — not a technical design. Treat the ' +
+      'technical material above as a constraint on what you recommend, not as something to ' +
+      'recommend; the Architect step owns the design.',
+    '',
     'Return ONLY the JSON object described in your instructions (one entry per itemId above).',
   )
   return lines.join('\n')
 }
 
+/** One Writer suggestion as parsed off the model's reply, before it is persisted. */
+export interface WriterSuggestion {
+  recommendation: string
+  fromStandard: string | null
+  /** The precedence level the Writer reports it came from; null when it reported none. */
+  groundedIn: RecommendationSource | null
+  /** How sure the Writer reports being (0..1); null when it reported nothing usable. */
+  confidence: number | null
+}
+
 /**
- * Coerce the Requirement Writer's parsed JSON into a map of itemId → { recommendation,
- * fromStandard }. Tolerant of a bare array or a `{recommendations:[...]}` wrapper; entries
+ * Coerce the Writer's reported confidence, or null.
+ *
+ * Null for anything that is not a finite number in 0..1, INCLUDING a number outside the range: a
+ * `confidence: 5` is a model that did not understand the scale, and reading it as "extremely sure"
+ * by clamping to 1 would hand an unwatched run its strongest possible signal on the strength of a
+ * misunderstanding. The floor treats null as below every bar above 0, so the failure lands on the
+ * side that asks a person.
+ */
+function coerceConfidence(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : null
+}
+
+const RECOMMENDATION_SOURCES: RecommendationSource[] = [
+  'standard',
+  'project-spec',
+  'web',
+  'general-practice',
+]
+
+/**
+ * Coerce the Writer's reported grounding level, or null.
+ *
+ * Null rather than a default, deliberately: a missing or unrecognised value means the Writer did
+ * not say, and filling that in with `general-practice` would invent the very provenance claim this
+ * field exists to make trustworthy — in the direction that makes a well-grounded answer look
+ * weak, while a garbled `standard` would make a guess look authoritative.
+ */
+function coerceSource(value: unknown): RecommendationSource | null {
+  return RECOMMENDATION_SOURCES.includes(value as RecommendationSource)
+    ? (value as RecommendationSource)
+    : null
+}
+
+/**
+ * Coerce the Requirement Writer's parsed JSON into a map of itemId → {@link WriterSuggestion}.
+ * Tolerant of a bare array or a `{recommendations:[...]}` wrapper; entries
  * missing a recommendation string are dropped.
  */
-export function coerceRecommendations(
-  raw: unknown,
-): Map<string, { recommendation: string; fromStandard: string | null }> {
+export function coerceRecommendations(raw: unknown): Map<string, WriterSuggestion> {
   const list = Array.isArray((raw as { recommendations?: unknown })?.recommendations)
     ? ((raw as { recommendations: unknown[] }).recommendations as unknown[])
     : Array.isArray(raw)
       ? (raw as unknown[])
       : []
-  const out = new Map<string, { recommendation: string; fromStandard: string | null }>()
+  const out = new Map<string, WriterSuggestion>()
   for (const entry of list) {
     if (!entry || typeof entry !== 'object') continue
     const obj = entry as Record<string, unknown>
@@ -335,7 +493,12 @@ export function coerceRecommendations(
     const recommendation = asString(obj.recommendation)
     if (!itemId || !recommendation) continue
     const fromStandard = asString(obj.fromStandard)
-    out.set(itemId, { recommendation, fromStandard: fromStandard || null })
+    out.set(itemId, {
+      recommendation,
+      fromStandard: fromStandard || null,
+      groundedIn: coerceSource(obj.groundedIn),
+      confidence: coerceConfidence(obj.confidence),
+    })
   }
   return out
 }
@@ -353,7 +516,7 @@ export function coerceRecommendations(
 export function coerceChunkRecommendations(
   raw: unknown,
   findings: RequirementReviewItem[],
-): Map<string, { recommendation: string; fromStandard: string | null }> {
+): Map<string, WriterSuggestion> {
   const list = Array.isArray((raw as { recommendations?: unknown })?.recommendations)
     ? ((raw as { recommendations: unknown[] }).recommendations as unknown[])
     : Array.isArray(raw)
@@ -365,15 +528,22 @@ export function coerceChunkRecommendations(
       itemId: asString(obj.itemId),
       recommendation: asString(obj.recommendation),
       fromStandard: asString(obj.fromStandard) || null,
+      groundedIn: coerceSource(obj.groundedIn),
+      confidence: coerceConfidence(obj.confidence),
     }))
     .filter((e) => e.recommendation)
-  const out = new Map<string, { recommendation: string; fromStandard: string | null }>()
+  const out = new Map<string, WriterSuggestion>()
   const findingIds = new Set(findings.map((f) => f.id))
   const consumed = new Set<number>()
   // Pass 1: route each entry whose echoed itemId names a finding in this chunk.
   entries.forEach((e, idx) => {
     if (e.itemId && findingIds.has(e.itemId) && !out.has(e.itemId)) {
-      out.set(e.itemId, { recommendation: e.recommendation, fromStandard: e.fromStandard })
+      out.set(e.itemId, {
+        recommendation: e.recommendation,
+        fromStandard: e.fromStandard,
+        groundedIn: e.groundedIn,
+        confidence: e.confidence,
+      })
       consumed.add(idx)
     }
   })
@@ -383,7 +553,12 @@ export function coerceChunkRecommendations(
   for (const f of findings) {
     if (out.has(f.id) || li >= leftover.length) continue
     const e = leftover[li++]!
-    out.set(f.id, { recommendation: e.recommendation, fromStandard: e.fromStandard })
+    out.set(f.id, {
+      recommendation: e.recommendation,
+      fromStandard: e.fromStandard,
+      groundedIn: e.groundedIn,
+      confidence: e.confidence,
+    })
   }
   return out
 }
@@ -397,10 +572,7 @@ export function coerceChunkRecommendations(
  * lone entry with a recommendation string, take it regardless of the id. Returns null only when
  * there is genuinely no usable recommendation.
  */
-export function coerceSingleRecommendation(
-  raw: unknown,
-  itemId: string,
-): { recommendation: string; fromStandard: string | null } | null {
+export function coerceSingleRecommendation(raw: unknown, itemId: string): WriterSuggestion | null {
   const list = Array.isArray((raw as { recommendations?: unknown })?.recommendations)
     ? ((raw as { recommendations: unknown[] }).recommendations as unknown[])
     : Array.isArray(raw)
@@ -412,13 +584,20 @@ export function coerceSingleRecommendation(
       itemId: asString(obj.itemId),
       recommendation: asString(obj.recommendation),
       fromStandard: asString(obj.fromStandard) || null,
+      groundedIn: coerceSource(obj.groundedIn),
+      confidence: coerceConfidence(obj.confidence),
     }))
     .filter((e) => e.recommendation)
   if (entries.length === 0) return null
   const chosen =
     entries.find((e) => e.itemId === itemId) ?? (entries.length === 1 ? entries[0] : null)
   return chosen
-    ? { recommendation: chosen.recommendation, fromStandard: chosen.fromStandard }
+    ? {
+        recommendation: chosen.recommendation,
+        fromStandard: chosen.fromStandard,
+        groundedIn: chosen.groundedIn,
+        confidence: chosen.confidence,
+      }
     : null
 }
 

@@ -1,13 +1,12 @@
 import type {
-  AgentFailure,
   EnvConfigRepairJobRecord,
   EnvConfigRepairJobRecordPatch,
   EnvConfigRepairJobRepository,
   RepoValidationIssue,
-  StepSubtasks,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseSubtasks } from '@cat-factory/kernel'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 
 /**
  * A row of the unified `agent_runs` table. This repository owns only the
@@ -42,54 +41,6 @@ interface EnvConfigRepairDetail {
   issues: RepoValidationIssue[]
   /** The original bootstrap form inputs, kept so a retry re-dispatches the same prompt. */
   inputs: Record<string, string> | null
-}
-
-/** Parse the JSON-encoded subtask counts column, tolerating a null/garbage value. */
-function parseSubtasks(raw: string | null): StepSubtasks | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (
-      typeof o.completed === 'number' &&
-      typeof o.inProgress === 'number' &&
-      typeof o.total === 'number'
-    ) {
-      type Item = NonNullable<StepSubtasks['items']>[number]
-      let items: Item[] | undefined
-      if (Array.isArray(o.items)) {
-        items = []
-        for (const it of o.items as unknown[]) {
-          if (!it || typeof it !== 'object') continue
-          const r = it as Record<string, unknown>
-          const status = r.status
-          if (
-            typeof r.label === 'string' &&
-            (status === 'pending' || status === 'in_progress' || status === 'completed')
-          ) {
-            items.push({ label: r.label, status })
-          }
-        }
-      }
-      return { completed: o.completed, inProgress: o.inProgress, total: o.total, items }
-    }
-  } catch {
-    // fall through
-  }
-  return null
-}
-
-/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
-function parseFailure(raw: string | null): AgentFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as AgentFailure
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
 }
 
 /** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
@@ -133,7 +84,7 @@ function rowToRecord(row: AgentRunRow): EnvConfigRepairJobRecord {
     inputs: detail.inputs,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

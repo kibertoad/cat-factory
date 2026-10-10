@@ -152,5 +152,74 @@ export function defineTokenUsageSuite(name: string, makeRepo: () => TokenUsageRe
       // `new` (9/9) + the surviving edge row (4/4) fold into one group, calls = 2; `old` gone.
       expect(breakdown[0]).toMatchObject({ inputTokens: 13, outputTokens: 13, calls: 2 })
     })
+
+    it("groups metered spend per workspace with the window's oldest row, excluding subscription", async () => {
+      const repo = makeRepo()
+      const a = workspaceId()
+      const b = workspaceId()
+      const quiet = workspaceId()
+      await repo.record(record({ id: `${a}-1`, workspaceId: a, costEstimate: 2, createdAt: 5_000 }))
+      await repo.record(record({ id: `${a}-2`, workspaceId: a, costEstimate: 3, createdAt: 9_000 }))
+      // A subscription row costs nothing real, so it must move neither the sum nor the
+      // window's start. A facade that forgot the billing filter would report 12 here.
+      await repo.record(
+        record({
+          id: `${a}-sub`,
+          workspaceId: a,
+          billing: 'subscription',
+          vendor: 'claude',
+          costEstimate: 7,
+          createdAt: 1_000,
+        }),
+      )
+      await repo.record(
+        record({ id: `${b}-1`, workspaceId: b, costEstimate: 11, createdAt: 8_000 }),
+      )
+
+      const byWorkspace = await repo.meteredSpendByWorkspaceSince([a, b, quiet], 0)
+      expect(byWorkspace.get(a)).toEqual({ costEstimate: 5, firstSeenAt: 5_000 })
+      expect(byWorkspace.get(b)).toEqual({ costEstimate: 11, firstSeenAt: 8_000 })
+      // A workspace with nothing metered is ABSENT, not a zero: the forecast distinguishes
+      // "spent nothing" from "not asked about", and the sweep skips the silent majority.
+      expect(byWorkspace.has(quiet)).toBe(false)
+
+      // The window's lower bound is inclusive and bounds `firstSeenAt` too, so a narrower
+      // window reports only what falls inside it.
+      const narrow = await repo.meteredSpendByWorkspaceSince([a], 9_000)
+      expect(narrow.get(a)).toEqual({ costEstimate: 3, firstSeenAt: 9_000 })
+      expect(await repo.meteredSpendByWorkspaceSince([], 0)).toEqual(new Map())
+    })
+
+    it('groups metered spend per account off the denormalized column', async () => {
+      const repo = makeRepo()
+      const ws = workspaceId()
+      const account = `${ws}-acct`
+      await repo.record(
+        record({
+          id: `${ws}-acc1`,
+          workspaceId: ws,
+          accountId: account,
+          costEstimate: 4,
+          createdAt: 3_000,
+        }),
+      )
+      await repo.record(
+        record({
+          id: `${ws}-acc2`,
+          workspaceId: ws,
+          accountId: account,
+          costEstimate: 6,
+          createdAt: 7_000,
+        }),
+      )
+      // An account-LESS row shares the workspace but belongs to no account: it must not leak
+      // into any account's rollup, and its NULL group must not surface as a map entry.
+      await repo.record(
+        record({ id: `${ws}-none`, workspaceId: ws, costEstimate: 99, createdAt: 2_000 }),
+      )
+      const byAccount = await repo.meteredSpendByAccountSince([account], 0)
+      expect(byAccount.get(account)).toEqual({ costEstimate: 10, firstSeenAt: 3_000 })
+      expect(byAccount.size).toBe(1)
+    })
   })
 }

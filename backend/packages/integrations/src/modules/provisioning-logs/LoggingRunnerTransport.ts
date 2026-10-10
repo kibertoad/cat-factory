@@ -1,8 +1,11 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   ProvisioningSubsystem,
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -51,15 +54,16 @@ export class LoggingRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     try {
-      await this.opts.inner.dispatch(ref, spec, kind, options)
+      const ack = (await this.opts.inner.dispatch(ref, spec, kind, options)) ?? undefined
       await this.log('dispatch', ref, 'success', null, { kind, ...options })
+      return ack
     } catch (error) {
       // The verbatim transport error ("… dispatch failed (HTTP X): body") IS the
       // diagnostic the operator needs — log it, then rethrow so the engine still
       // classifies the run failure (Part C).
-      await this.log('dispatch', ref, 'failure', messageOf(error), { kind, ...options })
+      await this.log('dispatch', ref, 'failure', getErrorMessage(error), { kind, ...options })
       throw error
     }
   }
@@ -84,8 +88,32 @@ export class LoggingRunnerTransport implements RunnerTransport {
       await this.opts.inner.release(ref)
       await this.log('release', ref, 'success', null, null)
     } catch (error) {
-      await this.log('release', ref, 'failure', messageOf(error), null)
+      await this.log('release', ref, 'failure', getErrorMessage(error), null)
       throw error
+    }
+  }
+
+  /**
+   * Stopping one job is a spin-down of exactly the kind this log exists to record, and it is the
+   * one an operator is most likely to go looking for: it happens on a REFUSED run, where the
+   * question afterwards is whether an agent is still working against the repository. The outcome
+   * rides the detail, so a `requested`/`unsupported` row is distinguishable from a real stop.
+   *
+   * Absent on the wrapped transport ⇒ absent here, so the decorator cannot make a backend look
+   * capable of something it is not.
+   */
+  get stopJob(): RunnerTransport['stopJob'] {
+    const inner = this.opts.inner.stopJob
+    if (!inner) return undefined
+    return async (ref: RunnerJobRef): Promise<RunnerJobStopOutcome> => {
+      try {
+        const outcome = await inner.call(this.opts.inner, ref)
+        await this.log('release', ref, 'success', null, { stopJob: outcome })
+        return outcome
+      } catch (error) {
+        await this.log('release', ref, 'failure', getErrorMessage(error), { stopJob: 'failed' })
+        throw error
+      }
     }
   }
 
@@ -109,8 +137,4 @@ export class LoggingRunnerTransport implements RunnerTransport {
       detail: detail && Object.keys(detail).length > 0 ? JSON.stringify(detail) : null,
     })
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

@@ -1,1980 +1,870 @@
 # @cat-factory/spend
 
-## 0.12.26
+## 0.23.9
 
 ### Patch Changes
 
-- Updated dependencies [2ce396d]
-  - @cat-factory/kernel@0.123.2
-  - @cat-factory/contracts@0.128.1
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
 
-## 0.12.25
-
-### Patch Changes
-
-- Updated dependencies [2c7ca2e]
-  - @cat-factory/kernel@0.123.1
-
-## 0.12.24
+## 0.23.8
 
 ### Patch Changes
 
-- Updated dependencies [e4c5abe]
-  - @cat-factory/kernel@0.123.0
+- ffe4356: Add Claude Haiku 5.5 to the model catalog and the price table, and correct the two gateway price rows that had fallen below their route.
+  
+  New catalog entry, declared only on routes verified to serve that exact model:
+  
+  - `claude-haiku-5-5` (Claude Haiku 5.5, 2026-10-07): Claude Code subscription, AWS Bedrock (`anthropic.claude-haiku-5-5`) and OpenRouter (`anthropic/claude-haiku-5.5`). It is the one two-band Claude model: $0.10 / $0.50 per 1M for a prompt up to 100,000 tokens and $0.50 / $2.50 for the whole request past it, so both its direct and its gateway row carry a long band at that threshold.
+  
+  Price corrections, both in the safe direction: `openrouter:deepseek/deepseek-v4-flash` output moves to 1.18 EUR/1M (the retired slug's blend now bills $1.28 out), and `openrouter:moonshotai/kimi-k3` names its cache read at 0.51 EUR/1M, the gateway's $0.55 blend, which sat above the derived 0.1x floor. The `anthropic:claude-sonnet-5-5` note now states its real 0.05x cache read; the row was already on the safe side.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
 
-## 0.12.23
-
-### Patch Changes
-
-- Updated dependencies [1e684b7]
-- Updated dependencies [1e684b7]
-  - @cat-factory/contracts@0.128.0
-  - @cat-factory/kernel@0.122.0
-
-## 0.12.22
-
-### Patch Changes
-
-- Updated dependencies [2a13ece]
-  - @cat-factory/kernel@0.121.8
-
-## 0.12.21
+## 0.23.7
 
 ### Patch Changes
 
-- Updated dependencies [3ce997d]
-  - @cat-factory/kernel@0.121.7
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
 
-## 0.12.20
-
-### Patch Changes
-
-- 67dccb6: perf(caching): route workspace-settings and spend budget reads through the app cache seam (perf-tracker items 7 & 9)
-
-  Replaces `SpendService`'s three homebrew `{ value, expiresAt }` TTL `Map`s (pricing /
-  account limit / user limit) and the uncached `WorkspaceSettingsService.get` with three new
-  `AppCaches` slices — `workspaceSettings`, `accountBudgetLimit`, `userBudgetLimit` — so these
-  slow-moving reads are coherent across a horizontally-scaled Node deployment (a budget/settings
-  edit invalidates every replica via the notification bus instead of leaving peers stale for the
-  TTL). The workspace-settings row is now read through a single shared slice by
-  `WorkspaceSettingsService`, `SpendService`'s pricing overlay, and
-  `LlmObservabilityService.bodiesEnabled`, so one invalidation on `WorkspaceSettingsService.update`
-  covers them all. The slices are pass-through on the Worker's isolate-safe profile (our own
-  mutable D1 state, no cross-isolate bus).
-
-- Updated dependencies [67dccb6]
-  - @cat-factory/kernel@0.121.6
-
-## 0.12.19
+## 0.23.6
 
 ### Patch Changes
 
-- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
-  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
 
-  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
-    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
-    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
-    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
-  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
-    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
-    stays on `^6.0.3`).
-  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
-    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
-    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
-  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
-    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
-    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
-    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
-    deployed for the new tags to roll out.
-
-- Updated dependencies [f8f1aa8]
-  - @cat-factory/contracts@0.127.1
-  - @cat-factory/kernel@0.121.5
-
-## 0.12.18
+## 0.23.5
 
 ### Patch Changes
 
-- Updated dependencies [4810353]
-  - @cat-factory/kernel@0.121.4
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
 
-## 0.12.17
-
-### Patch Changes
-
-- Updated dependencies [edad6e6]
-  - @cat-factory/kernel@0.121.3
-
-## 0.12.16
+## 0.23.4
 
 ### Patch Changes
 
-- Updated dependencies [d1a4129]
-  - @cat-factory/contracts@0.127.0
-  - @cat-factory/kernel@0.121.2
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
 
-## 0.12.15
-
-### Patch Changes
-
-- Updated dependencies [473e849]
-  - @cat-factory/kernel@0.121.1
-
-## 0.12.14
+## 0.23.3
 
 ### Patch Changes
 
-- Updated dependencies [f4482c7]
-  - @cat-factory/kernel@0.121.0
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
 
-## 0.12.13
-
-### Patch Changes
-
-- Updated dependencies [22a4d9e]
-  - @cat-factory/kernel@0.120.0
-
-## 0.12.12
+## 0.23.2
 
 ### Patch Changes
 
-- Updated dependencies [a5dcf7d]
-  - @cat-factory/kernel@0.119.0
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
 
-## 0.12.11
-
-### Patch Changes
-
-- Updated dependencies [5072999]
-  - @cat-factory/contracts@0.126.0
-  - @cat-factory/kernel@0.118.1
-
-## 0.12.10
+## 0.23.1
 
 ### Patch Changes
 
-- Updated dependencies [4f936de]
-  - @cat-factory/contracts@0.125.0
-  - @cat-factory/kernel@0.118.0
+- e84b0d5: Add GPT-6.1 Sol and Claude Sonnet 5.5 to the model catalog and the price table, and name the GLM-5.2 gateway cache rate that had fallen below its route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `gpt-6.1-sol` (GPT-6.1 Sol, 2026-09-29): Codex subscription and OpenRouter (`openai/gpt-6.1-sol`), two-band like every OpenAI row at $2 / $10 short and $4 / $15 long per 1M. Codex resolves the slug only from 0.159.0 onward. OpenRouter's `-pro` slug gets no entry: same model, same price, only a reasoning mode.
+  - `claude-sonnet-5-5` (Claude Sonnet 5.5, 2026-09-28): Claude Code subscription, AWS Bedrock (`anthropic.claude-sonnet-5-5`) and OpenRouter (`anthropic/claude-sonnet-5.5`), $2 / $10 per 1M like Sonnet 5.
+  
+  The existing `gpt-6-sol` and `claude-sonnet` entries keep their ids and models, so a block pinned to GPT-6 Sol or Sonnet 5 runs what it ran before.
+  
+  Price correction, in the safe direction: `openrouter:z-ai/glm-5.2` names its cache read again (0.21 EUR/1M), because the gateway's cached rate moved back above the 0.1x floor its input rate derives.
+  
+  The SPA's "Enable recommended" OpenRouter set gains GPT-6.1 Sol and Sonnet 5.5.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
 
-## 0.12.9
-
-### Patch Changes
-
-- Updated dependencies [127fe3e]
-  - @cat-factory/contracts@0.124.1
-  - @cat-factory/kernel@0.117.6
-
-## 0.12.8
-
-### Patch Changes
-
-- Updated dependencies [774908c]
-  - @cat-factory/kernel@0.117.5
-
-## 0.12.7
-
-### Patch Changes
-
-- Updated dependencies [08a7da2]
-  - @cat-factory/contracts@0.124.0
-  - @cat-factory/kernel@0.117.4
-
-## 0.12.6
-
-### Patch Changes
-
-- Updated dependencies [6b968bb]
-  - @cat-factory/kernel@0.117.3
-
-## 0.12.5
-
-### Patch Changes
-
-- Updated dependencies [eeadc97]
-  - @cat-factory/kernel@0.117.2
-  - @cat-factory/contracts@0.123.1
-
-## 0.12.4
-
-### Patch Changes
-
-- Updated dependencies [cb7fd14]
-  - @cat-factory/kernel@0.117.1
-
-## 0.12.3
-
-### Patch Changes
-
-- Updated dependencies [be54a32]
-  - @cat-factory/kernel@0.117.0
-
-## 0.12.2
-
-### Patch Changes
-
-- 51869b8: Add Claude Fable 5 to the model catalog. `claude-fable` runs via the Claude Code
-  subscription harness (Anthropic's most capable model, 1M context) with an
-  OpenRouter pay-as-you-go flavour, mirrors the existing `claude-opus` entry, and
-  carries its own spend pricing ($10 in / $50 out per 1M) plus an OpenRouter
-  recommended-slug entry.
-- Updated dependencies [51869b8]
-  - @cat-factory/kernel@0.116.0
-
-## 0.12.1
-
-### Patch Changes
-
-- Updated dependencies [a51a498]
-  - @cat-factory/kernel@0.115.1
-
-## 0.12.0
+## 0.23.0
 
 ### Minor Changes
 
-- a0c6934: Token-usage tracking for BOTH metered API traffic and flat-rate subscription harnesses
-  (usage-and-quota-tracking initiative, Part A). The `token_usage` spend ledger gains a
-  `billing` discriminator (`metered` | `subscription`) + `vendor` column, and subscription
-  harness usage (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) — previously kept out of
-  the ledger entirely — is now recorded durably for reporting. The budget gate is unchanged:
-  every spend rollup (`status` / `isOverBudget` / the account & user tiers) filters
-  `billing = 'metered'`, so a flat-rate quota call is counted for the usage report but never
-  inflates spend or trips a budget.
-
-  New `GET /workspaces/:ws/usage` returns the current period's usage broken down by
-  `(billing, vendor, provider, model)`, surfaced in a new "Usage" tab in Workspace Settings
-  (both metered and subscription usage, with per-model progress bars). Subscription cost is
-  illustrative (the equivalent metered-API cost), never billed.
-
-  D1 migration `0044_usage_billing.sql` ⇄ the Drizzle schema + generated migration; the
-  cross-runtime conformance suite pins the metered-vs-subscription split on both stores. No
-  data migration — existing rows default to `metered`.
-
-  (The `@cat-factory/executor-harness` bump is a test-only type fix — its fake
-  `TokenUsageRepository` gains the new `usageBreakdownForWorkspace` method; nothing in the
-  runner image changed.)
+- c046707: Add the models released since the last catalog sweep, and correct the price rows that had fallen below their route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `claude-opus-5-5` (Claude Opus 5.5, 2026-09-22): Claude Code subscription, AWS Bedrock (`anthropic.claude-opus-5-5`) and OpenRouter (`anthropic/claude-opus-5.5`), $4 / $20 per 1M.
+  - `gpt-6-sol` and `gpt-6-luna` (2026-09-22): Codex subscription and OpenRouter, two-band like every OpenAI row. Codex resolves both slugs only from 0.156.1 onward.
+  - `grok-4.7` (2026-09-21): direct xAI and OpenRouter, billed exactly as Grok 4.6.
+  - `glm-5.3-flashx`, `glm-5.3-prime` and `qwen3.8-max-prime`: faster serving tiers of models already in the catalog, at roughly twice the price, through OpenRouter. Each is its own entry so the speed-for-price trade is made per block.
+  
+  The existing entries keep their ids and models, so a block pinned to Opus 5, Grok 4.6 or GLM-5.3 runs what it ran before.
+  
+  Price corrections, all in the safe direction: `openrouter:openai/gpt-oss-120b` had fallen to a quarter of the gateway's listed rate and now names its cache read; `openrouter:z-ai/glm-5.3-flash` names the gateway's higher cache rate; the Workers AI gpt-oss-120b input and Llama 4 Scout output round up to Cloudflare's list instead of just under it.
+  
+  The SPA's "Enable recommended" OpenRouter set gains Opus 5.5, GPT-6 Sol and Grok 4.7.
 
 ### Patch Changes
 
-- Updated dependencies [b83bcc8]
-- Updated dependencies [b83bcc8]
-- Updated dependencies [a0c6934]
-  - @cat-factory/contracts@0.123.0
-  - @cat-factory/kernel@0.115.0
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
 
-## 0.11.24
+## 0.22.2
 
 ### Patch Changes
 
-- Updated dependencies [0f3c88b]
-  - @cat-factory/contracts@0.122.0
-  - @cat-factory/kernel@0.114.0
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
 
-## 0.11.23
-
-### Patch Changes
-
-- Updated dependencies [ed77be6]
-  - @cat-factory/kernel@0.113.0
-  - @cat-factory/contracts@0.121.2
-
-## 0.11.22
+## 0.22.1
 
 ### Patch Changes
 
-- Updated dependencies [7ee2530]
-  - @cat-factory/kernel@0.112.1
-
-## 0.11.21
-
-### Patch Changes
-
-- Updated dependencies [f25d5e2]
-  - @cat-factory/kernel@0.112.0
-
-## 0.11.20
-
-### Patch Changes
-
-- Updated dependencies [9aa9e19]
-  - @cat-factory/contracts@0.121.1
-  - @cat-factory/kernel@0.111.1
-
-## 0.11.19
-
-### Patch Changes
-
-- Updated dependencies [63f7881]
-  - @cat-factory/kernel@0.111.0
-  - @cat-factory/contracts@0.121.0
-
-## 0.11.18
-
-### Patch Changes
-
-- Updated dependencies [bcc843d]
-  - @cat-factory/kernel@0.110.1
-
-## 0.11.17
-
-### Patch Changes
-
-- Updated dependencies [a2db337]
-  - @cat-factory/contracts@0.120.0
-  - @cat-factory/kernel@0.110.0
-
-## 0.11.16
-
-### Patch Changes
-
-- Updated dependencies [8319e52]
-  - @cat-factory/kernel@0.109.1
-
-## 0.11.15
-
-### Patch Changes
-
-- Updated dependencies [8728bf7]
-- Updated dependencies [7157908]
-  - @cat-factory/contracts@0.119.0
-  - @cat-factory/kernel@0.109.0
-
-## 0.11.14
-
-### Patch Changes
-
-- Updated dependencies [f1906cb]
-  - @cat-factory/kernel@0.108.0
-
-## 0.11.13
-
-### Patch Changes
-
-- Updated dependencies [44fafa4]
-  - @cat-factory/kernel@0.107.0
-
-## 0.11.12
-
-### Patch Changes
-
-- Updated dependencies [89c861a]
-  - @cat-factory/kernel@0.106.0
-
-## 0.11.11
-
-### Patch Changes
-
-- Updated dependencies [2d97812]
-- Updated dependencies [b35e1a0]
-  - @cat-factory/kernel@0.105.0
-  - @cat-factory/contracts@0.118.0
-
-## 0.11.10
-
-### Patch Changes
-
-- Updated dependencies [4a3e536]
-  - @cat-factory/contracts@0.117.0
-  - @cat-factory/kernel@0.104.4
-
-## 0.11.9
-
-### Patch Changes
-
-- Updated dependencies [18a9cb5]
-  - @cat-factory/contracts@0.116.1
-  - @cat-factory/kernel@0.104.3
-
-## 0.11.8
-
-### Patch Changes
-
-- Updated dependencies [bc77f89]
-  - @cat-factory/contracts@0.116.0
-  - @cat-factory/kernel@0.104.2
-
-## 0.11.7
-
-### Patch Changes
-
-- Updated dependencies [802fc05]
-  - @cat-factory/contracts@0.115.0
-  - @cat-factory/kernel@0.104.1
-
-## 0.11.6
-
-### Patch Changes
-
-- Updated dependencies [6198b08]
-- Updated dependencies [37d1517]
-  - @cat-factory/contracts@0.114.0
-  - @cat-factory/kernel@0.104.0
-
-## 0.11.5
-
-### Patch Changes
-
-- Updated dependencies [14eac27]
-  - @cat-factory/contracts@0.113.0
-  - @cat-factory/kernel@0.103.0
-
-## 0.11.4
-
-### Patch Changes
-
-- Updated dependencies [ecbcbec]
-  - @cat-factory/contracts@0.112.0
-  - @cat-factory/kernel@0.102.0
-
-## 0.11.3
-
-### Patch Changes
-
-- Updated dependencies [fdba1ea]
-  - @cat-factory/contracts@0.111.0
-  - @cat-factory/kernel@0.101.2
-
-## 0.11.2
-
-### Patch Changes
-
-- Updated dependencies [10787c4]
-  - @cat-factory/contracts@0.110.1
-  - @cat-factory/kernel@0.101.1
-
-## 0.11.1
-
-### Patch Changes
-
-- Updated dependencies [f596090]
-  - @cat-factory/contracts@0.110.0
-  - @cat-factory/kernel@0.101.0
-
-## 0.11.0
+- 30d08c7: Take the agent CLIs at their newest, correct the one under-metering price row, and refresh the
+  dependency tree.
+  
+  **Re-verified every catalog route against its serving provider, and the catalog needed nothing.**
+  Anthropic, OpenAI, Google, xAI, DeepSeek, Moonshot, Z.ai, Alibaba and Cloudflare Workers AI were
+  each read fresh. Every model this catalog selects is still served under the id it names, and every
+  frontier launch since the last sweep is already here, so the honest result is no entry added and
+  none retired. Claude Mythos 5.1 stays out for the reason it always has: invitation-only through
+  Project Glasswing, with no public route to declare. What is new elsewhere is a cheaper or smaller
+  tier of something already carried (Gemini 3.5 Flash-Lite, GPT-5.4, Grok 4.3, a `-highspeed`
+  variant of Kimi K2.7 Code, `@cf/qwen/qwen3.8-27b` and `@cf/openai/gpt-oss-20b` on Workers AI), and
+  a tier nothing here would route to does not earn a catalog entry.
+  
+  **One price row was metering below what it bills.** `check-openrouter-pins.mjs` reported
+  `openrouter:z-ai/glm-5.2` as the single understated pin: the gateway's blend for that slug has
+  finished converging on Z.ai's own $1.40 / $4.40 list, which the previous note predicted and the
+  numbers had not followed. Understatement is the one direction a budget gate may not sit in, so the
+  fresh classes move up to the figures every other GLM-5.2 row already carried. Its named cache rate
+  is dropped rather than re-pinned, because the gateway's $0.14/M now IS the 0.1x floor the new input
+  rate derives, and the retired 0.21 pin was written against a $0.26/M blend that no longer exists.
+  Nothing else moved: 29 of 30 pinned slugs are at or above their live rate, which is the margin the
+  table is for.
+  
+  **Several notes were making claims that had stopped being true**, and in a table where a wrong
+  figure looks exactly like a right one, the reasoning is what the next reader checks the figure
+  against. Kimi K2.5 has left the Workers AI model index (its row stays, for recorded spend, but it
+  no longer "runs on Workers AI"). DeepSeek now documents `deepseek-v4-flash` as retired with the
+  legacy name served by `deepseek-flash`, so that row's justification narrows to the historical one.
+  Z.ai's GLM-5.3 Flash launch promotion has lapsed, so the row's list price is simply the price. The
+  Gemini Flash rate is Google's own discount to 2026-12-31, not the undiscounted rate the note
+  claimed, which makes it the one row deliberately below a published number and worth saying so.
+  OpenRouter now publishes a cache rate on both Muse Spark slugs, so the reason neither names one
+  moves to the half of that argument that still holds, which is about this platform, not about Meta.
+  The DeepSeek and Kimi gateway-blend observations are restamped with this sweep's read.
+  
+  **Agent CLIs.** Claude Code moves to 2.1.274, ahead of the 24h age window, as the Dockerfile's
+  standing note allows for those three pins alone. Pi holds at 0.85.1 and Codex at 0.154.0, both
+  already newest (Codex 0.155.0 is alpha-only). The two Pi extensions move to 2.10.1, which does NOT
+  take that exemption and has aged past the window. The `node:26-trixie-slim` digest is unchanged:
+  the tag still resolves to the pinned one. Both harness images bump.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution and a dedupe; no package
+  changed major and no name was dropped. Four holds were re-verified at HEAD rather than assumed, and
+  all four still bind: `@cloudflare/vitest-pool-workers@0.22.0` is newest and pins wrangler 4.124.0
+  exactly, which keeps wrangler, workerd, miniflare and `@cloudflare/workers-types` where they are and
+  keeps vitest on 4.x (the pool peers `^4.1.0`, so vitest 5 cannot be taken); drizzle stays on its
+  1.0.0-rc line; the frontend stays on TypeScript 6 for `vue-tsc`. Three Docker GitHub Actions move to
+  their newest aged releases.
+  
+  One bump was a source change rather than a number. `@clack/prompts` 1.8.1 respells every prompt's
+  result from `Promise<Value | symbol>` to `Promise<Value | typeof CANCEL_SYMBOL>`, and the CLI's
+  `bailIfCancelled` was declared `(value: T | symbol): T` so that inference would peel the symbol arm
+  off. A unique symbol does not match a wide `symbol` parameter slot, so under the new spelling `T`
+  swallowed the union whole and four call sites went back to holding a symbol they thought they had
+  been rid of — a typecheck failure here, but the same shape that reaches `.trim()` at runtime when it
+  is not. The helper now takes the whole result type and returns `Exclude<T, symbol>`, which is
+  indifferent to which spelling a future release uses and is what clack's own `group()` does with the
+  same values.
+- Updated dependencies [30d08c7]
+  - @cat-factory/kernel@0.348.1
+
+## 0.22.0
 
 ### Minor Changes
 
-- 9ea1e77: Tiered spend budgets (account / workspace / user) with operator hard caps.
+- 9f8cabc: Re-point the DeepSeek Flash route at the model DeepSeek actually serves, take the agent CLIs at
+  their newest, and refresh the dependency tree.
+  
+  **A retired model behind a live alias.** DeepSeek retired V4-Flash and V4-Flash-Vision-Exp on
+  2026-09-10 and made `deepseek-flash` the canonical, unversioned name for V4.1-Flash. The old
+  `deepseek-v4-flash` id still resolves, but only as a TEMPORARY compatibility alias onto the new
+  model, which is the quietest shape this catalog's failures take: nothing throws and nothing fails
+  to dispatch, so the picker went on saying "DeepSeek V4 Flash" while a different model answered, at
+  a rate the spend table did not carry, and the route dies outright whenever the alias is withdrawn.
+  All three DeepSeek-served arms of the `deepseek` entry (direct, subscription, and the OpenRouter
+  one, which must name the same model or the entry straddles two) now name the live model. The entry
+  keeps its `deepseek` id: that id is what a workspace persists against a block, and this is the same
+  slot following the vendor's own successor, so re-minting it would invalidate every stored pick to
+  say nothing new. `acceptsImages` is new on both refs and is a real capability gain rather than a
+  correction, since V4.1-Flash folds the vision line back into the main model.
+  
+  Two adjacent claims were re-read rather than trusted. The 2026-09-10 release note said
+  `deepseek-v4-pro` would route to V4.1-Flash from 2026-09-14, which would have silently demoted that
+  entry to a cheaper, weaker model; DeepSeek has since decided to keep serving V4 Pro with billing
+  unchanged, so it is untouched. And OpenRouter still serves a separate `deepseek/deepseek-v4-flash`
+  at a fifth of the price, which this entry deliberately does not keep: it is the retired build, and
+  an entry whose direct and gateway arms named different models is the neighbouring-version trap the
+  catalog header bans. Both retired price keys stay in the table so historical spend rows keep
+  costing correctly.
+  
+  **No other catalog gap.** Every frontier launch since the last sweep was checked against its
+  serving provider and is already here: Claude Fable 5.1, Gemini 3.8 Flash, Muse Spark 1.3 and GPT-6
+  Astra. Claude Mythos 5.1 stays out on purpose. It is the same model as Fable 5.1 at identical
+  pricing, offered by invitation only through Project Glasswing with no public route on any provider
+  this platform reaches, so an entry could only be a re-badge that `effectiveVariant` would pick and
+  then fail to dispatch. "Astra Pro" stays out for the reason recorded last time, re-checked here:
+  OpenRouter mints a slug for it, but reasoning effort is a parameter on the single `gpt-6-astra` id.
+  
+  **Agent CLIs at their newest**, ahead of the 24h `minimumReleaseAge` window, as the Dockerfile's
+  standing note allows for those three pins alone: Claude Code 2.1.265 to 2.1.270 and Codex 0.153.4
+  to 0.154.0 (still above the 0.153.0 floor `gpt-6-astra` needs). Pi holds at 0.85.1, already newest.
+  The two Pi extensions do NOT take that exemption and hold at 2.9.0: 2.10.0 published three hours
+  before this change and has not aged past the window. Both harness images move to the newest
+  `node:26-trixie-slim` digest that has (node 26.8.2), and the executor image tag rolls to 1.158.0
+  with the deploy image at 0.6.8.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, 31 resolved names moved, no
+  package name dropped. `pg-boss` 12.31.0 brings `rrule-temporal` and `temporal-spec` in as new
+  transitive deps, the only additions. A `pnpm dedupe` follows the bump because the partial
+  re-resolution left `@types/node` resolved at two patch versions. Four holds are unchanged and were
+  re-verified at HEAD rather than assumed: `vitest` at 4.1.11 and `wrangler` at 4.124.0
+  (`@cloudflare/vitest-pool-workers` 0.22.0 is still newest, peers `vitest: ^4.1.0` and pins that
+  wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date, which
+  that pool pins), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 reaches for
+  `typescript/lib/tsc`, absent from TS 7's exports map). pnpm moves 11.24.0 to 11.26.0, staying on
+  its major. WireMock holds at 3.13.1, still its newest non-prerelease. Actions: `setup-java` v6.0.0
+  to v6.0.1 and `zizmor-action` v0.6.3 to v0.6.4; every other pinned action is already newest.
 
-  Budgets are now tracked and enforced across three tiers: the existing per-workspace
-  monthly limit, a per-account limit, and a per-user limit. A run pauses when any applicable
-  tier is exhausted. All three tiers are configurable and visible in the Budget settings
-  screen.
-
-  Two new environment variables (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`,
-  `BUDGET_MAX_MONTHLY_PER_USER`), read by the Node and Cloudflare config loaders, set
-  operator hard ceilings on the account/user tiers; the UI cannot exceed a configured cap and
-  shows it on the budget screen. See `docs/environment-variables.md` and
-  `docs/initiatives/tiered-budgets.md`.
-
-  Breaking (pre-1.0, no data migration): the `token_usage` ledger gains nullable
-  `account_id`/`user_id` columns (existing rows are unattributed and excluded from the new
-  account/user rollups until re-metered); `TokenUsageRecord`, `RecordUsageInput`, and
-  `SpendPricing` gained fields; `SpendService.isOverBudget` now takes an optional tier scope.
-  A new `user_settings` table and `GET/PUT /user-settings` endpoint carry the user-tier
-  budget.
-
-### Patch Changes
-
-- Updated dependencies [9ea1e77]
-  - @cat-factory/contracts@0.109.0
-  - @cat-factory/kernel@0.100.0
-
-## 0.10.109
-
-### Patch Changes
-
-- Updated dependencies [e66accb]
-  - @cat-factory/contracts@0.108.1
-  - @cat-factory/kernel@0.99.1
-
-## 0.10.108
-
-### Patch Changes
-
-- Updated dependencies [1afa003]
-- Updated dependencies [f91b99d]
-  - @cat-factory/kernel@0.99.0
-  - @cat-factory/contracts@0.108.0
-
-## 0.10.107
-
-### Patch Changes
-
-- Updated dependencies [bf31df7]
-  - @cat-factory/contracts@0.107.0
-  - @cat-factory/kernel@0.98.0
-
-## 0.10.106
-
-### Patch Changes
-
-- Updated dependencies [6f9d935]
-  - @cat-factory/contracts@0.106.0
-  - @cat-factory/kernel@0.97.0
-
-## 0.10.105
-
-### Patch Changes
-
-- Updated dependencies [5490103]
-- Updated dependencies [e5b9462]
-- Updated dependencies [dd6df12]
-  - @cat-factory/contracts@0.105.0
-  - @cat-factory/kernel@0.96.0
-
-## 0.10.104
-
-### Patch Changes
-
-- Updated dependencies [accb8ec]
-  - @cat-factory/contracts@0.104.0
-  - @cat-factory/kernel@0.95.0
-
-## 0.10.103
-
-### Patch Changes
-
-- Updated dependencies [cd435d1]
-  - @cat-factory/contracts@0.103.0
-  - @cat-factory/kernel@0.94.0
-
-## 0.10.102
-
-### Patch Changes
-
-- Updated dependencies [77bc73c]
-- Updated dependencies [076d02f]
-  - @cat-factory/kernel@0.93.0
-  - @cat-factory/contracts@0.102.0
-
-## 0.10.101
-
-### Patch Changes
-
-- Updated dependencies [029a689]
-- Updated dependencies [029a689]
-  - @cat-factory/contracts@0.101.1
-  - @cat-factory/kernel@0.92.0
-
-## 0.10.100
-
-### Patch Changes
-
-- Updated dependencies [2e4d883]
-  - @cat-factory/contracts@0.101.0
-  - @cat-factory/kernel@0.91.0
-
-## 0.10.99
-
-### Patch Changes
-
-- Updated dependencies [773695b]
-  - @cat-factory/contracts@0.100.0
-  - @cat-factory/kernel@0.90.0
-
-## 0.10.98
-
-### Patch Changes
-
-- Updated dependencies [3981bbb]
-  - @cat-factory/contracts@0.99.0
-  - @cat-factory/kernel@0.89.1
-
-## 0.10.97
-
-### Patch Changes
-
-- Updated dependencies [cfcb6c7]
-- Updated dependencies [48f9d97]
-  - @cat-factory/kernel@0.89.0
-  - @cat-factory/contracts@0.98.0
-
-## 0.10.96
-
-### Patch Changes
-
-- Updated dependencies [f4c321e]
-  - @cat-factory/kernel@0.88.0
-
-## 0.10.95
-
-### Patch Changes
-
-- Updated dependencies [13a284f]
-  - @cat-factory/kernel@0.87.0
-
-## 0.10.94
-
-### Patch Changes
-
-- Updated dependencies [102c049]
-  - @cat-factory/contracts@0.97.0
-  - @cat-factory/kernel@0.86.1
-
-## 0.10.93
-
-### Patch Changes
-
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-- Updated dependencies [c20a69a]
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-  - @cat-factory/contracts@0.96.0
-  - @cat-factory/kernel@0.86.0
-
-## 0.10.92
-
-### Patch Changes
-
-- Updated dependencies [1f6d9fc]
-  - @cat-factory/kernel@0.85.0
-
-## 0.10.91
-
-### Patch Changes
-
-- Updated dependencies [e5ddaa4]
-  - @cat-factory/kernel@0.84.0
-
-## 0.10.90
-
-### Patch Changes
-
-- Updated dependencies [9bac054]
-  - @cat-factory/kernel@0.83.0
-
-## 0.10.89
-
-### Patch Changes
-
-- Updated dependencies [6c1efd1]
-  - @cat-factory/contracts@0.95.0
-  - @cat-factory/kernel@0.82.0
-
-## 0.10.88
-
-### Patch Changes
-
-- Updated dependencies [6edcce0]
-  - @cat-factory/contracts@0.94.0
-  - @cat-factory/kernel@0.81.0
-
-## 0.10.87
-
-### Patch Changes
-
-- Updated dependencies [ef57cb1]
-  - @cat-factory/contracts@0.93.0
-  - @cat-factory/kernel@0.80.0
-
-## 0.10.86
-
-### Patch Changes
-
-- Updated dependencies [1d738f7]
-  - @cat-factory/contracts@0.92.0
-  - @cat-factory/kernel@0.79.1
-
-## 0.10.85
-
-### Patch Changes
-
-- Updated dependencies [47a2975]
-  - @cat-factory/contracts@0.91.0
-  - @cat-factory/kernel@0.79.0
-
-## 0.10.84
-
-### Patch Changes
-
-- Updated dependencies [b928904]
-  - @cat-factory/contracts@0.90.0
-  - @cat-factory/kernel@0.78.0
-
-## 0.10.83
-
-### Patch Changes
-
-- Updated dependencies [7fa7578]
-  - @cat-factory/contracts@0.89.0
-  - @cat-factory/kernel@0.77.0
-
-## 0.10.82
-
-### Patch Changes
-
-- Updated dependencies [55661f4]
-  - @cat-factory/contracts@0.88.0
-  - @cat-factory/kernel@0.76.0
-
-## 0.10.81
-
-### Patch Changes
-
-- Updated dependencies [ca5c3e8]
-  - @cat-factory/contracts@0.87.0
-  - @cat-factory/kernel@0.75.0
-
-## 0.10.80
-
-### Patch Changes
-
-- Updated dependencies [b216fdc]
-  - @cat-factory/kernel@0.74.0
-  - @cat-factory/contracts@0.86.0
-
-## 0.10.79
-
-### Patch Changes
-
-- Updated dependencies [7fd6a19]
-  - @cat-factory/kernel@0.73.0
-
-## 0.10.78
-
-### Patch Changes
-
-- Updated dependencies [0ac0dc4]
-  - @cat-factory/contracts@0.85.0
-  - @cat-factory/kernel@0.72.0
-
-## 0.10.77
-
-### Patch Changes
-
-- Updated dependencies [36f4cf6]
-- Updated dependencies [b78adf5]
-  - @cat-factory/contracts@0.84.0
-  - @cat-factory/kernel@0.71.0
-
-## 0.10.76
-
-### Patch Changes
-
-- Updated dependencies [e0aab3f]
-  - @cat-factory/contracts@0.83.0
-  - @cat-factory/kernel@0.70.2
-
-## 0.10.75
-
-### Patch Changes
-
-- Updated dependencies [0d51638]
-  - @cat-factory/kernel@0.70.1
-
-## 0.10.74
-
-### Patch Changes
-
-- Updated dependencies [eb67d40]
-  - @cat-factory/kernel@0.70.0
-
-## 0.10.73
-
-### Patch Changes
-
-- Updated dependencies [5ce03c6]
-  - @cat-factory/contracts@0.82.0
-  - @cat-factory/kernel@0.69.8
-
-## 0.10.72
-
-### Patch Changes
-
-- Updated dependencies [7f9d215]
-  - @cat-factory/kernel@0.69.7
-
-## 0.10.71
-
-### Patch Changes
-
-- Updated dependencies [4a7a3f1]
-  - @cat-factory/contracts@0.81.3
-  - @cat-factory/kernel@0.69.6
-
-## 0.10.70
-
-### Patch Changes
-
-- Updated dependencies [6243bea]
-  - @cat-factory/contracts@0.81.2
-  - @cat-factory/kernel@0.69.5
-
-## 0.10.69
-
-### Patch Changes
-
-- Updated dependencies [2a91615]
-  - @cat-factory/contracts@0.81.1
-  - @cat-factory/kernel@0.69.4
-
-## 0.10.68
-
-### Patch Changes
-
-- Updated dependencies [67d3876]
-  - @cat-factory/contracts@0.81.0
-  - @cat-factory/kernel@0.69.3
-
-## 0.10.67
-
-### Patch Changes
-
-- Updated dependencies [d7f6e1c]
-- Updated dependencies [63cf6de]
-  - @cat-factory/kernel@0.69.2
-  - @cat-factory/contracts@0.80.1
-
-## 0.10.66
-
-### Patch Changes
-
-- Updated dependencies [120de05]
-  - @cat-factory/contracts@0.80.0
-  - @cat-factory/kernel@0.69.1
-
-## 0.10.65
-
-### Patch Changes
-
-- Updated dependencies [dcc8b32]
-  - @cat-factory/contracts@0.79.0
-  - @cat-factory/kernel@0.69.0
-
-## 0.10.64
-
-### Patch Changes
-
-- Updated dependencies [16ee6cc]
-  - @cat-factory/contracts@0.78.1
-  - @cat-factory/kernel@0.68.1
-
-## 0.10.63
-
-### Patch Changes
-
-- Updated dependencies [16621f8]
-  - @cat-factory/contracts@0.78.0
-  - @cat-factory/kernel@0.68.0
-
-## 0.10.62
-
-### Patch Changes
-
-- Updated dependencies [9e93fe8]
-- Updated dependencies [9b26ff1]
-- Updated dependencies [e0aa45e]
-- Updated dependencies [f70c273]
-- Updated dependencies [edf4e69]
-- Updated dependencies [f21279e]
-- Updated dependencies [6c51e31]
-  - @cat-factory/contracts@0.77.0
-  - @cat-factory/kernel@0.67.0
-
-## 0.10.61
-
-### Patch Changes
-
-- Updated dependencies [762fe66]
-  - @cat-factory/contracts@0.76.0
-  - @cat-factory/kernel@0.66.1
-
-## 0.10.60
-
-### Patch Changes
-
-- Updated dependencies [fb53662]
-  - @cat-factory/kernel@0.66.0
-  - @cat-factory/contracts@0.75.0
-
-## 0.10.59
-
-### Patch Changes
-
-- Updated dependencies [6f95aff]
-  - @cat-factory/contracts@0.74.0
-  - @cat-factory/kernel@0.65.0
-
-## 0.10.58
-
-### Patch Changes
-
-- Updated dependencies [3643708]
-  - @cat-factory/contracts@0.73.0
-  - @cat-factory/kernel@0.64.0
-
-## 0.10.57
-
-### Patch Changes
-
-- Updated dependencies [70e321b]
-  - @cat-factory/contracts@0.72.0
-  - @cat-factory/kernel@0.63.4
-
-## 0.10.56
-
-### Patch Changes
-
-- Updated dependencies [77c6842]
-  - @cat-factory/contracts@0.71.0
-  - @cat-factory/kernel@0.63.3
-
-## 0.10.55
-
-### Patch Changes
-
-- Updated dependencies [2e1354f]
-  - @cat-factory/contracts@0.70.1
-  - @cat-factory/kernel@0.63.2
-
-## 0.10.54
-
-### Patch Changes
-
-- Updated dependencies [b4c7e60]
-  - @cat-factory/contracts@0.70.0
-  - @cat-factory/kernel@0.63.1
-
-## 0.10.53
-
-### Patch Changes
-
-- Updated dependencies [f568a8c]
-  - @cat-factory/kernel@0.63.0
-  - @cat-factory/contracts@0.69.0
-
-## 0.10.52
-
-### Patch Changes
-
-- Updated dependencies [41203db]
-  - @cat-factory/contracts@0.68.0
-  - @cat-factory/kernel@0.62.4
-
-## 0.10.51
-
-### Patch Changes
-
-- Updated dependencies [cb9e2e3]
-  - @cat-factory/contracts@0.67.0
-  - @cat-factory/kernel@0.62.3
-
-## 0.10.50
-
-### Patch Changes
-
-- Updated dependencies [1e55e77]
-  - @cat-factory/contracts@0.66.1
-  - @cat-factory/kernel@0.62.2
-
-## 0.10.49
-
-### Patch Changes
-
-- Updated dependencies [ecf4cc1]
-  - @cat-factory/contracts@0.66.0
-  - @cat-factory/kernel@0.62.1
-
-## 0.10.48
-
-### Patch Changes
-
-- Updated dependencies [f9678df]
-- Updated dependencies [858799e]
-  - @cat-factory/contracts@0.65.0
-  - @cat-factory/kernel@0.62.0
-
-## 0.10.47
-
-### Patch Changes
-
-- Updated dependencies [9bb75b0]
-  - @cat-factory/contracts@0.64.0
-  - @cat-factory/kernel@0.61.1
-
-## 0.10.46
-
-### Patch Changes
-
-- Updated dependencies [15c5894]
-  - @cat-factory/contracts@0.63.0
-  - @cat-factory/kernel@0.61.0
-
-## 0.10.45
-
-### Patch Changes
-
-- Updated dependencies [f383515]
-  - @cat-factory/kernel@0.60.0
-  - @cat-factory/contracts@0.62.0
-
-## 0.10.44
-
-### Patch Changes
-
-- Updated dependencies [e4cddb4]
-  - @cat-factory/kernel@0.59.0
-  - @cat-factory/contracts@0.61.0
-
-## 0.10.43
-
-### Patch Changes
-
-- Updated dependencies [337d94d]
-  - @cat-factory/kernel@0.58.0
-  - @cat-factory/contracts@0.60.0
-
-## 0.10.42
-
-### Patch Changes
-
-- Updated dependencies [6009266]
-  - @cat-factory/kernel@0.57.1
-
-## 0.10.41
-
-### Patch Changes
-
-- Updated dependencies [1952d6b]
-- Updated dependencies [1952d6b]
-  - @cat-factory/contracts@0.59.0
-  - @cat-factory/kernel@0.57.0
-
-## 0.10.40
-
-### Patch Changes
-
-- Updated dependencies [5fd0ffa]
-  - @cat-factory/contracts@0.58.0
-  - @cat-factory/kernel@0.56.1
-
-## 0.10.39
-
-### Patch Changes
-
-- Updated dependencies [f9a173f]
-  - @cat-factory/contracts@0.57.0
-  - @cat-factory/kernel@0.56.0
-
-## 0.10.38
-
-### Patch Changes
-
-- Updated dependencies [fdeb466]
-  - @cat-factory/kernel@0.55.4
-
-## 0.10.37
-
-### Patch Changes
-
-- Updated dependencies [21b2096]
-  - @cat-factory/contracts@0.56.1
-  - @cat-factory/kernel@0.55.3
-
-## 0.10.36
-
-### Patch Changes
-
-- Updated dependencies [ad5d3e0]
-  - @cat-factory/contracts@0.56.0
-  - @cat-factory/kernel@0.55.2
-
-## 0.10.35
-
-### Patch Changes
-
-- Updated dependencies [4897078]
-  - @cat-factory/contracts@0.55.0
-  - @cat-factory/kernel@0.55.1
-
-## 0.10.34
-
-### Patch Changes
-
-- Updated dependencies [d5a0637]
-- Updated dependencies [915861c]
-  - @cat-factory/kernel@0.55.0
-  - @cat-factory/contracts@0.54.0
-
-## 0.10.33
-
-### Patch Changes
-
-- Updated dependencies [48a3df6]
-- Updated dependencies [48a3df6]
-  - @cat-factory/kernel@0.54.0
-  - @cat-factory/contracts@0.53.0
-
-## 0.10.32
-
-### Patch Changes
-
-- Updated dependencies [0577404]
-  - @cat-factory/contracts@0.52.0
-  - @cat-factory/kernel@0.53.1
-
-## 0.10.31
-
-### Patch Changes
-
-- Updated dependencies [69558f9]
-  - @cat-factory/contracts@0.51.0
-  - @cat-factory/kernel@0.53.0
-
-## 0.10.30
-
-### Patch Changes
-
-- Updated dependencies [29d8b5d]
-  - @cat-factory/kernel@0.52.0
-  - @cat-factory/contracts@0.50.1
-
-## 0.10.29
-
-### Patch Changes
-
-- Updated dependencies [40f687d]
-  - @cat-factory/contracts@0.50.0
-  - @cat-factory/kernel@0.51.0
-
-## 0.10.28
-
-### Patch Changes
-
-- Updated dependencies [e0f1149]
-  - @cat-factory/contracts@0.49.0
-  - @cat-factory/kernel@0.50.0
-
-## 0.10.27
-
-### Patch Changes
-
-- Updated dependencies [fc324d2]
-  - @cat-factory/contracts@0.48.0
-  - @cat-factory/kernel@0.49.0
-
-## 0.10.26
-
-### Patch Changes
-
-- Updated dependencies [e3b3540]
-  - @cat-factory/contracts@0.47.0
-  - @cat-factory/kernel@0.48.0
-
-## 0.10.25
-
-### Patch Changes
-
-- Updated dependencies [704c99e]
-  - @cat-factory/contracts@0.46.0
-  - @cat-factory/kernel@0.47.2
-
-## 0.10.24
-
-### Patch Changes
-
-- Updated dependencies [c2ec53b]
-  - @cat-factory/contracts@0.45.1
-  - @cat-factory/kernel@0.47.1
-
-## 0.10.23
-
-### Patch Changes
-
-- Updated dependencies [4b5d267]
-  - @cat-factory/kernel@0.47.0
-  - @cat-factory/contracts@0.45.0
-
-## 0.10.22
-
-### Patch Changes
-
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [8727f2b]
-- Updated dependencies [56e6ce6]
-  - @cat-factory/kernel@0.46.0
-  - @cat-factory/contracts@0.44.0
-
-## 0.10.21
-
-### Patch Changes
-
-- Updated dependencies [8fad695]
-  - @cat-factory/contracts@0.43.3
-  - @cat-factory/kernel@0.45.5
-
-## 0.10.20
-
-### Patch Changes
-
-- Updated dependencies [fb339db]
-  - @cat-factory/contracts@0.43.2
-  - @cat-factory/kernel@0.45.4
-
-## 0.10.19
-
-### Patch Changes
-
-- Updated dependencies [ab146e5]
-  - @cat-factory/kernel@0.45.3
-
-## 0.10.18
-
-### Patch Changes
-
-- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
-  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
-  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
-  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
-  removes that footgun for every publishable library.
-- Updated dependencies [c11a0cc]
-  - @cat-factory/contracts@0.43.1
-  - @cat-factory/kernel@0.45.2
-
-## 0.10.17
-
-### Patch Changes
-
-- Updated dependencies [5363166]
-  - @cat-factory/kernel@0.45.1
-
-## 0.10.16
-
-### Patch Changes
-
-- Updated dependencies [eab73b8]
-- Updated dependencies [eab73b8]
-  - @cat-factory/contracts@0.43.0
-  - @cat-factory/kernel@0.45.0
-
-## 0.10.15
-
-### Patch Changes
-
-- Updated dependencies [e641417]
-  - @cat-factory/contracts@0.42.0
-  - @cat-factory/kernel@0.44.0
-
-## 0.10.14
-
-### Patch Changes
-
-- Updated dependencies [bbafec9]
-- Updated dependencies [bbafec9]
-  - @cat-factory/kernel@0.43.0
-
-## 0.10.13
-
-### Patch Changes
-
-- Updated dependencies [63e2177]
-  - @cat-factory/contracts@0.41.0
-  - @cat-factory/kernel@0.42.2
-
-## 0.10.12
-
-### Patch Changes
-
-- Updated dependencies [d1027ec]
-  - @cat-factory/contracts@0.40.1
-  - @cat-factory/kernel@0.42.1
-
-## 0.10.11
-
-### Patch Changes
-
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-  - @cat-factory/kernel@0.42.0
-  - @cat-factory/contracts@0.40.0
-
-## 0.10.10
-
 ### Patch Changes
 
-- Updated dependencies [b5231b0]
-  - @cat-factory/contracts@0.39.0
-  - @cat-factory/kernel@0.41.0
+- Updated dependencies [9f8cabc]
+  - @cat-factory/contracts@0.355.1
+  - @cat-factory/kernel@0.348.0
 
-## 0.10.9
+## 0.21.9
 
 ### Patch Changes
 
-- Updated dependencies [6d829bb]
-  - @cat-factory/contracts@0.38.0
-  - @cat-factory/kernel@0.40.0
+- Updated dependencies [69fc66c]
+  - @cat-factory/contracts@0.355.0
+  - @cat-factory/kernel@0.347.0
 
-## 0.10.8
+## 0.21.8
 
 ### Patch Changes
 
-- Updated dependencies [714b7c9]
-  - @cat-factory/contracts@0.37.0
-  - @cat-factory/kernel@0.39.0
+- Updated dependencies [2cf867d]
+  - @cat-factory/contracts@0.354.0
+  - @cat-factory/kernel@0.346.2
 
-## 0.10.7
+## 0.21.7
 
 ### Patch Changes
 
-- Updated dependencies [efbd910]
-  - @cat-factory/contracts@0.36.0
-  - @cat-factory/kernel@0.38.1
+- Updated dependencies [5dc7506]
+  - @cat-factory/contracts@0.353.0
+  - @cat-factory/kernel@0.346.1
 
-## 0.10.6
+## 0.21.6
 
 ### Patch Changes
 
-- Updated dependencies [a4ea607]
-  - @cat-factory/contracts@0.35.0
-  - @cat-factory/kernel@0.38.0
+- Updated dependencies [44b27a7]
+  - @cat-factory/kernel@0.346.0
 
-## 0.10.5
+## 0.21.5
 
 ### Patch Changes
 
-- Updated dependencies [76543fa]
-  - @cat-factory/kernel@0.37.0
-  - @cat-factory/contracts@0.34.0
+- Updated dependencies [b75fa3c]
+  - @cat-factory/contracts@0.352.0
+  - @cat-factory/kernel@0.345.0
 
-## 0.10.4
+## 0.21.4
 
 ### Patch Changes
 
-- Updated dependencies [17adf4c]
-  - @cat-factory/contracts@0.33.0
-  - @cat-factory/kernel@0.36.0
+- Updated dependencies [bba4beb]
+  - @cat-factory/kernel@0.344.0
 
-## 0.10.3
+## 0.21.3
 
 ### Patch Changes
 
-- Updated dependencies [eb48652]
-  - @cat-factory/contracts@0.32.0
-  - @cat-factory/kernel@0.35.0
+- Updated dependencies [afd09af]
+  - @cat-factory/contracts@0.351.1
+  - @cat-factory/kernel@0.343.1
 
-## 0.10.2
+## 0.21.2
 
 ### Patch Changes
 
-- Updated dependencies [9f7ee39]
-- Updated dependencies [81b60d4]
-  - @cat-factory/contracts@0.31.0
-  - @cat-factory/kernel@0.34.0
+- Updated dependencies [2ae7e2b]
+  - @cat-factory/contracts@0.351.0
+  - @cat-factory/kernel@0.343.0
 
-## 0.10.1
+## 0.21.1
 
 ### Patch Changes
 
-- Updated dependencies [ea59e91]
-  - @cat-factory/contracts@0.30.0
-  - @cat-factory/kernel@0.33.0
+- Updated dependencies [6ff632f]
+  - @cat-factory/contracts@0.350.0
+  - @cat-factory/kernel@0.342.1
 
-## 0.10.0
+## 0.21.0
 
 ### Minor Changes
 
-- b82304e: Remove per-model price overrides from the workspace budget. A workspace's budget is
-  now just a currency + monthly limit overlaid on the built-in `DEFAULT_SPEND_PRICING`
-  table; the `spendModelPrices` setting, its contracts/schemas, and the
-  `workspace_settings.spend_model_prices` column (D1 + Postgres) are dropped. Also fixes
-  the budget save in the UI throwing `spendMonthlyLimit.trim is not a function` when the
-  number input emits a numeric value.
-
-  **Breaking:** the `spend_model_prices` column is dropped on both runtimes with no
-  migration of existing override data (pre-1.0); any stored overrides are discarded and
-  budgets fall back to the built-in price table.
+- 333b967: Meter every two-band model in the band its prompt actually lands in, check the cache classes the
+  table DERIVES, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Six rows were metering a long-context request at half its input rate.** OpenAI bills a request
+  whose prompt reaches 272,000 input tokens entirely at roughly double the short rate, with no
+  blending, and Gemini 3.1 Pro does the same at 200,000 tokens. Every OpenAI row and the Gemini Pro
+  row carried the SHORT band, so a long-prompt run metered at half its input and around 60% of its
+  output. The catalog gives all six entries a window over a million tokens, so a container agent
+  re-sending a large checkout crosses that threshold as ordinary behaviour, not as an edge case.
+  
+  **`ModelPrice` now carries both bands, and the meter picks between them.** A two-band row states
+  its base rates plus a `longBand` (rates, cache tiers and the threshold), `bandFor` selects on the
+  request's total input, and both metering entry points already hold that count: `estimateCost` gets
+  `inputTokens`, and `estimateClassedCost` sums the three input classes, because a vendor's threshold
+  is stated against the whole request and a 300K prompt served mostly from cache crosses it all the
+  same. Ten OpenAI rows, Gemini 3.1 Pro and the three Grok 4.6 rows carry a band, and each band's
+  cache tiers derive from that band's own input rate. A caller that cannot see the prompt size, which
+  is the telemetry rollup's rate resolver, still gets the DEARER band: of the two answers open to it,
+  only that one keeps a budget safe.
+  
+  Pricing the whole row at the long band instead is worse in both directions the figure is read. A
+  short-prompt run meters at roughly double its cost, which on inline judges and estimators is the
+  majority of calls and trips a workspace ceiling at half its real spend. The same rows are also the
+  picker's informational list price, rendered with no band annotation, so GPT-6 Astra would read
+  18.4/69 beside Claude Fable 5 at 9.2/46 while both bill $10/$50 at ordinary prompt lengths.
+  `modelCostResolver` stays on the base band for that reason, and the split between `priceFor` (the
+  list price a human compares) and `ratesFor` (the rate a budget meters) is now stated at both.
+  
+  The DYNAMIC per-workspace OpenRouter overlay still folds a model's bands to their maximum
+  (`dearestRate`), because which band applies depends on the prompt actually sent and a catalog
+  refresh has none to read. So enabling a two-band model in a workspace catalog meters its short
+  requests conservatively where the curated row prices each band exactly; carrying the threshold
+  through the catalog metadata is what would close that.
+  
+  **A DERIVED cache rate can understate the live one, and nothing was checking it.** A row names a
+  cache rate only where the vendor departs from the `CACHE_*_MULTIPLIER` floor, and
+  `check-openrouter-pins.mjs` skipped every unnamed class on the grounds that a derived figure has no
+  pin to have drifted. The derived figure is still what the budget meters with, and it follows OUR
+  input rate rather than the vendor's cache rate: `openrouter:z-ai/glm-5.3` was metering cache reads
+  at 54% of the live rate while the report said "nothing to do", on the class a container agent's
+  re-sent prefix lands in every turn. That row now names its rate, and the check compares the
+  EFFECTIVE rate for four classes rather than the pinned numbers for three.
+  
+  Three things keep that from becoming noise. A cache class is compared only where a hit can actually
+  land on the route, read out of the contracts `GATEWAY_PREFIX_POLICY` rather than restated, and the
+  gate covers a NAMED rate as well as a derived one: a figure no hit reaches is inert however it was
+  obtained, which is what `pricing.test.ts` already records for the two Alibaba slugs. The live side
+  is read band for band, so a row priced correctly in both bands reports nothing rather than flagging
+  its short band on every run. And the pinned THRESHOLD is checked as well, against the lowest
+  `min_prompt_tokens` the route publishes: pinned above the live one, every request between the two
+  meters in a band the vendor has stopped charging.
+  
+  Three parser fixes came with it, each of which silenced a comparison rather than breaking one. The
+  policy-map and price-row readers count braces and skip comments and strings, where a `[^}]*` match
+  ends the policy map at the `{@link}` reference sitting between its entries (leaving every vendor
+  declared below that line invisible) and would end a price row at its nested band's closing brace.
+  The cache-WRITE class reads `input_cache_write_1h` as a fallback, the order `cacheWriteRate`
+  applies on the dynamic path, so a route publishing only the long TTL is compared instead of passing
+  by default. And a non-array `overrides` is treated as no bands rather than thrown on, because a
+  throw exits 1, which is this script's reserved signal for a pinned route that was withdrawn.
+  
+  `openrouter:moonshotai/kimi-k2.7-code` is re-pinned from $0.674 / $3.40 to the $0.71 / $3.50 the
+  gateway's blend reads today, and its named cache read to 0.18: 0.17 sat under the 0.1748 the
+  conversion gives by more than the checker's rounding tolerance. The two Workers AI Kimi rows that
+  round the same vendor figures are corrected with it. The DeepSeek alias rows are re-stamped and
+  deliberately not moved: both now sit above their live rate, and Pro has swung $0.556 to $1.60 to
+  $0.946 across three reads in a fortnight, so chasing that blend down would spend the table's margin
+  on noise.
+  
+  **Every other rate was re-read and is unchanged**, against each vendor's own list rather than
+  inferred: Anthropic, the twelve Workers AI partner rows, Z.ai, Moonshot K3 and K2.6, DeepSeek's
+  peak bands, xAI, Qwen3.8 Max and Flash. Two prose corrections came out of it. Gemini 3.7 Flash's
+  half-rate promotion has lapsed on the gateway, so the row's deliberate over-count against it no
+  longer describes anything, and all three Flash routes now serve at the list price the rows carry.
+  Qwen3.8 Max is confirmed flat across its whole 1M window, unlike most of the Qwen line.
+  
+  **No major model is missing.** Everything shipped between 2026-09-01 and 2026-09-04 is already in
+  the catalog, and every one of the 27 curated OpenRouter routes is still served at the context
+  window it declares. Three re-checked and still not added: GPT-6 Astra Pro carries the same
+  $10 / $50 short band, the same $20 / $75 long band and the same 1,050,000-token window as
+  `gpt-6-astra`, and OpenAI's pricing page lists no row for it, so an entry could only re-badge a
+  model already here; Claude Mythos 5.1 is limited-availability; and Mercury 2.5, the one text model
+  the gateway has gained since, is a new vendor family rather than a frontier route.
+  
+  Pi holds at 0.85.1, Codex at 0.153.4 and both Pi extensions at 2.9.0, each already newest. Claude
+  Code goes 2.1.263 to 2.1.265, taking its newest release ahead of the 24h age window as the
+  Dockerfile's standing note allows. Playwright holds at 1.63.0 and WireMock at 3.13.1, both still
+  newest stable. `node:26-trixie-slim` still resolves to the pinned digest, so no base image moved.
+  The executor image tag rolls to 1.156.0, and the DEPLOY image tag to 0.6.6: the dependency refresh
+  reaches the deploy harness's own `@types/node` range, which is an image source, and republishing
+  over a live tag does not roll a deployment out.
+  
+  Dependency refresh: direct ranges plus a lockfile re-resolution, 75 resolved names moved, no
+  package name added or dropped, and three names that had two copies now have one. `@clack/prompts`
+  1.8.0 needed one source change: `isCancel` narrows to a UNIQUE symbol while the prompts still
+  return the wide `symbol`, so control flow cannot subtract one from the other. The CLI's single
+  cancel seam supplies the second half itself (`isCancel(value) || typeof value === 'symbol'`), which
+  narrows to `T` with no assertion and also exits cleanly on a cancel symbol minted by a second copy
+  of `@clack/core`, where an assertion would hand that symbol back to a caller about to call `.trim()`
+  on it. Four holds are unchanged and were re-verified at HEAD:
+  vitest at 4.1.11 and wrangler at 4.124.0 (vitest-pool-workers 0.22.0 is still newest, peers
+  `vitest: ^4.1.0` and pins that wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the
+  resolved workerd's date), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 is still newest and
+  calls `require.resolve('typescript/lib/tsc')`, absent from TS 7's exports map). Actions:
+  changesets/action v2.1.1 to v2.1.2, the only one that moved.
 
 ### Patch Changes
 
-- Updated dependencies [b82304e]
-  - @cat-factory/contracts@0.29.0
-  - @cat-factory/kernel@0.32.0
+- Updated dependencies [ca5be97]
+  - @cat-factory/kernel@0.342.0
 
-## 0.9.5
-
-### Patch Changes
-
-- Updated dependencies [765cc42]
-  - @cat-factory/kernel@0.31.0
-  - @cat-factory/contracts@0.28.0
-
-## 0.9.4
+## 0.20.2
 
 ### Patch Changes
 
-- Updated dependencies [52d886a]
-  - @cat-factory/kernel@0.30.0
-  - @cat-factory/contracts@0.27.0
+- Updated dependencies [5f06bfb]
+  - @cat-factory/contracts@0.349.0
+  - @cat-factory/kernel@0.341.0
 
-## 0.9.3
-
-### Patch Changes
-
-- Updated dependencies [a639189]
-  - @cat-factory/kernel@0.29.0
-  - @cat-factory/contracts@0.26.0
-
-## 0.9.2
+## 0.20.1
 
 ### Patch Changes
 
-- Updated dependencies [ed3a673]
-  - @cat-factory/contracts@0.25.1
-  - @cat-factory/kernel@0.28.1
+- Updated dependencies [8dc6677]
+  - @cat-factory/contracts@0.348.0
+  - @cat-factory/kernel@0.340.0
 
-## 0.9.1
-
-### Patch Changes
-
-- Updated dependencies [69d2270]
-  - @cat-factory/contracts@0.25.0
-  - @cat-factory/kernel@0.28.0
-
-## 0.9.0
+## 0.20.0
 
 ### Minor Changes
 
-- 3546e3d: Move operator/integration config out of environment variables into encrypted, UI-editable
-  DB settings. DB is now the source of truth — the moved env vars are **removed** (no
-  fallback), so the listed vars below no longer have any effect.
-
-  **Per-workspace budget (Workspace settings → Budget).** A workspace's spend currency,
-  monthly limit, and per-model price overrides now live on the `workspace_settings` row.
-  The spend safeguard resolves each workspace's effective pricing (base table + overrides)
-  behind a short-TTL cache, scoping the budget gate to the workspace's own usage
-  (`SpendService.status`/`isOverBudget` now take a `workspaceId`; new
-  `TokenUsageRepository.totalsSinceForWorkspace`). **Behaviour change:** spend is metered +
-  gated per workspace, not deployment-wide; a workspace with no budget inherits the built-in
-  default (~100 EUR/month). Removes env: `SPEND_MONTHLY_LIMIT`, `SPEND_CURRENCY`,
-  `SPEND_MODEL_PRICES`. A budget of `0` is intentional ("no PAID spend"): metered runs are
-  refused **up front** at start/retry with a clear `409` (not just a silent mid-run pause),
-  while LOCAL-runner models (keyless) and connected SUBSCRIPTIONS (flat-rate quota) keep
-  running since they incur no metered cost — so `0` is the "local-/subscription-only" setting.
-  The over-budget exemption (previously subscription-only) now also covers local-runner steps,
-  inline and container alike. The hot-path per-workspace rollup is indexed
-  (`idx_token_usage_workspace` on `(workspace_id, created_at)`, both runtimes).
-
-  **Per-workspace incident enrichment (service inspector → Post-release health).** PagerDuty
-
-  - incident.io credentials are sealed in a new per-workspace `incident_enrichment_connections`
-    table (one grouped blob) and resolved/decrypted at enrichment time by a new
-    `WorkspaceIncidentEnrichmentProvider`. Removes env: `PAGERDUTY_API_TOKEN`,
-    `PAGERDUTY_FROM_EMAIL`, `INCIDENTIO_API_KEY`. The write API is three-state per provider
-    group (omit ⇒ keep, `null` ⇒ clear, value ⇒ set) so one vendor can be removed without
-    wiping the other.
-
-  **Per-account integration secrets (Account settings → Deployment integrations, admin only).**
-  The Slack app OAuth credentials and the container web-search upstream keys (Brave /
-  SearXNG) now live in a new per-account `account_settings` table (one sealed secrets blob,
-  HKDF tag `cat-factory:account-settings`), behind an admin-gated
-  `GET|PUT /accounts/:id/settings`. Resolved dynamically: Slack OAuth at connect time, the
-  web-search upstream per run (off the container session's account id). The executor now
-  advertises the container `web_search` tool to a run **only when its account actually has
-  keys** (so an agent is never handed a tool that always fails); a run with no upstream gets
-  an empty result set rather than a hard `503`. Removes env:
-  `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URL`, `WEB_SEARCH_BRAVE_API_KEY`,
-  `WEB_SEARCH_SEARXNG_URL`, `WEB_SEARCH_SEARXNG_API_KEY` (the env-built upstream + its
-  `createWebSearchUpstreamFromEnv`/`gateways.webSearch` fallback are deleted, not just
-  unwired). (`SLACK_ENABLED` still gates Slack module assembly; the new tables/services
-  assemble whenever `ENCRYPTION_KEY` is set.)
-
-  **Hardening.** Re-sealing a partial settings/credentials write now **refuses** (clear `409`)
-  when the stored blob can't be decrypted (e.g. after an encryption-key change) instead of
-  silently dropping the un-edited secret group on the re-seal.
-
-  New tables mirror across both runtimes (D1 migrations 0012–0014 ⇄ Drizzle schema +
-  generated migration) with cross-runtime conformance assertions for the budget +
-  incident-enrichment round-trips. `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, and the GitHub
-  App/OAuth secrets stay in env (bootstrap/auth). Retention windows, inline-web-search
-  toggles, Langfuse keys, and execution timeouts intentionally remain env-configured.
-
-### Patch Changes
-
-- Updated dependencies [3546e3d]
-  - @cat-factory/contracts@0.24.0
-  - @cat-factory/kernel@0.27.0
-
-## 0.8.26
+- 636fcf3: Re-verify every curated model route against its serving provider, take the agent CLIs at their
+  newest, and refresh the dependency tree.
+  
+  **A withdrawn route, caught by the pin checker.** OpenRouter has withdrawn the undated
+  `qwen/qwen3.8-max` and now serves the dated `qwen/qwen3.8-max-0902` instead. That is the silent
+  failure `scripts/check-openrouter-pins.mjs` exists for: nothing throws, `effectiveVariant` keeps
+  choosing the gateway for a workspace holding only an OpenRouter key, and every dispatch fails on
+  a dead slug. The two entries swap arms accordingly, and the floating entry is deliberately NOT
+  re-pointed at the dated slug: following an alias onto a snapshot is the identity the pinned entry
+  beside it exists to hold.
+  
+  **GLM-5.3 gains the two routes it was waiting for.** It shipped subscription-only because Z.ai
+  had not yet released the weights; Workers AI picked it up on 2026-08-28 and OpenRouter serves
+  `z-ai/glm-5.3` today. Both were read off the serving provider before being declared, and each
+  carries that provider's own window rather than the vendor's headline figure: Workers AI
+  1,048,576, OpenRouter 1,310,720, the coding plan 1M.
+  
+  **Qwen3.8 Flash joins the catalog**, on DashScope and OpenRouter. It is the cheapest 1M-window
+  entry here that reads images, which is what earns it a curated slot rather than the dynamic
+  OpenRouter catalog: it is the natural low-cost tier for the inline steps that reach for
+  `glm-flash` today, and a per-token rate is what those steps are chosen on.
+  
+  **One pinned rate was understating the budget gate.** `openrouter:x-ai/grok-4.6` carried xAI's
+  SHORT band ($2 / $6) with its cache tier left to derive, while the direct `xai:grok-4.6` row
+  carried the long band as its comment explains. xAI bills a request whose prompt reaches 200K
+  tokens entirely at the doubled rate and OpenRouter is a passthrough, so the gateway row now
+  matches: a cache read was metering at 60% below the live rate on a route that really does record
+  the class (`x-ai` is `auto-prefix` on the gateway). Every other pin came back at or above its
+  live rate, and every curated `openrouter` context window matches what the gateway serves.
+  
+  **Two omissions re-checked rather than assumed.** GPT-6 Astra still declares no `bedrock` arm:
+  Codex 0.153.3 did add Astra to the Bedrock picker, so the route demonstrably exists, but neither
+  AWS nor OpenAI publishes the model id it addresses, and a `baseModelId` guessed from a
+  neighbouring entry is precisely the dead pin repaired above. Still no separate "Astra Pro" entry
+  either, though the reasoning has narrowed: OpenRouter has minted its own `openai/gpt-6-astra-pro`
+  slug, while OpenAI's model doc states reasoning effort is a parameter on the single `gpt-6-astra`
+  id and Codex has no such `--model` slug. A second entry could therefore carry one arm re-badging
+  a model already here at byte-identical pricing, and the two-entry shape is for a choice made with
+  the price in front of you.
+  
+  **Agent CLIs.** Pi 0.85.0 -> 0.85.1 and Claude Code 2.1.261 -> 2.1.263 take their newest releases
+  ahead of the 24h age window, as the Dockerfile's standing note allows for those three pins. Codex
+  holds at 0.153.4 (already newest) and both Pi extensions at 2.9.0. Playwright in the UI image goes
+  1.62.1 -> 1.63.0 with `@playwright/test`. The executor image tag rolls to 1.154.0.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution: 56 resolved names moved, no
+  package name added or dropped. Four holds are unchanged and were re-verified at HEAD rather than
+  restated: vitest at 4.1.11 and wrangler at 4.124.0 (`@cloudflare/vitest-pool-workers` 0.22.0 is
+  still the newest and peers `vitest: ^4.1.0` while pinning that wrangler exactly),
+  `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date), and frontend TypeScript
+  at 6.0.3 (`vue-tsc` 3.3.11 calls `require.resolve('typescript/lib/tsc')`, which TS 7's exports map
+  does not carry). Base images are unchanged: `node:26-trixie-slim` still resolves to the digest
+  already pinned. GitHub Actions: `docker/setup-qemu-action` v4.2.0 -> v4.3.0, `pnpm/action-setup`
+  v6.0.10 -> v6.1.0, `zizmorcore/zizmor-action` v0.6.2 -> v0.6.3.
 
 ### Patch Changes
 
-- Updated dependencies [a62044d]
-  - @cat-factory/kernel@0.26.1
+- Updated dependencies [636fcf3]
+  - @cat-factory/kernel@0.339.0
 
-## 0.8.25
-
-### Patch Changes
-
-- 2aae8bc: Fix the OpenRouter key panel falsely reporting "connected" on a rejected key, and add Kimi K2.7 as a curated OpenRouter model.
-
-  - The OpenRouter setup panel (`OpenRouterCatalogPanel`) used to fire its "OpenRouter key connected" success toast — and flip the panel into the connected state — _before_ probing OpenRouter, since the save endpoint stores keys without validating them. A wrong/expired key therefore showed a 401 "could not reach OpenRouter" toast **and** a "connected" status simultaneously. `connectKey` now probes OpenRouter with the freshly stored key first, only announces success when it's reachable, and rolls the key back on rejection so the form stays for a retry. (The Vendors & keys → Proxies screen shares the same store-only save codepath; it never showed the bug because it doesn't probe OpenRouter after saving.)
-  - `kimi-k2.7` now carries an `openrouter` flavour (`moonshotai/kimi-k2.7-code`, 256K context per OpenRouter's catalog), so it routes through the OpenRouter gateway out of the box once an OpenRouter key is connected. It's added to the OpenRouter panel's "Enable recommended" slugs and the spend price table (billed at Moonshot's upstream rates).
-
-- Updated dependencies [2aae8bc]
-  - @cat-factory/kernel@0.26.0
-
-## 0.8.24
-
-### Patch Changes
-
-- Updated dependencies [f4f954b]
-  - @cat-factory/kernel@0.25.0
-
-## 0.8.23
-
-### Patch Changes
-
-- Updated dependencies [ce81233]
-  - @cat-factory/contracts@0.23.0
-  - @cat-factory/kernel@0.24.0
-
-## 0.8.22
-
-### Patch Changes
-
-- Updated dependencies [7346a4f]
-  - @cat-factory/kernel@0.23.0
-
-## 0.8.21
-
-### Patch Changes
-
-- Updated dependencies [6ff1f10]
-  - @cat-factory/contracts@0.22.0
-  - @cat-factory/kernel@0.22.0
-
-## 0.8.20
-
-### Patch Changes
-
-- Updated dependencies [04befe8]
-  - @cat-factory/contracts@0.21.0
-  - @cat-factory/kernel@0.21.0
-
-## 0.8.19
-
-### Patch Changes
-
-- Updated dependencies [be182e8]
-  - @cat-factory/kernel@0.20.0
-
-## 0.8.18
-
-### Patch Changes
-
-- Updated dependencies [2c24da8]
-  - @cat-factory/contracts@0.20.0
-  - @cat-factory/kernel@0.19.0
-
-## 0.8.17
-
-### Patch Changes
-
-- Updated dependencies [4120ac5]
-  - @cat-factory/contracts@0.19.0
-  - @cat-factory/kernel@0.18.0
-
-## 0.8.16
-
-### Patch Changes
-
-- Updated dependencies [25efe48]
-  - @cat-factory/contracts@0.18.0
-  - @cat-factory/kernel@0.17.0
-
-## 0.8.15
-
-### Patch Changes
-
-- Updated dependencies [c7b8012]
-  - @cat-factory/contracts@0.17.1
-  - @cat-factory/kernel@0.16.2
-
-## 0.8.14
-
-### Patch Changes
-
-- Updated dependencies [aa06003]
-  - @cat-factory/contracts@0.17.0
-  - @cat-factory/kernel@0.16.1
-
-## 0.8.13
-
-### Patch Changes
-
-- Updated dependencies [208c933]
-  - @cat-factory/kernel@0.16.0
-
-## 0.8.12
-
-### Patch Changes
-
-- Updated dependencies [494fb34]
-  - @cat-factory/kernel@0.15.1
-
-## 0.8.11
-
-### Patch Changes
-
-- Updated dependencies [0ac64b8]
-  - @cat-factory/kernel@0.15.0
-  - @cat-factory/contracts@0.16.0
-
-## 0.8.10
-
-### Patch Changes
-
-- Updated dependencies [fde0437]
-  - @cat-factory/contracts@0.15.0
-  - @cat-factory/kernel@0.14.0
-
-## 0.8.9
-
-### Patch Changes
-
-- Updated dependencies [77b7d31]
-  - @cat-factory/kernel@0.13.4
-
-## 0.8.8
-
-### Patch Changes
-
-- Updated dependencies [82d771e]
-  - @cat-factory/contracts@0.14.0
-  - @cat-factory/kernel@0.13.3
-
-## 0.8.7
-
-### Patch Changes
-
-- Updated dependencies [ce27690]
-  - @cat-factory/contracts@0.13.1
-  - @cat-factory/kernel@0.13.2
-
-## 0.8.6
-
-### Patch Changes
-
-- Updated dependencies [c8bd144]
-  - @cat-factory/kernel@0.13.1
-
-## 0.8.5
-
-### Patch Changes
-
-- Updated dependencies [5c915fd]
-  - @cat-factory/contracts@0.13.0
-  - @cat-factory/kernel@0.13.0
-
-## 0.8.4
-
-### Patch Changes
-
-- Updated dependencies [128e12e]
-- Updated dependencies [4de2f5f]
-- Updated dependencies [4de2f5f]
-  - @cat-factory/kernel@0.12.0
-  - @cat-factory/contracts@0.12.0
-
-## 0.8.3
-
-### Patch Changes
-
-- Updated dependencies [f8a24e0]
-  - @cat-factory/kernel@0.11.1
-
-## 0.8.2
-
-### Patch Changes
-
-- Updated dependencies [1e31cbc]
-  - @cat-factory/contracts@0.11.0
-  - @cat-factory/kernel@0.11.0
-
-## 0.8.1
-
-### Patch Changes
-
-- Updated dependencies [d0081e1]
-  - @cat-factory/contracts@0.10.0
-  - @cat-factory/kernel@0.10.1
-
-## 0.8.0
+## 0.19.0
 
 ### Minor Changes
 
-- ae29687: OpenRouter: dynamic multi-tenant catalog + flavour unification.
-
-  **Flavour unification.** A catalog model can now carry an `openrouter` flavour alongside
-  `cloudflare`/`direct`/`subscription`. `effectiveVariant` resolves in the precedence
-  direct → openrouter → cloudflare (the subscription override still wins in `ModelRouter`),
-  so the SAME logical model routes through OpenRouter when only an OpenRouter key is
-  configured, and through its native vendor when that key is present. The standalone
-  `openrouter-*` catalog entries are folded into their native twins: `deepseek`, `gpt-5.5`
-  and `claude-opus` gain an `openrouter` route; Gemini 3 Pro becomes a curated `gemini`
-  entry. **Breaking (pre-1.0, acceptable):** the catalog ids `openrouter-claude-opus`,
-  `openrouter-gpt`, `openrouter-deepseek`, `openrouter-gemini-pro` and `openrouter-llama`
-  are removed — a block pinned to one falls through to default routing.
-
-  **Dynamic catalog.** A workspace can now browse OpenRouter's live `/models` and enable a
-  subset in the UI (the new "OpenRouter models" panel), rather than a hardcoded handful.
-  Enabled models surface in the per-workspace picker as `openrouter:<slug>` entries with
-  their live context window and price (overlaid onto the spend table, so budgets meter
-  accurately). Persisted in a new generic per-workspace `provider_model_catalog` table
-  (D1 ⇄ Drizzle, keyed by `(workspace_id, provider)` so future gateways like LiteLLM reuse
-  it), behind the new kernel `ProviderModelCatalogRepository` port and the
-  `OpenRouterCatalogService` (refresh leases the workspace's pooled OpenRouter key). New
-  routes: `GET|PUT /workspaces/:ws/openrouter/catalog`, `POST /workspaces/:ws/openrouter/refresh`.
-  Cross-runtime conformance asserts the enabled-subset round-trip + catalog surfacing on
-  both D1 and Postgres.
-
-### Patch Changes
-
-- Updated dependencies [ae29687]
-  - @cat-factory/contracts@0.9.0
-  - @cat-factory/kernel@0.10.0
-
-## 0.7.5
-
-### Patch Changes
-
-- Updated dependencies [5c20968]
-  - @cat-factory/kernel@0.9.0
-
-## 0.7.4
-
-### Patch Changes
-
-- Updated dependencies [c70df09]
-  - @cat-factory/contracts@0.8.0
-  - @cat-factory/kernel@0.8.0
-
-## 0.7.3
-
-### Patch Changes
-
-- a0a1bcc: Add Kimi K2.5 (`@cf/moonshotai/kimi-k2.5`) to the model catalog as a Cloudflare-only
-  entry (256K context) with its spend pricing. Cloudflare lists K2.5 at $0.60 in / $3.00
-  out per 1M, below the K2.6/K2.7 rate, so without an explicit price entry it would fall
-  back to the near-free `workers-ai` neuron rate and meter at ~0.
-
-  Default the `conflict-resolver` agent kind to Kimi K2.5 on both runtimes (Worker + Node).
-  The conflict-resolver rewrites conflicted hunks against the base, a focused diff-heavy
-  reasoning task the small default MoE handles poorly. Operators can still override via
-  `AGENT_MODELS`.
-
-- Updated dependencies [a0a1bcc]
-  - @cat-factory/kernel@0.7.3
-
-## 0.7.2
+- 386c4a2: Add GPT-6 Astra to the curated catalog, take the agent CLIs at their newest, and refresh the
+  dependency tree.
+  
+  **GPT-6 Astra.** OpenAI's new flagship (2026-09-03) joins the catalog as `gpt-6-astra` with a
+  Codex subscription arm and an OpenRouter pay-as-you-go arm, a 1.05M window and image input. The
+  model id IS the Codex `--model` slug, the same rule the GPT-5.6 tiers already follow. Two shapes
+  were decided by checking the routes rather than the announcement:
+  
+  - **No `bedrock` arm**, even though OpenAI named Bedrock among the launch-day routes. No published
+    model card names the Bedrock **id** for Astra, and this catalog declares a flavour only once the
+    route is verified to serve that exact model: a declared-but-absent route is selected by
+    `effectiveVariant` and then fails at dispatch, with nothing upstream of the dispatch to catch it.
+    The arm can be added, additively, when the id lands.
+  - **No separate "Astra Pro" entry.** Pro is not a second model or a second API id: it is this same
+    `gpt-6-astra` served with `reasoning.mode` set to `pro`, and it exists only inside the ChatGPT
+    plans, never on the API or in Codex. An entry for it could only name a route nothing here can
+    dispatch.
+  
+  Astra is priced at $10 / $50 per 1M, the most expensive model this catalog can select on either
+  OpenAI route, so it gets its own `openai:` and `openrouter:` spend rows rather than metering
+  against the bare provider fallback. Its cached input is $1, the same 0.1x read multiplier the
+  GPT-5.6 tiers use, so the derived cache tiers are already exact. The 2x "Fast mode" rate is
+  deliberately not modelled: nothing here dispatches it, and a row set to a mode we never request
+  would over-meter every ordinary Astra run against the budget gate.
+  
+  The built-in `mdp_chatgpt` preset deliberately stays on `gpt-5.6-sol` this round. It names a
+  vendor rather than a generation and is meant to roll forward as that vendor's flagship moves, but
+  Astra is still rolling out per-organization: rolling the preset now would repoint every workspace
+  holding it onto a model its subscription may not serve yet, and the failure would land at dispatch.
+  It is a one-line roll-forward once the rollout completes.
+  
+  **Agent CLIs.** Claude Code 2.1.260 -> 2.1.261, Codex 0.153.2 -> 0.153.4 and Pi 0.84.4 -> 0.85.0
+  all take their newest releases ahead of the 24h age window, as the Dockerfile's standing note
+  allows for those three pins. The Codex pin now also carries a floor the catalog depends on: Astra
+  resolves only from Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than
+  falling back, so that coupling is recorded at both ends. Both Pi extensions are already newest at
+  2.9.0. The executor image tag rolls to 1.152.0.
+  
+  **Dependency refresh.** Direct ranges plus a full lockfile re-resolution: 70 resolved names moved,
+  no package name added or dropped. Four holds, each on a live constraint rather than caution, and
+  the first three are one constraint at three levels:
+  
+  - vitest and `@vitest/coverage-v8` stay on 4.1.11: `@cloudflare/vitest-pool-workers` 0.22.0 is the
+    newest release and still peers `vitest: ^4.1.0`.
+  - wrangler holds at 4.124.0 for the sixth round, pinned exactly as a dependency of that same package.
+  - `@cloudflare/workers-types` holds at 5.20260815.1, one level further down. Its version encodes a
+    workerd DATE and the wrangler above pins `workerd@1.20260815.1`, so moving the types to
+    5.20260904.1 would describe a runtime three weeks newer than the one that actually executes: an
+    API added in the gap typechecks green and throws in production. That is the whole reason
+    `check-cloudflare-runtime-pins` exists, and it is what caught the attempt.
+  - TypeScript holds at 6.0.3 on the frontend, where `vue-tsc` resolves `typescript/lib/tsc`, which
+    TS 7 no longer exports.
 
 ### Patch Changes
 
-- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
-- Updated dependencies [4fa5ed9]
-  - @cat-factory/contracts@0.7.2
-  - @cat-factory/kernel@0.7.2
+- Updated dependencies [386c4a2]
+  - @cat-factory/kernel@0.338.0
 
-## 0.7.1
+## 0.18.2
 
 ### Patch Changes
 
-- 7463cf2: Add `repository` metadata (url + monorepo `directory`) to every published package.json. npm provenance attestation rejected the previous release because `repository.url` was empty and could not be matched against the source repo; declaring it lets the publish (and provenance) succeed, and re-triggers publishing of all packages from the failed release.
-- Updated dependencies [7463cf2]
-  - @cat-factory/contracts@0.7.1
-  - @cat-factory/kernel@0.7.1
+- Updated dependencies [76e2c1d]
+  - @cat-factory/contracts@0.347.0
+  - @cat-factory/kernel@0.337.0
 
-## 0.7.0
+## 0.18.1
+
+### Patch Changes
+
+- Updated dependencies [5c50d30]
+  - @cat-factory/contracts@0.346.2
+  - @cat-factory/kernel@0.336.1
+
+## 0.18.0
 
 ### Minor Changes
 
-- 4a08935: Add **OpenRouter** and **LiteLLM** as model providers. Both are OpenAI-compatible, so
-  they reuse the existing inlined `openAiCompatibleResolver` path (no new dependency, no
-  dedicated package) and work for both inline engine calls and container coding agents via
-  the LLM proxy. Keys are onboarded per workspace/user through the UI key pool like the
-  other direct vendors; their base URLs are deployment config — OpenRouter defaults to the
-  public gateway (`OPENROUTER_BASE_URL` override optional), while LiteLLM is operator-hosted
-  so `LITELLM_BASE_URL` is required to enable it. Ships curated, direct-only catalog entries
-  (OpenRouter: Claude Opus, Gemini 3 Pro, GPT-5.5, DeepSeek, Llama 3.3; LiteLLM: a generic
-  gateway-default entry) with approximate pricing/context, overridable via
-  `SPEND_MODEL_PRICES`.
-
-  Catalog selectability now also gates on a **resolvable base URL**: an OpenAI-compatible
-  provider (everything but `openai`/`anthropic`) is only offered once its base URL resolves,
-  so a LiteLLM model stays unselectable — and a pipeline using it is blocked at start —
-  until `LITELLM_BASE_URL` is set, instead of passing the guard and throwing "No base URL
-  configured" mid-run. Wired symmetrically into both facades' capability resolution.
-
-  **Wire change:** `apiKeyProviderSchema` is widened with `'openrouter'` and `'litellm'`.
-
-- 6406c8c: Extract `@cat-factory/spend` — pricing tables and spend metering/gating are now a standalone package. `@cat-factory/core` re-exports the full public surface for backward compatibility; the acceptance test and worker's spending config now import directly from `@cat-factory/spend`, narrowing the CI container-acceptance gate from `backend/packages/core/**` to `backend/packages/spend/**`.
+- cd220f2: Add five catalog models, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Five new curated models.** Claude Fable 5.1, Gemini 3.8 Flash, a pinned Qwen3.8-Max-0902
+  snapshot, and Meta's Muse Spark 1.3 in both of its commercial tiers. Every route was checked
+  against the serving provider's live catalogue before it was declared, which is what decided three
+  of the shapes:
+  
+  - **Claude Fable 5.1** is the first Claude entry carrying subscription, OpenRouter and Bedrock arms
+    at once. Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch day rather than a
+    generation behind, so the flavour is declared against a verified route. Its OpenRouter slug is
+    DOTTED (`anthropic/claude-fable-5.1`) where the API id is dashed; the two genuinely disagree and
+    normalising either spelling yields a dead id.
+  - **Qwen3.8-Max-0902** is DashScope-only. OpenRouter serves the undated alias and publishes no dated
+    slug, and a flavour declared before its route exists is picked by `effectiveVariant` and then
+    fails at dispatch. It is a separate entry rather than a repoint of `qwen3.8-max` for the reason
+    `claude-opus-4-8` is separate: a block pinned to a snapshot must keep getting that build.
+  - **Muse Spark 1.3 ships as TWO entries**, standard and contributor. They are the same model on the
+    same route and differ only in what Meta may do with the traffic: the contributor tier costs a
+    twelfth on input in exchange for Meta training on the prompts and completions. That is a choice
+    an operator has to make with the price in front of them, and one entry could only make it
+    silently, so the two prices sit in separate rows and the SPA's "enable recommended" set omits the
+    contributor slug.
+  
+  `meta` joins the OpenRouter vendor-prefix family map beside `meta-llama`, so an account that blocks
+  the Meta family blocks Muse Spark too rather than leaving it unclassified.
+  
+  **The bare `bedrock` price row moved up a tier**, from ~$5/$30 to ~$10/$50 per 1M. A Bedrock ref
+  carries the account's own geo prefix, so `priceFor` can only ever match the bare provider key, and
+  that row is deliberately set to the frontier tier the catalog can select there. Fable 5.1 moved that
+  ceiling; leaving the row behind would have metered every Fable-5.1-on-Bedrock run at half its cost.
+  
+  **Both runner image tags roll**: the executor to 1.150.0 for the CLI bumps, and the deploy image
+  to 0.6.2 because the dependency round moved `@types/node` in its `package.json`, which the image
+  builds from. A dep bump inside a harness IS an image-source change, and republishing over a live
+  tag does not roll a deployment out.
+  
+  **Agent CLIs at their newest, ahead of the age window**, as the Dockerfile's standing note allows
+  for exactly these pins: Claude Code 2.1.252 -> 2.1.260 and Codex 0.152.0 -> 0.153.2. Pi is already
+  at its newest (0.84.4). Both Pi extensions move 2.8.0 -> 2.9.0 and have aged past the window, so
+  they take the ordinary route.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits under the `minimumReleaseAge` gate. 68 resolved
+  names move and the re-resolve adds and drops nothing, leaving 1388 names on both sides. Direct:
+  the `@ai-sdk/*` line (`amazon-bedrock@^5.0.73`, `anthropic@^4.0.49`, `openai@^4.0.57`,
+  `openai-compatible@^3.0.43`, `provider@^4.0.10`), `ai@^7.0.91`, `@aws-sdk/client-s3@^3.1125.0`, the
+  `@opentelemetry/*` set (`0.222.0` exporters, `2.11.0` SDK), `@types/node@^26.4.1`,
+  `happy-dom@^20.13.2`, `knip@^6.34.0`, `oxfmt@^0.66.0`, `oxlint@^1.81.0`, `undici@^8.10.1`. The AI
+  SDK family stays inside the `ai@^7` + `@ai-sdk/*@^4` majors that pair with `workers-ai-provider`.
+  
+  Three holds, each for a reason rather than for the age window:
+  
+  - **TypeScript stays at 6.0.3 on the frontend** while the backend is already on 7.0.2. TS 7 was
+    tried and reverted: `vue-tsc@3.3.11` resolves `typescript/lib/tsc`, which TS 7 no longer exports,
+    so the typecheck dies with `ERR_PACKAGE_PATH_NOT_EXPORTED` before reading a single file. vue-tsc
+    is the real gate for `.vue`, so the frontend moves when vue-tsc does.
+  - **wrangler holds at 4.124.0 and `@cloudflare/workers-types` at 5.20260815.1** for the fifth round
+    running. `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins wrangler
+    exactly; the types version IS the workerd date that pin resolves.
+  - **`@types/node@26.4.0` and `undici@8.10.0` keep a second resolved copy** beside the new ones, held
+    by upstream ranges (`@types/pg`, `happy-dom`, `nuxt`, `unifont`) rather than by anything here.
+  
+  Also re-pins `openrouter:deepseek/deepseek-v4-flash`, the one row `check-openrouter-pins.mjs`
+  reported as metering BELOW the live rate. The alias drifted up ~9% since the 2026-09-01 read, and a
+  budget gate is allowed to be early but never short.
 
 ### Patch Changes
 
-- 8eed38c: Author relative imports with explicit `.js` extensions across the shared backend
-  packages so their emitted `dist` is directly resolvable by Node's ESM loader (no
-  bundler required). This lets the Node runtime run the built output on plain Node
-  (`node dist/main.js`) — no tsx, no esbuild bundle — and is inert for the Cloudflare
-  Worker (wrangler bundles regardless). `handlebars/runtime` is imported as
-  `handlebars/runtime.js` for the same reason (its type is sourced from the full
-  package, type-only). No behaviour or public-API change.
-- 7c37653: Expand the model picker, route AI Gateway catalog models, and default the
-  implementer (coder) to the latest Kimi.
+- Updated dependencies [cd220f2]
+  - @cat-factory/kernel@0.336.0
 
-  - The picker catalog (`MODEL_CATALOG`) gains three Cloudflare-served entries:
-    `kimi-k2.7` (`@cf/moonshotai/kimi-k2.7-code`), `glm` (`@cf/zai-org/glm-5.2`,
-    262K context) and `deepseek-v4-pro` (`deepseek/deepseek-v4-pro`, 131K context).
-    The existing DeepSeek reasoning entry is relabelled `DeepSeek R1`.
-  - The Workers AI upstream now serves `<provider>/<model>` AI-catalog slugs like
-    `deepseek/deepseek-v4-pro` (a unified-billing run-catalog model Cloudflare serves
-    via Fireworks) by calling `binding.run` directly in the OpenAI Chat Completions
-    shape, with the account's own token — no AI Gateway, no BYOK. A `@cf/...` Workers AI
-    id is unaffected (still routed through the AI SDK).
-  - The build phase (`coder`) now defaults to Kimi K2.7 instead of GLM-5.2. GLM-5.2
-    on Workers AI was observed emitting malformed tool calls (`write` with no `path`)
-    and looping until the harness no-progress guard aborted; design/review
-    (`architect`/`reviewer`) stay on GLM-5.2. Operators can still override per kind
-    via `AGENT_MODELS`.
-  - Spend pricing gains an approximate entry for `workers-ai:deepseek/deepseek-v4-pro`
-    (a partner model billed at provider rates, not the near-free neuron rate).
+## 0.17.12
 
-- 56ee67d: Price Cloudflare Workers AI Kimi models (`@cf/moonshotai/kimi-k2.6` and
-  `@cf/moonshotai/kimi-k2.7-code`) at Cloudflare's published Workers AI per-token
-  rate ($0.95 in / $4.00 out per 1M, USD→EUR ~0.92) instead of letting them fall
-  through to the near-free `workers-ai` neuron rate. Kimi K2.7 is the default coder,
-  so without explicit `workers-ai:@cf/moonshotai/...` entries every Cloudflare-Kimi
-  run metered at 0.1/0.1 EUR per million tokens and showed spend as ~0.00. Mirrors
-  the existing partner-model exception for `deepseek-v4-pro`.
-- 5ca8086: Add alternate subscription-backed coding harnesses (Claude Code / Codex) alongside
-  the Pi proxy harness.
+### Patch Changes
 
-  - New per-workspace **subscription token pool** (`provider_subscription_tokens`,
-    D1 + Postgres, encrypted at rest) with usage-aware rotation, behind a kernel
-    port + `ProviderSubscriptionService`, wired into all three runtimes.
-  - A guided **LLM Vendors** navbar UI to connect Claude / Codex / GLM (Z.ai) /
-    Kimi (Moonshot) / DeepSeek subscription credentials (token pool, write-only).
-    GLM / Kimi / DeepSeek all run via Claude Code against the vendor's
-    Anthropic-compatible endpoint; the unfiltered credential list covers every vendor.
-  - The executor-harness image now bundles the Claude Code and Codex CLIs; the
-    harness selects `pi` / `claude-code` / `codex` per job from the model, and the
-    subscription harnesses authenticate direct-to-vendor (no proxy) and report token
-    usage from the CLI event stream for rotation + telemetry.
-  - The model catalog becomes a canonical-model → provider map with precedence
-    **subscription > direct > cloudflare** ("subscriptions always win"): latest
-    Opus/Sonnet + GPT-5.5/5.4 (subscription-only), GLM-5.2/Kimi gain a Claude-Code
-    subscription flavour, and `ModelOption` now carries per-flavour cost, context
-    window, and a `quotaBased` flag (subscription usage is flat-rate quota, never
-    billed against the spend budget).
-  - A block's model is shared by all its pipeline steps, so a pin to a subscription-only
-    model (Claude Code / Codex — container-only, no provider key) is degraded to the
-    step's env-routing default for every INLINE LLM path through one shared seam
-    (`inlineModelRef` / `resolveInlineModelRef`): both the inline agent executor and the
-    requirements reviewer/rework, so the inline steps run instead of hard-failing and the
-    two paths can't drift. The claude-code subscription harness repairs malformed
-    structured output through the vendor's own Anthropic-compatible endpoint (the Pi
-    harness still uses the proxy; Codex keeps the graceful no-repair path).
-  - Hardening: the per-vendor token pool is capped to bound growth; the leased
-    subscription credential is scrubbed from subscription-repair error details (not just
-    GitHub-shaped secrets); and Codex token usage is read from its cumulative
-    `total_token_usage` so multi-turn runs attribute usage correctly for rotation.
+- Updated dependencies [d36d0a8]
+  - @cat-factory/kernel@0.335.1
+  - @cat-factory/contracts@0.346.1
 
-- Updated dependencies [fe53445]
-- Updated dependencies [d94e75c]
-- Updated dependencies [6406c8c]
-- Updated dependencies [3d9a9d8]
-- Updated dependencies [db77061]
-- Updated dependencies [a48c620]
-- Updated dependencies [3bc8c79]
-- Updated dependencies [9d3a956]
-- Updated dependencies [8d11833]
-- Updated dependencies [ad9ba9e]
-- Updated dependencies [3e0d753]
-- Updated dependencies [f83ffd7]
-- Updated dependencies [8065fed]
-- Updated dependencies [385bd93]
-- Updated dependencies [e50e78a]
-- Updated dependencies [0972696]
-- Updated dependencies [b48c455]
-- Updated dependencies [e9b9356]
-- Updated dependencies [e8005ba]
-- Updated dependencies [3a12f15]
-- Updated dependencies [b40da13]
-- Updated dependencies [3a12f15]
-- Updated dependencies [8eed38c]
-- Updated dependencies [084bf43]
-- Updated dependencies [268c15d]
-- Updated dependencies [157cd02]
-- Updated dependencies [7c37653]
-- Updated dependencies [db77061]
-- Updated dependencies [6406c8c]
-- Updated dependencies [57d70fa]
-- Updated dependencies [6406c8c]
-- Updated dependencies [918764f]
-- Updated dependencies [918764f]
-- Updated dependencies [88b3170]
-- Updated dependencies [fe0b7f8]
-- Updated dependencies [f73652c]
-- Updated dependencies [db336b1]
-- Updated dependencies [8807f5c]
-- Updated dependencies [9be11e1]
-- Updated dependencies [5ec0d25]
-- Updated dependencies [a691853]
-- Updated dependencies [f066c59]
-- Updated dependencies [4a08935]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [b287996]
-- Updated dependencies [b156b4b]
-- Updated dependencies [5c8ca33]
-- Updated dependencies [b156b4b]
-- Updated dependencies [7cf2a2d]
-- Updated dependencies [2d66d34]
-- Updated dependencies [197264e]
-- Updated dependencies [3a12f15]
-- Updated dependencies [37baa7f]
-- Updated dependencies [c664fe6]
-- Updated dependencies [553a67d]
-- Updated dependencies [311a110]
-- Updated dependencies [f16ae62]
-- Updated dependencies [36018cb]
-- Updated dependencies [799be66]
-- Updated dependencies [d65c979]
-- Updated dependencies [75a0441]
-- Updated dependencies [7157fd7]
-- Updated dependencies [21ca647]
-- Updated dependencies [c4ef995]
-- Updated dependencies [8eed95b]
-- Updated dependencies [0b38aa6]
-- Updated dependencies [a97e485]
-- Updated dependencies [de5a9d7]
-- Updated dependencies [f647733]
-- Updated dependencies [d5e9141]
-- Updated dependencies [2d66d34]
-- Updated dependencies [a54ada2]
-- Updated dependencies [2dd7e56]
-- Updated dependencies [5ca8086]
-- Updated dependencies [d0697d1]
-- Updated dependencies [0090313]
-- Updated dependencies [7dc8e57]
-- Updated dependencies [cc8d96a]
-- Updated dependencies [7c37653]
-- Updated dependencies [43f2443]
-- Updated dependencies [acac735]
-- Updated dependencies [3841315]
-- Updated dependencies [48d2f0d]
-- Updated dependencies [3e6a844]
-  - @cat-factory/contracts@0.7.0
-  - @cat-factory/kernel@0.7.0
+## 0.17.11
+
+### Patch Changes
+
+- Updated dependencies [0f3fb10]
+  - @cat-factory/contracts@0.346.0
+  - @cat-factory/kernel@0.335.0
+
+## 0.17.10
+
+### Patch Changes
+
+- Updated dependencies [745eae8]
+  - @cat-factory/contracts@0.345.0
+  - @cat-factory/kernel@0.334.0
+
+## 0.17.9
+
+### Patch Changes
+
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/contracts@0.344.0
+  - @cat-factory/kernel@0.333.0
+
+## 0.17.8
+
+### Patch Changes
+
+- Updated dependencies [3b11b10]
+  - @cat-factory/contracts@0.343.0
+  - @cat-factory/kernel@0.332.0
+
+## 0.17.7
+
+### Patch Changes
+
+- Updated dependencies [9dfd40b]
+  - @cat-factory/contracts@0.342.0
+  - @cat-factory/kernel@0.331.0
+
+## 0.17.6
+
+### Patch Changes
+
+- Updated dependencies [1c79070]
+  - @cat-factory/contracts@0.341.0
+  - @cat-factory/kernel@0.330.0
+
+## 0.17.5
+
+### Patch Changes
+
+- Updated dependencies [8b015a3]
+  - @cat-factory/contracts@0.340.0
+  - @cat-factory/kernel@0.329.0
+
+## 0.17.4
+
+### Patch Changes
+
+- Updated dependencies [ec0aba1]
+  - @cat-factory/contracts@0.339.0
+  - @cat-factory/kernel@0.328.0
+
+## 0.17.3
+
+### Patch Changes
+
+- Updated dependencies [436f373]
+  - @cat-factory/contracts@0.338.0
+  - @cat-factory/kernel@0.327.0
+
+## 0.17.2
+
+### Patch Changes
+
+- Updated dependencies [a745ee2]
+  - @cat-factory/contracts@0.337.0
+  - @cat-factory/kernel@0.326.0
+
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [92232a6]
+- Updated dependencies [a08d2ad]
+  - @cat-factory/contracts@0.336.0
+  - @cat-factory/kernel@0.325.0
+
+## 0.17.0
+
+### Minor Changes
+
+- 4d999cb: Treat OpenRouter as the gateway it is, rather than as one more OpenAI-compatible vendor.
+  
+  **Its own client.** `openrouter` now resolves through `@openrouter/ai-sdk-provider`
+  (`openRouterResolver`) instead of the generic `createOpenAICompatible`; every other
+  OpenAI-compatible provider is unchanged. The dispatch is made once, in
+  `directOpenAiCompatibleResolver`, which both entry points that build a provider from a leased key
+  route through.
+  
+  **Cost and upstream are now RECORDED rather than derived.** Usage accounting is requested on both
+  model paths, so `llm_call_metrics` gains `reported_cost_usd` (the gateway's own USD ledger figure)
+  and `upstream_provider` (which vendor actually served the call). Both are nullable and null is
+  load-bearing: every other cost on the table is derived from the spend price table, so a 0 would
+  report an unpriced call as free. **Break:** the two columns are added to the D1 telemetry store, the
+  Postgres `telemetry` schema and local mode's SQLite store; existing rows read NULL, which is the
+  correct answer for them.
+  
+  **`supportsStructuredOutputs` is now set** on the generic OpenAI-compatible client for the cloud
+  VENDORS. Without it the SDK silently rewrites a schema-carrying request to `{ type: 'json_object' }`
+  and drops the schema. Nothing in this repo passes a schema today, so this closes a trap rather than
+  changing behaviour. It is withheld from the upstreams nobody here can vouch for: per-user local
+  runners (which never come through this path anyway) and the operator-hosted `bifrost` / `litellm`
+  gateways, whose model ids are the operator's own aliases and routinely front an Ollama or vLLM
+  model that answers a `json_schema` request with a 400.
+  
+  **The `/models` catalog reads what it was dropping**: the conditional `overrides` pricing bands
+  (folded to their maximum), both cache classes and the 1-hour write fallback, `expiration_date` and
+  `canonical_slug`. A published cache rate now reaches the spend table instead of the derived
+  multiplier, unless it is zero, which cannot be told apart from a placeholder for a class the
+  gateway does not bill separately and would meter every cache hit free. A model's withdrawal date
+  is shown in the catalog picker.
+  
+  **Prompt caching is no longer reported as absent for every gateway model.** `providerCachePolicy`
+  takes the model, so an `openrouter:deepseek/…` slug resolves to the policy stated for its vendor
+  prefix. Those are stated per prefix rather than borrowed from the direct provider of the same
+  name, because the two genuinely differ: OpenRouter's Moonshot route caches automatically while our
+  direct `moonshot` does not, and its Alibaba route needs explicit breakpoints while direct Qwen
+  does not. Anthropic (and now Qwen) behind a gateway stays `none`, because nothing on that path
+  sends `cache_control`. **Break:** the rule moved from `@cat-factory/kernel` to
+  `@cat-factory/contracts` (kernel re-exports it unchanged) so the SPA can read the same function
+  instead of mirroring it in a Vue constant, which had already drifted.
+  
+  **Two new env vars, because both routing constraints can empty the upstream pool.**
+  `OPENROUTER_DATA_COLLECTION` (default `deny`, stricter than the vendor's own) is whether OpenRouter
+  may route to a prompt-retaining upstream; `OPENROUTER_REQUIRE_PARAMETERS` (default `true`) is
+  whether it must route only to an upstream advertising every parameter the request carries. A pool
+  narrowed to nothing is a 404, not a degraded call, so the proxy recognises that refusal and records
+  which constraint could have caused it: the gateway cannot say, since our request is the only place
+  both are stated.
+  
+  **New check `scripts/check-openrouter-pins.mjs`** re-reads the live catalogue against the spend
+  table's pinned slugs, comparing all three pinned classes: input, output, and the cache-READ rate a
+  row names only where the vendor departs from the derived floor (so nothing else follows it when the
+  vendor moves). Its runs found four pins metering below the live rate, one
+  (`deepseek/deepseek-v4-pro`) by nearly 3x; all four are repinned here.
+  
+  **Reported cost and upstream are rendered**, in the observability panel's call list: the upstream
+  beside `provider:model`, the gateway's own figure in the expanded row. They stay out of the spend
+  rollups, which remain derived end to end, because a rollup mixing a measured figure for one
+  provider's rows with an estimate for the rest answers a different question per row.
+  
+  **The inline instrumented provider now REFUSES to stream** rather than passing an unrecorded call
+  through. Nothing inline streams today (the recorder hard-codes `streaming: false` for that reason),
+  and a streamed call would have reached no sink at all, which downstream is indistinguishable from a
+  step that spent nothing.
+
+### Patch Changes
+
+- Updated dependencies [dc4a5d9]
+- Updated dependencies [4d999cb]
+  - @cat-factory/contracts@0.335.0
+  - @cat-factory/kernel@0.324.0
+
+## 0.16.26
+
+### Patch Changes
+
+- Updated dependencies [0f426b3]
+  - @cat-factory/kernel@0.323.2
+
+## 0.16.25
+
+### Patch Changes
+
+- Updated dependencies [332ef26]
+  - @cat-factory/kernel@0.323.1
+
+<!-- archived-releases -->
+
+Older releases: [`CHANGELOG-ARCHIVE.md`](./CHANGELOG-ARCHIVE.md).

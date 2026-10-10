@@ -13,15 +13,35 @@
  * A synchronous window (one that reads its data straight off the execution step, like the
  * test report) simply omits `onOpen`.
  *
- * `onClose` runs on EVERY close path — the X button, backdrop click, and the Escape key
- * handled here — BEFORE the view is torn down, so a window with unsaved draft input (the
- * review windows) can flush it in one place instead of every caller having to remember to.
- * It runs synchronously; if it kicks off async work it must capture whatever it needs first,
- * because `blockId`/the derived state go null the moment the view closes.
+ * `onClose` runs on EVERY close path — the X button, backdrop click, and the Escape key —
+ * BEFORE the view is torn down, so a window with unsaved draft input (the review windows) can
+ * flush it in one place instead of every caller having to remember to. It runs synchronously;
+ * if it kicks off async work it must capture whatever it needs first, because `blockId`/the
+ * derived state go null the moment the view closes.
+ *
+ * Escape-to-close is NOT owned here: every result window renders through `ResultWindowShell`
+ * (slice 5 of the modular-vue adoption), whose `useModalBehavior` owns Escape via the shared
+ * overlay stack (top overlay closes first, focus/scroll managed too). A listener here would
+ * double-fire `close`, so it was removed once the last window converted onto the shell.
  */
+/**
+ * The fully-resolved view context handed to `onOpen`. Every field is already initialised by
+ * the time `onOpen` fires, so a loader takes exactly what it needs from here and never reaches
+ * back into the store or the composable's own return refs. That matters because `onOpen` fires
+ * synchronously from the `immediate` watch below — DURING the caller's `setup`, before the
+ * `const { … } = useResultView(…)` destructure has been assigned — so any callback that closed
+ * over those refs would hit their temporal dead zone and throw on every open.
+ */
+export interface OpenResultView {
+  blockId: string
+  instanceId: string | null
+  stepIndex: number | null
+  stage: 'requirements' | 'architecture' | null
+}
+
 export function useResultView(
   viewId: string,
-  opts?: { onOpen?: (blockId: string) => void; onClose?: () => void },
+  opts?: { onOpen?: (view: OpenResultView) => void; onClose?: () => void },
 ) {
   const ui = useUiStore()
 
@@ -39,18 +59,20 @@ export function useResultView(
     ui.closeResultView()
   }
 
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && open.value) close()
-  }
-  onMounted(() => window.addEventListener('keydown', onKey))
-  onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-
-  // The load-on-open contract: fire immediately on mount and on any later block switch.
+  // The load-on-open contract: fire immediately on mount and on any later block switch. The
+  // callback receives the fully-resolved context (see OpenResultView) rather than the return
+  // refs, which aren't assigned yet at the initial synchronous fire.
   if (opts?.onOpen) {
     watch(
       blockId,
       (id) => {
-        if (id) opts.onOpen!(id)
+        if (id)
+          opts.onOpen!({
+            blockId: id,
+            instanceId: instanceId.value,
+            stepIndex: stepIndex.value,
+            stage: stage.value,
+          })
       },
       { immediate: true },
     )

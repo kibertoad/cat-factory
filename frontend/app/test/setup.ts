@@ -7,6 +7,11 @@ import { beforeEach, vi } from 'vitest'
 // surface a toast, and any mutation that would is out of scope for these unit tests.
 vi.stubGlobal('useApi', () => ({}))
 vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
+// The personal-subscriptions store scopes its password cache by the configured API base + the
+// signed-in user id (ADR 0026 D7). Stub both auto-imports with inert defaults; specs that assert
+// the scoping override `useAuthStore` with a fixed user.
+vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBase: '' } }))
+vi.stubGlobal('useAuthStore', () => ({ user: null }))
 vi.stubGlobal('usePipelineErrorToast', () => ({ present: vi.fn() }))
 // Some stores resolve translations through the Nuxt app's global i18n instance (they run
 // outside a component `setup`, so `useI18n()` isn't available). Stub it with a passthrough

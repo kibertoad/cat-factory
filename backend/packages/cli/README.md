@@ -1,19 +1,19 @@
 # @cat-factory/cli
 
-The bootstrap CLI for [cat-factory](https://github.com/kibertoad/cat-factory) — the Agent
+The bootstrap CLI for [cat-factory](https://github.com/kibertoad/cat-factory), the Agent
 Architecture Board. One command scaffolds a **local-mode deployment** you can run on your own
 machine: a Node/local backend (`@cat-factory/local-server`) and the frontend SPA
-(`@cat-factory/app`), mirroring the [`deploy/local`](../../../deploy/local) and
-[`deploy/frontend`](../../../deploy/frontend) example deployments in this repo — but depending on
+(`@cat-factory/app`), mirroring the [`deploy/local`](https://github.com/kibertoad/cat-factory/tree/main/deploy/local) and
+[`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend) example deployments in this repo, but depending on
 the **published** libraries, so the generated project stands alone outside the monorepo.
 
 It does the fiddly setup for you:
 
-- **Offers to generate the crypto secrets** in the exact formats the server requires —
+- **Offers to generate the crypto secrets** in the exact formats the server requires:
   `AUTH_SESSION_SECRET` (32 random bytes, hex), `ENCRYPTION_KEY` (32 random bytes, base64) and
   `HARNESS_SHARED_SECRET` (32 random bytes, hex). All three are required to boot. On by default;
   decline to leave them blank and paste your own.
-- **Lets you choose how agents run** — a **prewarmed Docker pool** (isolated per-run containers
+- **Lets you choose how agents run**: a **prewarmed Docker pool** (isolated per-run containers
   from the executor image, the default) or **native host agents** (a host process driving your
   own installed `claude`/`codex` CLI: no container, no leased credential, but no sandbox and only
   Claude/ChatGPT models go native). The tradeoffs of each are printed before you pick, and in
@@ -34,21 +34,123 @@ It does the fiddly setup for you:
 
 ## Commands
 
-- **`cat-factory init`** (the default) — scaffolds the whole deployment (`local/` + `frontend/`),
+- **`cat-factory init`** (the default): scaffolds the whole deployment (`local/` + `frontend/`),
   described above.
-- **`cat-factory env`** — generates **only** a ready-to-run local-mode `.env` in the current
+- **`cat-factory env`**: generates **only** a ready-to-run local-mode `.env` in the current
   directory (or `--dir`), using the same secret generation, PAT flow, and pool-vs-native choice.
-  Use it when the deployment already exists (e.g. inside [`deploy/local`](../../../deploy/local),
+  Use it when the deployment already exists (e.g. inside [`deploy/local`](https://github.com/kibertoad/cat-factory/tree/main/deploy/local),
   or an already-scaffolded project) and you just need a fresh, complete `.env`. It refuses to
   overwrite an existing `.env` unless you pass `--force`, and (like `init`) it creates or merges
   the target dir's `.gitignore` so the secret `.env` can never be committed. A model-provider key
-  is **not** needed to boot — add providers/keys through the UI after sign-in (the `.env` leaves
-  them as commented hints) — so the generated file runs local mode with no manual edits.
-- **`cat-factory k3s`** — guided local Kubernetes setup for ephemeral environments (see `--help`).
+  is **not** needed to boot; add providers/keys through the UI after sign-in (the `.env` leaves
+  them as commented hints), so the generated file runs local mode with no manual edits.
+- **`cat-factory k3s`**: guided local Kubernetes setup for ephemeral environments (see `--help`).
+  It probes the host, creates or reuses a cluster, applies a least-privilege ServiceAccount, mints a
+  token, and hands the values to the SPA's connect form. It also CHECKS, rather than assumes, whether
+  the cluster can serve an ingress-derived environment URL: that needs an ingress controller inside
+  the cluster and a host port published into it (`--ingress-port`, default 80). When either is
+  missing the summary says so and names the fix instead of printing a host template that resolves to
+  nothing. A published host port is fixed when the cluster is created, so `--recreate` destroys the
+  named k3d/kind cluster and builds it again from the current flags. It names what is on the cluster
+  before deleting it, and `-y` on its own never selects it.
+- **`cat-factory supervise`**: run a dev command under a self-healing watchdog (see
+  [Supervising local dev](#supervising-local-dev)).
+
+## Supervising local dev
+
+`node --watch` **parks on crash**: it restarts the entry only on a _file change_, never on a
+process exit. So when a laptop sleeps and the resume takes the Postgres connection with it, the
+server dies, the watcher settles at "Waiting for file changes before restarting", and nothing is
+left bound to the port. The wrapper PID is still alive and the ready banner scrolled past long ago,
+so the stack **looks** healthy while the SPA reports only a generic "can't reach backend", and it
+stays that way until somebody notices.
+
+`cat-factory supervise` wraps that command and repairs it:
+
+```sh
+cat-factory supervise --compose-service postgres -- pnpm dev:raw
+```
+
+`--compose-dir` (default: `--dir`, itself defaulting to the current directory) is where the
+`docker-compose.yml` lives: compose resolves its project file relative to the working directory, so
+supervising from anywhere else needs it set.
+
+- **Probes the real signal** every 10s: the port is listening _and_ `/health` answers 200. The two
+  failure modes differ: a parked watcher leaves nothing bound, while a server that booted but lost
+  its DB pool still holds the socket and only fails the HTTP check.
+- **Notices a resume.** Timers don't fire while the host is suspended, so a tick arriving three
+  intervals late means time jumped. That triggers an immediate repair rather than waiting out the
+  normal failure threshold: a resume is exactly when the stack is most likely already dead.
+- **Restores dependencies before restarting.** `--compose-service postgres` brings the database
+  back (the example compose files set no restart policy, so anything that stops the container
+  engine leaves it down) and waits for it to report healthy, because relaunching against a
+  still-initialising database just crashes again in `migrate`.
+- **Revives a stopped local cluster.** `--k3s-cluster <name>` starts a k3d/kind cluster that is
+  merely stopped and waits for its apiserver, so a slept laptop doesn't leave the Local k3s
+  environment handler pointing at a dead control plane.
+- **Notices a child that simply died.** A dead process handle is authoritative, so it repairs on the
+  next probe instead of counting failures against a process that no longer exists.
+- **Reaps the port.** Killing the child tree usually suffices, but a package-manager wrapper killed
+  without its subtree leaves the real `node` orphaned and holding the socket; the relaunch then
+  dies with `EADDRINUSE`, turning one outage into a restart loop. Reaping by port means SIGKILLing a
+  process it was never handed, so every kill **names** the pid and the command behind it, and it only
+  ever runs once the supervisor's own child is confirmed dead.
+- **Names an outage it did _not_ cause.** If a stack that had already answered stops answering and
+  comes back with no repair of ours in between, something restarted it underneath the supervisor —
+  on a `node --watch` deployment, usually a file-change storm that cycles the server several times
+  in a row. Nothing crashes and every process stays alive, so the only symptom is a client
+  mid-request failing with `ECONNREFUSED` against a stack that looks perfectly healthy by the time
+  anyone looks. That recovery is reported as a **warning** carrying how long the stack was down and
+  a running `unexplained outage #N` count, with the likely cause spelled out on the first
+  occurrence, and the running total repeated in a summary line at shutdown:
+
+  ```text
+  [supervise 11:50:53] • health probe failed (1/3)
+  [supervise 11:51:03] ⚠ serving again after 19.3s down since the first failed probe, give or
+                         take the 10s poll interval (2 failed probe(s)) —
+                         unexplained outage #1, no repair of ours caused it
+  ```
+
+  A recovery where the stack had **never** answered since the supervisor started it is reported
+  separately, as a slow start rather than an outage: nothing cycled underneath us, the boot simply
+  outran `--boot-grace`. That distinction is the whole value of the warning — without it every cold
+  boot, and every repair whose restarted stack binds late, claims a third party caused it.
+
+  Both durations name the poll interval they were measured against. Each end of the window is
+  quantized to that interval and the errors point in opposite directions, so the number is the truth
+  ± one poll: at a 10s poll a 100ms blip and a 10s outage render the same.
+
+  Every `[supervise]` line is **timestamped**, because these are read interleaved with the
+  supervised server's own structured logs and are usually the only record that a transient outage
+  happened at all — placing them against that log used to mean interpolating from whichever
+  neighbouring line happened to carry a clock.
+
+Two failures it deliberately does **not** retry, because retrying either would reproduce the exact
+pathology this command exists to end, a restart loop that reads as progress:
+
+- **A cluster wedged by a stale cgroup** (`runc create failed: … cgroup.procs: device or resource
+  busy`, a state a suspend can leave behind). Clearing that needs the container **engine** restarted,
+  which would kill every other container, including the database the supervisor depends on. Reported
+  once, with the fix.
+- **A supervised command that never serves.** Restarts that fail to reach a serving state are capped
+  (5 by default); hitting the cap reports why and exits **non-zero**. A command that is broken (a
+  syntax error, a missing binary, a port something else owns) cannot be repaired by killing it again.
+  Any successful probe resets the count, so a long-lived stack that has been repaired often is never
+  capped.
+
+`--runtime k3s` is **refused** alongside `--k3s-cluster`: a k3s host service has no containers for
+this command to start, and quietly treating it as k3d would report "not ready, will retry" forever
+without naming the real reason.
+
+Prefer the unsupervised script when you are **debugging a crash**: the supervisor's job is to
+restart the process, which destroys the parked state you would be trying to read.
+
+Run `cat-factory supervise --help` for the full flag list (`--port`, `--health-path`, `--poll`,
+`--boot-grace`, `--failures`, `--runtime`).
 
 ## Usage
 
-No install needed — run it with your package manager's runner:
+No install needed; run it with your package manager's runner:
 
 ```sh
 npm  create @cat-factory/cli@latest      # or:
@@ -56,8 +158,8 @@ pnpm dlx @cat-factory/cli
 npx  @cat-factory/cli
 ```
 
-Interactive by default (powered by [`@clack/prompts`](https://www.npmjs.com/package/@clack/prompts))
-— it asks for the project name and app title, lets you pick the source-control provider and
+Interactive by default (powered by [`@clack/prompts`](https://www.npmjs.com/package/@clack/prompts)):
+it asks for the project name and app title, lets you pick the source-control provider and
 container runtime from a menu, asks for the database URL and API base, opens the browser to create
 the token, and reads it back via a masked password prompt. Ctrl-C cancels cleanly at any step.
 
@@ -104,14 +206,14 @@ npx @cat-factory/cli init \
 <dir>/
   .gitignore               # ignores .env / .env.* (keeps .env.example), build output
   README.md                # generated, project-specific run instructions
-  local/                   # backend — @cat-factory/local-server
+  local/                   # backend - @cat-factory/local-server
     package.json
     src/main.ts            # one-line startLocal() entry
-    docker-compose.yml     # local Postgres (creds derived from --db-url)
+    docker-compose.yml     # local Postgres (creds from --db-url, Compose project from --dir)
     tsconfig.json
     .env                   # generated, gitignored: DATABASE_URL, secrets, PAT, harness image
     .env.example           # documented template
-  frontend/                # SPA — extends the @cat-factory/app Nuxt layer
+  frontend/                # SPA - extends the @cat-factory/app Nuxt layer
     package.json
     nuxt.config.ts
     wrangler.toml          # Cloudflare Pages config (optional deploy target)
@@ -129,15 +231,38 @@ cd local && npm install && npm run db:up && npm start     # serves :8787
 cd ../frontend && npm install && npm run dev              # Nuxt dev on :3000
 ```
 
-You still need to:
+Expect the first `npm start` to sit there a while: before it serves anything, the backend pulls
+the executor-harness image your agent jobs will run in, matched to the version it was built
+against. Later starts reuse it. The generated `.env` leaves `LOCAL_HARNESS_IMAGE` commented out
+so you stay on that matched pin; set it (or pass `--harness-image` at scaffold time) only when
+you want to lock a specific version or run your own build.
 
-- **Pull the executor image** the agent jobs run as: `docker pull ghcr.io/kibertoad/cat-factory-executor:latest`.
-- **Configure at least one model provider** in `local/.env` (the simplest is Cloudflare Workers
-  AI over REST: `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`; or a direct vendor key like
-  `ANTHROPIC_API_KEY`). Without one, no model is selectable and pipelines can't start.
+The last thing to add is a **model provider**, without which the board comes up but no model is
+selectable, so no pipeline can start. The quickest is Cloudflare Workers AI over REST
+(`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`); any direct vendor key works too, such as
+`ANTHROPIC_API_KEY`. Put it in `local/.env` before you start, or sign in and add it through the
+UI, whichever you prefer.
+
+### Each deployment gets its own Compose project
+
+`local/docker-compose.yml` declares a `name:`, derived from the deployment directory
+(`--dir`, or the project name when you omit it) plus a `-local` suffix: scaffolding into
+`~/deploy-a` gives the Compose project `deploy-a-local`. That name keys the Postgres container
+and the `deploy-a-local_cat-factory-pg` volume, so `npm run db:up` in one deployment can never
+bring up another's database. Compose's own default is the compose file's directory, which is
+`local/` in every deployment, so without the declared name the second deployment you scaffold
+migrates and serves the first one's data. Two deployment directories with the SAME basename
+still land in one project, so give each deployment its own directory name.
+
+Re-scaffolding an existing deployment with `--force` after changing its directory name moves it
+to a new Compose project. The CLI then prints the project it leaves behind and the
+`docker compose -p <old> down` that stops it: until you do, the old container holds the
+published Postgres port and `npm run db:down` no longer reaches it. The same rule, with the
+recovery step spelled out:
+[One Compose project per deployment](https://www.catfactory.ai/deploy/local.html#one-compose-project-per-deployment).
 
 The generated `README.md` repeats these steps with your chosen values, and links to the full
-[local-mode docs](../../../deploy/local/README.md) (container-runtime matrix, repo linking, the
+[local-mode docs](https://github.com/kibertoad/cat-factory/blob/main/deploy/local/README.md) (container-runtime matrix, repo linking, the
 Tester's Docker-in-Docker / ephemeral environments, the warm container pool, etc.).
 
 ## Security notes
@@ -155,11 +280,18 @@ Tester's Docker-in-Docker / ephemeral environments, the warm container pool, etc
 The bin is a thin shell over the package's exported functions, which are pure and reusable:
 
 ```ts
-import { buildPlan, generateSecrets, patCreationUrl } from '@cat-factory/cli'
+import { buildPlan, composeProjectNameFor, generateSecrets, patCreationUrl } from '@cat-factory/cli'
 
+const targetDir = '/home/me/deploy-a'
 const secrets = generateSecrets()
-const files = buildPlan({ projectName: 'my-cats', /* … */ ...secrets })
-// files: { path, content, secret? }[]  — write them wherever you like
+const files = buildPlan({
+  projectName: 'my-cats',
+  // Keys the deployment's container + database volume: derive it from the directory you are
+  // about to write into, or two deployments end up sharing one Postgres.
+  composeProjectName: composeProjectNameFor(targetDir, 'cat-factory'),
+  /* … */ ...secrets,
+})
+// files: { path, content, secret? }[] - write them wherever you like
 ```
 
 See `src/index.ts` for the full surface (`bootstrap`, `parseArgs`, `buildLocalEnv`,

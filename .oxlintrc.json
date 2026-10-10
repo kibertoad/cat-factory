@@ -4,7 +4,34 @@
   "categories": {
     "correctness": "error"
   },
-  "rules": {},
+  "rules": {
+    "complexity": ["error", { "max": 30 }],
+    "max-depth": ["error", { "max": 4 }],
+    "max-nested-callbacks": ["error", { "max": 4 }],
+    "max-params": ["error", { "max": 6 }],
+    "max-statements": ["error", { "max": 49 }],
+    "max-lines": ["error", { "max": 1500 }],
+    "max-lines-per-function": ["error", { "max": 250 }]
+  },
+  "overrides": [
+    {
+      "files": ["frontend/**"],
+      "rules": {
+        "no-use-before-define": ["error", { "functions": false }]
+      }
+    },
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "backend/internal/conformance/src/**",
+        "backend/internal/e2e/**"
+      ],
+      "rules": {
+        "max-lines-per-function": ["error", { "max": 400 }]
+      }
+    }
+  ],
   "ignorePatterns": ["**/*.generated.ts"],
   "env": {
     "builtin": true

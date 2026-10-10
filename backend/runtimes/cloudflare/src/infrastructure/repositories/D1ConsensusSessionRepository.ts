@@ -10,6 +10,8 @@ interface ConsensusSessionRow {
   agent_kind: string
   strategy: string
   status: string
+  group_id: string | null
+  group_name: string | null
   participants: string
   rounds: string
   synthesis: string | null
@@ -38,6 +40,8 @@ function rowToSession(row: ConsensusSessionRow): ConsensusSession {
     agentKind: row.agent_kind,
     strategy: row.strategy as ConsensusSession['strategy'],
     status: row.status as ConsensusSession['status'],
+    groupId: row.group_id,
+    groupName: row.group_name,
     participants: parseJsonArray<ConsensusParticipant>(row.participants),
     rounds: parseJsonArray<ConsensusRound>(row.rounds),
     synthesis: row.synthesis,
@@ -102,8 +106,9 @@ export class D1ConsensusSessionRepository implements ConsensusSessionRepository 
       .prepare(
         `INSERT INTO consensus_sessions
            (workspace_id, id, block_id, execution_id, step_index, agent_kind, strategy, status,
-            participants, rounds, synthesis, confidence, dissent, error, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            group_id, group_name, participants, rounds, synthesis, confidence, dissent, error,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            execution_id = excluded.execution_id,
@@ -111,6 +116,8 @@ export class D1ConsensusSessionRepository implements ConsensusSessionRepository 
            agent_kind = excluded.agent_kind,
            strategy = excluded.strategy,
            status = excluded.status,
+           group_id = excluded.group_id,
+           group_name = excluded.group_name,
            participants = excluded.participants,
            rounds = excluded.rounds,
            synthesis = excluded.synthesis,
@@ -128,6 +135,8 @@ export class D1ConsensusSessionRepository implements ConsensusSessionRepository 
         session.agentKind,
         session.strategy,
         session.status,
+        session.groupId ?? null,
+        session.groupName ?? null,
         JSON.stringify(session.participants),
         JSON.stringify(session.rounds),
         session.synthesis,

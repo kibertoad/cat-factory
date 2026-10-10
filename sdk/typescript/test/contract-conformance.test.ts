@@ -1,0 +1,739 @@
+// Do the GENERATED types still say what the CONTRACTS say?
+//
+// The SDK's types are generated from `docs/openapi.json`, which is generated from the Valibot
+// route contracts. That is two lossy-looking hops — Valibot → JSON Schema → TypeScript — and
+// nothing else in the repo checks that the type a caller ends up holding still matches the schema
+// the server validates against. A mapping bug in the emitter (an `anyOf` flattened wrongly, a
+// required field emitted optional, a nullable one emitted non-nullable) produces code that
+// compiles perfectly and is quietly wrong about the wire.
+//
+// This file closes that loop WITHOUT coupling the shipped SDK to the contracts:
+// `@cat-factory/contracts` is a devDependency, so it is compiled against here and is absent from
+// the published package (`files: ["dist"]`). The runtime SDK keeps its zero dependencies, and its
+// unknown-field tolerance — a contract-VALIDATING client would strip fields a newer deployment
+// added, which is the property we deliberately do not want (see sdk/README.md).
+//
+// Most of the work here is at COMPILE time: `expectMutuallyAssignable` fails `tsc`, not vitest.
+// The one runtime test is the coverage guard, so a DTO added to the spec cannot quietly skip the
+// check.
+
+import { readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type * as v from 'valibot'
+import * as contracts from '@cat-factory/contracts'
+import { describe, expect, it } from 'vitest'
+import type * as sdk from '../src/models.generated.ts'
+
+/**
+ * Assert that two types describe the same wire shape.
+ *
+ * MUTUAL assignability, because each direction catches a different bug:
+ *  - contract → generated: the SDK can hold everything the server may send. Failing this means a
+ *    caller cannot represent a legal response (a field typed too narrowly, or missing).
+ *  - generated → contract: the SDK never claims something the contract does not permit. Failing
+ *    this means the SDK invites a caller to send a request the server will reject.
+ *
+ * Deliberately not a strict `Equals<A, B>`: TypeScript's identity check treats `A | B` and its
+ * collapsed form as different, and the emitter legitimately widens an open vocabulary (the
+ * `taskType` `'feature' | … | (string & {})` pattern) to keep editor completions without
+ * narrowing the type to them.
+ */
+function expectMutuallyAssignable<A extends B, B extends C, C = A>(): void {
+  // Type-level only: the constraint above is the assertion. Nothing to do at runtime.
+}
+
+// -- The component DTOs, paired with the contract schema each is generated from ----------------
+//
+// Kept in the same order as `COMPONENT_SCHEMAS` in `scripts/generate-openapi.mjs`, which is the
+// table that decides what gets hoisted into `components.schemas` in the first place.
+
+expectMutuallyAssignable<sdk.ErrorResponse, v.InferOutput<typeof contracts.errorResponseSchema>>()
+expectMutuallyAssignable<sdk.PublicJob, v.InferOutput<typeof contracts.publicJobSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicJobAccepted,
+  v.InferOutput<typeof contracts.publicJobAcceptedSchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreatePublicJob,
+  v.InferOutput<typeof contracts.createPublicJobSchema>
+>()
+expectMutuallyAssignable<sdk.PublicService, v.InferOutput<typeof contracts.publicServiceSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicServiceList,
+  v.InferOutput<typeof contracts.publicServiceListSchema>
+>()
+expectMutuallyAssignable<sdk.PublicTask, v.InferOutput<typeof contracts.publicTaskSchema>>()
+expectMutuallyAssignable<sdk.PublicTaskList, v.InferOutput<typeof contracts.publicTaskListSchema>>()
+expectMutuallyAssignable<
+  sdk.CreatePublicTask,
+  v.InferOutput<typeof contracts.createPublicTaskSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskTicket,
+  v.InferOutput<typeof contracts.publicTaskTicketSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskSourceDocument,
+  v.InferOutput<typeof contracts.publicTaskSourceDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskUploadedDocument,
+  v.InferOutput<typeof contracts.publicTaskUploadedDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskDocument,
+  v.InferOutput<typeof contracts.publicTaskDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.StartPublicTask,
+  v.InferOutput<typeof contracts.startPublicTaskSchema>
+>()
+expectMutuallyAssignable<
+  sdk.UpdatePublicTask,
+  v.InferOutput<typeof contracts.updatePublicTaskSchema>
+>()
+expectMutuallyAssignable<sdk.PublicRun, v.InferOutput<typeof contracts.publicRunSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntry,
+  v.InferOutput<typeof contracts.publicKaizenEntrySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntryTask,
+  v.InferOutput<typeof contracts.publicKaizenEntryTaskSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntryCombo,
+  v.InferOutput<typeof contracts.publicKaizenEntryComboSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntryList,
+  v.InferOutput<typeof contracts.publicKaizenEntryListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AcknowledgeKaizenEntry,
+  v.InferOutput<typeof contracts.acknowledgeKaizenEntrySchema>
+>()
+// Guided PR review: the session view and everything it nests, plus the request bodies.
+expectMutuallyAssignable<
+  sdk.GuidedReviewSessionView,
+  v.InferOutput<typeof contracts.guidedReviewSessionViewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewThreadView,
+  v.InferOutput<typeof contracts.guidedReviewThreadViewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewExchange,
+  v.InferOutput<typeof contracts.guidedReviewExchangeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewSession,
+  v.InferOutput<typeof contracts.guidedReviewSessionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewOverview,
+  v.InferOutput<typeof contracts.guidedReviewOverviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewOverviewContent,
+  v.InferOutput<typeof contracts.guidedReviewOverviewContentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewFailure,
+  v.InferOutput<typeof contracts.guidedReviewFailureSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewThread,
+  v.InferOutput<typeof contracts.guidedReviewThreadSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewThreadSummary,
+  v.InferOutput<typeof contracts.guidedReviewThreadSummarySchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewMessage,
+  v.InferOutput<typeof contracts.guidedReviewMessageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewAnchor,
+  v.InferOutput<typeof contracts.guidedReviewAnchorSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewDraftReport,
+  v.InferOutput<typeof contracts.guidedReviewDraftReportSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewCommentDraft,
+  v.InferOutput<typeof contracts.guidedReviewCommentDraftSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicGuidedReviewList,
+  v.InferOutput<typeof contracts.publicGuidedReviewListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.OpenGuidedReview,
+  v.InferOutput<typeof contracts.openGuidedReviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.OpenGuidedReviewThread,
+  v.InferOutput<typeof contracts.openGuidedReviewThreadSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AskGuidedReview,
+  v.InferOutput<typeof contracts.askGuidedReviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.RequestGuidedReviewDrafts,
+  v.InferOutput<typeof contracts.requestGuidedReviewDraftsSchema>
+>()
+expectMutuallyAssignable<
+  sdk.EditGuidedReviewDraft,
+  v.InferOutput<typeof contracts.editGuidedReviewDraftSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PostGuidedReviewDrafts,
+  v.InferOutput<typeof contracts.postGuidedReviewDraftsSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewPostResult,
+  v.InferOutput<typeof contracts.guidedReviewPostResultSchema>
+>()
+expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicPipelineList,
+  v.InferOutput<typeof contracts.publicPipelineListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPromptFragment,
+  v.InferOutput<typeof contracts.publicPromptFragmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPromptFragmentList,
+  v.InferOutput<typeof contracts.publicPromptFragmentListSchema>
+>()
+expectMutuallyAssignable<sdk.Notification, v.InferOutput<typeof contracts.notificationSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicNotificationList,
+  v.InferOutput<typeof contracts.publicNotificationListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.NotificationWebhook,
+  v.InferOutput<typeof contracts.notificationWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicNotificationWebhook,
+  v.InferOutput<typeof contracts.publicNotificationWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicNotificationWebhookList,
+  v.InferOutput<typeof contracts.publicNotificationWebhookListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PutNotificationWebhook,
+  v.InferOutput<typeof contracts.putNotificationWebhookSchema>
+>()
+expectMutuallyAssignable<sdk.PublicUsageRow, v.InferOutput<typeof contracts.publicUsageRowSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicUsageBudget,
+  v.InferOutput<typeof contracts.publicUsageBudgetSchema>
+>()
+expectMutuallyAssignable<sdk.PublicUsage, v.InferOutput<typeof contracts.publicUsageSchema>>()
+expectMutuallyAssignable<sdk.PublicSpendRow, v.InferOutput<typeof contracts.publicSpendRowSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicSpendTotals,
+  v.InferOutput<typeof contracts.publicSpendTotalsSchema>
+>()
+expectMutuallyAssignable<sdk.PublicSpend, v.InferOutput<typeof contracts.publicSpendSchema>>()
+expectMutuallyAssignable<sdk.PublicIdentity, v.InferOutput<typeof contracts.publicIdentitySchema>>()
+expectMutuallyAssignable<
+  sdk.PublicUnanswerableWait,
+  v.InferOutput<typeof contracts.publicUnanswerableWaitSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicReviewFinding,
+  v.InferOutput<typeof contracts.publicReviewFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRequirementsDecision,
+  v.InferOutput<typeof contracts.publicRequirementsDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicForkDecision,
+  v.InferOutput<typeof contracts.publicForkDecisionSchema>
+>()
+expectMutuallyAssignable<sdk.PublicDecision, v.InferOutput<typeof contracts.publicDecisionSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicDecisionList,
+  v.InferOutput<typeof contracts.publicDecisionListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicReplyFinding,
+  v.InferOutput<typeof contracts.publicReplyFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSetFindingStatus,
+  v.InferOutput<typeof contracts.publicSetFindingStatusSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicIncorporate,
+  v.InferOutput<typeof contracts.publicIncorporateSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolveExceeded,
+  v.InferOutput<typeof contracts.publicResolveExceededSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicChooseFork,
+  v.InferOutput<typeof contracts.publicChooseForkSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInputGateDecision,
+  v.InferOutput<typeof contracts.publicInputGateDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolveInputGate,
+  v.InferOutput<typeof contracts.publicResolveInputGateSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicApprovalGateDecision,
+  v.InferOutput<typeof contracts.publicApprovalGateDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicApproveStep,
+  v.InferOutput<typeof contracts.publicApproveStepSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRequestStepChanges,
+  v.InferOutput<typeof contracts.publicRequestStepChangesSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRejectStep,
+  v.InferOutput<typeof contracts.publicRejectStepSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAgentDecision,
+  v.InferOutput<typeof contracts.publicAgentDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolveAgentDecision,
+  v.InferOutput<typeof contracts.publicResolveAgentDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicClarityDecision,
+  v.InferOutput<typeof contracts.publicClarityDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBrainstormDecision,
+  v.InferOutput<typeof contracts.publicBrainstormDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecision,
+  v.InferOutput<typeof contracts.publicPrReviewDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolvePrReview,
+  v.InferOutput<typeof contracts.publicResolvePrReviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingDecision,
+  v.InferOutput<typeof contracts.publicBugFishingDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingPhase,
+  v.InferOutput<typeof contracts.publicBugFishingPhaseSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingPlan,
+  v.InferOutput<typeof contracts.publicBugFishingPlanSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingUnfishedCell,
+  v.InferOutput<typeof contracts.publicBugFishingUnfishedCellSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingFinding,
+  v.InferOutput<typeof contracts.publicBugFishingFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingSpawn,
+  v.InferOutput<typeof contracts.publicBugFishingSpawnSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AddressPublicRunBugFishingFindingsRequest,
+  v.InferOutput<typeof contracts.publicAddressBugFishingFindingsSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicChallengePrReviewFinding,
+  v.InferOutput<typeof contracts.publicChallengePrReviewFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicHumanTestEnvironment,
+  v.InferOutput<typeof contracts.publicHumanTestEnvironmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicHumanTestDecision,
+  v.InferOutput<typeof contracts.publicHumanTestDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicVisualConfirmDecision,
+  v.InferOutput<typeof contracts.publicVisualConfirmDecisionSchema>
+>()
+// Follow-up triage and the interview gates. The two nested item shapes are pinned beside their
+// decisions rather than only through them: both are hoisted DTOs a caller names directly when it
+// writes the triage loop, and a widened `kind`/`status` on an item would otherwise be invisible
+// here while being exactly what a caller branches on.
+expectMutuallyAssignable<
+  sdk.PublicFollowUpItem,
+  v.InferOutput<typeof contracts.publicFollowUpItemSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicFollowUpsDecision,
+  v.InferOutput<typeof contracts.publicFollowUpsDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInterviewQuestion,
+  v.InferOutput<typeof contracts.publicInterviewQuestionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInterviewDecision,
+  v.InferOutput<typeof contracts.publicInterviewDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRequestGateFix,
+  v.InferOutput<typeof contracts.publicRequestGateFixSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAnswerFollowUp,
+  v.InferOutput<typeof contracts.publicAnswerFollowUpSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAnswerInterview,
+  v.InferOutput<typeof contracts.publicAnswerInterviewSchema>
+>()
+
+// Public-API KEYS: the provisioning surface's own resource. `PublicApiKey` is shared with the
+// session-authed key panel, so this pairing also pins that the two surfaces describe one key.
+expectMutuallyAssignable<sdk.PublicApiKey, v.InferOutput<typeof contracts.publicApiKeySchema>>()
+expectMutuallyAssignable<
+  sdk.PublicApiKeyList,
+  v.InferOutput<typeof contracts.publicApiKeyListResultSchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreatedPublicApiKey,
+  v.InferOutput<typeof contracts.createdPublicApiKeySchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreateHeadlessPublicApiKey,
+  v.InferOutput<typeof contracts.createHeadlessPublicApiKeySchema>
+>()
+
+// Run EVIDENCE. The verification report is the one DTO here the SDK did not gain a new shape for:
+// it is the ENGINE's own report type, served verbatim, so this pairing is what proves the wire
+// shape a consumer parses is the one the engine composes rather than a re-typed copy of it.
+expectMutuallyAssignable<
+  sdk.PublicRunArtifact,
+  v.InferOutput<typeof contracts.publicRunArtifactSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRunArtifactList,
+  v.InferOutput<typeof contracts.publicRunArtifactListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrVerificationReport,
+  v.InferOutput<typeof contracts.prVerificationReportSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportRun, v.InferOutput<typeof contracts.prReportRunSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportContext,
+  v.InferOutput<typeof contracts.prReportContextSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportContextDocument,
+  v.InferOutput<typeof contracts.prReportContextDocumentSchema>
+>()
+// Hoisted because it is a VARIANT reached from two sections (the report's `context` and the
+// outcome's `sources`), so left inline it would ship twice under two positional names that
+// RENUMBER if the union's members are reordered.
+expectMutuallyAssignable<
+  sdk.DocumentFreshness,
+  v.InferOutput<typeof contracts.documentFreshnessSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportStep, v.InferOutput<typeof contracts.prReportStepSchema>>()
+expectMutuallyAssignable<sdk.PrReportIssue, v.InferOutput<typeof contracts.prReportIssueSchema>>()
+expectMutuallyAssignable<sdk.PrReportCi, v.InferOutput<typeof contracts.prReportCiSchema>>()
+expectMutuallyAssignable<sdk.PrReportCheck, v.InferOutput<typeof contracts.prReportCheckSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportValidation,
+  v.InferOutput<typeof contracts.prReportValidationSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportValidationCommand,
+  v.InferOutput<typeof contracts.prReportValidationCommandSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportReproduction,
+  v.InferOutput<typeof contracts.prReportReproductionSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportTests, v.InferOutput<typeof contracts.prReportTestsSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportTestOutcome,
+  v.InferOutput<typeof contracts.prReportTestOutcomeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportTestConcern,
+  v.InferOutput<typeof contracts.prReportTestConcernSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportRequirements,
+  v.InferOutput<typeof contracts.prReportRequirementsSchema>
+>()
+// The service SPEC read. Every level of the tree is asserted, not just the envelope: the tree is
+// served as the app's own shapes rather than a projection, so a mapping bug anywhere down it
+// reaches an integrator's code with nothing else in the repo checking the hop.
+expectMutuallyAssignable<
+  sdk.PublicServiceSpec,
+  v.InferOutput<typeof contracts.publicServiceSpecSchema>
+>()
+// The RUN's read of the same tree, at the run's own branch. Its own envelope (a `runId`, a
+// nullable provenance, one extra anchor state) over the identical components below.
+expectMutuallyAssignable<sdk.PublicRunSpec, v.InferOutput<typeof contracts.publicRunSpecSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicSpecProvenance,
+  v.InferOutput<typeof contracts.publicSpecProvenanceSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecFeatureFile,
+  v.InferOutput<typeof contracts.publicSpecFeatureFileSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecTruncation,
+  v.InferOutput<typeof contracts.publicSpecTruncationSchema>
+>()
+expectMutuallyAssignable<sdk.SpecReadIssue, v.InferOutput<typeof contracts.specReadIssueSchema>>()
+expectMutuallyAssignable<sdk.SpecDoc, v.InferOutput<typeof contracts.specDocSchema>>()
+expectMutuallyAssignable<sdk.SpecModule, v.InferOutput<typeof contracts.specModuleSchema>>()
+expectMutuallyAssignable<
+  sdk.RequirementGroup,
+  v.InferOutput<typeof contracts.requirementGroupSchema>
+>()
+expectMutuallyAssignable<
+  sdk.RequirementItem,
+  v.InferOutput<typeof contracts.requirementItemSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AcceptanceCriterion,
+  v.InferOutput<typeof contracts.acceptanceCriterionSchema>
+>()
+expectMutuallyAssignable<sdk.DomainRule, v.InferOutput<typeof contracts.domainRuleSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironments,
+  v.InferOutput<typeof contracts.prReportEnvironmentsSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportMerge, v.InferOutput<typeof contracts.prReportMergeSchema>>()
+expectMutuallyAssignable<sdk.PrReportJudges, v.InferOutput<typeof contracts.prReportJudgesSchema>>()
+expectMutuallyAssignable<sdk.PrReportJudge, v.InferOutput<typeof contracts.prReportJudgeSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportObservability,
+  v.InferOutput<typeof contracts.prReportObservabilitySchema>
+>()
+
+// The nested projections a `pr-review` / `visual-confirmation` decision carries. The emitter
+// inlines them rather than hoisting them into `components.schemas`, so the coverage guard below
+// cannot see them, and inlined is exactly where a mapping bug hides, since nothing else names
+// the type. Asserted explicitly against the contract they come from.
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecisionSlice,
+  v.InferOutput<typeof contracts.publicPrReviewSliceSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecisionFinding,
+  v.InferOutput<typeof contracts.publicPrReviewFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecisionFindingChallenge,
+  v.InferOutput<typeof contracts.publicPrReviewFindingChallengeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicVisualConfirmDecisionPair,
+  v.InferOutput<typeof contracts.publicVisualConfirmPairSchema>
+>()
+
+// What the platform TRIED about a frame whose provision failed. Inlined under
+// `PrReportEnvironments` rather than hoisted, so the coverage guard cannot see it, and the
+// generated names are path-derived (`PrReportEnvironmentsEntryRemediationDeployFix`) where the
+// contracts' are not: pairing them here is the only place the two vocabularies are written down
+// together.
+expectMutuallyAssignable<
+  sdk.PrReportEnvironmentsEntryRemediation,
+  v.InferOutput<typeof contracts.prReportEnvironmentRemediationSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironmentsEntryRemediationDeployFix,
+  v.InferOutput<typeof contracts.prReportDeployFixSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironmentsEntryRemediationInvestigation,
+  v.InferOutput<typeof contracts.prReportEnvironmentInvestigationSchema>
+>()
+
+/** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
+const ASSERTED_COMPONENTS = [
+  'ErrorResponse',
+  'PublicJob',
+  'PublicJobAccepted',
+  'CreatePublicJob',
+  'PublicService',
+  'PublicServiceList',
+  'PublicTask',
+  'PublicTaskList',
+  'PublicTaskTicket',
+  'PublicTaskSourceDocument',
+  'PublicTaskUploadedDocument',
+  'PublicTaskDocument',
+  'CreatePublicTask',
+  'StartPublicTask',
+  'UpdatePublicTask',
+  'PublicRun',
+  'PublicKaizenEntry',
+  'PublicKaizenEntryTask',
+  'PublicKaizenEntryCombo',
+  'PublicKaizenEntryList',
+  'AcknowledgeKaizenEntry',
+  'GuidedReviewSessionView',
+  'GuidedReviewThreadView',
+  'GuidedReviewExchange',
+  'GuidedReviewSession',
+  'GuidedReviewOverview',
+  'GuidedReviewOverviewContent',
+  'GuidedReviewFailure',
+  'GuidedReviewThread',
+  'GuidedReviewThreadSummary',
+  'GuidedReviewMessage',
+  'GuidedReviewAnchor',
+  'GuidedReviewDraftReport',
+  'GuidedReviewCommentDraft',
+  'PublicGuidedReviewList',
+  'OpenGuidedReview',
+  'OpenGuidedReviewThread',
+  'AskGuidedReview',
+  'RequestGuidedReviewDrafts',
+  'EditGuidedReviewDraft',
+  'PostGuidedReviewDrafts',
+  'GuidedReviewPostResult',
+  'PublicPipeline',
+  'PublicPipelineList',
+  'PublicPromptFragment',
+  'PublicPromptFragmentList',
+  'Notification',
+  'PublicNotificationList',
+  'NotificationWebhook',
+  'PublicNotificationWebhook',
+  'PublicNotificationWebhookList',
+  'PutNotificationWebhook',
+  'PublicUsageRow',
+  'PublicUsageBudget',
+  'PublicUsage',
+  'PublicSpendRow',
+  'PublicSpendTotals',
+  'PublicSpend',
+  'PublicIdentity',
+  'PublicUnanswerableWait',
+  'PublicReviewFinding',
+  'PublicRequirementsDecision',
+  'PublicForkDecision',
+  'PublicDecision',
+  'PublicDecisionList',
+  'PublicReplyFinding',
+  'PublicSetFindingStatus',
+  'PublicIncorporate',
+  'PublicResolveExceeded',
+  'PublicChooseFork',
+  'PublicInputGateDecision',
+  'PublicResolveInputGate',
+  'PublicApprovalGateDecision',
+  'PublicApproveStep',
+  'PublicRequestStepChanges',
+  'PublicRejectStep',
+  'PublicAgentDecision',
+  'PublicResolveAgentDecision',
+  'PublicClarityDecision',
+  'PublicBrainstormDecision',
+  'PublicPrReviewDecision',
+  'PublicResolvePrReview',
+  'PublicBugFishingDecision',
+  'PublicBugFishingPhase',
+  'PublicBugFishingPlan',
+  'PublicBugFishingUnfishedCell',
+  'PublicBugFishingFinding',
+  'PublicBugFishingSpawn',
+  'PublicChallengePrReviewFinding',
+  'PublicHumanTestEnvironment',
+  'PublicHumanTestDecision',
+  'PublicVisualConfirmDecision',
+  'PublicFollowUpItem',
+  'PublicFollowUpsDecision',
+  'PublicInterviewQuestion',
+  'PublicInterviewDecision',
+  'PublicRequestGateFix',
+  'PublicAnswerFollowUp',
+  'PublicAnswerInterview',
+  'PublicApiKey',
+  'PublicApiKeyList',
+  'CreatedPublicApiKey',
+  'CreateHeadlessPublicApiKey',
+  'PublicRunArtifact',
+  'PublicRunArtifactList',
+  'PrVerificationReport',
+  'PrReportRun',
+  'PrReportContext',
+  'PrReportContextDocument',
+  'DocumentFreshness',
+  'PrReportStep',
+  'PrReportIssue',
+  'PrReportCi',
+  'PrReportCheck',
+  'PrReportValidation',
+  'PrReportValidationCommand',
+  'PrReportReproduction',
+  'PrReportTests',
+  'PrReportTestOutcome',
+  'PrReportTestConcern',
+  'PrReportRequirements',
+  'PublicServiceSpec',
+  'PublicRunSpec',
+  'PublicSpecProvenance',
+  'PublicSpecFeatureFile',
+  'PublicSpecTruncation',
+  'SpecReadIssue',
+  'SpecDoc',
+  'SpecModule',
+  'RequirementGroup',
+  'RequirementItem',
+  'AcceptanceCriterion',
+  'DomainRule',
+  'PrReportEnvironments',
+  'PrReportMerge',
+  'PrReportJudges',
+  'PrReportJudge',
+  'PrReportObservability',
+] as const
+
+describe('generated models conform to the Valibot contracts', () => {
+  it('asserts every DTO the spec hoists into components.schemas', async () => {
+    // The type-level assertions above are only as good as their coverage: a DTO added to
+    // `COMPONENT_SCHEMAS` but not asserted here would silently go unchecked, which is exactly the
+    // failure this file exists to prevent. Reading the spec makes the omission a failing test.
+    const specPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/openapi.json')
+    const spec = JSON.parse(await readFile(specPath, 'utf8')) as {
+      components: { schemas: Record<string, unknown> }
+    }
+    const hoisted = Object.keys(spec.components.schemas).sort()
+    const missing = hoisted.filter((name) => !ASSERTED_COMPONENTS.includes(name as never))
+
+    expect(
+      missing,
+      `these DTOs are in components.schemas but have no conformance assertion in ${'contract-conformance.test.ts'}`,
+    ).toEqual([])
+  })
+})

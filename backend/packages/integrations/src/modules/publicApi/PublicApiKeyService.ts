@@ -5,6 +5,7 @@ import type {
   PublicApiKeyRepository,
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
+import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
 
 // PublicApiKeyService: owns the INBOUND public-API keys external systems present to the
 // `/api/v1` surface. Unlike the outbound provider keys (`ApiKeyService`, encrypted so the
@@ -47,6 +48,62 @@ export interface PublicApiKeyAuth {
   keyId: string
   accountId: string
   workspaceId: string
+  /**
+   * What this key may do (read ⊂ write ⊂ decide ⊂ admin) — the public surface gates each
+   * route on it.
+   */
+  scope: PublicApiScope
+  /**
+   * The label the key was minted with, and when. Carried on the auth result rather than re-read
+   * because `authenticate` already has the row in hand: `GET /api/v1/me` answers from this, so
+   * self-description costs the request nothing beyond the lookup it was already doing.
+   */
+  label: string
+  /**
+   * Who the key acts for on its provisioner's side, or `null` when it was minted with no
+   * identity. Carried on the auth result for the same reason `label` is (the row is already in
+   * hand) and consumed by two callers: `GET /api/v1/me`, and every run start, which PINS it onto
+   * the run so the run keeps naming the identity that started it after the key is gone.
+   */
+  externalIdentity: string | null
+  /**
+   * The user whose PERSONAL subscriptions this key may unlock, or `null` when it was minted
+   * without that opt-in. Carried here for the same reason `label` is (the row is in hand), and
+   * consumed by the run paths: it is the initiator a headless start records, and the user whose
+   * credential the supplied personal password unlocks. Never a substitute for `scope`.
+   */
+  actsAsUserId: string | null
+  /**
+   * Who MINTED the key, or `null` for one provisioned headlessly (and for rows predating the
+   * column). Pure provenance, exactly as on the record: it is never an authorization input, and in
+   * particular an unbound key does NOT inherit this person's credentials.
+   *
+   * Carried here for one reader, and only ever to DESCRIBE: `GET /api/v1/models` resolves whether a
+   * personal subscription exists for this person so an unbound key can be told that the model it
+   * cannot dispatch to is nonetheless configured, and that binding is the fix. That is a lookup, not
+   * an unlock; see `subscriptionConfigured` on the wire row.
+   */
+  createdByUserId: string | null
+  createdAt: number
+}
+
+/**
+ * The scope ladder as a rank, so a `have ≥ need` check is one comparison. DERIVED from the
+ * contract's `PUBLIC_API_SCOPES` array order rather than hand-listed, so inserting a rung
+ * (as `decide` was, between `write` and `admin`) cannot leave the wire vocabulary and the
+ * server-side check disagreeing about the ladder.
+ */
+const SCOPE_RANK: Record<PublicApiScope, number> = Object.fromEntries(
+  PUBLIC_API_SCOPES.map((scope, rank) => [scope, rank]),
+) as Record<PublicApiScope, number>
+
+/**
+ * Whether a key that HOLDS `have` satisfies an endpoint that NEEDS `need`. The ladder is
+ * inclusive — an `admin` key satisfies a `decide`, `write` or `read` requirement — so this is
+ * a simple rank comparison, the single source of truth for every `/api/v1` scope gate.
+ */
+export function scopeSatisfies(have: PublicApiScope, need: PublicApiScope): boolean {
+  return SCOPE_RANK[have] >= SCOPE_RANK[need]
 }
 
 /** The result of issuing a key: the stored record + the one-time raw secret to hand back. */
@@ -61,26 +118,58 @@ export class PublicApiKeyService {
 
   constructor(private readonly deps: PublicApiKeyServiceDependencies) {}
 
-  /** Mint a new key for a workspace, returning the record + the one-time raw secret. */
+  /**
+   * Mint a new key for a workspace, returning the record + the one-time raw secret. `scope`
+   * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ write ⊂ admin).
+   */
   async issue(
-    scope: { accountId: string; workspaceId: string },
+    owner: {
+      accountId: string
+      workspaceId: string
+      createdByUserId?: string | null
+      /** Set only for a headless mint: the key that authenticated `POST /api/v1/keys`. */
+      createdByKeyId?: string | null
+      /**
+       * Who the caller says this key acts for, on their own side. Opaque: stored, echoed and
+       * pinned onto the runs it starts, never interpreted (see {@link PublicApiKeyRecord}).
+       */
+      externalIdentity?: string | null
+      /**
+       * Bind the key to a user's personal subscriptions. The CALLER is responsible for passing
+       * only the minting user's own id (`PublicApiKeyController` is the one site that may, and
+       * takes it from the session, never from the request body).
+       */
+      actsAsUserId?: string | null
+    },
     label: string,
+    scope: PublicApiScope = 'write',
   ): Promise<IssuedPublicApiKey> {
-    const live = await this.deps.repository.listByWorkspace(scope.workspaceId)
+    const live = await this.deps.repository.listByWorkspace(owner.workspaceId)
     if (live.length >= MAX_KEYS_PER_WORKSPACE) {
       throw new ConflictError(
         `This workspace already has the maximum of ${MAX_KEYS_PER_WORKSPACE} public-API keys; ` +
           'revoke one before creating another',
       )
     }
+    // Defensive: reject a scope outside the known ladder rather than persisting a row the
+    // gate can't rank (the contract already validates the wire input, but `issue` is a public
+    // service method other callers could reach).
+    if (!PUBLIC_API_SCOPES.includes(scope)) {
+      throw new ConflictError(`Unknown public-API key scope: ${scope}`)
+    }
     const id = this.deps.idGenerator.next('pak')
     const secret = randomHex(SECRET_BYTES)
     const record: PublicApiKeyRecord = {
       id,
-      accountId: scope.accountId,
-      workspaceId: scope.workspaceId,
+      accountId: owner.accountId,
+      workspaceId: owner.workspaceId,
       label,
+      scope,
       secretHash: await this.hash(secret),
+      createdByUserId: owner.createdByUserId ?? null,
+      createdByKeyId: owner.createdByKeyId ?? null,
+      externalIdentity: owner.externalIdentity ?? null,
+      actsAsUserId: owner.actsAsUserId ?? null,
       createdAt: this.deps.clock.now(),
       lastUsedAt: null,
       revokedAt: null,
@@ -94,9 +183,22 @@ export class PublicApiKeyService {
     return this.deps.repository.listByWorkspace(workspaceId)
   }
 
-  /** Revoke a key, scoped to its workspace. Idempotent. */
+  /**
+   * Revoke a key AND every key it minted, scoped to its workspace. Idempotent.
+   *
+   * The cascade is what makes headless provisioning (`POST /api/v1/keys`) safe to offer: without
+   * it, revoking a leaked key that had minted others would revoke the credential the operator can
+   * SEE and leave behind the ones the attacker made, which is the compromise surviving its own
+   * cleanup. The chain is exactly one link long by construction (a minted key can never reach the
+   * `admin` rung minting requires), so this is one extra statement, never a walk.
+   *
+   * Ordered minter-first: the two writes are not one transaction, so a failure between them must
+   * leave the credential someone came here to kill already dead.
+   */
   async revoke(workspaceId: string, id: string): Promise<void> {
-    await this.deps.repository.revoke(workspaceId, id, this.deps.clock.now())
+    const at = this.deps.clock.now()
+    await this.deps.repository.revoke(workspaceId, id, at)
+    await this.deps.repository.revokeMintedBy(workspaceId, id, at)
   }
 
   /**
@@ -118,7 +220,17 @@ export class PublicApiKeyService {
     if (record.lastUsedAt === null || now - record.lastUsedAt >= LAST_USED_STAMP_THROTTLE_MS) {
       await this.deps.repository.markUsed(record.id, now)
     }
-    return { keyId: record.id, accountId: record.accountId, workspaceId: record.workspaceId }
+    return {
+      keyId: record.id,
+      accountId: record.accountId,
+      workspaceId: record.workspaceId,
+      scope: record.scope,
+      label: record.label,
+      externalIdentity: record.externalIdentity,
+      actsAsUserId: record.actsAsUserId,
+      createdByUserId: record.createdByUserId,
+      createdAt: record.createdAt,
+    }
   }
 
   /**

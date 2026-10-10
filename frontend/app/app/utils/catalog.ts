@@ -1,13 +1,21 @@
+import { computed, shallowRef } from 'vue'
 import type {
   AgentArchetype,
   AgentCategory,
   AgentKind,
   BlockStatus,
   BlockType,
+  TaskTypeMeta,
 } from '~/types/domain'
+import type { BadgeColor } from '~/utils/badge'
+import {
+  isBuiltinGatableKind,
+  MONOREPO_ADOPTION_AGENT_KIND,
+  REPO_BOOTSTRAP_AGENT_KIND,
+} from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
-export function uid(prefix = 'id'): string {
+export function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`
 }
 
@@ -28,10 +36,15 @@ export const AGENT_CATEGORIES: { id: AgentCategory; label: string }[] = [
 export const AGENT_ARCHETYPES: AgentArchetype[] = [
   {
     kind: 'requirements-review',
+    tier: 'basic',
     label: 'Requirements Reviewer',
     icon: 'i-lucide-clipboard-check',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'review',
+    // Settles the PRODUCT layer before anyone builds, which is every use-case except reviewing
+    // someone else's open pull request: there the requirements are already someone's shipped
+    // decision and nothing here can change them.
+    purposes: ['build', 'document', 'research', 'planning'],
     description:
       'Reviews the collected context (description + linked PRDs/RFCs) for gaps, ambiguities, assumptions and risks before the architect starts.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -40,10 +53,13 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'clarity-review',
+    tier: 'basic',
     label: 'Clarity Reviewer',
     icon: 'i-lucide-bug',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'review',
+    // Triages a BUG REPORT for fixability, so it only makes sense where something gets fixed.
+    purposes: ['build'],
     description:
       'Triages a bug report for fixability — raising questions, gaps and assumptions about the report before anyone starts fixing it.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -56,28 +72,107 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // structured triage opens in the shared generic viewer; the clarity gate consumes its
     // `clarity`/`questions` server-side.
     kind: 'bug-investigator',
+    tier: 'intermediate',
     label: 'Bug Investigator',
     icon: 'i-lucide-search-code',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     category: 'review',
+    // Traces a bug to its root cause in the code: a fixing pipeline's opening move, and nothing
+    // a document, review, spike or plan has any use for.
+    purposes: ['build'],
     description:
       'Read-only, multi-repo codebase investigation that traces the bug to its root cause and decides whether the report is fixable as-is or needs the reporter to clarify (no code changes).',
     resultView: 'generic-structured',
   },
   {
+    // The BUG-FISHING expedition's single step, dispatched once per ANGLE by the engine's phase
+    // loop. Registered on the backend so it also arrives via the workspace manifest, but modelled
+    // statically here for the reason `pr-reviewer` is: `agentKindMeta('bug-fisher').resultView`
+    // has to resolve to the expedition window on every surface, not only once the manifest is
+    // hydrated. Mirrors the backend `presentation` in `bug-fisher.ts`.
+    kind: 'bug-fisher',
+    tier: 'intermediate',
+    label: 'Bug Fisher',
+    icon: 'i-lucide-fish',
+    color: 'var(--app-hue-sky)',
+    category: 'review',
+    // Hunts for defects nobody reported: it belongs with the bug work rather than the build
+    // ladder, and with review because its product is findings.
+    purposes: ['bugfix', 'review'],
+    description:
+      'Read-only, multi-angle hunt through an existing codebase for genuine logic gaps, latent bugs, footguns and unhandled edge cases — one pass per angle, nothing changed.',
+    resultView: 'bug-fishing',
+  },
+  {
+    // A read-only, token-bounded deep review of an EXISTING open pull request (the `pl_review`
+    // pipeline's single step). Registered on the backend so it also arrives via the workspace
+    // manifest, but modelled statically here so `agentKindMeta('pr-reviewer').resultView`
+    // resolves to the findings-selection window on every surface — not just when the manifest
+    // is hydrated. Mirrors the backend `presentation` in `pr-reviewer.ts`.
+    kind: 'pr-reviewer',
+    tier: 'basic',
+    label: 'PR Reviewer',
+    icon: 'i-lucide-clipboard-check',
+    color: 'var(--app-hue-indigo)',
+    category: 'review',
+    // Reviews an EXISTING open pull request, which is the whole of the review use-case, and is
+    // available to a build pipeline that wants a deep pass over the pull request it just opened.
+    purposes: ['build', 'review'],
+    description:
+      'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +
+      'chunks, reviews each, and returns prioritized findings.',
+    // Opens the dedicated PR-review window (findings grouped by slice + multi-select →
+    // resolve) instead of the generic read-only JSON viewer. See PrReviewWindow.vue.
+    resultView: 'pr-review',
+  },
+  {
+    // A timeboxed read-only research/investigation agent. Its structured findings open in the
+    // shared generic viewer; the findings document is committed by a backend post-op (delivered
+    // as a pull request by default, or straight to base via the direct pipeline).
+    kind: 'spike',
+    tier: 'intermediate',
+    label: 'Spike',
+    icon: 'i-lucide-flask-conical',
+    color: 'var(--app-hue-cyan)',
+    category: 'design',
+    description:
+      'Timeboxed read-only investigation that answers a research question against the context and codebase, and delivers a findings document (as a pull request by default; no code).',
+    resultView: 'generic-structured',
+  },
+  {
     kind: 'task-estimator',
+    tier: 'intermediate',
     label: 'Task Estimator',
     icon: 'i-lucide-gauge',
-    color: '#eab308',
+    color: 'var(--app-hue-yellow)',
     category: 'review',
     description:
       'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate consensus and conditional companion steps, and shown as ratings on the task.',
   },
   {
+    // The estimator's retrospective twin: it reads the change that actually landed (read-only, in a
+    // container, on the run's pull request) and re-scores the same three axes. `advanced` rather
+    // than `intermediate`: an extra container run per task is not part of the everyday delivery
+    // loop, and the everyday reader wants the forecast, not the calibration.
+    kind: 'task-reassessor',
+    tier: 'advanced',
+    label: 'Task Reassessor',
+    icon: 'i-lucide-gauge-circle',
+    color: 'var(--app-hue-amber)',
+    category: 'review',
+    // Reads the pull request the run opened, so it only belongs where a pipeline ships code. A
+    // document, research, planning or review pipeline opens none, and the step would be offered
+    // only to be skipped for want of a change to measure.
+    purposes: ['build'],
+    description:
+      'Re-rates Complexity, Risk and Impact after the implementation lands, from the change that was actually made. Place it after the coder: it corrects the estimator’s forecast, or produces the ratings for the first time in a pipeline that has no estimator.',
+  },
+  {
     kind: 'requirements-brainstorm',
+    tier: 'intermediate',
     label: 'Requirements Brainstorm',
     icon: 'i-lucide-lightbulb',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'design',
     description:
       'A structured dialogue that turns a rough idea into crisp requirements — proposing options with explicit trade-offs and letting you choose, before the requirements review.',
@@ -87,59 +182,117 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'architecture-brainstorm',
+    tier: 'advanced',
     label: 'Architecture Brainstorm',
     icon: 'i-lucide-compass',
-    color: '#a78bfa',
+    color: 'var(--app-hue-violet)',
     category: 'design',
     description:
       'A structured dialogue that explores and finalizes a technical approach from the refined requirements — proposing options with explicit trade-offs and letting you converge, before the architect.',
     resultView: 'brainstorm',
   },
   {
+    // Authors the service's in-repo specification from the clarified requirements, so it sits
+    // beside the design kinds and ahead of the architect that reads what it wrote. Registered on
+    // the backend so it also arrives via the workspace manifest, and modelled statically here for
+    // the same reason `pr-reviewer` is: a `pl_bugfix` timeline must name the step before the
+    // manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
+    kind: 'spec-writer',
+    tier: 'intermediate',
+    label: 'Spec Writer',
+    icon: 'i-lucide-clipboard-list',
+    color: 'var(--app-hue-purple)',
+    category: 'design',
+    // Writes the in-repo spec the implementation is then built against.
+    purposes: ['build', 'planning'],
+    description:
+      "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
+  },
+  {
     kind: 'architect',
+    tier: 'basic',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',
-    color: '#a78bfa',
+    color: 'var(--app-hue-violet)',
     category: 'design',
+    // Designs the shape of a CODE change, so it belongs wherever code is planned or written and
+    // nowhere a document is being authored.
+    purposes: ['build', 'research', 'planning'],
     description: 'Designs the shape of the solution and breaks down the work.',
   },
   {
+    // Refreshes the service → modules map the board projects. Statically modelled beside its
+    // backend `presentation` for the same reason the Spec Writer is: the single-kind run behind
+    // the board's "Map service" action renders its timeline before the manifest hydrates.
+    kind: 'blueprints',
+    tier: 'intermediate',
+    label: 'Blueprinter',
+    icon: 'i-lucide-map',
+    color: 'var(--app-hue-cyan)',
+    category: 'design',
+    // Decomposes a repository into services and modules on the board.
+    purposes: ['build', 'planning'],
+    description: 'Maps the repository into the service → modules blueprint.',
+  },
+  {
     kind: 'researcher',
+    tier: 'intermediate',
     label: 'Researcher',
     icon: 'i-lucide-telescope',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     category: 'design',
     description: 'Investigates prior art, libraries and constraints.',
   },
   {
     kind: 'coder',
+    tier: 'basic',
     label: 'Coder',
     icon: 'i-lucide-code-xml',
-    color: '#34d399',
+    color: 'var(--app-hue-emerald)',
     category: 'build',
     description: 'Implements the block according to the design.',
   },
   {
     kind: 'integrator',
+    tier: 'advanced',
     label: 'Integrator',
     icon: 'i-lucide-plug-zap',
-    color: '#fb923c',
+    color: 'var(--app-hue-orange)',
     category: 'build',
     description: 'Wires the block into the surrounding system.',
   },
   {
     kind: 'mocker',
+    tier: 'advanced',
     label: 'Mock Builder',
     icon: 'i-lucide-server-cog',
-    color: '#fb7185',
+    color: 'var(--app-hue-rose)',
     category: 'build',
     description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
   },
   {
+    // Provisions the ephemeral environment the tester / human-test / playwright steps read, which
+    // is why it leads the testing group.
+    //
+    // `basic`, and it has to be: a pipeline that reaches an env consumer with no Deployer in
+    // front of it is refused at SAVE (`validatePipelineAuthoring`), and the API Tester it serves
+    // is itself `basic`. Leaving the Deployer out of the basic palette would leave a basic-mode
+    // user composing a pipeline they cannot save and cannot see the fix for.
+    kind: 'deployer',
+    tier: 'basic',
+    label: 'Deployer',
+    icon: 'i-lucide-cloud-upload',
+    color: 'var(--app-hue-emerald)',
+    category: 'test',
+    description:
+      'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless. Place it before the first step that needs the environment.',
+  },
+  {
     kind: 'tester-api',
+    tier: 'basic',
     label: 'API Tester',
     icon: 'i-lucide-flask-conical',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description: 'Exercises the change against the mocks + spec scenarios and reports outcomes.',
     // Opens the dedicated structured test-report window (scenarios → outcomes →
@@ -148,9 +301,10 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'tester-ui',
+    tier: 'intermediate',
     label: 'UI Tester',
     icon: 'i-lucide-camera',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description:
       'Drives a real browser through the new UI, captures a screenshot of each view, and reports outcomes.',
@@ -159,18 +313,20 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'playwright',
+    tier: 'intermediate',
     label: 'Acceptance Test Author',
     icon: 'i-lucide-theater',
-    color: '#e879f9',
+    color: 'var(--app-hue-fuchsia)',
     category: 'test',
     description:
       "Turns scenarios into runnable tests — Playwright for frontend, the project's own framework for backend; adds only new ones.",
   },
   {
     kind: 'human-test',
+    tier: 'intermediate',
     label: 'Human Testing',
     icon: 'i-lucide-user-check',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description:
       'Spins up an ephemeral environment and pauses for a person to validate the change in a live URL — request a fix from findings, pull main + redeploy, or recreate/destroy the env — before the pipeline continues.',
@@ -179,10 +335,29 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'human-test',
   },
   {
+    // The `deployer`'s counterpart at the other end of the environment lifecycle, and a PALETTE
+    // block rather than a system kind precisely because deciding WHEN the environment goes away
+    // is the point of it: after the automated tester, or after a human has finished with the live
+    // URL. Without one, the TTL sweep reclaims environments on a timer long after the run
+    // settled, which is a fine backstop and cannot close the run's own teardown proof.
+    //
+    // `basic` for the same reason the Deployer is: a chain that deploys and never reclaims is
+    // refused at save, so the fix has to be reachable wherever the fault can be composed.
+    kind: 'disposer',
+    tier: 'basic',
+    label: 'Disposer',
+    icon: 'i-lucide-cloud-off',
+    color: 'var(--app-hue-emerald)',
+    category: 'test',
+    description:
+      'Reclaims the ephemeral environments this run provisioned, and confirms they are actually gone. Place it after the last step that needs the environment.',
+  },
+  {
     kind: 'visual-confirmation',
+    tier: 'advanced',
     label: 'Visual Confirmation',
     icon: 'i-lucide-image-play',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description:
       'Pauses for a person to review the UI tester’s screenshots against the uploaded reference designs — approve, or request a fix from findings — before the pipeline continues.',
@@ -192,27 +367,38 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'documenter',
+    tier: 'basic',
     label: 'Documenter',
     icon: 'i-lucide-book-open-text',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     category: 'docs',
+    // WRITES documentation into the repository, which a pipeline that reviews someone else's
+    // pull request never does.
+    purposes: ['build', 'document'],
     description: 'Produces docs and usage examples.',
   },
   {
     kind: 'business-documenter',
+    tier: 'intermediate',
     label: 'Domain Rules Documenter',
     icon: 'i-lucide-scroll-text',
-    color: '#84cc16',
+    color: 'var(--app-hue-lime)',
     category: 'docs',
+    // Writes domain-rule docs into the repository (see `documenter`).
+    purposes: ['build', 'document'],
     description:
       'Reads the implementation and writes/updates business-logic & domain-rule docs in the repo, weaving in linked context documents.',
   },
   {
     kind: 'business-reviewer',
+    tier: 'advanced',
     label: 'Domain Rules Reviewer',
     icon: 'i-lucide-shield-alert',
-    color: '#ef4444',
+    color: 'var(--app-hue-red)',
     category: 'docs',
+    // The review activity that groups under Documentation: it reads a change against the
+    // documented rules and reports violations, writing nothing.
+    purposes: ['build', 'review'],
     description:
       'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
   },
@@ -231,42 +417,50 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
 export const COMPANION_ARCHETYPES: AgentArchetype[] = [
   {
     kind: 'reviewer',
+    tier: 'basic',
     label: 'Reviewer (companion)',
     icon: 'i-lucide-scan-eye',
-    color: '#f472b6',
+    color: 'var(--app-hue-pink)',
     description:
       "Coder's companion: rates the change for quality/correctness and loops it back for automatic rework below the threshold.",
   },
   {
     kind: 'architect-companion',
+    tier: 'intermediate',
     label: 'Architect Companion',
     icon: 'i-lucide-bug-play',
-    color: '#c084fc',
+    color: 'var(--app-hue-purple)',
     description:
       "Challenges the architect's design for quality and completeness, looping it back for rework below the threshold before a human reviews it.",
   },
   {
     kind: 'spec-companion',
+    tier: 'intermediate',
     label: 'Spec Reviewer',
     icon: 'i-lucide-list-checks',
-    color: '#2dd4bf',
+    color: 'var(--app-hue-teal)',
     description:
       'Reviews the spec — especially acceptance-scenario coverage — rating it and looping the Spec Writer back for automatic rework below the threshold, instead of requiring a human review.',
   },
   {
     kind: 'doc-reviewer',
+    tier: 'intermediate',
     label: 'Doc Reviewer',
     icon: 'i-lucide-file-search',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Reviews the drafted document for completeness, clarity, accuracy and structure, looping the Doc Writer back for automatic rework below the threshold.',
   },
 ]
 
 /**
- * Producer agent kind → its companion agent kind. Mirrors the backend `COMPANIONS` registry
- * (`@cat-factory/agents`). The builder shows an "add companion" toggle on a producer step
- * found here, and inserts/removes the companion immediately after it.
+ * Producer agent kind → its companion agent kind, for the BUILT-IN pairs. Mirrors the backend
+ * `COMPANIONS` catalog (`@cat-factory/agents`). The builder shows an "add companion" toggle on
+ * a producer step found here, and inserts/removes the companion immediately after it.
+ *
+ * A DEPLOYMENT's own pair does not live here: it arrives on the snapshot as a custom agent
+ * kind carrying `companionTargets`, and is projected into {@link customCompanionTargets} by the
+ * agents store. Both are consulted below, built-ins first.
  */
 export const COMPANION_FOR_PRODUCER: Record<string, AgentKind> = {
   coder: 'reviewer',
@@ -277,35 +471,124 @@ export const COMPANION_FOR_PRODUCER: Record<string, AgentKind> = {
 
 const COMPANION_KINDS: ReadonlySet<string> = new Set(COMPANION_ARCHETYPES.map((a) => a.kind))
 
-/** The companion kind that depends on a producer kind, or undefined if it has none. */
+/**
+ * Reactive read-model of the deployment's CUSTOM companion pairings (companion kind → the
+ * producer kinds it reviews), kept in sync by the agents store from the snapshot's
+ * `customAgentKinds[].companionTargets`.
+ *
+ * A `shallowRef` for the same reason {@link customAgentKindMeta} is one: the pure lookups below
+ * must resolve a registered companion, and re-render when the catalog changes, without importing
+ * the store (circular) or mutating the frozen built-in map. Empty until the store first
+ * populates it, so a custom companion degrades to "not a companion" (an ordinary palette block),
+ * exactly as before registration.
+ */
+const customCompanionTargets = shallowRef<Record<string, readonly AgentKind[]>>({})
+
+/**
+ * The same projection INVERTED: producer kind → the companion that reviews it, the direction
+ * {@link companionForProducer} actually asks in. Derived rather than scanned per call, because
+ * that lookup runs once per step of every pipeline the builder renders.
+ *
+ * Inverting is also where an ambiguity has to be RESOLVED rather than left to iteration order:
+ * two registered companions may both claim a producer, and only one toggle can hang off it.
+ * First registration wins, stated here once, instead of "whichever `Object.entries` reached
+ * first" being the answer at each call site.
+ */
+const customCompanionByProducer = computed<Record<string, AgentKind>>(() => {
+  const out: Record<string, AgentKind> = {}
+  for (const [companion, targets] of Object.entries(customCompanionTargets.value)) {
+    for (const producer of targets) if (!(producer in out)) out[producer] = companion
+  }
+  return out
+})
+
+/** Replace the custom companion projection (called only by the agents store). */
+export function setCustomCompanionTargets(map: Record<string, readonly AgentKind[]>): void {
+  customCompanionTargets.value = map
+}
+
+/** Test-only: clear the custom companion projection so a spec starts from built-ins only. */
+export function __resetCustomCompanionTargetsForTest(): void {
+  customCompanionTargets.value = {}
+}
+
+/**
+ * The companion kind that depends on a producer kind, or undefined if it has none.
+ *
+ * Built-ins win. A deployment cannot re-point `coder` at its own reviewer by registering one,
+ * for the same reason `agentKindMeta`'s precedence puts built-ins first and the backend registry
+ * never shadows a built-in kind: the shipped pairing is the one the engine's own pipelines rely
+ * on, and a silent re-point would change what every stock pipeline does.
+ */
 export function companionForProducer(kind: string): AgentKind | undefined {
-  return COMPANION_FOR_PRODUCER[kind]
+  return COMPANION_FOR_PRODUCER[kind] ?? customCompanionByProducer.value[kind]
 }
 
 /**
  * Whether a kind is a dependent producer-companion (reviewer / architect-companion /
- * spec-companion) — rendered as a toggle on its producer, not a standalone palette block.
- * Distinct from `pipelineRender`'s `isCompanionKind`, which also counts the Tester's `fixer`.
+ * spec-companion, or a deployment's own): rendered as a toggle on its producer, not a
+ * standalone palette block. Distinct from `pipelineRender`'s `isCompanionKind`, which also
+ * counts the Tester's `fixer`.
  */
 export function isProducerCompanion(kind: string): boolean {
-  return COMPANION_KINDS.has(kind)
+  return COMPANION_KINDS.has(kind) || kind in customCompanionTargets.value
 }
 
-export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(
-  [...AGENT_ARCHETYPES, ...COMPANION_ARCHETYPES].map((a) => [a.kind, a]),
+/**
+ * The BUILT-IN palette + companion catalog, keyed by kind. Frozen and never
+ * mutated: custom (deployment/consumer) kinds no longer reach into this const —
+ * they flow through the modular `agentKinds` slot / the workspace-capability
+ * remote manifest and land in {@link customAgentKindMeta} instead (slice 2 of
+ * the modular-vue adoption). Freezing turns any stray write into a loud runtime
+ * error rather than silently conflating built-ins with custom kinds.
+ */
+export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.freeze(
+  Object.fromEntries([...AGENT_ARCHETYPES, ...COMPANION_ARCHETYPES].map((a) => [a.kind, a])),
 ) as Record<AgentKind, AgentArchetype>
+
+/**
+ * Reactive read-model of the deployment's CUSTOM agent kinds (consumer-slot +
+ * backend remote-manifest), kept in sync by the agents store from the resolved
+ * modular `agentKinds` slot. The slot/manifest is the source of truth; this
+ * `shallowRef` is its synchronous projection so the pure kind-meta lookups below
+ * ({@link agentKindMeta} / {@link isKnownAgentKind}) resolve a custom kind — and
+ * re-render when the catalog changes — WITHOUT importing the store (which would
+ * be circular) or mutating {@link AGENT_BY_KIND}. Empty until the store first
+ * populates it, so an unknown custom kind degrades to the generic fallback,
+ * exactly as before registration.
+ */
+const customAgentKindMeta = shallowRef<Record<string, AgentArchetype>>({})
+
+/**
+ * Replace the custom-kind projection (called only by the agents store, whenever
+ * its merged custom catalog changes). Whole-map replace, not per-key mutation.
+ */
+export function setCustomAgentKindMeta(map: Record<string, AgentArchetype>): void {
+  customAgentKindMeta.value = map
+}
+
+/** Test-only: clear the custom-kind projection so a spec starts from built-ins only. */
+export function __resetCustomAgentKindMetaForTest(): void {
+  customAgentKindMeta.value = {}
+}
 
 /**
  * Agent kinds eligible for the optional consensus mechanism (the pipeline builder shows an
  * "Enable Consensus" toggle for these). Mirrors the backend default-eligible set assigned by
  * `registerConsensusTraits()` in `@cat-factory/consensus` — hand-synced, like the other
- * frontend mirrors. In CONSENSUS mode `architect`/`analysis` reason over the provided context
- * rather than exploring a checkout (a deliberate trade, gated by the task estimate).
+ * frontend mirrors. In CONSENSUS mode a container-backed kind (`architect`/`analysis`, and the
+ * checkout-exploring reviewers) reasons over the provided context rather than exploring a
+ * checkout (a deliberate trade, gated by the task estimate); the review kinds carry the bulk of
+ * the value, since a review is a judgement and a panel judges better than one model.
  */
 export const CONSENSUS_ELIGIBLE_KINDS: ReadonlySet<string> = new Set([
   'architect',
   'analysis',
   'reviewer',
+  'pr-reviewer',
+  'doc-reviewer',
+  'architect-companion',
+  'spec-companion',
   'task-estimator',
 ])
 
@@ -315,76 +598,106 @@ export function isConsensusEligibleKind(kind: string): boolean {
 }
 
 /**
- * Whether an agent kind is one of the Tester gate kinds (API or UI). Mirrors the backend
- * `isTesterKind`; used by the pipeline builder to surface the test quality-control companion
- * toggle only on Tester steps.
+ * Whether an agent kind is one of the Tester gate kinds (API or UI). Used by the pipeline builder
+ * to surface the test quality-control companion toggle only on Tester steps.
+ *
+ * Re-exported from `@cat-factory/contracts` rather than mirrored: it used to be a hand-written
+ * copy of the engine's rule with the two slugs spelled out as literals, which is the shape that
+ * silently stops matching the day a third tester kind ships.
  */
-export function isTesterKind(kind: string): boolean {
-  return kind === 'tester-api' || kind === 'tester-ui'
-}
+export { isTesterKind } from '@cat-factory/contracts'
 
 /**
  * Display metadata for the engine-driven "system" kinds — the gate/automation
- * steps (blueprint mapper, conflicts gate + resolver, CI gate + fixer, merger)
- * that appear in seeded pipelines and run timelines but are NOT user-addable
- * palette archetypes, so they're intentionally absent from {@link AGENT_ARCHETYPES}
+ * steps (conflicts gate + resolver, CI gate + fixer, merger) that appear in
+ * seeded pipelines and run timelines but are NOT user-addable palette
+ * archetypes, so they're intentionally absent from {@link AGENT_ARCHETYPES}
  * / {@link AGENT_BY_KIND}. Looked up through {@link agentKindMeta}.
+ *
+ * An entry here also SHADOWS the backend's own catalog: the agents store drops any
+ * registered kind whose id appears in this map (see `customArchetypes`), so listing a
+ * kind that declares `presentation` silently overrides the deployment's decision to
+ * offer it. That is how `spec-writer` and `blueprints` stayed out of the palette while
+ * both collapse docs promised them as opt-in builder steps, and it took
+ * `spec-companion` with them: a companion renders as a toggle on its producer, so a
+ * shadowed producer removes both. Add a kind here only when the ENGINE decides the
+ * step exists — a gate it inserts, a helper it escalates to — and never when the
+ * backend registers it as a palette block.
  */
 export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
-  'spec-writer': {
-    kind: 'spec-writer',
-    label: 'Spec Writer',
-    icon: 'i-lucide-clipboard-list',
-    color: '#c084fc',
+  // The read-only Challenge Investigator: dispatched off a parked `pr-reviewer` step when a human
+  // challenges a finding, it re-examines that ONE finding against the full source and upholds
+  // (strengthening) or retracts it. Never a palette block; modelled here purely so it is a
+  // configurable per-kind default in the Model Defaults panel — a workspace can point it at a
+  // different (stronger) model than the reviewer. Its output renders in the pr-review window.
+  'challenge-investigator': {
+    kind: 'challenge-investigator',
+    tier: 'advanced',
+    label: 'Challenge Investigator',
+    icon: 'i-lucide-gavel',
+    color: 'var(--app-hue-indigo)',
     description:
-      "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
+      'Re-examines a single challenged PR-review finding against the full source, then upholds ' +
+      '(strengthening it) or retracts it with a justification. Configurable separately from the reviewer.',
   },
-  blueprints: {
-    kind: 'blueprints',
-    label: 'Blueprinter',
-    icon: 'i-lucide-map',
-    color: '#22d3ee',
-    description: 'Maps the repository into the service → modules blueprint.',
-  },
-  // The single environment provisioner: an operational (non-LLM) step that stands up the ephemeral
-  // environment the tester / human-test gate run against for a kubernetes/custom service, and is a
-  // fast no-op for docker-compose / infraless. Seeded before the first tester/human-test step in the
-  // built-in pipelines, so it needs display metadata (else it renders as a generic gray "Agent").
-  deployer: {
-    kind: 'deployer',
-    label: 'Deployer',
-    icon: 'i-lucide-cloud-upload',
-    color: '#34d399',
+  // The two agent kinds a REPO BOOTSTRAP run files its telemetry under. Neither is placeable
+  // and neither is a model-routing key (the bootstrapper runs on the `architect` routing, the
+  // advisor on the workspace default): they are here so the observability panel a bootstrap run
+  // opens names what actually ran. Without them both roll up as the generic "Agent" fallback,
+  // which puts the survey's model calls and the apply container's under one unnamed heading on
+  // the one panel whose job is telling them apart.
+  //
+  // Keyed off the contracts constants the BACKEND stamps on those rows, never a second spelling:
+  // a rename that missed one side would fall back to the unnamed heading with nothing failing.
+  [REPO_BOOTSTRAP_AGENT_KIND]: {
+    kind: REPO_BOOTSTRAP_AGENT_KIND,
+    tier: 'advanced',
+    label: 'Repo Bootstrapper',
+    icon: 'i-lucide-package-plus',
+    color: 'var(--app-hue-amber)',
     description:
-      'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless.',
+      'Scaffolds a new repository from a reference architecture, or writes a new service into a monorepo and opens the pull request.',
   },
-  // The Initiative Planning pipeline's two steps. Only runnable on an initiative
+  [MONOREPO_ADOPTION_AGENT_KIND]: {
+    kind: MONOREPO_ADOPTION_AGENT_KIND,
+    tier: 'advanced',
+    label: 'Adoption Advisor',
+    icon: 'i-lucide-scale',
+    color: 'var(--app-hue-amber)',
+    description:
+      'Reads a monorepo and the reference template and proposes what a new service should adopt from each. Its suggestion is the one a human settles before anything is written.',
+  },
+  // The Initiative Planning pipeline's steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata
-  // system kinds, never palette archetypes.
+  // system kinds, never palette archetypes. The analyst runs FIRST, ahead of the
+  // interviewer, so the interview covers only what the code cannot answer.
   'initiative-interviewer': {
     kind: 'initiative-interviewer',
+    tier: 'advanced',
     label: 'Initiative Interviewer',
     icon: 'i-lucide-messages-square',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
-      'Interviews you on the goals, scope and constraints of the initiative, then synthesizes the agreed brief the analyst and planner build on.',
+      'Interviews you on the goals, scope and constraints the codebase cannot answer, then synthesizes the agreed brief the planner builds on.',
     // Opens the dedicated planning Q&A window (answer / continue / proceed) while parked.
     resultView: 'initiative-planning',
   },
   'initiative-analyst': {
     kind: 'initiative-analyst',
+    tier: 'advanced',
     label: 'Initiative Analyst',
     icon: 'i-lucide-microscope',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
-      'Explores the codebase and writes an analysis (architecture, touch points, risks) that grounds the plan. Makes no changes.',
+      'Explores the codebase first and writes an analysis (architecture, touch points, risks) that grounds both the interview and the plan. Makes no changes.',
     resultView: 'initiative-tracker',
   },
   'initiative-planner': {
     kind: 'initiative-planner',
+    tier: 'advanced',
     label: 'Initiative Planner',
     icon: 'i-lucide-milestone',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       "Explores the codebase and drafts the initiative's multi-phase plan (items, estimates, concurrency + pipeline policy) for approval.",
     // Opens the dedicated tracker window (phases / items / policy) instead of the
@@ -393,9 +706,10 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'initiative-committer': {
     kind: 'initiative-committer',
+    tier: 'advanced',
     label: 'Initiative Committer',
     icon: 'i-lucide-git-commit-horizontal',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Persists the approved plan and commits the in-repo tracker (docs/initiatives/<slug>/), arming the execution loop. Runs no model.',
     resultView: 'initiative-tracker',
@@ -405,9 +719,10 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // for run-timeline / saved-pipeline display rather than in AGENT_ARCHETYPES.
   analysis: {
     kind: 'analysis',
+    tier: 'intermediate',
     label: 'Analyst',
     icon: 'i-lucide-search-code',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Audits the repository read-only and emits a prioritized findings report (drives the tech-debt pipeline).',
   },
@@ -416,9 +731,10 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // tech-debt pipeline, so it is a display-metadata system kind, not a palette archetype.
   tracker: {
     kind: 'tracker',
+    tier: 'advanced',
     label: 'Issue Tracker',
     icon: 'i-lucide-ticket',
-    color: '#fb923c',
+    color: 'var(--app-hue-orange)',
     description:
       'Files a tracker ticket (GitHub issue / Jira) from the analysis before work starts.',
   },
@@ -429,17 +745,19 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // `tracker`), not a palette archetype.
   'bug-intake': {
     kind: 'bug-intake',
+    tier: 'advanced',
     label: 'Bug Intake',
     icon: 'i-lucide-inbox',
-    color: '#fb923c',
+    color: 'var(--app-hue-orange)',
     description:
       'Pulls one matching open issue from the configured tracker board, marks it in-progress, and seeds the run from it.',
   },
   conflicts: {
     kind: 'conflicts',
+    tier: 'intermediate',
     label: 'Conflicts Gate',
     icon: 'i-lucide-git-merge',
-    color: '#f97316',
+    color: 'var(--app-hue-orange)',
     description: 'Ensures the PR is mergeable with its base, looping the resolver on conflicts.',
     // Opens the dedicated gate window (verdict, attempts, conflict detail) instead of
     // the generic prose step-detail panel. Shared with the CI gate.
@@ -447,16 +765,18 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'conflict-resolver': {
     kind: 'conflict-resolver',
+    tier: 'intermediate',
     label: 'Conflict Resolver',
     icon: 'i-lucide-git-merge',
-    color: '#f97316',
+    color: 'var(--app-hue-orange)',
     description: 'Merges the base in and resolves conflicts on the PR branch.',
   },
   ci: {
     kind: 'ci',
+    tier: 'basic',
     label: 'CI Gate',
     icon: 'i-lucide-shield-check',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     description: 'Gates the PR on green CI, looping the CI fixer on failure.',
     // Opens the dedicated gate window (verdict, attempts, the failing checks) instead
     // of the generic prose step-detail panel. Shared with the conflicts gate.
@@ -468,9 +788,10 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // is a registered kind, so it arrives via the workspace snapshot's `customAgentKinds`.
   'doc-quality': {
     kind: 'doc-quality',
+    tier: 'intermediate',
     label: 'Doc Quality Gate',
     icon: 'i-lucide-file-check-2',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Checks the drafted document for required sections, placeholders, links and heading structure, looping the doc fixer on problems.',
     // Opens the dedicated gate window (verdict, attempts, the document findings).
@@ -478,24 +799,39 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'ci-fixer': {
     kind: 'ci-fixer',
+    tier: 'basic',
     label: 'CI Fixer',
     icon: 'i-lucide-wrench',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     description: 'Fixes failing CI and pushes back to the PR branch.',
+  },
+  // The deployer's escalation, and the ci-fixer's shape one step earlier in the pipeline: never a
+  // palette block (nobody authors it into a pipeline), but it runs an LLM over the checkout, so it
+  // needs display metadata for timelines and a pinnable per-workspace model.
+  'deploy-fixer': {
+    kind: 'deploy-fixer',
+    tier: 'basic',
+    label: 'Deploy Fixer',
+    icon: 'i-lucide-server-cog',
+    color: 'var(--app-hue-sky)',
+    description:
+      'Repairs the deployment files a failed provision was rejected for and pushes back to the PR branch, then the environment is stood up again.',
   },
   fixer: {
     kind: 'fixer',
+    tier: 'basic',
     label: 'Fixer',
     icon: 'i-lucide-wrench',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     description:
       "Tester's companion: fixes the bugs the tester found and pushes back, then the tester re-runs.",
   },
   merger: {
     kind: 'merger',
+    tier: 'basic',
     label: 'Merger',
     icon: 'i-lucide-git-pull-request',
-    color: '#a3e635',
+    color: 'var(--app-hue-lime)',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
     // The merger's verdict is structured (scores + the engine's auto-merge / review
     // decision), so it opens a dedicated result view instead of the raw-JSON prose panel.
@@ -503,9 +839,10 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'human-review': {
     kind: 'human-review',
+    tier: 'basic',
     label: 'Human Review Gate',
     icon: 'i-lucide-users',
-    color: '#c084fc',
+    color: 'var(--app-hue-purple)',
     category: 'gates',
     description:
       'Waits for a human code review on the PR, looping the fixer to address comments; advances once approved with no unresolved threads.',
@@ -518,11 +855,30 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // so it needs display metadata here and a per-workspace model in Model Configuration.
   kaizen: {
     kind: 'kaizen',
+    tier: 'advanced',
     label: 'Kaizen',
     icon: 'i-lucide-sparkles',
-    color: '#2dd4bf',
+    color: 'var(--app-hue-teal)',
     description:
       'Grades each completed agent step (smooth vs chaotic) after a run and recommends prompt/model improvements.',
+  },
+  // The in-app assistant routes ONE typed sentence to one action from a closed catalog. Not a
+  // pipeline step (it declares no `category`, so it is never in the palette), but it runs an LLM
+  // on every request, so it needs display metadata here and a per-workspace model in Model
+  // Configuration. Without an entry it inherits the preset's base model like any unnamed kind,
+  // which is the right default; what it lacked was the row an operator pins a different one on,
+  // and a label anywhere a spend rollup names the kind that spent it.
+  assistant: {
+    kind: 'assistant',
+    // Intermediate, not advanced like `kaizen`: the assistant is a surface a person OPENS and
+    // spends on deliberately, several times a day, where Kaizen grades in the background on its
+    // own schedule. A kind whose cost someone can feel should not sit two levels down.
+    tier: 'intermediate',
+    label: 'Assistant',
+    icon: 'i-lucide-sparkles',
+    color: 'var(--app-hue-sky)',
+    description:
+      'Routes a typed request to one action the platform performs on the board (declare a dependency, add a service from a repository, file a task from a tracker issue).',
   },
   // A polling gate (no model of its own) that watches the released PR's observability
   // signals after merge and escalates to the on-call agent on a regression. NOT in any
@@ -531,9 +887,14 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // but it still needs display metadata here so timelines/saved pipelines render it.
   'post-release-health': {
     kind: 'post-release-health',
+    // Intermediate rather than advanced: the palette already offers this gate ONLY when the
+    // workspace has an observability integration connected, and that connection is a stronger
+    // statement of intent than the tier — burying a gate the operator just wired two levels
+    // down would hide the capability they came for.
+    tier: 'intermediate',
     label: 'Post-Release Health',
     icon: 'i-lucide-activity',
-    color: '#f43f5e',
+    color: 'var(--app-hue-rose)',
     category: 'gates',
     description:
       'Watches the released PR’s Datadog monitors/SLOs after merge and escalates to the on-call agent on a regression.',
@@ -560,14 +921,19 @@ export const OBSERVABILITY_GATE_ARCHETYPE: AgentArchetype =
  */
 export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
   ...[
-    'spec-writer',
-    'blueprints',
     'initiative-planner',
     'conflict-resolver',
     'ci-fixer',
+    'deploy-fixer',
     'fixer',
     'merger',
     'kaizen',
+    // The PR-review Challenge Investigator — pinnable to its own (stronger) model, separately
+    // from the reviewer that produced the findings.
+    'challenge-investigator',
+    // The in-app assistant: one inline model call per typed request, on the workspace's preset
+    // like every other kind, and pinnable away from it here.
+    'assistant',
   ].map((kind) => SYSTEM_AGENT_META[kind]!),
   // Companions run LLMs but aren't palette-addable (they're producer toggles), so include
   // them here to keep their per-workspace default model pinnable in the Model Defaults panel.
@@ -578,63 +944,215 @@ export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
 const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {
   label: 'Agent',
   icon: 'i-lucide-bot',
-  color: '#94a3b8',
+  color: 'var(--app-hue-slate)',
   description: 'Agent step.',
 }
 
 /**
- * Resolve display metadata for ANY agent kind — a palette archetype (incl. custom
- * agents registered into {@link AGENT_BY_KIND}), an engine system kind, or an
- * unknown one — ALWAYS returning a usable icon/label/color. This is the single
- * lookup every pipeline / run renderer should use so a kind missing from the
- * archetype map (e.g. `ci`/`merger`/`blueprints` in a seeded pipeline) can never
- * blow up a component with an undefined access.
+ * Resolve display metadata for ANY agent kind — a built-in palette archetype
+ * ({@link AGENT_BY_KIND}), an engine system kind ({@link SYSTEM_AGENT_META}), a
+ * deployment CUSTOM kind (projected from the modular `agentKinds` slot into
+ * {@link customAgentKindMeta} by the agents store), or an unknown one — ALWAYS
+ * returning a usable icon/label/color. This is the single lookup every pipeline
+ * / run renderer should use so a kind missing from the archetype map (e.g.
+ * `ci`/`merger` in a seeded pipeline) can never blow up a component
+ * with an undefined access. Reading `customAgentKindMeta` reactively means a
+ * component computed re-runs when the custom catalog changes.
  */
 export function agentKindMeta(kind: string): AgentArchetype {
   return (
     AGENT_BY_KIND[kind as AgentKind] ??
-    SYSTEM_AGENT_META[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
+    SYSTEM_AGENT_META[kind] ??
+    customAgentKindMeta.value[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
   )
 }
 
 /**
- * Whether an agent kind is actually known to this build — a palette archetype or companion
- * ({@link AGENT_BY_KIND}, which deployment custom kinds are merged into via
- * `useAgentsStore().registerCustomKinds`), or an engine system/gate kind
- * ({@link SYSTEM_AGENT_META}). Unlike {@link agentKindMeta} (which always returns a usable
- * fallback so renderers never crash), this returns `false` for an unknown kind — used to flag
- * a pipeline that references a nonexistent agent. Call AFTER custom kinds are registered.
+ * Whether the builder may offer a SKIP AXIS (an estimate gate, a run condition) on this kind:
+ * false only where this build KNOWS the answer is no.
+ *
+ * A built-in kind is answered by the shared `BUILTIN_GATABLE_KINDS`. A DEPLOYMENT-registered kind
+ * carries its own `gatable` flag in the agent-kind registry, which the SPA cannot see, so it is
+ * offered rather than withheld — the same direction the pipeline-health advisory takes the
+ * asymmetry, and for the sharper reason: over-offering costs a 422 with an explanatory message at
+ * save, while under-offering silently removes a capability the deployment declared, with no route
+ * to it and nothing on screen to say why.
+ */
+export function mayCarrySkipAxis(kind: string): boolean {
+  const isBuiltin = kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+  return isBuiltin ? isBuiltinGatableKind(kind) : true
+}
+
+/**
+ * Whether an agent kind is actually known to this build — a built-in palette
+ * archetype or companion ({@link AGENT_BY_KIND}), an engine system/gate kind
+ * ({@link SYSTEM_AGENT_META}), or a deployment CUSTOM kind projected from the
+ * modular `agentKinds` slot ({@link customAgentKindMeta}). Unlike
+ * {@link agentKindMeta} (which always returns a usable fallback so renderers
+ * never crash), this returns `false` for an unknown kind — used to flag a
+ * pipeline that references a nonexistent agent. Call AFTER the workspace
+ * snapshot has hydrated the custom kinds.
  */
 export function isKnownAgentKind(kind: string): boolean {
-  return kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+  return kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META || kind in customAgentKindMeta.value
+}
+
+// ---------------------------------------------------------------------------
+// Task-type presentation (frontend-extension-mechanism initiative, slice B) — the exact twin of
+// the agent-kind read-model above: a frozen BUILT-IN map + a reactive CUSTOM projection fed by the
+// task-types store, resolved through {@link taskTypeMeta} so the card badge + create-task picker
+// render a built-in OR a deployment-registered custom type — and an UNREGISTERED namespaced type
+// (stale data after an extension was removed) degrades to the `feature` presentation, never a crash.
+// ---------------------------------------------------------------------------
+
+/**
+ * The BUILT-IN task-type presentations, keyed by type. Icons mirror the create-task picker's old
+ * hardcoded list; `labelKey` is the i18n key the renderer resolves (built-in labels are localized,
+ * unlike a custom type's literal wire label). `recurring` is not human-creatable but is stamped on
+ * the reused schedule block, so it needs a badge too.
+ */
+export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
+  feature: {
+    taskType: 'feature',
+    icon: 'i-lucide-sparkles',
+    color: 'var(--app-hue-sky)',
+    labelKey: 'board.addTask.types.feature',
+  },
+  bug: {
+    taskType: 'bug',
+    icon: 'i-lucide-bug',
+    color: 'var(--app-hue-red)',
+    labelKey: 'board.addTask.types.bug',
+  },
+  'bug-fishing': {
+    taskType: 'bug-fishing',
+    icon: 'i-lucide-fish',
+    color: 'var(--app-hue-sky)',
+    labelKey: 'board.addTask.types.bugFishing',
+  },
+  document: {
+    taskType: 'document',
+    icon: 'i-lucide-file-text',
+    color: 'var(--app-hue-purple)',
+    labelKey: 'board.addTask.types.document',
+  },
+  spike: {
+    taskType: 'spike',
+    icon: 'i-lucide-flask-conical',
+    color: 'var(--app-hue-amber)',
+    labelKey: 'board.addTask.types.spike',
+  },
+  review: {
+    taskType: 'review',
+    icon: 'i-lucide-clipboard-check',
+    color: 'var(--app-hue-emerald)',
+    labelKey: 'board.addTask.types.review',
+  },
+  // Filed by an integration against a pull request it already has open; the create form does not
+  // offer it, but the card still needs a badge.
+  'resolve-conflicts': {
+    taskType: 'resolve-conflicts',
+    icon: 'i-lucide-git-merge',
+    color: 'var(--app-hue-emerald)',
+    labelKey: 'board.addTask.types.resolveConflicts',
+  },
+  ralph: {
+    taskType: 'ralph',
+    icon: 'i-lucide-infinity',
+    color: 'var(--app-hue-violet)',
+    labelKey: 'board.addTask.types.ralph',
+  },
+  media: {
+    taskType: 'media',
+    icon: 'i-lucide-image-plus',
+    color: 'var(--app-hue-pink)',
+    labelKey: 'board.addTask.types.media',
+  },
+  recurring: {
+    taskType: 'recurring',
+    icon: 'i-lucide-repeat',
+    color: 'var(--app-hue-slate)',
+    labelKey: 'board.addTask.types.recurring',
+  },
+}
+
+/**
+ * Reactive read-model of the deployment's CUSTOM task types (consumer-slot + backend
+ * remote-manifest), kept in sync by the task-types store — the exact twin of
+ * {@link customAgentKindMeta}. The store is the source of truth; this `shallowRef` is its
+ * synchronous projection so {@link taskTypeMeta} / {@link isKnownTaskType} resolve a custom type
+ * WITHOUT importing the store (circular) or mutating {@link TASK_TYPE_META}.
+ */
+const customTaskTypeMeta = shallowRef<Record<string, TaskTypeMeta>>({})
+
+/** Replace the custom task-type projection (called only by the task-types store). */
+export function setCustomTaskTypeMeta(map: Record<string, TaskTypeMeta>): void {
+  customTaskTypeMeta.value = map
+}
+
+/** Test-only: clear the custom task-type projection so a spec starts from built-ins only. */
+export function __resetCustomTaskTypeMetaForTest(): void {
+  customTaskTypeMeta.value = {}
+}
+
+/**
+ * Resolve display metadata for ANY task type — a BUILT-IN ({@link TASK_TYPE_META}), a deployment
+ * CUSTOM type (projected into {@link customTaskTypeMeta} by the task-types store), or an
+ * UNREGISTERED namespaced one (stale data after its extension was removed) — ALWAYS returning a
+ * usable icon/color/label. An unregistered/unknown type falls back to the `feature` presentation
+ * (its icon/color) but keeps the raw id as its literal label, so a leftover string renders a badge
+ * instead of breaking the card. Reading `customTaskTypeMeta` reactively means a component computed
+ * re-runs when the custom catalog changes.
+ */
+export function taskTypeMeta(taskType: string | undefined): TaskTypeMeta {
+  if (!taskType) return TASK_TYPE_META.feature!
+  return (
+    TASK_TYPE_META[taskType] ??
+    customTaskTypeMeta.value[taskType] ?? {
+      taskType,
+      icon: TASK_TYPE_META.feature!.icon,
+      color: TASK_TYPE_META.feature!.color,
+      // Unregistered namespaced type: no i18n key, so show its raw id rather than a blank badge.
+      label: taskType,
+    }
+  )
+}
+
+/** Whether a task type is known to this build — a built-in or a projected custom type. */
+export function isKnownTaskType(taskType: string): boolean {
+  return taskType in TASK_TYPE_META || taskType in customTaskTypeMeta.value
 }
 
 type BlockTypeMeta = { label: string; icon: string; accent: string }
 
 /** Visual metadata for each architecture block type. */
 export const BLOCK_TYPE_META: Record<BlockType, BlockTypeMeta> = {
-  frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: '#60a5fa' },
-  service: { label: 'Service', icon: 'i-lucide-server', accent: '#a78bfa' },
-  library: { label: 'Library', icon: 'i-lucide-package', accent: '#f472b6' },
-  document: { label: 'Document repository', icon: 'i-lucide-book-text', accent: '#c084fc' },
-  api: { label: 'API', icon: 'i-lucide-route', accent: '#22d3ee' },
-  database: { label: 'Database', icon: 'i-lucide-database', accent: '#34d399' },
-  queue: { label: 'Queue', icon: 'i-lucide-list-ordered', accent: '#fbbf24' },
+  frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: 'var(--app-hue-blue)' },
+  service: { label: 'Service', icon: 'i-lucide-server', accent: 'var(--app-hue-violet)' },
+  library: { label: 'Library', icon: 'i-lucide-package', accent: 'var(--app-hue-pink)' },
+  document: {
+    label: 'Document repository',
+    icon: 'i-lucide-book-text',
+    accent: 'var(--app-hue-purple)',
+  },
+  api: { label: 'API', icon: 'i-lucide-route', accent: 'var(--app-hue-cyan)' },
+  database: { label: 'Database', icon: 'i-lucide-database', accent: 'var(--app-hue-emerald)' },
+  queue: { label: 'Queue', icon: 'i-lucide-list-ordered', accent: 'var(--app-hue-amber)' },
   integration: {
     label: 'Integration',
     icon: 'i-lucide-workflow',
-    accent: '#fb923c',
+    accent: 'var(--app-hue-orange)',
   },
   // Not user-creatable, but still emitted by the backend (the seeded third-party
   // service and the environments integration), so they need display metadata.
-  external: { label: 'External', icon: 'i-lucide-globe', accent: '#94a3b8' },
-  environment: { label: 'Environment', icon: 'i-lucide-box', accent: '#2dd4bf' },
+  external: { label: 'External', icon: 'i-lucide-globe', accent: 'var(--app-hue-slate)' },
+  environment: { label: 'Environment', icon: 'i-lucide-box', accent: 'var(--app-hue-teal)' },
 }
 
 const FALLBACK_BLOCK_TYPE_META: BlockTypeMeta = {
   label: 'Block',
   icon: 'i-lucide-box',
-  accent: '#94a3b8',
+  accent: 'var(--app-hue-slate)',
 }
 
 /**
@@ -648,23 +1166,23 @@ export function blockTypeMeta(type: BlockType): BlockTypeMeta {
 /** Color + iconography for each block status. */
 export const STATUS_META: Record<
   BlockStatus,
-  { label: string; color: string; chip: string; icon: string }
+  { label: string; color: string; chip: BadgeColor; icon: string }
 > = {
   planned: {
     label: 'Planned',
-    color: '#64748b',
+    color: 'var(--ui-text-muted)',
     chip: 'neutral',
     icon: 'i-lucide-circle-dashed',
   },
   ready: {
     label: 'Ready',
-    color: '#3b82f6',
+    color: 'var(--ui-info)',
     chip: 'info',
     icon: 'i-lucide-circle-play',
   },
   in_progress: {
     label: 'In progress',
-    color: '#6366f1',
+    color: 'var(--ui-primary)',
     chip: 'primary',
     icon: 'i-lucide-loader',
   },
@@ -674,26 +1192,26 @@ export const STATUS_META: Record<
     // specific reason (TaskCard, the inspector) show the precise label/action;
     // this fallback must NOT imply a decision is the only thing it can be.
     label: 'Needs attention',
-    color: '#f59e0b',
+    color: 'var(--ui-warning)',
     chip: 'warning',
     icon: 'i-lucide-alert-triangle',
   },
   pr_ready: {
     label: 'PR ready',
-    color: '#22c55e',
+    color: 'var(--ui-success)',
     chip: 'success',
     icon: 'i-lucide-git-pull-request',
   },
   done: {
     label: 'Done',
-    color: '#16a34a',
+    color: 'var(--ui-text-muted)',
     chip: 'success',
     icon: 'i-lucide-circle-check',
   },
 }
 
 /** Visual metadata for module sub-frames. */
-export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
+export const MODULE_META = { icon: 'i-lucide-package', color: 'var(--app-hue-violet)' }
 
 /**
  * Display metadata for the future-looking Follow-up companion — a per-`coder`-step toggle
@@ -705,7 +1223,7 @@ export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
 export const FOLLOW_UP_COMPANION_META = {
   label: 'Follow-up companion',
   icon: 'i-lucide-compass',
-  color: '#f472b6',
+  color: 'var(--app-hue-pink)',
 }
 
 /**
@@ -716,18 +1234,5 @@ export const FOLLOW_UP_COMPANION_META = {
 export const FORK_DECISION_META = {
   label: 'Implementation-fork decision',
   icon: 'i-lucide-git-fork',
-  color: '#a78bfa',
-}
-
-/**
- * Whether a Coder step has the Follow-up companion enabled, given the pipeline's per-step
- * `followUps` toggle at index `i`. Enabled by default on a `coder` step (only `false`
- * disables it); ignored on other kinds.
- */
-export function followUpCompanionEnabled(
-  kind: string,
-  followUps: (boolean | null)[] | undefined,
-  i: number,
-): boolean {
-  return kind === 'coder' && followUps?.[i] !== false
+  color: 'var(--app-hue-violet)',
 }

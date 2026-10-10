@@ -1,9 +1,16 @@
 import type {
+  ComposeFileRef,
   EnvironmentManifest,
   EnvironmentStatus,
   RecipeHealthGate,
   RecipeStep,
   StackRecipe,
+} from '@cat-factory/kernel'
+import {
+  describeComposeSource,
+  getErrorMessage,
+  materializedComposePath,
+  normalizeComposeFileRefs,
 } from '@cat-factory/kernel'
 import { parse, stringify } from 'yaml'
 
@@ -67,6 +74,14 @@ export interface ComposeRuntime {
     project: string,
     target: { cloneUrl: string; ref: string; token?: string },
   ): Promise<{ dir: string }>
+  /**
+   * The project's working tree WITHOUT cloning anything — created empty if absent. The repo-less
+   * counterpart of {@link checkout}, for a stack whose compose layers are all supplied inline /
+   * read from other repos and so have no repo of their own to clone: the layers are materialized
+   * into this directory and it becomes `--project-directory`. Optional, paired with
+   * {@link writeCheckoutFile}; a runtime without it can only run stacks that clone.
+   */
+  workingDir?(project: string): Promise<{ dir: string }>
   /**
    * Build-from-source mode only: write the rewritten compose file INTO the checkout (beside the
    * original, so relative paths still resolve) at `relPath` under the project's checkout dir;
@@ -270,7 +285,7 @@ export function composeConfigToManifest(config: ComposeEnvironmentConfig): Envir
     provision: { method: 'POST', pathTemplate: '' },
     response: {},
     ...(config.defaultTtlMs ? { defaultTtlMs: config.defaultTtlMs } : {}),
-    providerConfig: { ...config } as unknown as Record<string, unknown>,
+    providerConfig: { ...config },
   }
 }
 
@@ -711,7 +726,7 @@ function isHostPathSource(source: string): boolean {
 
 /** The build context of a service's `build:` (short string form or long `{ context }`), or null
  * when no `build:` is declared. A `build:` with no explicit context defaults to `.`. */
-export function buildContextSource(build: unknown): string | null {
+function buildContextSource(build: unknown): string | null {
   if (build === undefined) return null
   if (typeof build === 'string') return build || '.'
   if (build && typeof build === 'object') {
@@ -719,6 +734,71 @@ export function buildContextSource(build: unknown): string | null {
     return typeof ctx === 'string' ? ctx : '.'
   }
   return '.'
+}
+
+/**
+ * Collect the unsupported / host-escape issues a single compose `service` raises: cross-file
+ * `extends.file`, a `build:` context, `privileged: true`, bind mounts, and `env_file`s.
+ * `refuseHostPath` encodes the mode's host-path policy (identical to the caller's).
+ */
+function collectServiceComposeIssues(
+  name: string,
+  service: ComposeService,
+  build: boolean,
+  baseDepth: number,
+  refuseHostPath: (source: string) => boolean,
+): string[] {
+  const issues: string[] = []
+  // Cross-file `extends: { file }` merges another file from disk — same bypass as include.
+  const extendsFile =
+    service.extends && typeof service.extends === 'object'
+      ? (service.extends as Record<string, unknown>).file
+      : undefined
+  if (typeof extendsFile === 'string') {
+    issues.push(
+      `service '${name}' uses extends.file ('${extendsFile}') — unsupported (the referenced file is merged by the daemon and bypasses the isolation / host-escape checks)`,
+    )
+  }
+  const buildContext = buildContextSource(service.build)
+  if (buildContext !== null) {
+    if (!build) {
+      issues.push(
+        `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
+      )
+    } else if (escapesCheckout(buildContext, baseDepth)) {
+      issues.push(
+        `service '${name}' builds from a context outside the checkout ('${buildContext}') — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  if (service.privileged === true) {
+    issues.push(`service '${name}' requests privileged: true — refused on the shared host daemon`)
+  }
+  for (const volume of asArray(service.volumes)) {
+    const source = bindMountSource(volume)
+    if (source === null) continue
+    if (!build) {
+      issues.push(
+        `service '${name}' bind-mounts a host path ('${source}') — unsupported (no repo on disk; use a named volume)`,
+      )
+    } else if (escapesCheckout(source, baseDepth)) {
+      issues.push(
+        `service '${name}' bind-mounts a path outside the checkout ('${source}') — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  for (const entry of asArray(service.env_file)) {
+    const path = typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
+    if (typeof path !== 'string') continue
+    if (refuseHostPath(path)) {
+      issues.push(
+        build
+          ? `service '${name}' reads an env_file outside the checkout ('${path}') — refused (host-filesystem escape)`
+          : `service '${name}' reads an env_file ('${path}') — unsupported (no repo on disk)`,
+      )
+    }
+  }
+  return issues
 }
 
 /**
@@ -766,56 +846,7 @@ export function collectUnsupportedComposeRefs(
   }
   for (const [name, service] of Object.entries(servicesOf(doc))) {
     if (!service || typeof service !== 'object') continue
-    // Cross-file `extends: { file }` merges another file from disk — same bypass as include.
-    const extendsFile =
-      service.extends && typeof service.extends === 'object'
-        ? (service.extends as Record<string, unknown>).file
-        : undefined
-    if (typeof extendsFile === 'string') {
-      issues.push(
-        `service '${name}' uses extends.file ('${extendsFile}') — unsupported (the referenced file is merged by the daemon and bypasses the isolation / host-escape checks)`,
-      )
-    }
-    const buildContext = buildContextSource(service.build)
-    if (buildContext !== null) {
-      if (!build) {
-        issues.push(
-          `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
-        )
-      } else if (escapesCheckout(buildContext, baseDepth)) {
-        issues.push(
-          `service '${name}' builds from a context outside the checkout ('${buildContext}') — refused (host-filesystem escape)`,
-        )
-      }
-    }
-    if (service.privileged === true) {
-      issues.push(`service '${name}' requests privileged: true — refused on the shared host daemon`)
-    }
-    for (const volume of asArray(service.volumes)) {
-      const source = bindMountSource(volume)
-      if (source === null) continue
-      if (!build) {
-        issues.push(
-          `service '${name}' bind-mounts a host path ('${source}') — unsupported (no repo on disk; use a named volume)`,
-        )
-      } else if (escapesCheckout(source, baseDepth)) {
-        issues.push(
-          `service '${name}' bind-mounts a path outside the checkout ('${source}') — refused (host-filesystem escape)`,
-        )
-      }
-    }
-    for (const entry of asArray(service.env_file)) {
-      const path =
-        typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
-      if (typeof path !== 'string') continue
-      if (refuseHostPath(path)) {
-        issues.push(
-          build
-            ? `service '${name}' reads an env_file outside the checkout ('${path}') — refused (host-filesystem escape)`
-            : `service '${name}' reads an env_file ('${path}') — unsupported (no repo on disk)`,
-        )
-      }
-    }
+    issues.push(...collectServiceComposeIssues(name, service, build, baseDepth, refuseHostPath))
   }
   // Top-level `secrets:` / `configs:` with a host `file:` source are mounted into the service — the
   // same host-path escape surface as a bind mount, so judge them the same way.
@@ -865,9 +896,7 @@ export function prepareComposeProject(
   } catch (err) {
     return {
       content: renderedText,
-      issues: [
-        `compose file is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
-      ],
+      issues: [`compose file is not valid YAML: ${getErrorMessage(err)}`],
     }
   }
   if (!parsed || typeof parsed !== 'object') {
@@ -965,6 +994,19 @@ export function classifyComposePs(output: string): EnvironmentStatus {
 }
 
 /**
+ * How many containers the project still has, for confirming a teardown.
+ *
+ * Deliberately separate from {@link classifyComposePs}, which maps the SAME output for a LIVE
+ * environment and reads an empty project as `failed` ("nothing left ⇒ the stack is gone/crashed").
+ * That reading is right for an environment that is supposed to be up and exactly inverted for one
+ * that is supposed to be gone, which is why the teardown confirmation counts rows itself rather
+ * than reusing the status mapping.
+ */
+export function countComposePs(output: string): number {
+  return parseComposePsRows(output).length
+}
+
+/**
  * The POSIX directory portion of a repo-relative compose path (`''` for a root-level file):
  * `docker-compose.yml` → `''`, `deploy/docker-compose.yml` → `deploy`. Pure string work (no
  * `node:path`, so the integrations package stays runtime-neutral). Build mode writes the rewritten
@@ -987,6 +1029,27 @@ export function tailOutput(output: string, lines = 12): string {
     .join('\n')
 }
 
+/**
+ * A connect-form failure line for the compose probe: the REMEDY first, then whatever docker said,
+ * on ONE line.
+ *
+ * Both halves are deliberate. The verdict renders as a paragraph that collapses newlines, so a
+ * multi-line stderr spliced mid-sentence ran together into an unreadable wall and glued its own
+ * trailing period onto the next clause; and the remedy is what the operator acts on, so it goes
+ * where it is read rather than after twelve lines of captured output.
+ *
+ * `label` names WHO is speaking, because the two are different faults: a non-zero exit is docker
+ * reporting something, while a throw is the invocation never getting that far.
+ */
+export function composeProbeFailure(
+  remedy: string,
+  output: string,
+  label = 'Docker reported',
+): string {
+  const captured = tailOutput(output).replace(/\s+/g, ' ').trim()
+  return captured ? `${remedy} ${label}: ${captured}` : remedy
+}
+
 // ---------------------------------------------------------------------------
 // STACK RECIPES — multi-`-f` layering, profiles, env-file materialization, ordered setup
 // steps + a terminal health gate. All pure (no I/O): the provider drives the daemon / host
@@ -1000,13 +1063,22 @@ export const DEFAULT_RECIPE_STEP_TIMEOUT_MS = 300_000
 /** Default budget (ms) for a `wait-*` step / a non-`compose-healthy` health gate. */
 export const DEFAULT_RECIPE_WAIT_TIMEOUT_MS = 300_000
 /** Default re-probe interval (ms) for a `wait-*` step / health gate. */
-export const DEFAULT_RECIPE_POLL_INTERVAL_MS = 2_000
+const DEFAULT_RECIPE_POLL_INTERVAL_MS = 2_000
 /** The rewritten-compose filename prefix, written beside each original inside the checkout. */
 const RECIPE_REWRITE_PREFIX = 'cat-factory.'
 
-/** The ordered `-f` compose files a recipe layers: `recipe.composeFiles` when set, else `[composePath]`. */
-export function resolveRecipeComposeFiles(recipe: StackRecipe, composePath: string): string[] {
-  return recipe.composeFiles && recipe.composeFiles.length > 0 ? recipe.composeFiles : [composePath]
+/**
+ * The ordered `-f` compose layers a recipe stacks: `recipe.composeFiles` when set, else the single
+ * `composePath`. Entries stay in their {@link ComposeFileRef} form (a bare path, or an explicit
+ * `inline` / `repo` source) — `planComposeLayers` normalizes and resolves them.
+ */
+export function resolveRecipeComposeFiles(
+  recipe: StackRecipe,
+  composePath: string,
+): ComposeFileRef[] {
+  return recipe.composeFiles && recipe.composeFiles.length > 0
+    ? [...recipe.composeFiles]
+    : [composePath]
 }
 
 /** The filename portion of a repo-relative path (`docker/dev.yml` → `dev.yml`). */
@@ -1055,9 +1127,7 @@ function parseRecipeComposeDoc(input: RecipeComposeInput): { doc?: ComposeDoc; i
     parsed = parse(input.text)
   } catch (err) {
     return {
-      issue: `compose file '${input.path}' is not valid YAML: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      issue: `compose file '${input.path}' is not valid YAML: ${getErrorMessage(err)}`,
     }
   }
   if (!parsed || typeof parsed !== 'object') {
@@ -1129,6 +1199,65 @@ export function prepareRecipeComposeFiles(
 }
 
 /**
+ * Whether a bring-up needs the stack's OWN repo checked out — true as soon as something reads a
+ * COMMITTED file: a `path` compose layer, an env-file template, a `copy-file` source, or a
+ * `compose-exec` seed dump piped from `stdinFile`.
+ *
+ * This is what makes a repo-LESS stack expressible: a stack whose layers are all `inline`
+ * documents / `repo` references needs no clone URL at all, and the bring-up materializes them into
+ * an empty working tree instead. Deliberately NOT triggered by a `host-command` workdir or a
+ * checkout-target `wait-file` — those write or watch, they don't read committed content, so a
+ * repo-less stack can legitimately use them against the materialized tree.
+ */
+export function composeBringUpNeedsRepo(input: {
+  composeFiles: readonly ComposeFileRef[]
+  envFiles?: readonly { template: string; target: string }[]
+  setupSteps?: readonly RecipeStep[]
+}): boolean {
+  if (normalizeComposeFileRefs(input.composeFiles).some((source) => source.kind === 'path')) {
+    return true
+  }
+  if ((input.envFiles ?? []).length > 0) return true
+  return (input.setupSteps ?? []).some(
+    (step) =>
+      step.kind === 'copy-file' || (step.kind === 'compose-exec' && step.stdinFile !== undefined),
+  )
+}
+
+/**
+ * Blocking host-escape issues for an ordered compose LAYER LIST, judged on the checkout-relative
+ * path each layer will be MATERIALIZED at. A generated path is escape-free by construction, but an
+ * `inline` layer may name its own — and that string reaches us from a request body / a deployment's
+ * seed, then becomes the `relPath` of a `writeCheckoutFile` call whose runtime implementation is a
+ * bare `join(checkoutDir, relPath)`. An unguarded `../` there is an arbitrary host-file WRITE with
+ * caller-chosen content, which is a strictly worse primitive than the read-shaped escapes the rest
+ * of {@link recipeCheckoutPathIssues} exists to refuse.
+ *
+ * Judged at `projectDir: ''` — the STRICTEST anchor — deliberately, and not at the list's real
+ * project directory: prefixing a (non-escaping) project dir can only push a path further below the
+ * checkout root, so the strict reading can never miss an escape, and it keeps the verdict
+ * independent of which layer happens to win the anchor. A layer list's escape safety must not
+ * change because an unrelated layer was reordered.
+ *
+ * This is the ONE escape judgement over layer placement: `recipeCheckoutPathIssues` calls it for
+ * the recipe path's pre-daemon preflight, and `planComposeLayers` calls it so the shared-stack
+ * bring-up — which has no preflight of its own — inherits exactly the same rule.
+ */
+export function composeSourceEscapeIssues(refs: readonly ComposeFileRef[]): string[] {
+  const issues: string[] = []
+  for (const [index, ref] of normalizeComposeFileRefs(refs).entries()) {
+    const path = materializedComposePath(ref, index, '')
+    if (escapesCheckout(path, 0)) {
+      issues.push(
+        `compose layer '${describeComposeSource(ref)}' would be written to '${path}', which escapes ` +
+          `the checkout — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  return issues
+}
+
+/**
  * Blocking host-escape issues for a recipe's checkout-relative paths, collected up front so a bad
  * recipe fails BEFORE the daemon is touched (the `prepareComposeProject` posture). Every path that
  * the engine reads/writes/execs INSIDE the checkout — the `composeFiles` layers (written back beside
@@ -1149,10 +1278,9 @@ export function recipeCheckoutPathIssues(recipe: StackRecipe): string[] {
     }
   }
   // The compose-file layers are written back into the checkout + one feeds `--project-directory`, so
-  // an escaping path is a host-filesystem write escape — guarded like every other recipe path.
-  for (const composeFile of recipe.composeFiles ?? []) {
-    check(composeFile, 'compose file')
-  }
+  // an escaping path is a host-filesystem write escape — guarded like every other recipe path,
+  // through the shared {@link composeSourceEscapeIssues} the shared-stack bring-up also runs.
+  issues.push(...composeSourceEscapeIssues(recipe.composeFiles ?? []))
   for (const env of recipe.envFiles ?? []) {
     check(env.template, 'env-file template')
     check(env.target, 'env-file target')

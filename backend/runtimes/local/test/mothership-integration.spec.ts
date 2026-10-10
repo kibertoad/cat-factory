@@ -86,6 +86,12 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
       email: null,
       aud: TOKEN_AUDIENCE.session,
       exp: Date.now() + 60_000,
+      // The session generation the bearer is valid under. `0` is what a freshly created `users`
+      // row carries, and the mothership's `verifySession` compares the claim against that row —
+      // a token carrying no claim at all is refused, which is what makes a revoked bearer stop
+      // working. The forged-session case below deliberately omits it: that one must fail on the
+      // signature, and it would be a weaker test if the missing claim could be what refused it.
+      gen: 0,
     })
   }
 
@@ -109,6 +115,7 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         LOCAL_MOTHERSHIP_TOKEN: token,
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
         LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
+        LOCAL_MOTHERSHIP_TELEMETRY_DB: ':memory:',
         LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
         LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
         // The ephemeral-environment integration wires from ENCRYPTION_KEY (always set here),
@@ -233,9 +240,26 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     // A minimal one-step pipeline (created over the RPC: pipelineRepository.insert).
     const pipeline = await local.call<Pipeline>('POST', `/workspaces/${workspaceId}/pipelines`, {
       name: 'Code only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     expect(pipeline.status).toBe(201)
+
+    // Promote it as the board's in-app default (`pipelineRepository.setDefault` over the RPC). The
+    // round-trip is the point: this is the one pipeline write that touches a SECOND row — the
+    // incumbent it demotes — inside a store transaction a node with no `db` cannot run for itself,
+    // so an un-routed method here would throw the moment an operator named a default.
+    const promoted = await local.call<Pipeline>(
+      'PATCH',
+      `/workspaces/${workspaceId}/pipelines/${pipeline.body.id}/organize`,
+      { isDefault: true },
+    )
+    expect(promoted.status).toBe(200)
+    expect(promoted.body.isDefault).toBe(true)
+    const library = await local.call<Pipeline[]>('GET', `/workspaces/${workspaceId}/pipelines`)
+    expect(library.body.filter((row) => row.isDefault).map((row) => row.id)).toEqual([
+      pipeline.body.id,
+    ])
 
     // Start a run on a seeded task (executionRepository.upsert + blockRepository.update over RPC).
     // In mothership mode the durable SqliteWorkRunner drives it immediately, in-process, reading
@@ -299,6 +323,51 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
       `/workspaces/${workspaceId}/agent-runs/ex_does-not-exist/retry`,
     )
     expect(unknown.status).toBe(404)
+  })
+
+  it('serves the guided-review store over the remote persistence RPC', async () => {
+    // Guided review sessions are org state, allow-listed as remote. The registry the mothership
+    // serves reflects `CoreDependencies`, so a facade that left the repository out of its core
+    // deps would answer `unknown_method` here.
+    async function rpc(method: string, args: unknown[]) {
+      const res = await mothershipApp.fetch(
+        new Request('https://mothership.test/internal/persistence', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${machineToken}`,
+          },
+          body: JSON.stringify({ repo: 'guidedReviewRepository', method, args }),
+        }),
+      )
+      return { status: res.status, body: (await res.json()) as { ok: boolean; value?: unknown } }
+    }
+    const opened = await rpc('openSession', [
+      workspaceId,
+      {
+        id: 'grs_rpc',
+        provider: 'github',
+        repoId: '42',
+        owner: 'acme',
+        repo: 'shop',
+        prNumber: 7,
+        prTitle: 'Add checkout',
+        reviewedHeadSha: 'head1',
+        baseRef: 'main',
+        createdBy: ORG_OWNER.id,
+        createdByKind: 'user',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      'node:node_integration-test',
+    ])
+    expect(opened).toMatchObject({ status: 200, body: { ok: true, value: { id: 'grs_rpc' } } })
+    const listed = await rpc('listSessions', [workspaceId, {}])
+    expect(listed.body.ok).toBe(true)
+    expect((listed.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
+    const paged = await rpc('pageSessions', [workspaceId, {}, { limit: 10 }])
+    expect(paged.body.ok).toBe(true)
+    expect((paged.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
   })
 
   it('mints a machine token from a whitelisted session (scoped to the user accounts)', async () => {

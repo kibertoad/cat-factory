@@ -43,8 +43,17 @@ export interface AppTokenSource {
    * cached token and mints a fresh one — used to defeat the in-memory token cache
    * after a permission/repo-access change on GitHub, since a token keeps its
    * grant-at-mint scopes and a stale one misreports a just-granted access.
+   *
+   * `repositoryIds` narrows the mint to those repos (GitHub's `repository_ids`): the container
+   * dispatch scopes the job token to the repos one run resolved, and the mothership delegation
+   * endpoint scopes it to an installation's App-linked repos. A source with no App key behind it
+   * (a static PAT, the delegating client) narrows what it can and ignores the rest; the engine's
+   * own calls pass none and stay installation-wide.
    */
-  installationToken(installationId: number, opts?: { forceRefresh?: boolean }): Promise<string>
+  installationToken(
+    installationId: number,
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
+  ): Promise<string>
   /**
    * The permissions the installation token actually carries (App ∩ install approval),
    * from the token mint response. This is the authoritative source for an App's write
@@ -91,9 +100,9 @@ export class GitHubAppRegistry {
 
   /**
    * An installation token, minted by the App that owns the installation.
-   * `repositoryIds` narrows the mint to those repos (the mothership GitHub-delegation
-   * path — see `GitHubAppAuth.installationToken`); the engine's own calls pass none
-   * and stay installation-wide.
+   * `repositoryIds` narrows the mint to those repos (the container dispatch's job token and
+   * the mothership GitHub-delegation path, see `GitHubAppAuth.installationToken`); the
+   * engine's own calls pass none and stay installation-wide.
    */
   async installationToken(
     installationId: number,

@@ -1,4599 +1,2117 @@
 # @cat-factory/agents
 
-## 0.54.10
+## 0.171.2
 
 ### Patch Changes
 
-- Updated dependencies [2ce396d]
-  - @cat-factory/kernel@0.123.2
-  - @cat-factory/contracts@0.128.1
-  - @cat-factory/prompt-fragments@0.13.16
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/prompt-fragments@1.1.60
 
-## 0.54.9
-
-### Patch Changes
-
-- Updated dependencies [2c7ca2e]
-  - @cat-factory/kernel@0.123.1
-
-## 0.54.8
+## 0.171.1
 
 ### Patch Changes
 
-- Updated dependencies [e4c5abe]
-  - @cat-factory/kernel@0.123.0
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/prompt-fragments@1.1.59
 
-## 0.54.7
-
-### Patch Changes
-
-- Updated dependencies [1e684b7]
-- Updated dependencies [1e684b7]
-  - @cat-factory/contracts@0.128.0
-  - @cat-factory/kernel@0.122.0
-  - @cat-factory/prompt-fragments@0.13.15
-
-## 0.54.6
-
-### Patch Changes
-
-- Updated dependencies [2a13ece]
-  - @cat-factory/kernel@0.121.8
-
-## 0.54.5
-
-### Patch Changes
-
-- Updated dependencies [3ce997d]
-  - @cat-factory/kernel@0.121.7
-
-## 0.54.4
-
-### Patch Changes
-
-- Updated dependencies [67dccb6]
-  - @cat-factory/kernel@0.121.6
-
-## 0.54.3
-
-### Patch Changes
-
-- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
-  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
-
-  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
-    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
-    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
-    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
-  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
-    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
-    stays on `^6.0.3`).
-  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
-    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
-    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
-  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
-    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
-    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
-    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
-    deployed for the new tags to roll out.
-
-- Updated dependencies [f8f1aa8]
-  - @cat-factory/contracts@0.127.1
-  - @cat-factory/kernel@0.121.5
-  - @cat-factory/prompt-fragments@0.13.14
-
-## 0.54.2
-
-### Patch Changes
-
-- Updated dependencies [4810353]
-  - @cat-factory/kernel@0.121.4
-
-## 0.54.1
-
-### Patch Changes
-
-- Updated dependencies [edad6e6]
-  - @cat-factory/kernel@0.121.3
-
-## 0.54.0
+## 0.171.0
 
 ### Minor Changes
 
-- d1a4129: Complete the implementation-fork decision phase with grounded CHAT (PR 2 of the initiative).
-  Before the Coder writes code, a human parked on the surfaced forks can now ask questions about
-  them and get a grounded, comparative answer before deciding. Each human turn is answered by an
-  inline LLM in the durable driver (no container re-dispatch) over the fixed proposal grounding +
-  the thread; a `maxChatTurns` budget bounds spend, and with no chat model wired the chat degrades
-  to a canned "chat unavailable" reply so pick / custom still work. Adds the
-  `POST /executions/:id/fork-decision/chat` endpoint, the `fork-chat` prompt (v1), the
-  `ForkChatService`, the `pendingForkChat` re-entry protocol, the window chat thread, and the
-  cross-runtime + e2e coverage. The fork-decision initiative tracker is converted to ADR 0022.
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
 
 ### Patch Changes
 
-- Updated dependencies [d1a4129]
-  - @cat-factory/contracts@0.127.0
-  - @cat-factory/kernel@0.121.2
-  - @cat-factory/prompt-fragments@0.13.13
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/prompt-fragments@1.1.58
 
-## 0.53.6
-
-### Patch Changes
-
-- Updated dependencies [473e849]
-  - @cat-factory/kernel@0.121.1
-
-## 0.53.5
+## 0.170.1
 
 ### Patch Changes
 
-- Updated dependencies [f4482c7]
-  - @cat-factory/kernel@0.121.0
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/prompt-fragments@1.1.57
 
-## 0.53.4
-
-### Patch Changes
-
-- cc6d554: Elaborate the model-provisioning failure messages with cause + fix + doc links (error-message
-  coverage initiative, items B1–B4). Each terse throw now names the condition, the likely cause,
-  the exact remedy (UI-first where the setting is UI-configurable, the env var otherwise), and links
-  `backend/docs/model-support.md` / `docs/environment-variables.md`.
-
-  - **B1** — `Unsupported model provider: X` (`CompositeModelProvider.resolve`) now explains that the
-    provider has no credentials configured, names the workspace AI provider key pool as the primary
-    fix for the UI-configurable direct providers and the deployment env vars (`CLOUDFLARE_*`,
-    `BEDROCK_REGION`) as the alternative, and lists the currently-registered providers as a diagnostic.
-  - **B2** — `Unsupported Bedrock model: X` now names the `BEDROCK_MODELS` allow-list, echoes the
-    models it currently permits, and tells the operator to add the id or pick an allowed one.
-  - **B3** — LiteLLM selected without a base URL gets a dedicated remedy naming `LITELLM_BASE_URL`
-    (an operator-hosted gateway has no public default), instead of the generic "no base URL" message.
-  - **B4** — `No base URL configured for OpenAI-compatible provider 'X'` now names the
-    `${PROVIDER}_BASE_URL` var and the workspace key pool. The inline model resolver and the container
-    LLM proxy share one helper (`openAiCompatibleBaseUrlError`) so both surfaces read identically.
-
-  Adds a small `providers/docs.ts` doc-URL module to `@cat-factory/agents` (it sits below the server
-  layer, so it cannot use `@cat-factory/server`'s `config/docs.ts`); `@cat-factory/provider-bedrock`
-  imports it. No behaviour changes beyond the message text.
-
-## 0.53.3
-
-### Patch Changes
-
-- Updated dependencies [22a4d9e]
-  - @cat-factory/kernel@0.120.0
-
-## 0.53.2
-
-### Patch Changes
-
-- Updated dependencies [a5dcf7d]
-  - @cat-factory/kernel@0.119.0
-
-## 0.53.1
-
-### Patch Changes
-
-- Updated dependencies [5072999]
-  - @cat-factory/contracts@0.126.0
-  - @cat-factory/kernel@0.118.1
-  - @cat-factory/prompt-fragments@0.13.12
-
-## 0.53.0
+## 0.170.0
 
 ### Minor Changes
 
-- 4f936de: Add the optional implementation-fork decision phase on the Coder step. Before the Coder
-  writes code, a read-only `fork-proposer` explore agent can aggressively surface the materially
-  different ways to implement a task; the run parks for a human to pick a proposed fork or enter
-  their own approach, and the chosen approach is folded into the Coder's prompt as a binding
-  directive. The phase is gated per-task by a tri-state (`auto`/`always`/`off`) and, in `auto`,
-  by an estimate gate on the workspace risk policy (`riskPolicy.forkDecision`, disabled by
-  default). All state rides the run's coder step (`step.forkDecision`), so it is
-  runtime-symmetric across the Cloudflare and Node facades (D1 ⇄ Drizzle: the new
-  `merge_threshold_presets.fork_decision` column). This slice ships propose → park → choose →
-  Coder plus the single-path auto-advance; grounded chat about the forks lands in a follow-up.
-
-  Breaking: the built-in merge-threshold preset catalog version is bumped (Balanced /
-  Manual review only → v3) to seed the new `forkDecision` gate; workspaces are advised to reseed.
-  The `build` Coder prompt is bumped to v4 and a new `fork-proposer` v1 prompt is added.
+- 8766c3f: `resolvePrNumber`, which reads the pull request a `review` task names from its `prNumber` or `prUrl`, moves to `@cat-factory/contracts` so the SPA's guided-review button and the dispatch read a task's target the same way. Breaking for internal consumers: `@cat-factory/agents` no longer exports it; import it from `@cat-factory/contracts`.
 
 ### Patch Changes
 
-- Updated dependencies [4f936de]
-  - @cat-factory/contracts@0.125.0
-  - @cat-factory/kernel@0.118.0
-  - @cat-factory/prompt-fragments@0.13.11
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
 
-## 0.52.9
-
-### Patch Changes
-
-- Updated dependencies [127fe3e]
-  - @cat-factory/contracts@0.124.1
-  - @cat-factory/kernel@0.117.6
-  - @cat-factory/prompt-fragments@0.13.10
-
-## 0.52.8
-
-### Patch Changes
-
-- Updated dependencies [774908c]
-  - @cat-factory/kernel@0.117.5
-
-## 0.52.7
-
-### Patch Changes
-
-- Updated dependencies [08a7da2]
-  - @cat-factory/contracts@0.124.0
-  - @cat-factory/kernel@0.117.4
-  - @cat-factory/prompt-fragments@0.13.9
-
-## 0.52.6
-
-### Patch Changes
-
-- Updated dependencies [6b968bb]
-  - @cat-factory/kernel@0.117.3
-
-## 0.52.5
-
-### Patch Changes
-
-- Updated dependencies [eeadc97]
-  - @cat-factory/kernel@0.117.2
-  - @cat-factory/contracts@0.123.1
-  - @cat-factory/prompt-fragments@0.13.8
-
-## 0.52.4
-
-### Patch Changes
-
-- Updated dependencies [cb7fd14]
-  - @cat-factory/kernel@0.117.1
-
-## 0.52.3
-
-### Patch Changes
-
-- Updated dependencies [be54a32]
-  - @cat-factory/kernel@0.117.0
-
-## 0.52.2
-
-### Patch Changes
-
-- Updated dependencies [51869b8]
-  - @cat-factory/kernel@0.116.0
-
-## 0.52.1
-
-### Patch Changes
-
-- Updated dependencies [a51a498]
-  - @cat-factory/kernel@0.115.1
-
-## 0.52.0
+## 0.169.0
 
 ### Minor Changes
 
-- b83bcc8: Requirements review: auto-recommend answers for findings that don't need a business decision.
-
-  The requirements reviewer now classifies each finding it raises as `autoAnswerable` — answerable
-  confidently from universal engineering/product best practice or the context already provided
-  (vs. needing a genuine business/product decision). For the `autoAnswerable` findings, the
-  Requirement Writer AUTO-generates a grounded recommendation and it is auto-accepted as the
-  finding's **default answer** (pre-filled, editable, dismissable), so the human only hand-answers
-  the findings that genuinely need their input. Findings needing a business decision are left blank
-  and flagged "needs your input"; the human still drives incorporation. The reviewer prompt is
-  bumped to `requirement-review@v3`.
-
-  The behaviour is configurable per pipeline step: a new **auto-recommendation** toggle on the
-  `requirements-review` step in the pipeline builder (**on by default**). Disabling it reverts to
-  the fully-manual flow (answer or request recommendations for every finding).
-
-  This introduces the extensible per-step **`stepOptions`** seam — a single JSON bag
-  (`pipelines.step_options`, parallel to `agentKinds`) that is the going-forward home for new
-  per-step pipeline parameters, replacing the "one array + one column per knob" pattern
-  (`autoRecommend` is its pilot field). See `docs/initiatives/pipeline-step-options.md` for
-  folding the legacy per-step arrays (`gates`/`thresholds`/`enabled`/`consensus`/`gating`/
-  `followUps`/`testerQuality`) into it.
-
-  Persistence: a new nullable `step_options` column on `pipelines`, mirrored across the D1 and
-  Drizzle stores (no data migration — absent ⇒ all defaults). Requirement-review items and
-  recommendations gain optional `autoAnswerable` / `auto` fields (stored in the existing JSON
-  columns, no migration).
+- 0ea28b8: Guided PR review gets its engine. `GuidedReviewService` opens a session for a linked repository's pull request, generates a structured overview of it, answers questions in independent threads and turns a thread's conclusions into comment drafts. Each of those is background work: the request persists a pending row and returns, and a `GuidedReviewRunner` drives it (a Cloudflare Workflow, a pg-boss queue on Node and standard local, a `node:sqlite` queue on a mothership-mode node), with a sweeper re-waking work whose claim lapsed.
+  
+  Answers come from an inline model with read tools over the PR pinned to the reviewed commit (`list_changed_files`, `read_diff`, `read_file` on either side, `list_directory`), under a per-job read budget, with file contents scrubbed of secrets. Drafts are kept only where the host could place them (a line inside a diff hunk on that side), and every refused proposal is recorded in the message's `draftReport`. A failure is settled with a reason from a closed vocabulary, which gains `head_moved`: once the PR moves past the reviewed commit, its changed files no longer describe that commit, so the job fails until the session is refreshed.
+  
+  `ConflictError` gains the `thread_busy` reason, translated in every locale. `fenceVerbatim` is extracted into `@cat-factory/agents`' shared prompt helpers. No routes expose the service yet; they land in the next slice.
 
 ### Patch Changes
 
-- Updated dependencies [b83bcc8]
-- Updated dependencies [b83bcc8]
-- Updated dependencies [a0c6934]
-  - @cat-factory/contracts@0.123.0
-  - @cat-factory/kernel@0.115.0
-  - @cat-factory/prompt-fragments@0.13.7
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/prompt-fragments@1.1.55
 
-## 0.51.0
-
-### Minor Changes
-
-- 0f3c88b: feat(testing): sealed sensitive test credentials, delivered to the Tester out of band
-
-  Add a SEALED per-service store for sensitive testing credentials (e.g. a third-party API
-  token a Tester needs), the sibling of the non-sensitive test-credential pools. Values are
-  encrypted at rest by the facade `SecretCipher` (info tag `cat-factory:test-secrets`, mirroring
-  `observability_connections`) and delivered to the Tester container **out of band**: decrypted at
-  dispatch, carried on a dedicated job-body field the agent-context snapshot allow-list omits, and
-  injected by the harness as container environment variables the agent reads (`$KEY`). The tester
-  prompt advertises only each secret's key + description (never the value). Per service frame,
-  resolved up the frame chain like release-health config; mirrored across both runtimes (D1 +
-  Drizzle) with a cross-runtime conformance assertion.
-
-  New API: `GET|PUT|DELETE /workspaces/:ws/services/:blockId/test-secrets` (values write-only).
-
-  This is Slice C of the tester-environment-access initiative; the Test Data Seeder agent
-  (Slice D) is a tracked follow-up. See docs/initiatives/tester-environment-access.md.
+## 0.168.4
 
 ### Patch Changes
 
-- Updated dependencies [0f3c88b]
-  - @cat-factory/contracts@0.122.0
-  - @cat-factory/kernel@0.114.0
-  - @cat-factory/prompt-fragments@0.13.6
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/prompt-fragments@1.1.54
 
-## 0.50.0
-
-### Minor Changes
-
-- ed77be6: Initiative-preset registry → app-owned DI (slice 5 of the custom-initiative-definitions
-  initiative; registry-DI-migration "Initiative presets" row). The module-global initiative-preset
-  registry is replaced by an app-owned `InitiativePresetRegistry` instance the composition root news,
-  threads through `CoreDependencies`, and re-exposes on `Core` — mirroring the agent-kind registry.
-  This removes the shared process state and the external-adapter module-identity gotcha: a deployment
-  registers its own presets by reference on the instance the facade injects.
-
-  BREAKING: the free `@cat-factory/kernel` exports `registerInitiativePreset`,
-  `registerInitiativePresets`, `getInitiativePreset`, `allInitiativePresets`,
-  `initiativePresetDescriptors`, and `clearRegisteredInitiativePresets` are removed. Use the new
-  `InitiativePresetRegistry` class (kernel) + `defaultInitiativePresetRegistry()` factory
-  (`@cat-factory/agents`, preloads the built-in generic / docs-refresh / tech-migration presets)
-  instead, and inject it via the facade's composition seam — `createApp({ overrides: {
-initiativePresetRegistry } })` on the Worker, or the `initiativePresetRegistry` option on `start()`
-  / `startLocal()`. `registerDocsRefreshPreset` / `registerTechMigrationPreset` now take the registry
-  as a parameter (no bottom-of-module self-registration). No data migration — pre-1.0, no back-compat.
+## 0.168.3
 
 ### Patch Changes
 
-- Updated dependencies [ed77be6]
-  - @cat-factory/kernel@0.113.0
-  - @cat-factory/contracts@0.121.2
-  - @cat-factory/prompt-fragments@0.13.5
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/prompt-fragments@1.1.53
 
-## 0.49.3
-
-### Patch Changes
-
-- 7ee2530: Internal cleanup: prune dead/needless exports flagged by knip (no runtime behaviour
-  change). ~110 findings resolved — genuinely-dead symbols deleted (e.g. the unused
-  `ENVIRONMENT_ANALYSIS_PIPELINE_ID` / `INITIATIVE_BREAKDOWN_PIPELINE_ID` pipeline-id
-  constants, `isCiStatusProviderWired`, `parseApiKeyProvider`, unused re-export members of
-  the runtime facade barrels), and the `export` keyword dropped from symbols only used
-  inside their own module (repository classes, config constants, helper types). Also tidied
-  stale `knip.jsonc` baseline entries (removed no-longer-needed `ignore` / `ignoreDependencies`
-  and dead entry-glob patterns).
-
-  The residual knip warnings are now all DELIBERATE: the neutral `VcsClient` port type
-  re-export barrel, the Worker config-type barrel, the `providerEndpoints` base-URL group,
-  and a couple of types that must stay exported for declaration emit. Since backwards
-  compatibility is a non-goal pre-1.0, the removed exports (which nothing imported) are
-  dropped outright rather than deprecated.
-
-- Updated dependencies [7ee2530]
-  - @cat-factory/kernel@0.112.1
-
-## 0.49.2
+## 0.168.2
 
 ### Patch Changes
 
-- Updated dependencies [f25d5e2]
-  - @cat-factory/kernel@0.112.0
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- e84b0d5: Tool servers (MCP) now run on the Pi harness. `MCP_HARNESS_TRANSPORTS.pi` is `['stdio', 'http']`,
+  so a declared server no longer drops as `harness_unsupported` on a Pi run: it is wired into Pi's own
+  MCP client through the `mcp.json` the runner image (1.162.0 onward) writes. On Pi an `allowedTools`
+  list is enforced rather than advisory.
+  
+  **Behaviour change for a deployment whose runner pool pins an older image.** Every earlier image
+  reported the `mcpServers` capability (for the subscription CLIs) while dropping a Pi run's servers,
+  so the handshake could not tell a Pi dispatch it was about to run blind. A Pi dispatch carrying tool
+  servers now requires the new `piMcpServers` body capability, and an image that reports a list
+  without it REFUSES the run at dispatch, naming the runner image as the fix. Unlike the older
+  capabilities, an image (or a runner pool control plane) that reports NO list is refused for it too
+  rather than treated as unknown: every such image predates Pi's MCP client, so that run would be
+  blind for certain. Move the pool to `cat-factory-executor:1.162.0`, or narrow the affected servers'
+  `harnesses` to `claude-code` / `codex` until you do. `HarnessBodyCapability` gains the
+  `piMcpServers` member, and `HARNESS_BODY_CAPABILITY_FIELDS` names the body field each member is
+  carried in. A body whose `harness` is absent or unrecognised is treated as Pi, as the harness's own
+  parser runs it.
+  
+  Boot validation no longer warns that a server narrowed to `['pi']` can never apply. The step
+  detail's `harness_unsupported` copy names every cause a persisted step can carry, in every locale:
+  a `harnesses` list that excludes the CLI, an ambient Codex login, and a Pi step recorded before Pi
+  could serve tool servers, which only needs a rerun on a current image.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/prompt-fragments@1.1.52
 
-## 0.49.1
+## 0.168.1
 
 ### Patch Changes
 
-- 9aa9e19: Initiatives: phases can now declare a `checkpoint` (slice 2 of the
-  custom-initiative-definitions initiative). A checkpoint phase PAUSES the initiative for
-  human review once every one of its items settles, before the next phase spawns — so a
-  human can read the phase's committed output (e.g. a research doc + GO/NO_GO verdict) and
-  then resume to continue or cancel to stop. The engine never interprets an LLM verdict:
-  the pause is declarative phase data the loop reads, and resume is the acknowledgment.
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/prompt-fragments@1.1.51
 
-  - Contracts: `checkpoint?` on the plan/entity/draft phase and the preset phase-template
-    phase, plus `checkpointClearedAt?` bookkeeping on the entity phase; a new `checkpoint`
-    reason on the `initiative` notification.
-  - Ingest stamps a template-authored `checkpoint` onto the matched phase (forced on — the
-    planner cannot unset it), honours a planner-authored one on any draft phase (generic,
-    usable without a preset), and preserves `checkpointClearedAt` across a re-plan.
-  - The execution loop pauses at a completed, uncleared checkpoint phase (checked before
-    completion, so a last-phase checkpoint still pauses) and raises the notification;
-    `InitiativeService.resume` clears the checkpoint in the same CAS transform it resumes in.
-  - The in-repo tracker markdown annotates a checkpoint phase (pending vs cleared).
-
-  Non-checkpoint phases are byte-for-byte unchanged — a plan with no `checkpoint` advances
-  exactly as before.
-
-- Updated dependencies [9aa9e19]
-  - @cat-factory/contracts@0.121.1
-  - @cat-factory/kernel@0.111.1
-  - @cat-factory/prompt-fragments@0.13.4
-
-## 0.49.0
+## 0.168.0
 
 ### Minor Changes
 
-- 63f7881: Code Commenter is now a business-as-usual step in the full build pipelines, keeping in-source
-  comments relevant and up to date on every task instead of only on a dedicated standalone run.
+- 7760397: Apply the Nuxt UI skill and MCP server to the platform's own coder agents.
+  
+  Slice 0 (#2247) vendored the `nuxt-ui` skill and declared the MCP server as Claude Code repo
+  conventions, which reach a local contributor session but not the coder agents this platform runs.
+  This adds `registerNuxtUiCapability`: an opt-in agent-kind capability that attaches the vendored
+  skill (a bundled playbook) and the `nuxt-ui` MCP server (`https://ui.nuxt.com/mcp`) to the coder
+  kinds that author or repair SPA source: `coder`, `fixer`, `ci-fixer`.
+  
+  It is opt-in per deployment, not a framework default: `defaultAgentKindRegistry()` stays
+  stack-agnostic, and the Node and Cloudflare facades opt in when they build their own default
+  registry. A deployment whose repos are not Nuxt gets neither the playbook nor a server pointing at
+  `ui.nuxt.com`, and a deployment injecting its own registry owns its capability wiring.
+  
+  The skill text stays single-sourced: `scripts/generate-nuxt-ui-skill.mjs` inlines the vendored
+  `.claude/skills/nuxt-ui/` tree into a committed generated module (the Worker cannot read the
+  filesystem at runtime), and `--check` guards it against drift in CI.
 
-  - **Full pipelines gain a `code-commenter` step** (`pl_full` and `pl_fullstack`, versions bumped
-    for the reseed): it runs right after the `reviewer` clears the implementation and edits comments
-    only — adding why-not-what comments, updating ones that have drifted from the code, and deleting
-    noise comments that merely restate what the code already says — with no behaviour change. The
-    existing `ci` step is the backstop that proves the comment-only diff is behaviour-neutral before
-    `merger` ships it.
-  - **One parametrized agent serves both use-cases.** A new adaptive clone mode `pr-or-work`
-    (`AgentCloneSpec.branch`) makes the Code Commenter amend the block's existing PR in place when
-    there is one (the BAU pipeline case — the well-commented code ships in the coder's own PR) and
-    fall back to branching off base and opening its own PR when there is none (a standalone
-    `pl_code_comments` run or an initiative-framed sweep of a legacy codebase). It is
-    `noChangesTolerated`, so a run that finds the comments already in good shape is a clean
-    non-event rather than a failure. No new agent kind, no executor-harness image change.
-  - The Code Commenter's prompt now actively **maintains** existing comments (fix/remove stale ones,
-    strip redundant ones) rather than only adding new ones, and scopes a BAU run to the files the
-    pull request changes.
-  - **Hardening:** `agentPresentationSchema.description` is now required and non-empty
-    (`minLength(1)`, like `label`/`icon`/`color`). The SPA renders a registered kind's description
-    verbatim in the pipeline builder palette with no fallback, so a blank one would have surfaced as
-    an empty description on a first-class palette block; this makes that impossible at the wire
-    boundary. Every existing agent kind already ships a description, so nothing changes for them.
-
-### Patch Changes
-
-- Updated dependencies [63f7881]
-  - @cat-factory/kernel@0.111.0
-  - @cat-factory/contracts@0.121.0
-  - @cat-factory/prompt-fragments@0.13.3
-
-## 0.48.5
-
-### Patch Changes
-
-- bcc843d: Initiatives: an initiative preset's per-agent-kind `promptAddition` now reaches the
-  runs SPAWNED by that initiative (a task's coder / tester / custom kind), not only the
-  initiative's own planning run. The `AgentContextBuilder` resolves the preset's steering
-  for any block carrying `initiativeId` (gated on it, so plain tasks pay nothing), and a
-  shared `initiativePresetSection` renderer folds the `## Initiative preset:` steering into
-  the standard-phase, generic custom-kind, and planning prompts alike — including a custom
-  kind that supplies its own user prompt (the steering is folded in ahead of it). This is the vehicle
-  for an org to attach standing role/task methodology to built-in agents without forking
-  them (slice 1 of the custom-initiative-definitions initiative). No behaviour changes for
-  non-initiative runs — their prompts stay byte-for-byte identical.
-- Updated dependencies [bcc843d]
-  - @cat-factory/kernel@0.110.1
-
-## 0.48.4
-
-### Patch Changes
-
-- a2db337: Fix initiative planning interview wedging after "Continue"/"Proceed", and surface a
-  "Run planning" start control on the initiative board card.
-
-  - **Engine:** the step re-park guard in `ExecutionService` never let a _resumed_
-    interactive-interviewer step (initiative planning + document interviewer) fall through to
-    its gate evaluation — it re-parked the run immediately, so pressing Continue/Proceed
-    loaded briefly and then hung on the same questions. The guard, the generic approve/reject
-    guard, AND the step-handler dispatch in `RunDispatcher` now all key off a new
-    `interview-gate` agent **trait** carried by both interviewer kinds — the dispatch routes
-    by trait to the controller registered for the step's `agentKind`, so a resumed interview
-    (one carrying `pendingInterview`) re-runs the interviewer in the durable driver instead of
-    wedging. Fully trait-based rather than kind-based, so a future interviewer just carries the
-    trait and wires its controller — no engine branch.
-  - **Board:** an initiative card now offers "Run planning" (and, while the interview is
-    parked, "Answer planning questions") directly on the board, mirroring a task card's
-    on-card Start affordance instead of hiding it behind selecting the block. The card and the
-    inspector share a single `useInitiativePlanning` composable (no duplicated planning logic):
-    the "Answer planning questions" affordance now keys on the interview's parked status alone
-    (so it stays reachable once every question is answered but before the human resumes), and
-    the optimistic start flag clears the moment the run takes over (so the button can't strand
-    itself spinning after a cancel).
-
-- Updated dependencies [a2db337]
-  - @cat-factory/contracts@0.120.0
-  - @cat-factory/kernel@0.110.0
-  - @cat-factory/prompt-fragments@0.13.2
-
-## 0.48.3
-
-### Patch Changes
-
-- 35636d5: Re-export the canonical migration phase-id constants (`MIGRATION_PHASE_IDS`,
-  `MIGRATION_PHASE_ID_ORDER`, and the `MigrationPhaseId` type) from the package index. They are the
-  contract shared by the tech-migration preset's `phaseTemplate`, its `promptAdditions`, and
-  `seedMigrationPlan`; exporting them lets the migration end-to-end test reference the ids by import
-  rather than retyping strings that could silently drift from the template the ingest normalizer
-  matches on. Additive — no behaviour change.
-
-## 0.48.2
-
-### Patch Changes
-
-- Updated dependencies [8319e52]
-  - @cat-factory/kernel@0.109.1
-
-## 0.48.1
-
-### Patch Changes
-
-- Updated dependencies [8728bf7]
-- Updated dependencies [7157908]
-  - @cat-factory/contracts@0.119.0
-  - @cat-factory/kernel@0.109.0
-  - @cat-factory/prompt-fragments@0.13.1
-
-## 0.48.0
+## 0.167.0
 
 ### Minor Changes
 
-- 4775c40: Register `preset_tech_migration`, the Technological-migration initiative preset (tech-migration slice
-  T8) — the second real consumer of the initiative-preset primitives and the one that proves "preset as
-  a mandated multi-phase methodology". It is pure WIRING that composes the already-landed migration
-  pieces: a create-time FORM (which migration, from/to tech, stored-proc policy, compat posture,
-  coverage bar, migration docs dir), the interviewer-driven `pl_initiative` planning pipeline
-  (`interview: 'full'`, `humanReviewDefault: true`), a declarative five-phase `phaseTemplate`
-  (blast-zone → coverage → transition-design → delivery → verify-decommission, all required, no extras)
-  enforced by the generic ingest normalizer, the conservative execution policy (`maxConcurrent: 2`,
-  `pl_quick` default escalating risky/complex items to `pl_full`, `onMissingEstimate: 'strongest'`),
-  `seedMigrationPlan` (T7) as its `seedPlan` for per-item spawn decoration + the confidence-case
-  control point, the T5 methodology `promptAdditions` for the interviewer/analyst/planner, and the
-  full T4 `MIGRATION_FRAGMENT_IDS` as `defaultFragmentIds`. It registers as an import side effect (the
-  docs-refresh / `@cat-factory/gates` pattern) so both runtimes pick it up with no per-facade wiring,
-  and carries NO `detect` hook (its derived `probe` is false — a create-time probe could read only the
-  FROM-side stack, which the analyst rediscovers far more thoroughly at planning time).
-
-## 0.47.0
-
-### Minor Changes
-
-- f97d5d3: Add `seedMigrationPlan`, the `preset_tech_migration` plan post-processor (tech-migration slice T7),
-  landed unwired ahead of the preset registration (T8). Running at ingest after the generic
-  phase-template normalizer, it stamps per-item spawn DECORATION keyed off each item's migration phase:
-  the blast-zone report + transition-design document(s) become `document` tasks with `.md` target paths
-  under the frozen `migrationDocsDir` on the doc-quick pipeline; coverage/delivery/verify items stay
-  ordinary coding tasks routed by the policy's estimate rules. It wires the phase-2 confidence case — a
-  single human-gated `confidence-case.md` document that `dependsOn` every surviving coverage item,
-  canonicalizing a planner-authored one or injecting it when omitted — caps phase-2 coverage at eight
-  items (scrubbing dropped ids from every surviving `dependsOn`), and applies the human-review gate
-  policy (confidence-case + transition-design are always gated as the coverage→delivery control points;
-  `humanReview` additionally gates the informational blast-zone report). Every spawned item carries the
-  `migration.*` fragments that APPLY to its primary producer — `coder` for coding items, `doc-writer`
-  for documents — via the new `migrationFragmentIdsFor(agentKind)` from `@cat-factory/prompt-fragments`
-  (alongside the full-set `MIGRATION_FRAGMENT_IDS` T8's `defaultFragmentIds` reuses), so a document
-  task no longer receives the coding-only behaviour-preservation standard (manual `fragmentIds` pins
-  bypass `appliesTo` at run time, so the scoping is applied at stamp time). The shared `seedPlan`
-  primitives (`strInput`/`fileSlug`/`uniqueDocPath`/`mergeGateOverride`) are lifted into
-  `presets/plan-helpers.ts` so docs-refresh and tech-migration share one implementation. Pure + total;
-  no runtime behaviour changes until T8 registers the preset.
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
 
 ### Patch Changes
 
-- Updated dependencies [f97d5d3]
-  - @cat-factory/prompt-fragments@0.13.0
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/prompt-fragments@1.1.50
 
-## 0.46.0
-
-### Minor Changes
-
-- cb088c7: Cap concurrent inline (non-container) LLM calls to a subscription/shared-pool vendor so a burst
-  can't overwhelm it. A new `VendorConcurrencyLimiter` + `LimitedModelProvider` decorator
-  (`@cat-factory/agents`) gates each resolved subscription-vendor model behind an in-process
-  per-vendor semaphore, keyed by `subscriptionVendorForRef(ref)`. It is applied as the outermost
-  resolver wrap in every facade via `wrapResolverWithLimiter` (`@cat-factory/server`), mirroring the
-  existing `InstrumentedModelProvider` shape, so no inline call site changes. Both the buffered
-  (`wrapGenerate`) and streaming (`wrapStream`) inline paths are gated — a stream holds its permit
-  until it ends — and a queued call whose request is aborted releases its slot instead of
-  head-of-line blocking. Only the five subscription vendors (`claude`/`codex`/`glm`/`kimi`/`deepseek`)
-  are capped; API-key vendors and Cloudflare pass through untouched.
-
-  Configured by `LLM_SUBSCRIPTION_MAX_CONCURRENCY` (default 3 per vendor; a
-  `LLM_SUBSCRIPTION_MAX_CONCURRENCY_<VENDOR>` overrides that one vendor and always wins). Any value
-  `<= 0` is uncapped, so setting the default to `0` uncaps every vendor that has no explicit
-  per-vendor override (to turn the feature off entirely, leave the per-vendor overrides unset too).
-  The limiter is
-  in-process only — one per Node process (per container/tenant) or per Worker isolate, which is the
-  scope of a single inline fan-out (a consensus panel, the requirements recommendation writer, a
-  sandbox sweep). It bounds in-flight concurrency, not requests-per-minute, and does not coordinate
-  across replicas/isolates; global rate-limiting stays out of scope. Because inline subscription
-  refs are degraded to a pool/API-key provider before resolve on Node/Worker, the cap primarily
-  bites in local mode (the prewarmed-container inline subscription backend keeps the ref) and is a
-  wired pass-through elsewhere.
-
-## 0.45.0
-
-### Minor Changes
-
-- 09a1c85: Technological-migration initiative — slice T5: the methodology prompt pack + the interviewer
-  promptAddition seam.
-
-  Adds `backend/packages/agents/src/presets/tech-migration/`, the code-side methodology steering the
-  upcoming `preset_tech_migration` registration (T8) will spread onto its `promptAdditions`. Kept OFF
-  the wire descriptor per the parent's off-the-wire rule (the descriptor's `phaseTemplate` carries
-  only the short phase ids/titles/goals; the deep methodology lives here):
-
-  - **`phases.ts`** — `MIGRATION_PHASE_IDS` (+ `MIGRATION_PHASE_ID_ORDER`), the single canonical
-    phase-id contract shared by the phase template, this prompt pack, the plan post-processor
-    (`seedMigrationPlan`, T7) and the migration E2E (T10), so no consumer retypes a phase id (a typo
-    would silently break the ingest normalizer's verbatim id match).
-  - **`prompt-additions.ts`** — `MIGRATION_PROMPT_ADDITIONS` (keyed by the kernel initiative kind
-    constants) with the interviewer / analyst / planner steering: the interviewer probes the fuzzy,
-    form-uncapturable migration facts (downtime tolerance, data-migration constraints, compat posture)
-    and never re-asks the seeded form; the analyst produces the direct + TRANSITIVE blast-zone
-    inventory with per-touchpoint existing-test coverage; the planner authors per-phase item briefs
-    (single-writer artifacts, the human-gated confidence-case item, coverage-before-delivery),
-    referencing the canonical phase ids verbatim.
-
-  Completes the interviewer half of the preset `promptAdditions` seam in
-  `InitiativeInterviewService`: the analyst/planner already fold their steering via `AgentContextBuilder`
-  → `initiativeContextLines`, but the interviewer is an inline service that builds its own prompt, so it
-  now folds `promptAdditions['initiative-interviewer']` under the same `## Initiative preset: <label>`
-  heading. Generic and preset-less initiatives register none, so their interview stays byte-for-byte
-  unchanged — the migration preset is simply the first FULL-interview preset to steer its interviewer.
-  Both changes are dormant data + a generic seam until T8 registers the preset; the loop never branches
-  on a preset id.
-
-## 0.44.1
+## 0.166.3
 
 ### Patch Changes
 
-- 785576b: Initiative presets — docs-refresh preset review fixes (follow-up to slice 8, #911):
+- 30d08c7: Take the agent CLIs at their newest, correct the one under-metering price row, and refresh the
+  dependency tree.
+  
+  **Re-verified every catalog route against its serving provider, and the catalog needed nothing.**
+  Anthropic, OpenAI, Google, xAI, DeepSeek, Moonshot, Z.ai, Alibaba and Cloudflare Workers AI were
+  each read fresh. Every model this catalog selects is still served under the id it names, and every
+  frontier launch since the last sweep is already here, so the honest result is no entry added and
+  none retired. Claude Mythos 5.1 stays out for the reason it always has: invitation-only through
+  Project Glasswing, with no public route to declare. What is new elsewhere is a cheaper or smaller
+  tier of something already carried (Gemini 3.5 Flash-Lite, GPT-5.4, Grok 4.3, a `-highspeed`
+  variant of Kimi K2.7 Code, `@cf/qwen/qwen3.8-27b` and `@cf/openai/gpt-oss-20b` on Workers AI), and
+  a tier nothing here would route to does not earn a catalog entry.
+  
+  **One price row was metering below what it bills.** `check-openrouter-pins.mjs` reported
+  `openrouter:z-ai/glm-5.2` as the single understated pin: the gateway's blend for that slug has
+  finished converging on Z.ai's own $1.40 / $4.40 list, which the previous note predicted and the
+  numbers had not followed. Understatement is the one direction a budget gate may not sit in, so the
+  fresh classes move up to the figures every other GLM-5.2 row already carried. Its named cache rate
+  is dropped rather than re-pinned, because the gateway's $0.14/M now IS the 0.1x floor the new input
+  rate derives, and the retired 0.21 pin was written against a $0.26/M blend that no longer exists.
+  Nothing else moved: 29 of 30 pinned slugs are at or above their live rate, which is the margin the
+  table is for.
+  
+  **Several notes were making claims that had stopped being true**, and in a table where a wrong
+  figure looks exactly like a right one, the reasoning is what the next reader checks the figure
+  against. Kimi K2.5 has left the Workers AI model index (its row stays, for recorded spend, but it
+  no longer "runs on Workers AI"). DeepSeek now documents `deepseek-v4-flash` as retired with the
+  legacy name served by `deepseek-flash`, so that row's justification narrows to the historical one.
+  Z.ai's GLM-5.3 Flash launch promotion has lapsed, so the row's list price is simply the price. The
+  Gemini Flash rate is Google's own discount to 2026-12-31, not the undiscounted rate the note
+  claimed, which makes it the one row deliberately below a published number and worth saying so.
+  OpenRouter now publishes a cache rate on both Muse Spark slugs, so the reason neither names one
+  moves to the half of that argument that still holds, which is about this platform, not about Meta.
+  The DeepSeek and Kimi gateway-blend observations are restamped with this sweep's read.
+  
+  **Agent CLIs.** Claude Code moves to 2.1.274, ahead of the 24h age window, as the Dockerfile's
+  standing note allows for those three pins alone. Pi holds at 0.85.1 and Codex at 0.154.0, both
+  already newest (Codex 0.155.0 is alpha-only). The two Pi extensions move to 2.10.1, which does NOT
+  take that exemption and has aged past the window. The `node:26-trixie-slim` digest is unchanged:
+  the tag still resolves to the pinned one. Both harness images bump.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution and a dedupe; no package
+  changed major and no name was dropped. Four holds were re-verified at HEAD rather than assumed, and
+  all four still bind: `@cloudflare/vitest-pool-workers@0.22.0` is newest and pins wrangler 4.124.0
+  exactly, which keeps wrangler, workerd, miniflare and `@cloudflare/workers-types` where they are and
+  keeps vitest on 4.x (the pool peers `^4.1.0`, so vitest 5 cannot be taken); drizzle stays on its
+  1.0.0-rc line; the frontend stays on TypeScript 6 for `vue-tsc`. Three Docker GitHub Actions move to
+  their newest aged releases.
+  
+  One bump was a source change rather than a number. `@clack/prompts` 1.8.1 respells every prompt's
+  result from `Promise<Value | symbol>` to `Promise<Value | typeof CANCEL_SYMBOL>`, and the CLI's
+  `bailIfCancelled` was declared `(value: T | symbol): T` so that inference would peel the symbol arm
+  off. A unique symbol does not match a wide `symbol` parameter slot, so under the new spelling `T`
+  swallowed the union whole and four call sites went back to holding a symbol they thought they had
+  been rid of — a typecheck failure here, but the same shape that reaches `.trim()` at runtime when it
+  is not. The helper now takes the whole result type and returns `Exclude<T, symbol>`, which is
+  indifferent to which spelling a future release uses and is what clack's own `group()` does with the
+  same values.
+- Updated dependencies [30d08c7]
+  - @cat-factory/kernel@0.348.1
+  - @cat-factory/prompt-fragments@1.1.49
 
-  - **`seedPlan` deduplicates derived target paths.** Two items whose titles slug to the same name
-    under one directory (e.g. two `diagrams` items) would previously stamp the SAME `targetPath`,
-    spawning two doc tasks that open competing PRs writing one file. Derived `<dir>/<slug>.md` paths
-    are now uniquified (`-2`, `-3`, …) across the plan.
-  - **Human review gates the `merger` step, derived from the pipeline shape.** `docsReviewGates` no
-    longer hand-maintains per-pipeline boolean arrays; it derives the override from each pipeline's
-    `agentKinds` and places the single gate on `merger`, so the human reviews the CI-green PR right
-    before it merges — the same review point for EVERY doc pipeline (previously `pl_document_quick`
-    gated a mid-pipeline `doc-reviewer` that still auto-merged afterwards, contradicting the form's
-    "review each documentation change before it merges" promise). Correct-by-construction against
-    pipeline-shape drift instead of relying on a length drift-guard.
-  - **README items are writer-placed from the description, not a dead `targetPath` mechanism.** The
-    planner's structured output has no `spawn` field (`INITIATIVE_PLANNER_SYSTEM_PROMPT`), so
-    `coerceInitiativePlan` never carries a planner-authored path to `seedPlan` — the old
-    `authored-readme` branch was inert. READMEs now name their per-service path in the item
-    description (like `comments`/`business-rules`) and carry no `targetPath`.
-  - **`seedPlan` merges its decoration OVER any planner spawn** (so a planner-authored `agentConfig`
-    survives) rather than replacing it, and reuses the package's shared `moduleSlug` for the file
-    slug instead of a fourth copy of the kebab-slug helper.
-  - **Planner steering keeps the required `foundations` phase present** (0 items when the dirs already
-    exist) rather than implying the phase may be dropped — which the exhaustive `phaseTemplate` would
-    reject as a missing required phase, failing the whole plan ingest.
-
-## 0.44.0
-
-### Minor Changes
-
-- f1906cb: Initiative presets — slice 8 (docs-refresh pilot): register the `preset_docs_refresh` initiative
-  preset — the FIRST real preset, and the registration pattern the technological-migration preset
-  (T8) copies. Incorporates inter-phase follow-up #1 (adopt the generic `phaseTemplate` shape
-  enforcement; do NOT hand-roll phase shaping in `seedPlan`); follow-up #2 (templated pipelines)
-  stays deferred.
-
-  - **agents** (`presets/docs-refresh/preset.ts`): the `preset_docs_refresh` registration — a
-    descriptor FORM (doc types, placement mode, docs/diagrams/business-rules dirs with `showWhen`,
-    scope hint, human-review opt-in, writing-style fragments), a `detect` probe reusing slice 6's
-    `detectDocsLayout`, a declarative `phaseTemplate` (Foundations `required` + one OPTIONAL phase
-    per doc type, `allowAdditionalPhases: false`), `promptAdditions` turning the analyst into a
-    documentation gap-auditor and shaping the planner's phases + item granularity, and a `seedPlan`
-    that stamps per-item spawn DECORATION only (pipeline per doc type, `taskType`/`docKind`/derived
-    `targetPath`, writing-style `fragmentIds`, and — when human review is opted in — the per-run
-    `spawn.gates` override at each pipeline's review point). Registered as a module side effect on
-    import (the `@cat-factory/gates` pattern), so it is available in every deployment with no
-    per-facade wiring — the two runtimes cannot drift on it. Plan SHAPE lives in the template + the
-    generic ingest normalizer; DECORATION lives in `seedPlan`; the two never overlap.
-  - **kernel** (`domain/seed.ts`): the preset's interviewer-free planning pipeline
-    `pl_initiative_docs` (`[initiative-analyst, initiative-planner, initiative-committer]`, no human
-    gates — the form is the interview; per-task review is the opt-in gate-override seam) + its
-    exported id `INITIATIVE_DOCS_PIPELINE_ID`, plus `DOCUMENT_QUICK_PIPELINE_ID` for the README /
-    diagram spawn pipeline.
-  - **prompt-fragments**: re-export the `styleFragments` collection so the preset builds its
-    writing-style form options from the same source of truth (no duplicated fragment ids/labels).
-
-  Backend-only: the SPA renders the new preset from its descriptor with no frontend changes (the
-  slice-4 generic form renderer + picker), and human review maps to SPAWNED-task gates, so the
-  planning run stays unattended.
-
-### Patch Changes
-
-- Updated dependencies [f1906cb]
-  - @cat-factory/kernel@0.108.0
-  - @cat-factory/prompt-fragments@0.12.0
-
-## 0.43.1
+## 0.166.2
 
 ### Patch Changes
 
-- Updated dependencies [4a7fca0]
-  - @cat-factory/prompt-fragments@0.11.0
+- 9f8cabc: Re-point the DeepSeek Flash route at the model DeepSeek actually serves, take the agent CLIs at
+  their newest, and refresh the dependency tree.
+  
+  **A retired model behind a live alias.** DeepSeek retired V4-Flash and V4-Flash-Vision-Exp on
+  2026-09-10 and made `deepseek-flash` the canonical, unversioned name for V4.1-Flash. The old
+  `deepseek-v4-flash` id still resolves, but only as a TEMPORARY compatibility alias onto the new
+  model, which is the quietest shape this catalog's failures take: nothing throws and nothing fails
+  to dispatch, so the picker went on saying "DeepSeek V4 Flash" while a different model answered, at
+  a rate the spend table did not carry, and the route dies outright whenever the alias is withdrawn.
+  All three DeepSeek-served arms of the `deepseek` entry (direct, subscription, and the OpenRouter
+  one, which must name the same model or the entry straddles two) now name the live model. The entry
+  keeps its `deepseek` id: that id is what a workspace persists against a block, and this is the same
+  slot following the vendor's own successor, so re-minting it would invalidate every stored pick to
+  say nothing new. `acceptsImages` is new on both refs and is a real capability gain rather than a
+  correction, since V4.1-Flash folds the vision line back into the main model.
+  
+  Two adjacent claims were re-read rather than trusted. The 2026-09-10 release note said
+  `deepseek-v4-pro` would route to V4.1-Flash from 2026-09-14, which would have silently demoted that
+  entry to a cheaper, weaker model; DeepSeek has since decided to keep serving V4 Pro with billing
+  unchanged, so it is untouched. And OpenRouter still serves a separate `deepseek/deepseek-v4-flash`
+  at a fifth of the price, which this entry deliberately does not keep: it is the retired build, and
+  an entry whose direct and gateway arms named different models is the neighbouring-version trap the
+  catalog header bans. Both retired price keys stay in the table so historical spend rows keep
+  costing correctly.
+  
+  **No other catalog gap.** Every frontier launch since the last sweep was checked against its
+  serving provider and is already here: Claude Fable 5.1, Gemini 3.8 Flash, Muse Spark 1.3 and GPT-6
+  Astra. Claude Mythos 5.1 stays out on purpose. It is the same model as Fable 5.1 at identical
+  pricing, offered by invitation only through Project Glasswing with no public route on any provider
+  this platform reaches, so an entry could only be a re-badge that `effectiveVariant` would pick and
+  then fail to dispatch. "Astra Pro" stays out for the reason recorded last time, re-checked here:
+  OpenRouter mints a slug for it, but reasoning effort is a parameter on the single `gpt-6-astra` id.
+  
+  **Agent CLIs at their newest**, ahead of the 24h `minimumReleaseAge` window, as the Dockerfile's
+  standing note allows for those three pins alone: Claude Code 2.1.265 to 2.1.270 and Codex 0.153.4
+  to 0.154.0 (still above the 0.153.0 floor `gpt-6-astra` needs). Pi holds at 0.85.1, already newest.
+  The two Pi extensions do NOT take that exemption and hold at 2.9.0: 2.10.0 published three hours
+  before this change and has not aged past the window. Both harness images move to the newest
+  `node:26-trixie-slim` digest that has (node 26.8.2), and the executor image tag rolls to 1.158.0
+  with the deploy image at 0.6.8.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, 31 resolved names moved, no
+  package name dropped. `pg-boss` 12.31.0 brings `rrule-temporal` and `temporal-spec` in as new
+  transitive deps, the only additions. A `pnpm dedupe` follows the bump because the partial
+  re-resolution left `@types/node` resolved at two patch versions. Four holds are unchanged and were
+  re-verified at HEAD rather than assumed: `vitest` at 4.1.11 and `wrangler` at 4.124.0
+  (`@cloudflare/vitest-pool-workers` 0.22.0 is still newest, peers `vitest: ^4.1.0` and pins that
+  wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date, which
+  that pool pins), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 reaches for
+  `typescript/lib/tsc`, absent from TS 7's exports map). pnpm moves 11.24.0 to 11.26.0, staying on
+  its major. WireMock holds at 3.13.1, still its newest non-prerelease. Actions: `setup-java` v6.0.0
+  to v6.0.1 and `zizmor-action` v0.6.3 to v0.6.4; every other pinned action is already newest.
+- Updated dependencies [9f8cabc]
+  - @cat-factory/contracts@0.355.1
+  - @cat-factory/kernel@0.348.0
+  - @cat-factory/prompt-fragments@1.1.48
 
-## 0.43.0
-
-### Minor Changes
-
-- 44fafa4: Inline subscription LLM steps can now run inside a prewarmed local container on a leased
-  subscription credential (initiative phase C2). The executor-harness gains a one-shot `inline`
-  job kind that runs `claude -p` / `codex exec` with no checkout and returns the completion text +
-  usage; the local `LocalContainerRunnerTransport` leases a warm pool member to serve it. The
-  local inline resolver now selects the developer's host CLI when its binary is present (ambient,
-  unmetered) and otherwise the container backend on a leased credential — personal per-run
-  activation for an individual vendor (Claude/Codex/GLM), a pooled token otherwise (Kimi/DeepSeek).
-  This lets a subscription-only preset run its inline reviewers/brainstorm/estimator even when the
-  host has no `claude`/`codex` binary and in mothership mode, and extends inline coverage to the
-  non-native claude-code vendors.
-
-  Mechanics: `ModelScope` gains an `executionId` run dimension and `resolveScopedModelProvider`
-  takes the full scope; the inline callers (the iterative reviewers, the doc/initiative
-  interviewers, the tester quality companion, Kaizen, and the AI/consensus agent executors) thread
-  the run's execution + initiator so the container backend can lease the right credential.
-  `buildNodeContainer`'s `wrapModelProviderResolver` seam now receives the subscription lease
-  closures. Bumps the executor-harness image tag (the harness `inline` kind is new image code).
+## 0.166.1
 
 ### Patch Changes
 
-- Updated dependencies [44fafa4]
-  - @cat-factory/kernel@0.107.0
+- Updated dependencies [69fc66c]
+  - @cat-factory/contracts@0.355.0
+  - @cat-factory/kernel@0.347.0
+  - @cat-factory/prompt-fragments@1.1.47
 
-## 0.42.0
+## 0.166.0
 
 ### Minor Changes
 
-- 89c861a: Initiative presets — slice 7 (docs-refresh pilot): the in-source comment annotator + the lean
-  spawn pipelines the preset drives.
-
-  - **agents** (`agents/kinds/code-commenter.ts`): a new built-in `code-commenter` agent kind,
-    pre-loaded by `defaultAgentKindRegistry()`. It adds and clarifies WHY-not-what comments in
-    EXISTING source with **no behaviour change** — a container-coding kind that runs the generic
-    work-branch → PR lifecycle (`buildRegisteredAgentBody`, no bespoke harness handler, no
-    executor-harness image bump), `doc-aware` so the engine folds the block's writing-style
-    fragments into its prompt. Its system prompt hard-forbids touching executable code (comments /
-    docstrings only), and the pipeline's `ci` step is the backstop that proves the diff is
-    behaviour-neutral. Being a side-effect kind (its product is a pushed commit) it deliberately does
-    NOT carry `FINAL_ANSWER_IN_REPLY`.
-  - **kernel** (`domain/seed.ts`): two lean built-in spawn pipelines the docs-refresh preset stamps
-    onto its spawned tasks (also pickable standalone) — `pl_code_comments`
-    (`[code-commenter, conflicts, ci, merger]`) and `pl_business_docs`
-    (`[business-documenter, conflicts, ci, merger]`, reusing the existing reverse-doc kind) — plus
-    their exported ids (`CODE_COMMENTS_PIPELINE_ID` / `BUSINESS_DOCS_PIPELINE_ID`).
-  - Design note (see the tracker's slice-7 row + inter-phase follow-up): after review, this is the
-    MINIMAL set — Mermaid diagrams and READMEs reuse `doc-writer` / `pl_document_quick` (a diagram
-    doc is just Markdown a writer produces), so `code-commenter` is the only genuinely-new capability
-    and no `diagram-author` kind / `pl_diagrams` pipeline are added.
-
-### Patch Changes
-
-- Updated dependencies [89c861a]
-  - @cat-factory/kernel@0.106.0
-
-## 0.41.0
-
-### Minor Changes
-
-- 2d97812: Initiative presets — slice 6 (docs-refresh pilot): deterministic documentation-layout
-  autodetection.
-
-  - **agents** (`presets/docs-refresh/docs-detect.logic.ts`): a new pure `detectDocsLayout(reader)`
-    heuristic — the checkout-free repo probe behind the docs-refresh preset's form prefill (its
-    `detect` hook lands in slice 8). Over a narrow `DocsRepoReader` (a `RepoFiles` satisfies it
-    structurally) it proposes the preset's placement DEFAULTS without a clone: the docs root
-    (`docs`/`doc`/`documentation`), the diagrams + business-rules subfolders (known dir-name
-    heuristics under the detected root), a monorepo flag (workspace manifest / `package.json`
-    `workspaces` / conventional `packages`|`apps`|`services`|`libs` dirs), a `per-service` vs `root`
-    placement decision (sampled from whether most packages carry their own docs), and an
-    `hasExistingMermaid` hint for the analyst.
-  - Deterministic, memoized, bounded by a hard read budget, and TOTAL — it never throws and never
-    rejects, so an unwired GitHub / a partial or unreadable repo simply yields the conventional
-    defaults (a prefill must never block create). Detected values are non-binding FORM DEFAULTS; a
-    user edit wins and the analyst confirms placement at planning time.
-  - **kernel** (`shared/repo-scan.logic.ts`): extracts the checkout-free scan primitives the repo
-    auto-detectors share — `joinRepoPath` + the budgeted, memoized `BudgetedRepoScanner` (over a
-    `CheckoutFreeRepoReader`) — into one home, so a fix to path normalization / caching / budget
-    lands once instead of drifting across copies.
-  - **integrations**: the service-provisioning (`provision-detect`) and frontend-config
-    (`frontend-detect`) detectors now consume the shared kernel primitive instead of their own
-    private `joinPath` + `Scanner` copies — a behaviour-neutral refactor (the shared `exhausted`
-    uses the precise "a read was actually skipped" semantics both had converged toward).
-
-### Patch Changes
-
-- Updated dependencies [2d97812]
-- Updated dependencies [b35e1a0]
-  - @cat-factory/kernel@0.105.0
-  - @cat-factory/contracts@0.118.0
-  - @cat-factory/prompt-fragments@0.10.27
-
-## 0.40.13
-
-### Patch Changes
-
-- Updated dependencies [4a3e536]
-  - @cat-factory/contracts@0.117.0
-  - @cat-factory/kernel@0.104.4
-  - @cat-factory/prompt-fragments@0.10.26
-
-## 0.40.12
+- 2cf867d: Pick the best-practice standards a task is judged against, over `/api/v1`
+  
+  A workspace curates best-practice standards, merged across the deployment's shipped catalog, the
+  account's library and the board's own; an agent working under one is held to it, and a reviewer
+  additionally rates how closely the change followed each. Which of them apply is a real per-task
+  question (a security sweep, a migration, a pull request in a repository whose rules differ from its
+  service's), and it was answerable from the app and from the internal API and nowhere else. A caller
+  filing a review headlessly could name the pull request, the focus, the pipeline and the model, and
+  could not say what the reviewer was to judge it against. Its only lever was the enclosing SERVICE's
+  standing set, which is the right default and aims any change at every other task under that service.
+  
+  `GET /api/v1/prompt-fragments` serves the merged catalog and `fragmentIds` on task creation names
+  ids from it, the same pairing `GET /api/v1/task-types` has with `fields`. `PublicTask` reads back
+  `fragmentIds`, which is the one pin a caller cannot predict from what it sent: the platform unions
+  the list with the service's standards and the task type's defaults and freezes the result.
+  
+  **The catalog carries each standard's identity, not its `body`.** Naming a standard needs the id,
+  the title, the category, the one-line summary and the tags, which is also exactly what the
+  platform's own relevance selector decides from; the body is the authored text of an organisation's
+  engineering guidelines, which is a different thing to publish than a list of what it has written
+  down. Each entry also says which `tier` it won on, because an account-wide rule and one this board
+  authored need different fixes when a standard is wrong.
+  
+  **The read sits at `write`, not at `read`.** Withholding the body is not enough to make the lower
+  floor honest: a standard imported from a repo of Markdown guidelines carries no authored summary,
+  so the importer derives one from the opening of the file, and for those entries the published
+  `summary` is a capped slice of the guidance itself. `write` is the scope that NAMES a standard on a
+  task, which keeps the discovery pairing exact (a key that can fill `fragmentIds` can read the
+  vocabulary it fills it from) with nothing derived from an org's guidelines below it. It stays under
+  the `admin` the preset libraries take, because naming a standard is not managing one.
+  
+  **The list is keyset-paginated from this first release** (`?limit=`, `?cursor=`, `nextCursor`),
+  ordered by `fragmentId`. A catalog is not self-limiting: a tier can link a repo directory and get
+  one standard per Markdown file, so an unbounded first release would have left only a `/v2` or a
+  silent truncation as the way to add the bound afterwards.
+  
+  **Fragment ids have ONE ceiling now** (`MAX_FRAGMENT_ID_LENGTH`), shared by the hand-authored `id`,
+  the repo-source mint and this public field, which is what makes "the catalog serves it ⇒ the create
+  accepts it" structural rather than a coincidence of two numbers. A sourced id is
+  `src:<sourceId>:<slugified path>` and had no bound at all, so a deep enough guidelines directory
+  produced ids the create door would have refused with a generic length error. The mint now truncates
+  with a stable digest of the slug (a prefix cut alone drops the filename, which is the half that
+  distinguishes siblings in a deep tree), and a file whose FRONTMATTER declares an over-long id is
+  declined with a warning rather than shortened, since that id is the author's own choice and a
+  rewritten one shadows nothing. Existing sourced fragments with an over-long id are re-minted on the
+  next sync: the old id tombstones and the new one starts at version `1.0.0`.
+  
+  **An id the board does not resolve is refused** (`422`, `details.reason:
+  'prompt_fragment_not_found'`, `details.fragmentIds` naming every one that missed) where the RUN path
+  drops it. The run path is right to drop: a standard deleted after a task was filed must not break
+  the run. At the door it is the wrong disposition, because a typo would answer `201` for a review
+  that folded nothing, which reads afterwards exactly like a review nobody asked to be judged against
+  anything. The check lives at this door rather than on `BoardService` beside the preset-pin guard,
+  and the reason is not the store it reads: the app's create form submits the service's inherited
+  standards verbatim alongside the person's own picks, so the same refusal there would turn one stale
+  library id into a service nobody can file a task under. Here every id was named by the caller, in
+  the same request cycle it read the catalog in. The route now checks the CONTAINER before any of
+  this: every other refusal on it presumes a service that exists, so answering an unknown-standard
+  `422` for a typo'd `serviceId` sent an integrator to fix the wrong end of a two-part mistake.
+  
+  The `blockTypes` value set is now pinned in the SDK IR's enum table. It is shared with
+  `publicService.type` and is walked first alphabetically under its new home, so leaving it positional
+  would have respelled the published `PublicServiceType` in four clients as a side effect of adding an
+  unrelated endpoint, arriving as a clean generated diff nobody reads.
+  
+  OpenAPI `info.version` 1.72.0 -> 1.73.0. The Python and Java clients (Kotlin with them) carry the
+  new operation and models, so their manifests move 0.7.0 -> 0.8.0: for those two the version change
+  IS the release, so regenerating without it would have shipped the catalog in two clients of four.
 
 ### Patch Changes
 
-- Updated dependencies [18a9cb5]
-  - @cat-factory/contracts@0.116.1
-  - @cat-factory/kernel@0.104.3
-  - @cat-factory/prompt-fragments@0.10.25
+- Updated dependencies [2cf867d]
+  - @cat-factory/contracts@0.354.0
+  - @cat-factory/kernel@0.346.2
+  - @cat-factory/prompt-fragments@1.1.46
 
-## 0.40.11
-
-### Patch Changes
-
-- Updated dependencies [bc77f89]
-  - @cat-factory/contracts@0.116.0
-  - @cat-factory/kernel@0.104.2
-  - @cat-factory/prompt-fragments@0.10.24
-
-## 0.40.10
-
-### Patch Changes
-
-- Updated dependencies [802fc05]
-  - @cat-factory/contracts@0.115.0
-  - @cat-factory/kernel@0.104.1
-  - @cat-factory/prompt-fragments@0.10.23
-
-## 0.40.9
-
-### Patch Changes
-
-- Updated dependencies [6198b08]
-- Updated dependencies [37d1517]
-  - @cat-factory/contracts@0.114.0
-  - @cat-factory/kernel@0.104.0
-  - @cat-factory/prompt-fragments@0.10.22
-
-## 0.40.8
-
-### Patch Changes
-
-- Updated dependencies [14eac27]
-  - @cat-factory/contracts@0.113.0
-  - @cat-factory/kernel@0.103.0
-  - @cat-factory/prompt-fragments@0.10.21
-
-## 0.40.7
-
-### Patch Changes
-
-- Updated dependencies [ecbcbec]
-  - @cat-factory/contracts@0.112.0
-  - @cat-factory/kernel@0.102.0
-  - @cat-factory/prompt-fragments@0.10.20
-
-## 0.40.6
-
-### Patch Changes
-
-- Updated dependencies [fdba1ea]
-  - @cat-factory/contracts@0.111.0
-  - @cat-factory/kernel@0.101.2
-  - @cat-factory/prompt-fragments@0.10.19
-
-## 0.40.5
-
-### Patch Changes
-
-- Updated dependencies [10787c4]
-  - @cat-factory/contracts@0.110.1
-  - @cat-factory/kernel@0.101.1
-  - @cat-factory/prompt-fragments@0.10.18
-
-## 0.40.4
-
-### Patch Changes
-
-- Updated dependencies [f596090]
-  - @cat-factory/contracts@0.110.0
-  - @cat-factory/kernel@0.101.0
-  - @cat-factory/prompt-fragments@0.10.17
-
-## 0.40.3
-
-### Patch Changes
-
-- Updated dependencies [9ea1e77]
-  - @cat-factory/contracts@0.109.0
-  - @cat-factory/kernel@0.100.0
-  - @cat-factory/prompt-fragments@0.10.16
-
-## 0.40.2
-
-### Patch Changes
-
-- Updated dependencies [e66accb]
-  - @cat-factory/contracts@0.108.1
-  - @cat-factory/kernel@0.99.1
-  - @cat-factory/prompt-fragments@0.10.15
-
-## 0.40.1
-
-### Patch Changes
-
-- Updated dependencies [1afa003]
-- Updated dependencies [f91b99d]
-  - @cat-factory/kernel@0.99.0
-  - @cat-factory/contracts@0.108.0
-  - @cat-factory/prompt-fragments@0.10.14
-
-## 0.40.0
+## 0.165.0
 
 ### Minor Changes
 
-- bf31df7: Stack recipes & shared stacks (slice 8): the opt-in environment analyst.
-
-  Adds an `environment-analyst` agent kind — the LLM half of environment auto-detection. Where the deterministic detector reads a repo checkout-free and can only see mechanical facts (compose layering, external networks, env-file pairs), the analyst is a read-only `container-explore` agent that CLONES the repo and reads the imperative bring-up a scan can't (README / Makefile / `bin/*` CLIs / setup scripts / seed dumps) to draft a declarative Docker Compose stack recipe — setup steps, prerequisites and a health gate — each grounded in a source citation. It returns the draft on `result.custom` (rendered by the shared `generic-structured` view); it never writes the repo. The draft is NON-BINDING: the setup wizard (slice 7) will merge it over the deterministic recommendation and nothing is applied until the human confirms.
-
-  - Contracts: `AnalystRecipeDraft` / `AnalystRecipeNote` / `AnalystCitation` (`environment-analyst.ts`) — a lenient LLM-output shape (a proposed `StackRecipe` + per-field provenance + summary) that degrades field-by-field on a partially-malformed reply.
-  - Agents: the `environment-analyst` kind (registered through the public `AgentKindRegistry` seam, pre-loaded by `defaultAgentKindRegistry()`), with its schema-derived structured output (`failOnUnusableFinal`, so an empty reply fails loudly rather than yielding an empty draft).
-  - Kernel: a seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`) the wizard runs against a service frame, mirroring `pl_blueprint`.
-
-  No persistence change — the analyst rides the execution engine and the existing `provisioning` blob, so no migration and no runtime asymmetry. The draft-merge + wizard trigger UI land with the wizard (slice 7).
-
-### Patch Changes
-
-- Updated dependencies [bf31df7]
-  - @cat-factory/contracts@0.107.0
-  - @cat-factory/kernel@0.98.0
-  - @cat-factory/prompt-fragments@0.10.13
-
-## 0.39.4
-
-### Patch Changes
-
-- Updated dependencies [6f9d935]
-  - @cat-factory/contracts@0.106.0
-  - @cat-factory/kernel@0.97.0
-  - @cat-factory/prompt-fragments@0.10.12
-
-## 0.39.3
-
-### Patch Changes
-
-- Updated dependencies [5490103]
-- Updated dependencies [e5b9462]
-- Updated dependencies [dd6df12]
-  - @cat-factory/contracts@0.105.0
-  - @cat-factory/kernel@0.96.0
-  - @cat-factory/prompt-fragments@0.10.11
-
-## 0.39.2
-
-### Patch Changes
-
-- Updated dependencies [accb8ec]
-  - @cat-factory/contracts@0.104.0
-  - @cat-factory/kernel@0.95.0
-  - @cat-factory/prompt-fragments@0.10.10
-
-## 0.39.1
-
-### Patch Changes
-
-- Updated dependencies [cd435d1]
-  - @cat-factory/contracts@0.103.0
-  - @cat-factory/kernel@0.94.0
-  - @cat-factory/prompt-fragments@0.10.9
-
-## 0.39.0
-
-### Minor Changes
-
-- 076d02f: feat(documents): interactive document-review sessions (doc-task WS5)
-
-  Between the outline and the draft, a document-authoring run now converses with the requester
-  instead of a single binary approve/revise gate. A new inline `doc-interviewer` step (inserted
-  after `doc-outliner` in `pl_document`, replacing the outline's human gate) asks a small batch of
-  clarifying questions about scope, audience and structure, parks the run on the standard durable
-  decision-wait while the human answers through a dedicated window, and iterates (up to a round
-  cap) until it synthesizes a refined **authoring brief** the `doc-writer`/`doc-finalizer` start
-  from (folded into their context via the agent-context builder).
-
-  The park/answer/resume/advance spine is now a shared `InterviewGateController<TEntity>`
-  parameterized by an `InterviewGateKind` strategy; both the document interviewer and the
-  interactive-planning (initiative) interviewer ride it, so the two gates can't drift. A document
-  task has no owning entity row, so its transcript is persisted in its own `doc_interview_sessions`
-  table — mirrored across D1 ⇄ Drizzle with a cross-runtime conformance assertion. The interview
-  window is wired through the universal result-view seam (`doc-interview`) and updates live over a
-  new `docInterview` workspace event. Pass-through when no interviewer model is wired, so document
-  pipelines run unchanged.
-
-  Hardening: a re-run of a document task now clears the block's prior session before interviewing
-  (so it starts clean instead of reusing a stale, already-converged one), the converged brief is
-  folded only into the two kinds that consume it (`doc-writer`/`doc-finalizer`), and a non-final
-  interviewer pass that returns neither questions nor a brief fails the run loudly instead of
-  silently skipping the interview with an empty brief.
-
-  Breaking: `pl_document` bumps to version 3 (the reseed offer), and its step indices shift (the
-  interviewer is inserted at index 2), so in-flight runs on the old shape should be restarted.
+- 5dc7506: Drive the whole PR deep review through `/api/v1`
+  
+  Triggering a review of an existing GitHub or GitLab pull request, reading back its prioritized
+  findings and posting the ones a person kept as inline comments was already reachable over the
+  public API, one call at a time. Driving it end to end was not, for three reasons that only show up
+  once something goes wrong.
+  
+  **A `post` that failed reported nothing.** A partial or total failure re-parks the review at
+  `awaiting_selection` with its resolution cleared, which is byte-for-byte a review nobody has
+  curated yet: a caller that posted seven comments and landed none read back the state it held a
+  moment before, and either looped or reported success. The `pr-review` decision now carries
+  `postReport` (what was attempted, what posted, what was folded into the summary comment because its
+  line falls outside the diff or the branch moved, and the provider's own error per finding) and
+  `postedFindingIds` (what a retry skips, so re-posting the same selection never double-comments).
+  The report names the PASS it describes (`attempt`, against the decision's `postAttempts`), because
+  a retry that fails identically leaves an otherwise byte-identical report and the defect would
+  reappear one level in; `postedBody` states whether the summary comment has landed, so
+  `bodyPosted: null` is readable as "suppressed, it already went" rather than "there was none". A
+  finding dismissed after a failed pass loses its `failures[]` row with it, so no id on this surface
+  names a finding the caller can no longer see.
+  
+  **A wedged review had no exit but throwing the work away.** The reviewer fans its slices out across
+  parallel subagents and emits findings only in a final aggregation turn, which can hang with every
+  slice finished; the watchdogs cannot see it and the 60-minute kill discards the lot. The app could
+  already re-dispatch only the slices that never reported, and now so can a key:
+  `POST /api/v1/runs/{runId}/decisions/pr-review/resume`. BOUNDED, unlike the app's own resume, and
+  projecting the evidence a bound needs (`resumeAttempts` / `maxResumeAttempts`, `reportedSlices`,
+  `lastActivityAt`): each call stops the running reviewer and starts a fresh container, so a poller
+  resuming on a timer shorter than the review takes would otherwise kill it forever, each time it
+  was about to finish. A person clicking Resume in the window is watching what they nudged, which is
+  the judgement a headless caller cannot supply.
+  
+  **A `write` key could start a review it could not finish.** Both `pl_review` and `pl_bug_fishing`
+  are single-step pipelines whose step parks the run for a person to curate what it found, and public
+  admission could not see that park: the two kinds park through machinery of their own rather than
+  through anything a registry declared, so a `write` key was admitted and then held a run whose every
+  verb needs `decide`. Both kinds now carry a `curation-gate` trait, which is the sixth park mechanism
+  admission enumerates and the fourth it derives from a registration, so a deployment's own curating
+  kind is seen with no edit there. **Starting either preset now needs a `decide` key**
+  (`403 pipeline_requires_decide_scope`), and so does RETRYING a run whose stored steps carry one: a
+  start path is not the only way to set a park in motion. The refusal names `pr-review` as answerable
+  through the decision surface and `bug-fisher` as not, and it names the DECISION KINDS rather than
+  the park surfaces, three of which are spelled differently in the two places (a `pr-reviewer` step
+  is answered by a `pr-review` decision, both brainstorm kinds by one `brainstorm`), so an
+  integration mapping the refusal onto `decisions[]` no longer hunts for an entry that is never
+  there. A run parked on the curation this API cannot answer now NAMES that wait
+  (`unanswerable[].reason = "curation_gate"`), which is what makes "honestly reported as parked with
+  nothing to answer" true rather than an empty list plus an approval that would end the run.
+  
+  OpenAPI `info.version` 1.71.0 → 1.72.0. The Python and Java clients (Kotlin with them) carry the
+  new operation and models too, so their manifests move 0.6.0 → 0.7.0: for those two the version
+  change IS the release, so regenerating without it would have shipped the loop in two clients of
+  four.
 
 ### Patch Changes
 
-- 77bc73c: Update dependencies to the latest versions within the supply-chain release-age
-  window. The Vercel AI SDK family stays within the `ai@6` / `@ai-sdk/*` majors
-  that `workers-ai-provider@^3` peers require (`ai@6.0.219`,
-  `@ai-sdk/anthropic@3.0.92`, `@ai-sdk/openai@3.0.80`,
-  `@ai-sdk/openai-compatible@2.0.56`, `@ai-sdk/provider@3.0.13`,
-  `@ai-sdk/amazon-bedrock@4.0.128`). Other bumps include `@hono/node-server`,
-  `pg-boss`, `undici`, `markdown-it`, `@aws-sdk/client-s3`, `@clack/prompts`,
-  `@types/node`, and eligible transitive dependencies. `@cloudflare/workers-types`
-  is held at `4.x` because `wrangler@4` peers on `^4`.
-- Updated dependencies [77bc73c]
-- Updated dependencies [076d02f]
-  - @cat-factory/kernel@0.93.0
-  - @cat-factory/contracts@0.102.0
-  - @cat-factory/prompt-fragments@0.10.8
+- Updated dependencies [5dc7506]
+  - @cat-factory/contracts@0.353.0
+  - @cat-factory/kernel@0.346.1
+  - @cat-factory/prompt-fragments@1.1.45
 
-## 0.38.2
-
-### Patch Changes
-
-- Updated dependencies [029a689]
-- Updated dependencies [029a689]
-  - @cat-factory/contracts@0.101.1
-  - @cat-factory/kernel@0.92.0
-  - @cat-factory/prompt-fragments@0.10.7
-
-## 0.38.1
-
-### Patch Changes
-
-- Updated dependencies [2e4d883]
-  - @cat-factory/contracts@0.101.0
-  - @cat-factory/kernel@0.91.0
-  - @cat-factory/prompt-fragments@0.10.6
-
-## 0.38.0
+## 0.164.0
 
 ### Minor Changes
 
-- 773695b: feat(documents): workspace-linked template + exemplar documents per DocKind (doc-task WS1 items 2–4)
-
-  A workspace can now point a document kind at its OWN template and example documents, reusing
-  the existing documents integration end-to-end (no new fetch machinery). A single `role`
-  (`template` | `exemplar`) + `docKind` tag on the projected `documents` row — sitting alongside
-  the block-scoped `linkedBlockId` anchor — models both:
-
-  - **Template** (singular per kind): its parsed section headings REPLACE the built-in skeleton
-    for that kind. Resolved through one shared seam (`resolveDocTemplate`) that BOTH the
-    doc-authoring prompts (via the engine-resolved `block.docTemplateBody`) and the `doc-quality`
-    gate provider go through, so the writer and the gate never check against different sections.
-  - **Exemplars** (multi-valued per kind): "good examples to emulate" surfaced to the author
-    agents alongside a new set of built-in curated exemplars.
-
-  The `documents` table gains nullable `role`/`doc_kind` columns (D1 migration ⇄ Drizzle schema +
-  generated migration), with new `DocumentRepository` role methods mirrored across both stores and
-  asserted by the cross-runtime conformance suite. The Node facade's Drizzle migration is the
-  merge node that collapses the two pre-existing divergent snapshot leaves. New workspace-scoped
-  routes (`GET`/`POST /document-role-links`, `POST /document-role-links/remove`) back a
-  per-DocKind template/exemplar management panel in the Integrations hub (i18n in all 8 locales).
-
-  Breaking (pre-1.0, acceptable): the `documents` projection wire shape gains `role`/`docKind`
-  fields; stale rows simply carry nulls.
-
-### Patch Changes
-
-- Updated dependencies [773695b]
-  - @cat-factory/contracts@0.100.0
-  - @cat-factory/kernel@0.90.0
-  - @cat-factory/prompt-fragments@0.10.5
-
-## 0.37.2
-
-### Patch Changes
-
-- Updated dependencies [3981bbb]
-  - @cat-factory/contracts@0.99.0
-  - @cat-factory/kernel@0.89.1
-  - @cat-factory/prompt-fragments@0.10.4
-
-## 0.37.1
+- 44b27a7: Run every inline LLM call on the model the workspace actually picked
+  
+  An inline call resolves its credentials from a `ModelScope`, and each caller built one by hand.
+  Several of them dropped a tier they were holding: the in-app assistant had the asker's id and
+  passed only the workspace, and so did the bug hunt, the document planner and the sandbox launch,
+  each of them a signed-in member's own synchronous request. Nothing failed. The call resolved,
+  answered, and landed on the deployment's routing default instead of the model the workspace's
+  preset names, so on a Claude-preset workspace the assistant quietly ran on something else and only
+  the bill said so.
+  
+  Every inline caller now goes through kernel's `resolveInlineScope`, whose subject is discriminated
+  (`block` / `run` / `user` / `workspace`), so a caller states what it holds rather than omitting it.
+  `kind: 'workspace'` stays legal and is now a claim: several callers legitimately make it, and the
+  ones with reasoned omissions say why (the Kaizen grader and the fragment-brief generator keep
+  theirs; the monorepo adoption advisor's `runId` is a bootstrap job id, which is a telemetry key
+  rather than an activation scope). `agentRunScopeSubject` is the shared dispatch fold, so a
+  consensus participant and the same step run alone cannot disagree about whose pool they draw on,
+  and `scripts/check-inline-model-scope.mjs` keeps the whole thing that way.
+  
+  Run-less surfaces can now reach a personal subscription. A credential activation was keyed by run,
+  so the assistant and the bug hunt could not lease one at all; the key was never really a run id
+  (an environment test already wrote its own into it), so it is now an `ActivationScopeId` that a run
+  or a USER mints. The assistant and the bug hunt carry the personal password header like a run start
+  does, and the SPA's existing credential modal collects it on the first turn that needs one. Both
+  surfaces re-map or swallow model failures by design, so each now rethrows `credential_required`
+  first, or the refusal never reaches the modal. Removing a subscription drops its user-scope
+  activations, which the soft delete alone left leasable for the rest of the TTL.
+  
+  BREAKING (internal): `subscription_activations.execution_id` becomes `scope_id` and existing rows
+  are dropped, on all three stores (D1, Postgres, and the local-sqlite credential store, which
+  declares the table rebuildable so the rename reaches a file that predates it). Scope ids are now
+  prefixed by kind, so an old unprefixed row would never be looked up again, and nothing records
+  which kind it was. An activation is a 12-hour cache of a credential the user can re-unlock with
+  their password, so the cost is one password prompt.
+  `SubscriptionActivationRepository.deleteByExecution` becomes `deleteByScope`, and
+  `PersonalSubscriptionService.activateForRun` / `leaseForRun` become `activate` / `lease`.
 
 ### Patch Changes
 
-- Updated dependencies [cfcb6c7]
-- Updated dependencies [48f9d97]
-  - @cat-factory/kernel@0.89.0
-  - @cat-factory/contracts@0.98.0
-  - @cat-factory/prompt-fragments@0.10.3
+- Updated dependencies [44b27a7]
+  - @cat-factory/kernel@0.346.0
+  - @cat-factory/prompt-fragments@1.1.44
 
-## 0.37.0
+## 0.163.0
 
 ### Minor Changes
 
-- f4c321e: feat(documents): add the `doc-quality` gate (WS4) to the forward document pipelines
-
-  A new deterministic polling gate `doc-quality`, authored through the public `registerGate`
-  seam in `@cat-factory/gates`, is inserted into `pl_document` (after `doc-finalizer`) and
-  `pl_document_quick` (after `doc-reviewer`). It reads the drafted document on the PR head
-  checkout-free via a new `DocQualityProvider` (wired per facade over `RepoFiles`) and checks
-  — against the WS1 template (`docTemplateFor`, the single source of truth) — that every
-  required section is present, no leftover placeholders remain, the heading hierarchy is sane,
-  and in-repo relative links resolve. On a red verdict it escalates to a new `doc-fixer`
-  container helper that repairs the document on the PR branch; a green document advances with
-  nothing spun up. Both doc pipelines' `version` is bumped (reseed offer).
-
-### Patch Changes
-
-- Updated dependencies [f4c321e]
-  - @cat-factory/kernel@0.88.0
-
-## 0.36.0
-
-### Minor Changes
-
-- 13a284f: Bug-triage pipeline (phase G): the `repro-test` Reproduction Test Automation agent. A new
-  structured `container-coding` agent kind writes one or more tests that fail for the reported
-  reason and commits them onto the run's shared work branch (seeding it for the coder, which opens
-  the one PR containing both the reproduction test and the fix) — or concedes `not_reproducible`
-  without failing the run. Conceding and reproduced outcomes both advance to the coder; a
-  post-completion resolver folds the `{ outcome, testPaths, notes }` assessment into the step
-  output so the coder reads it, and a `BUG_FIX_GUIDANCE` prompt fragment reframes the coder's
-  objective around the pre-existing failing test (fix the issue, don't merely make the test pass).
-
-  Enabling changes: `AgentStepSpec` gains `opensPr` / `noChangesTolerated` (container-coding) so a
-  kind can seed the work branch without opening a PR and tolerate a no-op; the executor-harness
-  coding path now parses a structured JSON outcome (`custom`) alongside the pushed commit; the
-  harness image is bumped to `1.34.9`. The runtime-neutral `@cat-factory/server` package keeps its
-  Web-standard `src` surface (no `@types/node`) while typing the one cross-runtime Node built-in it
-  uses (`AsyncLocalStorage`) via a local ambient shim, with node-using tests typechecked under a
-  separate project.
+- b75fa3c: Let a service say, in its own words, how it should be tested
+  
+  A Tester was handed two things about a service it did not stand up: where to reach it, and which
+  credentials its shell carries. Neither says which flows matter, which of the seeded accounts is the
+  one to sign in as, what the demo data means, or which flow charges a real card. That knowledge
+  exists, it is short, and until now there was nowhere to put it, so every Tester run rediscovered it
+  from the repository or guessed.
+  
+  **Testing context** is a freeform text box on the service frame's inspector, directly beneath the
+  sealed test credentials (advanced interface tier, and shown at either tier once a service records
+  one, so nobody is left unable to read or clear what their testers are being told). It is stored on
+  the service and injected verbatim into every tester prompt for it. The environment self-test's agent dry run is handed the same text through the same renderer:
+  a dry run's whole claim is that it predicts what a real Tester will be able to do here, and it cannot
+  predict that from a different briefing.
+  
+  Three decisions worth knowing:
+  
+  - **It is non-sensitive by contract**, because it is rendered INTO the prompt. Secrets stay in the
+    sealed panel above, which never renders a value into a prompt or into telemetry, and this prose
+    refers to them by variable name. The panel says so.
+  - **The empty case is stated to the agent, never omitted.** A Tester told nothing cannot tell "this
+    platform has nowhere to write that down" from "the place exists and nobody filled it in", so it
+    either reports no gap at all or reports one against the service. Told, it reports what it had to
+    guess at, which is what tells an operator what to type. A tester running on work that sits under
+    no service frame is told THAT instead, so an empty field and an absent owner cannot be reported
+    as the same neglect.
+  - **It is a `blocks` column, not a table**, for the reason `provisioning` and `service_connections`
+    are columns: one service-frame-owned value the engine reads off the frame it has already walked
+    to. Both runtimes gain the column and a conformance assertion drives the frame-chain walk on both
+    stores; the write boundary drops the field on any non-frame block rather than persisting dead data.
+  
+  Only the two tester kinds are handed it, so every other agent's prompt is byte-for-byte unchanged,
+  and a service that records nothing keeps the prompts it had.
 
 ### Patch Changes
 
-- Updated dependencies [13a284f]
-  - @cat-factory/kernel@0.87.0
+- Updated dependencies [b75fa3c]
+  - @cat-factory/contracts@0.352.0
+  - @cat-factory/kernel@0.345.0
+  - @cat-factory/prompt-fragments@1.1.43
 
-## 0.35.0
+## 0.162.0
 
 ### Minor Changes
 
-- 102c049: Document tasks: per-kind specific fields. The create-task form now collects the fields that
-  matter for the chosen document kind (PRD target users + success metrics, RFC alternatives +
-  rollout concerns, ADR decision drivers + considered options, runbook when-to-use + escalation,
-  research question + options to compare, API surface), and the author agents fold them into the
-  brief as required content for the matching template sections. The fields live on the sparse
-  `taskTypeFields` bag (no migration) with `DOC_KIND_FIELDS` as the single source of truth shared
-  by the form and the prompts.
+- bba4beb: Meter a streamed inline LLM call rather than refuse to make one
+  
+  The LiteLLM gateway lane, added in this same change, is what found this: LiteLLM forwards an
+  upstream's usage chunk only when the client sends `stream_options: { include_usage: true }`, and
+  `openAiCompatibleResolver` never set the SDK's `includeUsage`. Every streamed call through an
+  OpenAI-compatible provider (both operator-hosted gateways, plus qwen / deepseek / moonshot / xai
+  and the Cloudflare REST resolver) would therefore have arrived with no counts and been booked at
+  zero tokens, which downstream is the same absence as a step that spent nothing. The option is now
+  set once, in the resolver, and is inert on a buffered call: the SDK only emits `stream_options`
+  from `doStream`, which is why nothing short of a real gateway could tell the two settings apart.
+  
+  The other half was that no inline caller could stream at all. `InstrumentedModelProvider.wrapStream`
+  threw, deliberately, because a streamed call would otherwise have passed the wrap and reached no
+  sink; the refusal named the two things a streaming caller had to build first. Both are built here.
+  `wrapStream` folds a stream's parts into the shape a buffered reply already has, so `readUsage`,
+  `readFinishReason`, `readOutputText` and the gateway-attribution reader parse a stream through the
+  SAME code that parses a generate result rather than a second implementation that could disagree
+  with it. Every exit settles the row exactly once: the stream ending, the caller abandoning it (the
+  tokens were spent regardless, and the row names the cancellation rather than letting it read as a
+  model failure), an error part mid-flight, and a stream that never opens.
+  
+  `InlineLlmCall.streaming` is a new REQUIRED field, so the flag is the producer's answer instead of
+  the constant `false` the recorder used to write. That is a breaking change to an internal port with
+  one first-party producer per runtime; the conformance suite now records one streamed row, since
+  every fixture writing `false` would let a store that flattened the flag round-trip clean. The
+  subscription-CLI inline model files its rows as streamed too, which is what the container half of
+  that same producer (`makeHarnessCallRecorder`) has always called them.
 
 ### Patch Changes
 
-- Updated dependencies [102c049]
-  - @cat-factory/contracts@0.97.0
-  - @cat-factory/kernel@0.86.1
-  - @cat-factory/prompt-fragments@0.10.2
+- Updated dependencies [bba4beb]
+  - @cat-factory/kernel@0.344.0
+  - @cat-factory/prompt-fragments@1.1.42
 
-## 0.34.0
-
-### Minor Changes
-
-- 49b498a: Bug-triage pipeline, Phase F — structured, multi-repo investigation + clarification.
-
-  The `bug-investigator` is upgraded from a thin prose role into a STRUCTURED, read-only,
-  multi-repo `container-explore` kind whose triage drives the downstream `clarity-review` gate,
-  and the gate learns to seed itself from that triage instead of running its own first LLM pass.
-  Same kind id, so the existing `pl_bugfix` preset inherits the upgrade.
-
-  - **Structured `bug-investigator`** (`@cat-factory/agents`): registered via the public
-    `registerAgentKind` seam (the `security-auditor` shape) with a lenient valibot
-    `bugInvestigation` schema — `clarity` (`clear` | `needs_clarification`), `summary`, ranked
-    `rootCauseHypotheses`, `affectedRepos`, `suggestedReproductions`, and `questions`
-    (non-empty only when clarification is needed). Its structured object lands on `step.custom`
-    (rendered by the stock `generic-structured` view); a built-in post-completion resolver renders
-    a prose digest onto `step.output` so downstream steps read the investigation via `priorOutputs`.
-    The old prose ROLE entry is removed.
-  - **Read-only multi-repo checkouts** (`@cat-factory/server` + `@cat-factory/executor-harness`,
-    image bump): the multi-repo fan-out gate now also fires for `bug-investigator`, and the
-    container-explore job body threads `peerRepos` + the multi-repo prompt section. The harness
-    gains a read-only `runMultiRepoExplore` path — it clones the primary repo PLUS every connected
-    involved-service repo as SIBLING checkouts, runs the agent once at the workspace root, and
-    makes NO edits / commits / PR (a read-only peer carries no `newBranch`/`pr`) — so a
-    cross-service bug is traced across every repo it touches. `PeerRepoSpec.newBranch` is now
-    optional (present for the coding fan-out, absent for the read-only one).
-  - **Clarity gate seeding + auto-pass** (`@cat-factory/orchestration`): when a structured
-    investigator ran upstream, the `clarity-review` gate seeds DETERMINISTICALLY from its triage —
-    no reviewer LLM — auto-passing on `clarity === 'clear'` (advance, no human park, no
-    notification) and seeding one blocking finding per `question` on `needs_clarification` (park
-    for a human, exactly as an LLM reviewer pass would). Because the seed needs no model, the gate
-    now activates whenever the clarity store is wired, and the review/incorporate/re-review LLM
-    paths degrade gracefully when unwired. Mirrors the requirements-review auto-pass pattern.
-  - **Tracker echo on park** (`@cat-factory/kernel` port + `@cat-factory/integrations`): a new
-    best-effort `IssueWritebackProvider.postQuestions` echoes the open questions as a comment on
-    the block's linked tracker issue when the gate parks — answers still arrive in-app (the tracker
-    comment is an echo, not a channel). Not gated on the workspace writeback settings, and a
-    tracker outage never fails the run.
-  - **Conformance**: a two-facade suite drives the investigator → clarity gate flow — `clear`
-    auto-passes straight through to the next step with the digest recorded, and
-    `needs_clarification` parks one finding per question then resumes on dismiss-all + proceed.
-
-  The runner image is bumped for the read-only multi-repo explore path; the three hand-maintained
-  image-tag pins are synced.
-
-- 49b498a: Registry DI migration — the agent-kind registry becomes app-owned (no module global).
-
-  Continues the [registry-DI initiative](docs/initiatives/registry-di-migration.md): the
-  plugin-style agent-kind registry (`registerAgentKind` into a module-level `Map`) is replaced by
-  an app-owned **`AgentKindRegistry`** instance the composition root news once
-  (`defaultAgentKindRegistry()`, pre-loaded with the built-in `bug-investigator` / document /
-  initiative kinds), threads through the single `CoreDependencies` object, and re-exposes on the
-  `Core` + `ServerContainer` for the HTTP snapshot projection. Module identity stops mattering, the
-  external-adapter "phantom Map" gotcha is gone, and tests get a fresh instance instead of
-  `clearRegisteredAgentKinds()`. This also fixes the phase-F worker-shard conformance flake at its
-  root: the shared suite's `clearRegisteredAgentKinds()` used to wipe the built-in kinds for the
-  rest of a single-module run.
-
-  **BREAKING** — the free module-global seams are removed from `@cat-factory/agents` (and the
-  facade re-exports): `registerAgentKind`/`registerAgentKinds`, `registered*` (`registeredAgentKind`,
-  `registeredAgentStep`, `registeredKindRequiresContainer`, `registeredSystemPrompt`,
-  `registeredUserPrompt`, `registeredConfigContributions`, `registeredPreOps`, `registeredPostOps`,
-  `registeredAgentPresentation`, `registeredStructuredOutput`, `registeredWebResearchHint`,
-  `registeredAgentTuning`, `registeredAgentKinds`), and `clearRegisteredAgentKinds`. Instead export
-  the `AgentKindRegistry` class + `defaultAgentKindRegistry()` factory; the pure prompt/catalog fns
-  (`systemPromptFor`/`userPromptFor`/`traitsFor`/`hasTrait`/`agentTuningFor`/`configContributionsFor`/
-  `configContributionCatalog`/`webResearchGuidanceFor`/`isInlineModelStep`) now take a `registry`
-  argument, and a deployment registers custom kinds **by reference** on the instance it injects into
-  `buildContainer` / `start()` / `startLocal()` (the `agentKindRegistry` seam), exactly like the
-  backend-registries pilot. The runtimes stay symmetric and the cross-runtime conformance suite
-  injects a pre-loaded registry to assert a custom kind resolves identically on every facade.
-
-  Also fixes a warm-pool bug in the executor-harness: the read-only multi-repo explore fan-out
-  (`runExploreMode`) was gated on `!job.persistentCheckout`, so a `bug-investigator` dispatched to a
-  warm local pool (which injects `persistentCheckout: true` on every job) silently dropped its peer
-  repos and only saw the primary. The guard is dropped — `runMultiRepoExplore` uses its own
-  ephemeral workspace, so the flag is harmlessly ignored.
+## 0.161.1
 
 ### Patch Changes
 
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-- Updated dependencies [c20a69a]
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-  - @cat-factory/contracts@0.96.0
-  - @cat-factory/kernel@0.86.0
-  - @cat-factory/prompt-fragments@0.10.1
+- Updated dependencies [afd09af]
+  - @cat-factory/contracts@0.351.1
+  - @cat-factory/kernel@0.343.1
+  - @cat-factory/prompt-fragments@1.1.41
 
-## 0.33.1
-
-### Patch Changes
-
-- Updated dependencies [1f6d9fc]
-  - @cat-factory/kernel@0.85.0
-
-## 0.33.0
+## 0.161.0
 
 ### Minor Changes
 
-- 8eaa3f2: Universal writing-style fragments for document-authoring tasks (WS2 of the
-  documentation-type task initiative). Two built-in fragments — `style.anti-llmisms`
-  (cut the machine-written tells: filler intensifiers, hedging, throat-clearing,
-  summary-that-restates, bullet inflation) and `style.concise-actionable` (lead with
-  the point, active voice, one idea per paragraph, every recommendation names an actor
-  and an action) — now guide the document-authoring agents.
-
-  They reach those agents through a new `doc-aware` capability trait, the document
-  analogue of `code-aware`: the `doc-researcher` / `doc-outliner` / `doc-writer` /
-  `doc-finalizer` kinds carry it on their definitions and the `doc-reviewer` companion
-  carries it too, so the execution engine folds the block's selected style fragments
-  into each one's system prompt via the same `AgentContextBuilder` path `code-aware`
-  uses — no parallel fragment path in the prompt builders. Because the reviewer sees
-  the same bodies, the style guidance is both the writer's instruction and the
-  reviewer's criteria (an explicit clause in the companion prompt says so).
-
-  A new document task is pre-seeded with both style fragments (default-on,
-  user-removable like any block pin) via `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, seeded
-  onto the task's `fragmentIds` in `BoardService.addTask` — the selection default lives
-  at task creation, not hard-coded in a prompt.
-
-  The fragment "add" pickers (service, task, and workspace-default) now render their
-  options as labelled per-category sections instead of one flat list, so the catalog
-  stays navigable now that a block can pin across two tracks at once — the technical
-  collections (Node / React / …) and the Writing-style fragments.
-
-### Patch Changes
-
-- Updated dependencies [8eaa3f2]
-  - @cat-factory/prompt-fragments@0.10.0
-
-## 0.32.0
-
-### Minor Changes
-
-- e5ddaa4: Cache document-backed prompt-fragment bodies through the app caching seam
-  (caching-layer initiative, slice 2). A new `AppCaches.fragmentDocumentBody`
-  group cache serves a living fragment's external Confluence/Notion/GitHub/Figma/
-  Zeplin/Linear body, replacing the hand-rolled `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS`
-  in `FragmentLibraryService`: a run reads the cached body instead of blocking on a
-  live page fetch, and an entry entering its refresh window runs the source's cheap
-  version probe — keeping the cached body when the page hasn't moved, reloading in
-  the background when it has.
-
-  To support the probe, `DocumentContent` now carries an opaque `version` token and
-  `DocumentSourceProvider`/`DocumentContentResolver` gain a `probeVersion` method
-  (metadata-only, strictly cheaper than a full fetch), implemented across all
-  document providers. The self-verifying cache stays enabled on the Cloudflare
-  Worker (bounded staleness via the probe), unlike the mutable-state fragment
-  catalog.
-
-  Behavior change (pre-1.0, no back-compat): the durable `prompt_fragments.body` is
-  now the offline fallback + management-view content, refreshed only by an explicit
-  create/refresh; the live run-time body flows through the cache. Without a cache
-  wired, a run serves the persisted body and does not re-resolve live.
-
-- 6213771: Add a per-`DocKind` document template registry (WS1 of the documentation-type task
-  initiative). Each document kind now carries a structured template — required and optional
-  sections with per-section authoring guidance — that is the single source of truth for the
-  kind's expected shape. The templates are woven into the `doc-outliner` prompt (the outline
-  must cover the required sections) and the `doc-writer` prompt (start from the rendered
-  skeleton), replacing the previous one-line structure hint. A deployment can override a
-  kind's template through the public `registerDocTemplate` seam (an import side effect,
-  mirroring `registerPromptFragment`).
-
-### Patch Changes
-
-- Updated dependencies [e5ddaa4]
-  - @cat-factory/kernel@0.84.0
-
-## 0.31.0
-
-### Minor Changes
-
-- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
-  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
-
-  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
-    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
-    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
-    invalidation bus, never a data tier; with no notification factory injected the
-    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
-    machinery so ioredis never enters the module graph outside the Node facade's
-    REDIS_URL-gated wiring.
-  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
-    (group = workspace id), and every fragment write path — create / update / remove /
-    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
-    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
-    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
-  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
-    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
-    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
-    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
-    write — the same gating and resilience pattern as the realtime propagator. Local
-    mode stays bare in-memory (single-node by construction).
-  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
-    cross-instance state) is pass-through, since an isolate has no cross-isolate
-    invalidation bus. Documented in the caching package README.
-  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
-    catalog on all three runtimes (Worker/Node/local).
-  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
-    in-memory `isEntryStillCurrentFn` support: a cache profile may set
-    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
-    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
-    the probe reports the source unmoved, and fall back to a full background reload
-    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
-    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+- 2ae7e2b: Add a bugfix preset that proves the fix from the repository and spends the environment on one question
+  
+  Every way the platform had of establishing that a change works needs a running system: the API and
+  UI testers read a provisioned ephemeral environment, and the acceptance author writes tests that
+  target one. On a deployment whose preview environments are slow, costly or not representative, that
+  makes a bugfix wait on infrastructure to answer a question a committed test answers better, and it
+  leaves nothing behind: the environment goes away and the next regression is found the same way.
+  
+  `pl_bugfix_tested` ("Fix bug, verified by tests") is `pl_bugfix`'s investigate, triage, reproduce,
+  fix, review spine with the verification moved into the checkout:
+  
+  - **`mocker` then `integration-test`**, both after the fix and both before the `ci` gate. The mock
+    step is the existing one (WireMock stubs the repo owns, wired into compose and CI); the
+    integration step is a new registered kind that drives the fix through the seam a caller uses
+    against those stubs, commits the tests, and reports what it could NOT cover. CI re-running them
+    is the enforcement, which is why the step is a `container-coding` kind rather than a tester: only
+    the tester family is handed environment coordinates, so tests written here cannot come to depend
+    on a URL even by accident.
+  - **`deployer` then `disposer`, with nothing between them**, as a LAUNCH CHECK. The deployer
+    provisions the pull-request branch and settles on a reachability verdict, so a service that no
+    longer starts fails the run; a service that stands nothing up records a clean no-op as always.
+    That verdict is the only thing this preset asks an environment for, so the reclaim is adjacent
+    rather than terminal: holding the environment through the merge tail would bill for a URL no step
+    is going to open.
+  
+  Three things about the new step are deliberate and worth knowing before editing it. Committing no
+  test never fails the run (the fix is already pushed by the time it runs, so a failure would throw
+  the work away rather than name the gap): it reports `outcome: 'uncovered'` with the reason, and an
+  unreadable reply degrades to the same value rather than to a claim it never made. The gaps it
+  states are rendered even under a `covered` verdict, because the reported behaviour being covered
+  says nothing about the neighbouring case that is not. And its verdict is a claim about FILES, which
+  tolerating a no-op makes uncheckable by anything else, so the platform records on the step whether
+  the run committed anything and withdraws a `covered` claim an empty push contradicts, naming the
+  claim rather than quietly showing it.
+  
+  `mocker` gains the same no-op tolerance, which is a fix to every preset that carries it rather than
+  a concession to this one. Its own prompt tells it to add stubs only for calls not yet mocked, so an
+  empty diff is the ordinary outcome on a repository whose upstreams are already stubbed, and the
+  harness cannot tell that apart from an agent that did nothing. Failing there was also late: every
+  preset runs the mocker after the coder has opened the pull request. That prompt now sizes the work
+  to the change in flight too, instead of treating the block's whole external surface as mandatory.
+  
+  **Behaviour change: a marked BUG-FISHING finding now spawns onto this preset by default** instead of
+  `pl_bugfix`. A fished defect has no reporter to reproduce it with and no environment anybody is
+  watching it in, so the regression test committed beside the fix is the whole deliverable. Selection
+  is unchanged and was already there at two tiers: the board's `bugFishingFixPipelineId` overrides the
+  platform default for every spawn, and a single marking overrides both through the request's
+  `pipelineId`. A workspace that had set the board field is unaffected.
+  
+  Two costs come with that default, both the launch check's, and both are documented rather than
+  worked around: every marked finding provisions and reclaims an environment (a recorded no-op on an
+  `infraless` service), and a marking is refused outright when the service declares provisioning it
+  has not finished wiring, because a pipeline carrying an enabled `deployer` meets
+  `RunAdmission.assertDeployerConfigured` and the marking propagates that refusal rather than
+  answering 200 over a fix task that will never appear. `pl_bugfix` reached neither. A board that
+  wants neither pins something else in `bugFishingFixPipelineId`.
+  
+  Existing workspaces pick the preset up the way every catalog addition arrives: the new-pipeline
+  advisory offers it, a reseed inserts it, and a run that pins it by id adopts it. The bug-fishing
+  spawn resolves its fix pipeline through that same adoption seam rather than a point read at the
+  workspace's rows, which is what lets a board older than a built-in mark a finding at all.
+  
+  The run outcome summary gains one additive `/api/v1` value for the same reason (surface version
+  1.71.0): `tests.gap: 'verified_by_committed_tests'`, so a run that verified through committed tests
+  stops being reported as one where "nothing was exercised" on the one surface a person reads, while
+  its pull request says the opposite.
 
 ### Patch Changes
 
-- Updated dependencies [9bac054]
-  - @cat-factory/kernel@0.83.0
+- Updated dependencies [2ae7e2b]
+  - @cat-factory/contracts@0.351.0
+  - @cat-factory/kernel@0.343.0
+  - @cat-factory/prompt-fragments@1.1.40
 
-## 0.30.5
-
-### Patch Changes
-
-- Updated dependencies [6c1efd1]
-  - @cat-factory/contracts@0.95.0
-  - @cat-factory/kernel@0.82.0
-  - @cat-factory/prompt-fragments@0.9.55
-
-## 0.30.4
-
-### Patch Changes
-
-- Updated dependencies [6edcce0]
-  - @cat-factory/contracts@0.94.0
-  - @cat-factory/kernel@0.81.0
-  - @cat-factory/prompt-fragments@0.9.54
-
-## 0.30.3
-
-### Patch Changes
-
-- Updated dependencies [ef57cb1]
-  - @cat-factory/contracts@0.93.0
-  - @cat-factory/kernel@0.80.0
-  - @cat-factory/prompt-fragments@0.9.53
-
-## 0.30.2
-
-### Patch Changes
-
-- Updated dependencies [1d738f7]
-  - @cat-factory/contracts@0.92.0
-  - @cat-factory/kernel@0.79.1
-  - @cat-factory/prompt-fragments@0.9.52
-
-## 0.30.1
-
-### Patch Changes
-
-- Updated dependencies [47a2975]
-  - @cat-factory/contracts@0.91.0
-  - @cat-factory/kernel@0.79.0
-  - @cat-factory/prompt-fragments@0.9.51
-
-## 0.30.0
+## 0.160.0
 
 ### Minor Changes
 
-- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
-  the task's own service frame PLUS each connected involved-service frame, provisioning one
-  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
-  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
-  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
-  `involvedServices` (title + connection description + the peer's live env URL, read-time
-  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
-  integration test can reach a peer's real environment.
+- 6ff632f: Add the in-app assistant: type what you want done, and the platform does it
+  
+  Everything on the board is reachable, and reaching it means knowing which panel holds it. Putting a
+  repository on the board is a modal behind a sidebar entry; filing a task from a ticket is a second
+  modal plus a source picker plus a container picker; declaring that one service depends on another is
+  a field in a frame's inspector most people never open. Each is several clicks from someone who
+  already knows the sentence they would say.
+  
+  The assistant takes the sentence. It ships with three actions, the ones a request most often is:
+  declare that one service depends on another (so both are spun up when either is tested), add a
+  service backed by a GitHub or GitLab repository named by its URL, and file a board task from an issue
+  URL (GitHub, GitLab, Jira, Linear).
+  
+  The design decision worth reviewing is that the model does not act. It reads the request, names one
+  action from a closed catalog and copies that action's arguments out of the words in front of it;
+  everything after that is deterministic. The platform looks the id up in the catalog it rendered,
+  validates the arguments through the shared descriptor validator, resolves every name against the
+  board itself, and performs the action through the same service the equivalent button calls. So a
+  hallucinated action id is a decline, an invented argument key is a dropped key, and a service name
+  matching nothing (or matching two) is a question with the candidates attached. Nothing the model
+  writes reaches a side effect, a stored row, or the screen.
+  
+  That last part is also why a turn answers with DATA rather than a chat message: the outcome variant
+  carries the ids and titles of what was touched, or the machine-readable reason it could not act, and
+  every sentence a person reads is rendered by the SPA from the i18n catalog. Putting the model's own
+  explanation on the wire would have made the surface untranslatable and put unreviewed model text on
+  screen.
+  
+  A QUESTION is answered as data too. A turn that could not resolve an argument carries the action it
+  was heading for and the arguments it did resolve, so clicking one of the candidates re-runs that
+  action with the chosen value in the field the platform named: no model call, nothing billed, and no
+  chance of the answer routing somewhere else. The rule that comes with it binds any action added
+  later: a candidate has to be a legal VALUE for the field the question names, or the person is being
+  offered an answer the next turn refuses.
+  
+  `BoardService.addServiceFromRepo` now answers with the frame AND the disposition that produced it
+  (`created` or `mounted`), an internal signature change with no wire effect. The account-wide dedupe
+  answers with a frame either way, and only the operation knows which path it took: a caller comparing
+  the returned frame against the board it read a moment ago sees a service homed on another board as a
+  fresh import, which is the one case the distinction exists to report.
+  
+  Two alternatives were considered and rejected. A TOOL-CALLING loop (let the model call the board's
+  own methods) would have put the model inside the write path, where a wrong argument is a wrong write
+  rather than a wrong question, and would have made "which service did you mean?" unanswerable without
+  a second round trip. A DEPLOYMENT-REGISTERED action catalog was left for a later step: every action
+  performs a board write through an engine-internal service, the same reading that keeps the `merger`
+  step resolver a privileged built-in, so opening the catalog means defining a public, minimal action
+  context first. The tracker holds it as a named phase.
+  
+  Worth watching when reviewing:
+  
+  - The assistant is member tier and mounts no permission gate, on the same reading as the bug hunt:
+    every action it performs is board authoring a member can already do from a button. Each write
+    carries the asker's own tier (`blockEditAuthority`), so it is never a way around a policy its user
+    is held to.
+  - A turn is a billable model call no run start gates, so it answers to the workspace budget
+    (`isOverBudget`) before any vendor is reached, and fails closed.
+  - `WorkspaceService.snapshot` was refactored (no behaviour change) so that its board composition and
+    the two visibility passes are one private method, and a new `boardBlocks` read shares them. That
+    keeps exactly one definition of what is on a board while letting a caller that needs only the
+    frames skip the workspace's pipelines, executions and three built-in catalogs.
+  - There is no conformance group, and the reason is in the doc rather than an omission: the module is
+    composed in `createCore` from dependencies every facade already provides, with no port
+    implementation, table, migration or cron of its own. Making an end-to-end turn assertable per
+    facade needs an `AssistantRouter` seam first, which is on the tracker.
 
 ### Patch Changes
 
-- Updated dependencies [b928904]
-  - @cat-factory/contracts@0.90.0
-  - @cat-factory/kernel@0.78.0
-  - @cat-factory/prompt-fragments@0.9.50
+- Updated dependencies [6ff632f]
+  - @cat-factory/contracts@0.350.0
+  - @cat-factory/kernel@0.342.1
+  - @cat-factory/prompt-fragments@1.1.39
 
-## 0.29.1
-
-### Patch Changes
-
-- Updated dependencies [7fa7578]
-  - @cat-factory/contracts@0.89.0
-  - @cat-factory/kernel@0.77.0
-  - @cat-factory/prompt-fragments@0.9.49
-
-## 0.29.0
-
-### Minor Changes
-
-- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
-  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
-  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
-  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
-  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
-
-  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
-    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
-    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
-    key is shown once on create.
-  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
-    external runs never appear in the UI.
-  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+## 0.159.1
 
 ### Patch Changes
 
-- Updated dependencies [55661f4]
-  - @cat-factory/contracts@0.88.0
-  - @cat-factory/kernel@0.76.0
-  - @cat-factory/prompt-fragments@0.9.48
+- Updated dependencies [ca5be97]
+  - @cat-factory/kernel@0.342.0
+  - @cat-factory/prompt-fragments@1.1.38
 
-## 0.28.0
-
-### Minor Changes
-
-- ca5c3e8: Initiatives (slice 1 of 4): the long-running, multi-task counterpart to a task — see
-  `docs/initiatives/initiatives-feature.md` for the full multi-slice plan.
-
-  - **New `initiative` block level** — a container block under a service frame (created via the
-    new "Create initiative" button in the frame header, next to add-task/import-task). Tasks a
-    later slice's execution loop spawns link back via the new `blocks.initiative_id` membership
-    column (epic-style). D1 migration `0035_initiatives.sql` ⇄ Drizzle schema, shared mapper.
-  - **New `initiatives` entity + store** — the DB row is the source of truth (phases, items with
-    planner-authored estimates + dependencies, the execution policy with estimate→pipeline rules,
-    decisions / deviations / follow-ups / caveats), guarded by a `rev` compare-and-swap so the
-    loop has a single logical writer. Mirrored D1 ⇄ Drizzle repositories with a cross-runtime
-    conformance suite (CRUD, doc round-trip, CAS conflict, `blocks.initiative_id`).
-  - **Initiative Planning pipeline skeleton (`pl_initiative`)** — `initiative-planner` (a
-    read-only structured container explore that drafts the multi-phase plan, gated for human
-    approval) + `initiative-committer` (a deterministic engine step that flips the entity to
-    `executing` and commits the rendered tracker to `docs/initiatives/<slug>/` — canonical
-    `initiative.json` + human `tracker.md` + `version.json`, hash-short-circuited and
-    replay-safe, following the blueprint artifact pattern). A bidirectional guard in the
-    engine's shared `assertRunnable` makes `pl_initiative` the ONLY pipeline runnable on an
-    initiative block (and vice versa), across start/retry/restart.
-  - **API + snapshot + realtime** — `POST/GET /workspaces/:ws/initiatives` (+ by-block read),
-    the snapshot's optional `initiatives` field, and a new `initiative` WorkspaceEvent pushed
-    from both runtimes' publishers.
-  - **Frontend** — the Create Initiative modal + frame-header button, the initiative board card,
-    an inspector body (run planning / open tracker) and the read-only Initiative Tracker window
-    (`initiative-tracker` result view), with the `initiative.*` i18n namespace across all 8
-    locales.
-
-  Later slices add the interactive planning interview, the execution loop (just-in-time task
-  spawning with estimate-gated pipeline selection), and follow-up/deviation harvesting.
-
-### Patch Changes
-
-- Updated dependencies [ca5c3e8]
-  - @cat-factory/contracts@0.87.0
-  - @cat-factory/kernel@0.75.0
-  - @cat-factory/prompt-fragments@0.9.47
-
-## 0.27.1
-
-### Patch Changes
-
-- cc924a9: Requirements-review recommendations: batch, tighten, and surface what's awaited.
-
-  - The Requirement Writer now answers findings in CHUNKS (up to 4 per LLM call) instead of one
-    call per finding, so a batch of N findings costs `ceil(N / 4)` calls rather than N. Shared
-    grounding is still gathered once and progress still streams `ready / total` a chunk at a time;
-    a failure is isolated to its chunk. Each finding keeps the same per-finding output budget the
-    single-call path used (scaled by chunk size), and a batched response is routed back to its
-    findings by the echoed itemId with a prompt-order fallback — so a response that drops the ids
-    isn't discarded wholesale and the whole chunk force-reopened.
-  - The Writer prompt (`requirement-writer`, bumped to v2) now asks for precise, succinct
-    recommendations — the concrete answer in a couple of sentences, cite sources briefly, no
-    preamble or padding — instead of open-ended prose.
-  - The review window now shows a persistent "awaited recommendations" summary (how many the
-    Writer is still generating and how many are waiting on the human) in the stats rail, and lets
-    you request recommendations while a merged review is being reworked — not only in the initial
-    `ready` state.
-  - The incorporated-requirements document can now be collapsed as a whole. It defaults to collapsed
-    only in the pre-incorporation `ready` phase (so a long doc doesn't push the findings being worked
-    through off-screen) and expanded in `merged`/`incorporated`, where the document itself is the
-    thing to read; a manual collapse no longer leaks across a status change.
-
-## 0.27.0
+## 0.159.0
 
 ### Minor Changes
 
-- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
-
-  The full fragment bodies were already cached on our side; the "check for changes"
-  probe previously re-listed the whole source directory and hashed every blob sha.
-  It now reads only the source directory's current head commit sha and compares it to
-  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
-  directory listing or file reads.
-
-  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
-  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
-  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
-  are gone — the resync badge is now a plain "changes available" indicator). A new
-  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
-  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
-  sha, so no database migration is required; existing rows re-derive their commit on the
-  next sync.
-
-### Patch Changes
-
-- Updated dependencies [b216fdc]
-  - @cat-factory/kernel@0.74.0
-  - @cat-factory/contracts@0.86.0
-  - @cat-factory/prompt-fragments@0.9.46
-
-## 0.26.18
-
-### Patch Changes
-
-- Updated dependencies [7fd6a19]
-  - @cat-factory/kernel@0.73.0
-
-## 0.26.17
-
-### Patch Changes
-
-- Updated dependencies [0ac0dc4]
-  - @cat-factory/contracts@0.85.0
-  - @cat-factory/kernel@0.72.0
-  - @cat-factory/prompt-fragments@0.9.45
-
-## 0.26.16
-
-### Patch Changes
-
-- Updated dependencies [36f4cf6]
-- Updated dependencies [b78adf5]
-  - @cat-factory/contracts@0.84.0
-  - @cat-factory/kernel@0.71.0
-  - @cat-factory/prompt-fragments@0.9.44
-
-## 0.26.15
-
-### Patch Changes
-
-- Updated dependencies [e0aab3f]
-  - @cat-factory/contracts@0.83.0
-  - @cat-factory/kernel@0.70.2
-  - @cat-factory/prompt-fragments@0.9.43
-
-## 0.26.14
-
-### Patch Changes
-
-- Updated dependencies [0d51638]
-  - @cat-factory/kernel@0.70.1
-
-## 0.26.13
-
-### Patch Changes
-
-- Updated dependencies [eb67d40]
-  - @cat-factory/kernel@0.70.0
-
-## 0.26.12
-
-### Patch Changes
-
-- Updated dependencies [5ce03c6]
-  - @cat-factory/contracts@0.82.0
-  - @cat-factory/kernel@0.69.8
-  - @cat-factory/prompt-fragments@0.9.42
-
-## 0.26.11
+- 5f06bfb: Run an environment dry run on the model the workspace picked, and hand it what the tester will get
+  
+  An agent dry run was dispatched on a model no workspace had chosen. Its facades read the deployment's
+  env routing for the tester kinds once, at wiring, and pinned the prober to it for the process
+  lifetime, so a workspace running everything on its Claude preset had its dry run dispatched at the
+  Node family's Qwen default. The LLM proxy then refused it for having no key configured (`502`), after
+  the run had already created a branch and stood a real environment up. The subscription that would
+  have served it was never asked for, because the flow only ever knew the proxy branch: a
+  subscription-routed model was refused at WIRING, which disabled the whole capability for exactly the
+  deployments that had one.
+  
+  The model is now resolved per dispatch, under the same precedence a pipeline step gets (the frame's
+  own pin, then the workspace's model preset entry for the prober's kind, then env routing), through
+  the shared `ModelRouter`. The credential that opens it comes from the same `ContainerJobAuthResolver`
+  the step executor uses, so a dry run can run on a pooled subscription, a personal one, or the
+  developer's own CLI in native local mode. A personal credential is only leasable with its owner's
+  unlock, so the start route gates on it exactly as a run start does (428 `credential_required`, minted
+  against the run id the dispatch leases against) rather than provisioning an environment and failing
+  at the lease. `provision` mode spends no model call and stays ungated.
+  
+  The dry run also now predicts what a tester step will be handed, which is the only thing it was ever
+  claiming. Both are rendered by one module: the frame's test credentials as a three-state brief
+  (configured / the platform could not open its own store / this deployment has no store), the
+  environment access scheme including the two states the tester's own section used to drop, and one
+  list of where to look in the repository for how to operate the service. The tester side of each was
+  weaker: a sealed store that would not open reached it as an absent section, which reads as "this
+  service has none configured" and sends someone to re-enter secrets that are already there, and an
+  unopenable store took the whole dispatch down rather than costing the credentials.
+  
+  One rule the two held halves of moved with them: the shapes of a success nobody observed (a 200
+  carrying an error body, a login page where JSON was expected, a command that printed failures and
+  exited 0, a suite that ran zero tests). The prober named the HTTP ones; the tester, whose greenlight
+  is what merges a change, had the principle and none of the shapes. Grading and writing deliberately
+  did NOT move, because a prober never does either and the second is a security property its dispatch
+  shape enforces.
+  
+  Watch for one behaviour change: a dry run used to run on the deployment's `tester-api` /
+  `tester-ui` env routing, and now runs on whatever the workspace's preset names for
+  `environment-prober-api` / `environment-prober-ui`, falling back to that same env routing when the
+  preset names neither. A deployment that wants a specific model for dry runs sets it on those two
+  preset entries. The proxyable check moved with the resolution: it is asked of the RESOLVED model at
+  dispatch instead of disabling the capability deployment-wide over a routing entry no workspace had
+  chosen.
+  
+  Three things the dispatch resolves are now PERSISTED on the run row and handed back to every later
+  poll (`probe_model`, `probe_subscription_token_id`, `probe_subscription_vendor`), the same rule a
+  pipeline step's `recordDispatchAttribution` follows. The poll runs in a fresh process and rebuilds
+  its handle from that row: re-resolving the model there answered about the frame and preset as they
+  are NOW, so a pin cleared while the container worked stamped the settled report with a model nobody
+  ran, and the leased pooled token id has no second source at all.
+  
+  With it, a settled dry run files what it spent through the same `ContainerJobAccounting` a step's
+  poll files through: the per-call rows, the leased token's usage-aware rotation counters and the
+  modeled quota cycle. That only binds on a subscription harness, which is why it could not be left
+  out: a Pi job is metered by the LLM proxy, but a subscription harness talks to the vendor direct, so
+  the whole burn of a subscription-routed dry run was previously absent from the telemetry, from the
+  rotation and from the quota window: free and invisible, on the flow whose own admission gate is a
+  budget.
+  
+  Admission now also asks whether the RESOLVED model can be dispatched (409
+  `env_test_probe_model_unavailable`, translated in every locale), covering a provider the LLM proxy
+  cannot serve and a subscription-only model with no connected credential. Both were knowable before
+  anything was created and both used to cost a throwaway branch, a full provision and a teardown to
+  discover. The personal-credential unlock moved to LAST among the gates, resolved through a closure
+  the service calls after its own refusals, so a dry run that could never have started no longer asks
+  for a password first; and the mint now happens before the run row exists and outside the start's
+  cleanup path, so an unlock that fails answers `428 credential_required` instead of a `201` carrying
+  a failed run that the SPA reads as a finished action.
+  
+  Two fixes reach beyond the dry run. The modeled subscription quota cycle is now keyed on the VENDOR
+  the dispatch resolved rather than the model's provider: the two differ for four of the five
+  (`claude`/`anthropic`, `codex`/`openai`, `glm`/`zai`, `kimi`/`moonshot`), so the fold silently
+  matched DeepSeek alone and counted nothing for the rest. Expect quota cycles to start reporting
+  usage for those vendors. And both facades now compose every container dispatch's credential channels
+  through one builder, which is what closes the gap the dry run's own composition had: it omitted
+  `resolveAccountId`, so the proxy session token carried no account scope and the account-tier spend
+  budget was not enforced for a dry run while it was for every pipeline step.
 
 ### Patch Changes
 
-- Updated dependencies [7f9d215]
-  - @cat-factory/kernel@0.69.7
+- Updated dependencies [5f06bfb]
+  - @cat-factory/contracts@0.349.0
+  - @cat-factory/kernel@0.341.0
+  - @cat-factory/prompt-fragments@1.1.37
 
-## 0.26.10
-
-### Patch Changes
-
-- 4955639: Fix five bugs in how best-practice prompt fragments are managed and applied:
-
-  - **Code-aware helper agents now receive the service fragments.** `ci-fixer`, `fixer`
-    and `on-call` are dispatched off their HOSTING step (a `ci`/`post-release-health`
-    gate, the tester, the human-test/visual-confirmation loops), and the fragment fold
-    keyed off that step's kind — so the helpers never received the service's standards
-    despite being marked `code-aware`. `AgentContextBuilder.buildContext` now takes an
-    explicit `agentKind` override and every helper dispatch passes it; the on-call job
-    body additionally folds the resolved fragments into its bespoke system prompt
-    (previously bypassed). A stale `step.selectedFragmentIds` is also cleared when a
-    re-dispatch resolves to nothing, so observability can't over-report.
-  - **Tier tombstones now stick on the run path.** `resolveBodiesForRun` used to fall
-    back to the static pool for any id missing from the merged catalog — which is
-    exactly what a tombstone does to a built-in, so suppressing a fragment a service
-    had selected silently resurrected it. The fallback is gone; a missing id is dropped.
-  - **Deployment-registered fragments join the tenant catalog.** The library's built-in
-    tier now reads the UNIVERSAL pool (shipped catalog + `registerPromptFragment`
-    entries, lazily) instead of the raw shipped array, so a registered override of a
-    built-in id actually reaches runs and the resolved catalog, and registered
-    fragments can be tier-shadowed/tombstoned like any built-in.
-  - **Repo-source resync no longer mishandles renames and id edits.** The tombstone
-    sweep is keyed by the fragment ids the current tree produces, not by stale paths:
-    renaming a file that pins an explicit frontmatter `id` no longer tombstones the
-    fragment the rename just updated, and changing a file's explicit `id` in place now
-    retires the old id instead of leaving a live duplicate forever. The GitHub
-    installation is also resolved once per sync instead of once per file, and the
-    requirement writer's fragment grounding resolves through the merged tenant catalog
-    when the library is wired.
-  - **The SPA pickers now offer the merged catalog.** The per-service / per-block /
-    workspace-default fragment pickers loaded only the static built-in pool, so
-    managed, repo-sourced and document-backed fragments could be authored but never
-    attached (and a managed id set via API rendered no chip). The fragments store now
-    loads the workspace's resolved catalog (falling back to the static pool when the
-    library is off), invalidates on library edits, and unknown selected ids render as
-    removable chips instead of disappearing. The catalog is per-board, so a workspace
-    switch now invalidates it and the task inspector reloads it on mount — otherwise the
-    task picker kept showing the previous board's fragments.
-
-  Review follow-ups: `AgentContextBuilder` now clears a stale `step.selectedFragmentIds`
-  on the non-code-aware and error paths too (not only when a code-aware resolve is empty);
-  the requirement-writer grounding resolves the merged catalog once (reused for titles and
-  bodies) instead of twice; a repo-source RENAME of an explicit-id file inherits the
-  fragment's `version`/`createdAt` by id instead of resetting them; and the source `status`
-  count no longer double-counts a pure rename.
-
-## 0.26.9
-
-### Patch Changes
-
-- Updated dependencies [4a7a3f1]
-  - @cat-factory/contracts@0.81.3
-  - @cat-factory/kernel@0.69.6
-  - @cat-factory/prompt-fragments@0.9.41
-
-## 0.26.8
-
-### Patch Changes
-
-- Updated dependencies [6243bea]
-  - @cat-factory/contracts@0.81.2
-  - @cat-factory/kernel@0.69.5
-  - @cat-factory/prompt-fragments@0.9.40
-
-## 0.26.7
-
-### Patch Changes
-
-- fc8df61: Fix a cross-tenant access hole on the fragment-source routes: `unlink`/`status`/`sync`
-  resolved the source by its id alone, so an authenticated member of one account/workspace
-  could read, resync or delete another tenant's fragment source by addressing its id under
-  their own prefix. `FragmentSourceService.unlink/sync/status` now take the addressed
-  `(ownerKind, ownerId)` and 404 when the source belongs to a different owner (breaking
-  signature change for direct callers of those three methods).
-
-## 0.26.6
-
-### Patch Changes
-
-- Updated dependencies [2a91615]
-  - @cat-factory/contracts@0.81.1
-  - @cat-factory/kernel@0.69.4
-  - @cat-factory/prompt-fragments@0.9.39
-
-## 0.26.5
-
-### Patch Changes
-
-- Updated dependencies [67d3876]
-  - @cat-factory/contracts@0.81.0
-  - @cat-factory/kernel@0.69.3
-  - @cat-factory/prompt-fragments@0.9.38
-
-## 0.26.4
-
-### Patch Changes
-
-- Updated dependencies [d7f6e1c]
-- Updated dependencies [63cf6de]
-  - @cat-factory/kernel@0.69.2
-  - @cat-factory/contracts@0.80.1
-  - @cat-factory/prompt-fragments@0.9.37
-
-## 0.26.3
-
-### Patch Changes
-
-- Updated dependencies [120de05]
-  - @cat-factory/contracts@0.80.0
-  - @cat-factory/kernel@0.69.1
-  - @cat-factory/prompt-fragments@0.9.36
-
-## 0.26.2
-
-### Patch Changes
-
-- Updated dependencies [dcc8b32]
-  - @cat-factory/contracts@0.79.0
-  - @cat-factory/kernel@0.69.0
-  - @cat-factory/prompt-fragments@0.9.35
-
-## 0.26.1
-
-### Patch Changes
-
-- Updated dependencies [16ee6cc]
-  - @cat-factory/contracts@0.78.1
-  - @cat-factory/kernel@0.68.1
-  - @cat-factory/prompt-fragments@0.9.34
-
-## 0.26.0
+## 0.158.0
 
 ### Minor Changes
 
-- 16621f8: feat(testing): test quality-control companion that loops the Tester on incomplete reports
-
-  The Tester gate concluded a step purely from `greenlight` + blocking concerns + failed
-  outcomes, so a report that claimed to exercise many areas (`tested`) but recorded a single
-  happy-path `outcome` could greenlight and "pass" — leaving most scenarios as "No discrete
-  check recorded" in the Test Report window while the step read as successfully completed.
-
-  Two changes address this:
-
-  - **Tester prompts now require one recorded `outcome` per `tested` area** (API + UI testers):
-    every scenario listed as tested must have a matching outcome with a concrete detail, and
-    describing results only in the prose `summary` does not count. Genuinely un-exercised areas
-    are recorded as `skipped` with a reason rather than dropped.
-  - **A new test quality-control companion** (`tester-qc`) audits each Tester report for
-    coverage/coherence BEFORE the greenlight/fixer decision. When the report is inadequate it
-    loops the Tester for a focused additional pass (folding the prior report + the flagged gaps
-    in, and carrying forward already-covered outcomes), bounded by a new merge-preset knob
-    `maxTesterQualityIterations` (default 3). Enabled by default; a per-Tester-step toggle in
-    the pipeline shape (`pipeline.testerQuality`) disables it or gates it on the task estimate.
-    The companion is an inline reviewer (no container) that resolves its model like the other
-    inline reviewers and is a pass-through when no model is wired.
-
-  Persistence: the merge preset gains a `max_tester_quality_iterations` column, mirrored across
-  the D1 and Drizzle stores (built-in preset seed `version` bumped 1 → 2). The QC loop state
-  lives on the execution step, so no new table is added.
-
-  The frontend pipeline-builder toggle + Test Report verdict surfacing land in a follow-up
-  (see `docs/initiatives/tester-quality-companion.md`).
+- 8dc6677: Test whether an agent can actually operate a service's ephemeral environment, before a pipeline finds out
+  
+  "Test environment creation" answers whether a service's provisioning stands an environment up and
+  takes it down again. The expensive failure is the one after that, and it is a GREEN deploy: the
+  environment is up, the tester reaches it, and the agent then spends its whole step
+  reverse-engineering an auth flow, guessing a base path, or reporting the service as broken because
+  nobody told it which credential to send. That is a full run spent to discover a missing sentence of
+  configuration.
+  
+  "Test agent dry run" sits beside it on the same service and buys the same finding for one
+  container. It runs the identical lifecycle against a throwaway branch and adds one stage in the
+  middle. The environment is handed to an agent (HTTP for a backend service, a browser for a
+  frontend frame) together with the frame's sealed test credentials, the provider's own access
+  handle and a read-only checkout of the branch the environment was built from. The agent picks a few
+  simple but meaningful operations, at least one of which must go through authentication, attempts
+  them, and reports each one: what it was, how it was performed, whether it exercised auth, and what
+  happened. Then the run tears the environment down and deletes the branch exactly as before.
+  
+  The report's most valuable field is the one listing what the PLATFORM failed to supply (a
+  credential with no reference, an endpoint that could not be discovered, an auth flow that had to
+  be reverse-engineered), because each entry is a thing to fix before a real run spends a step on
+  it. An operation the agent could not even attempt is a first-class outcome carrying the reason,
+  not a failed call, and the failure vocabulary is grouped by whose problem each kind is: "no credential
+  was supplied" and "the credential I was given was refused" are different fixes and therefore
+  different members.
+  
+  The verdict is computed by the platform from the agent's per-operation judgements, never read off
+  the reply, and it will not call a service operable unless something that worked went through
+  authentication: a healthcheck answering 200 proves an ingress exists and nothing about whether an
+  agent can work there.
+  
+  Two things to watch when reviewing. The run's `status` deliberately stays a statement about the
+  LIFECYCLE, so a dry run reporting `inoperable` is a SUCCEEDED run that found something. Folding
+  the verdict in would make the one interesting outcome indistinguishable from a broken diagnostic
+  and leave a real teardown failure with nothing to say. And everything knowable before the first
+  side effect is refused there rather than mid-run: a deployment that cannot drive a dry run at all,
+  one whose runner backend has no image for THIS frame's surface, a workspace over its spend budget,
+  and a frame that already has a self-test running. Each of those otherwise costs a branch, a full
+  provision and a teardown to discover.
+  
+  Internal break: `environment_test_runs` gains `mode`, `probe_surface`, `probe_dispatched_at`,
+  `probe_progress` and `probe` on both runtimes, and the start endpoint takes an optional `{ mode }`
+  body (absent is the provisioning self-test, so an existing client is unchanged). The reasoning, the
+  traps and the wiring: `backend/docs/environment-self-tests.md`.
 
 ### Patch Changes
 
-- Updated dependencies [16621f8]
-  - @cat-factory/contracts@0.78.0
-  - @cat-factory/kernel@0.68.0
-  - @cat-factory/prompt-fragments@0.9.33
+- Updated dependencies [8dc6677]
+  - @cat-factory/contracts@0.348.0
+  - @cat-factory/kernel@0.340.0
+  - @cat-factory/prompt-fragments@1.1.36
 
-## 0.25.0
+## 0.157.2
+
+### Patch Changes
+
+- 636fcf3: Re-verify every curated model route against its serving provider, take the agent CLIs at their
+  newest, and refresh the dependency tree.
+  
+  **A withdrawn route, caught by the pin checker.** OpenRouter has withdrawn the undated
+  `qwen/qwen3.8-max` and now serves the dated `qwen/qwen3.8-max-0902` instead. That is the silent
+  failure `scripts/check-openrouter-pins.mjs` exists for: nothing throws, `effectiveVariant` keeps
+  choosing the gateway for a workspace holding only an OpenRouter key, and every dispatch fails on
+  a dead slug. The two entries swap arms accordingly, and the floating entry is deliberately NOT
+  re-pointed at the dated slug: following an alias onto a snapshot is the identity the pinned entry
+  beside it exists to hold.
+  
+  **GLM-5.3 gains the two routes it was waiting for.** It shipped subscription-only because Z.ai
+  had not yet released the weights; Workers AI picked it up on 2026-08-28 and OpenRouter serves
+  `z-ai/glm-5.3` today. Both were read off the serving provider before being declared, and each
+  carries that provider's own window rather than the vendor's headline figure: Workers AI
+  1,048,576, OpenRouter 1,310,720, the coding plan 1M.
+  
+  **Qwen3.8 Flash joins the catalog**, on DashScope and OpenRouter. It is the cheapest 1M-window
+  entry here that reads images, which is what earns it a curated slot rather than the dynamic
+  OpenRouter catalog: it is the natural low-cost tier for the inline steps that reach for
+  `glm-flash` today, and a per-token rate is what those steps are chosen on.
+  
+  **One pinned rate was understating the budget gate.** `openrouter:x-ai/grok-4.6` carried xAI's
+  SHORT band ($2 / $6) with its cache tier left to derive, while the direct `xai:grok-4.6` row
+  carried the long band as its comment explains. xAI bills a request whose prompt reaches 200K
+  tokens entirely at the doubled rate and OpenRouter is a passthrough, so the gateway row now
+  matches: a cache read was metering at 60% below the live rate on a route that really does record
+  the class (`x-ai` is `auto-prefix` on the gateway). Every other pin came back at or above its
+  live rate, and every curated `openrouter` context window matches what the gateway serves.
+  
+  **Two omissions re-checked rather than assumed.** GPT-6 Astra still declares no `bedrock` arm:
+  Codex 0.153.3 did add Astra to the Bedrock picker, so the route demonstrably exists, but neither
+  AWS nor OpenAI publishes the model id it addresses, and a `baseModelId` guessed from a
+  neighbouring entry is precisely the dead pin repaired above. Still no separate "Astra Pro" entry
+  either, though the reasoning has narrowed: OpenRouter has minted its own `openai/gpt-6-astra-pro`
+  slug, while OpenAI's model doc states reasoning effort is a parameter on the single `gpt-6-astra`
+  id and Codex has no such `--model` slug. A second entry could therefore carry one arm re-badging
+  a model already here at byte-identical pricing, and the two-entry shape is for a choice made with
+  the price in front of you.
+  
+  **Agent CLIs.** Pi 0.85.0 -> 0.85.1 and Claude Code 2.1.261 -> 2.1.263 take their newest releases
+  ahead of the 24h age window, as the Dockerfile's standing note allows for those three pins. Codex
+  holds at 0.153.4 (already newest) and both Pi extensions at 2.9.0. Playwright in the UI image goes
+  1.62.1 -> 1.63.0 with `@playwright/test`. The executor image tag rolls to 1.154.0.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution: 56 resolved names moved, no
+  package name added or dropped. Four holds are unchanged and were re-verified at HEAD rather than
+  restated: vitest at 4.1.11 and wrangler at 4.124.0 (`@cloudflare/vitest-pool-workers` 0.22.0 is
+  still the newest and peers `vitest: ^4.1.0` while pinning that wrangler exactly),
+  `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date), and frontend TypeScript
+  at 6.0.3 (`vue-tsc` 3.3.11 calls `require.resolve('typescript/lib/tsc')`, which TS 7's exports map
+  does not carry). Base images are unchanged: `node:26-trixie-slim` still resolves to the digest
+  already pinned. GitHub Actions: `docker/setup-qemu-action` v4.2.0 -> v4.3.0, `pnpm/action-setup`
+  v6.0.10 -> v6.1.0, `zizmorcore/zizmor-action` v0.6.2 -> v0.6.3.
+- Updated dependencies [636fcf3]
+  - @cat-factory/kernel@0.339.0
+  - @cat-factory/prompt-fragments@1.1.35
+
+## 0.157.1
+
+### Patch Changes
+
+- 386c4a2: Add GPT-6 Astra to the curated catalog, take the agent CLIs at their newest, and refresh the
+  dependency tree.
+  
+  **GPT-6 Astra.** OpenAI's new flagship (2026-09-03) joins the catalog as `gpt-6-astra` with a
+  Codex subscription arm and an OpenRouter pay-as-you-go arm, a 1.05M window and image input. The
+  model id IS the Codex `--model` slug, the same rule the GPT-5.6 tiers already follow. Two shapes
+  were decided by checking the routes rather than the announcement:
+  
+  - **No `bedrock` arm**, even though OpenAI named Bedrock among the launch-day routes. No published
+    model card names the Bedrock **id** for Astra, and this catalog declares a flavour only once the
+    route is verified to serve that exact model: a declared-but-absent route is selected by
+    `effectiveVariant` and then fails at dispatch, with nothing upstream of the dispatch to catch it.
+    The arm can be added, additively, when the id lands.
+  - **No separate "Astra Pro" entry.** Pro is not a second model or a second API id: it is this same
+    `gpt-6-astra` served with `reasoning.mode` set to `pro`, and it exists only inside the ChatGPT
+    plans, never on the API or in Codex. An entry for it could only name a route nothing here can
+    dispatch.
+  
+  Astra is priced at $10 / $50 per 1M, the most expensive model this catalog can select on either
+  OpenAI route, so it gets its own `openai:` and `openrouter:` spend rows rather than metering
+  against the bare provider fallback. Its cached input is $1, the same 0.1x read multiplier the
+  GPT-5.6 tiers use, so the derived cache tiers are already exact. The 2x "Fast mode" rate is
+  deliberately not modelled: nothing here dispatches it, and a row set to a mode we never request
+  would over-meter every ordinary Astra run against the budget gate.
+  
+  The built-in `mdp_chatgpt` preset deliberately stays on `gpt-5.6-sol` this round. It names a
+  vendor rather than a generation and is meant to roll forward as that vendor's flagship moves, but
+  Astra is still rolling out per-organization: rolling the preset now would repoint every workspace
+  holding it onto a model its subscription may not serve yet, and the failure would land at dispatch.
+  It is a one-line roll-forward once the rollout completes.
+  
+  **Agent CLIs.** Claude Code 2.1.260 -> 2.1.261, Codex 0.153.2 -> 0.153.4 and Pi 0.84.4 -> 0.85.0
+  all take their newest releases ahead of the 24h age window, as the Dockerfile's standing note
+  allows for those three pins. The Codex pin now also carries a floor the catalog depends on: Astra
+  resolves only from Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than
+  falling back, so that coupling is recorded at both ends. Both Pi extensions are already newest at
+  2.9.0. The executor image tag rolls to 1.152.0.
+  
+  **Dependency refresh.** Direct ranges plus a full lockfile re-resolution: 70 resolved names moved,
+  no package name added or dropped. Four holds, each on a live constraint rather than caution, and
+  the first three are one constraint at three levels:
+  
+  - vitest and `@vitest/coverage-v8` stay on 4.1.11: `@cloudflare/vitest-pool-workers` 0.22.0 is the
+    newest release and still peers `vitest: ^4.1.0`.
+  - wrangler holds at 4.124.0 for the sixth round, pinned exactly as a dependency of that same package.
+  - `@cloudflare/workers-types` holds at 5.20260815.1, one level further down. Its version encodes a
+    workerd DATE and the wrangler above pins `workerd@1.20260815.1`, so moving the types to
+    5.20260904.1 would describe a runtime three weeks newer than the one that actually executes: an
+    API added in the gap typechecks green and throws in production. That is the whole reason
+    `check-cloudflare-runtime-pins` exists, and it is what caught the attempt.
+  - TypeScript holds at 6.0.3 on the frontend, where `vue-tsc` resolves `typescript/lib/tsc`, which
+    TS 7 no longer exports.
+- Updated dependencies [386c4a2]
+  - @cat-factory/kernel@0.338.0
+  - @cat-factory/prompt-fragments@1.1.34
+
+## 0.157.0
 
 ### Minor Changes
 
-- f70c273: feat(frontend): `pl_frontend` pipeline + frontend-aware mocker (slice 4 of the
-  frontend-preview + in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
-
-  Builds on slice 3's self-contained UI-test infra with the pipeline that drives it and a mocker
-  that authors the mocks it needs.
-
-  - **`pl_frontend` built-in pipeline** (`coder → reviewer → mocker → tester-ui → conflicts → ci →
-merger`). For a `type: 'frontend'` frame the engine already resolves the frame's
-    `frontendConfig` + backend bindings and stands the app + WireMock up in one container (slice 3),
-    so this pipeline is just the step order that exercises it end to end: implement → review → mock
-    → browser-test → the standard mergeability/CI/merge tail. Labelled `experimental` — two
-    deploy-/keying-time steps remain (the `ui`-image per-step routing, and keying a bound service's
-    ephemeral env by its FRAME id so a live-service binding resolves instead of falling back to
-    WireMock); a mock-only frontend already runs fully self-contained today.
-  - **Frontend-aware mocker.** When a `mocker` step runs on a task under a `frontend` frame, its
-    user prompt now carries a frontend section: author WireMock stub mappings under the frontend
-    repo's mock dir in WireMock's `--root-dir` layout (`<dir>/mappings/*.json` + `<dir>/__files/`)
-    for exactly the upstreams the harness points at WireMock (every binding with no live service
-    under test), and do NOT wire a docker-compose stack — the platform serves the app + WireMock
-    directly. The live service(s) under test are named and explicitly excluded from mocking. A
-    backend-service mocker run is unchanged (the section is absent without a resolved frontend
-    context). The section explicitly OVERRIDES the docker-compose stand-up guidance in the
-    (backend-oriented) mocker role prompt so the two do not contradict for a frontend run, and the
-    default WireMock root (`mocks/`) is now the shared `DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH` constant
-    in `@cat-factory/contracts` rather than a private literal.
-
-- 6c51e31: Run inline LLM steps through the ambient Claude Code / Codex CLI in local mode, and refuse to
-  start a pipeline whose model preset can't satisfy every step.
-
-  - **Local inline harness execution**: with native agents enabled (`LOCAL_NATIVE_AGENTS`), the
-    inline steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) now run
-    on the developer's ambient `claude`/`codex` subscription CLI as a host subprocess — the inline
-    analogue of the existing container ambient-auth path. Previously a subscription-only preset
-    (e.g. Claude Opus) degraded these inline steps to the routing default and failed against an
-    unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
-    Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
-    local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
-    degrading it. The consensus executor (an inline path) threads the same predicate, so a
-    subscription-only consensus participant model is kept inline in local mode too.
-  - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
-    inline-usability, not just container-usability. A subscription-only model that satisfies the
-    container agents but can't run the inline reviewers (and this deployment has no inline harness)
-    is refused up front with a new `preset_unsatisfiable` conflict reason and an actionable message,
-    instead of failing mid-run. The SPA maps the new reason to a translated toast.
-
-  Breaking: `inlineModelRef` gains an optional third `opts` argument; the `ConflictReason` wire
-  union gains `preset_unsatisfiable`.
+- 76e2c1d: Bug-fishing expeditions now partition a large codebase into TERRITORIES and fish each angle over
+  each one, instead of telling every pass to decide for itself where an angle could bite.
+  
+  The partition is computed by the platform from the repository tree (blueprint modules first, then
+  package and directory boundaries, sized by blob bytes), the expedition stays ONE run whose phase
+  list is territory x angle, each pass is handed its territory's manifest as a `.cat-context/` file
+  so it starts from a map rather than three greps, and what each pass reported reading becomes a
+  per-phase coverage record. A pass budget bounds the matrix and every cell it cuts is recorded as
+  unfished. A codebase small enough to fish whole runs exactly as before.
+  
+  Territories are computed and stated in the frame the AGENT works in: the service's own directory
+  in a monorepo, which is where the harness roots its checkout, rather than the repository root.
+  
+  A task-type field descriptor gains `integer`, so a `number` field whose value must be whole says so
+  where a caller can read it instead of being refused at creation with a raw schema error. The public
+  API spec moves to 1.70.0 for it; `review.prNumber` and the new `bug-fishing.fishingMaxPasses` both
+  declare it.
+  
+  Internal wire break: `GitHubClient.listTree` and `VcsClient.listTree` now return
+  `{ entries, truncated }` rather than a bare array, so a caller building a manifest can tell a
+  truncated tree from a complete one. `bug-fisher` switches to `standardsDelivery: 'context-files'`,
+  so its standards are read once from `.cat-context/` instead of re-sent on every turn of every
+  pass.
 
 ### Patch Changes
 
-- 33687cf: fix(tester): give the Tester standardized env coordinates + real access credentials in its prompt
+- Updated dependencies [76e2c1d]
+  - @cat-factory/contracts@0.347.0
+  - @cat-factory/kernel@0.337.0
+  - @cat-factory/prompt-fragments@1.1.33
 
-  The tester prompt claimed a deployed environment's URL and access credentials were "provided to
-  the test harness out of band" — but nothing delivered them, so Testers aborted with "no deployed
-  URL or credentials found". `environmentSection()` now renders the standardized coordinates
-  (URL + derived host/port/scheme) and the FULL endpoint access credentials (bearer token / HTTP
-  basic username+password / custom header name+value) directly in the run context.
-
-  These are test-environment access credentials, treated as non-sensitive: the Tester cannot
-  authenticate without them reaching the model regardless of channel, so they go straight into the
-  prompt rather than a fictional out-of-band path. The tester system prompts and run-mode wording
-  now point at the concrete "Ephemeral environment under test" section.
-
-- Updated dependencies [9e93fe8]
-- Updated dependencies [9b26ff1]
-- Updated dependencies [e0aa45e]
-- Updated dependencies [f70c273]
-- Updated dependencies [edf4e69]
-- Updated dependencies [f21279e]
-- Updated dependencies [6c51e31]
-  - @cat-factory/contracts@0.77.0
-  - @cat-factory/kernel@0.67.0
-  - @cat-factory/prompt-fragments@0.9.32
-
-## 0.24.16
+## 0.156.3
 
 ### Patch Changes
 
-- Updated dependencies [762fe66]
-  - @cat-factory/contracts@0.76.0
-  - @cat-factory/kernel@0.66.1
-  - @cat-factory/prompt-fragments@0.9.31
+- 5c50d30: Cleanup pass with no behaviour change: deletes exports nothing consumed (dead constants, parse
+  wrappers, alias schemas, pass-through re-exports and the Worker's compat-shim modules left over
+  from the `@cat-factory/server` extraction), drops the `export` keyword from module-local symbols,
+  folds duplicated private helpers onto one owner (base64, `scrub`, `sleep`, `withFlag`, the
+  per-row busy guard), and removes tests that asserted a constant against its own literal or
+  re-implemented the code under test. The SPA's unreachable palette drop handler goes with it.
+  
+  Internal-surface break, flagged per the compatibility rules: the removed barrel exports
+  (`DEFAULT_CI_MAX_ATTEMPTS`, `STANDARD_PHASES`, `isTestingKind`, `isBugFishingPhaseId`,
+  `SEALED_SECRET_SOURCE_NAMES`, `TelemetryReadResults`, `LinearFetchLike`, `ENVIRONMENT_BLOCK_TYPE`,
+  the contracts `parse*`/`safeParse*` one-liners and the `initiativePreset*`/`taskTypeFieldOption`
+  schema aliases) had no consumer in this repository; a downstream import of one of them fails at
+  typecheck and should read the underlying helper directly.
+- Updated dependencies [5c50d30]
+  - @cat-factory/contracts@0.346.2
+  - @cat-factory/kernel@0.336.1
+  - @cat-factory/prompt-fragments@1.1.32
 
-## 0.24.15
-
-### Patch Changes
-
-- Updated dependencies [fb53662]
-  - @cat-factory/kernel@0.66.0
-  - @cat-factory/contracts@0.75.0
-  - @cat-factory/prompt-fragments@0.9.30
-
-## 0.24.14
-
-### Patch Changes
-
-- Updated dependencies [6f95aff]
-  - @cat-factory/contracts@0.74.0
-  - @cat-factory/kernel@0.65.0
-  - @cat-factory/prompt-fragments@0.9.29
-
-## 0.24.13
+## 0.156.2
 
 ### Patch Changes
 
-- Updated dependencies [3643708]
-  - @cat-factory/contracts@0.73.0
-  - @cat-factory/kernel@0.64.0
-  - @cat-factory/prompt-fragments@0.9.28
+- cd220f2: Add five catalog models, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Five new curated models.** Claude Fable 5.1, Gemini 3.8 Flash, a pinned Qwen3.8-Max-0902
+  snapshot, and Meta's Muse Spark 1.3 in both of its commercial tiers. Every route was checked
+  against the serving provider's live catalogue before it was declared, which is what decided three
+  of the shapes:
+  
+  - **Claude Fable 5.1** is the first Claude entry carrying subscription, OpenRouter and Bedrock arms
+    at once. Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch day rather than a
+    generation behind, so the flavour is declared against a verified route. Its OpenRouter slug is
+    DOTTED (`anthropic/claude-fable-5.1`) where the API id is dashed; the two genuinely disagree and
+    normalising either spelling yields a dead id.
+  - **Qwen3.8-Max-0902** is DashScope-only. OpenRouter serves the undated alias and publishes no dated
+    slug, and a flavour declared before its route exists is picked by `effectiveVariant` and then
+    fails at dispatch. It is a separate entry rather than a repoint of `qwen3.8-max` for the reason
+    `claude-opus-4-8` is separate: a block pinned to a snapshot must keep getting that build.
+  - **Muse Spark 1.3 ships as TWO entries**, standard and contributor. They are the same model on the
+    same route and differ only in what Meta may do with the traffic: the contributor tier costs a
+    twelfth on input in exchange for Meta training on the prompts and completions. That is a choice
+    an operator has to make with the price in front of them, and one entry could only make it
+    silently, so the two prices sit in separate rows and the SPA's "enable recommended" set omits the
+    contributor slug.
+  
+  `meta` joins the OpenRouter vendor-prefix family map beside `meta-llama`, so an account that blocks
+  the Meta family blocks Muse Spark too rather than leaving it unclassified.
+  
+  **The bare `bedrock` price row moved up a tier**, from ~$5/$30 to ~$10/$50 per 1M. A Bedrock ref
+  carries the account's own geo prefix, so `priceFor` can only ever match the bare provider key, and
+  that row is deliberately set to the frontier tier the catalog can select there. Fable 5.1 moved that
+  ceiling; leaving the row behind would have metered every Fable-5.1-on-Bedrock run at half its cost.
+  
+  **Both runner image tags roll**: the executor to 1.150.0 for the CLI bumps, and the deploy image
+  to 0.6.2 because the dependency round moved `@types/node` in its `package.json`, which the image
+  builds from. A dep bump inside a harness IS an image-source change, and republishing over a live
+  tag does not roll a deployment out.
+  
+  **Agent CLIs at their newest, ahead of the age window**, as the Dockerfile's standing note allows
+  for exactly these pins: Claude Code 2.1.252 -> 2.1.260 and Codex 0.152.0 -> 0.153.2. Pi is already
+  at its newest (0.84.4). Both Pi extensions move 2.8.0 -> 2.9.0 and have aged past the window, so
+  they take the ordinary route.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits under the `minimumReleaseAge` gate. 68 resolved
+  names move and the re-resolve adds and drops nothing, leaving 1388 names on both sides. Direct:
+  the `@ai-sdk/*` line (`amazon-bedrock@^5.0.73`, `anthropic@^4.0.49`, `openai@^4.0.57`,
+  `openai-compatible@^3.0.43`, `provider@^4.0.10`), `ai@^7.0.91`, `@aws-sdk/client-s3@^3.1125.0`, the
+  `@opentelemetry/*` set (`0.222.0` exporters, `2.11.0` SDK), `@types/node@^26.4.1`,
+  `happy-dom@^20.13.2`, `knip@^6.34.0`, `oxfmt@^0.66.0`, `oxlint@^1.81.0`, `undici@^8.10.1`. The AI
+  SDK family stays inside the `ai@^7` + `@ai-sdk/*@^4` majors that pair with `workers-ai-provider`.
+  
+  Three holds, each for a reason rather than for the age window:
+  
+  - **TypeScript stays at 6.0.3 on the frontend** while the backend is already on 7.0.2. TS 7 was
+    tried and reverted: `vue-tsc@3.3.11` resolves `typescript/lib/tsc`, which TS 7 no longer exports,
+    so the typecheck dies with `ERR_PACKAGE_PATH_NOT_EXPORTED` before reading a single file. vue-tsc
+    is the real gate for `.vue`, so the frontend moves when vue-tsc does.
+  - **wrangler holds at 4.124.0 and `@cloudflare/workers-types` at 5.20260815.1** for the fifth round
+    running. `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins wrangler
+    exactly; the types version IS the workerd date that pin resolves.
+  - **`@types/node@26.4.0` and `undici@8.10.0` keep a second resolved copy** beside the new ones, held
+    by upstream ranges (`@types/pg`, `happy-dom`, `nuxt`, `unifont`) rather than by anything here.
+  
+  Also re-pins `openrouter:deepseek/deepseek-v4-flash`, the one row `check-openrouter-pins.mjs`
+  reported as metering BELOW the live rate. The alias drifted up ~9% since the 2026-09-01 read, and a
+  budget gate is allowed to be early but never short.
+- Updated dependencies [cd220f2]
+  - @cat-factory/kernel@0.336.0
+  - @cat-factory/prompt-fragments@1.1.31
 
-## 0.24.12
-
-### Patch Changes
-
-- Updated dependencies [70e321b]
-  - @cat-factory/contracts@0.72.0
-  - @cat-factory/kernel@0.63.4
-  - @cat-factory/prompt-fragments@0.9.27
-
-## 0.24.11
-
-### Patch Changes
-
-- Updated dependencies [77c6842]
-  - @cat-factory/contracts@0.71.0
-  - @cat-factory/kernel@0.63.3
-  - @cat-factory/prompt-fragments@0.9.26
-
-## 0.24.10
-
-### Patch Changes
-
-- Updated dependencies [2e1354f]
-  - @cat-factory/contracts@0.70.1
-  - @cat-factory/kernel@0.63.2
-  - @cat-factory/prompt-fragments@0.9.25
-
-## 0.24.9
-
-### Patch Changes
-
-- Updated dependencies [b4c7e60]
-  - @cat-factory/contracts@0.70.0
-  - @cat-factory/kernel@0.63.1
-  - @cat-factory/prompt-fragments@0.9.24
-
-## 0.24.8
-
-### Patch Changes
-
-- Updated dependencies [f568a8c]
-  - @cat-factory/kernel@0.63.0
-  - @cat-factory/contracts@0.69.0
-  - @cat-factory/prompt-fragments@0.9.23
-
-## 0.24.7
-
-### Patch Changes
-
-- Updated dependencies [41203db]
-  - @cat-factory/contracts@0.68.0
-  - @cat-factory/kernel@0.62.4
-  - @cat-factory/prompt-fragments@0.9.22
-
-## 0.24.6
-
-### Patch Changes
-
-- Updated dependencies [cb9e2e3]
-  - @cat-factory/contracts@0.67.0
-  - @cat-factory/kernel@0.62.3
-  - @cat-factory/prompt-fragments@0.9.21
-
-## 0.24.5
-
-### Patch Changes
-
-- Updated dependencies [1e55e77]
-  - @cat-factory/contracts@0.66.1
-  - @cat-factory/kernel@0.62.2
-  - @cat-factory/prompt-fragments@0.9.20
-
-## 0.24.4
+## 0.156.1
 
 ### Patch Changes
 
-- Updated dependencies [ecf4cc1]
-  - @cat-factory/contracts@0.66.0
-  - @cat-factory/kernel@0.62.1
-  - @cat-factory/prompt-fragments@0.9.19
+- Updated dependencies [d36d0a8]
+  - @cat-factory/kernel@0.335.1
+  - @cat-factory/contracts@0.346.1
+  - @cat-factory/prompt-fragments@1.1.30
 
-## 0.24.3
-
-### Patch Changes
-
-- Updated dependencies [f9678df]
-- Updated dependencies [858799e]
-  - @cat-factory/contracts@0.65.0
-  - @cat-factory/kernel@0.62.0
-  - @cat-factory/prompt-fragments@0.9.18
-
-## 0.24.2
-
-### Patch Changes
-
-- Updated dependencies [9bb75b0]
-  - @cat-factory/contracts@0.64.0
-  - @cat-factory/kernel@0.61.1
-  - @cat-factory/prompt-fragments@0.9.17
-
-## 0.24.1
-
-### Patch Changes
-
-- Updated dependencies [15c5894]
-  - @cat-factory/contracts@0.63.0
-  - @cat-factory/kernel@0.61.0
-  - @cat-factory/prompt-fragments@0.9.16
-
-## 0.24.0
+## 0.156.0
 
 ### Minor Changes
 
-- f383515: Per-service provision types (slice 2c — tester collapse). **Breaking:** the per-task/per-service
-  `local` vs `ephemeral` Tester toggle is gone. A service's declared `provisioning` config now
-  drives the Tester's infra entirely, so these are removed (BC is a non-goal — stale rows/columns
-  are simply dropped):
-
-  - the `Block` fields `defaultTestEnvironment`, `testComposePath`, `noInfraDependencies` (folded
-    into `provisioning.type` / `provisioning.composePath`) — dropped from the contract, the shared
-    block mapper, and the D1 (`0026_drop_tester_env_columns.sql`) + Drizzle block columns;
-  - the `tester.environment` agent-config descriptor (`@cat-factory/agents`) and its prompt/job-body
-    consumers — the Tester's run mode is now derived from the service's provision type;
-  - the `delegateTestEnvToProvider` workspace setting (+ its D1/Drizzle column) and the local-facade
-    `resolveTesterFallbackDefault` / `resolveRequireEnvironmentProvider` wiring.
-
-  The start-time Tester gate is rewritten: it passes for an `infraless` (or undeclared) service,
-  refuses a `docker-compose` service on a runtime that can't nest containers OR with no compose
-  path declared (`tester_infra_unsupported` — "limited mode" / "nothing to stand up"), and requires
-  a resolvable workspace handler for a `kubernetes`/`custom` service (`provision_type_unhandled`, via
-  the new `EnvironmentConnectionService.resolveHandlerForType` /
-  `EnvironmentProvisioningService.canProvision` seam). The Tester's run mode (the `infra` job spec +
-  the prompt run-mode line, kept in lock-step) is derived from the provision type AND the run's
-  provisioned environment: a service that actually provisioned an env URL (e.g. via a `deployer`
-  step) tests against it regardless of declared type, and an undeclared service runs with no infra.
-  The agent-executor `service` context carries `provisioning` instead of the three legacy fields. The
-  service inspector replaces the local/ephemeral toggle with a provision-type selector.
-
-### Patch Changes
-
-- Updated dependencies [f383515]
-  - @cat-factory/kernel@0.60.0
-  - @cat-factory/contracts@0.62.0
-  - @cat-factory/prompt-fragments@0.9.15
-
-## 0.23.4
-
-### Patch Changes
-
-- Updated dependencies [e4cddb4]
-  - @cat-factory/kernel@0.59.0
-  - @cat-factory/contracts@0.61.0
-  - @cat-factory/prompt-fragments@0.9.14
-
-## 0.23.3
+- 0f3fb10: Bootstrap runs are legible: their steps are shown, their details are inspectable, and a retry resumes where the run stopped
+  
+  A repo bootstrap was already a first-class agent run in every way that costs something to build
+  (one `agent_runs` table, one retry surface, one stop surface) and in no way that helps a person
+  watching one. It rendered as a single "bootstrapping…" bar, so a monorepo bootstrap's three moves
+  (survey both repositories → your adoption decisions → write the service and open the pull request)
+  were invisible, and the control under that bar said "Retry bootstrap" while the service actually
+  resumed at the phase the run reached, carrying the reviewer's settled decisions forward.
+  
+  The steps are now derived from the run row by one rule in `@cat-factory/contracts` that both sides
+  read: the board renders them on the in-progress, parked and failed cards, and
+  `BootstrapService.retry` branches on the same function, so the button names the step it resumes
+  from and cannot promise one the service does not re-enter at. Where a run GOT to and where a retry
+  RESUMES are separate questions, because they differ on one case: a run parked on a plan the
+  platform could not produce reached the review, but the retry drops that plan so a fixed deployment
+  can produce a real suggestion, and re-surveys.
+  
+  A bootstrap is also inspectable through the observability panel now, over the same routes and the
+  same four sinks as any other run. It had been filing almost nothing: no provided-context snapshot,
+  no tool-call trajectory, and its apply phase's model calls keyed on the run's DRIVE id, which no
+  run-scoped read asks for. The drive id now addresses the container and nothing else; every sink
+  carries the run. The inline monorepo survey tags its loop with the run too and files its own
+  context snapshot, so its prompt and its spend read beside the apply's instead of sitting in the
+  store outside every read that could find them. What the panel cannot answer for a bootstrap (the
+  per-phase rollup and the run's cost, both folded from an execution's steps) it now SAYS, rather
+  than hiding the section: beside a list of calls that plainly cost something, a missing cost tile
+  reads as a run that cost nothing.
+  
+  Stopping a bootstrap no longer reports itself as a failure of the step it was stopped in. A stop
+  is stored as a failed status with a `cancelled` kind, so a stopped monorepo run used to paint the
+  reviewer's own decision step red; it is now its own step state.
+  
+  Two behaviour changes worth knowing: a bootstrap's model calls are filed under the agent kinds
+  that actually ran (`repo-bootstrapper`, `monorepo-adoption-advisor`) rather than under `architect`,
+  which changes how new rows group in per-kind spend rollups (the container still resolves its MODEL
+  through `architect`'s routing); and `MonorepoAdoptionSubject` gains a required `runId`, so a
+  deployment that injects its own `MonorepoAdoptionAdvisor` implementation gets the run id it needs
+  to tag its calls with. The two kind strings are exported from `@cat-factory/contracts`
+  (`REPO_BOOTSTRAP_AGENT_KIND`, `MONOREPO_ADOPTION_AGENT_KIND`), which is where anything naming
+  them should now read them from; `@cat-factory/agents` no longer exports the second.
 
 ### Patch Changes
 
-- Updated dependencies [337d94d]
-  - @cat-factory/kernel@0.58.0
-  - @cat-factory/contracts@0.60.0
-  - @cat-factory/prompt-fragments@0.9.13
+- Updated dependencies [0f3fb10]
+  - @cat-factory/contracts@0.346.0
+  - @cat-factory/kernel@0.335.0
+  - @cat-factory/prompt-fragments@1.1.29
 
-## 0.23.2
-
-### Patch Changes
-
-- 6009266: Refresh dependencies to their latest release-age-compliant versions: the Vercel AI
-  SDK family within its `workers-ai-provider`-compatible majors (`ai` 6.0.214,
-  `@ai-sdk/anthropic` 3.0.89, `@ai-sdk/openai` 3.0.77, `@ai-sdk/openai-compatible`
-  2.0.54, `@ai-sdk/amazon-bedrock` 4.0.124), `drizzle-orm`/`drizzle-kit` 1.0.0-rc.4,
-  and `yaml` 2.9.0, plus refreshed transitive resolutions.
-- Updated dependencies [6009266]
-  - @cat-factory/kernel@0.57.1
-
-## 0.23.1
-
-### Patch Changes
-
-- Updated dependencies [1952d6b]
-- Updated dependencies [1952d6b]
-  - @cat-factory/contracts@0.59.0
-  - @cat-factory/kernel@0.57.0
-  - @cat-factory/prompt-fragments@0.9.12
-
-## 0.23.0
+## 0.155.0
 
 ### Minor Changes
 
-- 5fd0ffa: Refuse to start a pipeline that includes an agent relying on binary-artifact storage when the workspace's account has none configured.
-
-  The requirement is modelled as a new `binary-storage` agent trait (carried today by the UI Tester, which uploads its screenshots), so the system is universal: a future artifact-producing agent just declares the trait instead of the engine hard-coding it. `ExecutionService` enforces it on start/retry/restart and throws a `binary_storage_unconfigured` conflict, which the SPA surfaces as an error prompt with a "Configure storage" jump to the content-storage settings.
-
-### Patch Changes
-
-- Updated dependencies [5fd0ffa]
-  - @cat-factory/contracts@0.58.0
-  - @cat-factory/kernel@0.56.1
-  - @cat-factory/prompt-fragments@0.9.11
-
-## 0.22.6
-
-### Patch Changes
-
-- Updated dependencies [f9a173f]
-  - @cat-factory/contracts@0.57.0
-  - @cat-factory/kernel@0.56.0
-  - @cat-factory/prompt-fragments@0.9.10
-
-## 0.22.5
-
-### Patch Changes
-
-- Updated dependencies [fdeb466]
-  - @cat-factory/kernel@0.55.4
-
-## 0.22.4
-
-### Patch Changes
-
-- Updated dependencies [21b2096]
-  - @cat-factory/contracts@0.56.1
-  - @cat-factory/kernel@0.55.3
-  - @cat-factory/prompt-fragments@0.9.9
-
-## 0.22.3
-
-### Patch Changes
-
-- Updated dependencies [ad5d3e0]
-  - @cat-factory/contracts@0.56.0
-  - @cat-factory/kernel@0.55.2
-  - @cat-factory/prompt-fragments@0.9.8
-
-## 0.22.2
+- 745eae8: Let a bootstrap say how its work should land: a pull request, or a push.
+  
+  A bootstrap's delivery used to be decided by its target. Landing a service in a monorepo always
+  opened a pull request; creating a repository always force-pushed the scaffold onto the default
+  branch. Neither is wrong as a default and both are wrong as the only option: a team that wants
+  the first commit of a new service reviewed before it becomes `main` had no way to ask for that,
+  and a team standing services up in their own monorepo had to review and merge a pull request per
+  service to get one there.
+  
+  `delivery` (`pull_request` | `direct_push`) is now a third axis on the launch form and on
+  `POST /workspaces/:ws/bootstrap/jobs`, orthogonal to where the content comes from and where the
+  service lands. Omitted, it resolves to the target's own default, so every existing caller is
+  unchanged: `direct_push` for a new repository, `pull_request` for a monorepo. It is stored on the
+  run, because a retry re-dispatches under it.
+  
+  Three consequences worth knowing before choosing:
+  
+  - **`direct_push` into a monorepo publishes as the agent works.** The harness checkpoints
+    committed work to whichever branch it is pushing, so a run that faults leaves what it had
+    already written on the default branch. A retry resumes on top of it.
+  - **`pull_request` for a NEW repository needs a base commit**, since a pull request is opened
+    between two commits. A repository with none is refused at pre-flight, naming both ways out.
+    Create it with an initial README, or push directly. The modal's own "create repository" button
+    now seeds one.
+  - **A `pull_request` run does not trigger the initial service mapping.** The mapper clones the
+    default branch, which such a run has not written to, so it would map the repository's initial
+    README. The service frame says so; run "map service" from the inspector once the pull request
+    has merged.
+  
+  `/api/v1`: a bootstrap job now projects `delivery`, and its already-released `prUrl` is populated
+  for a new-repo run that opened one. Read `delivery` for whether a pull request is coming and
+  `repoUrl` for which target a run took; the two URL fields are no longer mutually exclusive. Spec
+  version 1.68.0, additive, all four SDKs regenerated.
+  
+  Internal break: `MonorepoBootstrapLeg` no longer carries `branch`/`pr`, and `BootstrapRepoRequest`
+  carries a required `delivery` plan instead; `monorepoBootstrapBranch` / `monorepoBootstrapPrTitle`
+  are now `bootstrapWorkBranch` / `bootstrapPrTitle`. A bootstrap run also records its `workBranch`,
+  so a retry resumes the branch its first attempt pushed instead of opening a second one.
 
 ### Patch Changes
 
-- Updated dependencies [4897078]
-  - @cat-factory/contracts@0.55.0
-  - @cat-factory/kernel@0.55.1
-  - @cat-factory/prompt-fragments@0.9.7
+- Updated dependencies [745eae8]
+  - @cat-factory/contracts@0.345.0
+  - @cat-factory/kernel@0.334.0
+  - @cat-factory/prompt-fragments@1.1.28
 
-## 0.22.1
-
-### Patch Changes
-
-- Updated dependencies [d5a0637]
-- Updated dependencies [915861c]
-  - @cat-factory/kernel@0.55.0
-  - @cat-factory/contracts@0.54.0
-  - @cat-factory/prompt-fragments@0.9.6
-
-## 0.22.0
+## 0.154.0
 
 ### Minor Changes
 
-- 48a3df6: Fix the Tester→Fixer loop, make fixer runs inspectable, and let the Tester abort a run.
-
-  Three related issues in the API/UI Tester flow:
-
-  - **The Tester never actually re-ran after a Fixer round, so the step was marked "done"
-    regardless of the outcome.** The harness keys each job by `run + agentKind` and re-attaches
-    to an existing entry rather than re-running (replay idempotency). A container-reusing
-    transport (a warm local pool / a self-hosted runner pool) keeps that registry alive across
-    rounds — reclaiming a pooled member does NOT destroy it — so a re-dispatched Tester
-    re-attached to its FIRST round's completed job and silently replayed the stale report. Each
-    re-dispatch within a run now carries a per-round **dispatch epoch** folded into the harness
-    job id (`AgentRunContext.dispatchEpoch`), so the re-test always runs anew. Also covers the
-    CI/conflicts gate fixer loops, which share the same re-dispatch shape. Defensively, a report
-    with any failed outcome can no longer be greenlit (a failed check is treated as a blocker).
-    The conformance suite now models a pooled container so the loop is exercised faithfully.
-
-  - **Fixer companion runs were opaque.** A Tester step now keeps an append-only `attemptLog`
-    of its fixer rounds (what each round was handed + how it ended), rendered as an inspectable
-    timeline in the test report window instead of only a bare "N/M fix" count.
-
-  - **The Tester can now ABORT a run instead of looping the fixer.** When the change cannot be
-    meaningfully tested — its ephemeral environment never came up, a required dependency is
-    missing — the Tester sets `abort: { reason }` on its report (or the engine auto-aborts when
-    the step's ephemeral environment is in a `failed` state). The run stops, the block is left
-    blocked (retryable), and a human-actionable notification is raised — the fixer is NOT
-    dispatched, since it cannot provision infrastructure.
-
-  This is a breaking change to the persisted Tester step state and the test-report wire shape
-  (new `attemptLog` / `abort` fields); per the project's pre-1.0 policy, stale in-flight runs
-  may simply break rather than migrate.
-
-### Patch Changes
-
-- Updated dependencies [48a3df6]
-- Updated dependencies [48a3df6]
-  - @cat-factory/kernel@0.54.0
-  - @cat-factory/contracts@0.53.0
-  - @cat-factory/prompt-fragments@0.9.5
-
-## 0.21.17
-
-### Patch Changes
-
-- Updated dependencies [0577404]
-  - @cat-factory/contracts@0.52.0
-  - @cat-factory/kernel@0.53.1
-  - @cat-factory/prompt-fragments@0.9.4
-
-## 0.21.16
-
-### Patch Changes
-
-- Updated dependencies [69558f9]
-  - @cat-factory/contracts@0.51.0
-  - @cat-factory/kernel@0.53.0
-  - @cat-factory/prompt-fragments@0.9.3
-
-## 0.21.15
+- e7e1f8c: Bug fishing expeditions: hunt a codebase for the defects nobody has reported yet
+  
+  Every defect flow the platform had started from a REPORT: `bug-investigator` triages one,
+  `pl_bugfix` fixes one, `bug-hunt` picks one off a tracker board. Nothing looked for the defects
+  nobody has hit, and those are the ones that surface as an incident rather than as a ticket.
+  
+  A new `bug-fishing` task type runs the new read-only `bug-fisher` agent over a service's codebase
+  once per ANGLE — logic and control flow, failure handling, boundary conditions, concurrency and
+  idempotency, state and resource lifecycle, interface contracts, footguns, and conformance with the
+  supplied product requirements. One pass told to find everything returns the shallow half of
+  everything; a pass told to think only about concurrency reads the same files with a question that
+  makes the race visible, and each angle is its own dispatch with a fresh context, so one angle's
+  reading never lands on another's transcript. Nothing is written and no pull request is opened.
+  
+  Triage does not wait for the hunt. A finished angle's findings are final the moment they land, so
+  the expedition window offers them while later angles are still fishing, and each finding a human
+  MARKS spawns its own bug-fix task — carrying the finding's evidence and reproduction — on the
+  pipeline the board configures for spawned fixes (`bugFishingFixPipelineId`, defaulting to the
+  built-in bug-fix preset, overridable per batch). The spawned task links back through the new
+  `Block.expeditionId`.
+  
+  Refusals are deliberately loud rather than convenient. A pass that crashes settles THAT angle as
+  failed carrying its reason, and so does one that answers unusably (no `result.custom`, or a blob
+  the schema rejects), because a phase that silently reported nothing is indistinguishable from one
+  that honestly found nothing — and which angles came back empty is the whole thing a human reads.
+  A mark whose fix task cannot be created — a pipeline that no longer exists, or one that cannot be
+  started on a one-off task — fails with the pipeline named instead of answering 200 and leaving
+  somebody waiting for a task that will never appear. Dismissing an id the expedition does not carry
+  is refused rather than quietly accepted. And an expedition that caught nothing still parks and
+  says so.
+  
+  Marking is safe against two people at once. Creating the task and recording it after would let two
+  markings of one finding each file the same bug and start a run for it, so the finding's spawn
+  record is taken as a `pending` CLAIM under the run's compare-and-swap, carrying the block id it is
+  about to create, and settled to `spawned` or `failed` behind the work. The consequence for anyone
+  reading the state: whether a finding is being fixed is its spawn's `status`, not the record being
+  present. A spawned fix is also created the way the create form would have created it — with the
+  service's standing standards and the marking user as its creator — so it is held to the same
+  standards as the identical bug filed by hand, and the notifications its run raises reach somebody.
+  
+  The pre-dispatch input gate learned about the type: a bug-fishing task legitimately carries no
+  description, because its input is the codebase, so `description_missing` no longer parks one at
+  step 0.
+  
+  Public API: `taskType` gains `bug-fishing` and `NotificationType` gains `bug_fishing_triage`,
+  with two new optional notification-payload fields (`phaseCount`, `untriagedFindingCount`). Both are
+  additive enum members the SDKs already tolerate; the spec is `1.67.0`.
+  
+  Internal break: `workspace_settings` and `blocks` each gain a column, and
+  `ExecutionServiceDependencies` gains an optional `serviceRepository` plus an optional
+  `promptFragmentSource` (the pool a newly created task's default fragments come from, so a spawned
+  fix reads the same one the create form does). Both facades ship the migration.
 
 ### Patch Changes
 
-- Updated dependencies [29d8b5d]
-  - @cat-factory/kernel@0.52.0
-  - @cat-factory/contracts@0.50.1
-  - @cat-factory/prompt-fragments@0.9.2
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/contracts@0.344.0
+  - @cat-factory/kernel@0.333.0
+  - @cat-factory/prompt-fragments@1.1.27
 
-## 0.21.14
-
-### Patch Changes
-
-- Updated dependencies [40f687d]
-  - @cat-factory/contracts@0.50.0
-  - @cat-factory/kernel@0.51.0
-  - @cat-factory/prompt-fragments@0.9.1
-
-## 0.21.13
+## 0.153.1
 
 ### Patch Changes
 
-- Updated dependencies [e0f1149]
-  - @cat-factory/contracts@0.49.0
-  - @cat-factory/kernel@0.50.0
-  - @cat-factory/prompt-fragments@0.9.0
+- Updated dependencies [3b11b10]
+  - @cat-factory/contracts@0.343.0
+  - @cat-factory/kernel@0.332.0
+  - @cat-factory/prompt-fragments@1.1.26
 
-## 0.21.12
-
-### Patch Changes
-
-- Updated dependencies [fc324d2]
-  - @cat-factory/contracts@0.48.0
-  - @cat-factory/kernel@0.49.0
-  - @cat-factory/prompt-fragments@0.8.9
-
-## 0.21.11
-
-### Patch Changes
-
-- Updated dependencies [e3b3540]
-  - @cat-factory/contracts@0.47.0
-  - @cat-factory/kernel@0.48.0
-  - @cat-factory/prompt-fragments@0.8.8
-
-## 0.21.10
-
-### Patch Changes
-
-- Updated dependencies [704c99e]
-  - @cat-factory/contracts@0.46.0
-  - @cat-factory/kernel@0.47.2
-  - @cat-factory/prompt-fragments@0.8.7
-
-## 0.21.9
-
-### Patch Changes
-
-- Updated dependencies [c2ec53b]
-  - @cat-factory/contracts@0.45.1
-  - @cat-factory/kernel@0.47.1
-  - @cat-factory/prompt-fragments@0.8.6
-
-## 0.21.8
-
-### Patch Changes
-
-- Updated dependencies [4b5d267]
-  - @cat-factory/kernel@0.47.0
-  - @cat-factory/contracts@0.45.0
-  - @cat-factory/prompt-fragments@0.8.5
-
-## 0.21.7
-
-### Patch Changes
-
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [8727f2b]
-- Updated dependencies [56e6ce6]
-  - @cat-factory/kernel@0.46.0
-  - @cat-factory/contracts@0.44.0
-  - @cat-factory/prompt-fragments@0.8.4
-
-## 0.21.6
-
-### Patch Changes
-
-- 8fad695: Update dependencies to latest.
-
-  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
-    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
-    so the test runner / CI is pinned to **Node 26**. Production runtime is
-    unaffected — `undici` is a dev/test dependency only, and the service still runs
-    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
-  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
-    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
-    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
-    `@aws-sdk/client-s3` 3.1075.
-  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
-    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
-    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
-  - Pinned the whole Vue runtime family to one version via a pnpm `override`
-    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
-    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
-    bundled into the SPA; Vue's render internals are module-level singletons, so the
-    second copy crashed the app on boot (`Cannot read properties of null (reading
-'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
-    version = one singleton.
-  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
-    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
-
-- Updated dependencies [8fad695]
-  - @cat-factory/contracts@0.43.3
-  - @cat-factory/kernel@0.45.5
-  - @cat-factory/prompt-fragments@0.8.3
-
-## 0.21.5
-
-### Patch Changes
-
-- Updated dependencies [fb339db]
-  - @cat-factory/contracts@0.43.2
-  - @cat-factory/kernel@0.45.4
-  - @cat-factory/prompt-fragments@0.8.2
-
-## 0.21.4
-
-### Patch Changes
-
-- Updated dependencies [ab146e5]
-  - @cat-factory/kernel@0.45.3
-
-## 0.21.3
-
-### Patch Changes
-
-- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
-  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
-  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
-  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
-  removes that footgun for every publishable library.
-- Updated dependencies [c11a0cc]
-  - @cat-factory/contracts@0.43.1
-  - @cat-factory/kernel@0.45.2
-  - @cat-factory/prompt-fragments@0.8.1
-
-## 0.21.2
-
-### Patch Changes
-
-- Updated dependencies [5363166]
-  - @cat-factory/kernel@0.45.1
-
-## 0.21.1
-
-### Patch Changes
-
-- Updated dependencies [eab73b8]
-- Updated dependencies [eab73b8]
-  - @cat-factory/contracts@0.43.0
-  - @cat-factory/kernel@0.45.0
-  - @cat-factory/prompt-fragments@0.8.0
-
-## 0.21.0
+## 0.153.0
 
 ### Minor Changes
 
-- e641417: Add a document-authoring pipeline and a richer document task definition.
-
-  **Reviewers now read the real repository.** The `reviewer` (code) and `doc-reviewer`
-  companions run as read-only container reviewers: they clone the producer's PR branch and
-  read the ACTUAL changed files / committed document with tools before rating, instead of
-  grading the producer's summary reply (a review of a summary is worthless). They are
-  dispatched through the same async container path the coder/merger use and return their
-  verdict as structured JSON, resolved by the same threshold / rework-loop / human-gate
-  handling as before. Inline companions (`architect-companion` / `spec-companion`) are
-  unchanged. A container companion is gated on a wired sandbox like any other container kind.
-
-  A new forward-authoring track produces an in-repo Markdown document (PRD / RFC / design
-  doc / ADR / technical reference / runbook / research report) shipped as a pull request —
-  distinct from the reverse-documentation kinds (`documenter` / `business-documenter` /
-  `blueprints`) that describe existing code. Four new agent kinds are registered through the
-  public `registerAgentKind` seam — `doc-researcher` and `doc-outliner` (inline), `doc-writer`
-  (container-coding, opens the PR coder-style) and `doc-finalizer` (container-coding, polishes
-  on the PR branch) — plus a `doc-reviewer` companion that loops the writer back for rework.
-
-  Two built-in pipelines are seeded: `pl_document` (research → outline [human gate] → write →
-  AI review loop [human gate] → finalize → conflicts → ci → merger) and `pl_document_quick`.
-
-  The `document` task type gains a wider `docKind` set (`prd`/`rfc`/`adr`/`design`/`technical`/
-  `api`/`runbook`/`research`/`reference`/`other`) and optional `audience`, `targetPath` and
-  `outlineHints` fields, threaded into the agent context so the document agents specialise their
-  prompts. No new persisted tables — the committed Markdown is the durable artifact.
-
-### Patch Changes
-
-- Updated dependencies [e641417]
-  - @cat-factory/contracts@0.42.0
-  - @cat-factory/kernel@0.44.0
-  - @cat-factory/prompt-fragments@0.7.41
-
-## 0.20.3
+- 9dfd40b: Let the monorepo adoption survey choose what it reads, and record what it read.
+  
+  The survey behind a monorepo bootstrap's adoption suggestion used to read a DECLARED list of
+  files (the root convention files, up to two CI workflows, one probed sibling service) and hand
+  them to one model call to judge. What the survey could not see was therefore decided before it
+  looked. It could see a sibling's dependency on `@acme/service-base` but not what adopting it
+  entails; it could name one sibling but had no shape in which to say the siblings disagree; it
+  saw nothing below a sibling's top level; and it read whichever two CI workflows sorted first,
+  which is unlikely to be the one that will actually gate the pull request.
+  
+  The read is now a bounded tool loop. The platform still seeds an opening context (each side's
+  root listing and convention files, whichever CI declaration the repository's provider uses
+  listed rather than sampled, and the listing of every sibling holding a convention file of its
+  own), and the model then asks for what it needs through `list`/`read` tools bound per side over
+  the same checkout-free `RepoFiles`. It is still inline: no container, no clone, no runner-image
+  change. The prompt is built from the sides that were actually wired, so a run whose reference
+  template the workspace never linked is not told it has tools it does not have.
+  
+  The platform keeps the bookkeeping, which is what keeps the suggestion checkable. Every read,
+  seeded or model-chosen, is budgeted (24 model reads, 54 000 characters for the loop), scrubbed
+  of secrets and appended to one transcript, and a recommendation citing anything that transcript
+  does not hold as read is still dropped and reported. Exhausting a budget is stated to the model
+  so the plan can name the areas it ran short on, and reported on the plan so a reviewer can tell
+  a thin read from a thin reading.
+  
+  `AdoptionSurvey` is now that transcript: `reads` replaces `monorepoPaths`/`templatePaths`/
+  `unreadablePaths`, `siblingServices` replaces the single `siblingService`, and `exploration`
+  carries the budget plus `recordsDropped`, the count of rows the transcript's own cap could not
+  hold. `reads` is nullable: the list projection every workspace snapshot is built from withholds
+  the transcript once a run is past its review, and says so rather than sending an empty array,
+  which is what a survey that read nothing looks like. Internal wire shape, so a plan stored by an
+  older build reads back unusable and the run should be retried; nothing about the review, the park
+  or the pull request changes.
 
 ### Patch Changes
 
-- Updated dependencies [bbafec9]
-- Updated dependencies [bbafec9]
-  - @cat-factory/kernel@0.43.0
+- Updated dependencies [9dfd40b]
+  - @cat-factory/contracts@0.342.0
+  - @cat-factory/kernel@0.331.0
+  - @cat-factory/prompt-fragments@1.1.25
 
-## 0.20.2
-
-### Patch Changes
-
-- Updated dependencies [63e2177]
-  - @cat-factory/contracts@0.41.0
-  - @cat-factory/kernel@0.42.2
-  - @cat-factory/prompt-fragments@0.7.40
-
-## 0.20.1
-
-### Patch Changes
-
-- Updated dependencies [d1027ec]
-  - @cat-factory/contracts@0.40.1
-  - @cat-factory/kernel@0.42.1
-  - @cat-factory/prompt-fragments@0.7.39
-
-## 0.20.0
+## 0.152.0
 
 ### Minor Changes
 
-- 32c653f: Add the Visual Confirmation gate and split the tester into an API + UI tester.
-
-  - **Tester split:** the `tester` kind is renamed to `tester-api` (general/API exploratory
-    testing) and a new `tester-ui` kind drives a real browser (Playwright), captures a
-    non-redundant screenshot of each distinct view, uploads them to the binary-artifact
-    store, and reports them under `TestReport.screenshots[]`. Both share the Tester→Fixer
-    loop and the `tester.environment` infra choice (`isTesterKind`). The UI tester dispatches
-    with `image:'ui'` so a transport can route it to a dedicated Playwright/browser image.
-  - **Visual Confirmation gate** (`visual-confirmation`): a park-on-decision engine gate
-    (modelled on `human-test`) that gathers the UI tester's screenshots + the human-uploaded
-    reference design images (paired by view) and parks for a person to review actual-vs-reference.
-    The human approves (advance), requests a fix (dispatches the Tester's `fixer`, then re-parks),
-    or recaptures. Raises a `visual_confirmation_ready` notification; passes through when no
-    binary-artifact store is wired. New `pl_visual` pipeline (`… tester-ui → visual-confirmation
-→ merger`) and the `GET /blocks/:id/artifacts` + visual-confirmation action endpoints.
-  - Cross-runtime conformance covers the gate's no-store pass-through and the artifact store's
-    `listByBlock`.
-
-  BREAKING: the `tester` agent kind is renamed to `tester-api`. Per this repo's pre-1.0 policy
-  (no backwards-compatibility shims), any persisted state that still names `tester` simply stops
-  matching: a saved/custom pipeline referencing `tester` is detected as outdated and reseeded from
-  the catalog, and an execution that is parked mid-`tester` at upgrade time will no longer be
-  recognised by the tester gate (re-run the task). New runs are unaffected — the seeded pipelines
-  all use `tester-api`.
-
-  NOTE: the dedicated UI-tester container image (Playwright/Chromium) and the per-kind image
-  routing into it (a second Cloudflare container class; image-per-step on the local/pool
-  transports) are a deploy-time follow-up — the `image:'ui'` dispatch seam is in place. Until that
-  routing AND the harness env-passthrough (`ARTIFACT_UPLOAD_URL`/`ARTIFACT_UPLOAD_TOKEN` + a
-  Playwright driver) land, `tester-ui` has no browser and the `pl_visual` gate runs in MANUAL mode
-  (a human uploads references + screenshots and reviews them), which is why `pl_visual` is flagged
-  `experimental`.
+- 1c79070: An environment provider can state a balancer by NAME, and the platform resolves it when it dials
+  
+  A route candidate had to be an IP literal, on the reasoning that "a name would just be the lookup
+  that already failed". That is true of the environment's own hostname and false of the name the
+  deployments this feature exists for actually have: a per-PR environment whose record lives in an
+  internal view is fronted by load balancers that are ordinary public names, and those names resolve
+  from anywhere. A provider had to resolve them itself and state the result, which pins a snapshot of
+  a set that rotates as the balancer scales, forces DNS into a pure response mapping, and asks every
+  such provider to get bounded resolution and partial failure right on its own.
+  
+  A candidate may now state `host` instead of `address`, and a manifest declares one through the new
+  `response.hostsPath` beside `addressesPath`. The platform resolves each stated name at the moment
+  it dials, expands it in place into the addresses it answered with (so the provider's preference
+  order still means what it says), and grades every one of those addresses by exactly the rule that
+  governs a stated address, so an address a bridge may not name is still refused and the destination
+  a container is bridged to is still a literal the platform itself proved. The proof publishes the
+  address that carried plus the name it came from, and the stored candidate stays the stable identity
+  rather than today's answer, which is also what lets a proof survive the balancer changing addresses.
+  
+  Which kind a candidate names is stated, never inferred from the value. The address rule refuses
+  `2130706433` precisely because it is loopback in a disguise, and a resolver handed the same string
+  answers loopback without complaint, so a bare string means an address under `addressesPath` and a
+  name under `hostsPath`.
+  
+  Every way a name fails to become an address is recorded as its own attempt rather than dropped: a
+  name that resolves nowhere rules that candidate out and the proof moves to the next, a lookup that
+  failed (or a resolver that rejected, which the port forbids and nothing can enforce) carries the
+  resolver's own words, and a deployment with nothing wired to resolve records the new
+  `resolver_unavailable` reason, which settles nothing either way and can never fail a frame. Both
+  facades wire a resolver (Node through `dns.lookup`, the Worker over DNS-over-HTTPS, which is the
+  view its own outbound connections already resolve through).
+  
+  The platform also says when it stopped reading: the plan bounds how many names it looks up and how
+  many addresses it dials, and a list longer than that now ends in one `not_attempted` attempt naming
+  how many were passed over. That is a second new reason, and it leaves the route unruled-out for the
+  same reason the first does. A verdict that nothing reaches an environment may not be graded against
+  candidates nobody looked at, and the deployer fails a frame on that verdict.
+  
+  Two proofs that used to stand forever are now re-taken by the status poll: one recording that this
+  deployment could not resolve a name (once one is wired), and a `reached` proof whose address was
+  RESOLVED rather than stated. The second is the price of surviving a balancer rescale, which is what
+  `viaHost` is for: the name stays good while the literal beside it, the one a container host bridge
+  is built from, can be released by the same scale event.
+  
+  Internal breaks, no migration: `EnvironmentAddress` / `environmentAddressSchema` are renamed to
+  `EnvironmentRouteCandidate` / `environmentRouteCandidateSchema` with `address` now optional;
+  `planRouteProbes` takes an options object in place of its bare timeout argument;
+  `RouteProbeTarget`'s `refused` member is generalized to `undialled` and `recordRefusedAttempt` to
+  `recordUndialledAttempt`; and `reduceRouteProof` takes the carrying target rather than its address.
+  A stored candidate or proof written before this parses and behaves exactly as it did.
 
 ### Patch Changes
 
-- 32c653f: Review round 4 (visual-confirmation gate / binary artifacts):
+- Updated dependencies [1c79070]
+  - @cat-factory/contracts@0.341.0
+  - @cat-factory/kernel@0.330.0
+  - @cat-factory/prompt-fragments@1.1.24
 
-  - **Don't load the AWS SDK unless S3 is actually used.** `@cat-factory/provider-s3` now imports
-    `@aws-sdk/client-s3` lazily (on the first S3 operation) instead of at module load, so a
-    Node/local deployment running the `db` (or no) blob backend no longer pays the SDK's load cost
-    even though the facade statically imports `S3BinaryBlobBackend` to wire its container.
-  - **Guard Approve when the gate flags its screenshots as unreliable.** The visual-confirmation
-    window now requires an explicit "I've reviewed this manually" acknowledgement before Approve is
-    enabled whenever the gate set a `degradedReason` (no capture happened, a fix failed, or a fix
-    landed AFTER the shown screenshots) — so a stale/empty gallery can't be approved in one blind
-    click.
-  - **Cheaper per-run upload cap.** The harness screenshot ingest precheck uses an indexed
-    `countByExecution` (no row materialise) and only runs the post-insert overflow reconcile when the
-    insert could actually cross the cap, so the steady-state upload is one COUNT + one insert.
-  - **Serve a blob in a single metadata read** via `BinaryArtifactStore.getBlobWithMetadata`.
-  - **Drop dangling screenshot refs.** The gate validates the agent-reported screenshot `artifactId`s
-    against what the run actually uploaded, so a fabricated id or one removed by the retention sweep
-    renders as "not captured" rather than a 404 image.
-  - Make the UI-tester prompt honest: it now only instructs an upload when `ARTIFACT_UPLOAD_URL` is
-    provided to the run (manual mode otherwise), and treats the reference-design directory as
-    optional.
-
-  The new `countByExecution` / `getBlobWithMetadata` store methods are mirrored D1 ⇄ Drizzle and
-  asserted by the cross-runtime binary-artifacts conformance suite.
-
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-  - @cat-factory/kernel@0.42.0
-  - @cat-factory/contracts@0.40.0
-  - @cat-factory/prompt-fragments@0.7.38
-
-## 0.19.0
+## 0.151.0
 
 ### Minor Changes
 
-- b5231b0: Make prompt-caching a first-class, visible capability and add per-kind progress-guard
-  leniency.
-
-  **Caching capability + observability.** `providerCachePolicy` moves to the kernel
-  (`domain/cache-policy.ts`, re-exported from `@cat-factory/agents`) so the model catalog
-  can derive a per-flavour `ModelOption.cachesPrompts` from the effective provider — the
-  same model reads `false` on its cache-less Cloudflare/Workers-AI flavour and `true` once
-  a direct key upgrades it to its caching `direct` flavour. The already-recorded
-  `cachedPromptTokens` is now aggregated per agent kind in `summarizeByExecution` (D1 +
-  Drizzle, kept symmetric) and surfaced as `cachedPromptTokens` + a derived `cacheHitRate`
-  on the step rollup and the LLM-metrics export.
-
-  **Vendor-selection UI.** The model picker shows a `Prompt caching` / `No prompt caching`
-  badge per flavour, the API-keys panel notes which direct keys enable caching, and the
-  step metrics bar shows a cached-token split when present — so a user can see (and act on)
-  the hot path running cache-less. Shipped model defaults are intentionally NOT changed;
-  extending `providerCachePolicy` to more providers (Moonshot / OpenRouter / LiteLLM) is
-  gated on benchmark evidence (see `backend/docs/prompt-caching.md`).
-
-  **Per-kind guard leniency.** The container progress guard can now be loosened per agent
-  kind via an optional `guardLimits` job-body field (clamped per knob in the harness;
-  merged over the env/built-in defaults — loosen-only, never tighten). A data-driven
-  `agentTuningFor` seam (`@cat-factory/agents`, plus an `AgentKindDefinition.tuning` hook
-  for custom kinds) supplies the profile, which `ContainerAgentExecutor` folds into the
-  dispatch body. Initial profiles give `conflict-resolver` more error headroom and the
-  research-heavy kinds a higher consecutive-web cap, so a legitimately-progressing run is
-  not killed for its normal pattern. Output-token ceilings are unchanged.
-
-### Patch Changes
-
-- Updated dependencies [b5231b0]
-  - @cat-factory/contracts@0.39.0
-  - @cat-factory/kernel@0.41.0
-  - @cat-factory/prompt-fragments@0.7.37
-
-## 0.18.5
-
-### Patch Changes
-
-- Updated dependencies [6d829bb]
-  - @cat-factory/contracts@0.38.0
-  - @cat-factory/kernel@0.40.0
-  - @cat-factory/prompt-fragments@0.7.36
-
-## 0.18.4
-
-### Patch Changes
-
-- Updated dependencies [714b7c9]
-  - @cat-factory/contracts@0.37.0
-  - @cat-factory/kernel@0.39.0
-  - @cat-factory/prompt-fragments@0.7.35
-
-## 0.18.3
-
-### Patch Changes
-
-- Updated dependencies [efbd910]
-  - @cat-factory/contracts@0.36.0
-  - @cat-factory/kernel@0.38.1
-  - @cat-factory/prompt-fragments@0.7.34
-
-## 0.18.2
-
-### Patch Changes
-
-- 692ccb4: Centralize OpenAI-compatible provider base-URL resolution.
-
-  The env-override→default base-URL logic (and the "litellm has no public default" rule)
-  was reconstructed per facade — a `NODE_BASE_URLS` map plus a `||` lookup on Node and a
-  provider `switch` on the Worker. Both now route through a single
-  `resolveOpenAiCompatibleBaseUrl(provider, override)` in `@cat-factory/agents`, driven by
-  the existing `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` table, so adding an OpenAI-compatible
-  vendor is a one-line table entry both runtimes pick up automatically.
-
-  Minor behavioural alignment: a _blank_ `${PROVIDER}_BASE_URL` override now falls back to
-  the built-in default on the Worker too (it previously returned the empty string), matching
-  Node's long-standing `||` semantics.
-
-## 0.18.1
+- 8b015a3: Bootstrap a new service INTO an existing monorepo, with a human review of what it adopts.
+  
+  Repo bootstrap only ever created a service in a repository of its own: clone a reference
+  architecture, adapt it, force-push a single commit to a fresh empty repo. That shape is exactly
+  wrong for a monorepo, which already holds other people's services: there is no empty target, the
+  force-push would destroy them, and the question worth asking is not what the service contains but
+  what it should share with everything around it. A bootstrap can now target a DIRECTORY of a
+  repository the workspace already has, and it is delivered as a pull request.
+  
+  That question has no good default, which is why the run stops to ask. The template ships its own
+  build tooling, lint config, test runner, CI wiring and layout; the monorepo has answers for the
+  same areas, usually different ones. Adopt the template wholesale and the repository grows a second
+  toolchain; adopt the monorepo wholesale and the template stops being worth having. So a monorepo
+  run is two phases with a person between them: it surveys both sides, proposes per-area
+  recommendations, parks on a new `awaiting_review` status, and writes nothing until a human has
+  settled every line.
+  
+  The suggestion is built to be CHECKED rather than trusted. The platform reads a bounded, declared
+  set of files through the checkout-free repo port (the root manifests, the CI workflows, and the
+  nearest EXISTING sibling service, which is the only thing that says what a service in this
+  repository actually looks like), and the model only judges what it was given. A recommendation
+  whose evidence names no file the survey read is dropped before it reaches the reviewer, and the
+  plan reports the drop rather than quietly shortening: a plan that lost half its lines to invention
+  must not look like a monorepo with few conventions. What the survey could not read is reported
+  apart from what is simply absent, for the same reason.
+  
+  Two refusals are load-bearing. A review that leaves a decision unanswered is refused rather than
+  defaulted onto the recommendation, because agreeing with a suggestion and never having read it are
+  the two things this step exists to tell apart. And an answer naming a decision the plan does not
+  carry is refused whole, since the reviewer was looking at a different proposal. Where no model is
+  configured, over budget, or unable to read the repository, the run still parks and the reviewer is
+  told what the platform could not offer and why. An empty decision list and "the analysis never
+  ran" lead to opposite conclusions, and each cause needs a different fix, so each is its own
+  reason. The reviewer can settle such a plan anyway: there is nothing to answer, their notes are
+  the whole instruction, and the review is the only exit from the park.
+  
+  The survey's own model call is guarded twice. It answers to the same workspace budget a run start
+  does, since nothing else gates it; and it is claimed atomically before the call rather than marked
+  after it, because both durable drivers replay and two drives that each saw no plan yet would bill
+  twice and leave a reviewer answering a plan that had been replaced underneath them.
+  
+  The apply phase is an ORDINARY coding job rather than a bootstrap one: the monorepo as the
+  writable primary at a work branch, the reference template beside it as a read-only checkout the
+  run is structurally incapable of pushing to, and one pull request. Nothing outside the new
+  directory is touched beyond the registration the monorepo's own tooling needs, and nothing is
+  merged for the reviewer.
+  
+  The settled decisions ride the pull request as an engine-owned marker region rather than as its
+  body. The harness lets an agent-authored description replace the body field-wise, and it asks for
+  one whenever the target repository ships a pull request template, so the reviewed decisions (the
+  one thing on that PR the agent did not choose) would otherwise be routinely overwritten. The
+  region also means every hole in it crosses the host-markdown boundary: a reviewer's note reading
+  "fixes #412" would close an unrelated issue on the monorepo when the bootstrap PR merged.
+  
+  `BootstrapStatus` gains `awaiting_review` and `BootstrapJob` gains `prUrl`, both reaching
+  `/api/v1` (surface 1.65.0) because a run started in the app is read through it. `prUrl` is a new
+  field rather than a reuse of `repoUrl`: a monorepo run creates no repository, and putting a pull
+  request link in a field documented as the created repository's URL would leave an integration
+  that clones what it reads cloning a PR. It is additive (the clients tolerate unknown enum values),
+  but a poller's terminal test has to change: `awaiting_review` is neither running nor finished, so a
+  loop treating "not succeeded and not failed" as "still working" would wait forever on a run that is
+  waiting for a person.
 
 ### Patch Changes
 
-- Updated dependencies [a4ea607]
-  - @cat-factory/contracts@0.35.0
-  - @cat-factory/kernel@0.38.0
-  - @cat-factory/prompt-fragments@0.7.33
+- Updated dependencies [8b015a3]
+  - @cat-factory/contracts@0.340.0
+  - @cat-factory/kernel@0.329.0
+  - @cat-factory/prompt-fragments@1.1.23
 
-## 0.18.0
+## 0.150.0
 
 ### Minor Changes
 
-- 76543fa: Add a **Human Review gate** — an opt-in pipeline step (`human-review`, pipeline `pl_pr_review`
-  "Build & PR review") that watches a task's PR for a human code review on GitHub and loops the
-  existing `fixer` agent to address feedback:
-
-  - Advances once the PR meets GitHub's required approvals (read from branch protection) with no
-    unresolved review threads.
-  - Dispatches the `fixer` to address outstanding review threads (immediately when approved; after a
-    per-task grace window otherwise), then resolves each handed thread on GitHub via the GraphQL
-    review-thread API so the next probe sees it cleared. A reviewer re-opening a thread re-triggers a fix.
-  - Waits indefinitely for the human (re-arming, never auto-failing), surfacing a `human_review`
-    notification while it waits.
-  - A human can request a freeform fix at any time from the gate window
-    (`POST /workspaces/:ws/blocks/:blockId/human-review/request-fix`), dispatched immediately.
-
-  Built as a registry gate in `@cat-factory/gates` (new `PullRequestReviewProvider` port +
-  `GitHubPullRequestReviewProvider`, wired in every facade) reusing the generic gate driver, plus
-  small generic engine seams: `pollExhaustion: 'rearm'`, a `GateDefinition.onHelperComplete` side-effect
-  hook, and a `pendingFix` manual-inject path. Adds a per-task `humanReviewGraceMinutes` merge-preset
-  knob (D1 ⇄ Drizzle migration). The cross-runtime conformance suite asserts the gate on every runtime.
-
-  Review hardening:
-
-  - Branch-protection's required-approval count is read against the PR's **actual base branch**
-    (`pulls/{n}.base.ref`), not the repo default — so a PR into a stricter protected branch is gated
-    against its own rule instead of silently defaulting to 1.
-  - A **stalled fixer** (no progress on an unchanged head while feedback is outstanding) now raises a
-    `human_review` notification instead of waiting silently/invisibly forever.
-  - The awaiting-approval `human_review` card carries the run's `executionId`, so the inbox deep-links
-    into the gate window (the "request a fix here" affordance) instead of merely selecting the block.
-  - The thread-resolve reconcile is scoped strictly to threads the gate itself handed the fixer
-    (retained until confirmed resolved) — a **third-party review bot's** open thread is never silently
-    closed, and its feedback isn't mistaken for the fixer's own.
-  - `requestHumanReviewFix` rejects (409) when the gate has no review provider / async executor wired,
-    instead of accepting a request it would silently drop.
-  - The static branch-protection read is cached on the gate state after the first probe, so an
-    indefinite wait no longer re-reads it every poll.
-
-  **Breaking:** `FIXER_AGENT_KIND` moved from `@cat-factory/orchestration`'s `ci.logic` to
-  `@cat-factory/kernel` (re-exported from `ci.logic` for existing call sites); the `merge_threshold_presets`
-  table gains a non-null `human_review_grace_minutes` column.
+- ec0aba1: Keep what a status poll observes, and stop the environment investigation reasoning past it
+  
+  The first real environment investigation produced a confident wrong verdict: it blamed a platform
+  readiness gate that had worked correctly, told a human to go change three behaviours that already
+  behave as asked, and filed the actual cause as one bullet underneath. Three defects behind it, all
+  in what the platform recorded rather than in what the model did with it.
+  
+  **A status poll now persists what it captured.** `refreshStatus` handed the whole provision-field
+  bag to the provider and then wrote a patch that omitted it, so `provision_fields_cipher` was
+  written once at create time and never again. For an asynchronous provider the create response is
+  the least informative answer it will ever give (no finished deploy job, no load balancers, no
+  readiness detail), so every fact worth capturing arrived on a poll and was discarded, and an
+  adapter recording its balancer health and DNS resolution on each poll was writing into a field
+  nothing read. A stated bag now REPLACES the stored one, whole, and
+  `ProvisionedEnvironment.fields` is nullable: `null` states nothing and keeps what is stored, which
+  is what stops a status endpoint answering a narrower shape than its create endpoint from erasing
+  teardown state. The docstring described merge semantics and the code implemented neither.
+  
+  The corollary binds every adapter: a statement has to be COMPLETE. The generic manifest provider's
+  `status()` therefore carries the keys this response said nothing about over from the stored bag
+  under its freshly mapped values, because its bag is built from two paths a status endpoint commonly
+  omits (the id usually rides the request path, not the body). Its no-`status`-template fallback and
+  the Compose provider's no-project branch answer `null`, which is what an adapter that read nothing
+  owes.
+  
+  **A poll the provider ANSWERED leaves a trail.** The provisioning log records a poll that threw and
+  a poll that turned an environment `failed`; any other answer wrote nothing anywhere, so a readiness
+  wait that polled for four minutes left two rows a second apart at the create, and nothing in the
+  data distinguished "nothing polled" from "polling is not logged". The environment row carries
+  `lastPolledAt` plus a `pollCount` floor (a row per poll being the wrong shape at a ten-second
+  cadence), both projected onto `EnvironmentHandle`. It counts ANSWERS rather than successes, a
+  `failed` verdict included: the claim a reader gets wrong is how much polling happened, and reading
+  it as a success count would hand an investigation twenty-two successes for an environment that
+  failed all twenty-two.
+  
+  **The investigation's evidence carries the route, and one timeline.** The bundle gains
+  `route` (the addresses the provider stated and what dialling them proved) and folds the proof into
+  the timeline dated from its own `checkedAt`, so an ordering claim that contradicts a timestamp the
+  platform held is structurally hard to state; the verdict that filed this said the reachability
+  check "settled roughly at the moment of the create request" against a `checkedAt` reading 4m18s
+  later. The provisioning log's own state is an entry in that list too, in each of the four ways it
+  can have one (this deployment keeps none / this environment is on no run / it was read and holds
+  nothing / the read threw), because once the record's dates and the poll marker joined the timeline
+  an absent log stopped being distinguishable from an empty one by the list coming back short. The
+  platform also COMPUTES the determinate cause where its own inputs settle one (a `not_reached` proof
+  beside an empty candidate list means nothing but the environment's own name was ever available to
+  dial; a `no_candidate` proof BESIDE stated addresses is the different determinate cause that the
+  URL published none, not that the provider stated no addresses) and tells the model it outranks
+  anything inferred from apparent ordering. Prompt bumped to `environment-investigation@v2`, which
+  also forbids reading the absence of an entry in a record of attempts as the absence of the event,
+  and names the route evidence and the poll marker as sources an answer may cite.
+  
+  The route evidence is scrubbed and bounded on the way into the bundle, like every other
+  provider-authored section: `candidates` comes off a response mapping with no declared length and a
+  probe's `detail` is the only field carrying a raw error string. The attempt list now has ONE
+  renderer (kernel's `describeRouteTargets`) rather than a copy per surface, which is how one of them
+  came to ship that detail unredacted while its neighbour scrubbed it.
+  
+  **A route proof survives on what it established.** The fold compared the candidate list as a
+  SEQUENCE, so any later poll whose list merely reordered dropped the proof, and nothing took
+  another: `proveEnvironmentRoute` is reached only from the deployer's frame settle, which never runs
+  again for a settled frame. A provider stating addresses from a live DNS answer does not control
+  their order. A `reached` proof now survives while the target it names is still on offer (compared
+  after the same trim the prober applies, so a padded address stops failing to match its own proof),
+  any other proof while the candidate set is unchanged, and `refreshStatus` re-proves a `ready`
+  environment whose proof it had to drop.
+  
+  The re-prove is bounded, and the bound needed a third field. It runs at most once a minute per
+  environment, because a provider that genuinely re-states a different candidate set on every answer
+  would otherwise add up to twenty seconds of sequential dialling to every poll of a ten-second
+  readiness wait. Pacing that off the proof's own `checkedAt` does not work: the first time the poll
+  waits, it persists the drop, and the next poll reads an environment nothing ever dialled. So
+  `EnvironmentReachability` carries `probedAt` (when the platform last LOOKED, kept across a dropped
+  verdict and a moved URL), which is also what lets an environment settled `unproved` before a
+  deployment wired its prober get proved once one exists: `unproved` is a proof never taken, and it
+  survives the fold indefinitely.
+  
+  Internal break: `ProvisionedEnvironment.fields` is `ProvisionFields | null` (nullable, not
+  optional, so every provider still has to decide), `EnvironmentRecord` gains `lastPolledAt` and
+  `pollCount`, and the stored reachability blob gains an optional `probedAt`. Both facades add the two
+  columns (D1 migration 0099 and the matching Drizzle migration) and existing rows read back as
+  never-polled, which is what they are; `probedAt` needs no migration (it is inside the existing JSON
+  column) and a value written without one re-proves at its first opportunity.
 
 ### Patch Changes
 
-- Updated dependencies [76543fa]
-  - @cat-factory/kernel@0.37.0
-  - @cat-factory/contracts@0.34.0
-  - @cat-factory/prompt-fragments@0.7.32
+- Updated dependencies [ec0aba1]
+  - @cat-factory/contracts@0.339.0
+  - @cat-factory/kernel@0.328.0
+  - @cat-factory/prompt-fragments@1.1.22
 
-## 0.17.2
-
-### Patch Changes
-
-- Updated dependencies [17adf4c]
-  - @cat-factory/contracts@0.33.0
-  - @cat-factory/kernel@0.36.0
-  - @cat-factory/prompt-fragments@0.7.31
-
-## 0.17.1
+## 0.149.1
 
 ### Patch Changes
 
-- Updated dependencies [eb48652]
-  - @cat-factory/contracts@0.32.0
-  - @cat-factory/kernel@0.35.0
-  - @cat-factory/prompt-fragments@0.7.30
+- Updated dependencies [436f373]
+  - @cat-factory/contracts@0.338.0
+  - @cat-factory/kernel@0.327.0
+  - @cat-factory/prompt-fragments@1.1.21
 
-## 0.17.0
+## 0.149.0
 
 ### Minor Changes
 
-- 9f7ee39: Add "Requirements brainstorm" and "Architecture brainstorm" agents — structured-dialogue
-  gates that PROPOSE options with explicit trade-offs and let a human converge on a direction,
-  rather than doing all the work themselves or expecting the work done upfront.
-
-  - One shared, stage-discriminated engine (`BrainstormService` over the existing
-    `IterativeReviewService`), driven through the generic `ReviewGateController`. Two agent kinds
-    (`requirements-brainstorm`, `architecture-brainstorm`) reuse it via a stage-bound repository
-    adapter.
-  - Persistence: a new `brainstorm_sessions` table keyed per (block, **stage**) — a block may hold
-    a live requirements AND a live architecture session at once — mirrored across both runtimes
-    (D1 + Drizzle/Postgres) with a cross-runtime conformance suite.
-  - Handoffs (DB session state → next stage's prompt): `requirements-brainstorm` → the
-    requirements review (its converged direction becomes the reviewed subject);
-    `architecture-brainstorm` → the architect (surfaced additively as a prior output).
-  - Pipelines: both steps are added to `pl_full` and `pl_fullstack` but **disabled by default**
-    (opt-in per pipeline) — existing runs are unchanged.
-  - Frontend: a shared brainstorm window (option cards with trade-offs → choose/steer/dismiss →
-    incorporate → re-run), wired through the result-view seam, the workspace stream, and the
-    palette catalog.
-
-  Breaking: adds a new required table on both runtimes (`brainstorm_sessions` D1 migration +
-  Drizzle migration) and a new optional `ExecutionEventPublisher.brainstormSessionChanged` event.
-  No data migration — pre-1.0, stale state is acceptable.
-
-  The brainstorm iteration cap reuses the merge preset's `maxRequirementIterations` /
-  `maxRequirementConcernAllowed` knobs (no new preset field).
-
-- 81b60d4: Add the future-looking **Follow-up companion** to the Coder agent.
-
-  As the Coder works it now surfaces forward-looking items — genuine loose ends, useful
-  side-tasks it is deliberately not acting on, and clarifying questions — by appending them
-  to a `.cat-follow-ups.jsonl` sentinel file in its working directory. The executor-harness
-  tails that file and streams the items **out** on the job view (drain-on-read, like tool
-  spans), so a blinking **Follow-up companion** chip on the Coder step lights up the moment
-  the first item appears — while the container is still running.
-
-  A human triages each item at any point: file a follow-up as a tracker issue (GitHub Issues
-  / Jira, via the existing `TicketTrackerProvider`), send it back to the Coder to address
-  after delivering the key task, answer a question, or dismiss it. The pipeline's following
-  steps do not start until **every** item is decided: an undecided follow-up or unanswered
-  question parks the run at the Coder's completion (a new `followup_pending` notification).
-  Once all are decided the engine loops the Coder for the queued / answered items (within a
-  per-step budget) before advancing. The companion is enabled by default on Coder steps and
-  disableable per step in the pipeline builder.
-
-  This is pure engine + run-step state (no new table) so it is runtime-symmetric across the
-  Cloudflare and Node facades — the cross-runtime conformance suite asserts the park →
-  decide → loop → advance behaviour on both. Wire contracts (`followUpItem` /
-  `followUpsStepState`, the `followup_pending` notification, the `follow-ups` result view),
-  the `streamFollowUps` harness job flag + `RunnerJobView.followUps` channel (with an
-  optional pool-manifest `followUpsPath`), and the `FOLLOW_UP_GUIDANCE` Coder prompt fragment
-  are added across the stack.
-
-  Bumps the executor-harness image (new src) — publish + redeploy to roll it out.
+- a745ee2: An environment now carries an address as well as a name, and the platform proves the route before a tester is pointed at it
+  
+  An environment reached an agent as one nullable URL, so "reachable" meant "a URL exists" and
+  nothing between the provider stating it and a tester dialling it ever checked. The tester then got
+  `curl` code 000, which covers a DNS failure, a missing route and a refused connection as one
+  symptom, and reported the hypothesis its own task made salient: that the environment was down.
+  
+  Three things change together, because landing any one alone is incoherent or worse than today. A
+  host bridge can now map a name to an ADDRESS as well as to the container runtime's host gateway,
+  which is what a per-PR environment whose DNS record lives in an internal view needs. The deployer
+  DIALS the environment once when its frame settles ready, publishing the candidate that carried
+  rather than the first that resolved and recording every attempt either way. And what it proved
+  rides the handle into the tester's prompt, so an agent that cannot resolve a name is told which
+  layer the platform already ruled out and which address carried.
+  
+  An environment nothing can reach now settles the frame `failed` with the new
+  `environment_unreachable` reason, in about two minutes, rather than being handed on for a tester to
+  spend ten minutes and a model budget misdiagnosing. That failing verdict is deliberately the narrow
+  one, because a wrong "unreachable" kills a healthy deploy while a wrong "could not tell" costs one
+  diagnostic: a probe that could not classify its own failure, an environment with no address to dial
+  (a `ready` service that publishes no ingress), and a facade with nothing wired to open a socket are
+  `inconclusive` or `unproved`, and neither fails anything. The agent is told when a check was
+  inconclusive; a deployment with no prober carries no reachability line at all.
+  
+  The addresses the platform will dial are limited to those a host bridge may name, applied when the
+  probe is PLANNED rather than only when a bridge is built, so a provider-authored address list
+  cannot aim the platform's own outbound socket at loopback or a cloud metadata endpoint. A refused
+  address is recorded on the proof rather than silently dropped.
+  
+  Internal breaks, both deliberate: `RunnerDispatchOptions.environmentUrls` becomes `environments`,
+  a list of `{ url, address? }` (the pairing is what keeps the host side of a bridge a host the job
+  was actually handed), and `planEnvironmentBridges` moves from the local runtime into
+  `@cat-factory/integrations`, where the Kubernetes runner transport builds the same bridges as pod
+  `hostAliases`. Existing environment rows carry no addresses and no proof, which reads exactly as it
+  should: nothing has looked yet.
 
 ### Patch Changes
 
-- Updated dependencies [9f7ee39]
-- Updated dependencies [81b60d4]
-  - @cat-factory/contracts@0.31.0
-  - @cat-factory/kernel@0.34.0
-  - @cat-factory/prompt-fragments@0.7.29
+- Updated dependencies [a745ee2]
+  - @cat-factory/contracts@0.337.0
+  - @cat-factory/kernel@0.326.0
+  - @cat-factory/prompt-fragments@1.1.20
 
-## 0.16.1
-
-### Patch Changes
-
-- 4dd6e97: Fix: container agent (and repo-bootstrap) runs on **OpenRouter** and **LiteLLM** models
-  were rejected at start with `'openrouter' is not supported` even though the LLM proxy
-  already forwards both (their base URLs resolve in `resolveOpenAiCompatibleUpstream`). The
-  proxyability guard hardcoded only `qwen`/`deepseek`/`moonshot`/`openai`/`workers-ai` and
-  was duplicated (out of step) across `ContainerAgentExecutor` and `ContainerRepoBootstrapper`.
-  Replaced both copies with a single shared `isProxyableProvider` in `@cat-factory/agents`,
-  derived from `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` (so every OpenAI-compatible direct
-  provider — including OpenRouter) plus the operator-hosted `litellm` gateway and the per-user
-  local runners, so the start guard and the proxy can no longer disagree.
-
-## 0.16.0
+## 0.148.0
 
 ### Minor Changes
 
-- ea59e91: Add the Kaizen agent: a post-run, continuous-improvement reviewer (toggleable per
-  workspace, never a pipeline-builder step) that grades each completed agent step on how
-  smooth/efficient vs confused/chaotic the interaction was and recommends prompt/model
-  improvements.
-
-  - After a run completes, the engine schedules a grading per completed agent step
-    (skipping verified combos); a background sweep (Cloudflare cron / Node interval) runs
-    the inline LLM grade. The grader's model is configured in Model Configuration like
-    every other agent (the hidden-from-palette `kaizen` kind).
-  - A `(promptVersion, agentKind, model)` combo that grades strongly (>=4) with no
-    recommendations five times in a row is marked **verified** and is no longer graded.
-  - New persisted tables `kaizen_gradings` + `kaizen_verified_combos` (D1 ⇄ Drizzle parity,
-    asserted by a new cross-runtime conformance suite) and a per-workspace `kaizenEnabled`
-    setting (a new `workspace_settings.kaizen_enabled` column).
-  - New read API (`GET /workspaces/:ws/kaizen`, `GET /workspaces/:ws/executions/:id/kaizen`),
-    a `kaizen` real-time event, a Kaizen screen (grading history + verified combos), and
-    per-step grading status (scheduled/running/complete + results) inside the run window —
-    never on the board.
-  - A step with neither a provided-context snapshot nor any recorded LLM calls (e.g. prompt
-    recording is off deployment-wide) is settled `failed` rather than graded blind, so a
-    guessed grade can't advance a combo toward a bogus `verified`.
-  - The Worker Kaizen sweep gains an in-isolate re-entrancy guard (mirroring the Node
-    sweeper) so overlapping passes don't race the per-combo streak update.
-
-### Patch Changes
-
-- Updated dependencies [ea59e91]
-  - @cat-factory/contracts@0.30.0
-  - @cat-factory/kernel@0.33.0
-  - @cat-factory/prompt-fragments@0.7.28
-
-## 0.15.2
-
-### Patch Changes
-
-- Updated dependencies [b82304e]
-  - @cat-factory/contracts@0.29.0
-  - @cat-factory/kernel@0.32.0
-  - @cat-factory/prompt-fragments@0.7.27
-
-## 0.15.1
+- a08d2ad: Diagnose an environment that never became usable, instead of ending the run at the tester
+  
+  A provisioning failure that no edit in the checkout could fix used to be terminal and
+  unexplained: the `deploy-fixer` correctly declines every cause outside `manifest_invalid`, and
+  nothing else looked. The run died at the tester with a report saying a human had to look, while
+  the facts that explained it sat unread in the provider's own response.
+  
+  A `deployer` step now investigates such a failure. The platform gathers the evidence it already
+  had (the environment record, the WHOLE captured provision-field bag rather than the four fields
+  a consuming step is handed, and the run's provisioning timeline), asks the provider for its own
+  account through a new optional `EnvironmentProvider.diagnostics` capability, and runs one inline
+  model call that names the fault layer and picks one remediation from a list the engine narrowed
+  first. The engine performs it and the deployer re-enters its own path, so the provider's next
+  verdict is what settles the frame. When nothing is worth trying, the run still fails, but with a
+  named cause instead of a tester's guess.
+  
+  The Kubernetes backend implements the new capability: `describe` reads the namespace phase, the
+  Deployments' unsatisfied conditions, every pod through `analyzePodStatus`, the namespace's
+  warning events and a log tail from each unhealthy pod, and `remediate` rolls the Deployments the
+  `kubectl rollout restart` way. Every other provider is unaffected and degrades to the platform's
+  own evidence, which it states rather than presenting as an absence of problems.
+  
+  Internal break: `EnvironmentProvisioningServiceDependencies` gains an optional
+  `readProvisioningLog` and an optional `logger`; both facades wire them through the shared
+  container, so nothing outside a hand-built instance is affected.
+  
+  The provisioning-log operation vocabulary gains `remediate`, and the platform appends one such row
+  whenever it asks a provider to repair an environment in place. It is a distinct actor, the way
+  `teardown-verify` is: the investigation's own second round rebuilds its timeline from that log, so
+  an unlogged restart leaves the next round reasoning about an environment it believes nothing has
+  touched. Additive on `/api/v1` (spec `info.version` 1.63.0); the clients tolerate unknown enum
+  values, and a consumer that maps `operation` through an exhaustive table gains a member to name.
 
 ### Patch Changes
 
-- Updated dependencies [765cc42]
-  - @cat-factory/kernel@0.31.0
-  - @cat-factory/contracts@0.28.0
-  - @cat-factory/prompt-fragments@0.7.26
+- Updated dependencies [92232a6]
+- Updated dependencies [a08d2ad]
+  - @cat-factory/contracts@0.336.0
+  - @cat-factory/kernel@0.325.0
+  - @cat-factory/prompt-fragments@1.1.19
 
-## 0.15.0
+## 0.147.0
 
 ### Minor Changes
 
-- 52d886a: Improve the ergonomics of authoring custom agent kinds and gates:
-
-  - **Typed provider registry** (`defineProviderToken`/`wireProvider`/`requireProvider`, kernel),
-    surfaced through `GateContext.getProvider`/`requireProvider`. A custom gate reaches its data
-    source through the context instead of a hand-authored module global + unsafe `!`. The built-in
-    `@cat-factory/gates` suite dogfoods it (public `wireX` signatures unchanged).
-    **Breaking:** `GateContext` gains required `getProvider`/`requireProvider` (use `stubGateContext`).
-  - **Schema-driven structured output** (`defineStructuredOutput`, agents): one valibot schema
-    derives both the `agent.output` spec and a typed `parse`/`safeParse`, replacing the hand-written
-    `shapeHint` string + lenient coercer. `registerAgentKind` auto-fills `agent.output` from a
-    `structuredOutput` schema.
-  - **Boot-time registration validation** (`validateRegistrations`/`validateRegistrationsOnce`,
-    orchestration): a facade validates registered gates/kinds/pipelines at startup (gate `helperKind`
-    resolves, `resultView` is known) and fails loudly instead of mid-run. Wired into both runtimes.
-  - **Prompt + resultView wiring** (agents/contracts): `FINAL_ANSWER_IN_REPLY` + the read-only
-    guardrail are applied to registered kinds from their `agent.surface` (fixing a registered
-    `container-explore` kind missing the guardrail); `resultView` is now a typed picklist of
-    `RESULT_VIEW_IDS` (unknown ids fail validation instead of silently falling back to prose).
-
-### Patch Changes
-
-- Updated dependencies [52d886a]
-  - @cat-factory/kernel@0.30.0
-  - @cat-factory/contracts@0.27.0
-  - @cat-factory/prompt-fragments@0.7.25
-
-## 0.14.9
-
-### Patch Changes
-
-- Updated dependencies [a639189]
-  - @cat-factory/kernel@0.29.0
-  - @cat-factory/contracts@0.26.0
-  - @cat-factory/prompt-fragments@0.7.24
-
-## 0.14.8
-
-### Patch Changes
-
-- Updated dependencies [ed3a673]
-  - @cat-factory/contracts@0.25.1
-  - @cat-factory/kernel@0.28.1
-  - @cat-factory/prompt-fragments@0.7.23
-
-## 0.14.7
-
-### Patch Changes
-
-- Updated dependencies [69d2270]
-  - @cat-factory/contracts@0.25.0
-  - @cat-factory/kernel@0.28.0
-  - @cat-factory/prompt-fragments@0.7.22
-
-## 0.14.6
-
-### Patch Changes
-
-- Updated dependencies [3546e3d]
-  - @cat-factory/contracts@0.24.0
-  - @cat-factory/kernel@0.27.0
-  - @cat-factory/prompt-fragments@0.7.21
-
-## 0.14.5
-
-### Patch Changes
-
-- Updated dependencies [a62044d]
-  - @cat-factory/kernel@0.26.1
-
-## 0.14.4
-
-### Patch Changes
-
-- Updated dependencies [2aae8bc]
-  - @cat-factory/kernel@0.26.0
-
-## 0.14.3
-
-### Patch Changes
-
-- Updated dependencies [f4f954b]
-  - @cat-factory/kernel@0.25.0
-
-## 0.14.2
-
-### Patch Changes
-
-- Updated dependencies [ce81233]
-  - @cat-factory/contracts@0.23.0
-  - @cat-factory/kernel@0.24.0
-  - @cat-factory/prompt-fragments@0.7.20
-
-## 0.14.1
-
-### Patch Changes
-
-- Updated dependencies [7346a4f]
-  - @cat-factory/kernel@0.23.0
-
-## 0.14.0
-
-### Minor Changes
-
-- 6ff1f10: Link Confluence/Notion/GitHub documents as **living** best-practice fragments.
-
-  A team can now link an external document (a Confluence page, a Notion page, or a
-  GitHub file — any connected Document source) as a prompt-fragment whose guidance is
-  **re-resolved from the source at the moment an agent run uses it**, rather than a
-  one-time snapshot. Edit the upstream doc and the next agent run follows the new
-  version — no re-import. The body is cached on the fragment as a last-resolved
-  snapshot and refreshed on a short TTL (default 5 min); if the source is unreachable
-  the run falls back to the cached body, so resolution never blocks a run. Available
-  at both the account and workspace tiers; an account-tier link fetches through a
-  chosen workspace's connection — recorded on the fragment so every consuming
-  workspace re-resolves through that same connection at run time, not its own.
-
-  New surface: `POST /:scope/document-fragments` (link a document as a fragment) and
-  `POST /:scope/prompt-fragments/:id/refresh` (force an immediate re-resolve), a
-  "Documents" tab in the fragment-library manager with a "Live · <source>" badge, and
-  a `documentRef`/`resolvedAt` provenance block on `PromptFragment`.
-
-  As part of this, run-time fragment-id resolution now goes through the merged tenant
-  catalog (built-in ∪ account ∪ workspace) instead of only the built-in static pool,
-  so **managed (DB-authored) fragments also reach a run** — previously only built-in
-  ids resolved at run time. Behaviour is unchanged when the prompt-fragment library is
-  not configured.
-
-  Persistence: `prompt_fragments` gains `doc_source` / `doc_external_id` /
-  `doc_via_workspace_id` / `resolved_at` columns on both runtimes (a D1 migration and
-  a Drizzle migration); stale pre-existing rows simply carry nulls.
-
-### Patch Changes
-
-- Updated dependencies [6ff1f10]
-  - @cat-factory/contracts@0.22.0
-  - @cat-factory/kernel@0.22.0
-  - @cat-factory/prompt-fragments@0.7.19
-
-## 0.13.0
-
-### Minor Changes
-
-- 04befe8: Business-only specs + an explicit `technical` task label.
-
-  **Business-only spec-writer + "no new specs" outcome.** The spec-writer now captures
-  ONLY business requirements. For a purely technical task (a refactor / non-functional /
-  internal change with no externally-observable behaviour) "no new specs" is a valid
-  outcome: the writer returns `{"noBusinessSpecs": true}`, the baseline spec is left
-  untouched (`specPostOp` commits nothing), and the new `AgentRunResult.noBusinessSpecs`
-  channel carries the determination. The spec-companion corroborates or disputes it via a
-  new optional `technicalCorroborated` verdict on `companionAssessmentSchema` (a disputed
-  "no specs" claim loops the writer back as before). The spec-writer prompts are updated
-  accordingly (no version bump — they are not under prompt-version control).
-
-  **Explicit `technical` label on a task.** Blocks gain an optional `technical` field
-  (`true`/`false`/unset), persisted on both runtimes (D1 column ⇄ Drizzle column + generated
-  migration; shared block mapper). A human sets it at creation (a "Technical task" checkbox)
-  or via a tri-state inspector toggle (unset / technical / business). An explicit `false`
-  (business) is forwarded to the spec-writer, which is then required to produce specs (it is
-  told not to claim "no business specs"); `true` tells it the empty outcome is expected.
-  Left unset, the engine infers the label from the settled spec phase — `noBusinessSpecs`
-  (writer) combined with `technicalCorroborated` (companion) — both when the spec-companion
-  converges automatically AND when a human proceeds past its iteration cap. Once a concrete
-  label is recorded it is authoritative and not re-inferred (whether set by a human or a
-  prior inference); a human re-opens it to inference by clearing it to "unset". When a task
-  is technical the implementer treats the task definition / incorporated requirements as the
-  primary source of truth and the committed specs as a regression-spotting reference; the
-  `build` prompt is bumped to v3 and carries the per-task signal (only the implementer — not
-  the architect/reviewer — acts on it).
-
-  Breaking: none for existing data (the new columns default to "not determined").
+- dc4a5d9: Import an organisation's Backstage catalog, so triage agents know which services exist and who owns them
+  
+  The platform knew a great deal about the service being built and, since ADR 0031, about the shared
+  capabilities a deployment registered by hand. It knew nothing about the rest of the estate. That
+  cost most on the triage path: a bug investigator looking at a cross-service report had the
+  repositories it was handed and no record of what else the organisation runs, who owns it, or what
+  it exposes, so "which service is this?" was answered from repository names.
+  
+  Most organisations already record exactly that, in a developer portal. A workspace can now point
+  the platform at its Backstage instance and have its components arrive as `workspace`-tier
+  foundational services: identity, owner, system, domain and lifecycle composed into the
+  description, tags as capabilities, and each API entity's definition stored as one of the service's
+  contracts.
+  
+  **It feeds the EXISTING catalog rather than standing beside it**, which is the decision the rest
+  follows from. A parallel mechanism would have meant a second `.cat-context/` directory, a second
+  set of trait guidance, a second tiered merge and a second suppression surface, all describing the
+  same organisation to the same agents. So an imported service is an ordinary catalog row carrying
+  `sourceId: 'service-catalog'`, and the tier merge, the suppression sub-resource, the lazily-read
+  contract documents and the SPA's catalog list are untouched.
+  
+  **Triage agents read it under a new `service-estate` trait, deliberately not the design one.**
+  `foundational-catalog` asks its kind to prefer consuming a shared service and to end its reply
+  with a machine-read declaration block; both are wrong for an agent whose job is to locate a fault,
+  and the second is worse than wrong, because `bug-investigator` and its peers are structured-output
+  kinds whose reply IS a JSON object. The estate file states ownership and interface surface and
+  asks for nothing back. `bug-investigator` and `on-call` carry it; a deployment's own kind opts in
+  through `registerAgentKind({ traits })`. It carries no contract DOCUMENTS: an orientation read
+  happens on every triage dispatch, and folding every service's OpenAPI document into one would make
+  the prompt scale with the size of the organisation's specs, which is what the catalog/contracts
+  split exists to prevent.
+  
+  **The auth modes are a closed vocabulary of the shapes a self-hosted portal actually runs
+  behind**: a static service token, the legacy shared secret (a short-lived HS256 token the platform
+  mints per pass), OAuth2 client credentials for an instance behind an IdP or an identity-aware
+  proxy, HTTP Basic for a reverse proxy, an explicit header list for a gateway that authenticates on
+  its own names, and none at all for an instance reachable only inside a VPN. Free-form headers
+  alone would have covered the mechanics and lost every remedy an operator needs when one fails. Two
+  details are load-bearing: the legacy secret is base64-DECODED into an HMAC key rather than used as
+  UTF-8 (which is what decides whether the token verifies at all, so a secret that is not base64 is
+  refused rather than signed with the wrong key), and the header mode takes a LIST because the
+  common case needs two: a Cloudflare Access service token is an id plus a secret, and a
+  single-pair shape would have sent half a credential.
+  
+  Reviewers may want to look hardest at three things.
+  
+  **Widening the URL guard is the ordinary case here, not an exception.** A self-hosted portal
+  usually lives on an internal host, so `SERVICE_CATALOG_ALLOW_URL_HOSTS` /
+  `SERVICE_CATALOG_ALLOW_HTTP_URLS` exist and are scoped to this integration alone. Redirects are
+  followed by hand and re-checked per hop, with the body and `Authorization` dropped on a
+  cross-origin one, because the base URL is operator-supplied.
+  
+  **A partial import must never read as the estate.** An import reports `complete` / `truncated` /
+  `empty` coverage plus three skip counts, and stamps `ok` / `partial` / `failed` with a sentence on
+  the connection. `empty` is `partial` rather than a healthy import of zero services, because a
+  filter that matched nothing is a configuration problem with a remedy. EVERY failure past the
+  connection lookup is stamped before it propagates, including one raised before the portal is
+  contacted: `lastSyncedAt` is what the autorefresh sweep orders on and it sorts nulls first, so an
+  unstamped failure would pin that connection to the head of the stale queue and starve the sweep.
+  A failure tombstones nothing: an unreachable portal and an empty one are opposite facts.
+  
+  **The import YIELDS to a service the workspace already registered by another route**, counting the
+  refusal as `skippedConflicts` rather than taking the id over. An upsert there would replace a
+  hand-authored row, delete its uploaded contracts and strip any platform capability it was granted,
+  and disconnecting would then tombstone the original.
+  
+  **Two size ratchets moved DOWN, both by splitting.** The Worker's `container.ts` lost its three
+  content-library selectors to a new `container-content-library-deps.ts`, the twin of the file the
+  Node facade already had, so both facades now hold the same selectors in the same place (874 → 800).
+  `orchestration`'s `dependencies.ts` lost the same three libraries' declarations to
+  `content-library-dependencies.ts`, which `CoreDependencies` extends (1514 → 1301, under the
+  default).
+  
+  Also in here, because the import needs them: `asyncapi`, `graphql` and `grpc` join the
+  contract-format vocabulary, with AsyncAPI indexed (its channels are a parse, not a guess) and the
+  other two answering through `operationsAreIndexable` as formats nobody reads. That widened what a
+  linked-repository SCAN picks up too, so `detectContractFormat` requires a type-system definition of
+  a `.graphql`/`.gql` file and a `service` block of a `.proto` one: the common `.gql` in a repo is a
+  client's query text and the common `.proto` is generated message shapes, and neither is an
+  interface the service publishes. `ApiContractManifestEntry` gains `sourceSha`, so a sync can decide
+  whether a document changed without reading a body. The rendered catalog and estate blocks gained a
+  total size cap that states what it dropped, because an imported estate is the first catalog whose
+  size is decided by the organisation rather than by this deployment; the catalog's per-service
+  heading now reads `id (Name)`, the form the estate block already used.
+  
+  Four batched repository methods land with it (`upsertMany`, `softDeleteByIds`,
+  `replaceForServices`, `deleteForServices`, all on the mothership allow-list): reconciling a
+  thousand-service estate one row at a time is two thousand sequential round trips inside one
+  request. The `ownerFieldList` scope rule is new beside them, binding every record of a batched
+  write rather than the first.
+- 4d999cb: Treat OpenRouter as the gateway it is, rather than as one more OpenAI-compatible vendor.
+  
+  **Its own client.** `openrouter` now resolves through `@openrouter/ai-sdk-provider`
+  (`openRouterResolver`) instead of the generic `createOpenAICompatible`; every other
+  OpenAI-compatible provider is unchanged. The dispatch is made once, in
+  `directOpenAiCompatibleResolver`, which both entry points that build a provider from a leased key
+  route through.
+  
+  **Cost and upstream are now RECORDED rather than derived.** Usage accounting is requested on both
+  model paths, so `llm_call_metrics` gains `reported_cost_usd` (the gateway's own USD ledger figure)
+  and `upstream_provider` (which vendor actually served the call). Both are nullable and null is
+  load-bearing: every other cost on the table is derived from the spend price table, so a 0 would
+  report an unpriced call as free. **Break:** the two columns are added to the D1 telemetry store, the
+  Postgres `telemetry` schema and local mode's SQLite store; existing rows read NULL, which is the
+  correct answer for them.
+  
+  **`supportsStructuredOutputs` is now set** on the generic OpenAI-compatible client for the cloud
+  VENDORS. Without it the SDK silently rewrites a schema-carrying request to `{ type: 'json_object' }`
+  and drops the schema. Nothing in this repo passes a schema today, so this closes a trap rather than
+  changing behaviour. It is withheld from the upstreams nobody here can vouch for: per-user local
+  runners (which never come through this path anyway) and the operator-hosted `bifrost` / `litellm`
+  gateways, whose model ids are the operator's own aliases and routinely front an Ollama or vLLM
+  model that answers a `json_schema` request with a 400.
+  
+  **The `/models` catalog reads what it was dropping**: the conditional `overrides` pricing bands
+  (folded to their maximum), both cache classes and the 1-hour write fallback, `expiration_date` and
+  `canonical_slug`. A published cache rate now reaches the spend table instead of the derived
+  multiplier, unless it is zero, which cannot be told apart from a placeholder for a class the
+  gateway does not bill separately and would meter every cache hit free. A model's withdrawal date
+  is shown in the catalog picker.
+  
+  **Prompt caching is no longer reported as absent for every gateway model.** `providerCachePolicy`
+  takes the model, so an `openrouter:deepseek/…` slug resolves to the policy stated for its vendor
+  prefix. Those are stated per prefix rather than borrowed from the direct provider of the same
+  name, because the two genuinely differ: OpenRouter's Moonshot route caches automatically while our
+  direct `moonshot` does not, and its Alibaba route needs explicit breakpoints while direct Qwen
+  does not. Anthropic (and now Qwen) behind a gateway stays `none`, because nothing on that path
+  sends `cache_control`. **Break:** the rule moved from `@cat-factory/kernel` to
+  `@cat-factory/contracts` (kernel re-exports it unchanged) so the SPA can read the same function
+  instead of mirroring it in a Vue constant, which had already drifted.
+  
+  **Two new env vars, because both routing constraints can empty the upstream pool.**
+  `OPENROUTER_DATA_COLLECTION` (default `deny`, stricter than the vendor's own) is whether OpenRouter
+  may route to a prompt-retaining upstream; `OPENROUTER_REQUIRE_PARAMETERS` (default `true`) is
+  whether it must route only to an upstream advertising every parameter the request carries. A pool
+  narrowed to nothing is a 404, not a degraded call, so the proxy recognises that refusal and records
+  which constraint could have caused it: the gateway cannot say, since our request is the only place
+  both are stated.
+  
+  **New check `scripts/check-openrouter-pins.mjs`** re-reads the live catalogue against the spend
+  table's pinned slugs, comparing all three pinned classes: input, output, and the cache-READ rate a
+  row names only where the vendor departs from the derived floor (so nothing else follows it when the
+  vendor moves). Its runs found four pins metering below the live rate, one
+  (`deepseek/deepseek-v4-pro`) by nearly 3x; all four are repinned here.
+  
+  **Reported cost and upstream are rendered**, in the observability panel's call list: the upstream
+  beside `provider:model`, the gateway's own figure in the expanded row. They stay out of the spend
+  rollups, which remain derived end to end, because a rollup mixing a measured figure for one
+  provider's rows with an estimate for the rest answers a different question per row.
+  
+  **The inline instrumented provider now REFUSES to stream** rather than passing an unrecorded call
+  through. Nothing inline streams today (the recorder hard-codes `streaming: false` for that reason),
+  and a streamed call would have reached no sink at all, which downstream is indistinguishable from a
+  step that spent nothing.
 
 ### Patch Changes
 
-- Updated dependencies [04befe8]
-  - @cat-factory/contracts@0.21.0
-  - @cat-factory/kernel@0.21.0
-  - @cat-factory/prompt-fragments@0.7.18
+- Updated dependencies [dc4a5d9]
+- Updated dependencies [4d999cb]
+  - @cat-factory/contracts@0.335.0
+  - @cat-factory/kernel@0.324.0
+  - @cat-factory/prompt-fragments@1.1.18
 
-## 0.12.0
-
-### Minor Changes
-
-- be182e8: Hybrid linked-context delivery to agents, and deterministic reference resolution.
-
-  Linked documents and tracker issues now reach a container agent as a cheap in-prompt
-  summary index plus their full bodies materialised into a `.cat-context/` directory in the
-  checkout (kept out of the agent's commits via a local git exclude), so the agent reads only
-  what it needs on demand — replacing the previous 280-char document excerpt. Inline (no-
-  checkout) agent kinds instead get the budgeted full body injected into the prompt.
-
-  The engine also resolves references named explicitly in a block's description or its
-  incorporated requirements (Jira keys like `PROJ-123`, fully-qualified GitHub `owner/repo#123`,
-  and URLs) against the already-imported corpus, folding those high-confidence items into the
-  context set. Each reference is resolved by a **point lookup** (a keyed `get`, or a new
-  `getByUrl` repository method) rather than scanning the whole workspace corpus per step. Bare
-  `#123` refs are intentionally not resolved: a workspace can hold many repos, so a bare number
-  is ambiguous — name the issue as `owner/repo#123` (or by URL) to pull it in. There is no
-  speculative relationship graph and no live fetching: everything is prepared backend-side,
-  which is required because the container harness cannot reach Jira/Confluence/GitHub itself.
-
-  Documents gain a `content_hash` column (D1 + Drizzle) so a re-import whose body AND title/url
-  are unchanged is a no-op, preserving the existing projection and block link; a renamed/moved
-  page still re-projects.
-
-  Breaking (pre-1.0): `AgentRunContext.block.contextDocs` items now carry `summary` + `body`,
-  `contextTasks` items carry `summary`, and `DocumentRecord` carries `contentHash`. The
-  `DocumentRepository`/`TaskRepository` ports gain a `getByUrl` method (implemented on both the
-  D1 and Drizzle stores). The executor-harness image gains an optional `contextFiles` job field;
-  bump the runner image tag.
+## 0.146.6
 
 ### Patch Changes
 
-- Updated dependencies [be182e8]
-  - @cat-factory/kernel@0.20.0
+- 0f426b3: Refresh the dependency tree and the bundled agent CLIs.
+  
+  **Direct ranges plus a lockfile re-resolution from an empty tree**, so transitives move to the
+  newest release each declared range already admits, under the `minimumReleaseAge` gate:
+  
+  - **Direct**: `ai@^7.0.84 → ^7.0.85`, `@ai-sdk/anthropic@^4.0.45 → ^4.0.46`,
+    `@ai-sdk/openai@^4.0.51 → ^4.0.52`, `@ai-sdk/openai-compatible@^3.0.40 → ^3.0.41`,
+    `@ai-sdk/provider@^4.0.8 → ^4.0.9`, `@ai-sdk/amazon-bedrock@^5.0.67 → ^5.0.68`,
+    `happy-dom@^20.11.15 → ^20.12.0`, `pg-boss@^12.28.1 → ^12.29.0`,
+    `layered-loader@^16.1.0 → ^16.1.1`. The whole `@ai-sdk` line and `ai` were named as
+    age-blocked by the previous round and have now aged past the window. `layered-loader`
+    16.1.1 is 23 hours old and would miss it, but the package is ours and sits on
+    `minimumReleaseAgeExclude`, which is exactly the case that list exists for.
+  - **Transitives the re-resolve moved**, 32 resolved entries added against 32 removed:
+    `zod@4.5.2 → 4.5.4`, `@ai-sdk/gateway@4.0.68 → 4.0.69`,
+    `@ai-sdk/provider-utils@5.0.33 → 5.0.34`, `qs@6.15.3 → 6.16.0`,
+    `serialize-javascript@7.1.0 → 7.1.1`, `type-fest@5.8.0 → 5.9.0`, `ignore@7.0.6 → 7.0.7`,
+    `electron-to-chromium@1.5.416 → 1.5.417`.
+  
+  The tree is structurally unchanged: 1434 distinct names and 1967 resolved entries on both
+  sides, with no name added and none removed. The two-`zod` split the previous round introduced
+  holds along the same seam: `@cloudflare/vitest-pool-workers` keeps its hard-pinned `4.4.3` for
+  its own config validation, and every app-reachable consumer (the AI SDK family,
+  `@modelcontextprotocol/sdk`, `drizzle-orm`) moves to `4.5.4` together, so a schema built in one
+  module is still read by the same identity in another.
+  
+  **The agent CLIs**: Claude Code `2.1.251 → 2.1.252` and Codex `0.151.0 → 0.152.0`, both taken
+  at their newest under the Dockerfile's standing exemption from the age window (2.1.252 is 17
+  hours old, 0.152.0 is 8). That exemption covers exactly those three pins and is an explicit
+  call re-made on each bump. Pi is already newest at `0.84.4`, as are both Pi extensions at
+  `2.8.0`, and the extensions are held to the ordinary window regardless.
+  
+  The executor image tag rolls to `1.145.0` for the two CLI pins, because republishing over a
+  live tag does not roll a deployment out. The deploy image is untouched at `0.6.1`: nothing
+  under `backend/internal/deploy-harness/` moved.
+  
+  **Held back by the age window rather than by a compatibility call**, and takeable next round:
+  `ai@7.0.87` with `@ai-sdk/openai@4.0.53` and `@ai-sdk/amazon-bedrock@5.0.69` beside it (all
+  published late on 2026-08-31), `@aws-sdk/client-s3@3.1123.0`, `knip@6.34.0`, `undici@8.10.1`,
+  and the OpenTelemetry line (`@opentelemetry/sdk-*` and `resources` at 2.11.0, the two OTLP
+  exporters at 0.222.0).
+  
+  **Held by a deliberate call**, unchanged: `wrangler` stays at `4.124.0` and
+  `@cloudflare/workers-types` at `5.20260815.1` for the sixth round running, because
+  `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins that exact
+  wrangler, and the types are derived from the `workerd@1.20260815.1` it brings. `4.127.1` is
+  available and would split the runtime the tests prove from the runtime that ships. Drizzle
+  stays at `1.0.0-rc.4`: still only per-commit `rc.5` snapshots. The frontend layer stays on
+  `typescript@^6.0.3` while the rest of the tree is on `7.0.2`, which is why sherif ignores that
+  name. The `node:26-trixie-slim` base digest and the `searxng` tag in the local compose stack
+  are both already the newest published.
+- Updated dependencies [0f426b3]
+  - @cat-factory/kernel@0.323.2
+  - @cat-factory/prompt-fragments@1.1.17
 
-## 0.11.16
-
-### Patch Changes
-
-- Updated dependencies [2c24da8]
-  - @cat-factory/contracts@0.20.0
-  - @cat-factory/kernel@0.19.0
-  - @cat-factory/prompt-fragments@0.7.17
-
-## 0.11.15
-
-### Patch Changes
-
-- Updated dependencies [4120ac5]
-  - @cat-factory/contracts@0.19.0
-  - @cat-factory/kernel@0.18.0
-  - @cat-factory/prompt-fragments@0.7.16
-
-## 0.11.14
-
-### Patch Changes
-
-- Updated dependencies [25efe48]
-  - @cat-factory/contracts@0.18.0
-  - @cat-factory/kernel@0.17.0
-  - @cat-factory/prompt-fragments@0.7.15
-
-## 0.11.13
-
-### Patch Changes
-
-- c7b8012: Improve the requirements-review experience.
-
-  **Auto-save answers (no button).** The requirements-review window no longer has a "Save
-  answer" button: an answer is seeded into its textarea from the recorded reply and persisted
-  on blur (and flushed before incorporate/proceed), so a value just needs to be typed.
-
-  **"Recommend something" + the Requirement Writer.** A finding can now be marked for a
-  grounded recommendation instead of being answered or dismissed. A new second companion of
-  the requirements reviewer — the **Requirement Writer** (an inline LLM call, `WRITER_SYSTEM_PROMPT`
-  `requirement-writer@v1`) — produces a suggested answer per finding, grounded in this
-  precedence order: the block's **best-practice fragments** (team/org standards — checked
-  FIRST; a match is flagged as the "current standard" and surfaced with a badge), then the
-  in-repo `spec/` + `tech-spec/` (via the checkout-free `RepoFiles` port), then web search
-  (provider-hosted on Anthropic/OpenAI models; gateway-RAG wiring lands separately).
-  Recommendations are NOT AI-reviewed — the human accepts (it becomes the finding's answer,
-  folded into the next incorporation), rejects, or re-requests with a "do it differently"
-  note. Recommendations are a first-class collection on the review that survives the re-review
-  item churn.
-
-  - Contracts: `recommend_requested` item status, `RequirementRecommendation` +
-    `recommendations[]` on `RequirementReview`, and the request schemas.
-  - Persistence (both runtimes): a `recommendations` JSON column on `requirement_reviews`
-    (new D1 migration `0009` ⇄ Drizzle column + generated migration).
-  - Service: `RequirementReviewService.recommend` / `acceptRecommendation` /
-    `rejectRecommendation` / `reRequestRecommendation`, with optional `resolveRunRepoContext`
-    - best-practice-fragment resolver deps (degrade gracefully when unwired).
-  - Controller: `POST /blocks/:blockId/requirement-review/recommend` and the
-    `…/recommendations/:recId/{accept,reject,re-request}` routes.
-
-  **Board progress for the review companions.** While the review is incorporating, re-reviewing
-  or recommending, the board task card / mini-pipeline / inspector now show a spinning stage
-  label (`Recommending…` added alongside the existing `Incorporating…` / `Re-reviewing…`).
-
-- Updated dependencies [c7b8012]
-  - @cat-factory/contracts@0.17.1
-  - @cat-factory/kernel@0.16.2
-  - @cat-factory/prompt-fragments@0.7.14
-
-## 0.11.12
+## 0.146.5
 
 ### Patch Changes
 
-- Updated dependencies [aa06003]
-  - @cat-factory/contracts@0.17.0
-  - @cat-factory/kernel@0.16.1
-  - @cat-factory/prompt-fragments@0.7.13
-
-## 0.11.11
-
-### Patch Changes
-
-- Updated dependencies [208c933]
-  - @cat-factory/kernel@0.16.0
-
-## 0.11.10
-
-### Patch Changes
-
-- Updated dependencies [494fb34]
-  - @cat-factory/kernel@0.15.1
-
-## 0.11.9
-
-### Patch Changes
-
-- Updated dependencies [0ac64b8]
-  - @cat-factory/kernel@0.15.0
-  - @cat-factory/contracts@0.16.0
-  - @cat-factory/prompt-fragments@0.7.12
-
-## 0.11.8
-
-### Patch Changes
-
-- 7d1f829: Migrate the `tester` built-in agent onto the generic, manifest-driven `agent` harness kind,
-  continuing the Task-5 strangler (after the read-only kinds, the merger/on-call/fixers, the
-  coder, blueprints, and spec-writer).
-
-  `ContainerAgentExecutor` now routes `tester` through `buildMigratedBuiltInBody` →
-  `buildRegisteredAgentBody` as a read-only `mode: 'explore'` structured agent that clones the PR
-  head branch (it makes NO commits) instead of the bespoke `/test` body. The agent returns ONLY
-  its structured JSON report; `toRunResult` coerces that `custom` result into the `testReport`
-  channel the engine's `TesterController` greenlights-or-loops the fixer on. The conservative
-  coercion the harness `/test` handler used to apply — defaulting every field safely and honouring
-  a greenlight ONLY when no blocking (high/critical) concern is open — now runs backend-side in
-  `coerceTestReport` (and the engine re-applies it defensively). The role prompt and the
-  run-mode / ephemeral-URL guidance come from the standard `roleSystemPrompt` + `userPromptFor`,
-  which already carry them, so the harness adds none.
-
-  The tester needs its docker-compose dependencies stood up for the run, so the generic
-  `agent` explore flow grows an optional `infra` spec (`{ environment, noInfraDependencies?,
-composePath?, environmentUrl? }`): `handleAgent`'s explore mode stands the local
-  docker-compose infra up before the agent runs and tears it down afterward (lifted from the
-  bespoke tester handler), folding a stand-up-failure note into the prompt so a missing Docker
-  daemon is non-fatal. An `ephemeral` run manages no infra (the env is already deployed and its
-  URL reaches the agent through its prompt). This is a harness `src/**` change, so the
-  executor-harness image is bumped (1.13.0; deploy tag + `wrangler.toml`).
-
-  Two regressions the migration introduced are fixed here. (1) The report's `environment` (which
-  env the suite ran in, echoed to the UI) was authoritatively set from the task config by the old
-  `/test` handler; the migrated `coerceTestReport` only read it from the model's JSON, so it was
-  near-always dropped. The harness now stamps `environment` onto the structured result from the
-  job's `infra` spec (the authoritative source), so it's deterministic again regardless of what the
-  model emits. (2) A `local` service with no infra dependencies lost the precise "nothing was stood
-  up — run the suite directly" guidance and was told its infra had been stood up on localhost;
-  `testerEnvironmentSection` now restores the no-dependencies run-mode line for those services.
-
-  The dead `/test` harness handler (and the other migrated kinds' handlers) is removed in the
-  later harness-cleanup sweep. The cross-runtime conformance suite already covers the generic
-  `agent` explore + structured-result path on both runtimes.
-
-## 0.11.7
-
-### Patch Changes
-
-- Updated dependencies [fde0437]
-  - @cat-factory/contracts@0.15.0
-  - @cat-factory/kernel@0.14.0
-  - @cat-factory/prompt-fragments@0.7.11
-
-## 0.11.6
-
-### Patch Changes
-
-- 77b7d31: Migrate the `spec-writer` built-in agent onto the generic, manifest-driven `agent` harness
-  kind, continuing the Task-5 strangler (after the read-only kinds, the merger/on-call/fixers,
-  the coder, and blueprints).
-
-  `ContainerAgentExecutor` now routes `spec-writer` through `buildMigratedBuiltInBody` →
-  `buildRegisteredAgentBody` as a read-only `mode: 'explore'` structured agent that clones the
-  per-block WORK branch (`cat-factory/<blockId>` — the coder's branch, created from base when
-  absent; the spec-writer runs BEFORE the coder, so it seeds that branch) instead of the
-  bespoke `/spec` body. The agent now READS the baseline spec from its own checkout under
-  `spec/` (the harness no longer pre-injects it) and returns ONLY the complete spec doc as JSON;
-  `toRunResult` coerces that `custom` result into the `spec` channel (via `coerceSpecDoc`) the
-  engine already strict-validates + ingests. The `SPEC_WRITER_SYSTEM_PROMPT` is updated to point
-  the agent at `spec/overview.md` + the `spec/modules/**` shards, and a new `specWriterUserPrompt`
-  carries the task increment + the read-the-baseline / reuse-the-taxonomy guidance the harness
-  `buildUserPrompt`/`renderTaxonomyInventory` used to inject.
-
-  The deterministic SHARD + commit of the in-repo `spec/` artifact that used to live in the
-  executor-harness `/spec` handler now runs as a BACKEND built-in post-op (`specPostOp`,
-  `@cat-factory/agents`), over the checkout-free `RepoFiles` port. It is keyed by the engine's
-  own built-in op map in `ExecutionService` — deliberately NOT the agent-kind registry, so the
-  built-ins never leak into `customAgentKinds` / the SPA palette. It reproduces the harness
-  reconcile exactly: the canonical `service.json` / `overview.md` / `modules/<m>/<g>.{json,md}`
-  shards are always rewritten and a removed module/group's shards are PRUNED (the deletion
-  channel); the Gherkin `features/<m>/<g>.feature` files are SEEDED-ONCE (committed only when
-  absent, never clobbering a polished one); and the pre-sharding monolithic artifacts
-  (`spec/spec.json` / `rules.md` / `version.json`) + old flat `features/*.feature` files are
-  dropped on sight. Idempotent: the spec has no `version.json` manifest, so the post-op
-  byte-compares each rendered shard to the branch and makes NO commit when everything matches
-  and there is nothing to seed or prune (durable-driver replay re-commits nothing).
-
-  Because the spec doc is handed onward to be sharded + committed, the migrated kind opts into
-  a new `output.failOnUnusableFinal` flag (kernel `AgentOutputSpec`) so the generic explore
-  handler FAILS the run LOUDLY when the agent's final answer is cut off at the output ceiling
-  (or empty) — restoring the bespoke `/spec` handler's `unusableFinalAnswerCause` gate, which
-  the generic `handleAgent` path lacked, so a truncated reply can no longer be laundered into a
-  half-baked spec by the structured repair. This is a harness change, so the executor-harness
-  image is bumped to `1.12.0` (the `deploy/backend` `image:publish` tag + `wrangler.toml` are
-  bumped to match). The dead `/spec` handler is removed in a later sweep step.
-
-  Cross-runtime conformance asserts the post-op shards + commits the `spec/` artifact onto the
-  work branch via `RepoFiles` on both runtimes.
-
-  Also fixes a facade-parity gap in the self-hosted runner-pool result coercion
-  (`HttpRunnerPoolProvider.coerceRunnerResult`): the generic `agent`-kind structured channel
-  `custom` was missing from the pass-through allow-list, so a migrated kind's doc
-  (blueprints / spec-writer / merger / on-call) was silently dropped on a runner-pool backend
-  while the Cloudflare/local transports — which return the harness view verbatim — kept it.
-  `custom` now passes through, and a regression test covers it.
-
-- Updated dependencies [77b7d31]
-  - @cat-factory/kernel@0.13.4
-
-## 0.11.5
-
-### Patch Changes
-
-- Updated dependencies [82d771e]
-  - @cat-factory/contracts@0.14.0
-  - @cat-factory/kernel@0.13.3
-  - @cat-factory/prompt-fragments@0.7.10
-
-## 0.11.4
-
-### Patch Changes
-
-- ce27690: Migrate the `blueprints` built-in agent onto the generic, manifest-driven `agent` harness
-  kind, and add a checkout-free file-DELETION channel the migration needs.
-
-  `ContainerAgentExecutor` now routes `blueprints` through `buildMigratedBuiltInBody` →
-  `buildRegisteredAgentBody` as a read-only `mode: 'explore'` structured agent (cloning the PR
-  branch when one is open, else the default branch — exactly its old `prBranch ?? baseBranch`
-  clone) instead of the bespoke `/blueprint` body. The agent now returns ONLY the service →
-  modules tree as JSON; `toRunResult` coerces that `custom` result into the `blueprintService`
-  channel (via `coerceBlueprintService`) the engine already reconciles onto the board.
-
-  The deterministic render + commit of the in-repo `blueprints/` artifact that used to live in
-  the executor-harness `/blueprint` handler now runs as a BACKEND built-in post-op
-  (`blueprintPostOp`, `@cat-factory/agents`), over the checkout-free `RepoFiles` port. It is
-  keyed by the engine's own built-in op map in `ExecutionService` — deliberately NOT the
-  agent-kind registry, so the built-ins never leak into `customAgentKinds` / the SPA palette.
-  The post-op is idempotent (the `version.json` content hash short-circuits an unchanged tree,
-  so a durable-driver replay re-commits nothing) and prunes a removed module's stale deep-dive
-  file — the checkout-free analogue of the harness wiping `blueprints/` before writing.
-
-  To support that prune, `commitFilesSchema` / `CommitFilesInput` (and the `RepoFiles` /
-  `GitHubClient` `commitFiles` impl in `FetchGitHubClient`) gain an optional `deletions:
-string[]`: paths removed in the same commit, built into the Git Data tree as `sha: null`
-  entries against the base tree. Additive and non-breaking (absent ⇒ a pure add/update commit).
-
-  The already-shipped executor-harness image serves this via its generic `handleAgent`
-  explore-structured handler, so **no image bump is required**. One intentional, low-risk delta:
-  the blueprint explore body now carries the shared web-tools fields like every other explore
-  agent (gated by `webSearchProxyEnabled`), and the agent reads any existing blueprint from its
-  own checkout rather than the harness pre-injecting the baseline tree into the prompt.
-
-  The now-dead `/blueprint` harness handler is removed in a later step of the sweep (which
-  bumps the executor image), once parity is confirmed on CI. The cross-runtime conformance
-  suite gains an assertion that a `blueprints` step's post-op renders + commits the
-  `blueprints/` artifact via `RepoFiles`, identically on both runtimes.
-
-- Updated dependencies [ce27690]
-  - @cat-factory/contracts@0.13.1
-  - @cat-factory/kernel@0.13.2
-  - @cat-factory/prompt-fragments@0.7.9
-
-## 0.11.3
-
-### Patch Changes
-
-- Updated dependencies [c8bd144]
-  - @cat-factory/kernel@0.13.1
-
-## 0.11.2
-
-### Patch Changes
-
-- Updated dependencies [5c915fd]
-  - @cat-factory/contracts@0.13.0
-  - @cat-factory/kernel@0.13.0
-  - @cat-factory/prompt-fragments@0.7.8
-
-## 0.11.1
-
-### Patch Changes
-
-- 22d7fff: Migrate the read-only built-in agents (`architect`, `analysis`, `bug-investigator`) onto
-  the generic, manifest-driven `agent` harness kind — the first step of the strangler that
-  converts every built-in to the custom-agent model.
-
-  `ContainerAgentExecutor` now dispatches the read-only kinds through `buildRegisteredAgentBody`
-  with a synthesized `container-explore` step, so they ride `kind: 'agent'` in `mode: 'explore'`
-  (the SAME path a deployment's registered `container-explore` kind takes) instead of the
-  bespoke `explore` dispatch kind. The job body is byte-identical to the old `/explore` body
-  (same branch resolution, prompts and web-tools) bar the harness-internal temp-dir label, and
-  the prose result maps to `output` exactly as before — a behaviour-preserving reroute, not a
-  behaviour change. The already-shipped executor-harness image serves this via its generic
-  `handleAgent` handler, so no image bump is required.
-
-  The now-dead `/explore` harness handler (`handleExplore` / `parseExploreJob` / the `explore`
-  dispatch kind) is removed in a follow-up once parity is confirmed on CI.
-
-## 0.11.0
-
-### Minor Changes
-
-- 128e12e: Custom agents: live pre/post-op execution + data-driven palette + generic result view.
-
-  Registered custom agent kinds now run end to end. A kind's deterministic backend hooks
-  fire around its agent step: `ExecutionService` runs its `preOps` before dispatch and its
-  `postOps` after the result is recorded, over a per-run, checkout-free `RepoFiles` bound to
-  the run's repo. The binding is a new optional engine dependency `resolveRunRepoContext`
-  (`CoreDependencies` / `ExecutionServiceDependencies`), composed from a facade's wired
-  `GitHubClient` + the executor's `resolveRepoTarget` via the new
-  `makeResolveRunRepoContext` (`@cat-factory/server`) and wired symmetrically across ALL
-  three facades (Worker `selectGitHubDeps`, Node `githubGateDeps`, local via
-  `buildNodeContainer`). When GitHub isn't connected the hooks are skipped, so pipelines run
-  unchanged without the feature. `runRepoOps` moved to `@cat-factory/agents` so the
-  orchestration engine drives the hooks without importing the server HTTP layer. New kernel
-  ports: `RunRepoContext` + `ResolveRunRepoContext`. The cross-runtime conformance suite
-  asserts a registered kind's pre-op read + post-op commit on both D1 and Postgres.
-
-  Frontend: the workspace snapshot now carries `customAgentKinds` (kind + presentation +
-  container flag), which the SPA merges into its palette catalog
-  (`useAgentsStore().registerCustomKinds`) so a registered kind is a first-class palette
-  block + result view instead of the generic fallback. A `container-explore` structured
-  kind's `result.custom` JSON is recorded on the step (new `PipelineStep.custom`) and
-  rendered read-only by a new shared `generic-structured` result view — a custom agent gets
-  a usable result window with no bespoke UI.
-
-  The built-in agents are not yet migrated to this model (their rendering still lives in the
-  executor-harness); that strangler conversion is sequenced as follow-up work. See
-  `backend/docs/custom-agents.md` and the `@cat-factory/example-custom-agent` worked example.
-
-### Patch Changes
-
-- Updated dependencies [128e12e]
-- Updated dependencies [4de2f5f]
-- Updated dependencies [4de2f5f]
-  - @cat-factory/kernel@0.12.0
-  - @cat-factory/contracts@0.12.0
-  - @cat-factory/prompt-fragments@0.7.7
-
-## 0.10.1
-
-### Patch Changes
-
-- f8a24e0: Refresh dependencies to latest. Notable major bumps: TypeScript 5→6 (tooling
-  packages), vitest 3→4, pino 9→10, `@hono/node-server` 1→2, `@hono/valibot-validator`
-  0.5→0.6, happy-dom 15→20, and `@types/node` →26. Patch/minor refreshes for `ai`,
-  `hono`, `wrangler`, `pg-boss`, `ws`, `@ai-sdk/*`, `oxlint`, and the Cloudflare
-  workers tooling.
-- Updated dependencies [f8a24e0]
-  - @cat-factory/kernel@0.11.1
-
-## 0.10.0
-
-### Minor Changes
-
-- 1e31cbc: Replace per-agent-kind model defaults with named **model presets**.
-
-  A workspace now keeps a library of model presets instead of a single per-agent-kind
-  default map. A preset is one `baseModelId` applied to every agent kind plus optional
-  per-kind `overrides`, so "everything Kimi K2.7" is a base with no overrides. Two
-  built-ins are seeded for every workspace: **Kimi K2.7** (the default — every agent runs
-  on Kimi K2.7) and **GLM-5.2**. A task selects a preset via the new `Block.modelPresetId`
-  (the inspector's "Model preset" picker + the new-task form); changing it affects only
-  steps that haven't started yet. Resolution precedence is unchanged in spirit: a block's
-  pinned model wins, else the task's selected/default preset's mapping for the kind, else
-  the env routing.
-
-  - `@cat-factory/contracts`: new `model-presets.ts` (`ModelPreset`, create/update schemas);
-    `Block.modelPresetId`; `addTask`/`updateBlock` accept `modelPresetId`; the snapshot
-    carries `modelPresets` instead of `modelDefaults`. The `model-defaults` contract is removed.
-  - `@cat-factory/kernel`: new `ModelPresetRepository` port (replaces `ModelDefaultsRepository`),
-    `DEFAULT_MODEL_PRESETS` seed + `modelForKindFromPreset` helper; `resolveWorkspaceModelDefault`
-    resolvers gain an optional `modelPresetId` argument throughout.
-  - `@cat-factory/orchestration`: `ModelPresetService` (CRUD + lazy seeding, replaces
-    `ModelDefaultsService`) and `resolvePresetModelForKind`; the execution engine threads the
-    block's preset into model resolution, the personal-credential gate and the start guard.
-  - `@cat-factory/agents`: `StepModelInputs.modelPresetId` + the resolver signature.
-  - `@cat-factory/server`: `ModelPresetController` (`GET|POST|PATCH|DELETE
-/workspaces/:ws/model-presets`, replaces the model-defaults controller); the block mappers
-    persist `model_preset_id`; the snapshot lists `modelPresets`.
-  - `@cat-factory/worker` / `@cat-factory/node-server`: the `model_presets` table (D1 migration
-    `0006` ⇄ Drizzle) + `blocks.model_preset_id`, replacing `workspace_model_defaults`.
-
-  BREAKING (pre-1.0, no migration): the `workspace_model_defaults` table, the
-  `/model-defaults` endpoint, and the snapshot's `modelDefaults` field are removed. Existing
-  per-agent-kind default maps are dropped; workspaces fall back to the seeded built-in presets.
-
-### Patch Changes
-
-- Updated dependencies [1e31cbc]
-  - @cat-factory/contracts@0.11.0
-  - @cat-factory/kernel@0.11.0
-  - @cat-factory/prompt-fragments@0.7.6
-
-## 0.9.0
-
-### Minor Changes
-
-- d0081e1: Shard the in-repo `spec/` artifact by a module → feature taxonomy to kill merge churn.
-
-  The spec-writer no longer commits a single monolithic `spec/spec.json` (+ `overview.md`
-  / `rules.md` / `version.json`); every spec run rewrote those whole files, so two task
-  branches that both touched the spec conflicted hard on merge. The spec is now SHARDED:
-  a tiny `spec/service.json`, an `spec/overview.md` index, and one canonical
-  `spec/modules/<module>/<group>.json` (+ a human `<group>.md`) per feature group, with
-  the Gherkin `spec/features/<module>/<group>.feature` files nested to match. A group's
-  file bytes depend only on that group, so concurrent branches editing different
-  features never touch the same file.
-
-  **Breaking (acceptable per pre-1.0 policy — no migration):**
-
-  - `@cat-factory/contracts`: `SpecDoc` gains a two-level taxonomy — `modules: SpecModule[]`
-    where each module holds `groups`, and each group carries BOTH its `requirements` and the
-    domain `rules` scoped to it. The top-level `SpecDoc.groups`/`SpecDoc.rules`,
-    the `SpecVersion`/`version.json` manifest, and the `SPEC_JSON_PATH`/`SPEC_RULES_PATH`/
-    `SPEC_VERSION_PATH` path constants are removed; `SPEC_SERVICE_PATH`/`SPEC_MODULES_DIR`
-    are added. `renderSpecForReview` walks the new shape. An existing repo's monolithic
-    `spec.json` / `rules.md` / `version.json` (and any old flat `features/*.feature` files)
-    are DELETED on the next spec run — the sharded layout is written fresh; no migration.
-  - `@cat-factory/executor-harness`: sharded deterministic render + on-disk reassembly
-    read-back + orphan-shard pruning (a removed/renamed module or group is deleted, not
-    resurrected) + a one-time prune of the pre-sharding monolithic/flat artifacts;
-    `version.json` dropped (no-op detection is now per-file via the commit).
-    Content-derived (not positional) rule ids keep a group file byte-stable. The spec-writer
-    prompt + reassembled-baseline now carry an EXISTING-taxonomy inventory and steer the
-    agent to slot new requirements/rules into the closest existing module + feature (reusing
-    exact names) rather than spawning near-duplicate domains/groups. Ships in the **1.9.0**
-    runner image already pinned in `deploy/backend` (no further tag move needed).
-  - `@cat-factory/agents`: the runtime-neutral `repo-ops/render.ts` mirror is reworked to
-    the same sharded layout (`renderSpecVersionFile`/`nextSpecVersion`/`canonicalSpecJson`/
-    `hashSpec` for the spec removed); `SPEC_AWARE_GUIDANCE` points readers at
-    `spec/modules/<module>/<feature>.{md,json}`.
-  - `@cat-factory/server`: `SPEC_WRITER_SYSTEM_PROMPT` describes the module → feature →
-    {requirements, rules} structure, the no-catch-all rule, and the taxonomy-reuse rule.
-
-### Patch Changes
-
-- Updated dependencies [d0081e1]
-  - @cat-factory/contracts@0.10.0
-  - @cat-factory/kernel@0.10.1
-  - @cat-factory/prompt-fragments@0.7.5
-
-## 0.8.2
-
-### Patch Changes
-
-- Updated dependencies [ae29687]
-  - @cat-factory/contracts@0.9.0
-  - @cat-factory/kernel@0.10.0
-  - @cat-factory/prompt-fragments@0.7.4
-
-## 0.8.1
-
-### Patch Changes
-
-- Updated dependencies [5c20968]
-  - @cat-factory/kernel@0.9.0
-
-## 0.8.0
-
-### Minor Changes
-
-- c70df09: Add the foundations for manifest-driven custom agents (pre/agent/post-op model).
-
-  - `@cat-factory/agents`: new `repo-ops/render.ts` — the deterministic, container-free
-    rendering + lenient coercion of the in-repo `blueprints/`/`spec/` artifacts
-    (`renderBlueprintFiles`/`renderSpecFiles`/`renderSpecFeatureFiles`,
-    `coerceBlueprintService`/`coerceSpecDoc`/`dedupeSpecIds`, the version manifests). This
-    is the logic lifted out of the executor-harness image; the hash uses Web Crypto so it
-    is runtime-neutral (so the hash + version helpers are async). The agent-kind registry
-    (`AgentKindDefinition`) gains `agent` (execution surface), `preOps`/`postOps` (backend
-    repo-op hooks) and `presentation` (frontend palette metadata), with matching accessors;
-    `registeredKindRequiresContainer` now also derives from a container agent surface.
-  - `@cat-factory/kernel`: new `RepoFiles`/`ResolveRepoFiles` ports (a per-run,
-    checkout-free facade over the `GitHubClient` Git Data API) and the agent-definition
-    vocabulary (`AgentSurface`/`AgentStepSpec`/`AgentCloneSpec`/`AgentOutputSpec`,
-    `RepoOp`/`RepoOpContext`).
-  - `@cat-factory/contracts`: new `AgentPresentation`/`AgentCategory`/`CustomAgentKind`
-    wire shapes for the data-driven agent palette.
-
-### Patch Changes
-
-- Updated dependencies [c70df09]
-  - @cat-factory/contracts@0.8.0
-  - @cat-factory/kernel@0.8.0
-  - @cat-factory/prompt-fragments@0.7.3
-
-## 0.7.3
-
-### Patch Changes
-
-- Updated dependencies [a0a1bcc]
-  - @cat-factory/kernel@0.7.3
-
-## 0.7.2
-
-### Patch Changes
-
-- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
-- Updated dependencies [4fa5ed9]
-  - @cat-factory/contracts@0.7.2
-  - @cat-factory/kernel@0.7.2
-  - @cat-factory/prompt-fragments@0.7.2
-
-## 0.7.1
-
-### Patch Changes
-
-- 7463cf2: Add `repository` metadata (url + monorepo `directory`) to every published package.json. npm provenance attestation rejected the previous release because `repository.url` was empty and could not be matched against the source repo; declaring it lets the publish (and provenance) succeed, and re-triggers publishing of all packages from the failed release.
-- Updated dependencies [7463cf2]
-  - @cat-factory/contracts@0.7.1
-  - @cat-factory/kernel@0.7.1
-  - @cat-factory/prompt-fragments@0.7.1
-
-## 0.7.0
-
-### Minor Changes
-
-- 6406c8c: Extract `@cat-factory/agents` — agent catalog, routing, prompts, fragment library, and versioned prompt registry are now a standalone package. `@cat-factory/core` re-exports the full public surface for backward compatibility. `REVIEW_SYSTEM_PROMPT` moves from `requirements.logic` into agents (its natural home); `renderTaskContext`/`TaskContextView` move into `@cat-factory/kernel` (pure, kernel-deps-only).
-- 8d11833: Companion agents + acceptance-test rework (the structured spec replaces the
-  client-only scenario surface), plus a vocabulary split so "requirements" (the
-  linked-prose context review) and "spec" (the structured in-repo document) are no
-  longer the same word.
-
-  - **Companion agents.** A companion grades a prior producer step's output, returns
-    an overall quality rating (0..1), and — below the step's threshold (default 0.8) —
-    loops the producer back for automatic rework BEFORE a human is asked, failing the
-    run (`companion_rejected`) once the rework budget is spent. Companions declare an
-    allow-list of target kinds and are placed as their own chain step in the pipeline
-    builder (with a per-step `thresholds` array, parallel to `gates`). Built-ins:
-    `architect-companion`, `spec-companion`, and `reviewer` reframed as the coder's
-    companion. Wired into `ExecutionService` (`evaluateCompanion` + a unified rework
-    revision path shared with the human "request changes" flow).
-  - **Companion-gated requirements rework.** The per-block requirements review's
-    rework step is now gated by a quality companion: below threshold the reworked doc
-    is NOT accepted (the review stays `ready`), and the companion's challenge is
-    surfaced in the review window and fed into the next rework. Persisted on
-    `requirement_reviews.companion` (D1 migration 0036 + Drizzle).
-  - **Acceptance tests via the spec.** The client-only scenarios store/UI is removed;
-    the structured Given/When/Then acceptance scenarios live in the service spec
-    (authored by the `spec-writer`, reviewed on its gated step) and are derived into
-    Gherkin. The redundant `acceptance` polish agent is dropped; `playwright` still
-    writes the runnable tests. `spec-writer`'s prompt now treats complete
-    acceptance-scenario coverage as a first-class deliverable.
-  - **`architect` is now a container agent** that explores the repo (read-only, like
-    `analysis`) before proposing. Both read-only kinds share one reusable execution
-    path: a new harness `/explore` endpoint (dispatch kind `explore`) clones the branch,
-    runs the agent read-only and returns its prose report/proposal — making no commit,
-    opening no PR, and (unlike `/run`) NOT treating an edit-free run as a failure. A
-    shared read-only guardrail is appended to their system prompts.
-  - **Companion rework correctness.** When a companion loops a producer back, EVERY step
-    between the producer and the companion is now reset and re-run (clearing stale
-    container job handles), so an intermediate container step re-dispatches fresh work
-    instead of re-attaching to its evicted job. The automatic rework budget now counts
-    only automatic attempts (`companion.attempts`); a human "request changes" on a
-    companion's gate re-runs the producer without consuming it.
-  - **Rename: requirements → spec** for the structured family. In-repo `requirements/`
-    → `spec/` (`spec.json`, `spec/features/*.feature`; legacy `requirements/`
-    relocated on first run); `RequirementsDoc` → `SpecDoc`; `requirements-writer` →
-    `spec-writer`; the pipeline analyst `requirements` → `requirements-review`;
-    `pl_requirements` → `pl_spec`. The context-review family (`RequirementReview*`,
-    `requirement_reviews`) keeps the `requirements` name.
-
-  The harness image changed (the `/requirements` endpoint + `requirements/` paths
-  became `/spec` + `spec/`), so `@cat-factory/executor-harness` and the
-  `deploy/backend` image tag are bumped to 1.0.6 and must be re-published + rolled out.
-
-- 385bd93: Add an optional consensus-orchestration framework + a core Task Estimator.
-
-  A new opt-in `@cat-factory/consensus` package lets an eligible agent step run through
-  a multi-model **consensus** process — a specialist panel, a debate, or ranked
-  voting/scoring — to produce a higher-quality result of the same shape the single-actor
-  agent would have (a polished document, an aggregate of observations, an estimate). It
-  integrates via the `AgentExecutor` seam: a `ConsensusAgentExecutor` wraps the standard
-  composite and delegates to it when a step isn't consensus-enabled or gating marks the
-  task ineligible. Eligibility is surfaced through a new group of assignable capability
-  traits (`specialist-panel-capable` / `debate-capable` / `ranked-voting-capable`); the
-  pipeline builder shows an "Enable Consensus" toggle (strategy, participants + models,
-  optional risk/impact gating) on eligible steps. Each session persists a full transcript
-  (`consensus_sessions`, both runtimes) rendered in a dedicated Consensus Session window
-  and streamed live via a new `consensus` workspace event; every sub-call flows to
-  `llm_call_metrics`. Wired per facade behind `CONSENSUS_ENABLED` (off ⇒ unchanged).
-
-  A new **core** `task-estimator` agent rates a task's Complexity/Risk/Impact (0..1) after
-  requirements are clarified; the engine persists it on `block.estimate` (new column on
-  both stores) and the inspector shows the ratings. It gates the expensive consensus step
-  and is useful standalone for triage.
-
-  BREAKING (pre-1.0, no migration): `Block` gains `estimate`, the pipeline + pipeline-step
-  shapes gain `consensus`, `AgentRunContext` gains `consensus` + `block.estimate`, and the
-  `WorkspaceEvent` union + `ExecutionEventPublisher` gain a consensus variant. Stale rows /
-  shapes simply re-create.
-
-- e8005ba: Datadog post-release-health gate + Agent-On-Call.
-
-  After a release ships, a new **`post-release-health`** polling gate watches the team's
-  Datadog **monitors/SLOs** over a monitoring window. It reuses the existing gate machinery
-  (`ci`/`conflicts`): a clean window advances with nothing spun up; a regression escalates —
-  Datadog credentials stay on the backend and never enter containers.
-
-  The gate is **opt-in**: it is NOT in any default pipeline. A user adds it deliberately in
-  the pipeline builder, and it only appears in the palette — and is only accepted by the
-  backend — once the workspace has an **observability integration connected** (today a
-  Datadog connection). `PipelineService` rejects a `create`/`update` that adds an enabled
-  `post-release-health` step otherwise.
-
-  - **No blind revert.** On a regression the gate dispatches an **`on-call`** container agent
-    that clones the base branch (the merged release; the work branch is deleted on merge),
-    locates the merged commit and correlates its diff with the regression evidence (alerting
-    monitors/SLOs + recent error logs), returning a JSON assessment (culprit confidence +
-    `revert`/`hold`/`monitor` recommendation). It makes no commits and reverts nothing — the
-    engine raises a **`release_regression`** notification for a human to decide. The gate only
-    engages once the PR actually merged, attributes only post-release alerts (not pre-existing
-    ones) to the release, and honours the full configured watch window even when it outlasts a
-    single poll budget.
-  - **Datadog connection + monitor/SLO mapping** are per-workspace (keys sealed at rest under
-    a `cat-factory:datadog` cipher, write-only), managed in a new settings panel and the
-    `GET|PUT|DELETE /workspaces/:ws/datadog/connection` + `/release-health-configs/:blockId`
-    API. The gate maps a run's repo to its service-frame config (monitor + SLO ids + env tag).
-  - **Merge-preset knobs**: `releaseWatchWindowMinutes` (default 30) and `releaseMaxAttempts`
-    (default 1) bound the watch window + on-call dispatches.
-  - **Incident enrichment (optional, additive):** PagerDuty / incident.io are NOT used to
-    re-alert (they already page off the same monitors/SLOs) — instead the on-call
-    investigation is posted onto an incident they already opened (annotate, never duplicate),
-    behind a new `IncidentEnrichmentProvider` port. Slack + the in-app inbox carry the
-    human-facing `release_regression` notification.
-  - Runtime-symmetric: D1 (`datadog_connections`, `release_health_configs` + the two preset
-    columns) ⇄ Drizzle/Postgres, wired in both the Cloudflare Worker and Node/local facades.
-  - New harness route `POST /on-call`; the executor-harness image is bumped to `1.7.1`.
-
-  **Breaking (pre-1.0, acceptable):** `merge_threshold_presets` gains two columns — stale rows
-  are re-seeded with the defaults.
-
-- 3a12f15: Fix the container coding-agent role prompts that told the agent to push and manage
-  the pull request itself — work it has no credentials for and was never meant to do.
-
-  The `build`, runnable-tests (`playwright`) and docs (`business-documenter`) gates each
-  instructed the agent to "open or update the pull request, push the fix, and wait for
-  CI". Inside the run container the agent has no push token (version control is the
-  platform's job), so a capable model would try `git push`, hit an auth wall, and then
-  burn the entire run probing env vars, decoding tokens and poking at git remotes
-  instead of doing the work (shipping zero changes and failing with "no file changes");
-  weaker models just gave up.
-
-  The three gates now share one `PLATFORM_DELIVERY_CONTRACT` (in `ci-gate.ts`) that makes
-  the boundary explicit: the agent commits its OWN work (it alone knows which files are
-  part of the solution vs scratch scripts/artifacts), validates locally, and stops; the
-  platform pushes, opens the PR and drives CI (dispatching a CI-fixer on failure). It is
-  told not to push, not to use `gh`/the GitHub API, and not to chase credentials, and to
-  bound its effort rather than spin. The `build` prompt is bumped to `build@v2`.
-
-  BREAKING: the `CI_RETRY_SANITY_CHECK` export is replaced by `PLATFORM_DELIVERY_CONTRACT`.
-
-- b40da13: Simplify task granularity and run configuration; open the pipeline-step detail
-  overlay from the zoomed-in board.
-
-  - **Open the agent step-detail overlay from the board.** Clicking a pipeline agent
-    in a zoomed-in task card now opens the full `AgentStepDetail` overlay (execution
-    metadata + the agent's prose output), exactly like clicking it from the inspector
-    or the focus-view pipeline — instead of expanding raw text inside the card.
-  - **Removed the per-task auto-merge "confidence threshold".** The confidence-score
-    auto-merge gate (`Block.confidenceThreshold`, the inspector + task-card UI, the
-    `DEFAULT_CONFIDENCE_THRESHOLD` constant) is gone; the `merger` step's merge-policy
-    preset (complexity/risk/impact ceilings) is the sole auto-merge gate. (The raw
-    `confidence` score is still recorded for transparency.)
-  - **Removed "feature" tracking from the board and the service map.** `Block.features`
-    (the inspector's "Features implemented" tags and the board/module feature badges)
-    is removed, and the in-repo blueprint / board-scan decomposition is now
-    service → modules only — the Blueprinter, harness rendering, and reconciliation no
-    longer produce a "feature" sub-level or derive tasks from it. Acceptance scenarios
-    are now freeform per task (decoupled from features) pending a deeper
-    requirements-driven model.
-  - **Task creation picks a pipeline + merge policy; model selection removed.** The
-    "Add a task" modal now offers a default pipeline (`Block.pipelineId`, which the
-    task's Run/Start controls use) and a merge policy preset. The per-task model
-    picker is gone — a model is resolved per step, not per task.
-
-  Migration `0025_task_run_config.sql` drops the `confidence_threshold` and `features`
-  columns and adds `pipeline_id`. Bumps `@cat-factory/executor-harness` (the blueprint
-  rendering inside its image changed).
-
-- 8eed38c: Introduce a generic, extensible AI provisioning facade so model resolution is no
-  longer hardwired to the Cloudflare Worker.
-
-  `@cat-factory/agents` now exposes `CompositeModelProvider` — a `ModelProvider`
-  composed from one or more mixable `ProviderRegistry` maps — plus the base,
-  runtime-neutral resolvers (`openAiResolver`, `anthropicResolver`,
-  `openAiCompatibleResolver`, `cloudflareRestResolver`, `baseProviderRegistry`) and
-  the shared OpenAI-compatible endpoint constants. Direct vendor usage works on any
-  runtime; `cloudflareRestResolver` adds a non-binding path to Cloudflare-hosted
-  models (Workers AI REST / AI Gateway) for non-Worker deployments.
-
-  AWS Bedrock support ships as a separate opt-in package,
-  `@cat-factory/provider-bedrock` (`bedrockResolver` / `bedrockRegistry`), so the
-  AWS SDK is pulled in only by deployments that use it. It throws a clear
-  `Unsupported Bedrock model` for any model id outside its configured allow-list.
-
-  `@cat-factory/worker`'s `CloudflareModelProvider` is now a thin composition of the
-  shared facade (behaviour unchanged: same providers, same "not configured" errors),
-  and a new installation extension point — `registerModelRegistry` — lets a
-  deployment mix extra provider registries (e.g. Bedrock) into every container build,
-  including the durable Workflow and cron-sweeper paths.
-
-- f49fa30: Give the inline design/research agents (architect, researcher) provider-hosted web
-  search. The `AiAgentExecutor` now attaches the AI SDK's server-executed `web_search`
-  tool (Anthropic / OpenAI) to its one-shot call for an allow-listed set of kinds, plus
-  a per-kind usage nudge — so those agents can verify current libraries/APIs instead of
-  relying on training data, the same way Claude Code and Codex do. Opt-in and a no-op by
-  default: enabled per deployment via `INLINE_WEB_SEARCH_ENABLED` (with
-  `INLINE_WEB_SEARCH_KINDS` / `INLINE_WEB_SEARCH_MAX_USES` to tune the allow-list and
-  cap), and only on providers that expose a hosted search — models on Workers AI / the
-  OpenAI-compatible providers run unchanged. Both runtime facades wire it from env.
-
-  The per-kind web-research nudge is data-driven, not a hardcoded switch:
-  `AgentKindDefinition` gains an optional `webResearchHint`, so a proprietary/custom
-  agent kind registered via `registerAgentKind` supplies its own nudge and the shared
-  composer (`webResearchGuidanceFor`) picks it up — the shared surface never needs to
-  know the custom kind exists. Built-in kinds carry sensible defaults; unknown kinds get
-  a generic hint.
-
-- 918764f: Add optional, opt-in **Langfuse** LLM observability. A new fetch-based
-  `@cat-factory/observability-langfuse` package implements a runtime-neutral
-  `LlmTraceSink` (new kernel port) against Langfuse's ingestion API — no Node SDK or
-  OpenTelemetry, so it runs unchanged on BOTH the Cloudflare Worker (workerd) and Node
-  facades.
-
-  Proxied container-agent calls and inline (non-proxied) calls — requirements
-  review/rework, document planner, fragment selector, the inline agent — flow through the
-  SAME sink path: the orchestration `LlmObservabilityService` fans every recorded proxied
-  call out as a generation, and an `InstrumentedModelProvider` wraps every resolved model
-  so inline `generateText` calls surface the identical `LlmGenerationEvent`. Calls are
-  grouped under one trace per run (`executionId`); inline single-shot calls become their
-  own standalone trace.
-
-  Off unless `LANGFUSE_ENABLED=true` and both keys are set; wired symmetrically in both
-  runtime containers. Honours the existing `LLM_RECORD_PROMPTS` switch (prompt/response
-  bodies are omitted from Langfuse too when disabled). The sink never throws into the LLM
-  path — failures are swallowed and logged. The existing local metric store, spend gating
-  and board rollups are unchanged; Langfuse is an additive external sink, not a
-  replacement.
-
-- 9be11e1: Add an automated merge-conflict resolver, and converge the container coding agents
-  onto a shared base.
-
-  **Conflict resolver.** Previously a PR that conflicted with its base degraded to a
-  manual `merge_review` handoff. A new pre-merge `conflicts` gate now sits before the
-  `ci`/`merger` steps in the standard pipelines (mirroring the CI gate): it reads the
-  PR's mergeability (`PullRequestMergeabilityProvider` → GitHub `mergeable_state`) and,
-  on a real conflict, dispatches a `conflict-resolver` container agent that clones the
-  PR branch, merges the base in, has the agent resolve the conflicts, and pushes back
-  onto the same branch — looping (bounded by the merge preset's attempt budget) until
-  the PR is mergeable, or failing the run for a human if it can't. Pass-through when no
-  mergeability provider is wired (e.g. tests / no GitHub), so existing behaviour is
-  unchanged. The resolver never pushes a half-resolved tree (it guards on remaining
-  unmerged paths).
-
-  **Shared base.** The container agents were near-duplicates of one clone → write
-  context → run Pi → push flow. They now share `runCodingAgent` (implement + ci-fix +
-  conflict-resolve) on top of a thinner `withWorkspace` / `runAgentInWorkspace` base
-  (also used by bootstrap / blueprint / merger), plus shared no-op-reason helpers — so
-  fixes like the "judge the whole run, counting the agent's own commits" change apply
-  everywhere instead of being re-derived per agent.
-
-  Bumps `@cat-factory/executor-harness` (new `/resolve-conflicts` endpoint + shared-base
-  refactor change its image).
-
-- 5ec0d25: Real merge lifecycle: CI gate + CI-fixer, merger agent, and notifications.
-
-  A task now becomes `done` only when its pull request is **actually merged** on
-  GitHub — fixing the bug where a task showed "merged" (and a green board) from a
-  confidence score alone, while CI was red and the PR still open.
-
-  - **CI gate (`ci` step)** — auto-inserted before the merger in the standard
-    pipelines. It polls the PR head's GitHub check runs and, on failure, dispatches a
-    new **`ci-fixer`** container agent that pushes a fix to the PR branch, looping up
-    to a configurable budget (default 10) until CI is green; polling stops the moment
-    CI goes green. If the budget is spent it raises a `ci_failed` notification.
-  - **Merger agent (`merger` step)** — runs last. A container agent scores the PR's
-    complexity / risk / impact, and the engine compares those against the task's
-    **merge threshold preset** to either auto-merge (a real GitHub merge) or raise a
-    `merge_review` notification for a human. Presets are a per-workspace library
-    (selectable per task); the CI-fixer attempt budget lives on the preset.
-  - **`merger` is appended to the standard pipelines.** A pipeline with no merger now
-    raises a `pipeline_complete` notification on completion (confirm + merge) instead
-    of silently marking the task done.
-  - **Notifications** — a new first-class, human-actionable board surface (inbox +
-    events), modelled behind a `NotificationChannel` port so email/Slack delivery can
-    be added later without touching the call sites. In-app delivery only for now.
-
-  Adds migration `0024_merge_lifecycle.sql` (notifications + merge-preset tables, the
-  `blocks.merge_preset_id` column). The executor-harness image gains `/ci-fix` and
-  `/merge` endpoints (version bumped so the GHCR image is re-tagged).
-
-- 7d5e060: Bridge the Cloudflare ⇄ Node/local runtime feature-parity gaps: seven product
-  features that worked on the Worker but `503`'d on the Node + local facades (their
-  repositories were never wired) now work identically on all three, each landed with
-  a cross-runtime conformance assertion.
-
-  - **Merge threshold presets** — `merge_threshold_presets` + `DrizzleMergePresetRepository`.
-  - **Board-scan repository blueprints** — `repo_blueprints` + `DrizzleRepoBlueprintRepository`
-    (the blueprint reads; the `blueprints` pipeline step already ran on Node).
-  - **Document sources** — `document_connections`/`documents` + repos; the Confluence /
-    Notion / GitHub-docs provider shells are promoted into `@cat-factory/integrations`
-    so both facades compose the same providers.
-  - **Ephemeral environments** — `environment_connections`/`environments` + repos;
-    `HttpEnvironmentProvider` promoted into `@cat-factory/integrations`; a Node
-    `setInterval` TTL-teardown sweeper mirrors the Worker's expiry cron.
-  - **GitHub projections + inline sync** — `github_branches`/`github_pull_requests`/
-    `github_issues`/`github_commits`/`github_check_runs` + `github_sync_cursors` and the
-    full read/write projection repos, so the runtime-neutral `GitHubSyncService`'s inline
-    webhook/backfill ingest persists on Node; `WebCryptoWebhookVerifier` promoted into
-    `@cat-factory/server`.
-  - **Repo bootstrap** — `reference_architectures` + bootstrap runs stored as
-    `kind='bootstrap'` rows of `agent_runs`; `ContainerRepoBootstrapper` promoted into
-    `@cat-factory/server`; a **pg-boss durable bootstrap driver** (the analogue of the
-    Worker's `BootstrapWorkflow`) replaces the previous "bootstrap isn't durable on Node
-    yet" gap, and the stale-run sweeper now re-drives orphaned bootstrap runs too. The
-    self-hosted runner pool (`RunnerPoolTransport`) now accepts the `bootstrap` dispatch
-    kind — the harness `/bootstrap` route needs no Cloudflare primitive, so a pool runner
-    serves it just like the local Docker transport — so a real bootstrap run dispatches +
-    pushes for real on Node, not just on local.
-  - **Prompt-fragment library (ADR 0006)** — `prompt_fragments`/`fragment_sources` +
-    `DrizzlePromptFragmentRepository`/`DrizzleFragmentSourceRepository`; the runtime-neutral
-    `LlmFragmentSelector` promoted into `@cat-factory/agents`. Opt-in via
-    `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`, wired exactly like the Worker's
-    `selectFragmentLibraryDeps` (repos + installation resolver + selector), so the managed
-    tenant fragment catalog feeding every agent run works identically on all three.
-
-  The Worker keeps the same behaviour (it gains the new conformance assertions and the
-  shared promoted classes). **Breaking on Node/local:** these features now require their
-  new tables — boot-time `migrate()` applies them; there is no data to preserve.
-
-  The Node/local Drizzle migration lineage was re-baselined to a single fresh
-  `drizzle-kit generate` migration off the current `schema.ts` (the prior hand-authored
-  folders had no snapshots, which blocked `db:generate`); `db:generate`/`db:check` are
-  green again. Safe because no deployed database depends on the old lineage.
-
-  Deferred (still Worker-only, flagged for follow-up): real-time push (Node `realtime`
-  gateway still `501`s — needs a WebSocket hub over Postgres `LISTEN/NOTIFY`),
-  queue-backed async GitHub ingest (Node ingests inline rather than via a pg-boss queue),
-  and GitHub rate-limit telemetry (Node keeps the no-op repository).
-
-- 4a08935: Add **OpenRouter** and **LiteLLM** as model providers. Both are OpenAI-compatible, so
-  they reuse the existing inlined `openAiCompatibleResolver` path (no new dependency, no
-  dedicated package) and work for both inline engine calls and container coding agents via
-  the LLM proxy. Keys are onboarded per workspace/user through the UI key pool like the
-  other direct vendors; their base URLs are deployment config — OpenRouter defaults to the
-  public gateway (`OPENROUTER_BASE_URL` override optional), while LiteLLM is operator-hosted
-  so `LITELLM_BASE_URL` is required to enable it. Ships curated, direct-only catalog entries
-  (OpenRouter: Claude Opus, Gemini 3 Pro, GPT-5.5, DeepSeek, Llama 3.3; LiteLLM: a generic
-  gateway-default entry) with approximate pricing/context, overridable via
-  `SPEND_MODEL_PRICES`.
-
-  Catalog selectability now also gates on a **resolvable base URL**: an OpenAI-compatible
-  provider (everything but `openai`/`anthropic`) is only offered once its base URL resolves,
-  so a LiteLLM model stays unselectable — and a pipeline using it is blocked at start —
-  until `LITELLM_BASE_URL` is set, instead of passing the guard and throwing "No base URL
-  configured" mid-run. Wired symmetrically into both facades' capability resolution.
-
-  **Wire change:** `apiKeyProviderSchema` is widened with `'openrouter'` and `'litellm'`.
-
-- 5c8ca33: Add per-step human approval gates to pipelines, plus two board polish fixes.
-
-  A pipeline step can now be marked "require approval" when building the pipeline
-  (`Pipeline.gates`, parallel to `agentKinds`; persisted via the new `gates` column,
-  migration `0023`). When a gated step finishes, the run parks — reusing the durable
-  decision wait — and a human reviews the step's proposal in an editable modal, then
-  either **Approves** (the edited proposal advances and flows to downstream steps as
-  context) or **Requests changes** (the same step re-runs with the human's feedback
-  folded into the agent's prompt via `AgentRunContext.revision`). New endpoints
-  `POST /executions/:id/steps/:approvalId/{approve,request-changes}`
-  (`ExecutionService.approveStep` / `requestStepChanges`). The gate is surfaced on the
-  board card, inspector, focus view and the zoomed-in pipeline.
-
-  The **requirements reviewer** is now an automated, inline pipeline step
-  (`requirements` agent kind) that runs before the architect instead of a manual
-  inspector button. The default "Full build" pipeline seeds it first and gates both
-  the requirements review and the architecture proposal.
-
-  Also: the inspector panel now scrolls when its content exceeds the viewport, and
-  zoomed-in pipeline steps are clickable to reveal the prose conclusion each agent
-  produced (matching the inspector).
-
-- 3a12f15: Add prompt caching for container-agent model calls, plus the observability to prove
-  it works, and unify how both AI-call paths treat a provider's cache.
-
-  - **Shared cache policy** (`@cat-factory/agents`): `providerCachePolicy` is the single
-    source of truth for how each provider caches (`auto-prefix` for OpenAI/DeepSeek/Qwen,
-    `explicit-anthropic`, or `none`). Both the in-container proxy path and the inline
-    AI-SDK path consult it instead of hard-coding provider ids.
-  - **Proxy** (`@cat-factory/server`): routes a run's calls to the same cached prefix via
-    `prompt_cache_key` (keyed on the execution id) on providers that support it — the big
-    win, since a container agent re-sends its whole growing prefix every turn. It also
-    fixes the misleading `requestMaxTokens` metric to record the EFFECTIVE output ceiling
-    (it previously logged the client's value before the Workers-AI floor override, so it
-    read as `null`).
-  - **Measure the hit rate**: `LlmCallMetric` gains `cachedPromptTokens` (read across the
-    `prompt_tokens_details.cached_tokens` / `prompt_cache_hit_tokens` field names), so the
-    dashboard shows cached vs total prompt tokens per call. D1 migration `0028` + a Drizzle
-    migration add the column.
-
-  Note: the inline path's calls are single-shot (no growing prefix), so caching there is
-  marginal; full inline-call observability (recording inline LLM calls through the same
-  sink) is a follow-up.
-
-- 37baa7f: Scheduled recurring pipelines on services.
-
-  A service (a `frame` block) can now carry **recurring pipelines** that re-run a
-  pipeline on a cadence — primarily **Dependency updates** and **Tech debt**. A
-  schedule runs every `intervalHours`, optionally constrained to an allowed window
-  (weekdays + an hour-of-day range, in a chosen IANA timezone), and owns one reused
-  on-board task block inside the service that each fire runs the pipeline against
-  (skipping any fire while a run is still in flight). Run history is kept ~1 week and
-  surfaced in the inspector.
-
-  - **Tech-debt pipeline** adds two agent kinds: a read-only `analysis` container
-    agent that audits the repo, then a special non-LLM `tracker` step that files a
-    **GitHub issue or Jira ticket** from the analysis before implementation. The
-    tracker is a per-workspace selection (`GET|PUT /workspaces/:ws/tracker-settings`);
-    `GitHubClient` gains `createIssue`. The runtime-neutral `TicketTrackerService`
-    resolves each **tenant's own** connected integration (it is injected with a
-    `fileGitHubIssue` filer + a `resolveJiraConnection` resolver, never shared/env
-    credentials): on Cloudflare it files GitHub issues through the workspace's GitHub
-    App installation against the service's repo, and Jira tickets (markdown→ADF) using
-    the workspace's encrypted `task_connections`. Two new seed pipelines:
-    `pl_dep_update`, `pl_tech_debt`.
-  - **Per-tenant tracker on the Node facade**: both trackers now work on Node, each
-    resolving the **workspace's own** integration. Jira: the task-source integration is
-    wired on Node (always on; requires the shared `ENCRYPTION_KEY`) — a Drizzle
-    `task_connections`/`tasks` store + the runtime-neutral Jira provider — so each tenant
-    connects its own Jira through the existing UI (credentials encrypted at rest). GitHub:
-    the filer mints a short-lived token from that workspace's own GitHub App installation
-    (reusing the per-tenant App infra) and resolves the service's repo from the
-    `github_repos` projection — no shared/env credentials.
-  - **Persistence + scheduling are symmetric across runtimes**: D1 migration
-    `0029_recurring_pipelines.sql` ⇄ Drizzle schema + generated migration; the
-    Cloudflare `scheduled` cron fires due schedules (and prunes run history) ⇄ a Node
-    `setInterval` sweeper does the same. New ports `PipelineScheduleRepository` /
-    `TrackerSettingsRepository` with D1 + Drizzle implementations; the cross-runtime
-    conformance suite covers schedule CRUD, `runDue`, and the tracker setting.
-  - **UI**: an "Add recurring pipeline" button on the service frame (mirroring "Add
-    task") opens a per-frame modal (pipeline + cadence editor; the tracker choice is
-    surfaced inline for the tech-debt pipeline). The schedule's block shows a recurring
-    badge on the board; selecting it reveals the cadence, run-now/pause, and run
-    history in the inspector.
-
-- c664fe6: Let deployments mix in custom agent kinds and predefined pipelines programmatically —
-  the same installation-level extension pattern as opt-in model providers
-  (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
-
-  `@cat-factory/agents` now exposes an agent-kind registry (`registerAgentKind` /
-  `registerAgentKinds`, `AgentKindDefinition`): a registered kind contributes its system
-  prompt (string or `(kind) => string`), an optional custom user prompt, and an optional
-  `requiresContainer` flag. `systemPromptFor` / `userPromptFor` consult the registry for
-  custom kinds — after the built-in tracks (so a registered kind never shadows a
-  standard-phase, acceptance, mock or business-logic kind) and before the generic
-  fallback. The Worker's `CompositeAgentExecutor` routes a registered
-  `requiresContainer: true` kind to the container executor (inline kinds need no harness
-  changes and work end-to-end).
-
-  `@cat-factory/kernel` now exposes a pipeline registry (`registerPipeline` /
-  `registerPipelines`): registered pipelines are merged into `seedPipelines()` by id
-  (appended, or replacing a built-in in place), so every new workspace is seeded with the
-  deployment's pipelines alongside the built-in catalog.
-
-  Both runtime facades (`@cat-factory/worker`, `@cat-factory/node-server`) re-export
-  `registerAgentKind` / `registerPipeline` (and the test-only `clear*` helpers) next to the
-  existing model-provider seam, so a proprietary org package registers everything from one
-  place at deployment-assembly startup. The agent-kind id was already an open string
-  throughout (pipelines, steps, model defaults), so no schema change is required.
-
-- 4026793: Requirements review: react to findings + a rework agent that feeds downstream steps.
-
-  The requirements-review flow is now wired into the UI and reworks the requirements
-  instead of overwriting the block description:
-
-  - **New review window** (`RequirementsReviewWindow.vue`) modelled on the polished
-    prose review window: a human reacts to the reviewer's structured findings —
-    answering the relevant ones, dismissing the irrelevant — then runs the
-    **requirements-rework** agent. Triggered from the inspector's "Review
-    requirements" button (open-finding count badge). The old dormant
-    `RequirementReviewModal` is removed.
-  - **Rework, not overwrite.** `incorporate()` no longer rewrites
-    `block.description`. It folds the answers into ONE standard-format requirements
-    document (new versioned `REWORK_SYSTEM_PROMPT`: SHALL statements + MoSCoW +
-    Given/When/Then acceptance + domain rules) stored on the review, and returns
-    `{ review }`. It runs even with **zero findings**, so every task can carry a
-    clean, writer-ready spec.
-  - **Downstream consumption.** When a block has an incorporated review,
-    `ExecutionService` feeds that reworked document to **every** agent step in place
-    of the original description and drops the (already-folded-in) linked docs/tasks;
-    the requirements-writer aggregates the reworked text per task instead of the raw
-    description. The rework call rejects a length-truncated document instead of
-    persisting a silently-incomplete spec.
-  - **Both runtimes, enforced.** The requirements feature is wired on the Node facade
-    too — a `requirement_reviews` Postgres table (Drizzle schema + migration) and
-    `DrizzleRequirementReviewRepository`, plus the review/model deps in the Node
-    container — so the review/rework API and the agent-context substitution behave
-    identically on Cloudflare and Node. The cross-runtime conformance suite asserts the
-    substitution against both stores so the parity can't silently drift.
-  - **Frozen description.** Once a task's requirements are reworked, the inspector
-    freezes its raw description (read-only, tucked behind an expander) and puts the
-    standardized requirements in focus — the description is no longer what agents read.
-
-- d65c979: Unify the approval gate into the conclusions reader, with GitHub-style review.
-
-  The dedicated approval modal is gone. A pending gate now opens the same polished
-  step-detail reader (ToC side nav, rendered markdown), in a new **approval mode**:
-  the reviewer can comment on individual blocks of the agent's output (click a block —
-  the rendered markdown carries `data-src-start/end` source ranges so the comment
-  quotes that block's verbatim raw markdown), leave overall freeform feedback, then
-  **Approve** (advance), **Request changes** or **Reject**.
-
-  - **Request changes** re-runs the step with both the freeform feedback and the
-    per-block comments folded into the agent's prompt (`AgentRunContext.revision`
-    gains `comments`; `requestStepChangesSchema` now takes `feedback?` + `comments?`,
-    requiring at least one).
-  - **Reject** stops the run entirely — a terminal `rejected` failure
-    (`agentFailureKindSchema`), so the board's shared failure banner + retry surfaces
-    it (block → `blocked`). New `POST /executions/:id/steps/:approvalId/reject`
-    (`ExecutionService.rejectStep`).
-  - `stepApprovalSchema` gains the `rejected` status and a persisted `comments` array
-    (`stepReviewCommentSchema`). No migration: approvals live in the execution
-    `detail` JSON.
-
-  - **Approve with corrections** opens an inline editor over the conclusions; the
-    human's edits become the approved proposal carried forward (the existing
-    `approveStep` proposal override — no backend change). Manual edits are a distinct
-    mode and can't be combined with per-block comments / request-changes — they only
-    happen _together with_ approving.
-
-  The review surface is responsive — a right-side rail on wide screens, a bottom
-  sheet below `lg` — so a pending gate is always actionable. Reject uses a two-step
-  inline confirm (no native dialog). `requestStepChanges`/`rejectStep` reject a stale
-  gate id whose step is already being re-run (`changes_requested`) so a double-submit
-  can't dispatch duplicate work.
-
-  Cross-runtime conformance gains assertions for reject and comment-driven re-runs.
-
-- 8eed95b: Service-scoped best-practice prompt fragments, delivered by agent traits.
-
-  A service (frame block) now owns an explicit selection of best-practice / guideline
-  fragments — its programming standards — chosen from the **universal fragment pool**.
-  That pool is the built-in catalog plus any fragments a deployment registers at startup
-  via the new `registerPromptFragment` seam in `@cat-factory/prompt-fragments` (mirroring
-  `registerAgentKind` / the model-provider registry); `GET /prompt-fragments` serves the
-  merged pool. A workspace can also configure a **default set new services inherit**
-  (`GET|PUT /workspaces/:ws/service-fragment-defaults`), seeded onto a frame's
-  `serviceFragmentIds` when it is created (board drop, repo import, or bootstrap).
-
-  Agents gain first-class **capability traits** (`@cat-factory/agents`): a registry of
-  standard + custom traits with `traitsFor` / `hasTrait`, assignable to built-in kinds and
-  to custom kinds via `AgentKindDefinition.traits`. Two standard traits ship:
-
-  - **`code-aware`** (coder, ci-fixer, fixer, reviewer, architect): the running service's
-    selected fragments are folded into the agent's system prompt, unioned with the block's
-    own manual pins. Other kinds keep only their block pins.
-  - **`spec-aware`** (every code-touching kind): the agent's system prompt gains guidance to
-    read the in-repo `spec/` artifact (overview.md → rules.md → features/\*.feature →
-    spec.json) and treat it as the source of truth for required behaviour.
-
-  This **replaces the automatic per-run relevance selector**: fragment delivery is now
-  explicit (the service's selection) and trait-gated (code-aware) rather than guessed per
-  run. Per-block manual pins (`Block.fragmentIds`) still apply to that block's own agents.
-  The tenant fragment **library** (account/workspace CRUD + repo sources) remains as a
-  management surface but no longer feeds the run path.
-
-  Persistence is mirrored on both runtimes: a `service_fragment_ids` column on `blocks`
-  and a `workspace_fragment_defaults` table (Cloudflare D1 migration `0040` +
-  `D1ServiceFragmentDefaultsRepository`; Node Drizzle schema/migration +
-  `DrizzleServiceFragmentDefaultsRepository`), with the cross-runtime conformance suite
-  asserting the workspace-default round-trip, new-service inheritance, and the
-  code-aware-only folding on both facades. The UI adds a per-service "Service best
-  practices" picker in the inspector and a "Default service best practices" workspace
-  settings panel.
-
-  BREAKING (Node facade dev/test only): the Drizzle migration lineage under
-  `runtimes/node/drizzle/` was squashed into a single fresh baseline migration — the prior
-  incremental migrations had a forked, non-commutative history (left by merging two
-  branches) that broke `drizzle-kit generate`/`check`. There are no production Postgres
-  deployments, so existing dev/test databases should be dropped and re-created from the
-  new baseline rather than migrated. CI now runs `db:check` to keep the lineage honest.
-
-- a54ada2: Spec-writer now applies ONE task's requirements as an increment, not a service-wide aggregate.
-
-  The spec-writer used to receive `serviceTasks` — every task under the block's service
-  frame, merged or not — and fold them all into one document. So a run for a single task
-  ("add CRUD for office tables") produced a spec covering five unrelated sibling resources,
-  and the spec-reviewer correctly read it as scope contamination. That violates the
-  branched-work model: a task's baseline is what's already merged, plus its own increment;
-  an unmerged sibling task does not exist for it.
-
-  The spec-writer now reads the spec already committed on its work branch (the baseline)
-  and applies ONLY the current task's clarified/reworked requirements as an increment —
-  adding what the task introduces and adjusting existing requirements only where the task
-  changes their behaviour. It translates the given requirements and does not invent or fill
-  gaps (that is the requirements step's job). The in-repo `spec.json` stays the complete
-  service spec; only the writer's editing scope narrows.
-
-  - Engine: removed `gatherServiceTasks` and the `serviceTasks` field from
-    `AgentRunContext`. The dispatch feeds the single task (the block, whose description is
-    already the reworked requirements).
-  - Reviewer: the `spec-companion` now judges fidelity to the requirements it was given and
-    no longer penalises the writer for requirements it was never handed.
-  - Harness (`SpecJob.tasks` → `SpecJob.task`): the prompt is reframed as "baseline plus
-    this task's increment". Image retagged 1.6.0 → 1.7.0 (deploy/backend `image:publish` +
-    wrangler.toml) so the new digest rolls out.
-
-  Breaking: the `/spec` harness job shape changes (`tasks: []` → `task: {}`) and
-  `AgentRunContext.serviceTasks` is gone. No migration — stale in-flight jobs simply break.
-
-- 0090313: Surface a step's model the moment it starts, not only once its work finishes.
-
-  A pipeline step's `model` was recorded on the step only after the work returned: a
-  container step got its model from the job handle once `startJob` (which blocks for
-  the whole cold-boot dispatch) returned, and an inline step from the result once the
-  LLM query was over. But the model is fixed the instant its ref resolves (block pin >
-  workspace per-kind default > env routing) — well before the container is up or the
-  query runs — so the board showed "Spinning up container…" / a working step with no
-  model for that whole window.
-
-  The executor port gains an optional, side-effect-free `resolveModel(context)` that
-  previews the `provider:model` without dispatching (implemented by the inline
-  `AiAgentExecutor` and the `ContainerAgentExecutor`, forwarded by
-  `CompositeAgentExecutor`). The execution engine calls it up front and sets
-  `step.model` before the first "spinning up container" emit (container steps) and
-  before the blocking LLM call (inline steps), so the model rides the same emit that
-  shows the step starting. The job handle / result still re-assert the same value, and
-  the preview is best-effort (an executor that can't preview, or a resolution failure,
-  simply falls back to the old timing). No wire-contract change — the SPA already
-  renders `step.model` whenever present, so it now appears immediately. A cross-runtime
-  conformance assertion pins that `step.model` is set on the booting/querying emit.
-
-- 7dc8e57: Link integration context at task creation, GitHub issues as a source, and feed
-  all linked context to every agent step.
-
-  - **Linked context now reaches every step.** Documents (Confluence / Notion / …)
-    and tracker issues (Jira / GitHub) attached to a task were only rendered into the
-    prompts of the generic agent kinds — the four standard phases (architect, coder,
-    reviewer, tester) silently dropped them, so the agents doing the work never saw
-    the linked requirements/issues. The engine already resolves this context per step
-    (`ExecutionService.buildAgentContext`); a shared `linkedContextSection` is now
-    appended to every kind's user prompt (`@cat-factory/agents`), standard phases
-    included.
-  - **Attach context when creating a task.** The "Add a task" modal now lets you
-    select already-imported documents and issues and links them to the new task on
-    creation (previously only possible from the inspector after the fact).
-  - **GitHub Issues as a task source.** A new `github` task source reuses the
-    workspace's installed GitHub App (no separate credentials): it resolves the
-    installation that owns the issue's repo and fetches the issue body + comments via
-    the existing `GitHubClient` (new `getIssue`). Refs accept a full issue URL or the
-    `owner/repo#number` shorthand. Wired in when `TASK_SOURCES` includes `github` and
-    the GitHub integration is enabled.
-
-- cc8d96a: Flesh out the Tester agent, add an agent configuration-contribution mechanism, and
-  make Mocker always precede Tester.
-
-  - **Pipelines:** every built-in pipeline that runs a `tester` now runs `mocker`
-    immediately before it, so the Tester has its external-dependency mocks up.
-  - **Config contribution:** agents (built-in or custom, via the agent registry's new
-    `configContributions`) declare task-level config parameters. The union over a
-    task's pipeline appears on task creation + the inspector and freezes once the
-    contributing agent's step starts. Values persist as a sparse `agentConfig` map on
-    the block (keys/values length-capped); the catalog rides the workspace snapshot. The
-    Tester contributes its `environment` (local vs ephemeral) and Playwright its e2e
-    target (CI vs ephemeral). The old fixed `testTarget` block field is dropped — its
-    column is dropped on both runtimes too (no backwards-compat shim).
-  - **Tester → Fixer loop:** `tester` is now a container agent that runs the project's
-    tests — standing infra up locally via the service's docker-compose (rootless
-    Docker-in-Docker in the harness) or against an ephemeral environment — and returns
-    a structured report (what was tested, outcomes, concerns, greenlight). On a
-    withheld greenlight the engine loops a new dedicated `fixer` agent with the report
-    and re-tests, up to the task's merge-preset attempt budget. Only **blocking
-    (high/critical)** concerns withhold the greenlight — low/medium are advisory, so a
-    trivial nit can't burn the whole fixer budget — and the engine re-applies that rule
-    defensively over the report. When the budget is spent (or there's no PR branch to
-    fix, or the report is unparseable) the run fails for real (the tester step is left
-    un-`done`) and raises a human-actionable `test_failed` notification (retry action),
-    mirroring the CI gate. New harness `/test` + `/fix-tests` endpoints; reports + fixer
-    summaries render in the inspector and step detail.
-  - **Service + provisioning config:** a service frame carries the Tester's
-    docker-compose path / "no infra dependencies" toggle (a Tester pipeline can't start
-    until one is set), plus a cloud provider and abstract instance size that resolve to
-    the concrete instance-type id forwarded to the runner. Per-service sizing applies to
-    the self-hosted-pool and local-Docker backends; the Cloudflare Container backend has
-    a fixed per-class instance type (`wrangler.toml`) with no per-dispatch override, so
-    it ignores the hints (pick `cloudflare` when you don't need per-service sizing).
-  - **Account default cloud provider (fully wired):** accounts carry a
-    `defaultCloudProvider` new services inherit — persisted on both runtimes, settable
-    via `PATCH /accounts/:id` (owner-only) and the account menu, returned on the account
-    wire, and pre-filled as the service editor's provider default.
-  - **Local mode is 100% Docker/Podman:** a new first-class `docker` cloud provider
-    represents the local daemon. The local runner backend sizes each per-job container
-    from the abstract instance size (`--memory`/`--cpus`) and runs the Tester job
-    `--privileged` so it stands its docker-compose infra up with Docker-in-Docker on the
-    host daemon — never Cloudflare. A Tester-only pipeline with no PR branch now fails
-    cleanly (no fixer to push to) instead of throwing.
-  - Mirrored across both runtimes (D1 migration ⇄ Drizzle schema + migration).
-
-- 48d2f0d: Add per-workspace, per-agent-kind default model selection. A workspace can choose
-  which model each agent kind defaults to (e.g. point `architect` at a strong model
-  and `tester` at a cheap one), overriding the env-driven `AGENT_routing` for that
-  workspace at run time. New `GET|PUT /workspaces/:workspaceId/model-defaults`
-  endpoints (returning/replacing `{ defaults: Record<agentKind, modelId> }`) and the
-  selection surfaced on the workspace snapshot as `modelDefaults`. Persisted in
-  `workspace_model_defaults` on both runtimes (D1 migration 0028 / a new Postgres
-  migration).
-
-  The defaults are applied uniformly through one shared resolver
-  (`resolveStepModelRef` in `@cat-factory/agents`) used by **every** executor — the
-  inline LLM executor, the container executor and the requirements reviewer, on both
-  the Worker and the Node service — so a step's model resolves as block-pinned >
-  workspace per-kind default > env routing for the kind > env default for every agent
-  kind, not just the container kinds. A stale/unresolvable block pin now falls
-  through to the workspace default instead of skipping it. Request keys (agent kinds)
-  and values (model ids) are validated as trimmed, non-empty strings.
-
-### Patch Changes
-
-- 9d3a956: Clarity reviewer (bug-report triage) + bug investigator: a new bug-fix pipeline front.
-
-  Adds two new agents at the front of a new `pl_bugfix` ("Triage & fix bug") pipeline preset:
-
-  - **`bug-investigator`** — a read-only container agent (it runs the shared `/explore`
-    harness path used by `architect`/`analysis`, so no new harness endpoint or image change).
-    It clones the repo, reads the codebase from the raw bug report, and returns a prose
-    enriched report plus an OPTIONAL working hypothesis — which it omits unless reasonably
-    confident, so a low-confidence guess never misdirects the fix. Its output feeds the
-    clarity reviewer (the triage subject) and the coder (a non-binding lead, via `priorOutputs`).
-  - **`clarity-review`** — an inline engine gate step that triages the bug report for
-    _fixability_ (repro steps, expected-vs-actual, environment, affected area), mirroring the
-    requirements-review iterative loop (raise findings → answer/dismiss → incorporate into one
-    standard-format clarified report → re-review until it converges, with the same per-task
-    `maxRequirementIterations` / `maxRequirementConcernAllowed` knobs). The converged clarified
-    report substitutes downstream as the task description for the spec-writer/coder (when both
-    a requirements and a clarity review exist, the requirements doc wins).
-
-  Persisted as a new `clarity_reviews` table on BOTH runtimes (D1 migration
-  `0002_clarity_reviews` + Drizzle migration), wired in both facades' containers with a new
-  `clarity` event on the real-time transport and a `clarity_review` notification type. A
-  cross-runtime conformance assertion pins the clarified-brief substitution against both
-  stores.
-
-- 8065fed: Make the CI / conflicts gates observable. The gate window now shows the run id
-  (copyable, with a jump into observability), a per-attempt history of every
-  ci-fixer / conflict-resolver run (what each tried and how it ended), and — for
-  the conflicts gate — the resolver's own account of which files it left
-  conflicting (GitHub's API exposes mergeability as a single bit, so this comes
-  from the resolver, plus a link to inspect the PR on GitHub). Failing CI checks
-  now link straight to their GitHub run logs.
-
-  Mechanically: `GateStepState` gains an append-only `attemptLog`; the engine
-  records each gate-helper attempt when its job finishes (previously discarded the
-  moment the gate re-probed) and sets the conflicts gate's `lastFailureSummary`
-  from the resolver's output. `CiCheck` / `gateFailingCheckSchema` /
-  `githubCheckRunSchema` carry the check run's `html_url` so the UI can link to it
-  (populated on the live check-runs read; not persisted to the projection). The
-  conflict-resolver result mapping now surfaces the still-conflicting file list
-  (its `error`) instead of dropping it.
-
-  Also tightens the conflict-resolver prompt: lockfiles (`package-lock.json`,
-  `pnpm-lock.yaml`, `Cargo.lock`, `go.sum`, …) must be regenerated via the package
-  manager rather than hand-merged — large generated files are what exhausted the
-  resolver's context window and left big conflict sets unresolved.
-
-- b48c455: Internal cleanup — no behavior or API changes. Deduplicates repeated helpers into
-  shared modules: the subtask-snapshot comparison (`sameSubtasks`/`sameSubtaskItems`)
-  used by the execution + bootstrap flows now lives in `@cat-factory/kernel`
-  (`domain/subtasks.logic`), a `getErrorMessage` helper replaces the repeated
-  `error instanceof Error ? error.message : String(error)` expression, the shared
-  `STANDARDS_FOOTER` prompt line is centralized in `@cat-factory/agents`
-  (`agents/prompt-shared`), and the identical document/task in-memory provider
-  registries now extend a generic `MapSourceRegistry` exported from
-  `@cat-factory/kernel`.
-- 8eed38c: Author relative imports with explicit `.js` extensions across the shared backend
-  packages so their emitted `dist` is directly resolvable by Node's ESM loader (no
-  bundler required). This lets the Node runtime run the built output on plain Node
-  (`node dist/main.js`) — no tsx, no esbuild bundle — and is inert for the Cloudflare
-  Worker (wrangler bundles regardless). `handlebars/runtime` is imported as
-  `handlebars/runtime.js` for the same reason (its type is sourced from the full
-  package, type-only). No behaviour or public-API change.
-- 197264e: Sharpen the `mocker` and `tester` agent prompts so they do real work instead of
-  restating the implementer and resolving.
-
-  - **Mocker.** Leads with the concrete goal — make the service runnable locally with
-    just `docker-compose up`, every external SERVICE answered by a WireMock mock — and
-    is now explicit that this is a hands-on build step: it must read the existing
-    mappings, add/extend the stubs + fixtures + docker-compose wiring and COMMIT them.
-    A prose-only "already covered" write-up with no committed mock files is called out
-    as a failure of the step. The prose output is reframed as a summary of the mocks it
-    committed (which services/operations are now mocked, and what was deliberately left
-    unmocked).
-  - **Tester.** Reframed as exploratory testing that actually runs the software:
-    greenlights must be backed by observed runtime behaviour, not by reading the diff.
-    It now starts from the earlier steps' artifacts — the `spec/` document and its
-    Gherkin acceptance scenarios for the new functionality, and the WireMock mocks the
-    mocker stood up on localhost via docker-compose — then probes edge/error cases and
-    does a reasonable amount of regression testing of the blast radius. Sub-blocking
-    issues go in `concerns` at low/medium severity without necessarily withholding the
-    greenlight (the engine still skips the fixer when the report is greenlit).
-
-  The existing tester gate already dispatches the `fixer` companion on a withheld
-  greenlight and skips it when the tests pass — no wiring, pipeline or harness-image
-  change for the prompts.
-
-  **Frontend (`@cat-factory/app`).**
-
-  - **Dedicated test-report window.** The `tester` archetype now declares a `resultView`,
-    so opening a tester step opens a structured window (the universal result-view seam,
-    like the requirements review) instead of the generic prose panel. It renders the
-    report as a hierarchical tree — the scenarios the Tester exercised (its `tested`
-    areas) → the per-area outcomes (passed / failed / skipped) → the concerns grouped
-    under them — plus the greenlight verdict, outcome counts and the fixer-attempt state.
-    The service spec is not yet exposed to the SPA, so spec-element linkage is derived
-    from the report itself (a future spec endpoint can make it explicit).
-  - **Companion visualization.** Companion steps (`reviewer` / `architect-companion` /
-    `spec-companion` / `fixer`) are now visually tagged as companions in the pipeline
-    views, and a gate step's conditionally-run companion — today the Tester's `fixer` —
-    renders as a distinct sub-node marked **possible / running / completed / skipped**
-    (in both `PipelineProgress` and the inspector's `TaskExecution`). `fixer` is added to
-    the agent catalog + the `AgentKind` union.
-
-- b80d657: Reorganize the `agents/` source into focused subfolders so each agent's prompt is
-  easy to find. Pure internal refactor: the package's public barrel exports are
-  unchanged, the precompiled template output is byte-identical, and behaviour is the
-  same. The prompt TEXT now lives under `agents/prompts/*` (one file per track:
-  `standard`, `acceptance`, `business-logic`, `mock`, `testing`, `companion`,
-  `requirements`, plus the thin `roles` map extracted from the old `agent-catalog`,
-  and the shared `shared`/`delivery-contract` constants); metadata ABOUT kinds lives
-  under `agents/kinds/*` (`companions`, `traits`, `configs`, `read-only`, `registry`,
-  `versions`); the model-call machinery lives under `agents/runtime/*` (`executor`,
-  `routing`, `fragments`, `web-search`); and `agents/catalog.ts` is the dispatcher
-  that maps a kind to its prompt. The versioned-prompt registry (`versions`) is split
-  from the requirements prompt text (`prompts/requirements`) it references.
-- 2dd7e56: Spec reviewer (`spec-companion`) now judges only what the Spec Writer controls.
-
-  The reviewer kept faulting the writer for things the writer was never allowed to add:
-  error paths, validation rules, and status codes the requirements never stated (or
-  explicitly put out of scope), plus open questions like "is an extra field discarded?".
-  That is reviewing the requirements, not the spec — exactly what the writer's mandate
-  forbids it from filling.
-
-  The prompt now: covers the happy path for every stated behaviour plus only the
-  error/edge/boundary cases the requirements explicitly call for or that a stated
-  requirement cannot be satisfied without; honours the requirements' own non-goals,
-  assumptions, and exclusions instead of penalising the spec for leaving them out; and
-  never asks the writer to "clarify" or "decide" a question the requirements left open.
-
-- 86a5843: Require final-answer agents to emit the answer in the reply, not the reasoning channel.
-
-  A spec-writer run, then a blueprinter run, on `@cf/moonshotai/kimi-k2.7-code` failed
-  with "the agent did not return a usable ...: its final turn produced no text (an empty
-  completion)" even though the model produced a complete, valid document. The whole
-  answer landed in the model's reasoning channel and the visible reply came back empty
-  (telemetry: `finish_reason='stop'`, thousands of completion tokens, ~31k chars of
-  `reasoning_text`, zero visible content). The harness reads the deliverable from the
-  visible content only, so the no-empty-outcome gate (`unusableFinalAnswerCause`)
-  correctly failed the run.
-
-  This is universal to any agent whose deliverable IS its final reply. Added a shared
-  `FINAL_ANSWER_IN_REPLY` fragment (`@cat-factory/agents`, `prompts/shared.ts`) that
-  names the channel, and applied it to every final-answer agent: the four container
-  constants in `ContainerAgentExecutor.ts` (spec-writer, blueprint, merger, on-call), the
-  design/review/test standard phases, the tester report, the business-reviewer, the
-  companions, the requirements reviewer + rework, and the generic report roles
-  (researcher, analysis, bug-investigator, documenter, integrator, task-estimator,
-  merger). It is deliberately NOT applied to side-effect agents whose product is a pushed
-  commit (coder, ci-fixer, conflict-resolver, mocker, playwright, business-documenter):
-  they legitimately end with no final text. The spec-writer prompt also now states it has
-  no repository write access, removing the "maybe it just wants me to push the file"
-  reading. Bumped the `requirement-review`, `requirement-rework`, and `review` versioned
-  prompts. The no-empty-outcome gate stays as the safety net.
-
-- 5ca8086: Add alternate subscription-backed coding harnesses (Claude Code / Codex) alongside
-  the Pi proxy harness.
-
-  - New per-workspace **subscription token pool** (`provider_subscription_tokens`,
-    D1 + Postgres, encrypted at rest) with usage-aware rotation, behind a kernel
-    port + `ProviderSubscriptionService`, wired into all three runtimes.
-  - A guided **LLM Vendors** navbar UI to connect Claude / Codex / GLM (Z.ai) /
-    Kimi (Moonshot) / DeepSeek subscription credentials (token pool, write-only).
-    GLM / Kimi / DeepSeek all run via Claude Code against the vendor's
-    Anthropic-compatible endpoint; the unfiltered credential list covers every vendor.
-  - The executor-harness image now bundles the Claude Code and Codex CLIs; the
-    harness selects `pi` / `claude-code` / `codex` per job from the model, and the
-    subscription harnesses authenticate direct-to-vendor (no proxy) and report token
-    usage from the CLI event stream for rotation + telemetry.
-  - The model catalog becomes a canonical-model → provider map with precedence
-    **subscription > direct > cloudflare** ("subscriptions always win"): latest
-    Opus/Sonnet + GPT-5.5/5.4 (subscription-only), GLM-5.2/Kimi gain a Claude-Code
-    subscription flavour, and `ModelOption` now carries per-flavour cost, context
-    window, and a `quotaBased` flag (subscription usage is flat-rate quota, never
-    billed against the spend budget).
-  - A block's model is shared by all its pipeline steps, so a pin to a subscription-only
-    model (Claude Code / Codex — container-only, no provider key) is degraded to the
-    step's env-routing default for every INLINE LLM path through one shared seam
-    (`inlineModelRef` / `resolveInlineModelRef`): both the inline agent executor and the
-    requirements reviewer/rework, so the inline steps run instead of hard-failing and the
-    two paths can't drift. The claude-code subscription harness repairs malformed
-    structured output through the vendor's own Anthropic-compatible endpoint (the Pi
-    harness still uses the proxy; Codex keeps the graceful no-repair path).
-  - Hardening: the per-vendor token pool is capped to bound growth; the leased
-    subscription credential is scrubbed from subscription-repair error details (not just
-    GitHub-shaped secrets); and Codex token usage is read from its cumulative
-    `total_token_usage` so multi-turn runs attribute usage correctly for rotation.
-
-- 43f2443: Add a unified, persisted requirements structure stored in each service's GitHub
-  repo. A new `requirements-writer` container agent runs before the coder in
-  `pl_full` (and standalone via the new `pl_requirements` pipeline): it aggregates
-  the clarified requirements of every task under the service frame into one
-  PRESCRIPTIVE document, committed to the implementation branch
-  (`cat-factory/<blockId>`, created from base when absent) so the spec is present
-  before any code is written.
-
-  The harness deterministically renders the document into `requirements/`: the
-  canonical `requirements.json` (a `RequirementsDoc`), `overview.md`, `rules.md`
-  (cross-cutting domain rules / invariants), a `version.json` staleness manifest,
-  and Gherkin `features/*.feature` files (one `Scenario` per acceptance criterion).
-  Gherkin is generated two-pass — mechanical render in the harness, then the
-  `acceptance` agent polishes the `.feature` files and `playwright` turns each
-  scenario into a runnable test. Every container agent reads the requirements via a
-  new `REQUIREMENTS_GUIDANCE` block in its global `AGENTS.md`. The in-repo files are
-  the source of truth; the engine strictly validates the returned doc
-  (`parseRequirementsDoc`) at ingest. Mirrors the blueprint pattern; covered by the
-  cross-runtime conformance suite.
-
-- Updated dependencies [fe53445]
-- Updated dependencies [d94e75c]
-- Updated dependencies [6406c8c]
-- Updated dependencies [3d9a9d8]
-- Updated dependencies [db77061]
-- Updated dependencies [a48c620]
-- Updated dependencies [3bc8c79]
-- Updated dependencies [9d3a956]
-- Updated dependencies [8d11833]
-- Updated dependencies [ad9ba9e]
-- Updated dependencies [3e0d753]
-- Updated dependencies [f83ffd7]
-- Updated dependencies [8065fed]
-- Updated dependencies [385bd93]
-- Updated dependencies [e50e78a]
-- Updated dependencies [0972696]
-- Updated dependencies [b48c455]
-- Updated dependencies [e9b9356]
-- Updated dependencies [e8005ba]
-- Updated dependencies [3a12f15]
-- Updated dependencies [b40da13]
-- Updated dependencies [3a12f15]
-- Updated dependencies [8eed38c]
-- Updated dependencies [084bf43]
-- Updated dependencies [268c15d]
-- Updated dependencies [157cd02]
-- Updated dependencies [7c37653]
-- Updated dependencies [db77061]
-- Updated dependencies [6406c8c]
-- Updated dependencies [57d70fa]
-- Updated dependencies [6406c8c]
-- Updated dependencies [918764f]
-- Updated dependencies [918764f]
-- Updated dependencies [88b3170]
-- Updated dependencies [fe0b7f8]
-- Updated dependencies [f73652c]
-- Updated dependencies [db336b1]
-- Updated dependencies [8807f5c]
-- Updated dependencies [9be11e1]
-- Updated dependencies [5ec0d25]
-- Updated dependencies [a691853]
-- Updated dependencies [f066c59]
-- Updated dependencies [4a08935]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [b287996]
-- Updated dependencies [b156b4b]
-- Updated dependencies [5c8ca33]
-- Updated dependencies [b156b4b]
-- Updated dependencies [7cf2a2d]
-- Updated dependencies [2d66d34]
-- Updated dependencies [197264e]
-- Updated dependencies [3a12f15]
-- Updated dependencies [37baa7f]
-- Updated dependencies [c664fe6]
-- Updated dependencies [553a67d]
-- Updated dependencies [311a110]
-- Updated dependencies [f16ae62]
-- Updated dependencies [36018cb]
-- Updated dependencies [799be66]
-- Updated dependencies [d65c979]
-- Updated dependencies [75a0441]
-- Updated dependencies [7157fd7]
-- Updated dependencies [21ca647]
-- Updated dependencies [c4ef995]
-- Updated dependencies [8eed95b]
-- Updated dependencies [0b38aa6]
-- Updated dependencies [a97e485]
-- Updated dependencies [de5a9d7]
-- Updated dependencies [f647733]
-- Updated dependencies [d5e9141]
-- Updated dependencies [2d66d34]
-- Updated dependencies [a54ada2]
-- Updated dependencies [2dd7e56]
-- Updated dependencies [5ca8086]
-- Updated dependencies [d0697d1]
-- Updated dependencies [0090313]
-- Updated dependencies [7dc8e57]
-- Updated dependencies [cc8d96a]
-- Updated dependencies [7c37653]
-- Updated dependencies [43f2443]
-- Updated dependencies [acac735]
-- Updated dependencies [3841315]
-- Updated dependencies [48d2f0d]
-- Updated dependencies [3e6a844]
-  - @cat-factory/contracts@0.7.0
-  - @cat-factory/kernel@0.7.0
-  - @cat-factory/prompt-fragments@0.7.0
+- 332ef26: Refresh the dependency tree, the agent CLIs and the local web-search image.
+  
+  **Direct ranges plus a lockfile re-resolution from an empty tree**, so transitives move to the
+  newest release each declared range already admits, under the `minimumReleaseAge` gate:
+  
+  - **Direct**: `ai@^7.0.83 → ^7.0.84`, `@ai-sdk/anthropic@^4.0.44 → ^4.0.45`,
+    `@ai-sdk/openai@^4.0.50 → ^4.0.51`, `@ai-sdk/openai-compatible@^3.0.39 → ^3.0.40`,
+    `@ai-sdk/amazon-bedrock@^5.0.66 → ^5.0.67`, `@aws-sdk/client-s3@^3.1120.0 → ^3.1121.0`,
+    `happy-dom@^20.11.12 → ^20.11.15`, `knip@^6.32.3 → ^6.33.0`, `pg-boss@^12.28.0 → ^12.28.1`.
+    Every one of these was named as held back by the age window in the previous round and has now
+    aged past it.
+  - **Transitives the re-resolve moved**, 42 resolved entries added against 43 removed:
+    `oxc-parser@0.143.0 → 0.147.0` with its 19 platform bindings, `@ai-sdk/gateway@4.0.68`,
+    `@ai-sdk/provider-utils@5.0.33`, `express-rate-limit@8.7.0`, `fastq@1.20.3`,
+    `formatly@0.3.0 → 0.7.0` (knip's own range), `ip-address@10.7.0`, `json-rpc-2.0@1.8.0`,
+    `open@11.0.2`, `powershell-utils@0.2.1`, `pretty-bytes@7.1.2`, `pretty-ms@9.3.1`,
+    `@iconify/collections@1.0.730`.
+  
+  The tree stays at 1387 distinct names on both sides, and 1614 resolved entries becomes 1613:
+  `@oxc-project/types` collapses from three copies to two and `get-tsconfig` from two to one, while
+  `zod` gains a second.
+  
+  **That second `zod` is deliberate and is worth knowing about**, because a duplicated singleton is
+  usually a bug here. No workspace package declares `zod`, so every copy of it fills an
+  auto-installed optional peer slot, and until now the exact `zod@4.4.3` that
+  `@cloudflare/vitest-pool-workers@0.22.0` pins as a hard dependency was the only version in the
+  tree, which dragged every other consumer onto it. `zod@4.5.2` has now aged past the window, so the
+  peer slots take it and the pool's pin no longer speaks for the whole graph. The split is along a
+  seam nothing crosses: `4.4.3` is reachable only from the vitest pool, which uses it to validate its
+  own config, and everything app-reachable (the AI SDK family, `@modelcontextprotocol/sdk`,
+  `drizzle-orm`) moves to `4.5.2` together, so there is still exactly one `zod` identity in every
+  place a schema is built in one module and read in another. Do not "fix" this with a top-level
+  override pinning `4.4.3`: that would freeze the whole tree on a decision that belongs to the test
+  pool, which is the mistake the `wrangler` note in `pnpm-workspace.yaml` exists to prevent.
+  
+  **Held back by the age window rather than by a compatibility call**, and takeable next round:
+  `ai@7.0.85` and the whole `@ai-sdk` line beside it (`anthropic@4.0.46`, `openai@4.0.52`,
+  `openai-compatible@3.0.41`, `amazon-bedrock@5.0.68`) were all published about six hours ago, and
+  `happy-dom@20.12.0` misses by two and a half hours.
+  
+  **The agent CLIs**: Codex `0.150.1 → 0.151.0`, and both Pi extensions `2.7.1 → 2.8.0`. Pi
+  (`0.84.4`) and Claude Code (`2.1.251`) are already at their newest. The Dockerfile's standing
+  exemption that lets the three CLI pins run ahead of the age window is not exercised this round:
+  every version taken here has aged past it on its own, the extensions included, which is the rule
+  they are held to anyway.
+  
+  The executor image tag rolls to `1.144.0` for those pins, because republishing over a live tag does
+  not roll a deployment out. The deploy image is unchanged and stays at `0.6.1`: nothing under
+  `backend/internal/deploy-harness/` moved, and its `kubectl`/`kustomize`/`helm` pins are managed
+  deliberately rather than swept (`kubectl` has a `v1.37.0` available against the pinned `v1.36.4`,
+  which is a call for its own change).
+  
+  **The `searxng` image in the local compose stack takes `2026.8.29-d226b78bc`**, 29 hours old, after
+  holding two rounds at `2026.8.22-9fea41204` for tags that kept landing an hour or two short of the
+  window. The `node:26-trixie-slim` digest both runner Dockerfiles pin does not move: the tag still
+  resolves to `sha256:c0753125` (Node 26.8.1), unchanged since 2026-08-27.
+  
+  **Standing holds, restated so the next round need not re-derive them**: `wrangler` and
+  `@cloudflare/workers-types` do not move for the fifth round running, because
+  `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins `wrangler@4.124.0`
+  exactly, and the types version is the workerd date that pin resolves to. `drizzle-orm` and
+  `drizzle-kit` stay at `1.0.0-rc.4`: the only newer publishes are per-commit `rc.5` snapshots, not a
+  release to pin against. The frontend keeps `typescript@^6.0.3` against the root's `7.0.2` because
+  `vue-tsc@3.3.11` is what pairs with it, so moving it is a Nuxt-toolchain decision rather than a
+  sweep. The Java SDK moves nothing: jackson, junit, jspecify and every build plugin are already at
+  their newest stable on Maven Central, and Go and Python have no dependencies by design.
+- Updated dependencies [332ef26]
+  - @cat-factory/kernel@0.323.1
+  - @cat-factory/prompt-fragments@1.1.16
+
+<!-- archived-releases -->
+
+Older releases: [`CHANGELOG-ARCHIVE.md`](./CHANGELOG-ARCHIVE.md).

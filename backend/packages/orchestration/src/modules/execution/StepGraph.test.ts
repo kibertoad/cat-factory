@@ -62,3 +62,311 @@ describe('StepGraph.loopCompanionProducer', () => {
     expect(inst.steps[1]!.companion).toBeDefined()
   })
 })
+
+describe('StepGraph.rerunProducerThrough', () => {
+  it('clears the flags recording how the loop ENDED, since it has just been re-armed', () => {
+    // Every re-arm funnels through here: the automatic below-threshold round, the human-granted
+    // extra round, and `requestChanges` on a companion's gate. Each of these flags is a claim about
+    // a loop that stopped, and all three outlive their round unless cleared — leaving a run that
+    // went on to converge saying that a person is still being waited on, that the producer stopped
+    // responding, and that policy waved it past the bar.
+    const graph = new StepGraph(clock)
+    const inst = instance([
+      step({ agentKind: 'coder', state: 'done', output: 'prev' }),
+      step({
+        agentKind: 'reviewer',
+        state: 'waiting_decision',
+        companion: {
+          threshold: 0.8,
+          maxAttempts: 3,
+          attempts: 1,
+          verdicts: [{ rating: 0.4, threshold: 0.8, passed: false, feedback: 'no' }],
+          exceeded: true,
+          stalled: true,
+          capSettledByPolicy: true,
+        } as never,
+      }),
+    ])
+    graph.rerunProducerThrough(inst, 0, 1, rework)
+    const companion = inst.steps[1]!.companion!
+    expect(companion.exceeded).toBeUndefined()
+    expect(companion.stalled).toBeUndefined()
+    expect(companion.capSettledByPolicy).toBeUndefined()
+    // The graded history and the budget are NOT part of "how it ended" and must survive: the next
+    // round shows the verdicts back to the companion as its memory of what it already asked for.
+    expect(companion.verdicts).toHaveLength(1)
+    expect([companion.attempts, companion.maxAttempts]).toEqual([1, 3])
+  })
+})
+
+describe('StepGraph.resetStepForRerun', () => {
+  it('clears the liveness heartbeat so a re-run does not render a stale "active Ns ago"', () => {
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      startedAt: 1000,
+      jobId: 'job_1',
+      subtasks: { completed: 2, inProgress: 1, total: 5 },
+      lastActivityAt: 4000,
+    })
+    graph.resetStepForRerun(s)
+    expect(s.lastActivityAt).toBeNull()
+    // Sanity: the other per-dispatch live fields reset alongside it.
+    expect(s.subtasks).toBeUndefined()
+    expect(s.jobId).toBeUndefined()
+    expect(s.state).toBe('pending')
+  })
+
+  it('clears the delegated retry budget while keeping the attempt log it is NOT counted from', () => {
+    // The two halves of the reason `delegatedRetries` is its own counter. The attempt log is the
+    // evidence for why the step is being re-run and survives; the budget is per run of the step,
+    // so a step re-run after one recovered external failure must not spend its next retryable
+    // verdict on a budget the previous run used up and hard-fail as `delegated_failed`.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      delegatedRetries: 1,
+      delegated: {
+        executor: 'acme:executor',
+        status: 'failed',
+        correlationKey: 'run_1-acme:impl',
+        poll: null,
+        attempts: [{ startedAt: 1000, outcome: 'the workflow was cancelled' }],
+      },
+    } as Partial<PipelineStep>)
+    graph.resetStepForRerun(s)
+    expect(s.delegatedRetries).toBeUndefined()
+    expect(s.delegated?.attempts).toHaveLength(1)
+  })
+
+  it('drops the tool-server record but keeps the attribution the settle path reads back', () => {
+    // The two halves of one rule, asserted together because the rule is the DIFFERENCE between
+    // them: both are pinned at dispatch by `recordDispatchAttribution` and only one is consumed
+    // again. `model` and its two siblings are read when the job's usage lands, so a reset that
+    // cleared them would put every re-run's `token_usage` row back to provider "unknown", the bug
+    // the guard in that function exists to prevent. The tool-server record has no such reader, so
+    // holding it past a reset only lets a re-armed step render chips for a resolution no dispatch
+    // has made yet.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      model: 'anthropic/claude-x',
+      subscriptionTokenId: 'tok_1',
+      initiatedByUserId: 'user_1',
+      dispatches: [{ agentKind: 'coder', count: 1 }],
+      toolServers: {
+        agentKind: 'coder',
+        wired: [{ id: 'linear', label: 'Linear', transport: 'http' }],
+        unavailable: [{ id: 'slack', label: 'Slack', reason: 'missing_secret' }],
+      },
+    })
+    graph.resetStepForRerun(s)
+    expect(s.toolServers).toBeUndefined()
+    expect([s.model, s.subscriptionTokenId, s.initiatedByUserId]).toEqual([
+      'anthropic/claude-x',
+      'tok_1',
+      'user_1',
+    ])
+    // The pair that keeps the cleared field HONEST, asserted here rather than left to the
+    // cross-attempt suite below: `stepToolServersSchema` says an absent record means the CURRENT
+    // attempt has no resolution, never that the step did not run, and `dispatches` standing beside
+    // it is the whole of what makes that reading available to a diagnosing reader.
+    expect(s.dispatches).toEqual([{ agentKind: 'coder', count: 1 }])
+  })
+
+  it('clears the deployer fan-out state', () => {
+    // Every field here belongs to one provisioning attempt, and the human-test gate loops a
+    // `deployer` step back to rebuild its environment.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      deployEnvs: {
+        'frame-1': { status: 'failed', url: null, environmentId: 'env_1', error: 'x' },
+      },
+      deployFrameId: 'frame-1',
+      deployPrimaryFrameId: 'frame-1',
+      deployProvisioning: { type: 'kubernetes' },
+    })
+    graph.resetStepForRerun(s)
+    expect([s.deployEnvs, s.deployFrameId, s.deployPrimaryFrameId, s.deployProvisioning]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ])
+  })
+
+  it('re-arms the spent deploy-fix budget while keeping the rounds on the record', () => {
+    // The budget is per provisioning CYCLE: the re-run provisions from scratch, so its first
+    // failure is a first failure, and an `attempts` already at the bar sends it straight to
+    // `deploy_blocked` with no repair round ever dispatched. `phase` is the other half, since a
+    // stale `fixing` hands the re-run's deploy job to the agent poller that never dispatched it.
+    // The attempt LOG is per run, because the verification report reduces it: dropping it made a
+    // frame whose deployment files the fixer had edited report as one nothing was attempted on.
+    const graph = new StepGraph(clock)
+    const round = {
+      attempt: 1,
+      at: 1_000,
+      outcome: 'completed' as const,
+      reason: 'manifest_invalid',
+      error: 'Deployment is invalid',
+      summary: 'set the image tag',
+    }
+    const s = step({
+      state: 'working',
+      deployFix: {
+        phase: 'fixing',
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        reason: 'manifest_invalid',
+        lastError: 'Deployment is invalid',
+        attemptLog: [round],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.deployFix?.attempts).toBe(0)
+    expect(s.deployFix?.phase).not.toBe('fixing')
+    expect(s.deployFix?.maxAttempts).toBe(2)
+    expect(s.deployFix?.attemptLog).toEqual([round])
+  })
+
+  it('re-arms the investigation budget too, which used to survive a loop-back untouched', () => {
+    // The sibling loop had no reset line at all, so a looped-back deployer carried a SPENT
+    // `attempts` into its next failure: the first round of the new cycle was refused as "the
+    // budget is spent", and the terminal failure was explained by the verdict about the
+    // environment the re-provision had already superseded. `environmentId` goes with it, since a
+    // remedy run against that id restarts or tears down replaced infrastructure.
+    const graph = new StepGraph(clock)
+    const round = {
+      attempt: 1,
+      at: 1_000,
+      outcome: 'reported' as const,
+      error: 'namespace never became ready',
+      failure: null,
+    }
+    const s = step({
+      state: 'working',
+      environmentInvestigation: {
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        environmentId: 'env_1',
+        waitExtensions: 1,
+        attemptLog: [round],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.environmentInvestigation?.attempts).toBe(0)
+    expect(s.environmentInvestigation?.environmentId).toBeNull()
+    expect(s.environmentInvestigation?.maxAttempts).toBe(2)
+    expect(s.environmentInvestigation?.attemptLog).toEqual([round])
+    // The rounds already on the record stay readable as a cycle apart from the ones to come.
+    expect(s.environmentInvestigation?.cycle).toBe(1)
+  })
+
+  it('carries the granted readiness-ceiling extensions THROUGH a loop-back', () => {
+    // The bound on `wait` is run-long, not per cycle, because a cycle is not always started by a
+    // person: `rerunProducerThrough` is driven by the judge loop and the below-threshold
+    // companion loop too, so re-arming it would hand the model a fresh ceiling on every
+    // automatic rework round. It is also the run's ONLY record that a `wait` was granted, which
+    // the verification report reduces: the bring-up simply runs past the configured ceiling.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      environmentInvestigation: {
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        environmentId: 'env_1',
+        waitExtensions: 1,
+        attemptLog: [],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.environmentInvestigation?.waitExtensions).toBe(1)
+  })
+
+  it('re-arms the fixer budget onto a fresh cycle, keeping the rounds on the record', () => {
+    const graph = new StepGraph(clock)
+    const round = {
+      attempt: 1,
+      cycle: 0,
+      at: 1_000,
+      outcome: 'completed' as const,
+      reason: 'manifest_invalid',
+      error: 'image "" is not a valid reference',
+      summary: 'set the image tag',
+    }
+    const s = step({
+      state: 'working',
+      deployFix: {
+        phase: 'fixing' as const,
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        reason: 'manifest_invalid',
+        lastError: 'image "" is not a valid reference',
+        attemptLog: [round],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.deployFix?.attempts).toBe(0)
+    expect(s.deployFix?.cycle).toBe(1)
+    expect(s.deployFix?.phase).toBe('retrying')
+    expect(s.deployFix?.attemptLog).toEqual([round])
+  })
+
+  it('leaves a step that entered neither loop with no remediation state', () => {
+    const graph = new StepGraph(clock)
+    const s = step({ state: 'working' })
+    graph.resetStepForRerun(s)
+
+    expect([s.deployFix, s.environmentInvestigation]).toEqual([undefined, undefined])
+  })
+})
+
+// Two facts have to OUTLIVE a reset, because a reset is exactly what destroys the evidence that
+// a step ran before: the external trace hangs every attempt's telemetry under one parent derived
+// from (run, agent kind), so a parent rebuilt from the surviving attempt alone would start after
+// its own earliest child and would report a cycle as a single round.
+describe('StepGraph — cross-attempt step facts', () => {
+  it('stamps firstStartedAt and counts the attempt on a fresh start', () => {
+    const graph = new StepGraph({ now: () => 1_000 })
+    const s = step({ state: 'pending', startedAt: null })
+    graph.startStep(s)
+    expect([s.startedAt, s.firstStartedAt, s.attempts]).toEqual([1_000, 1_000, 1])
+  })
+
+  it('does not re-count a step resuming from a human pause', () => {
+    // startStep also runs when a parked step re-enters `working`. Counting that would inflate
+    // every approval into an extra round.
+    const graph = new StepGraph({ now: () => 5_000 })
+    const s = step({ startedAt: 1_000, firstStartedAt: 1_000, attempts: 1, pausedAt: 2_000 })
+    graph.startStep(s)
+    expect([s.startedAt, s.firstStartedAt, s.attempts, s.pausedAt]).toEqual([1_000, 1_000, 1, null])
+  })
+
+  it('keeps firstStartedAt, attempts and dispatches across a re-run reset', () => {
+    const graph = new StepGraph({ now: () => 9_000 })
+    const s = step({
+      startedAt: 1_000,
+      firstStartedAt: 1_000,
+      finishedAt: 2_000,
+      attempts: 1,
+      dispatches: [{ agentKind: 'coder', count: 1 }],
+    })
+    graph.resetStepForRerun(s)
+    // The in-flight timings are cleared, as a reset must; the record of the earlier attempt is not.
+    expect([s.startedAt, s.finishedAt]).toEqual([null, null])
+    expect(s.firstStartedAt).toBe(1_000)
+    expect(s.dispatches).toEqual([{ agentKind: 'coder', count: 1 }])
+
+    graph.startStep(s)
+    expect([s.startedAt, s.firstStartedAt, s.attempts]).toEqual([9_000, 1_000, 2])
+  })
+})

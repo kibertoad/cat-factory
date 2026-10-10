@@ -1,20 +1,25 @@
 import type {
   Block,
+  BoardChange,
   BootstrapJob,
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
   DocInterviewSession,
+  GuidedReviewChange,
   EnvConfigRepairJob,
   EnvironmentTestRun,
   ExecutionEventPublisher,
   ExecutionInstance,
+  InfraSetupTransition,
   Initiative,
+  KaizenGrading,
   LlmCallActivity,
   Notification,
   RequirementReview,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
+import { boardChangeSubject } from '@cat-factory/kernel'
 
 export interface FanOutEventPublisherDependencies {
   workspaceMountRepository: Pick<WorkspaceMountRepository, 'listWorkspaceIdsMountingBlock'>
@@ -31,6 +36,10 @@ export interface FanOutEventPublisherDependencies {
  * client reconciles any miss by re-fetching its snapshot. When a block can't be resolved to
  * a service (e.g. a legacy workspace-local block, or a coarse `boardChanged` with no block)
  * it falls back to delivering to the originating workspace only.
+ *
+ * The per-target forwards are independent (one DO round-trip per mounting workspace on the
+ * Worker), so they run concurrently via `Promise.all` — a shared service mounted on N boards
+ * pays one round-trip's latency, not N serial ones — rather than awaiting each in turn.
  */
 export class FanOutEventPublisher implements ExecutionEventPublisher {
   constructor(
@@ -55,24 +64,19 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     instance: ExecutionInstance,
     block?: Block | null,
   ): Promise<void> {
-    for (const ws of await this.targets(workspaceId, block?.id ?? instance.blockId)) {
-      await this.inner.executionChanged(ws, instance, block)
-    }
+    const targets = await this.targets(workspaceId, block?.id ?? instance.blockId)
+    await Promise.all(targets.map((ws) => this.inner.executionChanged(ws, instance, block)))
   }
 
-  async boardChanged(
-    workspaceId: string,
-    reason: string,
-    blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void> {
-    // A structural change to a shared service (a module materialised, a run cancelled, a
-    // bootstrap finished) must prompt a refresh on EVERY board that mounts it. When the caller
-    // names a block of the affected service we resolve it to that set; a genuinely block-less
-    // signal falls back to the originating workspace only.
-    for (const ws of await this.targets(workspaceId, blockId)) {
-      await this.inner.boardChanged(ws, reason, blockId, originConnectionId)
-    }
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    // A change to a shared service (a task spawned, a module materialised, a run cancelled, a
+    // bootstrap finished) must reach EVERY board that mounts it. When the caller names a block of
+    // the affected service we resolve it to that set; a genuinely block-less signal falls back to
+    // the originating workspace only. The block a targeted change CARRIES is the same object on
+    // every target: `deliverableBoardBlock` (applied by the inner publisher) is what keeps that
+    // sound, by refusing to carry the one level whose payload is per-board.
+    const targets = await this.targets(workspaceId, boardChangeSubject(change))
+    await Promise.all(targets.map((ws) => this.inner.boardChanged(ws, change)))
   }
 
   async bootstrapChanged(
@@ -80,9 +84,8 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     job: BootstrapJob,
     block?: Block | null,
   ): Promise<void> {
-    for (const ws of await this.targets(workspaceId, block?.id ?? job.blockId)) {
-      await this.inner.bootstrapChanged?.(ws, job, block)
-    }
+    const targets = await this.targets(workspaceId, block?.id ?? job.blockId)
+    await Promise.all(targets.map((ws) => this.inner.bootstrapChanged?.(ws, job, block)))
   }
 
   // A repair run has no board block, so there's no shared-service fan-out — it is purely
@@ -97,9 +100,23 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
-    for (const ws of await this.targets(workspaceId, notification.blockId)) {
-      await this.inner.notificationChanged?.(ws, notification)
-    }
+    const targets = await this.targets(workspaceId, notification.blockId)
+    await Promise.all(targets.map((ws) => this.inner.notificationChanged?.(ws, notification)))
+  }
+
+  // A reachability transition concerns the WORKSPACE's own infrastructure wiring, not a block, so
+  // there is nothing to resolve a shared service from — and nothing to fan out: a board that mounts
+  // a service from another workspace reads its OWN infra projection. Origin only.
+  async infraSetupChanged(workspaceId: string, change: InfraSetupTransition): Promise<void> {
+    await this.inner.infraSetupChanged?.(workspaceId, change)
+  }
+
+  // Run-details only (never surfaced on the board), so no shared-service fan-out. Forwarded
+  // explicitly because this decorator delegates method-by-method: an event it doesn't name is
+  // silently DROPPED for every deployment that wires the fan-out, with nothing failing.
+  // `fanOutEventPublisher.spec.ts` pins that surface so the next addition can't be forgotten.
+  async kaizenGradingChanged(workspaceId: string, grading: KaizenGrading): Promise<void> {
+    await this.inner.kaizenGradingChanged?.(workspaceId, grading)
   }
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {
@@ -111,38 +128,37 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   }
 
   async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
-    for (const ws of await this.targets(workspaceId, review.blockId)) {
-      await this.inner.requirementReviewChanged?.(ws, review)
-    }
+    const targets = await this.targets(workspaceId, review.blockId)
+    await Promise.all(targets.map((ws) => this.inner.requirementReviewChanged?.(ws, review)))
   }
 
   async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
-    for (const ws of await this.targets(workspaceId, session.blockId)) {
-      await this.inner.consensusSessionChanged?.(ws, session)
-    }
+    const targets = await this.targets(workspaceId, session.blockId)
+    await Promise.all(targets.map((ws) => this.inner.consensusSessionChanged?.(ws, session)))
   }
 
   async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
-    for (const ws of await this.targets(workspaceId, review.blockId)) {
-      await this.inner.clarityReviewChanged?.(ws, review)
-    }
+    const targets = await this.targets(workspaceId, review.blockId)
+    await Promise.all(targets.map((ws) => this.inner.clarityReviewChanged?.(ws, review)))
   }
 
   async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
-    for (const ws of await this.targets(workspaceId, session.blockId)) {
-      await this.inner.brainstormSessionChanged?.(ws, session)
-    }
+    const targets = await this.targets(workspaceId, session.blockId)
+    await Promise.all(targets.map((ws) => this.inner.brainstormSessionChanged?.(ws, session)))
   }
 
   async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
-    for (const ws of await this.targets(workspaceId, initiative.blockId)) {
-      await this.inner.initiativeChanged?.(ws, initiative)
-    }
+    const targets = await this.targets(workspaceId, initiative.blockId)
+    await Promise.all(targets.map((ws) => this.inner.initiativeChanged?.(ws, initiative)))
   }
 
   async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
-    for (const ws of await this.targets(workspaceId, session.blockId)) {
-      await this.inner.docInterviewChanged?.(ws, session)
-    }
+    const targets = await this.targets(workspaceId, session.blockId)
+    await Promise.all(targets.map((ws) => this.inner.docInterviewChanged?.(ws, session)))
+  }
+
+  // A guided review belongs to one workspace and no board block, so there is nothing to fan out.
+  async guidedReviewChanged(workspaceId: string, change: GuidedReviewChange): Promise<void> {
+    await this.inner.guidedReviewChanged?.(workspaceId, change)
   }
 }

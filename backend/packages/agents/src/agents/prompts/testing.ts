@@ -1,5 +1,8 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
-import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
+import { frameProfile } from '@cat-factory/contracts'
+import { FALSE_SUCCESS_SHAPES, FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { REFERENCE_SCREENSHOT_DIR } from './standard.js'
+import { SERVICE_DISCOVERY_GUIDANCE } from './environment-under-test.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
 // branch, brings its dependencies up (locally via docker-compose for a `docker-compose`
@@ -28,22 +31,47 @@ const TEST_REPORT_SHAPE = [
   '  "concerns": [                    // bugs/risks to fix before re-testing; non-empty ⇒ greenlight false',
   '    { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" }',
   '  ],',
+  '  "requirementVerdicts": [         // one entry per spec requirement you ruled on (see below)',
+  '    { "requirementId": string, "status": "met" | "not_met" | "not_covered", "detail": string }',
+  '  ],',
   '  "environment"?: "local" | "ephemeral",',
   '  "abort"?: { "reason": string }   // set ONLY if you could not run a meaningful test at all',
   '}',
+].join('\n')
+
+/**
+ * The per-requirement verdict contract, shared by the API and UI testers. It is what turns the
+ * spec from a list of intentions into evidence: the ids are the SPEC's own requirement ids, so
+ * the platform can both promote a verified requirement to `established` and render
+ * criterion → evidence on the pull request without inventing a second id space.
+ */
+const REQUIREMENT_VERDICT_RULES = [
+  'Ruling on the spec requirements (`requirementVerdicts`):',
+  '- Each Gherkin scenario in `spec/features/**.feature` carries a `# requirement: <id>` comment naming the SPEC REQUIREMENT it came from. Report your verdicts under exactly those ids — do not invent your own ids, renumber them, or use the scenario title.',
+  "- Use `met` ONLY when you actually exercised that requirement's acceptance criteria and observed them hold. `not_met` when you exercised them and they did NOT hold. `not_covered` when you did not exercise them this run — out of the change's blast radius, unreachable in this setup, or not yet built.",
+  '- A scenario tagged `@aspirational` describes behaviour that is AGREED BUT NOT YET BUILT. Its absence is NOT a bug and NOT a regression: if it is not implemented, record `not_covered` (with a short reason) — never `not_met`, and never file it as a concern for the fixer. Only rule it `met`/`not_met` if this change was actually supposed to deliver it.',
+  '- `met` is load-bearing: it PROMOTES the requirement to standing behaviour that every future run must preserve. Never mark a requirement `met` on the strength of reading the code or the diff — only on something you ran and observed.',
+  '- Omitting a requirement entirely reads the same as `not_covered`, so prefer an explicit `not_covered` with a reason. If the service has no `spec/` at all, send an empty list.',
 ].join('\n')
 
 const TESTER_SYSTEM_PROMPT = [
   'You are a meticulous test engineer doing EXPLORATORY testing of a pull request before release.',
   'You actually run the software and observe its behaviour — you do NOT pass judgement by reading the diff or restating what the implementer says they did. A greenlight that is not backed by something you actually exercised is worthless.',
   '',
+  'If "Run mode" below says this is a LIBRARY test suite, there is no running system to probe: your job shifts to the suite — install and build the package, bring up any test dependencies, run the unit + integration tests, assess how well they cover the public API surface for THIS change, and author the missing unit/integration tests on the branch. The rules below (base every outcome on something you observed; a failed outcome blocks the greenlight; abort rather than guess if you truly cannot run the suite) apply unchanged.',
+  '',
   'Bootstrap your environment from the repository:',
   "- Read the repo's README.md (and any CONTRIBUTING / docs it points to) to learn how to install dependencies, configure the service, run migrations and start it.",
+  // The environment DRY RUN's own discovery list, shared verbatim: a dry run reports whether an
+  // agent handed this environment could work out how to operate the service, and it can only
+  // predict YOUR answer if you are sent looking in the same places.
+  `- ${SERVICE_DISCOVERY_GUIDANCE}`,
   "- Local mode: the platform has stood up the service's infra dependencies from its docker-compose file (including the WireMock mocks the mocker step added for the service's external dependencies) and exposed them on localhost. Connect to them, run any DB migrations, then start the service and exercise it against those mocks. If the service was marked as having no infra dependencies, just run the suite directly.",
   '- Ephemeral mode: the deployed environment coordinates (URL, host, port, scheme) and any access credentials are provided in the run context below (see "Ephemeral environment under test"); test against that environment rather than starting anything locally.',
   '',
   'What to test:',
   "- Start from the specs written in earlier steps: the unified spec under `spec/` and especially its Gherkin acceptance scenarios in `spec/features/*.feature`. Walk the scenarios that cover THIS task's new functionality and confirm the running service actually behaves that way.",
+  '- The spec marks each requirement `established` (already-standing behaviour — a break is a regression worth reporting) or `aspirational` (agreed but not yet built — its absence is expected, not a bug). Read the heading in the group `.md`, or the `@aspirational` tag on the scenario, before judging anything a failure.',
   '- Explore the new functionality beyond the happy path: probe edge cases, bad input, error and boundary conditions, and the failure responses the external mocks can return — the kinds of things a scripted suite tends to miss.',
   '- Then do a REASONABLE amount of regression testing of related behaviour the change could plausibly affect — target the blast radius, do not re-test the whole system.',
   '- Run the existing automated suite where present, and add your own ad-hoc checks (API calls, flows, UI interactions) on top of it.',
@@ -51,9 +79,14 @@ const TESTER_SYSTEM_PROMPT = [
   'Rules:',
   "- Make NO commits and open NO pull request — you only assess and report. Fixes are another agent's job (the engine dispatches a fixer when you withhold the greenlight, then re-runs you).",
   '- Base every outcome on something you actually observed. Greenlight ONLY when you have exercised the change and are confident it is correct and safe; any blocking bug or unresolved risk means greenlight=false with the concern listed. Minor, sub-blocking issues go in `concerns` at low/medium severity without necessarily withholding the greenlight.',
+  // The dry run's own false-success shapes, which the greenlight needs more than the prober's
+  // report does: a pass nobody observed is what lets a broken change merge.
+  `- NEVER record an outcome as \`passed\` on a response you did not actually read. ${FALSE_SUCCESS_SHAPES}`,
   '- Record a discrete `outcome` for EVERY area you list in `tested`: each scenario in `tested` MUST have its own entry in `outcomes` (matching name) with a concrete `detail` of what you observed. Do NOT list a scenario in `tested` and then omit its outcome — a `tested` entry with no matching `outcome` reads as an unexplained skip, and describing results only in the prose `summary` does NOT count. If you genuinely did not exercise something, record it as a `"skipped"` outcome with the reason, rather than dropping it. The greenlight covers everything you claimed to test, so leave no claimed scenario unaccounted for.',
   '- A `"failed"` outcome is a blocker: if you record ANY outcome with status `"failed"`, set greenlight=false (the engine treats a failed check as a blocker regardless of the greenlight flag, and will loop the fixer). If a check did not actually fail — it was inapplicable or intentionally not run — mark it `"skipped"`, not `"failed"`; reserve `"failed"` for a genuine failure you want fixed.',
   '- If you CANNOT run a meaningful test at all — the ephemeral environment never came up, a dependency the test needs is unavailable, or the change simply cannot be exercised in this setup — do NOT guess, do NOT greenlight, and do NOT file it as a bug for the fixer (it cannot provision infrastructure). Instead set `abort` with a concise `reason`, set greenlight=false, and stop. The run is handed to a human to resolve and retry.',
+  '',
+  REQUIREMENT_VERDICT_RULES,
   '',
   TEST_REPORT_SHAPE,
   '',
@@ -69,6 +102,7 @@ const UI_TEST_REPORT_SHAPE = [
   '  "tested": string[],            // one `outcomes` entry per area you list here (same name)',
   '  "outcomes": [ { "name": string, "status": "passed" | "failed" | "skipped", "detail": string } ],',
   '  "concerns": [ { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" } ],',
+  '  "requirementVerdicts": [ { "requirementId": string, "status": "met" | "not_met" | "not_covered", "detail": string } ],',
   '  "environment"?: "local" | "ephemeral",',
   '  "abort"?: { "reason": string },  // set ONLY if you could not run a meaningful test at all',
   '  "screenshots": [               // one entry per DISTINCT view you captured + uploaded',
@@ -90,9 +124,10 @@ const TESTER_UI_SYSTEM_PROMPT = [
   '',
   'What to do:',
   '- Walk the new UI functionality for THIS task (start from the Gherkin acceptance scenarios in `spec/features/*.feature`), plus a reasonable amount of regression of related screens the change could affect.',
+  '- The spec marks each requirement `established` (already-standing behaviour — a break is a regression) or `aspirational` (agreed but not yet built — its absence is expected, not a bug). Check the `@aspirational` tag on a scenario before judging anything a failure.',
   '- Use Playwright to navigate every DISTINCT view the functionality touches and verify it behaves correctly (interactions, validation, error states).',
   '- For EACH distinct view, capture ONE full-page screenshot (PNG). Be non-redundant: one screenshot per logical view, not many near-identical shots of the same screen.',
-  '- If a reference-design directory is present (`.cat-context/reference-screenshots/`), capture the matching views and name each screenshot’s `view` to match the reference so they can be compared side by side. If it is absent, just use clear view names of your own.',
+  `- If reference designs were delivered to this run, they are listed by view name at the end of your context and stored in \`${REFERENCE_SCREENSHOT_DIR}/\`: capture each of those views and name the screenshot’s \`view\` EXACTLY as listed, so your capture pairs with its reference. That listing also names any reference the platform could NOT deliver: capture those views under their listed names too, there is simply no image on disk to compare against. With no listing at all, use clear view names of your own.`,
   '',
   'Uploading screenshots (ONLY if an upload endpoint was provided to this run):',
   '- This run MAY provide a screenshot upload endpoint via the `ARTIFACT_UPLOAD_URL` env var (with the `ARTIFACT_UPLOAD_TOKEN` bearer token). If — and only if — `ARTIFACT_UPLOAD_URL` is set, POST each screenshot to it as multipart form-data with fields `file` (the PNG), `kind=screenshot`, and `view` (the view name); the response returns the stored artifact’s `id`, which you record as that view’s `artifactId`. Do NOT inline image bytes in your report.',
@@ -101,9 +136,12 @@ const TESTER_UI_SYSTEM_PROMPT = [
   'Rules:',
   '- Make NO commits and open NO pull request — you only assess, capture and report.',
   '- Base every outcome on something you actually observed in the browser. A blocking bug means greenlight=false with the concern listed.',
+  `- NEVER record an outcome as \`passed\` on a screen you did not actually read. ${FALSE_SUCCESS_SHAPES}`,
   '- Record a discrete `outcome` for EVERY area you list in `tested`: each scenario in `tested` MUST have its own entry in `outcomes` (matching name) with a concrete `detail` of what you observed. Do NOT list a scenario in `tested` and then omit its outcome — a `tested` entry with no matching `outcome` reads as an unexplained skip, and describing results only in the prose `summary` does NOT count. If you genuinely did not exercise something, record it as a `"skipped"` outcome with the reason. The greenlight covers everything you claimed to test.',
   '- A `"failed"` outcome is a blocker: if you record ANY outcome with status `"failed"`, set greenlight=false (the engine treats a failed check as a blocker and will loop the fixer). Mark a check you did not or could not run `"skipped"`, never `"failed"`.',
   '- If you CANNOT run a meaningful test at all — the app/environment never came up or cannot be driven — do NOT greenlight and do NOT file it as a bug for the fixer. Set `abort` with a concise `reason`, set greenlight=false, and stop; the run is handed to a human.',
+  '',
+  REQUIREMENT_VERDICT_RULES,
   '',
   UI_TEST_REPORT_SHAPE,
   '',
@@ -155,14 +193,7 @@ const FIXER_SYSTEM_PROMPT = [
   '',
   'Commit your fixes to the current branch (no new branch, no new PR) so the tester / reviewer can',
   're-check them.',
-  '',
-  STANDARDS_FOOTER,
 ].join('\n')
-
-/** True when the kind is part of the Tester/Fixer track (API or UI tester + fixer). */
-export function isTestingKind(kind: AgentKind): boolean {
-  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND || kind === FIXER_AGENT_KIND
-}
 
 /** The built-out system prompt for a Tester/Fixer kind, or undefined otherwise. */
 export function testingSystemPrompt(kind: AgentKind): string | undefined {
@@ -173,21 +204,64 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
 }
 
 /**
- * The "which environment to run in" section for a Tester step, rendered from the service's
- * declared provision type AND whether the run provisioned an environment: a `kubernetes`/
- * `custom` service — or ANY run that provisioned an env URL (e.g. a `deployer` step) — runs
- * against that ephemeral environment; a `docker-compose` service has its dependencies stood
- * up locally; an `infraless` service (or none declared) stands nothing up. Empty for
- * non-tester kinds, so callers can append it unconditionally. Kept in lock-step with
+ * The "which environment to run in" section for a Tester step, rendered from the frame's
+ * capability profile + its declared provision type: a `library` frame (not `deployable`) runs
+ * the suite in-container (any repo-local compose stood up on localhost, else its lifecycle
+ * scripts); a `kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a
+ * `deployer` step) — runs against that ephemeral environment; a `docker-compose` service has its
+ * dependencies stood up locally; an `infraless` service (or none declared) stands nothing up.
+ * Empty for non-tester kinds, so callers can append it unconditionally. Kept in lock-step with
  * {@link testerInfraSpec} (server) so the prompt and the harness `infra` spec never disagree.
  */
+/**
+ * Whether this step will be told to test an EPHEMERAL ENVIRONMENT rather than to stand something
+ * up for itself — the `Run mode: ephemeral environment` branch of
+ * {@link testerEnvironmentSection}, extracted so the ENGINE can ask the same question before it
+ * dispatches.
+ *
+ * It has to be one predicate, not two agreeing ones: the engine's dispatch guard refuses a step
+ * whose ephemeral environment has no URL, and a guard keyed off a slightly different condition
+ * than the prompt would either refuse a step the prompt was going to let stand up its own infra,
+ * or let through the exact case it exists to catch.
+ */
+export function runsAgainstEphemeralEnvironment(context: AgentRunContext): boolean {
+  if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND) {
+    return false
+  }
+  // A `library` frame has no deployment and no running system to probe, so it never runs against
+  // an environment however the workspace's provisioning is configured.
+  const frameType = context.service?.type
+  if (frameType && frameProfile(frameType).testPosture === 'suite') return false
+  const type = context.service?.provisioning?.type
+  // A declared `kubernetes`/`custom` service is ALWAYS handed an environment; any other service
+  // is only in ephemeral mode when this run actually provisioned one it can reach.
+  return type === 'kubernetes' || type === 'custom' || Boolean(context.environment?.url)
+}
+
 export function testerEnvironmentSection(context: AgentRunContext): string {
   if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
     return ''
-  const type = context.service?.provisioning?.type
-  if (type === 'kubernetes' || type === 'custom' || context.environment?.url) {
+  // A `library` frame runs the tester in `suite` posture: no deployment and no running system to
+  // probe, so the tester runs the suite in-container. When the frame declares a repo/package-local
+  // compose file it has been stood up on localhost (the harness `standUpInfra` path); otherwise the
+  // agent self-manages test deps via the repo's `pretest:ci`/`test:ci`/`posttest:ci` lifecycle
+  // scripts. Keyed off the profile's `testPosture` (the field named for exactly this choice) so it
+  // stays in lock-step with `testerInfraSpec` (server), which keys the wire spec off the same flag.
+  const frameType = context.service?.type
+  if (frameType && frameProfile(frameType).testPosture === 'suite') {
+    return (
+      '\nRun mode: library test suite — this is a published package with no deployment and no ' +
+      'running system. Install and build the package; if this run stood up repo-local test ' +
+      'dependencies they are on localhost (connect to them), otherwise run the repo’s ' +
+      '`pretest:ci` / `test:ci` / `posttest:ci` lifecycle scripts (where present) to self-manage ' +
+      'them. Then run the unit + integration suite, assess coverage of the public API surface ' +
+      'against this change, and add the missing unit/integration tests on the branch.'
+    )
+  }
+  if (runsAgainstEphemeralEnvironment(context)) {
     return '\nRun mode: ephemeral environment — test against the environment described under "Ephemeral environment under test" above (URL/host/port + any credentials); do not start the service locally.'
   }
+  const type = context.service?.provisioning?.type
   if (type === 'docker-compose') {
     return '\nRun mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.'
   }

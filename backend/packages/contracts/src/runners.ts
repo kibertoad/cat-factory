@@ -1,10 +1,10 @@
 import * as v from 'valibot'
+import { environmentAuthSchemeSchema, environmentRequestTemplateSchema } from './environments.js'
 import {
-  environmentAuthSchemeSchema,
-  environmentRequestTemplateSchema,
+  customBackendKindSchema,
+  eksClusterFieldsSchema,
   environmentSecretRefSchema,
-} from './environments.js'
-import { customBackendKindSchema, eksClusterFieldsSchema } from './primitives.js'
+} from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Self-hosted runner-pool wire contracts ("bring your own infra").
@@ -72,6 +72,14 @@ export const runnerPoolResponseMappingSchema = v.object({
   progressCompletedPath: v.optional(v.string()),
   progressInProgressPath: v.optional(v.string()),
   progressTotalPath: v.optional(v.string()),
+  /**
+   * Dot-path to the harness liveness heartbeat (epoch ms of its last sign of life — the harness
+   * `heartbeatAt`). A pool that proxies the cat-factory executor-harness verbatim should set this to
+   * `heartbeatAt` so a long, quiet phase on a pool-backed run still refreshes the step's throttled
+   * `lastActivityAt` (and the run's `updated_at`), exactly like a Cloudflare container — otherwise a
+   * live-but-quiet pool run looks wedged to the sweeper + UI. Absent ⇒ no liveness signal is forwarded.
+   */
+  heartbeatPath: v.optional(v.string()),
   /** Dot-paths to the finished work product. */
   prUrlPath: v.optional(v.string()),
   branchPath: v.optional(v.string()),
@@ -96,6 +104,72 @@ export const runnerPoolResponseMappingSchema = v.object({
    * coerced to `{ kind, title, detail?, suggestedAction? }`.
    */
   followUpsPath: v.optional(v.string()),
+  /**
+   * Dot-path to the array of per-model-call telemetry rows the harness lifted from its CLI
+   * stream since the last poll (the harness `callMetrics` drain-on-read channel). A pool that
+   * proxies the cat-factory executor-harness verbatim should set this to `callMetrics`, so a
+   * pool-backed run's token spend and prompt/response bodies land in `llm_call_metrics` WHILE
+   * it runs — and survive it dying before it can return a terminal result. Absent ⇒ the calls
+   * are recorded only from the terminal result envelope, as before.
+   */
+  callMetricsPath: v.optional(v.string()),
+  /**
+   * Dot-path to the LATEST pre-PR validation attempt the harness published (the harness
+   * `validationReport` latest-value channel — NOT a drain buffer). A pool that proxies the
+   * cat-factory executor-harness verbatim should set this to `validationReport` so a pool-backed
+   * run surfaces the repair loop LIVE ("lint failed, repairing — attempt 2 of 3"), exactly like a
+   * Cloudflare/local container. Absent ⇒ the report is surfaced only from the terminal result
+   * envelope, which is still enough to gate the PR and carry the failure evidence.
+   */
+  validationReportPath: v.optional(v.string()),
+  /**
+   * Dot-path to the LATEST bugfix reproduction-proof attempt the harness published (the harness
+   * `reproductionReport` latest-value channel — NOT a drain buffer). A pool that proxies the
+   * cat-factory executor-harness verbatim should set this to `reproductionReport` so a pool-backed
+   * bugfix run surfaces a failed verification WHILE its repair loop runs, exactly like a
+   * Cloudflare/local container. Absent ⇒ the verdict is surfaced only from the terminal result
+   * envelope, which is still enough for the PR report and the step card.
+   */
+  reproductionReportPath: v.optional(v.string()),
+  /**
+   * Dot-path to the WHOLE per-slice review set a parallel PR reviewer has captured so far (the
+   * harness `sliceReviews` latest-value channel — NOT a drain buffer). A pool that proxies the
+   * cat-factory executor-harness verbatim should set this to `sliceReviews`.
+   *
+   * Unlike the two reports above, absent here is not merely a lost live view: the reviewer emits
+   * its `slices`/`findings` only in the TERMINAL structured output, so this channel is the only
+   * thing that makes a finished slice durable while the review is still running. Without it a
+   * pool-backed review that wedges or dies has nothing for a manual resume to work from and can
+   * only be re-run from zero.
+   */
+  sliceReviewsPath: v.optional(v.string()),
+  /**
+   * Dot-path to what the agent's CLI reported about the tool servers (MCP) it loaded (the harness
+   * `toolServers` latest-value channel — NOT a drain buffer). A pool that proxies the cat-factory
+   * executor-harness verbatim should set this to `toolServers`.
+   *
+   * Absent ⇒ the run's tool-server record carries the dispatch's half only, which is the honest
+   * answer for a pool this deployment has not mapped: "not observed" and "observed, all healthy"
+   * are different facts, and only an unmapped path can be reported as the first one. Unmapped is
+   * therefore a lost DIAGNOSTIC, never a false accusation — a server that failed to start on a
+   * pool-backed run simply goes unreported, exactly as it did before this channel existed.
+   */
+  toolServersPath: v.optional(v.string()),
+  /**
+   * Dot-path, IN THE DISPATCH RESPONSE (not the poll one), to the harness's capability handshake:
+   * the list of optional job-body fields the running image actually parses. A pool that proxies
+   * `POST /jobs` verbatim should set this to `capabilities`.
+   *
+   * Worth the one line, because it is the only thing that lets the backend refuse a BLIND run on a
+   * pool: an image older than a capability ignores the field instead of rejecting it, and the
+   * prompt has already told the agent it has tools or a skill that were never installed. Absent ⇒
+   * the dispatch cannot tell, warns, and proceeds.
+   *
+   * Deliberately not read by name without this: `capabilities` is an ordinary word for a scheduler
+   * to use about its own runners (`["gpu","docker"]`), and reading one of those as the harness's
+   * answer would refuse every capability dispatch against a current image.
+   */
+  dispatchCapabilitiesPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
   /**
@@ -139,6 +213,54 @@ export type KubernetesResourceQuantities = v.InferOutput<typeof kubernetesResour
 /** The secret-bundle key the Kubernetes backend reads the ServiceAccount token from. */
 export const KUBERNETES_RUNNER_TOKEN_SECRET_KEY = 'apiToken'
 
+/**
+ * The container image variants the PLATFORM itself publishes, and therefore the names a
+ * deployment may not claim for an image of its own: each has its own named setting on every
+ * runner backend, and re-pointing one would silently change what a built-in kind runs.
+ *
+ * On the WIRE rather than in the backend alone, for the reason the capability tags are: the
+ * people who must not collide with these names are outside it. A deployment registers an agent
+ * kind naming its own variant, and an operator fills in a backend's variant map in the SPA.
+ * Kernel re-exports it, so a backend and a registration are held to one list.
+ */
+export const PLATFORM_IMAGE_VARIANTS = ['default', 'ui', 'deploy'] as const
+
+/**
+ * One of the variants the platform publishes, as a CLOSED union derived from the picklist above.
+ *
+ * A literal tuple rather than `readonly string[]` so the members are a type and not just data.
+ * That is what lets a backend switch over them exhaustively: each platform image needs its own
+ * arm (its own image setting, its own refusal naming what an operator loses by leaving it
+ * unwired), so a fourth published image is a decision every backend has to make, and the only
+ * thing that can make it make it is a build failure. Read through
+ * {@link isPlatformImageVariant}, never by respelling the names: a branch that restated them
+ * routes a newly published image into the deployment-owned half and refuses it as unwired on the
+ * one runtime that ships it, with nothing failing at compile time.
+ */
+export type PlatformImageVariant = (typeof PLATFORM_IMAGE_VARIANTS)[number]
+
+/** Whether `variant` is one the platform publishes, rather than a deployment's own. */
+export function isPlatformImageVariant(variant: string): variant is PlatformImageVariant {
+  return (PLATFORM_IMAGE_VARIANTS as readonly string[]).includes(variant)
+}
+
+/** The shape every image-variant name is held to: a bounded lower-kebab slug. */
+export const IMAGE_VARIANT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/
+const IMAGE_VARIANT_NAME_MAX_LENGTH = 64
+
+/**
+ * Whether `value` is SHAPED like an image-variant name, membership aside.
+ *
+ * The names are open, so this is the only question askable about one without a backend's
+ * variant map in hand: a reader recovering a variant out of a container key holds no config,
+ * and a registration is checked at boot before any pool is resolved. Stated once here because
+ * both boundaries that ACCEPT a name (an agent kind's declaration, a backend's variant map)
+ * must agree with the reader that recovers it.
+ */
+export function isImageVariantName(value: string): boolean {
+  return value.length <= IMAGE_VARIANT_NAME_MAX_LENGTH && IMAGE_VARIANT_NAME_PATTERN.test(value)
+}
+
 export const kubernetesRunnerConfigSchema = v.object({
   /** Human label for the connection (shown in the UI). */
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
@@ -165,7 +287,47 @@ export const kubernetesRunnerConfigSchema = v.object({
    * raw-manifest REST path is unaffected); set it to enable the pool's deploy backend.
    */
   imageDeploy: v.optional(v.string()),
-  /** Container port the harness HTTP server listens on (default 8080). */
+  /**
+   * The DEPLOYMENT's own image variants: the name one of its agent kinds declares
+   * (`AgentStepSpec.image`) mapped to the tag a pod for it pulls.
+   *
+   * A map rather than more named fields, because these are open-ended in a way the three above
+   * are not: `image` / `imageUi` / `imageDeploy` are images this repo publishes and every backend
+   * knows the meaning of, while what a deployment's own agent kind needs in its container is
+   * known only to that deployment. A kind declaring a name this map does not carry is refused at
+   * dispatch rather than quietly run on the default image, which would produce a job missing
+   * whatever the variant existed for and a step reporting nothing about why.
+   *
+   * The platform's own names are not accepted here: they have their own fields above, and a
+   * second place to set them would be a second answer to one question.
+   */
+  imageVariants: v.optional(
+    v.pipe(
+      v.record(
+        v.pipe(
+          v.string(),
+          v.trim(),
+          v.maxLength(IMAGE_VARIANT_NAME_MAX_LENGTH),
+          v.regex(IMAGE_VARIANT_NAME_PATTERN, 'must be a lower-kebab slug'),
+        ),
+        v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+      ),
+      v.check(
+        (variants) => Object.keys(variants).every((name) => !isPlatformImageVariant(name)),
+        'must not redefine a platform image variant (default, ui, deploy): each has its own field',
+      ),
+    ),
+  ),
+  /**
+   * Container port the harness HTTP server listens on, defaulting to `HARNESS_JOB_PORT`.
+   * The pod spec states it BOTH ways (`containerPort` plus a `PORT` env var), so the harness binds
+   * whatever a pool sets here and the proxy addresses the same number.
+   *
+   * A pool carrying a value from before the default moved off 8080 keeps dispatching, and that is
+   * the trap rather than the relief: the harness then holds 8080 inside every job container, which
+   * is the most common default for a containerised service, so an app under test cannot bind it
+   * and a health check aimed at it is answered by the harness. Prefer leaving this unset.
+   */
   harnessPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
   /** Name of an `imagePullSecrets` entry for a private registry. */
   imagePullSecretName: v.optional(v.string()),

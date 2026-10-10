@@ -18,8 +18,11 @@ import type { PullRequestRef } from '../domain/types.js'
 export interface MergePrEntry {
   /** The repo (owner/name) the PR is in; absent ⇒ the block's own-service repo. */
   repo?: string
-  /** The involved-service frame whose repo this is; absent for the own-service PR. */
-  frameId?: string
+  /**
+   * The involved-service frames whose changes ride this PR; absent for the own-service PR.
+   * Several when the repo is a monorepo hosting more than one of the run's involved services.
+   */
+  frameIds?: string[]
   /** The PR ref (number + branch) to merge. */
   ref: PullRequestRef
 }

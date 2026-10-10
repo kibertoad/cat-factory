@@ -1,7 +1,7 @@
 import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 
 // Persistence port for a workspace's enabled GATEWAY models (the dynamic-catalog subset).
-// A gateway provider (OpenRouter today; LiteLLM and others later) is a single OpenAI-
+// A gateway provider (OpenRouter today; Bifrost, LiteLLM and others later) is a single OpenAI-
 // compatible endpoint to many models reached via the workspace's API-key pool. Rather than
 // a hardcoded list, a workspace browses the gateway's live catalog and enables a subset;
 // the persisted `models` array IS that subset, each carrying its cached context window +
@@ -17,7 +17,7 @@ import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 export interface ProviderModelCatalogRecord {
   /** Workspace (`ws_*`) the enabled set belongs to. */
   workspaceId: string
-  /** Gateway provider id (e.g. `openrouter`, `litellm`) — also the `ModelRef.provider`. */
+  /** Gateway provider id (e.g. `openrouter`, `bifrost`, `litellm`), also the `ModelRef.provider`. */
   provider: string
   /** The enabled models, each with cached metadata (context + price). */
   models: OpenRouterModelMeta[]

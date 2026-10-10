@@ -8,6 +8,7 @@ import {
   openBoard,
   pinWorkspace,
   seedGitHub,
+  selectTask,
   taskCard,
 } from './helpers'
 
@@ -53,7 +54,7 @@ test.describe('GitHub integration (faked App, real projections)', () => {
     await openBoard(page)
 
     // Open the task's inspector (selecting the node) and expand its collapsed "Run settings".
-    await taskCard(page, task.id).click()
+    await selectTask(taskCard(page, task.id))
     const inspector = page.getByTestId('inspector-panel')
     await expect(inspector).toBeVisible({ timeout: LIVE_TIMEOUT })
     const runSettings = inspector

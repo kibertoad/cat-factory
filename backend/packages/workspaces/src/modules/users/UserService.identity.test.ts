@@ -53,6 +53,19 @@ class InMemoryUserRepository implements UserRepository {
   listIdentities(userId: string): Promise<UserIdentityRecord[]> {
     return Promise.resolve([...this.identities.values()].filter((i) => i.userId === userId))
   }
+  private readonly generations = new Map<string, number>()
+  sessionGeneration(userId: string): Promise<number | null> {
+    if (!this.users.has(userId)) return Promise.resolve(null)
+    return Promise.resolve(this.generations.get(userId) ?? 0)
+  }
+  bumpSessionGeneration(userId: string): Promise<number> {
+    if (!this.users.has(userId)) {
+      return Promise.reject(new Error(`Cannot revoke sessions for unknown user '${userId}'`))
+    }
+    const next = (this.generations.get(userId) ?? 0) + 1
+    this.generations.set(userId, next)
+    return Promise.resolve(next)
+  }
 }
 
 const passwordHasher: PasswordHasher = {

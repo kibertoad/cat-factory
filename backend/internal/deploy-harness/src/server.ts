@@ -2,9 +2,10 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { handleDeploy } from './deploy.js'
 import { parseDeployJob } from './job.js'
-import { redactSecrets } from './redact.js'
+import { redact } from './redact.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
+import { DEFAULT_HARNESS_PORT } from './harness-port.js'
 
 // The deploy container's HTTP entry point. The backend addresses one instance per run
 // and POSTs a `deploy` job to /jobs; the harness starts that job in the background
@@ -14,7 +15,7 @@ import { log } from './logger.js'
 // runner transport drives both the same way. Nothing here holds long-lived secrets: the
 // per-job cluster token + git token arrive in the request body and live only for the job.
 
-const PORT = Number(process.env.PORT ?? 8080)
+const PORT = Number(process.env.PORT ?? DEFAULT_HARNESS_PORT)
 
 // Optional bind address, identical to the executor harness: default (unset) binds all
 // interfaces (a container's published port needs it); the native local transport sets
@@ -114,7 +115,7 @@ const server = createServer((req, res) => {
       }
       return send(res, 404, { error: 'not found' })
     } catch (error) {
-      const message = redactSecrets(error instanceof Error ? error.message : String(error))
+      const message = redact(error instanceof Error ? error.message : String(error))
       log.error('request handler error', { method: req.method, url: req.url, error: message })
       if (!res.headersSent) send(res, 400, { error: message })
     }

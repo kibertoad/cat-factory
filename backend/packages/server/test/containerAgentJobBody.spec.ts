@@ -7,6 +7,11 @@ import type {
   RunnerJobResult,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import {
+  CONTEXT_DOCUMENTS_OVER_BUDGET,
+  FOUNDATIONAL_CATALOG_FILE,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -14,6 +19,12 @@ import {
   type ContainerAgentExecutorDependencies,
 } from '../src/agents/ContainerAgentExecutor.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
+// Derived rather than spelled out: what these specs are about is that the prompt names the
+// sibling checkout for each repo, not what that name looks like. The NAME's shape is pinned
+// where it matters, against the harness that creates the directory, by the executor-harness's
+// `harness-contract.conformity.test.ts`. Hard-coding it here would put a third copy of the rule
+// in a spec that has no way to tell the harness it moved.
+import { siblingCheckoutDir } from '../src/agents/harnessContract.js'
 
 // Characterization snapshot of the harness job body `buildJobBody` produces for each
 // agent kind. `buildJobBody` is private, so we drive it through `startJob` and capture
@@ -21,6 +32,11 @@ import type { ContainerSessionService } from '../src/containers/ContainerSession
 // (ModelRouter + a common-body + per-kind delta table) is behaviour-preserving, so these
 // snapshots must be byte-identical before and after — they are the diff-the-bodies guard
 // the plan calls for.
+//
+// Two clusters that had subjects of their own were split out of here when this file hit its size
+// budget: the multi-repo LAYOUT of one dispatch (`containerAgentMultiRepo.spec`) and the
+// DIRECTIVES a dispatch composes around a kind's prompt, read-only guardrail through
+// PR-description sentinel (`containerAgentDispatchDirectives.spec`).
 
 const PI_REF: ModelRef = { provider: 'workers-ai', model: '@cf/test/model' }
 
@@ -60,6 +76,7 @@ function makeExecutor(depsOverride: Partial<ContainerAgentExecutorDependencies> 
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',
@@ -137,6 +154,30 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  it('resolves an ATTACHED pull request on its own branch and creates no work branch', async () => {
+    const created: string[] = []
+    const made = makeExecutor({
+      ensureWorkBranch: async (_repo, branch, options) => {
+        if (options.create) created.push(branch)
+        return true
+      },
+    })
+    const attached = {
+      url: 'https://github.com/acme/widgets/pull/12',
+      number: 12,
+      branch: 'theirs',
+    }
+    await made.executor.startJob(
+      context('conflict-resolver', { taskType: 'resolve-conflicts', pullRequest: attached }),
+    )
+    expect(created).toEqual([])
+    expect(made.captured[0]!.spec).toMatchObject({
+      branch: 'theirs',
+      pushBranch: 'theirs',
+      mergeBase: 'main',
+    })
+  })
+
   it('merger', async () => {
     await executor.startJob(context('merger', { pullRequest: PR }))
     expect(captured[0]).toMatchSnapshot()
@@ -185,6 +226,26 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('read-only (architect)', async () => {
     await executor.startJob(context('architect'))
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  // Trait guidance that NAMES an injected `.cat-context/` file is gated on that file arriving, and
+  // the snapshots above are dispatches that inject none: neither the architect nor the coder now
+  // carries the foundational reuse mandate there. Both directions have to be pinned, because a
+  // regression in either is silent — the gate stuck shut is a design that never hears about the
+  // shared services it should be reusing, and the gate stuck open is the ~200 words of dangling
+  // pointer this replaced.
+  it('gates the foundational guidance on the catalog file this dispatch actually injected', async () => {
+    await executor.startJob(context('architect'))
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain(FOUNDATIONAL_CATALOG_FILE)
+
+    await executor.startJob(
+      context('architect', {}, undefined, {
+        injectedContextFiles: [{ path: FOUNDATIONAL_CATALOG_FILE, content: '# services' }],
+      }),
+    )
+    const withCatalog = captured[1]!.spec.systemPrompt as string
+    expect(withCatalog).toContain(FOUNDATIONAL_CATALOG_FILE)
+    expect(withCatalog).toContain('Prefer an existing foundational service')
   })
 
   it('default (coder)', async () => {
@@ -244,7 +305,7 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(spec.referenceRepos).not.toMatchObject([{ pr: expect.anything() }])
     const systemPrompt = spec.systemPrompt as string
     expect(systemPrompt).toContain('## Reference repositories')
-    expect(systemPrompt).toContain('acme__design-system/')
+    expect(systemPrompt).toContain(`${siblingCheckoutDir('acme', 'design-system')}/`)
   })
 
   it('doc-writer with NO reference repos emits no referenceRepos field', async () => {
@@ -299,6 +360,34 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('omits packageRegistries when no resolver is wired', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]!.spec.packageRegistries).toBeUndefined()
+  })
+
+  it('refuses the dispatch when the linked context overflows the byte budget', async () => {
+    // The unit test on `buildContextFiles` proves the throw; this proves it survives `startJob`
+    // — nothing reaches the transport, and the throw is a `DomainError` carrying the cause code,
+    // which is what makes `classifyDispatchFailure` file it as a `preflight` rejection rather
+    // than "the container failed to start".
+    const error = await executor
+      .startJob(
+        context('coder', {
+          contextDocs: [
+            {
+              title: 'Platform PRD',
+              url: 'https://wiki.test/prd',
+              origin: 'confluence' as const,
+              excerpt: 'x',
+              summary: 'x',
+              body: 'x'.repeat(300_000),
+            },
+          ],
+        }),
+      )
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details?.reason).toBe(CONTEXT_DOCUMENTS_OVER_BUDGET)
+    expect((error as ValidationError).message).toContain('"Platform PRD"')
+    // No partial corpus was shipped: the agent never got a half-context it could not detect.
+    expect(captured).toEqual([])
   })
 })
 
@@ -477,142 +566,320 @@ describe('ContainerAgentExecutor apriori reference branches', () => {
   })
 })
 
-describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
-  // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
-  // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural
-  // repo resolver wired so the executor can resolve a connected service's repo target.
-  const OWN_TARGET = { installationId: 7, owner: 'acme', name: 'widgets', baseBranch: 'main' }
-  const PEER_TARGET = { installationId: 7, owner: 'acme', name: 'billing', baseBranch: 'develop' }
-
-  // A plural resolver that returns the own service (primary) plus one peer resolved from
-  // `frm_peer`. It only returns the peer when that frame is among the requested involved ids,
-  // mirroring the real resolver (which resolves exactly the frames it is asked about).
-  const resolveRepoTargets = async (
-    _ws: string,
-    _blk: string,
-    frameIds: string[],
-    primary: typeof OWN_TARGET = OWN_TARGET,
-  ) => ({
-    checkouts: [
-      { target: primary, primary: true, involved: [] },
-      ...(frameIds.includes('frm_peer')
-        ? [{ target: PEER_TARGET, primary: false, involved: [{ frameId: 'frm_peer' }] }]
-        : []),
-    ],
+// The pr-reviewer (`clone.prHead`) reviews an EXISTING PR: the engine resolves that PR's number
+// from the review task's fields (`prNumber`/`prUrl`, the same source the diff pre-op uses) into the
+// job's `reviewPrNumber`, so the harness can prefetch `pull/<n>/head` into `origin/pr-head`. A kind
+// without `clone.prHead` never carries it, and an unresolvable number degrades to no prefetch.
+describe('ContainerAgentExecutor pr-reviewer PR-head prefetch (reviewPrNumber)', () => {
+  it('carries reviewPrNumber resolved from the review task prNumber field', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('pr-reviewer', { taskTypeFields: { prNumber: 4558 } }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.reviewPrNumber).toBe(4558)
   })
 
-  it('conflict-resolver targets the conflicted PEER repo when the gate hands a conflictTarget', async () => {
-    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+  it('resolves reviewPrNumber from a prUrl when prNumber is absent', async () => {
+    const { executor, captured } = makeExecutor()
     await executor.startJob(
-      context('conflict-resolver', { pullRequest: PR }, undefined, {
-        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      context('pr-reviewer', {
+        taskTypeFields: { prUrl: 'https://github.com/acme/widgets/pull/321' },
       }),
     )
-    const spec = captured[0]!.spec
-    // The harness clones the PEER repo (not the own `widgets`)…
-    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
-    // …merges the PEER's base in to surface its conflicts…
-    expect(spec.mergeBase).toBe('develop')
-    // …and resolves on the shared per-task work branch every repo's PR rides.
-    expect(spec.branch).toBe('cat-factory/blk_1')
-    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    expect(captured[0]!.spec.reviewPrNumber).toBe(321)
   })
 
-  it('conflict-resolver stays on the OWN repo when the conflictTarget has no frameId', async () => {
-    const { executor, captured } = makeExecutor({ resolveRepoTargets })
-    await executor.startJob(
-      context('conflict-resolver', { pullRequest: PR }, undefined, {
-        // An own-repo conflict carries no frameId (single-repo, implicit own target).
-        conflictTarget: { repo: 'acme/widgets' } as never,
-      }),
+  it('omits reviewPrNumber when the review task carries no PR reference (degrades cleanly)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('pr-reviewer'))
+    expect(captured[0]!.spec.reviewPrNumber).toBeUndefined()
+  })
+
+  it('never carries reviewPrNumber for a kind without clone.prHead (architect), even with PR fields', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('architect', { taskTypeFields: { prNumber: 4558 } }))
+    expect(captured[0]!.spec.reviewPrNumber).toBeUndefined()
+  })
+})
+
+// The `task-reassessor` uses the same prefetch to read a change the RUN opened, so it DECLARES that
+// source (`clone.prHeadSource: 'run'`) rather than sharing a precedence with the reviewer, whose
+// subject is the pull request its task names. And because its whole job is that change, `requirePr`
+// turns an unresolvable number into a refusal instead of a base-branch checkout it would score as
+// though it were the change. In a real run that refusal is not reached: `runStepPreamble` skips such
+// a step (`no_pull_request`) before a dispatch is built, and this is the invariant's backstop.
+describe('ContainerAgentExecutor task-reassessor PR-head prefetch', () => {
+  it('resolves reviewPrNumber from the pull request the run opened', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('task-reassessor', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.reviewPrNumber).toBe(9)
+    // BASE, not the PR branch: a merge deletes that branch while `refs/pull/<n>/head` survives it.
+    expect(spec.branch).toBe('main')
+    expect(spec.full).toBe(true)
+  })
+
+  it('refuses the dispatch when the task has no pull request at all', async () => {
+    const { executor, captured } = makeExecutor()
+    await expect(executor.startJob(context('task-reassessor'))).rejects.toThrow(
+      /needs the pull request carrying this task's change/,
     )
-    const spec = captured[0]!.spec
-    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'widgets' })
-    expect(spec.mergeBase).toBe('main')
+    expect(captured).toHaveLength(0)
   })
 
-  it('conflict-resolver resolves on the shared work branch when the OWN service has no PR (peer-only conflict)', async () => {
-    // Peer-only conflict: the own service was unchanged (no own `pullRequest`), only the connected
-    // peer conflicts. `prBranch` is therefore undefined, so the resolve branch must fall back to the
-    // shared per-task work branch (`cat-factory/<blockId>`) every repo's PR rides — otherwise the
-    // generic `pr`-clone path would clone the peer at its base branch (the wrong ref).
-    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+  it('leaves the reviewer reading the pull request its TASK names', async () => {
+    // Each kind DECLARES its source (`clone.prHeadSource`) instead of sharing a `task ?? run`
+    // precedence. A precedence reads as harmless and silently widens the reviewer: a review task
+    // whose run also opened a pull request would start prefetching a head its review state knows
+    // nothing about, while the prompt and the diff preOp still described the declared one.
+    const { executor, captured } = makeExecutor()
     await executor.startJob(
-      context('conflict-resolver', {}, undefined, {
-        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
-      }),
+      context('pr-reviewer', { taskTypeFields: { prNumber: 4558 }, pullRequest: PR }),
     )
-    const spec = captured[0]!.spec
-    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
-    expect(spec.mergeBase).toBe('develop')
-    // The fallback (`prBranch ?? parts.workBranch`) pins clone/push to the shared work branch.
-    expect(spec.branch).toBe('cat-factory/blk_1')
-    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    expect(captured[0]!.spec.reviewPrNumber).toBe(4558)
   })
 
-  it('conflict-resolver fails fast when the tagged peer repo cannot be resolved', async () => {
-    // A stale/missing repo projection row for the conflicted frame must NOT silently fall through
-    // to the own repo (which has no conflict) — that would loop the resolver until the whole attempt
-    // budget is spent on the wrong repo. Dispatch throws loudly instead.
-    const { executor } = makeExecutor({ resolveRepoTargets })
+  it('does not let a task declaration stand in for the change the run never landed', async () => {
+    // The mirror of the case above. The reassessor's subject is the run's own pull request, so a
+    // number the task declares is not a fallback for it — measuring an unrelated PR and recording
+    // the score as this task's is worse than recording nothing.
+    const { executor, captured } = makeExecutor()
     await expect(
-      executor.startJob(
-        context('conflict-resolver', { pullRequest: PR }, undefined, {
-          conflictTarget: { repo: 'acme/ghost', frameId: 'frm_missing' },
-        }),
-      ),
-    ).rejects.toThrow(/could not resolve the conflicted peer repo/)
+      executor.startJob(context('task-reassessor', { taskTypeFields: { prNumber: 4558 } })),
+    ).rejects.toThrow(/needs the pull request carrying this task's change/)
+    expect(captured).toHaveLength(0)
   })
+})
 
-  const PEER_PR = {
-    repo: 'acme/billing',
-    frameId: 'frm_peer',
-    ref: { url: 'https://github.com/acme/billing/pull/3', number: 3, branch: 'cat-factory/blk_1' },
+describe('ContainerAgentExecutor job-token scope', () => {
+  // The job token is narrowed to the repos ONE dispatch resolved, so a fully compromised run
+  // reaches the repos the run was about rather than every repo the installation covers
+  // (`backend/docs/security-model.md`, Layer 3). What the executor owes is the SCOPE; turning
+  // it into GitHub's `repository_ids` is the facade's job (`buildDispatchTokenMint`).
+
+  const OWN = {
+    installationId: 7,
+    repoId: '1001',
+    owner: 'acme',
+    name: 'widgets',
+    baseBranch: 'main',
+  }
+  const PEER = {
+    installationId: 7,
+    repoId: '2002',
+    owner: 'acme',
+    name: 'billing',
+    baseBranch: 'develop',
+  }
+  // A peer the workspace reaches through a DIFFERENT installation: one job carries one token, so
+  // this repo is unreachable with or without scoping and naming it would only make GitHub reject
+  // the mint.
+  const FOREIGN = {
+    installationId: 99,
+    repoId: '3003',
+    owner: 'other',
+    name: 'shared',
+    baseBranch: 'main',
   }
 
-  it('merger scores the COMBINED diff: peers cloned read-only (full) at their PR branch + a multi-repo section', async () => {
-    const { executor, captured } = makeExecutor({ resolveRepoTargets })
-    await executor.startJob(context('merger', { pullRequest: PR, peerPullRequests: [PEER_PR] }))
-    const spec = captured[0]!.spec
-    // Read-only explore, full clone (so `git diff origin/<base>...HEAD` has the merge base).
-    expect(spec.mode).toBe('explore')
-    expect(spec.full).toBe(true)
-    // The peer PR's repo is a read-only sibling checked out at ITS PR branch (no newBranch/pr).
-    expect(spec.peerRepos).toEqual([
-      {
-        repo: {
-          owner: 'acme',
-          name: 'billing',
-          baseBranch: 'develop',
-          cloneUrl: 'https://github.com/acme/billing.git',
-          provider: 'github',
-        },
-        frameId: 'frm_peer',
-        cloneBranch: 'cat-factory/blk_1',
+  function captureScope(depsOverride: Partial<ContainerAgentExecutorDependencies> = {}) {
+    const scopes: (string[] | undefined)[] = []
+    const made = makeExecutor({
+      resolveRepoTarget: async () => OWN,
+      mintInstallationToken: async (_id, ctx) => {
+        scopes.push(ctx?.repoIds)
+        return 'GH-TOKEN'
       },
-    ])
-    expect(spec.peerRepos).not.toMatchObject([{ newBranch: expect.anything() }])
-    expect(spec.peerRepos).not.toMatchObject([{ pr: expect.anything() }])
-    // The system prompt names both sibling checkouts + their per-repo diff commands…
-    const systemPrompt = spec.systemPrompt as string
-    expect(systemPrompt).toContain('## Multi-repo pull request')
-    expect(systemPrompt).toContain('acme__widgets/')
-    expect(systemPrompt).toContain('acme__billing/')
-    expect(systemPrompt).toContain('git diff origin/develop...HEAD')
-    // …and the user prompt is the combined-diff variant (ONE assessment across repos).
-    const userPrompt = spec.userPrompt as string
-    expect(userPrompt).toContain('spans MULTIPLE repositories')
-    expect(userPrompt).toContain('SINGLE')
+      ...depsOverride,
+    })
+    return { ...made, scopes }
+  }
+
+  it('scopes a single-repo dispatch to the primary repo alone', async () => {
+    const { executor, scopes } = captureScope()
+    await executor.startJob(context('coder'))
+    expect(scopes).toEqual([['1001']])
   })
 
-  it('merger stays single-repo when the task opened no peer PRs', async () => {
-    const { executor, captured } = makeExecutor({ resolveRepoTargets })
-    await executor.startJob(context('merger', { pullRequest: PR }))
-    const spec = captured[0]!.spec
-    expect(spec.peerRepos).toBeUndefined()
-    expect(spec.systemPrompt).not.toContain('## Multi-repo pull request')
-    // The single-repo prompt still names the own diff.
-    expect(spec.userPrompt as string).toContain('git diff origin/main...HEAD')
+  it('scopes a multi-repo fan-out to the primary plus every peer checkout', async () => {
+    const { executor, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('coder', {}, undefined, {
+        involvedServices: [{ frameId: 'frm_peer', name: 'billing' }],
+      } as never),
+    )
+    // The primary is FIRST and always present: a scope missing it would mint a token that cannot
+    // clone the repo the run is about.
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('drops a leg on another installation rather than asking for a token that cannot cover it', async () => {
+    const { executor, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: FOREIGN, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('coder', {}, undefined, {
+        involvedServices: [{ frameId: 'frm_peer', name: 'shared' }],
+      } as never),
+    )
+    expect(scopes).toEqual([['1001']])
+  })
+
+  it('scopes the merger to every peer PR repo it clones as a sibling', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('merger', {
+        pullRequest: PR,
+        peerPullRequests: [
+          {
+            repo: 'acme/billing',
+            frameIds: ['frm_peer'],
+            ref: {
+              url: 'https://github.com/acme/billing/pull/3',
+              number: 3,
+              branch: 'cat-factory/blk_1',
+            },
+          },
+        ],
+      }),
+    )
+    // Every repo the body tells the harness to clone is in the scope: a leg dropped from the
+    // scope is a clone the harness cannot make. (The converse does NOT hold, deliberately: the
+    // merger REPLACES the fan-out's peers in the body while their ids stay in the scope, so the
+    // scope is a superset. Widening beyond what the body names costs nothing; narrowing below it
+    // breaks the clone.)
+    expect(captured[0]!.spec.peerRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes the conflict-resolver to the peer repo it is retargeted onto', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      } as never),
+    )
+    // The resolver clones the PEER, not the primary. The primary stays in the scope anyway
+    // (`jobTokenRepoIds` always yields it), which is a token slightly wider than this one job
+    // needs and never one that cannot clone what the body names.
+    expect(captured[0]!.spec.repo).toMatchObject({ name: 'billing' })
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes a read-only reference repo the same as a writable leg', async () => {
+    const { executor, captured, scopes } = captureScope()
+    await executor.startJob({
+      ...context('doc-writer'),
+      referenceRepos: [{ repoId: 2002, owner: 'acme', name: 'billing', defaultBranch: 'develop' }],
+    } as never)
+    // A reference repo is cloned read-only, but a token that cannot READ it fails the clone
+    // exactly as one that cannot write does, so it belongs in the scope.
+    expect(captured[0]!.spec.referenceRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+})
+
+describe('ContainerAgentExecutor pre-PR validation checks (job-body gating)', () => {
+  // The commands ride the JOB BODY (containers have no DB access), and only for a dispatch that
+  // actually OPENS a pull request — that is what "pre-PR" means. An in-place fixer pushing onto
+  // an EXISTING PR head is deliberately excluded: the `ci` gate is already the loop there, so
+  // forwarding checks would run a second, redundant repair loop inside the fixer.
+  const validationChecks = {
+    checks: [{ label: 'lint', command: 'pnpm lint' }],
+    maxAttempts: 2,
+  }
+
+  it('forwards the service’s checks on a PR-opening coding dispatch', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder', {}, undefined, { validationChecks }))
+    expect(captured[0]!.spec.validationChecks).toEqual(validationChecks)
+  })
+
+  it('omits them for an in-place fixer, which pushes onto an existing PR head', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('ci-fixer', { pullRequest: PR }, undefined, { validationChecks }),
+    )
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+
+  it('omits them when the service configured none (the unconfigured path is unchanged)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder'))
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+})
+
+describe('ContainerAgentExecutor dependency prepopulation (job-body gating)', () => {
+  // The install rides the BASE job body, under a deliberately WIDER rule than the pre-PR checks
+  // above: every dispatch that gets a checkout, not only one that opens a pull request. These
+  // tests exist to pin that difference — folding the install in beside `validationChecks` would
+  // typecheck, pass every harness test, and silently leave every read-only agent (the ones whose
+  // complaint motivated the feature) reasoning about a manifest instead of the packages.
+  const dependencyInstall = 'pnpm install --frozen-lockfile'
+
+  it('forwards the install on a PR-opening coding dispatch', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder', {}, undefined, { dependencyInstall }))
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+  })
+
+  it('forwards it on a read-only EXPLORE dispatch, which opens no PR', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('architect', {}, undefined, { dependencyInstall }))
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+  })
+
+  it('forwards it to an in-place fixer, which the pre-PR checks deliberately skip', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('ci-fixer', { pullRequest: PR }, undefined, { dependencyInstall }),
+    )
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+    // The two gates are independent, and this is the case that proves it.
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+
+  it('omits it when the service declared none (the unconfigured path is unchanged)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder'))
+    // Absent, never an empty object: the harness keys the whole phase off the field's presence.
+    expect(captured[0]!.spec.dependencyInstall).toBeUndefined()
   })
 })
 
@@ -645,6 +912,7 @@ describe('ContainerAgentExecutor private package registries', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -699,6 +967,7 @@ describe('ContainerAgentExecutor private package registries', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -719,11 +988,16 @@ describe('ContainerAgentExecutor private package registries', () => {
 })
 
 describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
-  // The independent dispatch resolutions — installation-token mint, work-branch ensure, auth,
-  // package registries, tester secrets, web-search availability — are fanned out in one wave
-  // once the repo target is resolved (audit item 4). This pins that they overlap rather than
-  // running one-after-another, and that a failing context-observability record still never
-  // breaks a dispatch.
+  // The independent dispatch resolutions (work-branch ensure, the auxiliary-checkout resolution,
+  // auth, package registries, tester secrets, web-search availability) are fanned
+  // out in one wave once the repo target is resolved (audit item 4). This pins that they overlap
+  // rather than running one-after-another, and that a failing context-observability record still
+  // never breaks a dispatch.
+  //
+  // The installation-token mint is deliberately NOT in the wave: it is narrowed to the repos the
+  // auxiliary resolution produces, so it cannot start until the wave settles. That ordering is
+  // the security property (`jobTokenRepoIds`), so it is pinned here as its own assertion rather
+  // than left to be re-parallelised by a later latency pass.
 
   // A deferred promise whose resolution we drive from the test, so we can observe which
   // resolvers have STARTED before any of them finishes.
@@ -735,7 +1009,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
     return { promise, resolve }
   }
 
-  it('starts the independent dispatch resolvers concurrently (not serialised)', async () => {
+  it('starts the independent dispatch resolvers concurrently, and mints the token after them', async () => {
     const started = { token: false, branch: false, registries: false, search: false }
     const gates = {
       token: deferred<string>(),
@@ -755,6 +1029,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -786,14 +1061,19 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
     const job = executor.startJob(context('coder'))
     // Let the pending microtasks + a macrotask boundary drain so every resolver has been kicked
     // off (the repo-target/model resolutions precede the wave). None has RESOLVED, so if the
-    // executor were serialising it would be parked on the first resolver only.
+    // executor were serialising it would be parked on the first resolver only. The token mint is
+    // absent for the opposite reason: it is downstream of the whole wave by design.
     await new Promise((r) => setTimeout(r, 0))
-    expect(started).toEqual({ token: true, branch: true, registries: true, search: true })
+    expect(started).toEqual({ token: false, branch: true, registries: true, search: true })
 
-    gates.token.resolve('GH-TOKEN')
     gates.branch.resolve(true)
     gates.registries.resolve([])
     gates.search.resolve({ available: false, provider: null })
+    await new Promise((r) => setTimeout(r, 0))
+    // Only once the wave has settled, which is when the token's repo scope is known.
+    expect(started.token).toBe(true)
+
+    gates.token.resolve('GH-TOKEN')
     await job
   })
 
@@ -811,6 +1091,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -864,6 +1145,7 @@ function makeExecutorReturning(result: RunnerJobResult): ContainerAgentExecutor 
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',

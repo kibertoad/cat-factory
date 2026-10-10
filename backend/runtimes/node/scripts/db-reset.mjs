@@ -45,6 +45,10 @@ const APP_SCHEMAS = [
   'telemetry',
   'sandbox',
   'provisioning',
+  // The audit log's own schema. It is dropped WITH the rest, deliberately: separating the store
+  // is about retention and capacity, never about surviving a reset, and a ledger that outlived
+  // its data is the exact desync this script exists to prevent.
+  'audit',
   schemaEnv('DB_MIGRATIONS_SCHEMA', 'drizzle'),
   schemaEnv('DB_PGBOSS_SCHEMA', 'pgboss'),
 ]

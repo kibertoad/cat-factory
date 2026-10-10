@@ -1,7 +1,7 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { GitHubClient } from '@cat-factory/kernel'
 import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/kernel'
-import type { GitHubConnection, GitHubInstallationOption } from '@cat-factory/kernel'
+import type { GitHubConnection, GitHubInstallationOption, VcsWebUrls } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -31,18 +31,38 @@ export interface GitHubInstallationServiceDependencies {
    * `.github/workflows/*` would be rejected. Absent (or throwing) → false.
    */
   workflowsGranted?: (installation: GitHubInstallation) => Promise<boolean>
+  /**
+   * The browser-facing host of each provider's configured instance, so a connection states where
+   * its repositories can be opened. Keyed by provider because this service reads back rows every
+   * connect path wrote, local mode's GitLab-provider one included. Absent (or absent for the
+   * row's provider) ⇒ the connection reports a null host and its readers withhold the link.
+   */
+  webUrls?: VcsWebUrls
 }
 
 function toConnection(
   installation: GitHubInstallation,
   canCreateRepos: boolean,
   canManageWorkflows: boolean,
+  webUrls: VcsWebUrls,
 ): GitHubConnection {
   return {
     installationId: installation.installationId,
     accountLogin: installation.accountLogin,
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
+    provider: installation.provider,
+    // This service reads back whatever wrote the row, so the method is DERIVED from the row
+    // rather than asserted: it also serves the per-workspace PAT connect's rows and local
+    // mode's synthetic PAT-backed connection, and calling either of those an App installation
+    // is what puts a github.com installation-settings link that 404s in front of the user.
+    // `appId` is the discriminator because only the App connect path fills it (probed at
+    // connect to route this installation's token mints, ADR 0005); both PAT paths leave it
+    // null. A row predating the multi-App tier also has none, so it reads as `pat` and loses
+    // the grant-access link until it reconnects — stale internal state re-created, not a
+    // compatibility shim.
+    method: installation.appId !== null ? 'app' : 'pat',
+    webUrl: webUrls[installation.provider] ?? null,
     canCreateRepos,
     canManageWorkflows,
   }
@@ -89,8 +109,14 @@ export class GitHubInstallationService {
       // The App that owns this installation (probed at connect), so every later
       // token mint routes to the right App's key (ADR 0005).
       appId: meta.appId,
+      // The GitHub-App connect flow is GitHub by construction; a GitLab connection is
+      // materialised through its own (deployment-level) path, never here.
+      provider: 'github',
       cachedToken: null,
       tokenExpiresAt: null,
+      // The App mints its own installation tokens from its key; no durable per-connection
+      // credential is stored here (that column backs the per-workspace PAT connect path).
+      accessToken: null,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }
@@ -99,6 +125,7 @@ export class GitHubInstallationService {
       installation,
       this.canCreate(installation),
       await this.canWorkflows(installation),
+      this.deps.webUrls ?? {},
     )
   }
 
@@ -180,6 +207,7 @@ export class GitHubInstallationService {
       installation,
       this.canCreate(installation),
       await this.canWorkflows(installation),
+      this.deps.webUrls ?? {},
     )
   }
 

@@ -1,5 +1,9 @@
+import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { createMisconfiguredApp } from '../src/config/misconfiguredApp.js'
+import { authController } from '../src/modules/auth/AuthController.js'
+import type { AppEnv, ServerContainer } from '../src/http/env.js'
+import { REQUEST_ID_HEADER } from '../src/http/requestLogging.js'
 import {
   ConfigValidationError,
   ENV_HELP,
@@ -49,10 +53,14 @@ describe('ConfigValidationError', () => {
     expect(formatConfigProblems([{ key: 'B', summary: 's', remedy: 'r' }])).not.toContain('Docs:')
   })
 
-  it('every ENV_HELP entry carries a documentation link', () => {
+  // Either destination is legitimate: an in-repo doc for a remedy that needs the code open, and
+  // a catfactory.ai page for one whose instruction the website owns (a variable an operator sets
+  // needs no checkout). What must never happen is a remedy with NO link, or one pointing at some
+  // third place; `docs.spec.ts` then resolves each shape the way only it can be resolved.
+  it('every ENV_HELP entry carries a documentation link, to a repo doc or to the site', () => {
     for (const [key, help] of Object.entries(ENV_HELP)) {
       expect(help.docsUrl, `${key} should link docs`).toMatch(
-        /^https:\/\/github\.com\/kibertoad\/cat-factory\/blob\/main\//,
+        /^https:\/\/(github\.com\/kibertoad\/cat-factory\/blob\/main\/|www\.catfactory\.ai\/)/,
       )
     }
   })
@@ -235,6 +243,37 @@ describe('createMisconfiguredApp', () => {
     expect(body.misconfigured.problems).toEqual(PROBLEMS)
   })
 
+  it('reports the SAME provider keys the real /auth/config does, all off', async () => {
+    // The fallback response is hand-built with `Response.json`, so it has no contract-typed route
+    // layer to hold it to the live shape. The typed constant catches a MISSING key; what it cannot
+    // catch is the two endpoints disagreeing, and the SPA gates each login control on one of these
+    // booleans — a key absent here reads as `undefined` and renders whatever that coerces to.
+    // Derived from the real controller's own answer rather than a hand-listed set, so a provider
+    // added later needs no edit in this test.
+    const live = new Hono<AppEnv>()
+    live.use('*', async (c, next) => {
+      c.set('container', {
+        // An unconfigured deployment: every provider flag off, so the live route reports the same
+        // all-false shape the fallback hand-builds.
+        config: { auth: { enabled: false, githubEnabled: false, passwordEnabled: false } },
+      } as unknown as ServerContainer)
+      await next()
+    })
+    live.route('/auth', authController())
+    const liveBody = (await (await live.request('http://x/auth/config')).json()) as {
+      providers: Record<string, unknown>
+    }
+    const fallbackBody = (await (await app.request('http://x/auth/config')).json()) as {
+      providers: Record<string, unknown>
+    }
+    expect(Object.keys(fallbackBody.providers).sort()).toEqual(
+      Object.keys(liveBody.providers).sort(),
+    )
+    expect(Object.values(fallbackBody.providers)).toEqual(
+      Object.values(fallbackBody.providers).map(() => false),
+    )
+  })
+
   it('reports misconfigured on /health but stays 200 (no crash-loop)', async () => {
     const res = await app.request('http://x/health')
     expect(res.status).toBe(200)
@@ -247,6 +286,18 @@ describe('createMisconfiguredApp', () => {
     const body = (await res.json()) as { error: { code: string; problems: typeof PROBLEMS } }
     expect(body.error.code).toBe('backend_misconfigured')
     expect(body.error.problems).toEqual(PROBLEMS)
+  })
+
+  it('correlates its responses like the real facades do', async () => {
+    // The Worker serves the fallback from INSIDE `createApp`, so it inherits the request
+    // middleware; Node/local swap in THIS whole app instead. Without the mount here, the one
+    // deployment shape an operator is actively debugging would be the only one serving requests
+    // with no id — and the SPA could not read it back without the expose-header.
+    const res = await app.request('http://x/workspaces', {
+      headers: { origin: 'http://localhost:3000', 'X-Request-Id': 'upstream-7' },
+    })
+    expect(res.headers.get(REQUEST_ID_HEADER)).toBe('upstream-7')
+    expect(res.headers.get('access-control-expose-headers')).toContain(REQUEST_ID_HEADER)
   })
 
   it('a problem exposes ONLY the non-secret key/summary/remedy/docsUrl fields (never a secret value)', () => {

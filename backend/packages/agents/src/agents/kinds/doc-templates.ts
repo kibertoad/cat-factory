@@ -18,11 +18,12 @@ import { documentHeadings } from '@cat-factory/kernel'
 // `registerPromptFragment` / `registerAgentKind`); a later per-workspace linked-document
 // override (WS1 items 2–3) resolves ahead of both, but always through `docTemplateFor`.
 //
-// NOTE (registry-DI): like the sibling agent-catalog seams (`registerAgentKind`,
-// `registerAgentTrait`, `registerPromptFragment`), this is a module-global registry. When
-// the registry-DI migration (docs/initiatives/registry-di-migration.md) reaches the
-// `@cat-factory/agents` seams, this one migrates with them — it deliberately copies their
-// current shape rather than inventing a divergent one.
+// NOTE (registry-DI): like the still-module-global `registerPromptFragment` seam, this is a
+// module-global registry. The agent-kind + agent-trait seams have already migrated to the
+// app-owned `AgentKindRegistry` instance; when the registry-DI migration
+// (docs/initiatives/registry-di-migration.md) reaches the remaining `@cat-factory/agents`
+// seams, this one migrates with them — it deliberately copies their current shape rather than
+// inventing a divergent one.
 // ---------------------------------------------------------------------------
 
 /** One section of a document template: the heading a document should carry + why. */

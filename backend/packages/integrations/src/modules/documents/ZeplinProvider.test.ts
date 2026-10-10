@@ -50,7 +50,7 @@ describe('ZeplinProvider.fetchDocument', () => {
       }),
     )
 
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1', 'ws_1')
     expect(doc.title).toBe('Acme — Home')
     expect(doc.url).toBe('https://app.zeplin.io/project/p1/screen/s1')
     expect(doc.body).toContain('## Home')
@@ -67,7 +67,7 @@ describe('ZeplinProvider.fetchDocument', () => {
         return jsonResponse([])
       }),
     )
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')
     expect(doc.version).toBe('1751600000')
   })
 })
@@ -83,14 +83,14 @@ describe('ZeplinProvider.probeVersion', () => {
         throw new Error(`unexpected ${url}`)
       }),
     )
-    const version = await new ZeplinProvider().probeVersion(TOKEN, 'p1:s1')
+    const version = await new ZeplinProvider().probeVersion(TOKEN, 'p1:s1', 'ws_1')
     expect(version).toBe('1751600000')
     // The probe is a single project read — it never touches the screen/component reads.
     expect(seen).toHaveLength(1)
     expect(seen[0]?.endsWith('/projects/p1')).toBe(true)
   })
 
-  it('drops an unreadable SUPPLEMENTARY section (tokens) instead of failing the import', async () => {
+  it('states an unreadable SUPPLEMENTARY section (tokens) instead of failing the import', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -101,10 +101,13 @@ describe('ZeplinProvider.probeVersion', () => {
         return new Response('nope', { status: 500 })
       }),
     )
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')
     expect(doc.title).toBe('Acme')
     expect(doc.body).toContain('### Components')
-    expect(doc.body).not.toContain('### Design tokens')
+    // The import survives, and the failed read is NAMED: a dropped section and a project
+    // that defines no tokens are the same absence and opposite facts.
+    expect(doc.body).toContain('the Zeplin design-tokens read failed')
+    expect(doc.body).not.toMatch(/^- .+ = /m)
   })
 
   it('fails the import when the PRIMARY screens read fails (not a silent empty success)', async () => {
@@ -119,7 +122,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return jsonResponse([])
       }),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })
@@ -133,7 +136,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return jsonResponse([])
       }),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })
@@ -147,7 +150,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return jsonResponse([])
       }),
     )
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1', 'ws_1')
     expect(doc.title).toBe('Acme — Home')
     expect(doc.body).toContain('## Home')
   })
@@ -157,7 +160,7 @@ describe('ZeplinProvider.probeVersion', () => {
       'fetch',
       vi.fn(async () => new Response('unauthorized', { status: 401 })),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })
@@ -170,7 +173,7 @@ describe('ZeplinProvider.probeVersion', () => {
           new Response(null, { status: 302, headers: { location: 'https://169.254.169.254/' } }),
       ),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })

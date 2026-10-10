@@ -2,7 +2,6 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { DOC_AWARE_TRAIT } from './traits.js'
 import { PLATFORM_DELIVERY_CONTRACT } from '../prompts/delivery-contract.js'
-import { STANDARDS_FOOTER } from '../prompts/shared.js'
 import { linkedContextSection } from '../prompts/standard.js'
 
 // ---------------------------------------------------------------------------
@@ -75,8 +74,6 @@ const CODE_COMMENTER_SYSTEM_PROMPT = [
   '  concise and accurate; a wrong comment is worse than none.',
   '',
   PLATFORM_DELIVERY_CONTRACT,
-  '',
-  STANDARDS_FOOTER,
 ].join('\n')
 
 function codeCommenterUserPrompt(context: AgentRunContext): string {
@@ -140,6 +137,9 @@ export const CODE_COMMENTER_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Keeps in-source comments relevant and up-to-date: adds why-not-what comments, fixes ones that have drifted from the code, and removes noise, with no behaviour change.',
       category: 'docs',
+      // Comments source code in place: documentation by category, code work by use-case.
+      purposes: ['build'],
+      tier: 'advanced',
     },
   },
 ]

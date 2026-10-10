@@ -225,3 +225,20 @@ export function aprioriBranchesError(
   }
   return null
 }
+
+/**
+ * The kinds of coarse board change a mutation pushes. A closed union (rather than a free
+ * string) so a typo can't silently produce an unrecognised signal — the SPA treats every
+ * value the same (a debounced full refresh), but the conformance suite asserts specific
+ * ones, and keeping the set explicit documents what the board service emits.
+ */
+export type BoardChangeReason =
+  | 'block-added'
+  | 'block-updated'
+  | 'block-moved'
+  | 'block-reparented'
+  | 'block-removed'
+  | 'block-archived'
+  | 'block-restored'
+  | 'epic-assigned'
+  | 'dependency-toggled'

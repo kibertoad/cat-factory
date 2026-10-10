@@ -2,36 +2,21 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   BudgetCaps,
-  InfraSetup,
   SpendStatus,
-  Workspace,
+  WorkspaceAccess,
+  WorkspaceListItem,
   WorkspaceSnapshot,
 } from '~/types/domain'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
-import { usePipelinesStore } from '~/stores/pipelines'
-import { useExecutionStore } from '~/stores/execution'
-import { useAgentRunsStore } from '~/stores/agentRuns'
-import { useEnvironmentTestStore } from '~/stores/environmentTest'
 import { useNotificationsStore } from '~/stores/notifications'
-import { useRiskPoliciesStore } from '~/stores/riskPolicies'
-import { useSharedStacksStore } from '~/stores/sharedStacks'
-import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
-import { useAgentConfigStore } from '~/stores/agentConfig'
-import { useModelPresetsStore } from '~/stores/modelPresets'
-import { useServiceFragmentDefaultsStore } from '~/stores/serviceFragmentDefaults'
-import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
-import { useInitiativesStore } from '~/stores/initiative'
-import { useServicesStore } from '~/stores/services'
-import { useAgentsStore } from '~/stores/agents'
-import { useTrackerStore } from '~/stores/tracker'
-import { useRequirementsStore } from '~/stores/requirements'
-import { useClarityStore } from '~/stores/clarity'
-import { useBrainstormStore } from '~/stores/brainstorm'
-import { useConsensusStore } from '~/stores/consensus'
-import { useGitHubStore } from '~/stores/github'
-import { useFragmentsStore } from '~/stores/fragments'
-import { useProviderConnectionsStore } from '~/stores/providerConnections'
+import type { LiveWriteBaselines } from '~/stores/workspace/hydrate'
+import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
+import { createWorkspaceCommands } from '~/stores/workspace/commands'
+import { createInfraSetupState } from '~/stores/workspace/infraSetup'
+import { createRefreshFunnel } from '~/stores/workspace/refreshFunnel'
+import { markBoot } from '~/utils/bootMarks'
+import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -51,8 +36,12 @@ export const useWorkspaceStore = defineStore(
 
     /** Active workspace id (persisted so a reload reopens the same board). */
     const workspaceId = ref<string | null>(null)
-    /** Every board visible to the user, across the accounts they belong to. */
-    const workspaces = ref<Workspace[]>([])
+    /**
+     * Every board visible to the user, across the accounts they belong to. Each row is
+     * annotated by `GET /workspaces` with the caller's effective workspace-RBAC role
+     * (`viewerRole`) so a restricted board can be badged in the switcher.
+     */
+    const workspaces = ref<WorkspaceListItem[]>([])
     /** True once the initial snapshot has been loaded and stores hydrated. */
     const ready = ref(false)
     /** Set when bootstrap fails so the UI can show a retry. */
@@ -65,12 +54,22 @@ export const useWorkspaceStore = defineStore(
     const userSpend = ref<SpendStatus | null>(null)
     /** Operator hard ceilings on the account/user budget tiers (null until first load). */
     const budgetCaps = ref<BudgetCaps | null>(null)
+    // The infra-setup slice (the banner's projection + the live reachability patch), extracted
+    // because it is the one slice with RULES rather than a plain assign-from-snapshot.
+    const {
+      infraSetup,
+      infraSetupDetails,
+      hydrate: hydrateInfraSetup,
+      patchInfraSetup,
+    } = createInfraSetupState()
     /**
-     * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
-     * storage) from the snapshot, driving the infra-setup banner. Null on an older backend that
-     * doesn't compute it (⇒ no banner).
+     * The signed-in caller's resolved workspace-RBAC access to the ACTIVE board — their
+     * effective role + the permission set it grants, from the auth gate's resolution
+     * (attached to the snapshot with zero extra reads). Null on an older backend OR in
+     * dev-open (auth disabled) — `useWorkspaceAccess()` then allows everything (backend
+     * parity). Consumers MUST go through `useWorkspaceAccess()`, never read this directly.
      */
-    const infraSetup = ref<InfraSetup | null>(null)
+    const access = ref<WorkspaceAccess | null>(null)
 
     /** The boards belonging to the active account (all boards when auth is off). */
     const accountWorkspaces = computed(() => {
@@ -84,74 +83,34 @@ export const useWorkspaceStore = defineStore(
       () => workspaces.value.find((w) => w.id === workspaceId.value) ?? null,
     )
 
-    /** Push a snapshot into the data stores. */
-    function hydrate(snapshot: WorkspaceSnapshot) {
-      // A change of active board (or the first load) — drop the per-block caches that are
-      // NOT part of the snapshot (reviews, brainstorm/consensus sessions, the GitHub
-      // projection) so a switched-to board never shows the previous one's stale state.
-      // These are lazily reloaded/re-probed per board, so clearing on a same-board refresh
-      // would needlessly wipe an open review window — hence only on an actual id change.
-      if (workspaceId.value !== snapshot.workspace.id) {
-        useRequirementsStore().reset()
-        useClarityStore().reset()
-        useBrainstormStore().reset()
-        useConsensusStore().reset()
-        useGitHubStore().reset()
-        useInitiativesStore().reset()
-        useDocInterviewStore().reset()
-        // The fragment picker catalog is per-board (the merged tenant catalog), so drop
-        // it too — the next inspector open re-fetches it for the switched-to board rather
-        // than showing the previous board's (or a raw-id placeholder for) fragments.
-        useFragmentsStore().invalidate()
-      }
+    /**
+     * Push a snapshot into the data stores. `baselines` (captured BEFORE this snapshot's fetch)
+     * lets the replace-style stores preserve anything written live while the fetch was in flight,
+     * so a slower refresh can't clobber newer live state (see {@link LiveWriteBaselines}). Omitted
+     * by fresh loads (init/switch/create), where there is no in-flight race to guard.
+     */
+    function hydrate(snapshot: WorkspaceSnapshot, baselines?: LiveWriteBaselines) {
+      // A change of active board (or the first load) drops the per-block caches that are NOT
+      // part of the snapshot; a same-board refresh keeps them (see `resetPerBoardCaches`).
+      if (workspaceId.value !== snapshot.workspace.id) resetPerBoardCaches()
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null
       accountSpend.value = snapshot.accountSpend ?? null
       userSpend.value = snapshot.userSpend ?? null
       budgetCaps.value = snapshot.budgetCaps ?? null
-      useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
-      infraSetup.value = snapshot.infraSetup ?? null
-      // Keep the board list in step (e.g. a freshly created board, or a rename).
-      const i = workspaces.value.findIndex((w) => w.id === snapshot.workspace.id)
-      if (i >= 0) workspaces.value[i] = snapshot.workspace
-      else workspaces.value.unshift(snapshot.workspace)
-      useBoardStore().hydrate(snapshot.blocks)
-      useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
-      usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
-      useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
-      useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
-      useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
-      useEnvironmentTestStore().hydrate(snapshot.environmentTestRuns ?? [], snapshot.workspace.id)
-      useNotificationsStore().hydrate(snapshot.notifications ?? [])
-      useRiskPoliciesStore().hydrate(
-        snapshot.riskPolicies ?? [],
-        snapshot.riskPolicyCatalogVersions,
-      )
-      useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
-      useWorkspaceSettingsStore().hydrate(snapshot.settings)
-      useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
-      useModelPresetsStore().hydrate(
-        snapshot.modelPresets ?? [],
-        snapshot.modelPresetCatalogVersions,
-      )
-      useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
-      useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
-      useInitiativesStore().hydrate(snapshot.initiatives)
-      // Registered initiative presets (built-in generic + any a deployment mixed in): drive the
-      // create picker and which planning pipeline "Run planning" starts. Workspace-independent.
-      useInitiativesStore().hydratePresets(snapshot.initiativePresets)
-      useTrackerStore().hydrate(snapshot.trackerSettings)
-      useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
-      // Merge the deployment's registered custom agent kinds into the palette catalog so a
-      // proprietary kind renders as a first-class block + result view (idempotent on reload).
-      useAgentsStore().registerCustomKinds(snapshot.customAgentKinds ?? [])
-      // Seed the connect form's backend-kind selectors (built-in + any custom backend a
-      // deployment registered), so a programmatically-registered env/runner backend is a
-      // first-class connect option instead of a hardcoded manifest/kubernetes list.
-      useProviderConnectionsStore().registerBackendKinds({
-        environment: snapshot.environmentBackendKinds,
-        'runner-pool': snapshot.runnerBackendKinds,
-      })
+      hydrateInfraSetup(snapshot.infraSetup)
+      access.value = snapshot.access ?? null
+      // Keep the board list in step (e.g. a freshly created board, or a rename). The
+      // snapshot's `workspace` carries no `viewerRole` (that's a `GET /workspaces` list
+      // annotation), so preserve any existing badge rather than clobbering it to absent.
+      const existingRow = workspaces.value.find((w) => w.id === snapshot.workspace.id)
+      if (existingRow) {
+        Object.assign(existingRow, snapshot.workspace)
+      } else {
+        workspaces.value.unshift(snapshot.workspace)
+      }
+      // Fan the rest of the snapshot out into the per-feature data stores.
+      applySnapshotToStores(snapshot, baselines)
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */
@@ -159,6 +118,17 @@ export const useWorkspaceStore = defineStore(
       ready.value = false
       error.value = null
       try {
+        // Cold-open waterfall flattening (app-startup initiative, item 8): the persisted board is
+        // usually known from localStorage BEFORE any request fires, and its snapshot is the app's
+        // heaviest payload (the ~18-read aggregate). Fetch it SPECULATIVELY in parallel with the
+        // workspace list + accounts instead of waiting for the list to resolve first — one fewer
+        // sequential round trip on the critical path. Validated for membership in
+        // resolveActiveBoard; a stale/removed persisted id just discards the speculative result and
+        // falls back to today's path. `.catch` keeps a gone-board 404 from rejecting the whole init.
+        const persistedId = workspaceId.value
+        const speculativeSnapshot = persistedId
+          ? api.getWorkspace(persistedId).catch(() => null)
+          : null
         // Accounts (an auth concept — empty in dev, which leaves boards unscoped) and the
         // workspace list are independent, so fetch them concurrently. resolveActiveBoard
         // needs both, so it still runs after.
@@ -166,27 +136,43 @@ export const useWorkspaceStore = defineStore(
           useAccountsStore()
             .load()
             .catch(() => {}),
-          api.listWorkspaces(),
+          // Retry a not-listening-yet backend (cold-start race) before surfacing the
+          // unreachable screen. This gates the rest of init, so once it resolves the
+          // backend is up and the speculative/follow-up snapshot fetches succeed too.
+          retryWhileBackendUnreachable(() => api.listWorkspaces()),
         ])
+        markBoot('workspaces-listed')
         workspaces.value = workspaceList
-        await resolveActiveBoard()
+        await resolveActiveBoard(await speculativeSnapshot)
+        markBoot('snapshot-hydrated')
         ready.value = true
       } catch (e) {
         error.value = e instanceof Error ? e.message : 'Failed to reach the backend.'
       }
     }
 
-    /** Open the persisted board (aligning the active account to it), else pick/create one. */
-    async function resolveActiveBoard() {
+    /**
+     * Open the persisted board (aligning the active account to it), else pick/create one.
+     *
+     * `prefetched` is the speculatively-fetched snapshot for the persisted board (see {@link init}):
+     * when it's for the SAME still-valid board we reuse it instead of re-fetching, so the cold open
+     * pays exactly one snapshot fetch — overlapped with the workspace list rather than after it.
+     */
+    async function resolveActiveBoard(prefetched?: WorkspaceSnapshot | null) {
       const accounts = useAccountsStore()
       if (workspaceId.value) {
         const existing = workspaces.value.find((w) => w.id === workspaceId.value)
         if (existing) {
           if (accounts.enabled && existing.accountId) accounts.activeAccountId = existing.accountId
-          hydrate(await api.getWorkspace(existing.id))
+          hydrate(
+            prefetched && prefetched.workspace.id === existing.id
+              ? prefetched
+              : await api.getWorkspace(existing.id),
+          )
           return
         }
-        // Persisted board is gone (deleted, or now another tenant's) — fall through.
+        // Persisted board is gone (deleted, or now another tenant's) — fall through (and discard the
+        // now-irrelevant speculative snapshot).
         workspaceId.value = null
       }
       const first = accountWorkspaces.value[0]
@@ -202,76 +188,33 @@ export const useWorkspaceStore = defineStore(
       }
     }
 
-    /** Switch to another board (within reach of the active account). */
-    async function switchTo(id: string) {
-      if (id === workspaceId.value) return
-      hydrate(await api.getWorkspace(id))
-    }
+    // Board CRUD (open / create / rename / delete) + the account switch, extracted into a
+    // cohesive factory over the state above — a size-only split mirroring `hydrate.ts` and
+    // `infraSetup.ts`.
+    const { switchTo, selectAccount, create, update, rename, remove } = createWorkspaceCommands({
+      api,
+      workspaceId,
+      workspaces,
+      hydrate,
+      resolveActiveBoard,
+    })
 
-    /** Switch the active account, then open one of its boards (creating one if needed). */
-    async function selectAccount(id: string) {
-      const accounts = useAccountsStore()
-      if (id === accounts.activeAccountId) return
-      accounts.switchTo(id)
-      workspaceId.value = null
-      await resolveActiveBoard()
-    }
-
-    /** Create a new board in the active account and open it. */
-    async function create(name?: string, description?: string) {
-      const accounts = useAccountsStore()
-      const snapshot = await api.createWorkspace({
-        seed: false,
-        name,
-        description,
-        accountId: accounts.activeAccountId ?? undefined,
-      })
-      hydrate(snapshot)
-      return snapshot.workspace
-    }
-
-    /** Rename a board and/or update its description. */
-    async function update(id: string, patch: { name?: string; description?: string | null }) {
-      const updated = await api.updateWorkspace(id, patch)
-      const i = workspaces.value.findIndex((w) => w.id === id)
-      if (i >= 0) workspaces.value[i] = updated
-      return updated
-    }
-
-    /** Rename a board (kept for the existing rename callers). */
-    async function rename(id: string, name: string) {
-      return update(id, { name })
-    }
-
-    /** Delete a board; if it was active, fall back to another in the account. */
-    async function remove(id: string) {
-      await api.deleteWorkspace(id)
-      workspaces.value = workspaces.value.filter((w) => w.id !== id)
-      if (workspaceId.value === id) {
-        workspaceId.value = null
-        await resolveActiveBoard()
-      }
-    }
-
-    // Monotonic guard for {@link refresh}: `board`-type stream events (and the on-connect resync)
-    // each fire a full-snapshot refresh, and {@link hydrate} REPLACES the block list. Without
-    // ordering, two in-flight fetches can resolve out of order, so a slower/staler snapshot's
-    // hydrate clobbers a newer one — dropping a just-spawned block whose ONLY live delivery was
-    // the coarse `board` event (there is no per-block push), so its card never reappears (no
-    // further event to restore it). Stamping each call lets only the latest-issued refresh commit.
-    let refreshSeq = 0
-
-    /** Re-fetch the snapshot and re-hydrate (after mutations and on stream (re)connect). */
-    async function refresh() {
-      const targetId = workspaceId.value
-      if (!targetId) return
-      const seq = ++refreshSeq
-      const snapshot = await api.getWorkspace(targetId)
-      // A newer refresh was issued (or the active board switched) while this fetch was in flight —
-      // discard this older/staler result so it can't clobber the newer hydrate.
-      if (seq !== refreshSeq || workspaceId.value !== targetId) return
-      hydrate(snapshot)
-    }
+    // The one door every full-snapshot refresh goes through: it coalesces the ~35 direct
+    // post-mutation call sites and the stream's coarse-event resync into at most one in-flight
+    // fetch plus one queued follow-up, and exposes the coverage mark the stream's debounce uses to
+    // drop a resync a mutation's own refresh already served. Ordering (a stale snapshot's hydrate
+    // clobbering a newer one, which would drop a just-spawned block whose ONLY live delivery was
+    // the coarse `board` event) falls out of there being one fetch at a time. Rules and the
+    // reasoning: `stores/workspace/refreshFunnel.ts`.
+    const { refresh, refreshMark, hydratedSince } = createRefreshFunnel({
+      currentWorkspaceId: () => workspaceId.value,
+      fetchSnapshot: (id, signal) => api.getWorkspace(id, signal),
+      captureBaselines: (): LiveWriteBaselines => ({
+        board: useBoardStore().hydrateBaseline(),
+        notifications: useNotificationsStore().hydrateBaseline(),
+      }),
+      apply: hydrate,
+    })
 
     /** The active workspace id, or throw if the app isn't bootstrapped yet. */
     function requireId(): string {
@@ -297,6 +240,9 @@ export const useWorkspaceStore = defineStore(
       userSpend,
       budgetCaps,
       infraSetup,
+      infraSetupDetails,
+      patchInfraSetup,
+      access,
       init,
       switchTo,
       selectAccount,
@@ -305,6 +251,8 @@ export const useWorkspaceStore = defineStore(
       rename,
       remove,
       refresh,
+      refreshMark,
+      hydratedSince,
       requireId,
       resumeSpend,
     }

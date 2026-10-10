@@ -34,5 +34,5 @@ export type ResetPasswordInput = v.InferOutput<typeof resetPasswordSchema>
 /** What `GET /auth/config` reports so the SPA renders the right login controls. */
 export interface AuthProvidersConfig {
   enabled: boolean
-  providers: { github: boolean; password: boolean; google: boolean }
+  providers: { github: boolean; password: boolean; google: boolean; sso: boolean }
 }

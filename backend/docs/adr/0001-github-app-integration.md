@@ -22,7 +22,7 @@ isolation, read **and** write, and native webhooks. Each workspace maps to one A
 
 - **OAuth App** issues user-scoped tokens (no per-installation isolation) and needs
   per-repo webhook configuration.
-- **PATs** (classic / fine-grained) are single-user with manual rotation —
+- **PATs** (classic / fine-grained) are single-user with manual rotation,
   unsuitable for multi-tenant.
 
 ### 2. A thin `fetch` client over Web Crypto, not Octokit

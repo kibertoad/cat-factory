@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AgentState, PipelineStep } from '~/types/domain'
+import { stepHasOutput } from '@cat-factory/contracts'
 import { agentKindMeta } from '~/utils/catalog'
 import {
   subtaskIconClass,
@@ -9,12 +10,15 @@ import {
   COMPANION_STATE_META,
 } from '~/utils/pipelineRender'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
+import { prReviewPhase } from '~/utils/prReviewProgress'
+import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
-// Spatial drill-down inside a task card: at the `steps` zoom band the task's
-// build-pipeline steps appear, and one band deeper (`subtasks`) each step's live
-// todo breakdown expands — done / in-progress / pending — exactly the way a
-// zoomed-in bootstrap card reads. Renders nothing until the task has a run and
-// the user has zoomed in far enough, so it's safe to mount on every task card.
+// Drill-down inside a task card: the task's build-pipeline steps appear on hover (at any
+// zoom level) or once the `steps` zoom band is reached, and one band deeper (`subtasks`)
+// each step's live todo breakdown expands — done / in-progress / pending — exactly the way
+// a zoomed-in bootstrap card reads. Renders nothing until the task has a run and the card
+// is expanded, so it's safe to mount on every task card.
 const props = defineProps<{ taskId: string }>()
 
 const execution = useExecutionStore()
@@ -38,13 +42,10 @@ const runFailed = computed(() => instance.value?.status === 'failed')
 // (spinning "Running") rather than a frozen subtask list.
 const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
-// Expand the pipeline list only when zoomed in far enough AND the board driver
-// permits this card — on-screen, and the centre-most of any cards that would
-// otherwise overlap (see useTaskExpansion) — so deep-zoom expansions don't pile up.
-const showSteps = computed(
-  () =>
-    lodAtLeast(lod.value, 'steps') && steps.value.length > 0 && expansion.canExpand(props.taskId),
-)
+// Expand the pipeline list when the board driver says so: this card is hovered (at any
+// zoom level), or the deep zoom bands granted it — on-screen, and the centre-most of any
+// cards that would otherwise overlap. See stores/taskExpansion.ts.
+const showSteps = computed(() => steps.value.length > 0 && expansion.isExpanded(props.taskId))
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
 
 // Clicking a step opens the full agent step-detail overlay — execution metadata
@@ -57,10 +58,10 @@ function openStep(i: number) {
 
 /** Per-state accent, matching the inspector/focus pipeline views. */
 const STATE_META: Record<AgentState, { color: string; icon: string }> = {
-  pending: { color: '#64748b', icon: 'i-lucide-circle-dashed' },
-  working: { color: '#6366f1', icon: 'i-lucide-loader' },
-  waiting_decision: { color: '#f59e0b', icon: 'i-lucide-circle-help' },
-  done: { color: '#22c55e', icon: 'i-lucide-circle-check' },
+  pending: { color: 'var(--ui-text-muted)', icon: 'i-lucide-circle-dashed' },
+  working: { color: 'var(--ui-primary)', icon: 'i-lucide-loader' },
+  waiting_decision: { color: 'var(--ui-warning)', icon: 'i-lucide-circle-help' },
+  done: { color: 'var(--ui-success)', icon: 'i-lucide-circle-check' },
 }
 
 // A reviewer gate (requirements-review / clarity-review) folding answers or re-reviewing in
@@ -83,6 +84,13 @@ function stepSpinning(s: PipelineStep) {
   return !runFailed.value && (s.state === 'working' || backgroundReview(s))
 }
 
+// Whether a step is a `pr-reviewer` with a LIVE phase to surface (slicing / reviewing / … ).
+// Drives replacing the generic N/M count + state icon with the phase badge, while a terminal
+// (done/skipped) review keeps its normal check/count visuals.
+function prPhaseActive(s: PipelineStep): boolean {
+  return prReviewPhase(s.prReview, s.subtasks) !== null
+}
+
 // Same todo-status icons the bootstrap card uses, so a zoomed-in task reads the
 // same way as a zoomed-in bootstrap.
 const ITEM_ICON: Record<string, string> = {
@@ -93,15 +101,16 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
-  <div v-if="showSteps" class="mt-2 space-y-1 border-t border-slate-800 pt-2">
-    <div class="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
+  <div v-if="showSteps" class="mt-2 space-y-1 border-t border-default pt-2">
+    <SectionLabel class="flex items-center gap-1">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}
-    </div>
-    <div v-for="(s, i) in steps" :key="i" class="rounded bg-slate-900/60 px-1.5 py-1">
-      <button
-        type="button"
-        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+    </SectionLabel>
+    <div v-for="(s, i) in steps" :key="i" class="rounded-sm bg-default/60 px-1.5 py-1">
+      <UButton
+        color="neutral"
+        variant="ghost"
+        class="flex w-full cursor-pointer items-center gap-1 rounded-sm p-0 text-start hover:bg-transparent"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >
@@ -110,53 +119,66 @@ const ITEM_ICON: Record<string, string> = {
           class="h-3 w-3 shrink-0"
           :style="{ color: agentKindMeta(s.agentKind).color }"
         />
-        <span class="truncate text-[10px] text-slate-200">
+        <span class="truncate text-3xs text-default">
           {{ agentKindMeta(s.agentKind).label }}
         </span>
         <UIcon
-          v-if="s.output"
+          v-if="stepHasOutput(s)"
           name="i-lucide-file-text"
-          class="h-2.5 w-2.5 shrink-0 text-slate-500"
+          class="h-2.5 w-2.5 shrink-0 text-dimmed"
         />
+        <!-- The plain N/M count, replaced by the phase line below while a `pr-reviewer` step is
+             live — its slice progress reads better as Slicing… / Reviewing X/Y slices. -->
         <span
-          v-if="s.subtasks && s.subtasks.total > 0"
-          class="ms-auto shrink-0 font-mono text-[9px] tabular-nums text-slate-400"
+          v-if="s.subtasks && s.subtasks.total > 0 && !prPhaseActive(s)"
+          class="ms-auto shrink-0 font-mono text-3xs tabular-nums text-muted"
         >
           {{ s.subtasks.completed }}/{{ s.subtasks.total }}
         </span>
         <UIcon
-          v-else
+          v-else-if="!prPhaseActive(s)"
           :name="stepVisual(s).icon"
           class="ms-auto h-2.5 w-2.5 shrink-0"
           :class="stepSpinning(s) ? 'animate-spin' : ''"
           :style="{ color: stepVisual(s).color }"
         />
-      </button>
+      </UButton>
+
+      <!-- PR reviewer: the precise sub-phase (slicing vs reviewing N/M slices), so the board
+           card tells the reviewer's progress apart from a bare subtask count. Self-hides once
+           the review is terminal / for any non-pr-reviewer step. -->
+      <PrReviewPhaseBadge
+        v-if="prPhaseActive(s)"
+        :step="s"
+        :run-failed="runFailed"
+        class="ms-4 mt-1 text-3xs"
+      />
 
       <!-- pending approval gate: jump straight to the conclusions reader. Suppressed
            while a reviewer gate is folding/re-reviewing in the background (no human needed). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="
           s.approval &&
           s.approval.status === 'pending' &&
           instance &&
           !reviews.isBackground(s.agentKind, props.taskId)
         "
-        type="button"
-        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold text-amber-950 transition hover:bg-amber-400"
+        class="mt-1 flex w-full items-center justify-center gap-1 rounded-sm bg-app-warning-500 px-1.5 py-0.5 text-3xs font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
         {{ t('board.task.reviewAndApprove') }}
-      </button>
+      </UButton>
 
       <!-- per-step subtask progress bar -->
       <div
         v-if="s.subtasks && s.subtasks.total > 0"
-        class="mt-1 h-0.5 w-full overflow-hidden rounded bg-slate-700/60"
+        class="mt-1 h-0.5 w-full overflow-hidden rounded-sm bg-accented/60"
       >
         <div
-          class="h-full rounded bg-indigo-400 transition-all"
+          class="h-full rounded-sm bg-primary transition-all"
           :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
         />
       </div>
@@ -164,7 +186,7 @@ const ITEM_ICON: Record<string, string> = {
       <!-- conditionally-run companion (the gate's ci-fixer / conflict-resolver, or the
            Tester's fixer): a compact running/ran/skipped line, so a gate that's working
            its helper reads as actively fixing rather than a frozen subtask list. -->
-      <div v-if="companionByStep[i]" class="mt-1 flex items-center gap-1 text-[9px]">
+      <div v-if="companionByStep[i]" class="mt-1 flex items-center gap-1 text-3xs">
         <UIcon
           :name="agentKindMeta(companionByStep[i]!.kind).icon"
           class="h-2.5 w-2.5 shrink-0"
@@ -173,7 +195,7 @@ const ITEM_ICON: Record<string, string> = {
             companionByStep[i]!.state === 'running' ? 'animate-spin' : '',
           ]"
         />
-        <span class="truncate text-slate-400">
+        <span class="truncate text-muted">
           {{ agentKindMeta(companionByStep[i]!.kind).label }}
         </span>
         <span
@@ -189,13 +211,13 @@ const ITEM_ICON: Record<string, string> = {
         <li
           v-for="(item, j) in s.subtasks.items"
           :key="j"
-          class="flex items-start gap-1 text-[9px]"
+          class="flex items-start gap-1 text-3xs"
           :class="
             item.status === 'completed'
-              ? 'text-slate-500 line-through'
+              ? 'text-dimmed line-through'
               : item.status === 'in_progress'
-                ? 'text-slate-100'
-                : 'text-slate-400'
+                ? 'text-app-100'
+                : 'text-muted'
           "
         >
           <UIcon

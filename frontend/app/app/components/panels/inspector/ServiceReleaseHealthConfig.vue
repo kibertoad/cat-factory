@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { showOverrideField } from '~/utils/uiMode'
 
 // Per-service (frame) post-release-health mapping: which observability monitors/SLOs the
 // `post-release-health` gate watches after this service's PRs ship. Keyed by THIS block's
@@ -11,7 +12,9 @@ const props = defineProps<{ block: Block }>()
 
 const store = useReleaseHealthStore()
 const ui = useUiStore()
+const uiMode = useUiModeStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -20,6 +23,14 @@ const draft = reactive({ monitorIds: '', sloIds: '', envTag: '' })
 
 const connected = computed(() => store.connection.connected)
 const saved = computed(() => store.configForBlock(props.block.id))
+
+// Post-release health is an ADVANCED-tier concern: with no mapping the gate is a pass-through,
+// so basic mode hides the whole section rather than showing a service-level knob whose absence
+// changes nothing. `showOverrideField` (not a bare `isAdvanced`) because the mapping is per
+// SERVICE and durable — once a teammate on the advanced tier maps monitors onto this frame,
+// hiding the panel would leave a basic-mode user with releases being watched (and an on-call
+// agent that can spawn) by a configuration they can neither see nor clear.
+const show = computed(() => showOverrideField(uiMode.isAdvanced, saved.value))
 
 function parseIds(csv: string): string[] {
   return csv
@@ -42,15 +53,6 @@ watch(
   { immediate: true },
 )
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function save() {
   busy.value = true
   try {
@@ -65,7 +67,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('inspector.releaseHealth.saveFailed'), e)
+    present(e, 'inspector.releaseHealth.saveFailed')
   } finally {
     busy.value = false
   }
@@ -82,7 +84,7 @@ async function clear() {
     draft.envTag = ''
     toastDone('clear', noun)
   } catch (e) {
-    notifyError(t('inspector.releaseHealth.clearFailed'), e)
+    present(e, 'inspector.releaseHealth.clearFailed')
   } finally {
     busy.value = false
   }
@@ -91,6 +93,7 @@ async function clear() {
 
 <template>
   <InspectorSection
+    v-if="show"
     :title="t('inspector.releaseHealth.title')"
     :hint="t('inspector.releaseHealth.sectionHint')"
   >
@@ -111,7 +114,7 @@ async function clear() {
     <!-- Disabled affordance until an observability integration is connected. -->
     <div
       v-if="!connected"
-      class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400"
+      class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-2 py-1.5 text-2xs text-muted"
     >
       <span>{{ t('inspector.releaseHealth.connectPrompt') }}</span>
       <UButton
@@ -127,7 +130,7 @@ async function clear() {
     </div>
 
     <div v-else class="space-y-2">
-      <p class="text-[11px] text-slate-500">
+      <p class="text-2xs text-dimmed">
         {{ t('inspector.releaseHealth.hint') }}
       </p>
       <div class="grid grid-cols-2 gap-2">

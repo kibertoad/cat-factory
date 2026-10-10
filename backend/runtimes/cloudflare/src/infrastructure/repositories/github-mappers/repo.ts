@@ -10,6 +10,7 @@ export interface GitHubRepoRow {
   private: number
   is_monorepo: number
   linked_via: string | null
+  provider: string | null
   synced_at: number
 }
 
@@ -23,6 +24,7 @@ export function rowToRepo(row: GitHubRepoRow): GitHubRepo {
     private: bool(row.private),
     isMonorepo: bool(row.is_monorepo),
     linkedVia: row.linked_via === 'user_pat' ? 'user_pat' : 'app',
+    provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
     syncedAt: row.synced_at,
   }
 }
@@ -41,6 +43,7 @@ export function repoValues(workspaceId: string, r: GitHubRepo): Record<string, u
     // clobbering them.
     is_monorepo: intBool(r.isMonorepo ?? false),
     linked_via: r.linkedVia ?? 'app',
+    provider: r.provider ?? 'github',
     synced_at: r.syncedAt,
     deleted_at: null,
   }

@@ -1,4 +1,5 @@
 import { resolveFrontendServePort } from './frontend.js'
+import { type RunServiceScope, stepConditionSatisfied } from './step-conditions.js'
 import type { Block, Pipeline } from './entities.js'
 
 // ---------------------------------------------------------------------------
@@ -7,11 +8,16 @@ import type { Block, Pipeline } from './entities.js'
 // A "visual" pipeline exercises a rendered UI — it either drives a real browser
 // against a running frontend (`tester-ui`) or parks for a human to review the
 // captured screenshots vs the task's reference designs (`visual-confirmation`).
-// Such a pipeline only makes sense where there IS a UI to exercise: a `frontend`
+// Such a step only makes sense where there IS a UI to exercise: a `frontend`
 // frame (it owns the app under test), or a frame a `frontend` frame links to (the
 // linked frontend is the UI a change to that service is validated through). The SPA
 // uses these predicates to surface visual pipelines only where they can run; the
 // backend gates a run start on the SAME rule so the guarantee holds server-side.
+//
+// What a pipeline LISTS and what a run REACHES are two questions, and the gate wants the
+// second: a visual step scoped to a frontend service (`stepOptions[i].condition`) excuses
+// itself from a backend run before it dispatches, which is what lets one build preset carry
+// both testers. See `pipelineRunsVisualStep`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -31,10 +37,51 @@ export const VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'
 /** The visual step kinds: a pipeline carrying any of these is a "visual" pipeline. */
 export const VISUAL_STEP_KINDS = [UI_TESTER_AGENT_KIND, VISUAL_CONFIRM_AGENT_KIND] as const
 
-/** Whether a pipeline includes any visual step (`tester-ui` / `visual-confirmation`). */
+/**
+ * Whether an agent kind drives a rendered UI. Reads {@link VISUAL_STEP_KINDS} rather than
+ * re-spelling the disjunction, so a third visual kind added to that list is seen by both
+ * predicates below instead of leaving the frame gate quietly offering a UI-driving pipeline on a
+ * frame with no UI.
+ */
+function isVisualStepKind(kind: string): boolean {
+  return (VISUAL_STEP_KINDS as readonly string[]).includes(kind)
+}
+
+/**
+ * Whether a pipeline includes any visual step (`tester-ui` / `visual-confirmation`) AT ALL,
+ * conditional ones included. The question for a caller asking whether the pipeline could ever
+ * drive a browser (run start resolves the frontend bindings off it). A caller deciding whether
+ * a pipeline may run HERE wants {@link pipelineRunsVisualStep} instead.
+ */
 export function pipelineHasVisualStep(pipeline: Pick<Pipeline, 'agentKinds'>): boolean {
+  return pipeline.agentKinds.some(isVisualStepKind)
+}
+
+/**
+ * Whether a run of `scope` would actually REACH a visual step: the steps that are enabled and
+ * whose run condition (`stepOptions[i].condition`) the scope admits. This is the question the
+ * frame gate below has to ask, and it is NOT the same as "does the pipeline list one".
+ *
+ * Since the build ladder carries the CONDITIONAL tester pair, every build preset lists a
+ * `tester-ui` scoped to `serviceScope: 'frontend'`. On a backend service that step is skipped
+ * before it dispatches, so the pipeline demands no UI and the run starts fine — which is exactly
+ * what run admission concludes, filtering the chain through the same two rules before it reaches
+ * the frame gate. Asking the coarse question there instead hides every build rung from every
+ * picker on every non-frontend service.
+ *
+ * An UNRESOLVABLE scope (neither half set: a block under no service frame) admits every
+ * condition, the fail-safe direction `stepConditionSatisfied` takes throughout: the visual step
+ * would run, so the frame gate gets to refuse it rather than a condition quietly excusing it.
+ */
+export function pipelineRunsVisualStep(
+  pipeline: Pick<Pipeline, 'agentKinds' | 'enabled' | 'stepOptions'>,
+  scope: RunServiceScope,
+): boolean {
   return pipeline.agentKinds.some(
-    (kind) => kind === UI_TESTER_AGENT_KIND || kind === VISUAL_CONFIRM_AGENT_KIND,
+    (kind, i) =>
+      isVisualStepKind(kind) &&
+      pipeline.enabled?.[i] !== false &&
+      stepConditionSatisfied(pipeline.stepOptions?.[i]?.condition, scope),
   )
 }
 

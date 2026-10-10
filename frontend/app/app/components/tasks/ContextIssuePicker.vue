@@ -6,30 +6,47 @@
 // It only *stages* a choice: the caller collects PendingContext items and links
 // them once the block exists (see useContextLinking). A search hit / pasted ref
 // carries `needsImport: true` so it's fetched + persisted before linking.
+//
+// Search results are always confined to ONE repository (`scopeBlockId`'s service).
+// An issue in another repo is reachable only by pasting its URL, which the explicit
+// "attach by reference" row below imports directly — it never comes back as a hit,
+// so what the search offers is exactly what the service owns.
+//
+// The tracker being searched is ALWAYS on screen (even when the workspace offers
+// exactly one), and its menu doubles as the "add a tracker" affordance: attaching a
+// context issue is where a missing integration is discovered, and the connect modal
+// opens over the caller's form rather than navigating away from it.
+import { useId } from 'vue'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
+import {
+  type AddSourceLabels,
+  buildSourceChoices,
+  menuIsPickable,
+  reconcileSource,
+  sourceMenuItems,
+} from '~/utils/sourcePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
   chosenKeys?: string[]
   /**
    * The block the picker is attaching context to (a service frame or a task/module
-   * under one). Scopes a GitHub search to that service's linked repo, so hits stay
-   * in-repo and a pasted URL / bare issue number resolves to the exact issue.
+   * under one). REQUIRED: it is what scopes a GitHub search to that service's linked
+   * repo, so hits stay in-repo and a bare issue number resolves to the exact issue.
+   * A search with no scope reaches every repository the deployment's credential can
+   * see (under a PAT, all of public GitHub), so there is no unscoped mode — a caller
+   * that has no block yet must not render the picker.
    */
-  scopeBlockId?: string
+  scopeBlockId: string
   /**
    * Controlled source: when provided the parent owns the selected tracker (via
    * `v-model:source`); omitted, the picker manages it internally (the add-task case).
    */
   source?: TaskSourceKind
-  /**
-   * Always render the source selector, even with a single offered tracker — so the
-   * user can see *which* tracker is being searched (the "create task from issue"
-   * surface, where the source is otherwise invisible). Off by default: the inline
-   * add-task picker stays compact and only shows a selector when there's a choice.
-   */
-  alwaysShowSource?: boolean
 }>()
 const emit = defineEmits<{
   pick: [item: PendingContext]
@@ -38,12 +55,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const tasks = useTasksStore()
+const ui = useUiStore()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
 
 // Source: default to the first offered tracker. Controlled when the parent passes
-// `source` (write-through to `update:source`), else internal. A selector appears when
-// more than one source is offered, or whenever the parent asks (`alwaysShowSource`).
+// `source` (write-through to `update:source`), else internal. The selector is always
+// rendered, single tracker or not — which tracker is being searched decides what a
+// pasted key resolves to, so it must never be invisible.
 const internalSource = ref<TaskSourceKind | undefined>(tasks.offeredSources[0]?.source)
 const source = computed<TaskSourceKind | undefined>({
   get: () => props.source ?? internalSource.value,
@@ -52,13 +71,51 @@ const source = computed<TaskSourceKind | undefined>({
     if (v) emit('update:source', v)
   },
 })
-const sourceItems = computed(() =>
-  tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
-)
-const showSourceSelect = computed(
-  () => sourceItems.value.length > 1 || (props.alwaysShowSource && sourceItems.value.length > 0),
-)
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
+
+// The tracker the user left to connect, so it becomes the selection the moment it turns
+// up offered (the connect modal re-probes on success). Also the reconcile trigger for a
+// source that stops being offered — disconnected, or toggled off in settings.
+const awaitingConnect = ref<TaskSourceKind | null>(null)
+function addSource(s: TaskSourceKind) {
+  awaitingConnect.value = s
+  ui.openTaskConnect(s)
+}
+watch(
+  () => tasks.offeredSources.map((s) => s.source),
+  (offered) => {
+    const next = reconcileSource(offered, source.value, awaitingConnect.value)
+    if (next && next === awaitingConnect.value) awaitingConnect.value = null
+    if (next !== source.value && next) source.value = next
+  },
+)
+
+/** Wording per add action, exhaustive over what a TRACKER menu can carry. */
+const ADD_LABEL: AddSourceLabels<'connect' | 'enable'> = {
+  connect: (label) => t('tasks.picker.connectSource', { label }),
+  enable: (label) => t('tasks.picker.enableSource', { label }),
+}
+
+// Two-tier menu: pick an offered tracker, or add one that isn't offered yet.
+const sourceChoices = computed(() => buildSourceChoices(tasks.sources, source.value))
+const sourceMenu = computed(() =>
+  sourceMenuItems(sourceChoices.value, {
+    onSelect: (s) => {
+      source.value = s
+    },
+    onAdd: addSource,
+    addLabel: ADD_LABEL,
+  }),
+)
+/** One entry decides nothing, so the tracker is named as a label rather than as a dead control. */
+const sourcePickable = computed(() => menuIsPickable(sourceChoices.value))
+
+// The trigger's own content is the tracker NAME, which says nothing about what the name means, so
+// the visible "Source" caption is joined to it as the accessible name ("Source GitHub"). Per
+// instance, because this picker and the import modal's copy can be mounted at the same time and a
+// hard-coded id would make one trigger claim the other's caption.
+const sourceLabelId = useId()
+const sourceTriggerId = useId()
 const searchable = computed(() => descriptor.value?.searchable ?? false)
 
 const query = ref('')
@@ -109,7 +166,14 @@ async function runSearch() {
     results.value = await tasks.search(source.value, q, props.scopeBlockId)
   } catch (e) {
     results.value = []
-    searchError.value = e instanceof Error ? e.message : String(e)
+    // "This service has no repo" is the one failure with an action attached, so it gets its
+    // own localized copy off the backend's machine-readable reason rather than the raw
+    // message (AGENTS.md "Backend strings"). Anything else keeps the generic wording.
+    const notLinked: TaskSourceReadReason = 'repo_not_linked'
+    searchError.value =
+      apiErrorReason(e) === notLinked
+        ? t('tasks.picker.searchNeedsRepo')
+        : t('tasks.picker.searchFailed', { error: e instanceof Error ? e.message : String(e) })
   } finally {
     searching.value = false
   }
@@ -221,14 +285,39 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-    <USelect
-      v-if="showSourceSelect"
-      v-model="source"
-      :items="sourceItems"
-      size="xs"
-      class="w-full"
-    />
+  <div class="space-y-2 rounded-lg border border-default bg-default/40 p-2">
+    <!-- Which tracker is being searched, always visible, plus the trackers the user could add from
+         here (each opens the connect modal over the caller's form). With a single entry there is
+         nothing to decide, so the tracker is named as plain text: a chevron opening a one-item menu
+         promises a choice that isn't there. `id` labels the trigger, whose own content is the
+         tracker name rather than what that name means. -->
+    <div class="flex items-center gap-1.5">
+      <SectionLabel as="span" :id="sourceLabelId" class="shrink-0">
+        {{ t('tasks.picker.sourceLabel') }}
+      </SectionLabel>
+      <UDropdownMenu
+        v-if="sourcePickable"
+        :items="sourceMenu"
+        :content="{ side: 'bottom', align: 'start' }"
+      >
+        <UButton
+          :id="sourceTriggerId"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          :icon="icon"
+          trailing-icon="i-lucide-chevron-down"
+          class="max-w-full"
+          :aria-labelledby="`${sourceLabelId} ${sourceTriggerId}`"
+        >
+          <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
+        </UButton>
+      </UDropdownMenu>
+      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-toned">
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0" />
+        <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
+      </span>
+    </div>
 
     <UInput
       v-model="query"
@@ -244,57 +333,60 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
-      {{ t('tasks.picker.searchFailed', { error: searchError }) }}
+    <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
+      {{ searchError }}
     </p>
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
       <!-- Already-imported issues (linked directly, no re-fetch). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="row in importedRows"
         :key="`imp:${row.externalId}`"
-        type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickImported(row)"
       >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
         <span class="truncate">{{ row.externalId }} · {{ row.title }}</span>
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
           t('tasks.picker.imported')
         }}</UBadge>
-      </button>
+      </UButton>
 
       <!-- Tracker search hits (imported on add). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="r in searchRows"
         :key="`hit:${r.externalId}`"
-        type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickSearch(r)"
       >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-muted" />
         <span class="truncate">{{ r.externalId }} · {{ r.title }}</span>
         <UBadge v-if="r.status" color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ r.status }}
         </UBadge>
-      </button>
+      </UButton>
 
       <!-- Explicit URL/key reference (imported on add). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="refRow"
-        type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickRef(refRow)"
       >
-        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-muted" />
         <span class="truncate">
           <i18n-t keypath="tasks.picker.attachByReference" tag="span" scope="global">
             <template #ref>
-              <span class="text-slate-200">{{ refRow }}</span>
+              <span class="text-default">{{ refRow }}</span>
             </template>
           </i18n-t>
         </span>
-      </button>
+      </UButton>
 
       <EmptyState
         v-if="empty"

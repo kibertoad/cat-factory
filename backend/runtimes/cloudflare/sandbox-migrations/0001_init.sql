@@ -4,7 +4,7 @@
 -- unprefixed: the database is the namespace. The Node facade mirrors this as a Postgres
 -- `sandbox` schema (Drizzle). Shipped baselines are NOT stored (read live from
 -- `@cat-factory/agents`); only candidate prompt versions are. JSON-shaped fields are
--- stored as TEXT JSON. See backend/CLAUDE.md "Keep the runtimes symmetric".
+-- stored as TEXT JSON. See backend/README.md "Keep the runtimes symmetric".
 
 -- Candidate prompt-version lineages under test (origin always 'candidate').
 CREATE TABLE prompt_versions (

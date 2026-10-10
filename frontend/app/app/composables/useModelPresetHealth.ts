@@ -17,11 +17,23 @@ export interface ModelPresetIssue {
   toVersion?: number
 }
 
-/** A built-in's display name for an issue message (humanise its catalog id as a fallback). */
-function builtinName(id: string, stored: ModelPreset | undefined): string {
+/**
+ * A built-in's display name for an issue message: the stored row's when there is one, else the
+ * catalog's own name from the snapshot's companion map.
+ *
+ * The humanised id (`mdp_kimi` to "kimi", rendered capitalised) is the FALLBACK for a facade that
+ * ships no name map, not the primary answer. It reads acceptably for the built-ins whose ids ARE
+ * their names and wrongly for the first one where it is not: `mdp_chatgpt` came out as "Chatgpt" in
+ * the modal offering to add it, a name for GPT-5.6 Sol that appears nowhere else in the product,
+ * on exactly the boards that predate the preset and therefore see this advisory.
+ */
+function builtinName(
+  id: string,
+  stored: ModelPreset | undefined,
+  names: Record<string, string>,
+): string {
   if (stored) return stored.name
-  // `mdp_claude` -> "claude" — only used until the row is reseeded into existence.
-  return id.replace(/^mdp_/, '').replace(/_/g, ' ')
+  return names[id] ?? id.replace(/^mdp_/, '').replace(/_/g, ' ')
 }
 
 /**
@@ -41,7 +53,7 @@ export function useModelPresetHealth() {
     for (const [id, catalogVersion] of Object.entries(store.catalogVersions)) {
       const stored = byId.get(id)
       if (!stored) {
-        out.push({ type: 'new', id, name: builtinName(id, undefined) })
+        out.push({ type: 'new', id, name: builtinName(id, undefined, store.catalogNames) })
         continue
       }
       if (catalogVersion > (stored.version ?? 0)) {

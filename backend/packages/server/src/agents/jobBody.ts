@@ -1,50 +1,23 @@
-import type { AgentRunContext, AgentStepSpec, RunnerDispatchKind } from '@cat-factory/kernel'
+import type {
+  AgentDispatchContext,
+  AgentRunContext,
+  AgentStepSpec,
+  RunnerDispatchKind,
+} from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
+  appendContainerDispatchDirectives,
   bugFixGuidanceFor,
-  composeBlockSystemPrompt,
+  toolServersSection,
   FOLLOW_UP_GUIDANCE,
+  PR_DESCRIPTION_GUIDANCE,
   isContainerBackedCompanion,
-  isReadOnlyAgentKind,
-  systemPromptFor,
+  resolvePrHeadNumber,
   userPromptFor,
 } from '@cat-factory/agents'
-import {
-  BLUEPRINTS_AGENT_KIND,
-  CI_FIXER_AGENT_KIND,
-  CONFLICT_RESOLVER_AGENT_KIND,
-  FIXER_AGENT_KIND,
-  MERGER_AGENT_KIND,
-  ON_CALL_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
-  TESTER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
-} from '@cat-factory/orchestration'
-import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
-import {
-  BLUEPRINT_SHAPE_HINT,
-  BLUEPRINT_SYSTEM_PROMPT,
-  blueprintUserPrompt,
-  INITIATIVE_ANALYST_SYSTEM_PROMPT,
-  initiativeAnalystUserPrompt,
-  INITIATIVE_PLAN_SHAPE_HINT,
-  INITIATIVE_PLANNER_SYSTEM_PROMPT,
-  initiativePlannerUserPrompt,
-  MERGE_ASSESSMENT_SHAPE_HINT,
-  MERGER_SYSTEM_PROMPT,
-  mergerMultiRepoUserPrompt,
-  mergerUserPrompt,
-  ON_CALL_ASSESSMENT_SHAPE_HINT,
-  ON_CALL_SYSTEM_PROMPT,
-  onCallUserPrompt,
-  prBody,
-  SPEC_SHAPE_HINT,
-  SPEC_WRITER_SYSTEM_PROMPT,
-  specWriterUserPrompt,
-  TEST_REPORT_SHAPE_HINT,
-  testerInfraSpec,
-  UI_TEST_REPORT_SHAPE_HINT,
-} from './prompts.js'
+import { composeRoleSystemPrompt } from './brief.js'
+import { siblingCheckoutDir } from './harnessContract.js'
+import { prBody, testerInfraSpec } from './prompts.js'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 import type { RepoCheckout } from './resolveRepoTarget.js'
 
@@ -54,13 +27,27 @@ import type { RepoCheckout } from './resolveRepoTarget.js'
  * can't drift on which shared fields they forward:
  *   - `common` — the fields EVERY harness job body carries (jobId/model/auth/repo/proxy/…).
  *   - `webTools` — the proxy-backed web-tools nudge + switch, shared by the kinds that
- *     allow web access.
+ *     allow web access. See the field below for what its switch does NOT state.
  *   - `repo` — the resolved repo target (owner/name/baseBranch + optional serviceDirectory).
  *   - `workBranch` / `workBranchReady` — the deterministic per-task work branch and whether
  *     it exists on the remote yet (a read-only agent falls back to base when it doesn't).
  */
 export interface KindBodyParts {
   common: Record<string, unknown>
+  /**
+   * The web-research nudge plus its switch. The switch (`webSearch`) states one thing only: that
+   * OUR PROXY can serve web research for this run's account. It is what Pi's `web_search` /
+   * `web_fetch` are pointed at and what they would fail without, which makes it a CAPABILITY
+   * probe (see `resolveWebSearchAvailability`) and never a policy about whether a run may reach
+   * the web.
+   *
+   * The subscription CLIs deliberately do not read it. Claude Code's `WebSearch`/`WebFetch` are
+   * served by the vendor the leased subscription already pays, so they work on a deployment with
+   * no search provider wired at all and the harness declares them unconditionally (its
+   * `CLAUDE_TOOL_SET`). Gating them on this switch would withhold a working capability on the
+   * strength of wiring that has no bearing on it. A genuine "may this run reach the web" policy,
+   * if one is ever added, is a SECOND fact and belongs beside this one rather than folded into it.
+   */
   webTools: Record<string, unknown>
   repo: RepoTarget
   workBranch: string
@@ -80,7 +67,7 @@ export interface KindBodyParts {
    * snapshot. Present only for the tester kinds when the service frame has secrets configured.
    */
   testSecretEnv?: { key: string; value: string }[]
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   /**
    * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
    * where each involved service lives, how the checkouts are laid out). Appended to the coding
@@ -116,6 +103,14 @@ export interface KindBodyParts {
    * commit to or push them). Appended to the consumer kind's system prompt; absent otherwise.
    */
   referenceBranchesSection?: string
+  /**
+   * The backend-rendered skill directive for a dispatch that applies skills — a `skill` step's
+   * pick and/or the running kind's declared playbooks — appended to the kind's system prompt. For
+   * the claude-code harness it is a short pointer to the natively-installed skills; for Pi/codex it
+   * carries the folded-in instructions + a pointer to each skill's `.cat-context/skill/<name>/`
+   * resources. Absent when the dispatch applies no skills.
+   */
+  skillSection?: string
 }
 
 /**
@@ -132,102 +127,106 @@ export function buildKindBody(
   registry: AgentKindRegistry,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
-  // `buildRegisteredAgentBody`/`buildMigratedBuiltInBody`, not directly here.
-  const baseRoleSystemPrompt = composeBlockSystemPrompt(
-    systemPromptFor(context.agentKind, registry),
-    context.block,
-  )
+  // `buildRegisteredAgentBody`, not directly here.
+  // The executor-INDEPENDENT half: the workspace's own prompt for this kind when it has one (else
+  // the shipped base), the block's resolved standards at this kind's verbosity, and its trait
+  // guidance. Composed by `composeRoleSystemPrompt`, which a DELEGATED dispatch's brief calls too,
+  // so an external executor and this harness are told the same thing about the work. Everything
+  // layered below it is about the CONTAINER.
+  const baseRoleSystemPrompt = composeRoleSystemPrompt(context, registry)
+  // The directives EVERY container job carries, whatever the kind: what the execution environment
+  // can and cannot do (platform facts no agent can derive from the repository, absent which a coder
+  // and its reviewer each rediscovered that the Dockerfile they were asked for could not be built
+  // here), which tool to reach for, how to stop what it backgrounded, and the effort
+  // self-assessment the harness lifts onto the result. Appended here, the single
+  // container-dispatch chokepoint, so they reach every container
+  // kind, built-in and registered alike, exactly like the read-only/final-answer directives reach
+  // every kind via `applySurfaceDirectives`. The set is declared in `@cat-factory/agents`
+  // (`CONTAINER_DISPATCH_DIRECTIVES`) because `appendedDirectivesFor` has to MEASURE it: the prompt
+  // editor shows a workspace the rules its override cannot delete, and these are among them.
+  const withEffort = appendContainerDispatchDirectives(baseRoleSystemPrompt)
   // When the future-looking Follow-up companion is enabled for this (coder) step, append
   // the guidance that tells the Coder to stream loose-ends / side-tasks / questions to the
   // sentinel file the harness tails. Only when enabled, so a disabled companion (or any
   // other kind) never writes the file.
   const withFollowUp = context.followUpCompanion
-    ? `${baseRoleSystemPrompt}\n\n${FOLLOW_UP_GUIDANCE}`
-    : baseRoleSystemPrompt
+    ? `${withEffort}\n\n${FOLLOW_UP_GUIDANCE}`
+    : withEffort
   // Bug-triage (phase G): when a prior `repro-test` step ran, augment the CODER's prompt with
   // BUG_FIX_GUIDANCE — fix the reported issue, don't merely make the reproduction test pass.
   // `bugFixGuidanceFor` returns '' for every other kind / when no repro-test preceded, so this
   // is a no-op everywhere else.
   const bugFix = bugFixGuidanceFor(context)
-  const roleSystemPrompt = bugFix ? `${withFollowUp}\n\n${bugFix}` : withFollowUp
+  const withBugFix = bugFix ? `${withFollowUp}\n\n${bugFix}` : withFollowUp
+  // A dispatch that applies skills folds their directive (harness-aware — a native-skill pointer
+  // for claude-code, the full instructions for Pi/codex) into the system prompt. Present on a
+  // `skill` step whose pick resolved AND on any kind that declares skills of its own; a no-op
+  // for every other kind.
+  const withSkills = parts.skillSection ? `${withBugFix}\n\n${parts.skillSection}` : withBugFix
+  // The tool servers (MCP) wired for this dispatch, plus any the run could not wire. Appended
+  // here — the single container-dispatch chokepoint, exactly like the effort-report guidance —
+  // so it reaches EVERY container kind including a registered kind with its own `userPrompt`
+  // builder, which would otherwise bypass any user-prompt fold. Empty for a kind that declares
+  // no tool servers, so every built-in run's prompt is byte-for-byte unchanged.
+  const tools = toolServersSection(context)
+  const roleSystemPrompt = tools ? `${withSkills}\n\n${tools}` : withSkills
 
-  // A registered (custom or migrated) kind that declares an `agent` step dispatches
-  // through the generic, manifest-driven `agent` harness kind — no per-kind case here.
-  // Built-in kinds (below) still carry their bespoke bodies until they are migrated.
-  const registeredStep = registry.agentStep(context.agentKind)
-  if (registeredStep) {
-    return buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt, registry)
-  }
-
-  // Built-in container kinds migrated onto the generic, manifest-driven `agent` harness
-  // kind (they dispatch `kind:'agent'` through `buildRegisteredAgentBody`, exactly like a
-  // registered custom kind, with NO bespoke per-kind harness handler) — the Task-5
-  // strangler. Today: blueprints/spec-writer (structured explore + render post-op), the
-  // in-place fixers (`ci-fixer` / `fixer`, coding-on-PR), the JSON-assessment producers
-  // (`merger` / `on-call`, read-only structured explore whose assessment is coerced
-  // backend-side in `toRunResult`), the `tester` (read-only structured explore with
-  // docker-compose infra stand-up), and the conflict-resolver (coding with a `mergeBase`).
-  // The default coder dispatches the generic coding agent at the end of this method.
-  const migrated = buildMigratedBuiltInBody(context, parts, roleSystemPrompt, registry)
-  if (migrated) return migrated
-
-  // Container-backed companions (reviewer / doc-reviewer): a read-only explore that clones
-  // the producer's PR branch and reads the ACTUAL repository (changed files / committed
-  // document) before rating it, returning the verdict as structured JSON. Surfaced to the
-  // engine as `result.custom` (the default `toRunResult` branch) and parsed back into a
-  // CompanionAssessment by `CompanionController.resolveContainerVerdict`. The companion
-  // review system prompt (which already instructs the JSON shape and, for these kinds, to
-  // read the checkout) wins in `systemPromptFor`, so no per-kind prompt wiring is needed.
-  if (isContainerBackedCompanion(context.agentKind)) {
-    return buildRegisteredAgentBody(
-      context,
-      parts,
-      { surface: 'container-explore', clone: { branch: 'pr' }, output: { kind: 'structured' } },
-      roleSystemPrompt,
-      registry,
-    )
-  }
-
-  // Read-only agents (architect, analysis) explore a real checkout but never edit it:
-  // they clone a branch, produce a prose report/proposal and return it as `output`,
-  // making no commit and opening no PR (and — unlike a coding run — an edit-free run is
-  // the expected, correct outcome, not a failure). They dispatch through the generic,
-  // manifest-driven `agent` kind in `explore` mode — the SAME path a registered
-  // `container-explore` kind takes — instead of a bespoke per-kind harness handler. A
-  // synthesized read-only step (no clone target ⇒ the shared work-branch fallback, so
-  // e.g. the architect reads the spec-writer's committed `spec/` and any in-progress
-  // implementation, falling back to base when no work/PR branch exists) yields a body
-  // byte-identical to the old `/explore` job, minus only the harness-internal temp-dir
-  // label. This is the first built-in migrated onto the generic agent surface (the
-  // Task-5 strangler); the now-dead `/explore` harness handler is deleted in a
-  // follow-up once parity is confirmed on CI.
-  if (isReadOnlyAgentKind(context.agentKind)) {
-    return buildRegisteredAgentBody(
-      context,
-      parts,
-      { surface: 'container-explore' },
-      roleSystemPrompt,
-      registry,
-    )
-  }
-
-  // The default coder (and any other write-and-PR kind): the build-phase role plus the
-  // block's selected best-practice fragments. Dispatches the generic `container-coding`
-  // agent onto the deterministic per-task work branch (`clone: 'work'` ⇒ branch off base,
-  // push the work branch, open a PR). The work-branch name is deterministic per task
-  // (block), NOT per dispatch — a retry mints a fresh executionId but keeps the blockId —
-  // so every re-dispatch targets the SAME branch; `runCodingAgent` checkpoints commits to
-  // it and RESUMES on it if it already exists, so an evicted/failed run's work survives.
-  // This is behaviour-equivalent to the old bespoke `/run` body (handleAgent coding mode
-  // is built on the same `runCodingAgent` primitive); the dead `/run` handler is removed
-  // in the harness-cleanup step.
+  // ONE dispatch path. Every kind the platform ships now DECLARES its container shape on the
+  // agent-kind registry (see `@cat-factory/agents` → `kinds/built-in-container.ts`), so what a
+  // built-in does is data the engine reads through the same seam a deployment's own kind uses:
+  // there is no `switch (context.agentKind)` here, and no bespoke per-kind harness handler
+  // behind it either. That is the end of the agent-kind strangler.
   return buildRegisteredAgentBody(
     context,
     parts,
-    { surface: 'container-coding', clone: { branch: 'work' } },
+    resolveDispatchStep(context.agentKind, registry),
     roleSystemPrompt,
     registry,
   )
+}
+
+/**
+ * The default dispatch shape for a container kind that declared none: the implementer's. Branch
+ * off base onto the deterministic per-task work branch, push it, open a PR.
+ *
+ * No built-in reaches it any more — this is what a deployment gets for a kind it routed to the
+ * container executor without an `agent` spec, and it is the behaviour that path always had.
+ */
+const DEFAULT_CONTAINER_STEP: AgentStepSpec = {
+  surface: 'container-coding',
+  clone: { branch: 'work' },
+}
+
+/**
+ * A container-backed COMPANION's dispatch shape: a read-only explore that clones the producer's
+ * PR branch and reads the ACTUAL repository (the changed files, the committed document) before
+ * rating it, returning the verdict as structured JSON.
+ *
+ * Synthesized rather than registered because a companion is a PAIRING (`registerCompanion`)
+ * rather than an agent kind: it never appears in `registry.all()`, and giving it a registration
+ * would put it in the palette as a placeable block, which it is not. `CompanionController`
+ * parses the verdict back out of `result.custom`.
+ *
+ * `full: true` for the same reason the `merger` declares it: this kind's whole job is to judge a
+ * CHANGE, and a change is a diff against the base branch. A default explore clone is
+ * `--depth 1 --single-branch`, which has neither `origin/<base>` nor a merge base, so the
+ * three-dot diff its prompt asks for cannot run at all and a later `git fetch` of a shallow base
+ * still has no common ancestor. The reviewer then discovers the change file by file instead, which
+ * is where a measured ~40 exploratory calls per review went. Paying for the history once is
+ * cheaper than paying for the exploration on every turn that follows it.
+ */
+const CONTAINER_COMPANION_STEP: AgentStepSpec = {
+  surface: 'container-explore',
+  clone: { branch: 'pr', full: true },
+  output: { kind: 'structured' },
+}
+
+/** The dispatch shape for this kind: its own declaration, the companion shape, else the default. */
+function resolveDispatchStep(kind: string, registry: AgentKindRegistry): AgentStepSpec {
+  const declared = registry.agentStep(kind)
+  if (declared) return declared
+  if (isContainerBackedCompanion(kind, registry)) return CONTAINER_COMPANION_STEP
+  return DEFAULT_CONTAINER_STEP
 }
 
 /**
@@ -251,13 +250,68 @@ function structuredOutputField(output: AgentStepSpec['output']): Record<string, 
 }
 
 /**
- * Build the generic `agent` job body for a registered kind from its declarative
- * {@link AgentStepSpec} — the single dispatch path that replaces the per-kind cases as
- * built-ins migrate. `container-explore` clones a branch read-only and returns prose
- * (or, for `output.kind==='structured'`, a parsed `custom` JSON object the kind's
- * post-op renders from); `container-coding` clones, edits, pushes and (off the work
- * branch) opens a PR. The clone target maps `base`/`pr`/`work` to a concrete branch
- * exactly as the built-in bodies do.
+ * The resolved checkout facts a kind's own prompt builder may name — see kernel's
+ * {@link AgentDispatchContext}. Built here, at the one dispatch chokepoint, so a builder can
+ * never be handed a branch that differs from the one the job body asks the harness to clone.
+ */
+function dispatchContextFor(parts: KindBodyParts, checkoutBranch: string): AgentDispatchContext {
+  return {
+    baseBranch: parts.repo.baseBranch,
+    checkoutBranch,
+    workBranch: parts.workBranch,
+    multiRepo: (parts.peerRepos?.length ?? 0) > 0,
+  }
+}
+
+/**
+ * The concrete branch a `container-explore` dispatch clones, from the step's declared target.
+ *
+ * Its own function so the prompt and the job body read ONE resolution: the builder is handed this
+ * through {@link AgentDispatchContext.checkoutBranch} and the body asks the harness to clone the
+ * same string, so a prompt naming the checkout cannot describe a branch the job never fetched.
+ * Note the two `?? repo.baseBranch` fallbacks — a `pr`-targeting explore with no pull request is
+ * checked out on base, which is exactly what a caller must be able to see.
+ */
+function resolveExploreBranch(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+): string {
+  const { repo, workBranch, workBranchReady } = parts
+  const prBranch = context.block.pullRequest?.branch
+  if (step.clone?.branch === 'base') return repo.baseBranch
+  if (step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work') {
+    return prBranch ?? repo.baseBranch
+  }
+  return workBranchReady ? workBranch : (prBranch ?? repo.baseBranch)
+}
+
+/**
+ * The concrete branch a `container-coding` dispatch clones: the in-place target where the step
+ * works on an existing pull request, else the repo base it branches off.
+ *
+ * The in-place pair is resolved ONCE here and handed to {@link buildCodingAgentBody}, so the
+ * refusal `resolveInPlaceBranches` can raise fires before the prompt is built rather than twice.
+ */
+function resolveCodingBranches(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+): { clone: string; inPlace?: { clone: string; push: string } } {
+  const prBranch = context.block.pullRequest?.branch
+  const onPr =
+    step.clone?.branch === 'pr' || (step.clone?.branch === 'pr-or-work' && Boolean(prBranch))
+  const inPlace = onPr ? resolveInPlaceBranches(context, parts, step) : undefined
+  return { clone: inPlace ? inPlace.clone : parts.repo.baseBranch, ...(inPlace ? { inPlace } : {}) }
+}
+
+/**
+ * Build the generic `agent` job body for a kind from its declarative {@link AgentStepSpec} —
+ * the single dispatch path, taken by every built-in and every deployment-registered kind alike.
+ * `container-explore` clones a branch read-only and returns prose (or, for
+ * `output.kind==='structured'`, a parsed `custom` JSON object the kind's post-op renders from);
+ * `container-coding` clones, edits, pushes and (off the work branch) opens a PR. The clone target
+ * maps `base`/`pr`/`work` to a concrete branch.
  */
 function buildRegisteredAgentBody(
   context: AgentRunContext,
@@ -265,33 +319,178 @@ function buildRegisteredAgentBody(
   step: AgentStepSpec,
   roleSystemPrompt: string,
   registry: AgentKindRegistry,
-  /**
-   * The concrete task prompt. Defaults to the generic `userPromptFor` (block context +
-   * prior outputs) — the same prompt a registered custom kind gets. A migrated built-in
-   * (merger / on-call) overrides it with its bespoke, JSON-instructing prompt so its
-   * body matches the old per-kind handler's.
-   */
-  userPrompt: string = userPromptFor(context, registry, { materialized: true }),
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
-  const { common, webTools, repo, workBranch, workBranchReady } = parts
-  const prBranch = context.block.pullRequest?.branch
-  // Amend an EXISTING PR in place (fixer-like: push back, open no new PR) when the kind targets
-  // the PR branch, OR targets `pr-or-work` and a PR already exists. A `pr-or-work` kind with no PR
-  // yet falls back to the work-branch open-a-PR flow (coder-like) below — so one kind serves both
-  // a BAU pipeline step (amend the coder's PR) and a standalone/initiative run (open its own PR).
-  const onPr =
-    step.clone?.branch === 'pr' || (step.clone?.branch === 'pr-or-work' && Boolean(prBranch))
-  const wantsPr = step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work'
-  const exploreBranch =
-    step.clone?.branch === 'base'
-      ? repo.baseBranch
-      : wantsPr
-        ? (prBranch ?? repo.baseBranch)
-        : workBranchReady
-          ? workBranch
-          : (prBranch ?? repo.baseBranch)
+  // The concrete checkout, resolved BEFORE the prompt: a builder that names what is checked out
+  // (the companion's diff commands) and the body that asks the harness to clone it must read the
+  // same resolution, or the prompt describes a checkout the job never made.
+  const coding = step.surface === 'container-coding'
+  const codingBranches = coding ? resolveCodingBranches(context, parts, step) : undefined
+  const checkoutBranch = codingBranches
+    ? codingBranches.clone
+    : resolveExploreBranch(context, parts, step)
+  // The prefetched PR head, resolved BEFORE the prompt for the reason the coding pair above is:
+  // the refusal `resolvePrefetchPrNumber` can raise belongs ahead of a prompt assembly (fragment
+  // resolution, standards, the context fold) whose whole cost would then be discarded.
+  const prefetchPrNumber = coding ? undefined : resolvePrefetchPrNumber(context, step)
+  // The kind's own prompt when it declared one (the merger's diff instructions, the
+  // conflict-resolver's compact task reference), else the generic block-context prompt. Both
+  // resolve inside `userPromptFor`, so this layer names no kind.
+  const userPrompt = userPromptFor(context, registry, {
+    materialized: true,
+    dispatch: dispatchContextFor(parts, checkoutBranch),
+  })
+  // Two mutually-exclusive surfaces, split into their own builders so each stays within the
+  // cyclomatic-complexity budget (the shared branch prelude is cheap enough to recompute in each).
+  return codingBranches
+    ? buildCodingAgentBody(context, parts, step, roleSystemPrompt, userPrompt, codingBranches)
+    : buildExploreAgentBody(context, parts, step, roleSystemPrompt, userPrompt, {
+        branch: checkoutBranch,
+        prNumber: prefetchPrNumber,
+      })
+}
 
-  if (step.surface === 'container-coding') {
+/**
+ * Resolve an in-place (`pr`-targeting) coding dispatch to its concrete clone + push branches,
+ * honouring the step's declared preconditions.
+ *
+ * `requirePr` WITHDRAWS the base-branch fallback: a kind that works in place on an existing pull
+ * request has nothing to do without one, and quietly cloning base would push its commits onto the
+ * default branch. The dispatch fails loudly instead. `prFallback: 'work'` keeps one narrower
+ * fallback for that case — the shared per-task work branch every repo's PR rides, which is the
+ * right target when the OWN service had no change (so no own `pullRequest`) but a PEER repo did.
+ */
+function resolveInPlaceBranches(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+): { clone: string; push: string } {
+  const prBranch = context.block.pullRequest?.branch
+  const toWorkBranch = step.clone?.prFallback === 'work'
+  if (!step.clone?.requirePr) {
+    // No precondition declared: clone whatever exists (base when there is no PR yet) and push to
+    // the work branch, so a kind that reaches this path without a PR still lands its commits on
+    // a branch of its own rather than on base.
+    return { clone: prBranch ?? parts.repo.baseBranch, push: prBranch ?? parts.workBranch }
+  }
+  const resolved = prBranch ?? (toWorkBranch ? parts.workBranch : undefined)
+  if (!resolved) {
+    throw new Error(
+      `The \`${context.agentKind}\` step needs the implementation pull request's branch to ` +
+        'work on, and this block has none.',
+    )
+  }
+  return { clone: resolved, push: resolved }
+}
+
+/**
+ * The optional sibling-checkout legs of a coding job: the multi-repo peer repos (each opening the
+ * SAME work branch + an equivalent PR when this kind opens PRs, otherwise resumed in place / seeded
+ * with no PR), the read-only reference repos (forwarded as-is — `{ repo }`-shaped, no branch/PR, so
+ * the harness clones and skips them in the push phase), and the read-only reference branches. Each
+ * is `undefined` when empty so the body spreads read cleanly. Extracted from
+ * {@link buildCodingAgentBody} to keep it under the complexity ceiling — behaviour is byte-identical.
+ */
+function buildCodingRepoLegs(
+  parts: KindBodyParts,
+  args: { opensPr: boolean; workBranch: string; pr: { title: string; body: string } },
+): {
+  peerRepos?: Record<string, unknown>[]
+  referenceRepos?: { repo: Record<string, unknown> }[]
+  referenceBranches?: string[]
+} {
+  const { opensPr, workBranch, pr } = args
+  // The peer set is gated upstream (see MULTI_REPO_FANOUT_KINDS / a registered kind's
+  // `fanOutMultiRepo`); the conflict-resolver never reaches here with peers set (it stays
+  // single-repo). A peer leg carries `pr` only when this kind opens PRs.
+  const peerRepos = parts.peerRepos?.length
+    ? parts.peerRepos.map((p) => ({
+        repo: p.repo,
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
+        newBranch: workBranch,
+        ...(opensPr ? { pr } : {}),
+      }))
+    : undefined
+  const referenceRepos = parts.referenceRepos?.length ? parts.referenceRepos : undefined
+  const referenceBranches = parts.referenceBranches?.length ? parts.referenceBranches : undefined
+  return { peerRepos, referenceRepos, referenceBranches }
+}
+
+/**
+ * The PRE-PR verification payloads a coding job body carries: the service's configured validation
+ * check commands, and the run's declared bugfix reproduction. Extracted together because they
+ * share one gate and one rationale — see
+ * [pre-PR validation](../../../../docs/initiatives/pre-pr-validation.md) and
+ * [reproduction proof](../../../../docs/adr/0033-bugfix-reproduction-proof.md).
+ *
+ * Both are forwarded ONLY when this dispatch actually OPENS a PR: that is the whole point of
+ * "pre-PR" for the checks (an in-place fixer pushing onto an existing PR head is already covered
+ * by the `ci` gate), and the proof is published on the PR this dispatch opens. Both are dropped
+ * on a multi-repo fan-out too, because both run in the PRIMARY checkout only — with one PR per
+ * repo, they would speak for just one of them.
+ *
+ * Extracted from {@link buildCodingAgentBody} to keep it under the complexity ceiling — behaviour
+ * is byte-identical, and an absent field (never an empty object) is what preserves the harness's
+ * pre-feature code path.
+ */
+function buildPrePrVerification(
+  context: AgentRunContext,
+  gate: { opensPr: boolean; multiRepo: boolean },
+): { validationChecks?: Record<string, unknown>; reproduction?: Record<string, unknown> } {
+  if (!gate.opensPr || gate.multiRepo) return {}
+  const checks = context.validationChecks
+  const reproduction = context.reproduction
+  return {
+    ...(checks?.checks.length
+      ? {
+          validationChecks: {
+            checks: checks.checks.map((c) => ({ label: c.label, command: c.command })),
+            maxAttempts: checks.maxAttempts,
+          },
+        }
+      : {}),
+    ...(reproduction?.command
+      ? {
+          reproduction: {
+            command: reproduction.command,
+            testPaths: [...reproduction.testPaths],
+            // Non-zero ⇒ the pre-fix tree will be rebuilt from an INCOMPLETE reproduction, which
+            // the harness must be able to say in its report rather than let a green base read as
+            // "the test does not capture the defect".
+            ...(reproduction.omittedTestPaths
+              ? { omittedTestPaths: reproduction.omittedTestPaths }
+              : {}),
+            ...(reproduction.setupCommand ? { setupCommand: reproduction.setupCommand } : {}),
+            maxAttempts: reproduction.maxAttempts,
+          },
+        }
+      : {}),
+  }
+}
+
+/**
+ * The `container-coding` job body: branch off base onto the deterministic work branch, push it and
+ * open a PR (coder-like); or, when the kind targets the PR branch, work in place and push back with
+ * no new PR (fixer-like). Extracted verbatim from {@link buildRegisteredAgentBody} so each function
+ * stays within the complexity budget — behaviour is byte-identical.
+ */
+function buildCodingAgentBody(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+  roleSystemPrompt: string,
+  userPrompt: string,
+  branches: { clone: string; inPlace?: { clone: string; push: string } },
+): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+  const { common, webTools, repo, workBranch } = parts
+  // The concrete in-place branches, honouring the step's `requirePr` / `prFallback` declarations —
+  // resolved by {@link resolveCodingBranches} before the prompt, so the clone, the push target, the
+  // refusal and what the prompt SAYS is checked out cannot disagree. Present ⇒ this dispatch
+  // amends an EXISTING PR in place (fixer-like: push back, open no new PR); absent ⇒ it branches
+  // off base onto the work branch and opens a PR (coder-like), which is where a `pr-or-work` kind
+  // with no PR yet lands, so one kind serves both a BAU pipeline step and a standalone run.
+  const inPlace = branches.inPlace
+  const onPr = inPlace !== undefined
+  {
     // `pr` clone ⇒ work in place on the PR branch and push back (fixer-like, no new PR);
     // otherwise branch off base onto the work branch, push it and open a PR (coder-like).
     const pr = {
@@ -306,27 +505,11 @@ function buildRegisteredAgentBody(
     // `not_reproducible`) treats it as a clean non-event.
     const opensPr = !onPr && step.opensPr !== false
     const noChangesIsError = !onPr && step.noChangesTolerated !== true
-    // Multi-repo fan-out (service-connections phases 3–4): clone each connected involved-service
-    // repo as a sibling. A PR-opening implementer (`opensPr`) opens the SAME work branch + an
-    // equivalent PR in each; the ci-fixer (`onPr`) RESUMES those same peer work branches to push
-    // fixes onto the existing peer PRs, and a seed-only kind (`repro-test`) pushes the work branch
-    // per repo with no PR — so a peer leg carries `pr` only when this kind opens PRs. The peer set
-    // is gated upstream (see MULTI_REPO_FANOUT_KINDS / a registered kind's `fanOutMultiRepo`); the
-    // conflict-resolver never reaches here with peers set (it stays single-repo).
-    const peerRepos = parts.peerRepos?.length
-      ? parts.peerRepos.map((p) => ({
-          repo: p.repo,
-          ...(p.frameId ? { frameId: p.frameId } : {}),
-          newBranch: workBranch,
-          ...(opensPr ? { pr } : {}),
-        }))
-      : undefined
-    // Read-only reference repos (doc-writer): forwarded as-is — already `{ repo }`-shaped with NO
-    // branch/PR fields (unlike the peer legs above, which add `newBranch`/`pr`), so the harness
-    // clones each and skips it in the push phase. Kept as its own binding so the `undefined`-when-
-    // empty spread below reads the same as `peerRepos`.
-    const referenceRepos = parts.referenceRepos?.length ? parts.referenceRepos : undefined
-    const referenceBranches = parts.referenceBranches?.length ? parts.referenceBranches : undefined
+    const { peerRepos, referenceRepos, referenceBranches } = buildCodingRepoLegs(parts, {
+      opensPr,
+      workBranch,
+      pr,
+    })
     return {
       kind: 'agent',
       body: {
@@ -336,11 +519,20 @@ function buildRegisteredAgentBody(
           parts.multiRepoSection,
           parts.referenceReposSection,
           parts.referenceBranchesSection,
+          // Only a dispatch that OPENS a PR is asked for the reviewer briefing: an in-place
+          // fixer amends an existing PR (whose description it doesn't own) and a seed-only
+          // kind opens none, so prompting either for one would spend tokens on a file the
+          // harness reads for no PR.
+          opensPr ? PR_DESCRIPTION_GUIDANCE : undefined,
         ]),
         userPrompt,
-        branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
+        branch: branches.clone,
         ...(onPr ? {} : { newBranch: workBranch }),
-        pushBranch: onPr ? (prBranch ?? workBranch) : workBranch,
+        pushBranch: inPlace ? inPlace.push : workBranch,
+        // Merge the repo's base branch in before the agent runs, so the conflict hunks are in the
+        // working tree for it to resolve; the harness completes the merge commit and pushes back
+        // onto the same branch, refusing a half-resolved tree (the conflict-resolver).
+        ...(step.clone?.mergeBase ? { mergeBase: repo.baseBranch } : {}),
         ...(opensPr ? { pr } : {}),
         ...(noChangesIsError ? {} : { noChangesIsError: false }),
         ...(peerRepos ? { peerRepos } : {}),
@@ -351,6 +543,22 @@ function buildRegisteredAgentBody(
         // commit; forward the output spec so the harness parses the final reply into `custom`
         // (same shape the explore branch sends). Absent for the plain coder/fixers.
         ...structuredOutputField(step.output),
+        // Ralph loop: after the coding agent commits, the harness runs this programmatic
+        // completion command in the checkout, records the outcome to the progress log, and
+        // reports the exit code back on `result.ralphVerdict` (never the model). Present only
+        // for a `ralph` iteration (the engine folds it in from `step.ralph`).
+        ...(context.ralphValidation
+          ? {
+              validation: {
+                command: context.ralphValidation.command,
+                progressPath: context.ralphValidation.progressPath,
+                iteration: context.ralphValidation.iteration,
+              },
+            }
+          : {}),
+        // The PRE-PR verification payloads (validation checks + bugfix reproduction proof), both
+        // gated on this dispatch actually opening a PR in the primary checkout.
+        ...buildPrePrVerification(context, { opensPr, multiRepo: !!peerRepos || !!referenceRepos }),
         // The Coder (follow-up companion enabled) streams forward-looking items out via the
         // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
@@ -363,18 +571,69 @@ function buildRegisteredAgentBody(
       },
     }
   }
+}
+
+/**
+ * The pull request whose HEAD the harness prefetches into `origin/pr-head`, for a
+ * `clone.prHead` kind. Without it such a kind clones only the base branch, and since the container
+ * agent holds no git credential of its own (the token lives with the harness) it cannot fetch the
+ * head itself: files the change ADDS are absent and modified files are only at their base version.
+ *
+ * WHICH pull request is the kind's own declaration (`clone.prHeadSource`), resolved through the
+ * shared {@link resolvePrHeadNumber} the run preamble also reads: the PR the TASK names for the
+ * `pr-reviewer`, the PR THIS RUN opened for the `task-reassessor`. Never a `task ?? run`
+ * precedence, which would silently start prefetching a second kind of head for the reviewer.
+ *
+ * `requirePr` makes an unresolvable number a REFUSAL rather than a quiet fall back to no prefetch,
+ * because a kind whose whole subject is the change a pull request carries would otherwise score a
+ * base checkout as though it were that change. For a READING kind the refusal is not expected to
+ * be reached: `runStepPreamble` skips such a step before the dispatch is built (`no_pull_request`),
+ * so this is the invariant's backstop, and it is what a kind declaring `requirePr` on a surface
+ * with no preamble skip would hit.
+ */
+function resolvePrefetchPrNumber(
+  context: AgentRunContext,
+  step: AgentStepSpec,
+): number | undefined {
+  if (!step.clone?.prHead) return undefined
+  const resolved = resolvePrHeadNumber(step.clone, context.block)
+  if (resolved !== null) return resolved
+  if (step.clone.requirePr) {
+    throw new Error(
+      `The \`${context.agentKind}\` step needs the pull request carrying this task's change, and ` +
+        'this block has none.',
+    )
+  }
+  return undefined
+}
+
+/**
+ * The `container-explore` job body: a read-only clone returning prose, or a structured JSON object
+ * as `custom`. Extracted verbatim from {@link buildRegisteredAgentBody} so each function stays
+ * within the complexity budget — behaviour is byte-identical.
+ */
+function buildExploreAgentBody(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+  roleSystemPrompt: string,
+  userPrompt: string,
+  /** What the caller already resolved, together because both are facts about ONE checkout. */
+  explore: { branch: string; prNumber: number | undefined },
+): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+  const { common, webTools } = parts
 
   // container-explore (read-only): prose, or a structured JSON object as `custom`.
   // Multi-repo (service-connections phase 3, read-only): a fan-out kind (today the
   // `bug-investigator`) clones each connected involved-service repo as a SIBLING checkout so
   // it can read across every repo the bug touches. Unlike the coding path there is no
   // `newBranch`/`pr` — the peers are read, never pushed — so the harness's read-only
-  // `runMultiRepoExplore` just clones them (`{ repo, frameId }`) and runs the agent at the
+  // `runMultiRepoExplore` just clones them (`{ repo, frameIds }`) and runs the agent at the
   // workspace root. The layout section names each repo/subdir + role.
   const explorePeers = parts.peerRepos?.length
     ? parts.peerRepos.map((p) => ({
         repo: p.repo,
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         // The merger pins each read-only peer to its PR branch so the combined diff sees the PR
         // change; the bug-investigator omits it (cloned at the repo's default branch).
         ...(p.cloneBranch ? { cloneBranch: p.cloneBranch } : {}),
@@ -393,31 +652,25 @@ function buildRegisteredAgentBody(
         parts.referenceBranchesSection,
       ]),
       userPrompt,
-      branch: exploreBranch,
+      branch: explore.branch,
       ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(exploreReferenceBranches ? { referenceBranches: exploreReferenceBranches } : {}),
       ...(step.clone?.full ? { full: true } : {}),
+      ...(explore.prNumber !== undefined ? { reviewPrNumber: explore.prNumber } : {}),
       ...structuredOutputField(step.output),
+      // The tester family: stand the service's declared test dependencies up around the run
+      // (locally via docker-compose, or against the environment this run provisioned — the
+      // frame's capability profile decides which) and hand the step's resolved test secrets to
+      // the suite. Derived per run, so a kind declares only that it needs one.
+      ...(step.testInfra
+        ? {
+            infra: testerInfraSpec(context),
+            ...(parts.testSecretEnv?.length ? { testSecrets: parts.testSecretEnv } : {}),
+          }
+        : {}),
       ...webTools,
     },
   }
-}
-
-/** Sanitise an owner/name segment for a sibling checkout directory. MUST match the harness's
- * `safeDirSegment` (executor-harness `coding-agent.ts`) — see {@link siblingCheckoutDir}. */
-function safeDirSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
-}
-
-/**
- * The sibling checkout directory the harness creates for a repo under the multi-repo workspace
- * root. MUST stay byte-identical to the harness's `siblingDir` (`owner__name`, computed in
- * executor-harness `coding-agent.ts`): the two are independent, so a divergent rule would name a
- * directory in the agent's prompt that does not exist on disk (the agent would edit the wrong
- * repo). GitHub owners contain no `_`, so `owner__name` is collision-free across the deduped set.
- */
-function siblingCheckoutDir(owner: string, name: string): string {
-  return `${safeDirSegment(owner)}__${safeDirSegment(name)}`
 }
 
 /**
@@ -533,9 +786,16 @@ export function renderMultiRepoWorkspaceSection(
  * harness's `siblingDir`) and the exact per-repo diff command, and instructs the agent to weigh the
  * whole cross-repo change as ONE assessment. Distinct from {@link renderMultiRepoWorkspaceSection}
  * (which is for a coding fan-out — "commit inside each, one PR per repo"); the merger writes nothing.
+ *
+ * `unaddressable` names the repos of recorded pull requests the platform could NOT resolve to a
+ * checkout, so none of their diff is in front of the agent. It is stated rather than dropped
+ * because the alternative is a merger scoring a partial change while reading its evidence as
+ * whole, which is the one way this section can produce a confident merge of something nobody
+ * looked at.
  */
 export function renderMergerMultiRepoSection(
   repos: { owner: string; name: string; baseBranch: string }[],
+  unaddressable: string[] = [],
 ): string {
   const lines = [
     '## Multi-repo pull request',
@@ -554,6 +814,15 @@ export function renderMergerMultiRepoSection(
       `- \`${r.owner}/${r.name}\` → \`${dir}/\` (base \`${r.baseBranch}\`): ` +
         `\`cd ${dir} && git fetch origin ${r.baseBranch} && git diff origin/${r.baseBranch}...HEAD\``,
     )
+  }
+  if (unaddressable.length) {
+    lines.push(
+      '',
+      'NOT CHECKED OUT: this task also opened a pull request in the repositories below, and the',
+      'platform could not resolve them, so NONE of their changes are in front of you. Treat the',
+      'combined change as INCOMPLETE and say so in your assessment rather than scoring it as whole.',
+    )
+    for (const repo of unaddressable) lines.push(`- \`${repo}\``)
   }
   return lines.join('\n')
 }
@@ -665,283 +934,4 @@ export function renderReferenceBranchesSection(
     )
   }
   return lines.join('\n')
-}
-
-/**
- * Build the generic `agent` body for a BUILT-IN container kind being migrated onto the
- * manifest-driven path (the Task-5 strangler), or undefined when `context.agentKind` is
- * not a migrated built-in (the caller falls through to the remaining bespoke switch). Each
- * migrated kind is expressed as a synthesized {@link AgentStepSpec} routed through
- * {@link buildRegisteredAgentBody} — the SAME dispatch a registered custom kind takes — so
- * there is no bespoke harness handler:
- *   - `ci-fixer` / `fixer`: coding-on-PR (clone the PR branch, push back, no new PR; a
- *     no-op is non-fatal). Requires the implementation PR branch.
- *   - `merger` / `on-call`: read-only structured explore (full clone) that returns ONLY a
- *     JSON assessment; the conservative coercion that used to live in the harness runs
- *     backend-side in {@link toRunResult}.
- *   - `conflict-resolver`: coding (full clone of the PR branch) with a `mergeBase` — the
- *     harness merges the base in to surface the conflicts, the agent resolves them, and the
- *     harness completes the merge commit + pushes back onto the same branch (no new PR).
- */
-function buildMigratedBuiltInBody(
-  context: AgentRunContext,
-  parts: KindBodyParts,
-  roleSystemPrompt: string,
-  registry: AgentKindRegistry,
-): { body: Record<string, unknown>; kind: RunnerDispatchKind } | undefined {
-  const { repo } = parts
-  const prBranch = context.block.pullRequest?.branch
-  switch (context.agentKind) {
-    // The Blueprinter maps the repo into the service → modules tree. It now runs as a
-    // read-only structured explore (clone the PR branch when present, else the default
-    // branch — exactly its old `prBranch ?? baseBranch` clone), returning ONLY the tree
-    // as JSON; the deterministic render + commit of the `blueprints/` artifact that used
-    // to live in the harness `/blueprint` handler is the backend `blueprintPostOp` (run
-    // from ExecutionService), and `toRunResult` coerces the JSON into `blueprintService`
-    // for the board reconcile + that post-op.
-    case BLUEPRINTS_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'pr' },
-          output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
-        },
-        BLUEPRINT_SYSTEM_PROMPT,
-        registry,
-        blueprintUserPrompt(),
-      )
-    // The spec-writer maintains the prescriptive `spec/` document. It now runs as a
-    // read-only structured explore on the per-block WORK branch (clone `work` — the
-    // deterministic `cat-factory/<blockId>` the coder resumes, created from base when
-    // absent; it runs BEFORE the coder, so it SEEDS that branch). The agent READS the
-    // baseline spec from its own checkout (`spec/`), applies this ONE task as an increment,
-    // and returns the COMPLETE tree as JSON; the deterministic SHARD + commit of the
-    // `spec/` artifact that used to live in the harness `/spec` handler is the backend
-    // `specPostOp` (run from ExecutionService), and `toRunResult` coerces the JSON into the
-    // `spec` channel the engine strict-validates + that post-op renders/commits from. It
-    // NEVER targets base: the spec is prescriptive for not-yet-landed work, so it merges
-    // WITH the feature, never reaching `main` ahead of it.
-    case SPEC_WRITER_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'work' },
-          // The spec doc is handed onward to be sharded + committed by `specPostOp`, so a
-          // final answer cut off at the output ceiling must FAIL LOUDLY (the bespoke `/spec`
-          // handler's `unusableFinalAnswerCause` gate) rather than be laundered into a
-          // half-baked spec by the structured repair — exactly what drove the old
-          // spec-writer ⇄ companion rework loop.
-          output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
-        },
-        SPEC_WRITER_SYSTEM_PROMPT,
-        registry,
-        specWriterUserPrompt(context),
-      )
-    // The initiative analyst explores the repository (read-only, base branch — an
-    // initiative block has no PR) and returns a PROSE codebase-analysis report grounding
-    // the plan (structure, hot spots, risks, likely touch points). Its output is folded
-    // onto the `initiatives` entity by the engine's analyst post-completion resolver and
-    // then into the planner's prompt. No structured output — it makes no commit and opens
-    // no PR (an edit-free run is the expected outcome, exactly like the architect/analysis).
-    case INITIATIVE_ANALYST_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        { surface: 'container-explore', clone: { branch: 'base' } },
-        INITIATIVE_ANALYST_SYSTEM_PROMPT,
-        registry,
-        initiativeAnalystUserPrompt(context),
-      )
-    // The initiative planner explores the repository (read-only, base branch — an
-    // initiative block has no PR) to ground its multi-phase plan in the actual code,
-    // returning ONLY the plan as JSON. `toRunResult` coerces it into `initiativePlan`
-    // for the engine's ingest (into the `initiatives` entity); the in-repo tracker is
-    // committed later by the `initiative-committer` step, AFTER the human approves the
-    // plan at the pipeline gate. `failOnUnusableFinal` because the plan is handed
-    // onward — a truncated final answer must fail loudly, not be laundered into a
-    // half-baked plan by the structured repair.
-    case INITIATIVE_PLANNER_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'base' },
-          output: {
-            kind: 'structured',
-            shapeHint: INITIATIVE_PLAN_SHAPE_HINT,
-            failOnUnusableFinal: true,
-          },
-        },
-        INITIATIVE_PLANNER_SYSTEM_PROMPT,
-        registry,
-        initiativePlannerUserPrompt(context),
-      )
-    // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
-    // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
-    case CI_FIXER_AGENT_KIND:
-      if (!prBranch) throw new Error('CI-fixer needs the implementation PR branch to push fixes to')
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        { surface: 'container-coding', clone: { branch: 'pr' } },
-        roleSystemPrompt,
-        registry,
-      )
-    case FIXER_AGENT_KIND:
-      if (!prBranch) throw new Error('Fixer needs the implementation PR branch to push fixes to')
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        { surface: 'container-coding', clone: { branch: 'pr' } },
-        roleSystemPrompt,
-        registry,
-      )
-    // The conflict-resolver clones the PR head branch (full history), merges the base in
-    // to surface the conflicts, resolves them and pushes back onto the SAME branch (no new
-    // branch / PR) so the PR becomes mergeable and CI re-runs. It dispatches the generic
-    // coding agent with a `mergeBase` (the harness merges `origin/<mergeBase>` in before the
-    // agent runs); the harness leads the prompt with the actual conflict hunks it discovers.
-    //
-    // Unlike the CI-fixer it is deliberately NOT given `userPromptFor(context)`: that renders
-    // the full task brief + every prior agent's output (the spec-writer's whole spec, etc.),
-    // which buries the one-line "resolve a conflict" role and drifts the model onto
-    // re-implementing the feature (observed in prod: a resolver that returned a "test report
-    // is ready" answer and never touched the markers). The backend supplies only a compact
-    // task reference for intent.
-    case CONFLICT_RESOLVER_AGENT_KIND: {
-      // The branch to resolve on is the shared per-task work branch every repo's PR rides
-      // (`cat-factory/<blockId>`, opened via `newBranch: workBranch` for the own service AND
-      // every peer). The own PR's recorded branch equals it by construction; `parts.workBranch`
-      // is the robust value when the OWN service had no change (no own `pullRequest`) but a
-      // PEER repo did (the peer-conflict case — `parts.repo` was swapped to that peer upstream).
-      const resolveBranch = prBranch ?? parts.workBranch
-      if (!resolveBranch) {
-        throw new Error(
-          'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
-        )
-      }
-      const description = context.block.description?.trim()
-      const built = buildRegisteredAgentBody(
-        context,
-        parts,
-        { surface: 'container-coding', clone: { branch: 'pr', full: true } },
-        roleSystemPrompt,
-        registry,
-        `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
-      )
-      // Pin the clone/push branch to the resolved work branch (the generic `pr`-clone path falls
-      // back to the base branch when there is no own PR, which would clone the wrong ref for a
-      // peer-only conflict) and merge THIS repo's base in to surface the conflicts.
-      return {
-        kind: built.kind,
-        body: {
-          ...built.body,
-          branch: resolveBranch,
-          pushBranch: resolveBranch,
-          mergeBase: repo.baseBranch,
-        },
-      }
-    }
-    // The merger clones the PR head (full, to diff vs base) and returns ONLY the
-    // complexity/risk/impact assessment JSON; the engine performs the real merge. On a MULTI-REPO
-    // task (`parts.peerRepos` set) it clones each peer PR's repo as a read-only full sibling too
-    // (the explore fan-out) and scores the COMBINED diff — the section naming the sibling
-    // checkouts + per-repo diff commands is appended to the system prompt by the explore builder.
-    case MERGER_AGENT_KIND: {
-      const multiRepo = (parts.peerRepos?.length ?? 0) > 0
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'pr', full: true },
-          output: { kind: 'structured', shapeHint: MERGE_ASSESSMENT_SHAPE_HINT },
-        },
-        MERGER_SYSTEM_PROMPT,
-        registry,
-        multiRepo ? mergerMultiRepoUserPrompt(context) : mergerUserPrompt(context, repo),
-      )
-    }
-    // The on-call agent clones the BASE branch (full, to locate + diff the merged
-    // release commit) and returns ONLY the regression assessment JSON. It is
-    // `code-aware` (it reads the released code to correlate the diff with the
-    // evidence), so the service's resolved best-practice fragments are folded into
-    // its bespoke system prompt — the shared `roleSystemPrompt` is bypassed here.
-    case ON_CALL_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'base', full: true },
-          output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
-        },
-        composeBlockSystemPrompt(ON_CALL_SYSTEM_PROMPT, context.block),
-        registry,
-        onCallUserPrompt(context, repo, registry),
-      )
-    // The tester clones the PR head branch (read-only — it makes NO commits), stands up
-    // its dependencies (locally via the service's docker-compose, or against the
-    // provisioned ephemeral env — the service's declared provision type picks which) and
-    // returns ONLY a structured JSON report. It runs as a generic structured explore with
-    // an `infra` spec the harness uses to stand the docker-compose dependencies up for the
-    // run; `toRunResult` coerces the JSON into `testReport` (the conservative greenlight /
-    // blocking-concern rule the harness applied now runs backend-side, and the engine's
-    // TesterController re-applies it). The role prompt + the run-mode/ephemeral-URL guidance
-    // come from the standard `roleSystemPrompt` + `userPromptFor` (which already carry them),
-    // so the harness adds none. The engine loops the `fixer` on a withheld greenlight.
-    case TESTER_AGENT_KIND: {
-      const built = buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'pr' },
-          output: { kind: 'structured', shapeHint: TEST_REPORT_SHAPE_HINT },
-        },
-        roleSystemPrompt,
-        registry,
-      )
-      return {
-        kind: built.kind,
-        body: {
-          ...built.body,
-          infra: testerInfraSpec(context),
-          ...(parts.testSecretEnv?.length ? { testSecrets: parts.testSecretEnv } : {}),
-        },
-      }
-    }
-    // The UI tester is the Tester's browser-driven sibling: same read-only structured
-    // explore + infra stand-up, but it drives Playwright (supplied by the UI-tester
-    // image, routed via the `image:'ui'` dispatch option) to capture a non-redundant
-    // screenshot of each distinct view, uploads them to the artifact store, and reports
-    // them under `screenshots[]`. The role prompt carries the capture guidance.
-    case UI_TESTER_AGENT_KIND: {
-      const built = buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'pr' },
-          output: { kind: 'structured', shapeHint: UI_TEST_REPORT_SHAPE_HINT },
-        },
-        roleSystemPrompt,
-        registry,
-      )
-      return {
-        kind: built.kind,
-        body: {
-          ...built.body,
-          infra: testerInfraSpec(context),
-          ...(parts.testSecretEnv?.length ? { testSecrets: parts.testSecretEnv } : {}),
-        },
-      }
-    }
-  }
-  return undefined
 }

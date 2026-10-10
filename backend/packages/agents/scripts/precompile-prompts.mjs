@@ -16,6 +16,12 @@ import { fileURLToPath } from 'node:url'
 import Handlebars from 'handlebars'
 
 // Shared context preamble, included by every phase template via {{> blockContext}}.
+//
+// `openFindingsText` is the review findings still open against that prior output, rendered by
+// `renderOpenFindings` before it ever reaches here (see `standard.ts`'s `UserPromptView`). It is
+// interpolated on the output's own line and carries its own leading newline, so there is nothing
+// for this template to decide: no `{{#if}}`, and no second copy of the ordering/trimming rules the
+// bespoke-kind prompt path applies to the same findings.
 const BLOCK_CONTEXT_PARTIAL = [
   'Pipeline: {{pipelineName}}',
   'Block: {{block.title}} ({{block.type}})',
@@ -27,7 +33,7 @@ const BLOCK_CONTEXT_PARTIAL = [
   '{{#if priorOutputs.length}}',
   'Work from earlier agents in this pipeline:',
   '{{#each priorOutputs}}### {{agentKind}}',
-  '{{output}}',
+  '{{output}}{{openFindingsText}}',
   '',
   '{{/each}}{{/if}}',
 ].join('\n')

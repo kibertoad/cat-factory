@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { PipelineStep } from '~/types/execution'
-import { stepDurationLabel, stepDurationMs, stepIsRunning } from '~/composables/useStepTimer'
+import {
+  stepActivityAgoMs,
+  stepDurationLabel,
+  stepDurationMs,
+  stepIsRunning,
+} from '~/composables/useStepTimer'
 
 // The pure helpers encode one freeze rule shared by the list surfaces (pipeline timeline,
 // inspector run list) and the single-step overlay, so pin the precedence here:
@@ -63,6 +68,22 @@ describe('stepDurationMs', () => {
 
   it('never returns a negative duration', () => {
     expect(stepDurationMs(step({ startedAt: 8000 }), NOW, true, 6000)).toBe(0)
+  })
+})
+
+describe('stepActivityAgoMs (liveness clock, distinct from elapsed)', () => {
+  it('is null when the step has no heartbeat (non-container / not yet polled / old image)', () => {
+    expect(stepActivityAgoMs(step({ startedAt: 4000 }), NOW)).toBeNull()
+    expect(stepActivityAgoMs(null, NOW)).toBeNull()
+  })
+
+  it('measures time since the last heartbeat, not since the step started', () => {
+    // Started long ago (elapsed 6s) but active 1s ago — the whole point: a quiet run reads active.
+    expect(stepActivityAgoMs(step({ startedAt: 4000, lastActivityAt: 9000 }), NOW)).toBe(1000)
+  })
+
+  it('clamps to 0 so container/server clock skew never renders a negative value', () => {
+    expect(stepActivityAgoMs(step({ startedAt: 4000, lastActivityAt: NOW + 5000 }), NOW)).toBe(0)
   })
 })
 

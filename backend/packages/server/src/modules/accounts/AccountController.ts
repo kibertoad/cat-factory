@@ -15,6 +15,7 @@ import {
   revokeInvitationContract,
   setMemberRolesContract,
   testEmailContract,
+  updateAccountApiKeyContract,
   updateAccountContract,
   updateAccountSettingsContract,
 } from '@cat-factory/contracts'
@@ -24,19 +25,21 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { apiKeyToWire } from '../providers/ApiKeyController.js'
+import { requireCapability, requireUser } from '../../http/guards.js'
+import { registerAuditLogRoutes } from './auditLogRoutes.js'
 
 /**
- * The signed-in user, narrowed to what the tenancy layer needs. Generic over the
- * env so it accepts a contract-typed handler context (`ContractEnv<T> & AppEnv`),
- * which Hono treats as a distinct, non-assignable env from the bare `AppEnv`.
+ * The signed-in user, narrowed to what the tenancy layer needs, or a 401 — every route here
+ * is account-scoped and has nothing to answer for an anonymous caller. Contrast
+ * `WorkspaceController`'s `optionalAccountUser`, which is deliberately nullable because board
+ * listing still answers with no signed-in user (dev-open). Generic over the env so it accepts a
+ * contract-typed handler context (`ContractEnv<T> & AppEnv`), which Hono treats as a distinct,
+ * non-assignable env from the bare `AppEnv`.
  */
-function accountUser<E extends AppEnv>(c: Context<E>) {
-  const user = c.get('user')
-  return user ? { id: user.id, login: user.login, name: user.name } : null
+function requireAccountUser<E extends AppEnv>(c: Context<E>) {
+  const user = requireUser(c, 'Sign in to manage accounts')
+  return { id: user.id, login: user.login, name: user.name }
 }
-
-const signInRequired = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unauthorized', message: 'Sign in to manage accounts' } }, 401)
 
 /**
  * Account tenancy: the accounts a user can switch between (their personal account
@@ -48,25 +51,36 @@ const signInRequired = <E extends AppEnv>(c: Context<E>) =>
  * `buildHonoRoute`: the method/path and request validation come from the contract,
  * and `c.req.valid(...)` + the `c.json(body, status)` return are typed from it.
  */
+/** Resolve the account-scoped API-key store, or refuse with a 503. */
+function requireApiKeys<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(c.get('container').apiKeys, 'API key storage is not configured')
+}
+
+/** Resolve the account-settings store, or refuse with a 503. */
+function requireAccountSettings<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').accountSettings,
+    'Account settings storage is not configured',
+  )
+}
+
 export function accountController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, listAccountsContract, async (c) => {
-    const user = accountUser(c)
+    const user = requireAccountUser(c)
     if (!user) return c.json([], 200)
     return c.json(await c.get('container').accountService.listForUser(user), 200)
   })
 
   buildHonoRoute(app, createAccountContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const account = await c.get('container').accountService.createOrg(user, c.req.valid('json'))
     return c.json(account, 201)
   })
 
   buildHonoRoute(app, updateAccountContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const account = await c
       .get('container')
       .accountService.updateSettings(c.req.valid('param').accountId, user.id, c.req.valid('json'))
@@ -74,8 +88,7 @@ export function accountController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, listAccountMembersContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const accounts = c.get('container').accountService
     const { accountId } = c.req.valid('param')
     // Membership in the account is required to see its roster (404 otherwise).
@@ -84,8 +97,7 @@ export function accountController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, addAccountMemberContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const body = c.req.valid('json')
     const member = await c
       .get('container')
@@ -95,8 +107,7 @@ export function accountController(): Hono<AppEnv> {
 
   // Set a member's role set (admin-only). The acting admin can't drop their own admin.
   buildHonoRoute(app, setMemberRolesContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const { accountId, userId } = c.req.valid('param')
     const member = await c
       .get('container')
@@ -104,12 +115,16 @@ export function accountController(): Hono<AppEnv> {
     return c.json(member, 200)
   })
 
+  // The audit log's read surface + the admin-forced session revocation that writes to it. Their
+  // own registrar (`auditLogRoutes.ts`) so this function stays inside the per-function budget;
+  // the paths still live under the account prefix.
+  registerAuditLogRoutes(app)
+
   // ---- Invitations (email-based org onboarding) ---------------------------
   // Available only when the invitation repository is wired (opt-in feature).
 
   buildHonoRoute(app, listInvitationsContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
     if (!container.invitations) return c.json([], 200)
     const { accountId } = c.req.valid('param')
@@ -119,17 +134,11 @@ export function accountController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, createInvitationContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.invitations) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Invitations are not configured' } },
-        503,
-      )
-    }
+    const invitations = requireCapability(container.invitations, 'Invitations are not configured')
     const body = c.req.valid('json')
-    const created = await container.invitations.invite(
+    const created = await invitations.invite(
       c.req.valid('param').accountId,
       user.id,
       body.email,
@@ -141,8 +150,7 @@ export function accountController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, revokeInvitationContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
     if (!container.invitations) return c.body(null, 204)
     const { accountId, invitationId } = c.req.valid('param')
@@ -156,39 +164,43 @@ export function accountController(): Hono<AppEnv> {
   // the raw key is write-only — only secret-free metadata is ever returned. Available
   // only when the API-key store is wired (ENCRYPTION_KEY).
 
-  const apiKeysUnavailable = <E extends AppEnv>(c: Context<E>) =>
-    c.json({ error: { code: 'unavailable', message: 'API key storage is not configured' } }, 503)
-
   buildHonoRoute(app, listAccountApiKeysContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.apiKeys) return apiKeysUnavailable(c)
+    const apiKeys = requireApiKeys(c)
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    const keys = await container.apiKeys.listKeys('account', accountId)
+    const keys = await apiKeys.listKeys('account', accountId)
     return c.json({ keys: keys.map(apiKeyToWire) }, 200)
   })
 
   buildHonoRoute(app, addAccountApiKeyContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.apiKeys) return apiKeysUnavailable(c)
+    const apiKeys = requireApiKeys(c)
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    const summary = await container.apiKeys.addKey('account', accountId, c.req.valid('json'))
+    const summary = await apiKeys.addKey('account', accountId, c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
   })
 
-  buildHonoRoute(app, removeAccountApiKeyContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+  buildHonoRoute(app, updateAccountApiKeyContract, async (c) => {
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.apiKeys) return apiKeysUnavailable(c)
+    const apiKeys = requireApiKeys(c)
     const { accountId, id } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    await container.apiKeys.removeKey('account', accountId, id)
+    const summary = await apiKeys.updateKey('account', accountId, id, c.req.valid('json'))
+    return c.json(apiKeyToWire(summary), 200)
+  })
+
+  buildHonoRoute(app, removeAccountApiKeyContract, async (c) => {
+    const user = requireAccountUser(c)
+    const container = c.get('container')
+    const apiKeys = requireApiKeys(c)
+    const { accountId, id } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    await apiKeys.removeKey('account', accountId, id)
     return c.body(null, 204)
   })
 
@@ -196,8 +208,7 @@ export function accountController(): Hono<AppEnv> {
   // Owner-only mutations; available only when the email module is wired.
 
   buildHonoRoute(app, getEmailConnectionContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
     if (!container.email) return c.json({ connection: null, configured: false }, 200)
     const { accountId } = c.req.valid('param')
@@ -207,21 +218,17 @@ export function accountController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, connectEmailContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.email) {
-      return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
-    }
+    const email = requireCapability(container.email, 'Email is not configured')
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    const connection = await container.email.connect(accountId, c.req.valid('json'))
+    const connection = await email.connect(accountId, c.req.valid('json'))
     return c.json(connection, 201)
   })
 
   buildHonoRoute(app, disconnectEmailContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
     if (!container.email) return c.body(null, 204)
     const { accountId } = c.req.valid('param')
@@ -231,15 +238,12 @@ export function accountController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, testEmailContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.email) {
-      return c.json({ error: { code: 'unavailable', message: 'Email is not configured' } }, 503)
-    }
+    const email = requireCapability(container.email, 'Email is not configured')
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    await container.email.sendTest(accountId, c.req.valid('json').to)
+    await email.sendTest(accountId, c.req.valid('json').to)
     return c.json({ ok: true }, 200)
   })
 
@@ -250,27 +254,19 @@ export function accountController(): Hono<AppEnv> {
   // settings store is wired (ENCRYPTION_KEY). Admin-gated for BOTH read and write —
   // these are sensitive deployment knobs.
 
-  const settingsUnavailable = <E extends AppEnv>(c: Context<E>) =>
-    c.json(
-      { error: { code: 'unavailable', message: 'Account settings storage is not configured' } },
-      503,
-    )
-
   buildHonoRoute(app, getAccountSettingsContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.accountSettings) return settingsUnavailable(c)
+    const accountSettings = requireAccountSettings(c)
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    return c.json(await container.accountSettings.service.read(accountId), 200)
+    return c.json(await accountSettings.service.read(accountId), 200)
   })
 
   buildHonoRoute(app, updateAccountSettingsContract, async (c) => {
-    const user = accountUser(c)
-    if (!user) return signInRequired(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
-    if (!container.accountSettings) return settingsUnavailable(c)
+    const accountSettings = requireAccountSettings(c)
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
     const input = c.req.valid('json')
@@ -288,7 +284,7 @@ export function accountController(): Hono<AppEnv> {
         'model_policy_unsupported',
       )
     }
-    const view = await container.accountSettings.service.write(accountId, input)
+    const view = await accountSettings.service.write(accountId, input)
     // The write may have changed the account's model-family policy; drop the cached read so
     // the `/models` catalog + start guard see it at once (cross-node when a bus is wired).
     await container.caches.accountModelPolicy.invalidate(accountId, accountId)

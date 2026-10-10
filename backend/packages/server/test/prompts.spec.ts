@@ -1,123 +1,22 @@
 import { describe, expect, it } from 'vitest'
+import { FRONTEND_WIREMOCK_PORT, HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import type { RepoTarget } from '../src/agents/ContainerAgentExecutor.js'
-import {
-  blueprintUserPrompt,
-  mergerUserPrompt,
-  onCallUserPrompt,
-  prBody,
-  specWriterUserPrompt,
-  TEST_REPORT_SHAPE_HINT,
-  testerInfraSpec,
-  UI_TEST_REPORT_SHAPE_HINT,
-} from '../src/agents/prompts.js'
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { dispatchEnvironments, prBody, testerInfraSpec } from '../src/agents/prompts.js'
 
-const agentKindRegistry = defaultAgentKindRegistry()
-
-// Characterisation tests pinning the per-kind prompt material that was extracted verbatim
-// from ContainerAgentExecutor.ts into prompts.ts. They lock in the deterministic prompt
-// shapes + the infra-spec branches so the move is provably behaviour-preserving.
-
-const repo: RepoTarget = {
-  installationId: 1,
-  owner: 'acme',
-  name: 'widgets',
-  baseBranch: 'main',
-}
+// Characterisation tests pinning what the container dispatch layer still renders itself: the
+// tester infra-spec branches and the pull-request body. The per-KIND prompts moved beside their
+// registrations in `@cat-factory/agents`, and their tests moved with them
+// (`agents/prompts/built-in-container.test.ts`).
 
 const context = (over: Record<string, unknown> = {}): AgentRunContext =>
   ({
-    agentKind: 'on-call',
+    agentKind: 'tester-api',
     pipelineName: 'Ship',
     block: { id: 'b1', title: 'Add login', type: 'task' },
     decisions: [],
     priorOutputs: [],
     ...over,
   }) as unknown as AgentRunContext
-
-describe('blueprintUserPrompt', () => {
-  it('instructs an update-or-create that returns the complete tree as JSON only', () => {
-    const p = blueprintUserPrompt()
-    expect(p).toContain('canonical service → modules blueprint')
-    expect(p).toContain('blueprints/blueprint.json')
-    expect(p).toContain('ONLY the JSON object')
-  })
-})
-
-describe('specWriterUserPrompt', () => {
-  it('embeds the block header + description and the default self-determine guidance', () => {
-    const p = specWriterUserPrompt(
-      context({
-        block: { id: 'b9', title: 'Refactor auth', type: 'task', description: 'Tidy it' },
-      }),
-    )
-    expect(p).toContain('### Refactor auth (block b9)')
-    expect(p).toContain('Tidy it')
-    expect(p).toContain('If this task is purely TECHNICAL')
-  })
-
-  it('withdraws the no-specs escape hatch for an explicit BUSINESS task', () => {
-    const p = specWriterUserPrompt(
-      context({ block: { id: 'b1', title: 'T', type: 'task', technical: false } }),
-    )
-    expect(p).toContain('explicitly flagged BUSINESS')
-    expect(p).not.toContain('If this task is purely TECHNICAL')
-  })
-
-  it('tells an explicit TECHNICAL task the empty outcome is expected', () => {
-    const p = specWriterUserPrompt(
-      context({ block: { id: 'b1', title: 'T', type: 'task', technical: true } }),
-    )
-    expect(p).toContain('explicitly flagged TECHNICAL')
-    expect(p).toContain('{"noBusinessSpecs": true}')
-  })
-})
-
-describe('mergerUserPrompt', () => {
-  it('names the PR + branches so the agent diffs against the right base', () => {
-    const p = mergerUserPrompt(
-      context({
-        block: {
-          id: 'b1',
-          title: 'T',
-          type: 'task',
-          pullRequest: { number: 42, branch: 'feat/x', url: 'u' },
-        },
-      }),
-      repo,
-    )
-    expect(p).toContain('(PR #42)')
-    expect(p).toContain('`feat/x`')
-    expect(p).toContain('git diff origin/main...HEAD')
-  })
-
-  it('falls back to the base branch when there is no PR', () => {
-    const p = mergerUserPrompt(context({ block: { id: 'b1', title: 'T', type: 'task' } }), repo)
-    expect(p).toContain('`main`')
-    expect(p).not.toContain('(PR #')
-  })
-})
-
-describe('onCallUserPrompt', () => {
-  it('tells the agent how to locate the merged commit by PR number', () => {
-    const p = onCallUserPrompt(
-      context({
-        block: {
-          id: 'b1',
-          title: 'T',
-          type: 'task',
-          pullRequest: { number: 7, branch: 'feat/y', url: 'u' },
-        },
-      }),
-      repo,
-      agentKindRegistry,
-    )
-    expect(p).toContain('#7')
-    expect(p).toContain('git log --oneline -n 50')
-    expect(p).toContain('base branch `main`')
-  })
-})
 
 describe('testerInfraSpec', () => {
   it('runs ephemeral for a `docker-compose` service (Deployer-provisioned, no in-container bring-up)', () => {
@@ -135,6 +34,40 @@ describe('testerInfraSpec', () => {
   it('flags no-infra for an `infraless` service (or none declared)', () => {
     const spec = testerInfraSpec(
       context({ service: { provisioning: { type: 'infraless' } } } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
+  })
+
+  it('stands a `library` frame`s declared compose path up locally (reviving the in-container path)', () => {
+    // A library is never deployed: a declared compose file is repo-local TEST infra brought up on
+    // localhost (the harness `standUpInfra` DinD path), NOT an ephemeral environment.
+    const spec = testerInfraSpec(
+      context({
+        service: {
+          type: 'library',
+          provisioning: { type: 'docker-compose', composePath: 'packages/db/docker-compose.yml' },
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', composePath: 'packages/db/docker-compose.yml' })
+  })
+
+  it('runs a `library` frame with no declared compose path as a self-managed local suite', () => {
+    // No compose path → nothing is stood up here; the agent self-manages deps via the repo`s
+    // `pretest:ci`/`test:ci` lifecycle scripts (narrated in the tester prompt).
+    const spec = testerInfraSpec(
+      context({ service: { type: 'library' } } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
+  })
+
+  it('never provisions an ephemeral env for a `library` frame, even with an env URL present', () => {
+    // The frame capability profile wins over a stray env URL: a library never targets an ephemeral env.
+    const spec = testerInfraSpec(
+      context({
+        service: { type: 'library' },
+        environment: { url: 'https://stray.env' },
+      } as Record<string, unknown>),
     )
     expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
   })
@@ -217,7 +150,7 @@ describe('testerInfraSpec', () => {
       buildScript: 'build',
       outputDir: 'dist',
       serveMode: 'static',
-      // Defaulted server port (NOT 8080 — the harness's own job server owns that).
+      // Defaulted serve port (NOT the harness's own job-server port, which it owns here).
       servePort: 4173,
       env: {
         // The live service under test keeps its real ephemeral URL...
@@ -290,7 +223,7 @@ describe('testerInfraSpec', () => {
   })
 
   it('falls back to the default serve port when the configured port collides with a reserved one', () => {
-    for (const reserved of [8080, 8089]) {
+    for (const reserved of [HARNESS_JOB_PORT, FRONTEND_WIREMOCK_PORT]) {
       const spec = testerInfraSpec(
         context({
           frontend: {
@@ -299,7 +232,8 @@ describe('testerInfraSpec', () => {
           },
         } as Record<string, unknown>),
       )
-      // 8080 is the harness job server, 8089 is WireMock — neither is usable, so fall back to 4173.
+      // The harness job server and WireMock already hold theirs, so neither is usable and the
+      // spec falls back to 4173.
       expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
     }
   })
@@ -315,6 +249,147 @@ describe('testerInfraSpec', () => {
   })
 })
 
+describe('dispatchEnvironments', () => {
+  /** Every string in a rendered infra spec that parses as an absolute http(s) URL. */
+  const urlsIn = (value: unknown): string[] => {
+    if (typeof value === 'string') {
+      return /^https?:\/\//.test(value) ? [value] : []
+    }
+    if (Array.isArray(value)) return value.flatMap(urlsIn)
+    if (value && typeof value === 'object') return Object.values(value).flatMap(urlsIn)
+    return []
+  }
+
+  // The one context that exercises all three legs at once: the frame's own provisioned
+  // environment, a live peer for a cross-service test, and a frontend binding resolved to the
+  // service under test.
+  const everyLeg = () =>
+    context({
+      service: { provisioning: { type: 'kubernetes' } },
+      environment: { url: 'https://env.example' },
+      involvedServices: [
+        { frameId: 'f_email', title: 'Email', envUrl: 'https://email.env' },
+        { frameId: 'f_db', title: 'DB' },
+      ],
+    } as Record<string, unknown>)
+
+  it('lists the run own environment and every live peer', () => {
+    expect(
+      dispatchEnvironments(everyLeg())
+        .map((env) => env.url)
+        .sort(),
+    ).toEqual(['https://email.env', 'https://env.example'])
+  })
+
+  it('carries the PROVED address beside the URL, for the own environment and for a peer', () => {
+    // The address is what a transport installs as a hosts entry, and it has to arrive PAIRED with
+    // the URL it belongs to: that pairing is what makes the host side of every bridge, by
+    // construction, a host this job was handed rather than a name a provider chose.
+    expect(
+      dispatchEnvironments(
+        context({
+          environment: {
+            url: 'https://env.example',
+            reachability: { state: 'reached', address: '10.4.19.22' },
+          },
+          involvedServices: [
+            {
+              frameId: 'f_email',
+              title: 'Email',
+              envUrl: 'https://email.env',
+              envReachability: { state: 'reached', address: '10.4.19.23' },
+            },
+          ],
+        } as Record<string, unknown>),
+      ),
+    ).toEqual([
+      { url: 'https://env.example', address: '10.4.19.22' },
+      { url: 'https://email.env', address: '10.4.19.23' },
+    ])
+  })
+
+  it('carries no address for an environment whose own name carried', () => {
+    // `reached` with nothing to dial around is the ordinary case, and it must not produce a bridge:
+    // re-pointing a name that already resolves correctly breaks an environment that worked.
+    expect(
+      dispatchEnvironments(
+        context({
+          environment: { url: 'https://env.example', reachability: { state: 'reached' } },
+        } as Record<string, unknown>),
+      ),
+    ).toEqual([{ url: 'https://env.example' }])
+  })
+
+  it('carries the PROVED address for a frontend binding too, off the same handle', () => {
+    // The third leg. A bound peer only reachable by address fails a UI test on name resolution
+    // exactly as the run's own environment would, and the binding resolution reads the proof off
+    // the very handle it takes the URL from, so omitting it dropped a fact the platform held.
+    expect(
+      dispatchEnvironments(
+        context({
+          frontend: {
+            config: { backendBindings: [] },
+            bindings: [
+              {
+                envVar: 'PUB_API_URL',
+                serviceUrl: 'https://api.ephemeral.example',
+                serviceAddress: '10.4.19.24',
+              },
+            ],
+          },
+        } as Record<string, unknown>),
+      ),
+    ).toEqual([{ url: 'https://api.ephemeral.example', address: '10.4.19.24' }])
+  })
+
+  it('lists a frontend binding resolved to a real service, and never the in-container mock', () => {
+    // The WireMock URL the harness substitutes for an unresolved binding is served INSIDE the
+    // container and is reached exactly as written. Declaring it as an environment would invite a
+    // transport to re-point `localhost`, breaking what the job is there to drive.
+    const urls = dispatchEnvironments(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            { envVar: 'PUB_OTHER_URL' },
+            // Dropped for a reserved name, so the job never receives it.
+            { envVar: 'PATH', serviceUrl: 'https://never-injected.example' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(urls).toEqual([{ url: 'https://api.ephemeral.example' }])
+  })
+
+  it('accounts for EVERY URL the rendered infra spec carries', () => {
+    // The relation that would have caught the bug this exists because of. A transport acting on
+    // these URLs cannot read them back out of the job body (an untyped bag, three levels deep,
+    // under a wire shape the harness owns) — the first cut tried and read a field the engine has
+    // never emitted, so the bridge could not fire in production. Declaring them separately is only
+    // safe while the declaration stays a SUPERSET of what the spec renders, and that is what this
+    // asserts: derived from the spec itself rather than pinned to a list, so a fourth leg added to
+    // the spec fails here instead of going silently unbridged.
+    for (const ctx of [
+      everyLeg(),
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [{ envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' }],
+        },
+      } as Record<string, unknown>),
+    ]) {
+      const declared = new Set(dispatchEnvironments(ctx).map((env) => env.url))
+      const rendered = urlsIn(testerInfraSpec(ctx)).filter(
+        // The harness's own in-container mock is not an environment; see the case above.
+        (url) => !url.startsWith('http://localhost:'),
+      )
+      expect(rendered.length).toBeGreaterThan(0)
+      for (const url of rendered) expect(declared, url).toContain(url)
+    }
+  })
+})
+
 describe('prBody', () => {
   it('renders the block title/type, description and pipeline name', () => {
     const body = prBody(
@@ -322,16 +397,59 @@ describe('prBody', () => {
     )
     expect(body).toContain('**Add login** (task)')
     expect(body).toContain('do it')
-    expect(body).toContain('Pipeline: Ship')
+    expect(body).toContain('`Ship` pipeline')
+    // The fallback marks itself as dispatch-time text so a reviewer knows no agent briefing exists.
+    expect(body).toContain('the agent did not write')
+    // No fork decision ran ⇒ no approach section.
+    expect(body).not.toContain('Chosen implementation approach')
   })
-})
 
-describe('UI_TEST_REPORT_SHAPE_HINT', () => {
-  it('extends the base tester report with a screenshots array', () => {
-    expect(UI_TEST_REPORT_SHAPE_HINT).toContain('"screenshots"')
-    // Derived from the base hint, so it preserves its leading shape.
-    expect(UI_TEST_REPORT_SHAPE_HINT.startsWith(TEST_REPORT_SHAPE_HINT.replace(/\}\.$/, ''))).toBe(
-      true,
+  it('briefs the reviewer on the human-chosen implementation approach when the fork phase ran', () => {
+    const body = prBody(
+      context({
+        block: { id: 'b1', title: 'Add login', type: 'task', description: 'do it' },
+        implementationChoice: {
+          source: 'proposed',
+          title: 'Session cookie',
+          approach: 'Store the session server-side; the cookie carries only the id.',
+          note: 'Keep the cookie HttpOnly.',
+          alternativesConsidered: ['Stateless JWT', 'OAuth-only'],
+        },
+      } as Record<string, unknown>),
     )
+    expect(body).toContain('## Chosen implementation approach')
+    expect(body).toContain('**Session cookie**')
+    expect(body).toContain('Store the session server-side')
+    expect(body).toContain('Alternatives considered and rejected: Stateless JWT; OAuth-only.')
+    expect(body).toContain('Keep the cookie HttpOnly.')
+  })
+
+  // Every hole in this body carries text the platform did not write — a human's description and
+  // note, and the fork PROPOSER MODEL's own titles. It lands on a host-parsed surface that the
+  // merger step then merges for real, so an auto-link trigger must never reach it live.
+  it('defuses host auto-link triggers in every untrusted hole', () => {
+    const body = prBody(
+      context({
+        block: {
+          id: 'b1',
+          title: 'Fix login for @alice',
+          type: 'task',
+          description: 'Closes https://github.com/acme/app/issues/42 — see #17.',
+        },
+        implementationChoice: {
+          source: 'custom',
+          title: 'Approach for #99',
+          approach: 'Ping @bob when the cookie rotates.',
+          note: 'Blocks !31.',
+          alternativesConsidered: ['Reuse @acme/session'],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(body).not.toMatch(/@alice|@bob|@acme/)
+    expect(body).not.toMatch(/#17|#42|#99/)
+    expect(body).not.toMatch(/!31/)
+    expect(body).not.toMatch(/\bCloses https/)
+    // Defused, not deleted — the reader still sees what was written.
+    expect(body).toContain('&#64;alice')
   })
 })

@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures'
 import {
+  createSimplePipeline,
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
-  createSimplePipeline,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -39,7 +40,7 @@ test.describe('conflicts gate (conflict-resolver loop)', () => {
     await startRun(request, workspaceId, 'task_login', pipeline.id)
 
     await expect(card).toHaveAttribute('data-status', 'in_progress', { timeout: LIVE_TIMEOUT })
-    await card.click()
+    await selectTask(card)
 
     // LIVE: the conflicts gate probes `conflicted` → dispatches the resolver → re-probes
     // `mergeable`, so reaching `done` proves the resolver round ran and the re-probe cleared.

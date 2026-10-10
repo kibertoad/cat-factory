@@ -3,15 +3,13 @@ import { ValidationError } from '@cat-factory/kernel'
 import type {
   DeployProvisionJob,
   EnvironmentProvider,
-  EnvironmentRecord,
   EnvironmentRegistryRepository,
-  ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
+  ProvisionEnvironmentRequest,
   RepoValidationResult,
   ResolveRunRepoContext,
   RunnerJobRef,
   RunnerJobView,
-  SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import {
@@ -19,117 +17,19 @@ import {
   EnvironmentProvisioningService,
 } from './EnvironmentProvisioningService.js'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import {
+  fakeCipher,
+  fakeRegistry,
+  makeService,
+  MANIFEST,
+  READY,
+  recordingProvider,
+} from './test-support/environment-provisioning-fakes.js'
 
 // EnvironmentProvisioningService is the seam an in-house adapter (e.g. a PR-environment
 // platform) plugs into: it receives the typed provisionContext + the flattened inputs and
 // owns the returned `fields`. These tests assert that contract + the returned-URL policy,
 // independent of any HTTP provider.
-
-const MANIFEST = {
-  providerId: 'acme',
-  label: 'Acme',
-  baseUrl: 'https://envs.test/api',
-  auth: { type: 'none' as const },
-  provision: { method: 'POST' as const, pathTemplate: '/envs' },
-  response: {},
-}
-
-/** A passthrough cipher: persistence round-trips JSON without real crypto. */
-const fakeCipher: SecretCipher = {
-  encrypt: async (plaintext: string) => `enc:${plaintext}`,
-  decrypt: async (cipher: string) => cipher.replace(/^enc:/, ''),
-}
-
-/** In-memory registry repo capturing inserts. */
-function fakeRegistry(): EnvironmentRegistryRepository & { records: EnvironmentRecord[] } {
-  const records: EnvironmentRecord[] = []
-  return {
-    records,
-    async insert(record) {
-      records.push(record)
-    },
-    async update(workspaceId, id, patch) {
-      const i = records.findIndex((r) => r.id === id)
-      if (i >= 0) records[i] = { ...records[i]!, ...patch }
-    },
-    async get(_workspaceId, id) {
-      return records.find((r) => r.id === id) ?? null
-    },
-    async getByBlock(_workspaceId, blockId) {
-      return records.find((r) => r.blockId === blockId && !r.deletedAt) ?? null
-    },
-    async getByBlockAndFrame(_workspaceId, blockId, frameId) {
-      return (
-        records.find((r) => r.blockId === blockId && r.frameId === frameId && !r.deletedAt) ?? null
-      )
-    },
-    async getFramelessByBlock(_workspaceId, blockId) {
-      return (
-        [...records]
-          .reverse()
-          .find((r) => r.blockId === blockId && r.frameId == null && !r.deletedAt) ?? null
-      )
-    },
-    async listByWorkspace() {
-      return records
-    },
-    async listExpired() {
-      return []
-    },
-    async softDelete(_workspaceId, id, at) {
-      const r = records.find((x) => x.id === id)
-      if (r) r.deletedAt = at
-    },
-  }
-}
-
-/** A recording provider returning a fixed environment; captures the request it saw. */
-function recordingProvider(
-  returns: ProvisionedEnvironment,
-): EnvironmentProvider & { lastProvision?: ProvisionEnvironmentRequest } {
-  const provider: EnvironmentProvider & { lastProvision?: ProvisionEnvironmentRequest } = {
-    async provision(req) {
-      provider.lastProvision = req
-      return returns
-    },
-    async status() {
-      return returns
-    },
-    async teardown() {
-      return { status: 'torn_down' }
-    },
-  }
-  return provider
-}
-
-function makeService(
-  provider: EnvironmentProvider,
-  registry: EnvironmentRegistryRepository,
-  urlPolicy?: UrlSafetyPolicy,
-) {
-  const connectionService = {
-    resolveProvider: async () => ({ provider, manifest: MANIFEST }),
-    resolveSecrets: async () => () => undefined,
-  } as unknown as EnvironmentConnectionService
-  let n = 0
-  return new EnvironmentProvisioningService({
-    connectionService,
-    environmentRegistryRepository: registry,
-    secretCipher: fakeCipher,
-    idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
-    clock: { now: () => 1_700_000_000_000 },
-    ...(urlPolicy ? { urlPolicy } : {}),
-  })
-}
-
-const READY: ProvisionedEnvironment = {
-  externalId: 'env-123',
-  url: 'https://app.public.example/preview',
-  status: 'ready',
-  expiresAt: null,
-  access: null,
-  fields: { externalId: 'env-123', ref: 'feat/login' },
-}
 
 describe('EnvironmentProvisioningService — provision context', () => {
   it('passes the typed provisionContext to the provider and flattens it into inputs', async () => {
@@ -179,7 +79,7 @@ describe('EnvironmentProvisioningService — provision context', () => {
     const registry = fakeRegistry()
     const service = makeService(recordingProvider(READY), registry)
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    // The provider's arbitrary `fields` (here a Kargo-style ref) round-trip encrypted.
+    // The provider's arbitrary `fields` (here a provider-native ref) round-trip encrypted.
     expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
   })
 })
@@ -199,6 +99,7 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
         openPullRequest: async () => ({ number: 1 }) as never,
       },
       baseBranch: 'main',
+      repoId: 'repo_1',
     })
   }
 
@@ -247,7 +148,7 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
   it('throws ValidationError BEFORE calling provider.provision when validation fails', async () => {
     const provider = gatedProvider({
       ok: false,
-      issues: [{ severity: 'error', message: 'no jobs', path: '.kargo.yml' }],
+      issues: [{ severity: 'error', message: 'no jobs', path: '.acme-envs.yml' }],
     })
     const service = makeGatedService(provider, fakeRegistry(), gateResolver())
 
@@ -543,9 +444,13 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       status: 'ready',
       accessCipher: null,
       provisionFieldsCipher: null,
+      reachability: null,
       createdAt: 1,
       expiresAt: null,
       lastError: null,
+      statusNote: null,
+      lastPolledAt: null,
+      pollCount: 0,
       provisionType: 'kubernetes',
       engine: 'remote-kubernetes',
       deletedAt: null,
@@ -566,7 +471,7 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
 })
 
 describe('EnvironmentProvisioningService — returned URL policy', () => {
-  const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://prenv.kargo.internal' }
+  const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://box.envs.internal' }
 
   it('rejects an internal returned URL under the strict default', async () => {
     const service = makeService(recordingProvider(internalEnv), fakeRegistry())
@@ -582,8 +487,61 @@ describe('EnvironmentProvisioningService — returned URL policy', () => {
       allowHosts: ['.internal'],
     })
     const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    expect(handle.url).toBe('https://prenv.kargo.internal')
+    expect(handle.url).toBe('https://box.envs.internal')
     expect(registry.records).toHaveLength(1)
+  })
+})
+
+describe('EnvironmentProvisioningService — mis-resolving URL policy', () => {
+  // A wildcard-DNS host answers from the LEFTMOST four-octet run in a name, so `cf-acc-5` in
+  // front of the loopback host answers 5.127.0.0. The URL is otherwise perfectly safe, which is
+  // why this is graded beside the safety policy rather than folded into it: the two refuse
+  // different things about the same value.
+  const LOOPBACK: UrlSafetyPolicy = { schemes: ['http'], allowHosts: ['.nip.io'] }
+  const misresolving: ProvisionedEnvironment = {
+    ...READY,
+    url: 'http://cf-acc-5.127.0.0.1.nip.io',
+  }
+
+  it('refuses the URL a provider returns from a synchronous provision', async () => {
+    const service = makeService(recordingProvider(misresolving), fakeRegistry(), LOOPBACK)
+    await expect(service.provision({ workspaceId: 'ws1', blockId: 'blk1' })).rejects.toThrow(
+      /5\.127\.0\.0/,
+    )
+  })
+
+  it('refuses a host first read back on the STATUS poll', async () => {
+    // The `ingressStatus` / `gatewayStatus` shape: the URL is null at provision and only exists
+    // once the live Ingress is read, so a provision-time-only check can never see it at all.
+    const registry = fakeRegistry()
+    const provider: EnvironmentProvider = {
+      async provision() {
+        return { ...misresolving, url: null, status: 'provisioning' }
+      },
+      async status() {
+        return misresolving
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+    const service = makeService(provider, registry, LOOPBACK)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    await expect(service.refreshStatus('ws1', id)).rejects.toThrow(/5\.127\.0\.0/)
+  })
+
+  it('leaves a correctly-composed wildcard host alone', async () => {
+    // The control, and the one a false positive would break: every working ephemeral environment
+    // on a local cluster looks exactly like this.
+    const registry = fakeRegistry()
+    const service = makeService(
+      recordingProvider({ ...READY, url: 'http://cf-acc-pr5.127.0.0.1.nip.io' }),
+      registry,
+      LOOPBACK,
+    )
+    const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(handle.url).toBe('http://cf-acc-pr5.127.0.0.1.nip.io')
   })
 })
 
@@ -605,7 +563,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
         return { status: 'torn_down' }
       },
       asyncProvision: {
-        buildProvisionJob(req): DeployProvisionJob {
+        async buildProvisionJob(req): Promise<DeployProvisionJob> {
           provider.lastBuild = req
           return {
             ref: req.deploy!.ref,
@@ -669,6 +627,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     opts: {
       deployJobClient?: DeployJobClient
       cloneTarget?: typeof CLONE | null
+      urlPolicy?: UrlSafetyPolicy
     } = {},
   ) {
     const connectionService = {
@@ -682,6 +641,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
       secretCipher: fakeCipher,
       idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
       clock: { now: () => 1_700_000_000_000 },
+      ...(opts.urlPolicy ? { urlPolicy: opts.urlPolicy } : {}),
       ...(opts.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
       ...(opts.cloneTarget !== null
         ? { resolveDeployCloneTarget: async () => opts.cloneTarget ?? CLONE }
@@ -721,7 +681,10 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
       state: 'done',
       result: { custom: { namespace: 'pr-blk1', url: 'https://pr-blk1.example' } },
     }
-    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+    const { handle } = await service.finalizeProvision(
+      { workspaceId: 'ws1', blockId: 'blk1' },
+      view,
+    )
 
     expect(handle.status).toBe('ready')
     expect(handle.url).toBe('https://pr-blk1.example')
@@ -729,6 +692,23 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     // The prior `provisioning` record is superseded; the ready one is the live record.
     const live = registry.records.find((r) => r.blockId === 'blk1' && !r.deletedAt)
     expect(live!.status).toBe('ready')
+  })
+
+  it('refuses a mis-resolving URL the deploy container rendered', async () => {
+    // The URL a container hands back is published exactly as one derived in process is, so the
+    // grade has to sit on the seam both settle on. Without it, every kustomize/helm/image-override
+    // service shipped the failure this rule exists for while the raw-manifest path was guarded.
+    const service = makeAsyncService(asyncProvider(), fakeRegistry(), {
+      deployJobClient: fakeJobClient({ state: 'running' }),
+      urlPolicy: { schemes: ['http'], allowHosts: ['.nip.io'] },
+    })
+    const view: RunnerJobView = {
+      state: 'done',
+      result: { custom: { namespace: 'cf-acc-5', url: 'http://cf-acc-5.127.0.0.1.nip.io' } },
+    }
+    await expect(
+      service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view),
+    ).rejects.toThrow(/5\.127\.0\.0/)
   })
 
   it('finalizes a failed deploy view into a failed environment carrying the error', async () => {
@@ -739,10 +719,19 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     })
 
     const view: RunnerJobView = { state: 'failed', error: 'helm release failed' }
-    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+    const { handle, reason } = await service.finalizeProvision(
+      { workspaceId: 'ws1', blockId: 'blk1' },
+      view,
+    )
 
     expect(handle.status).toBe('failed')
     expect(handle.lastError).toBe('helm release failed')
+    // A deploy container reports free-form CLI output, so this failure is UNCLASSIFIED, and
+    // unclassified is what keeps a `deploy-fixer` away from it. Pinned because the alternative
+    // (reading `manifest_invalid` out of the text) would re-create the exact failure the
+    // classification exists to prevent: a run whose `{{image}}` was never substituted looks
+    // identical here to one whose manifests are genuinely wrong.
+    expect(reason).toBeNull()
   })
 
   it('pollProvisionJob returns the transport view', async () => {
@@ -773,7 +762,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
   it('falls back to the synchronous path when the provider builds no deploy job', async () => {
     // A provider whose buildProvisionJob returns null (raw manifests) provisions synchronously.
     const provider = asyncProvider()
-    provider.asyncProvision!.buildProvisionJob = () => null
+    provider.asyncProvision!.buildProvisionJob = async () => null
     provider.provision = async () => READY
     const registry = fakeRegistry()
     const service = makeAsyncService(provider, registry, {

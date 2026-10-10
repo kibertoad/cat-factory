@@ -10,7 +10,9 @@ import {
   DEFAULT_WORKSPACE_SETTINGS,
   readCachedWorkspaceSettings,
   requireWorkspace,
+  ValidationError,
 } from '@cat-factory/kernel'
+import { mergeWorkspaceSettings } from './workspaceSettingsMerge.js'
 
 export interface WorkspaceSettingsServiceDependencies {
   workspaceSettingsRepository: WorkspaceSettingsRepository
@@ -72,24 +74,15 @@ export class WorkspaceSettingsService {
     patch: UpdateWorkspaceSettingsInput,
   ): Promise<WorkspaceSettings> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
-    const current = await this.get(workspaceId)
-    const next: WorkspaceSettings = {
-      waitingEscalationMinutes: patch.waitingEscalationMinutes ?? current.waitingEscalationMinutes,
-      taskLimitMode: patch.taskLimitMode ?? current.taskLimitMode,
-      taskLimitShared:
-        patch.taskLimitShared !== undefined ? patch.taskLimitShared : current.taskLimitShared,
-      taskLimitPerType:
-        patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
-      storeAgentContext: patch.storeAgentContext ?? current.storeAgentContext,
-      artifactRetentionDays: patch.artifactRetentionDays ?? current.artifactRetentionDays,
-      kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
-      delegateAgentsToRunnerPool:
-        patch.delegateAgentsToRunnerPool ?? current.delegateAgentsToRunnerPool,
-      spendCurrency:
-        patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
-      spendMonthlyLimit:
-        patch.spendMonthlyLimit !== undefined ? patch.spendMonthlyLimit : current.spendMonthlyLimit,
-    }
+    // The merge base is read from the REPOSITORY, never through the cache, even though `get`
+    // is right there. This is a read-modify-write of the WHOLE row: `upsert` writes back every
+    // field, so a base that is stale by even one bounded-staleness window silently REVERTS
+    // whatever a peer committed inside it. The cache's contract is that a read may lag by its
+    // window; a write base is precisely the read that may not. (The window is ~5s on the
+    // Worker's coherent profile and the peer-invalidation latency on Node, but the argument
+    // does not depend on the number.)
+    const current = (await this.settings.get(workspaceId)) ?? { ...DEFAULT_WORKSPACE_SETTINGS }
+    const next = mergeWorkspaceSettings(current, patch)
     // Keep the limit fields consistent with the mode so the enforcement logic + UI never
     // read a stale cap from an inactive mode.
     if (next.taskLimitMode === 'off') {
@@ -101,6 +94,38 @@ export class WorkspaceSettingsService {
     } else {
       next.taskLimitShared = null
       if (next.taskLimitPerType == null) next.taskLimitPerType = {}
+    }
+    // Review-debt friction cross-field validation (mirrors the taskLimit checks). The hard-block
+    // knobs persist across mode switches so toggling back to `enforce` restores them; the verdict
+    // function only consults them in `enforce`, so a warn/off mode never reads a stale threshold.
+    if (next.reviewFrictionMode === 'enforce') {
+      if (next.reviewFrictionBlockCount == null && next.reviewFrictionBlockStuckMinutes == null) {
+        throw new ValidationError(
+          'Enforce mode requires at least one hard-block threshold (a block count or a stuck-minutes limit).',
+        )
+      }
+      if (
+        next.reviewFrictionBlockCount != null &&
+        next.reviewFrictionBlockCount < next.reviewFrictionWarnCount
+      ) {
+        throw new ValidationError(
+          'The review-debt block count must be greater than or equal to the warn count.',
+        )
+      }
+    }
+    // Default test-environment provisioning cross-field validation. The manifest id is
+    // meaningful ONLY for `custom`, so anything else clears it rather than leaving a stale id
+    // that would silently reappear on the next switch back — the same "keep the inactive
+    // branch's fields consistent with the mode" rule the task-limit block above follows.
+    // `custom` WITHOUT an id is refused outright instead of normalised away: it would seed
+    // every new service with a type that matches no `remote-custom` handler, and the failure
+    // would surface much later, at the deployer step, on a service nobody knowingly misconfigured.
+    if (next.defaultProvisionType !== 'custom') {
+      next.defaultProvisionManifestId = null
+    } else if (!next.defaultProvisionManifestId) {
+      throw new ValidationError(
+        'A custom default provisioning mechanism must name the custom manifest type it uses.',
+      )
     }
     await this.settings.upsert(workspaceId, next)
     // Drop the cached row (and broadcast to peers) after the write commits, so the next

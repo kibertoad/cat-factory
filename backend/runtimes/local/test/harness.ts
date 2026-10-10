@@ -1,5 +1,7 @@
 import {
   AsyncFakeAgentExecutor,
+  withDelegatedArm,
+  lateHarnessCallRecorder,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -13,24 +15,44 @@ import {
   fakeBuildPreviewJob,
   driveWorkspace,
   makeIncorporatedClarityReview,
+  makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  mintSession,
+  seedFrameRepoLink,
+  type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
+  DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
+  DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
+  DrizzleTaskRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
   createApp,
   createDbClient,
   createDrizzleRepositories,
   migrate,
+  DrizzleGitHubInstallationRepository,
+  DrizzleRepoProjectionRepository,
 } from '@cat-factory/node-server'
+import type { ServerContainer } from '@cat-factory/server'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
-import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  Clock,
+  ExecutionInstance,
+  Pipeline,
+  Service,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import {
   MODEL_PRESET_SEED_IDS,
   NoopBootstrapRunner,
@@ -42,7 +64,7 @@ import type {
   UpsertLocalModelEndpointInput,
   UserSecretKind,
 } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
 const BASE = 'https://cat-factory.test'
@@ -147,43 +169,91 @@ async function ensureDatabase(baseUrl: string, dbName: string): Promise<void> {
   }
 }
 
+/** The optional per-app knobs the conformance suites pass into {@link makeConformanceApp}. */
+type ConformanceAppOpts = {
+  cloudflareModelsEnabled?: boolean
+  resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+  resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
+  promptFragmentRegistry?: CoreDependencies['promptFragmentRegistry']
+  gateProviders?: GateProviderOverrides
+  environmentProvider?: CoreDependencies['environmentProvider']
+  routeProbe?: CoreDependencies['routeProbe']
+  hostResolver?: CoreDependencies['hostResolver']
+  resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+  deployJobClient?: CoreDependencies['deployJobClient']
+  resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
+  prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
+  appBaseUrl?: string
+  apiBaseUrl?: string
+  backendRegistries?: BackendRegistries
+  agentKindRegistry?: AgentKindRegistry
+  gateRegistry?: CoreDependencies['gateRegistry']
+  judgeRegistry?: CoreDependencies['judgeRegistry']
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
+  judgeAssessor?: CoreDependencies['judgeAssessor']
+  bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
+  repoBootstrapper?: CoreDependencies['repoBootstrapper']
+  inlineUseCaseGenerator?: CoreDependencies['inlineUseCaseGenerator']
+  fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
+  stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
+  initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
+  taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  inlineUseCaseRegistry?: CoreDependencies['inlineUseCaseRegistry']
+  pipelineRegistry?: CoreDependencies['pipelineRegistry']
+  testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+  taskSourceProviders?: CoreDependencies['taskSourceProviders']
+  detectionConventions?: CoreDependencies['detectionConventions']
+  /**
+   * Env entries layered over {@link TEST_ENV}, for a spec that needs a different DEPLOYMENT
+   * SHAPE rather than a different dependency — a GitLab PAT instead of the default GitHub one,
+   * say. Set a key to `undefined` to unset it. It reaches both `buildLocalContainer` and
+   * `createApp`, because the config the container composes and the one the app reads must be
+   * the same one (a divergence here would make a spec pass against a deployment that cannot
+   * exist).
+   */
+  env?: NodeJS.ProcessEnv
+}
+
+/** Copy only the truthy-valued keys of `obj` — the object-literal form of `...(v ? { k: v } : {})`. */
+function onlyTruthy<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    if (obj[key]) out[key] = obj[key]
+  }
+  return out
+}
+
 /**
- * Build one app over the shared Postgres through the LOCAL composition root, with a
- * deterministic agent + no-op durable runner (the suite advances runs itself via
- * `drive`). A thin adapter over the shared conformance harness, identical to the Node
- * helper apart from `buildLocalContainer`.
+ * The core-dependency overrides, split out of {@link makeConformanceApp} to keep it within the
+ * complexity budget. Behaviour-neutral: each optional override still lands only when the suite
+ * supplies it (the `onlyTruthy` filter mirrors the prior `...(v ? {} : {})` spreads).
  */
-export function makeConformanceApp(
-  db: DrizzleDb,
-  agentOptions?: FakeAgentOptions,
-  opts?: {
-    cloudflareModelsEnabled?: boolean
-    resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
-    resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
-    gateProviders?: GateProviderOverrides
-    environmentProvider?: CoreDependencies['environmentProvider']
-    resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
-    deployJobClient?: CoreDependencies['deployJobClient']
-    resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
-    backendRegistries?: BackendRegistries
-    agentKindRegistry?: AgentKindRegistry
-    initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
-    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
-    taskSourceProviders?: CoreDependencies['taskSourceProviders']
-    detectionConventions?: CoreDependencies['detectionConventions']
-  },
-): ConformanceApp {
-  const recorder = new RecordingEventPublisher()
+function buildConformanceOverrides(
+  recorder: RecordingEventPublisher,
+  agentOptions: FakeAgentOptions | undefined,
+  opts: ConformanceAppOpts | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
+): Partial<CoreDependencies> {
+  const o = opts ?? {}
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
   // (so it detects the custom kind's structured output) and the container build below.
   const agentExecutorOptions: FakeAgentOptions = {
     ...agentOptions,
-    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(o.agentKindRegistry ? { agentKindRegistry: o.agentKindRegistry } : {}),
   }
-  const overrides: Partial<CoreDependencies> = {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentExecutorOptions)
-      : new FakeAgentExecutor(agentExecutorOptions),
+  return {
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. Overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      o,
+      recordHarnessCalls,
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     // Run the shared conformance suite with the merger UNWIRED, exactly like the Node/Worker
@@ -199,7 +269,7 @@ export function makeConformanceApp(
     pullRequestMerger: undefined,
     // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
     // local composition root without GitHub/Docker (driven via driveBootstrap).
-    repoBootstrapper: new FakeRepoBootstrapper(),
+    repoBootstrapper: o.repoBootstrapper ?? new FakeRepoBootstrapper(),
     // Deterministic env-config-repairer + no-op runner so the suite drives the repair
     // lifecycle through the local composition root (driven via driveEnvConfigRepair); the
     // module only builds when an env provider is also wired.
@@ -214,46 +284,115 @@ export function makeConformanceApp(
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against
     // Postgres without hitting the network. Override wins over the config providers.
-    taskSourceProviders: opts?.taskSourceProviders ?? [
+    taskSourceProviders: o.taskSourceProviders ?? [
       new FakeTaskSourceProvider('jira'),
       new FakeTaskSourceProvider('linear'),
     ],
-    // Inject the engine's run-repo resolver (a fake in the suite) so the registered
-    // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
-    ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
-    // Inject the binary-artifact store resolver so the suite drives the start-time
-    // binary-storage gate deterministically (local inherits Node's storage-OFF default).
-    ...(opts?.resolveBinaryArtifactStore
-      ? { resolveBinaryArtifactStore: opts.resolveBinaryArtifactStore }
-      : {}),
-    // Inject a native environment provider + the block-less coords resolver (both fakes
-    // in the suite) so the on-demand repo-config validate route is asserted end-to-end
-    // against real Postgres, identically to the Worker/Node. Overrides are spread last in
-    // buildNodeContainer (reused by buildLocalContainer), so they win over the default
-    // HttpEnvironmentProvider.
-    ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
-    ...(opts?.resolveRepoFilesForCoords
-      ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
-      : {}),
-    // Inject the deployment-level detection-convention extensions (a fake in the suite) so
-    // convention-honouring service-provisioning detection is asserted through the local
-    // composition root, identically to the Worker/Node.
-    ...(opts?.detectionConventions ? { detectionConventions: opts.detectionConventions } : {}),
-    // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
-    // full QC loop is driven through the local composition root without a model, identically to
-    // the Worker/Node.
-    ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
-    // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
-    // the suite drives the container render path through the local composition root, identically
-    // to the Worker/Node. Overrides win over buildLocalContainer's own deploy wiring (spread last).
-    ...(opts?.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
-    ...(opts?.resolveDeployCloneTarget
-      ? { resolveDeployCloneTarget: opts.resolveDeployCloneTarget }
-      : {}),
+    // Proving a provisioned environment's route. Injected on every conformance app rather than
+    // left to the facade's real probe: the suite's environment URLs are fixtures on reserved TLDs
+    // that resolve nowhere, so a real probe would fail every deploy here on the machine's DNS
+    // instead of on anything the suite asserts. A case driving the unreachable path supplies its
+    // own probe.
+    routeProbe: o.routeProbe ?? (async () => ({ state: 'carried' as const })),
+    // Resolving a stated balancer NAME, injected on the same terms and for the same reason.
+    hostResolver: o.hostResolver ?? (async () => ({ state: 'unresolved' as const })),
+    // Each override below lands only when the suite supplies it (mirrors the prior
+    // `...(v ? { k: v } : {})` spreads): the engine's run-repo resolver, the binary-artifact
+    // store resolver, a native env provider + block-less coords resolver, detection-convention
+    // extensions, the QC companion's inline reviewer, and the async deploy lifecycle (a fake
+    // deploy-job client + clone-target resolver). Overrides are spread last in buildNodeContainer
+    // (reused by buildLocalContainer), so they win over the local facade's own defaults.
+    ...onlyTruthy({
+      resolveRunRepoContext: o.resolveRunRepoContext,
+      resolveBinaryArtifactStore: o.resolveBinaryArtifactStore,
+      // The app-owned standards pool the suite registered its own fragments onto.
+      promptFragmentRegistry: o.promptFragmentRegistry,
+      environmentProvider: o.environmentProvider,
+      resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
+      detectionConventions: o.detectionConventions,
+      testerQualityReviewer: o.testerQualityReviewer,
+      // The judge's verdict producer: a deterministic fake, so the pass / park / bounce / fail
+      // loop drives with no model — and a DISABLED one proves the unwired pass-through.
+      judgeAssessor: o.judgeAssessor,
+      // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
+      // outcomes drive with no model on every runtime.
+      bugHuntAssessor: o.bugHuntAssessor,
+      monorepoAdoptionAdvisor: o.monorepoAdoptionAdvisor,
+      inlineUseCaseGenerator: o.inlineUseCaseGenerator,
+      fragmentBriefGenerator: o.fragmentBriefGenerator,
+      deployJobClient: o.deployJobClient,
+      resolveDeployCloneTarget: o.resolveDeployCloneTarget,
+      prVerificationReportPublisher: o.prVerificationReportPublisher,
+      appBaseUrl: o.appBaseUrl,
+      apiBaseUrl: o.apiBaseUrl,
+    }),
   }
+}
+
+/**
+ * The app-owned registry options threaded into `buildLocalContainer` (which forwards them into
+ * `buildNodeContainer`), split out of {@link makeConformanceApp}. Each lands only when the
+ * matching suite supplies it, so the container resolves it by reference.
+ */
+function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
+  const o = opts ?? {}
+  return onlyTruthy({
+    backendRegistries: o.backendRegistries,
+    agentKindRegistry: o.agentKindRegistry,
+    gateRegistry: o.gateRegistry,
+    judgeRegistry: o.judgeRegistry,
+    delegatedExecutorRegistry: o.delegatedExecutorRegistry,
+    stepResolverRegistry: o.stepResolverRegistry,
+    initiativePresetRegistry: o.initiativePresetRegistry,
+    taskTypeRegistry: o.taskTypeRegistry,
+    inlineUseCaseRegistry: o.inlineUseCaseRegistry,
+    pipelineRegistry: o.pipelineRegistry,
+  })
+}
+
+/**
+ * Build one app over the shared Postgres through the LOCAL composition root, with a
+ * deterministic agent + no-op durable runner (the suite advances runs itself via
+ * `drive`). A thin adapter over the shared conformance harness, identical to the Node
+ * helper apart from `buildLocalContainer`.
+ */
+/**
+ * Issue a request whose success carries BYTES (the artifact blob endpoint), through the facade's
+ * real `app.fetch`.
+ *
+ * Module-level rather than a closure inside {@link makeConformanceApp}, which the JSON `call` is:
+ * that one needs nothing but `app`, and the builder is already at its function-size budget.
+ */
+export async function callBinaryThrough(
+  app: { fetch: (request: Request, ...rest: never[]) => Response | Promise<Response> },
+  method: string,
+  path: string,
+  extraHeaders?: Record<string, string>,
+): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }> {
+  const res = await app.fetch(
+    new Request(`${BASE}${path}`, { method, headers: { ...extraHeaders } }),
+  )
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type'),
+    bytes: new Uint8Array(await res.arrayBuffer()),
+  }
+}
+
+export function makeConformanceApp(
+  db: DrizzleDb,
+  agentOptions?: FakeAgentOptions,
+  opts?: ConformanceAppOpts,
+): ConformanceApp {
+  const recorder = new RecordingEventPublisher()
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildConformanceOverrides(recorder, agentOptions, opts, harnessCalls.record)
+  const env: NodeJS.ProcessEnv = { ...TEST_ENV, ...opts?.env }
   const container = buildLocalContainer({
     db,
-    env: TEST_ENV,
+    env,
     overrides,
     // Local mode's PRODUCTION default model preset is Claude (subscription-only, no Cloudflare
     // flavour), but the conformance suite drives runs through the fake executor with only
@@ -268,20 +407,12 @@ export function makeConformanceApp(
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
     gateProviders: opts?.gateProviders,
-    // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
-    // suite) so a registered custom backend is resolved by reference, exactly like a real deployment.
-    ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
-    // Inject the app-owned agent-kind registry (pre-loaded with a custom kind in the custom-kind
-    // suite) so buildLocalContainer forwards it into buildNodeContainer — the SAME instance the
-    // fake executor above got.
-    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
-    // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
-    // custom-preset suite) so buildLocalContainer forwards it into buildNodeContainer.
-    ...(opts?.initiativePresetRegistry
-      ? { initiativePresetRegistry: opts.initiativePresetRegistry }
-      : {}),
+    // Inject the app-owned registries (pre-loaded with custom kinds/preset/task-type in the
+    // matching suites) so buildLocalContainer forwards each into buildNodeContainer by reference.
+    ...buildContainerRegistryOptions(opts),
   })
-  const app = createApp(container, TEST_ENV)
+  harnessCalls.bind(container.llmObservability)
+  const app = createApp(container, env)
 
   async function call<T>(
     method: string,
@@ -303,6 +434,9 @@ export function makeConformanceApp(
     const text = await res.text()
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
   }
+
+  const callBinary = (method: string, path: string, extraHeaders?: Record<string, string>) =>
+    callBinaryThrough(app, method, path, extraHeaders)
 
   async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
     return (await call<WorkspaceSnapshot>('POST', '/workspaces', options)).body
@@ -382,6 +516,13 @@ export function makeConformanceApp(
   // Postgres) store so the engine's reworked-requirements substitution can be driven
   // without running the reviewer LLM — the same Drizzle persistence the Node harness
   // writes through (the local facade reuses the Node repositories).
+  function seedPipeline(workspaceId: string, pipeline: Pipeline) {
+    return createDrizzleRepositories(db, SEED_CLOCK).pipelineRepository.insert(
+      workspaceId,
+      pipeline,
+    )
+  }
+
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository.upsert(
       workspaceId,
@@ -389,10 +530,10 @@ export function makeConformanceApp(
     )
   }
 
-  function seedReadyReview(workspaceId: string, blockId: string) {
+  function seedReadyReview(workspaceId: string, blockId: string, openItems?: number) {
     return createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository.upsert(
       workspaceId,
-      makeReadyReviewWithOpenItem(blockId),
+      makeReadyReviewWithOpenItem(blockId, openItems),
     )
   }
 
@@ -400,6 +541,13 @@ export function makeConformanceApp(
     return createDrizzleRepositories(db, SEED_CLOCK).clarityReviewRepository.upsert(
       workspaceId,
       makeIncorporatedClarityReview(blockId, report),
+    )
+  }
+
+  function seedReadyClarityReview(workspaceId: string, blockId: string, openItems?: number) {
+    return createDrizzleRepositories(db, SEED_CLOCK).clarityReviewRepository.upsert(
+      workspaceId,
+      makeReadyClarityReview(blockId, openItems),
     )
   }
 
@@ -413,36 +561,86 @@ export function makeConformanceApp(
 
   return {
     call,
+    callBinary,
     createWorkspace,
     createOrgWorkspace,
+    authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
+    session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    createWorkspaceInAccount: (accountId, ownerUserId, options) =>
+      container.workspaceService.create(
+        { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
+        ownerUserId,
+        accountId,
+      ),
     drive,
     startExecution: (workspaceId, blockId, pipelineId, opts) =>
-      container.executionService.start(
-        workspaceId,
-        blockId,
-        pipelineId,
-        undefined,
-        undefined,
-        undefined,
-        opts?.gates,
-      ),
+      container.executionService.start(workspaceId, blockId, pipelineId, {
+        gatesOverride: opts?.gates,
+      }),
     driveBootstrap,
     driveEnvConfigRepair,
     executionEmits,
     boardEmits,
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedReadyClarityReview,
     executionRepository: () => container.executionRepository,
+    requirementReviewRepository: () =>
+      createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository,
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
+    workspaceRepository: () => new DrizzleWorkspaceRepository(db),
+    workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => createDrizzleRepositories(db, SEED_CLOCK).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
+    taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
+    accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
+    accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
+    // The writes live in the shared `seedFrameRepoLink`; this names only which of THIS facade's
+    // stores they land in (the same Drizzle repositories the Node facade builds over).
+    linkFrameRepo: (input) =>
+      seedFrameRepoLink(
+        {
+          installations: new DrizzleGitHubInstallationRepository(db),
+          projection: new DrizzleRepoProjectionRepository(db),
+          services: createDrizzleRepositories(db, SEED_CLOCK).serviceRepository,
+        } satisfies FrameRepoLinkRepositories,
+        input,
+      ),
+    ...containerServiceProbes(container),
+  }
+}
+
+/**
+ * The optional per-container service probes, split out of the app factory so its size stays inside
+ * the per-function budget. Each is undefined when this facade did not wire the service, which is
+ * how the suite skips an assertion rather than failing it on a deployment shape that legitimately
+ * lacks the store.
+ */
+function containerServiceProbes(
+  container: ServerContainer,
+): Pick<
+  ConformanceApp,
+  | 'onboarding'
+  | 'toolServerDispatch'
+  | 'localModelEndpoints'
+  | 'openRouterCatalog'
+  | 'userSecrets'
+  | 'userSettings'
+> {
+  return {
     onboarding: () => makeOnboardingProbe(container),
+    // The tool-server (MCP) dispatch resolution over this facade's own composed
+    // capability-credential chain: the half no HTTP route can show, since credential values are
+    // write-only on the wire and the resolution happens inside a job body.
+    toolServerDispatch: () => makeToolServerDispatchProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints
       if (!svc) return undefined

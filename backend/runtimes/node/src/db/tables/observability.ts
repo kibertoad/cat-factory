@@ -1,0 +1,338 @@
+import {
+  bigint,
+  doublePrecision,
+  index,
+  integer,
+  pgSchema,
+  pgTable,
+  primaryKey,
+  text,
+} from 'drizzle-orm/pg-core'
+
+// The observability schema: the four append-heavy TELEMETRY sinks (one row per model call,
+// per dispatched agent context, per web search a container agent performed, per tool call it
+// made) plus the two
+// deployment-level PROJECTIONS the operator dashboard aggregates (settled gates, and the daily
+// run rollup behind the long windows).
+//
+// Split out of `schema.ts` as a cohesive module (the `tables/` pattern the identity, settings
+// and VCS groups already follow) when the platform projections pushed that file over its
+// size budget: budgets are split triggers, never numbers to raise. Re-exported from
+// `schema.ts`, so every `from '../db/schema.js'` importer is unchanged.
+
+// Telemetry has a very different write profile from the transactional domain
+// (append-heavy, high-volume, write-and-rarely-read, short retention), so it lives in
+// its own `telemetry` Postgres schema rather than `public`. This is the Node analogue
+// of the Cloudflare worker's separate TELEMETRY_DB D1 database. The schema is purely a
+// namespace served by the same connection/pool; `migrate()` creates it on boot. The
+// `llm_call_metrics` table and `agent_context_snapshots` table live here.
+export const telemetry = pgSchema('telemetry')
+
+// LLM observability sink (mirror of D1 migration 0026). One row per proxied
+// container-agent model call: full prompt/response, output-limit headroom and the
+// transport-vs-execution latency split. Pruned aggressively by retention (the full
+// bodies make it heavy); booleans are integer 0/1 to match the SQLite store.
+export const llmCallMetrics = telemetry.table(
+  'llm_call_metrics',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id'),
+    agent_kind: text('agent_kind').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    streaming: integer('streaming').notNull().default(0),
+    // WHICH slice of the run spent the call (`agent` / `validation-repair` / … ), stamped by
+    // the harness that owns the phase boundary; '' is the unattributed slice, a real group in
+    // the rollup rather than a dropped row. `turn_index` is the harness's job-scoped `seq`,
+    // NULL where the producing channel has no turn concept (the proxy). Mirrors D1 migration
+    // 0004_llm_call_phase_turn. See docs/initiatives/token-burn-instrumentation.md.
+    phase: text('phase').notNull().default(''),
+    turn_index: integer('turn_index'),
+    // 1 when the row carries only TOKENS and stands for no model call: the shortfall a harness CLI
+    // leaves when it costs each turn's input but not its output, filed as its own row so a measured
+    // turn is never grown by tokens it did not produce. Real spend, so it stays in every token sum;
+    // not a call, so `calls` excludes it. 0 for every other producer AND for the shortfall row of a
+    // CLI that narrates no turns, where nothing else recorded the call. A NULL `turn_index` cannot
+    // stand in for this: a genuine inline call has one too. Mirrors D1 telemetry migration
+    // 0006_llm_call_spend_only.
+    spend_only: integer('spend_only').notNull().default(0),
+    message_count: integer('message_count').notNull().default(0),
+    tool_count: integer('tool_count').notNull().default(0),
+    request_max_tokens: integer('request_max_tokens'),
+    prompt_tokens: integer('prompt_tokens').notNull().default(0),
+    cache_read_tokens: integer('cache_read_tokens').notNull().default(0),
+    cache_write_tokens: integer('cache_write_tokens').notNull().default(0),
+    completion_tokens: integer('completion_tokens').notNull().default(0),
+    total_tokens: integer('total_tokens').notNull().default(0),
+    finish_reason: text('finish_reason'),
+    upstream_ms: integer('upstream_ms').notNull().default(0),
+    overhead_ms: integer('overhead_ms').notNull().default(0),
+    total_ms: integer('total_ms').notNull().default(0),
+    ok: integer('ok').notNull().default(1),
+    http_status: integer('http_status'),
+    error_message: text('error_message'),
+    // prompt_text is stored as a DELTA (only the messages this call appended beyond
+    // prompt_prefix_count); the full prompt is rebuilt on export. See D1 migration 0027.
+    prompt_text: text('prompt_text').notNull().default(''),
+    prompt_prefix_count: integer('prompt_prefix_count').notNull().default(0),
+    prompt_hash: text('prompt_hash').notNull().default(''),
+    response_text: text('response_text').notNull().default(''),
+    // The model's reasoning/"thinking" trace on a separate channel, when emitted (a
+    // reasoning model can spend its whole output budget here and return empty
+    // response_text). Mirrors D1 migration 0002_llm_reasoning_text.
+    reasoning_text: text('reasoning_text').notNull().default(''),
+    // What the VENDOR said this call cost, in USD, for the one provider class that says: an
+    // OpenRouter call with usage accounting on reports its own ledger figure. NULL everywhere
+    // else, and NULL is the load-bearing value: every other row's cost is DERIVED from the
+    // spend price table, and a 0 here would claim a free call rather than an unreported one.
+    // Stored in the vendor's own currency rather than converted, because the USD→spend-currency
+    // rate is this platform's assumption and the reported figure is not. Mirrors D1 telemetry
+    // migration 0007_llm_call_gateway_attribution.
+    reported_cost_usd: doublePrecision('reported_cost_usd'),
+    // WHICH upstream a gateway routed this call to (OpenRouter's `provider`), e.g. `anthropic`
+    // or `deepinfra`. NULL for a direct vendor, where `provider` above already names it. A
+    // gateway resells many upstreams at different rates and reliabilities, so without this a
+    // slow or failing upstream is invisible: every row just reads `openrouter`.
+    upstream_provider: text('upstream_provider'),
+  },
+  (t) => [
+    index('idx_llm_call_metrics_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_llm_call_metrics_created').on(t.created_at),
+  ],
+)
+
+// The complete, redacted context provided to one container-agent dispatch (per step
+// attempt): the fully fragment-composed system + user prompts, the fragment bodies
+// folded in, and the full content of the files injected into the container. Captures
+// what proxy telemetry can't (the injected `.cat-context/*` files the agent reads via
+// tools). JSON-shaped columns are text; pruned on the same retention window as
+// llm_call_metrics. Mirrors the D1 agent_context_snapshots table column-for-column.
+export const agentContextSnapshots = telemetry.table(
+  'agent_context_snapshots',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    step_index: integer('step_index').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    model: text('model'),
+    harness: text('harness'),
+    system_prompt: text('system_prompt').notNull().default(''),
+    user_prompt: text('user_prompt').notNull().default(''),
+    // JSON arrays: [{id, body}] and [{path, title, url, content}].
+    fragments: text('fragments').notNull().default('[]'),
+    context_files: text('context_files').notNull().default('[]'),
+    // Redacted structural bits (repo/branch, webSearch, infra, decisions, revision).
+    extras: text('extras').notNull().default('{}'),
+  },
+  (t) => [
+    index('idx_agent_context_snapshots_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_context_snapshots_created').on(t.created_at),
+  ],
+)
+
+// One web search a container agent performed through the backend search proxy. Recorded
+// best-effort (gated by the same LLM_RECORD_PROMPTS + storeAgentContext double switch as
+// agent_context_snapshots) and pruned on the same retention window. Mirrors the D1
+// agent_search_queries table column-for-column.
+export const agentSearchQueries = telemetry.table(
+  'agent_search_queries',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    // The upstream backend that served the search (`brave` | `searxng`), or null.
+    provider: text('provider'),
+    query: text('query').notNull().default(''),
+    result_count: integer('result_count').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_agent_search_queries_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_search_queries_created').on(t.created_at),
+  ],
+)
+
+// One tool invocation an agent made, in trajectory order — what the agent DID, beside the
+// per-call cost (`llm_call_metrics`) and the context it was given (`agent_context_snapshots`).
+// The metadata is always recorded; `args`/`result` ride the same LLM_RECORD_PROMPTS +
+// storeAgentContext double gate as the other body-bearing sinks, and `bodies` says which, so a
+// withheld body never reads as a tool that took no arguments. Pruned on the same retention
+// window. Mirrors the D1 agent_tool_calls table column-for-column.
+export const agentToolCalls = telemetry.table(
+  'agent_tool_calls',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    // The dispatch the call was made in: the drill-down filter, and the scope `seq` is
+    // numbered within. It is deliberately NOT the trajectory's sort key — a job id is a
+    // string, so ordering by it sorts a run's dispatches by agent-kind spelling.
+    job_id: text('job_id').notNull(),
+    seq: integer('seq').notNull(),
+    tool: text('tool').notNull(),
+    started_at: bigint('started_at', { mode: 'number' }).notNull(),
+    ended_at: bigint('ended_at', { mode: 'number' }).notNull(),
+    ok: integer('ok').notNull().default(1),
+    bodies: text('bodies').notNull().default('withheld'),
+    args: text('args').notNull().default(''),
+    result: text('result').notNull().default(''),
+    args_dropped: integer('args_dropped').notNull().default(0),
+    result_dropped: integer('result_dropped').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_agent_tool_calls_trajectory').on(
+      t.workspace_id,
+      t.execution_id,
+      t.started_at,
+      t.seq,
+    ),
+    index('idx_agent_tool_calls_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_tool_calls_job').on(t.workspace_id, t.execution_id, t.job_id, t.created_at),
+    index('idx_agent_tool_calls_created').on(t.created_at),
+  ],
+)
+
+// ---------------------------------------------------------------------------
+// Platform-operator observability projections (mirrors D1 migration 0079). Both are read by
+// the account-scoped dashboard rollups; see the D1 migration for the full rationale.
+// ---------------------------------------------------------------------------
+
+/**
+ * One flat row per SETTLED polling gate, so the gate / CI-fixer attempt statistics are an
+ * ordinary aggregate over columns rather than a `jsonb_array_elements` expansion of the run's
+ * internal `steps[].gate.*` shape. The id is derived by the writer (`<runId>:<stepIndex>:
+ * <outcome>`) so a driver replay collapses onto one row.
+ */
+export const gateOutcomes = pgTable(
+  'gate_outcomes',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    block_id: text('block_id').notNull(),
+    gate_kind: text('gate_kind').notNull(),
+    helper_kind: text('helper_kind'),
+    outcome: text('outcome').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    max_attempts: integer('max_attempts').notNull().default(0),
+    helper_failures: integer('helper_failures').notNull().default(0),
+    duration_ms: bigint('duration_ms', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    // The rollup's access path: this account's workspaces, settled since T.
+    index('idx_gate_outcomes_workspace_created').on(t.workspace_id, t.created_at),
+    // The retention prune's access path (a global range delete, not workspace-scoped).
+    index('idx_gate_outcomes_created').on(t.created_at),
+  ],
+)
+
+/**
+ * The daily rollup of `agent_runs` behind the dashboard's `30d` / `90d` windows. `failure_kind`
+ * carries '' (never NULL) for a non-failed status because it is part of the primary key, and a
+ * NULL there would not deduplicate a re-run bucket; the repository maps it back to null at the
+ * read boundary. Rewritten in place on each sweep, never appended: the current day's counts are
+ * not final, so they must be corrected rather than frozen.
+ */
+export const platformRunDays = pgTable(
+  'platform_run_days',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    day_start: bigint('day_start', { mode: 'number' }).notNull(),
+    status: text('status').notNull(),
+    failure_kind: text('failure_kind').notNull().default(''),
+    run_count: integer('run_count').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.day_start, t.status, t.failure_kind] }),
+    // The prune's access path; the account-scoped read rides the primary key's leading columns.
+    index('idx_platform_run_days_day').on(t.day_start),
+  ],
+)
+
+/**
+ * The DURABLE cost-attribution rollup (mirror of D1 migration 0084): one row per
+ * `(workspace, UTC day, run, agent kind, provider:model, billing, vendor)`, carrying the board
+ * shape the spend happened under (the run's block, service, repository, task type and tracker
+ * ticket), FROZEN at rollup time, plus the display names for each.
+ *
+ * It exists because the ledger cannot answer a TCO question durably: `token_usage` is pruned,
+ * and everything past the workspace is resolved at read time through `agent_runs` and the LIVE
+ * service↔repo / ticket↔block links, so re-pointing a service silently rewrites last quarter.
+ *
+ * This is the only table in the deployment with NO retention: there is no prune for it in
+ * either facade's sweep, and no `deleteOlderThan` on its port. Key columns carry '' rather
+ * than NULL (a nullable key column would not deduplicate a rewritten bucket); label columns
+ * stay nullable, matching the wire shape's nullable label.
+ */
+export const spendDays = pgTable(
+  'spend_days',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    day_start: bigint('day_start', { mode: 'number' }).notNull(),
+    execution_id: text('execution_id').notNull().default(''),
+    agent_kind: text('agent_kind').notNull().default(''),
+    provider: text('provider').notNull().default(''),
+    model: text('model').notNull().default(''),
+    billing: text('billing').notNull().default('metered'),
+    vendor: text('vendor').notNull().default(''),
+    account_id: text('account_id').notNull().default(''),
+    workspace_name: text('workspace_name'),
+    block_id: text('block_id').notNull().default(''),
+    block_title: text('block_title'),
+    service_id: text('service_id').notNull().default(''),
+    service_name: text('service_name'),
+    repo_id: text('repo_id').notNull().default(''),
+    repo_name: text('repo_name'),
+    task_type: text('task_type').notNull().default(''),
+    ticket_ref: text('ticket_ref').notNull().default(''),
+    calls: integer('calls').notNull().default(0),
+    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    metered_cost: doublePrecision('metered_cost').notNull().default(0),
+    subscription_cost: doublePrecision('subscription_cost').notNull().default(0),
+  },
+  (t) => [
+    primaryKey({
+      columns: [
+        t.workspace_id,
+        t.day_start,
+        t.execution_id,
+        t.agent_kind,
+        t.provider,
+        t.model,
+        t.billing,
+        t.vendor,
+      ],
+    }),
+    // The read's access path: one account's (optionally one board's) buckets over a window.
+    index('idx_spend_days_account').on(t.account_id, t.day_start),
+    // The rewrite's access path: a pass deletes its whole day window across every workspace.
+    index('idx_spend_days_day').on(t.day_start),
+    // Per-run lookup (the finest TCO axis), independent of when the run happened.
+    index('idx_spend_days_execution').on(t.workspace_id, t.execution_id),
+  ],
+)
+
+/**
+ * How far the daily-rollup SWEEP has covered. A fact about the sweep, so it cannot be derived
+ * from the rolled-up rows: `MAX(day_start)` cannot tell an idle account from a wedged pass, nor
+ * a brand-new account from a rollup that has never run, and those call for opposite responses.
+ *
+ * DEPLOYMENT-scoped (one row per rollup, no tenant dimension) because one pass covers every
+ * workspace, and carrying only a day boundary and a timestamp it holds no tenant data. Written
+ * in the same transaction as the rewrite it describes. NOT workspace-scoped, hence absent from
+ * `WORKSPACE_SCOPED_TABLES` and from the retention prune.
+ */
+export const platformRollupState = pgTable('platform_rollup_state', {
+  rollup: text('rollup').primaryKey(),
+  through_day: bigint('through_day', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})

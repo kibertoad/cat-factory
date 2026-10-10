@@ -1,14 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { headerDistanceSq, type Rect } from './taskExpansionRanking'
 
-/** Rank a set of cards against a screen centre, best (would-expand) first. */
-function rank(cards: Record<string, Rect>, cx: number, cy: number): string[] {
-  return Object.entries(cards)
-    .map(([id, rect]) => ({ id, dist: headerDistanceSq(rect, cx, cy) }))
-    .sort((a, b) => a.dist - b.dist)
-    .map((c) => c.id)
-}
-
 describe('headerDistanceSq', () => {
   it('measures from the centre of the card top edge', () => {
     const r: Rect = { left: 0, right: 100, top: 200, bottom: 600 }
@@ -25,27 +17,26 @@ describe('headerDistanceSq', () => {
   })
 })
 
-describe('ranking', () => {
-  // The regression from the screenshot: a tall card parked at the top of the screen
-  // expands its pipeline down past the centre, so its body covers the centre. A compact
-  // card whose header sits right at the centre must still win — the one you're looking at.
+describe('ordering by header distance', () => {
+  // `useTaskExpansion` sorts candidates by this measure, so the card with the smaller value is
+  // the one that expands. The regression from the screenshot: a tall card parked at the top of
+  // the screen expands its pipeline down past the centre, so its body covers the centre. A
+  // compact card whose header sits right at the centre must still win.
   it('prefers the card whose header is at the centre over a tall card bleeding down from the top', () => {
     const top: Rect = { left: 0, right: 200, top: 30, bottom: 700 } // header far up, body covers centre
     const here: Rect = { left: 0, right: 200, top: 320, bottom: 520 } // header at the centre
-    expect(rank({ top, here }, 100, 340)).toEqual(['here', 'top'])
-    // document order can't flip the winner
-    expect(rank({ here, top }, 100, 340)).toEqual(['here', 'top'])
+    expect(headerDistanceSq(here, 100, 340)).toBeLessThan(headerDistanceSq(top, 100, 340))
   })
 
   it('ranks by the header nearest the centre regardless of expansion state', () => {
     const above: Rect = { left: 0, right: 200, top: 100, bottom: 800 }
     const below: Rect = { left: 0, right: 200, top: 360, bottom: 420 }
-    expect(rank({ above, below }, 100, 320)).toEqual(['below', 'above'])
+    expect(headerDistanceSq(below, 100, 320)).toBeLessThan(headerDistanceSq(above, 100, 320))
   })
 
   it('uses horizontal offset to break a vertical tie', () => {
     const near: Rect = { left: 0, right: 100, top: 100, bottom: 200 }
     const far: Rect = { left: 400, right: 500, top: 100, bottom: 200 }
-    expect(rank({ far, near }, 80, 100)).toEqual(['near', 'far'])
+    expect(headerDistanceSq(near, 80, 100)).toBeLessThan(headerDistanceSq(far, 80, 100))
   })
 })

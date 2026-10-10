@@ -1,5 +1,121 @@
 import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
-import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
+import {
+  DispatchError,
+  DomainError,
+  getErrorMessage,
+  HARNESS_SHUTDOWN_ERROR,
+} from '@cat-factory/kernel'
+
+/**
+ * The fields of a FAILED job view that the shared container-eviction recovery reads. Grouped
+ * rather than passed as loose arguments because they always travel together — one transport
+ * verdict about one dead container — and both the agent and deployer call sites forward them
+ * verbatim off their poll result.
+ */
+export interface ContainerFailureView {
+  /** The transport's one-line failure message. */
+  error?: string
+  /** The STRUCTURED eviction verdict. Absent ⇒ not an eviction; the caller handles it. */
+  evicted?: ContainerEvictionKind
+  /**
+   * The transport watched the harness exit CLEANLY with this job still in flight: it was shut
+   * down, not lost. Never set beside {@link evicted}, and handled BEFORE it. See
+   * {@link containerShutdownFailure}.
+   */
+  harnessShutdown?: true
+  /**
+   * The transport's post-mortem of the dead container (its exit state + its own log tail),
+   * recorded as the failure `detail` once the eviction budget is spent. The container is
+   * reclaimed as the run settles, so this is the only account of WHY it died that outlives it.
+   */
+  detail?: string
+}
+
+/** A terminal run failure, as the poll paths report one. */
+export interface TerminalJobFailure {
+  error: string
+  failureKind: AgentFailureKind
+  detail: string
+}
+
+/**
+ * The terminal failure for a job whose harness was SHUT DOWN under it, or null when that is not
+ * what the transport reported (so the caller carries on with eviction recovery and its own
+ * genuine-failure handling).
+ *
+ * Kept apart from the eviction recovery rather than folded into it, because it is the one
+ * container-loss shape with no recovery: an eviction spends a budget on a fresh container, and
+ * this fails the run on the FIRST occurrence. Retrying would be worse than useless. Whatever
+ * stopped the harness is still there on the next attempt (a host restart, an operator, or the
+ * agent's own commands: the incident behind this spent the whole eviction budget re-running an
+ * agent that killed its container each time), and each attempt costs another full agent run.
+ */
+export function containerShutdownFailure(failure: ContainerFailureView): TerminalJobFailure | null {
+  if (!failure.harnessShutdown) return null
+  // Kernel's own wording for the fallback, not a second sentence saying the same thing: the
+  // transports all report this condition with that constant, and one condition worded two ways
+  // is a condition an operator cannot search for.
+  const error = failure.error ?? HARNESS_SHUTDOWN_ERROR
+  return { error, failureKind: 'harness_shutdown', detail: failure.detail ?? error }
+}
+
+/**
+ * The terminal failure for a DELEGATED job whose executor called its verdict final, or null when
+ * this is not that.
+ *
+ * Its own function rather than a reuse of {@link containerShutdownFailure}, and the separation IS
+ * the fix: borrowing the container path's only "terminal, do not retry" signal made every external
+ * CI failure report `failureKind: 'harness_shutdown'`, which renders to an operator as "Harness
+ * shut down" for a step that never had a harness and buckets delegated verdicts under container
+ * eviction in every failure-kind rollup. The two conditions want the same DISPOSITION and
+ * different NAMES, and only the name reaches a human.
+ *
+ * A RETRYABLE delegated failure answers null, and its re-drive is
+ * `PollCompletionController.recoverDelegatedFailure` rather than anything here: retryability and
+ * classification are separate axes, so `delegated_failed` is the kind for BOTH and the
+ * disposition decides only whether a second dispatch is spent (see `DelegationUpdate.retryable`
+ * and {@link MAX_DELEGATED_RETRIES}).
+ */
+export function delegatedTerminalFailure(failure: {
+  error?: string
+  detail?: string
+  // The whole delegated channel, not just the disposition: the caller forwards the update's own
+  // field, which also carries the external url.
+  delegated?: { url?: string; disposition?: 'terminal' | 'retryable' }
+}): TerminalJobFailure | null {
+  if (failure.delegated?.disposition !== 'terminal') return null
+  const error = failure.error ?? 'The external executor reported a terminal failure.'
+  return { error, failureKind: 'delegated_failed', detail: failure.detail ?? error }
+}
+
+/**
+ * How many times a DELEGATED step is re-dispatched automatically after its executor called a
+ * failure retryable (a cancelled run, a runner-pool restart, a rate limit).
+ *
+ * One, like {@link MAX_EVICTION_RECOVERIES} and for the same reasoning: a single blip is absorbed
+ * silently, and a second failure of the same step is evidence that the next attempt reaches the
+ * same verdict. The cost of being wrong is higher here than on the container path, because the
+ * attempt runs on somebody else's runner and bills somebody else's account, which is also why the
+ * budget is the engine's to set rather than the executor's to ask for.
+ */
+export const MAX_DELEGATED_RETRIES = 1
+
+/**
+ * Compose the failure `detail` for a step whose eviction budget is spent, from the post-mortem
+ * of the FIRST container that died on it (retained across recoveries on
+ * `PipelineStep.firstEvictionDetail`, since a re-dispatch removes the dead container at once)
+ * and that of the LAST. Both are kept when they differ — the first death normally explains the
+ * run, while the last is what the operator would otherwise be handed — and collapsed to one when
+ * only one exists or the two say the same thing.
+ */
+export function evictionFailureDetail(
+  first: string | undefined,
+  last: string | undefined,
+): string | undefined {
+  if (!first || first === last) return last
+  if (!last) return first
+  return `First eviction:\n${first}\n\nFinal eviction:\n${last}`
+}
 
 /**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is
@@ -13,37 +129,72 @@ export const MAX_EVICTION_RECOVERIES = 1
 
 /**
  * Recovery budget for evictions a runtime flags as *transient infrastructure churn*
- * (see {@link isTransientEviction}) rather than a crash. Larger than
- * {@link MAX_EVICTION_RECOVERIES} because such churn can recur several times in a
+ * (the transport mints `RunnerJobView.evicted = 'transient'`) rather than a crash. Larger
+ * than {@link MAX_EVICTION_RECOVERIES} because such churn can recur several times in a
  * short window (e.g. a deploy that drains the sandbox repeatedly). Each recovery
  * re-dispatches a fresh container, naturally spaced by the job poll interval, so a
  * bounded handful rides out the window instead of deterministically failing a
  * healthy run. The engine stays runtime-neutral: which infra events count as
- * transient is the facade's call — it opts in by tagging the eviction with
- * {@link TRANSIENT_EVICTION_MARKER} (Cloudflare maps a new-version rollout / exit
- * 143 to it; another runtime might map a node drain or a placement move).
+ * transient is the facade's call — it opts in by minting `evicted: 'transient'`
+ * (Cloudflare maps a new-version rollout / exit 143 to it; another runtime might map a
+ * node drain or a placement move).
  */
 export const MAX_TRANSIENT_EVICTION_RECOVERIES = 5
 
 /**
- * Neutral marker a runtime facade appends to an eviction error to declare it
- * transient infrastructure churn (recover leniently), not a crash. Kept generic on
- * purpose: the engine knows only "transient vs crash"; the facade owns the mapping
- * from its own signal (a Cloudflare rollout, a node drain, …) to this marker. The
- * tagged string still contains "evicted or crashed" so {@link isContainerEvictionError}
- * also matches and the shared recovery machinery engages.
+ * Recovery budget for a step whose push to the work branch was REFUSED because the branch moved
+ * under it (the harness reports `branch-contended`). Re-dispatching resumes the branch as it now
+ * stands, which is exactly what resolves the race the rejection reports: the other writer's
+ * commits are already there, so the agent works on top of them instead of against them.
+ *
+ * Set to 1, and deliberately lower than the transient-eviction budget: the two failure shapes look
+ * alike but recur differently. Infra churn is a window that passes, whereas the one contention
+ * shape the harness cannot resolve itself is an agent REWRITING history it did not publish, which
+ * is deterministic, so a second attempt does the same thing again. One retry buys the genuine race
+ * its resolution without funding a loop, and the failure past it names the cause precisely.
  */
-export const TRANSIENT_EVICTION_MARKER = 'transient infrastructure eviction'
+export const MAX_BRANCH_CONTENTION_RECOVERIES = 1
 
 /**
- * Whether a failed job poll is a *container eviction/crash* (the per-run container
- * vanished and its in-memory job registry is gone) rather than a genuine agent
- * failure. The Cloudflare transport maps a 404 job poll to a failed view whose
- * message ends `(container evicted or crashed)`; the worker bootstrap flow
- * classifies the identical string. Matching it here lets the execution engine
- * recover a transient eviction by spinning a fresh container instead of failing
- * the whole run on the first blip. Covers transient-tagged evictions too (their
- * message also contains this phrase) — {@link isTransientEviction} sub-classifies them.
+ * Throttle window (ms) for persisting a container step's liveness heartbeat as its
+ * `lastActivityAt`. The harness heartbeat advances on every stdout chunk and the driver polls
+ * every ~15s, so persisting on every poll would rewrite the run needlessly; instead the engine
+ * only re-stamps `lastActivityAt` once the forwarded heartbeat has moved forward by at least this
+ * much. Chosen well under the stale-run sweeper's 5-minute lease so a live-but-quiet run always
+ * refreshes its `updated_at` in time, while roughly halving the write rate versus the poll cadence.
+ */
+export const ACTIVITY_PERSIST_THROTTLE_MS = 20_000
+
+/**
+ * Whether a freshly-polled liveness heartbeat should be persisted as the step's `lastActivityAt`,
+ * given the value already stored. True when nothing is stored yet (first poll) or the incoming
+ * heartbeat has advanced by at least {@link ACTIVITY_PERSIST_THROTTLE_MS}. A wedged job whose
+ * heartbeat is frozen returns false forever — so its `updated_at` stops advancing and the sweeper /
+ * UI correctly see it as stale, which is the whole point of distinguishing quiet-but-alive from
+ * wedged. A non-advancing or absent incoming value is never persisted.
+ */
+export function shouldPersistActivity(
+  stored: number | null | undefined,
+  incoming: number | undefined,
+): boolean {
+  if (incoming == null) return false
+  if (stored == null) return true
+  return incoming - stored >= ACTIVITY_PERSIST_THROTTLE_MS
+}
+
+/**
+ * Whether a thrown DISPATCH-time error is a *container eviction/crash* (the container
+ * vanished before it accepted the job) rather than a genuine dispatch fault. Some transports
+ * have no job view at dispatch time (the Kubernetes `waitForPodReady` wait, the inline-job
+ * path), so a dispatch-time eviction can only surface as a thrown Error whose message ends
+ * `(container evicted or crashed)`; matching it here routes such a throw to a fresh-container
+ * retry rather than failing the run on the first blip.
+ *
+ * POLL-time eviction is NOT string-matched — it rides the structured
+ * {@link import('@cat-factory/kernel').ContainerEvictionKind | RunnerJobView.evicted} field
+ * (set by every transport), which the recovery paths read directly. This check is the only
+ * remaining eviction string test, kept because the dispatch-time throw carries no view (the
+ * typed dispatch-eviction error is a separate follow-up).
  */
 export function isContainerEvictionError(error: string | undefined): boolean {
   return error !== undefined && /evicted or crashed/i.test(error)
@@ -62,10 +213,85 @@ export interface DispatchFailureClassification {
 }
 
 /**
+ * What the step had already accomplished when the dispatch threw — the "run history" the
+ * classifier needs to tell a fresh-start failure apart from a container lost AFTER work had
+ * begun (ADR 0026 D1). Populated from the step at the throw site; every field is optional so
+ * the first-dispatch path (no history) passes nothing and gets the classic framing.
+ */
+export interface DispatchFailureContext {
+  /**
+   * Automatic crash-eviction recoveries already spent on this step. `> 0` means the step
+   * reached the agent phase, lost its container to an eviction, and this throw is the FAILED
+   * recovery re-dispatch — not a container that never started. This is the primary "work had
+   * begun" signal (the recovery path increments it before re-dispatching).
+   */
+  evictionRecoveries?: number
+  /** Transient-churn recoveries already spent — same "work had begun" signal as above. */
+  transientEvictionRecoveries?: number
+  /**
+   * Branch-contention recoveries already spent (see `MAX_BRANCH_CONTENTION_RECOVERIES`). The third
+   * "work had begun" signal, and the STRONGEST of them: a refused push is proof the step's commits
+   * are on the remote branch already, where an eviction only proves the container reached the agent
+   * phase. It gets its own message rather than the eviction one because nothing was evicted.
+   */
+  branchContentionRecoveries?: number
+  /** Epoch ms the step first began executing, to render "after N minutes of work". */
+  startedAt?: number | null
+  /** Slices the reviewer had already grouped the diff into (partial progress), if any. */
+  sliceCount?: number
+  /** Injected `now` (epoch ms) for deterministic tests; defaults to `Date.now()`. */
+  now?: number
+}
+
+/** Whole minutes of work between `startedAt` and now, or null when it can't be computed / is <1. */
+function elapsedWorkMinutes(context: DispatchFailureContext): number | null {
+  if (context.startedAt == null) return null
+  const now = context.now ?? Date.now()
+  const minutes = Math.floor((now - context.startedAt) / 60_000)
+  return minutes >= 1 ? minutes : null
+}
+
+/**
+ * The honest terminal message for a container lost to an eviction AFTER the step had done work
+ * (see {@link classifyDispatchFailure}'s catch-all). Reads as "evicted mid-work, unrecoverable"
+ * rather than "never started", and folds in the elapsed minutes + any partial slice count so the
+ * board and PR-review window can render "work was in progress".
+ */
+function evictionAfterWorkMessage(context: DispatchFailureContext): string {
+  const slices =
+    context.sliceCount && context.sliceCount > 0
+      ? ` (${context.sliceCount} slice${context.sliceCount === 1 ? '' : 's'} reviewed)`
+      : ''
+  return `The container was evicted ${whenWorkHadBegun(context)}${slices} and could not be recovered.`
+}
+
+/** "after N minutes of work", or the vaguer form when no start clock was recorded. */
+function whenWorkHadBegun(context: DispatchFailureContext): string {
+  const minutes = elapsedWorkMinutes(context)
+  return minutes != null
+    ? `after ${minutes} minute${minutes === 1 ? '' : 's'} of work`
+    : 'after work had begun'
+}
+
+/**
+ * The honest terminal message for the re-dispatch of a step whose work-branch push was REFUSED
+ * failing to start. Nothing was evicted here, so it keeps the `dispatch` framing, but it must not
+ * read as "never started": the step's commits are on the remote branch already, which is precisely
+ * what the refused push proved.
+ */
+function contentionAfterWorkMessage(context: DispatchFailureContext): string {
+  return (
+    `The container failed to start when resuming this step ${whenWorkHadBegun(context)}, ` +
+    'after its push to the work branch was refused. The commits it had already pushed are on the ' +
+    'branch.'
+  )
+}
+
+/**
  * Classify a throw from an async agent dispatch (`startJob`) into a terminal failure. The
  * dispatch catch used to assume EVERY throw was the container failing to accept the job, but a
  * job is also built (auth, repo target, context) BEFORE any container is contacted — so a
- * precondition can reject it up front. Three cases, most-specific first:
+ * precondition can reject it up front. Cases, most-specific first:
  *
  *  - A domain PRECONDITION error (any {@link DomainError}, e.g. the `github_not_connected`
  *    `ConflictError` raised while building the job because the workspace has no connected repo)
@@ -76,11 +302,26 @@ export interface DispatchFailureClassification {
  *  - A container eviction/crash routes to `evicted` (a fresh-container retry may help).
  *  - A structured {@link DispatchError} from a transport `dispatch()` routes to `dispatch` and
  *    surfaces its already-elaborated message verbatim (the raw status line + any 404 stale-image
- *    remedy), rather than the generic "failed to start" framing.
+ *    remedy), rather than the generic "failed to start" framing. This DELIBERATELY takes
+ *    precedence over the evicted-after-work case below: even on a recovery re-dispatch of a step
+ *    that had done work, that elaborated message (e.g. "redeploy the stale image") is both more
+ *    actionable and less misleading than the generic eviction message — and it is NOT the "failed
+ *    to start" wording D1 set out to remove — so a genuine dispatch fault keeps its own framing.
+ *  - A generic throw on a step that had ALREADY begun work (`context.evictionRecoveries > 0` —
+ *    the failed recovery re-dispatch of a container that reached the agent phase and was then
+ *    evicted) is framed as `evicted` with an eviction-after-work message, NOT the misleading
+ *    "container failed to start" (which reads as "never started"). See ADR 0026 D1.
+ *  - A generic throw on the re-dispatch after a REFUSED work-branch push
+ *    (`context.branchContentionRecoveries > 0`) is the same misattribution to avoid, with a
+ *    stronger history behind it: the step's commits are already on the branch. It keeps the
+ *    `dispatch` kind (no container was evicted) and says what it was resuming.
  *  - Anything else is a genuine container accept failure (`dispatch`): the container/runner
- *    never accepted the job (an HTTP/network error, a capacity blip).
+ *    never accepted the job (an HTTP/network error, a capacity blip) before any work happened.
  */
-export function classifyDispatchFailure(error: unknown): DispatchFailureClassification {
+export function classifyDispatchFailure(
+  error: unknown,
+  context: DispatchFailureContext = {},
+): DispatchFailureClassification {
   const message = getErrorMessage(error)
   if (error instanceof DomainError) {
     const reason = error.details?.reason
@@ -95,53 +336,24 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
     return { error: message, failureKind: 'evicted', detail: message }
   }
   if (error instanceof DispatchError) {
+    // Intentionally BEFORE the evicted-after-work branch: a structured dispatch fault carries an
+    // accurate, actionable message (the raw status line + any stale-image remedy) that beats the
+    // generic eviction wording even when the step had already done work — so keep `dispatch`.
     return { error: message, failureKind: 'dispatch', detail: message }
   }
+  // The step had already reached the agent phase and lost a container to an eviction (the
+  // recovery path bumped the recovery count before this re-dispatch): the run DID work, so
+  // report an unrecoverable eviction rather than a fresh-start failure. The verbatim throw
+  // stays on `detail` for the post-mortem.
+  const recoveries = (context.evictionRecoveries ?? 0) + (context.transientEvictionRecoveries ?? 0)
+  if (recoveries > 0) {
+    return { error: evictionAfterWorkMessage(context), failureKind: 'evicted', detail: message }
+  }
+  // Same reasoning, different history: this is the re-dispatch after a REFUSED work-branch push, so
+  // the step's work is not merely begun but pushed. It stays a `dispatch` failure (nothing was
+  // evicted) with a message that says so.
+  if ((context.branchContentionRecoveries ?? 0) > 0) {
+    return { error: contentionAfterWorkMessage(context), failureKind: 'dispatch', detail: message }
+  }
   return { error: 'The container failed to start.', failureKind: 'dispatch', detail: message }
-}
-
-/**
- * Whether a container eviction was flagged by the runtime facade as *transient
- * infrastructure churn* (the facade tagged it with {@link TRANSIENT_EVICTION_MARKER})
- * rather than a crash/OOM. Transient evictions recover on the larger
- * {@link MAX_TRANSIENT_EVICTION_RECOVERIES} budget. This is intentionally agnostic to
- * what the underlying event was: the facade decides (Cloudflare, for instance, maps a
- * new-version rollout to it after asking the container Durable Object).
- */
-export function isTransientEviction(error: string | undefined): boolean {
-  return error !== undefined && error.includes(TRANSIENT_EVICTION_MARKER)
-}
-
-/**
- * The structured container-eviction verdict for a failed job, preferring the transport's
- * {@link ContainerEvictionKind | evicted} field and falling back to the error-string sentinels
- * (`(container evicted or crashed)` + {@link TRANSIENT_EVICTION_MARKER}) only when it is absent —
- * an older producer / a pool that doesn't forward the field. Returns undefined when the failure
- * is NOT an eviction, so the caller proceeds with its own genuine-failure handling. This is the
- * single seam consumers read instead of calling {@link isContainerEvictionError} /
- * {@link isTransientEviction} directly, so the structured field is the load-bearing signal and
- * the regexes are the compatibility fallback (section I of the error-message initiative).
- */
-export function evictionKindOf(
-  evicted: ContainerEvictionKind | undefined,
-  error: string | undefined,
-): ContainerEvictionKind | undefined {
-  if (evicted) return evicted
-  if (!isContainerEvictionError(error)) return undefined
-  return isTransientEviction(error) ? 'transient' : 'crash'
-}
-
-/**
- * The error-string fallback for an agent/execution job failure when the harness reported no
- * structured `failureCause` (an older image, or a pool transport that doesn't forward it). Mirrors
- * the bootstrap path's `classifyBootstrapFailure`: the watchdog phrases map to `timeout`, anything
- * else to `agent` — so the SAME watchdog text classifies identically on both the execution and
- * bootstrap paths. Container eviction is handled separately (by {@link isContainerEvictionError}),
- * so it never reaches here. Used as `failureKindFromHarnessCause(cause) ??
- * classifyAgentFailure(error)` — the kernel's shared structured-cause mapper wins when the
- * harness reported a cause.
- */
-export function classifyAgentFailure(error: string | undefined): AgentFailureKind {
-  if (error && /inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
-  return 'agent'
 }

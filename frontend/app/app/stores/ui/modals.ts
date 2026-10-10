@@ -1,0 +1,1211 @@
+import { ref } from 'vue'
+import type {
+  DocumentSourceKind,
+  InfraSetupArea,
+  OpenGuidedReviewInput,
+  TaskSourceKind,
+} from '~/types/domain'
+import type {
+  InfrastructureScrollTarget,
+  InfrastructureTab,
+  ProviderConnectionKind,
+} from '~/types/providerConnections'
+import type { PendingContext } from '~/composables/useContextLinking'
+import {
+  infraSetupDismissalKey,
+  type InfraSetupCardKind,
+  type InfraSetupDismissalKey,
+} from '~/utils/infraSetup'
+import {
+  DEFAULT_PROVISION_DEEP_LINK_PARAM,
+  DEFAULT_PROVISION_DEEP_LINK_VALUE,
+} from '~/utils/defaultProvisioning'
+
+/** Values used to seed the add-task form when it is opened from another surface. */
+export interface AddTaskPrefill {
+  title?: string
+  description?: string
+  /** Context items staged on the new task (e.g. the source issue), linked once created. */
+  context?: PendingContext[]
+}
+
+/**
+ * Non-secret `local-k3s` connection values captured from the `cat-factory k3s` CLI deep-link
+ * (`?infraSetup=local-k3s&…`). Mirrors the params `buildK3sSetupUrl` emits (the CLI-side
+ * `k3s-handler.ts`); the ServiceAccount token is intentionally absent — the user pastes it.
+ */
+export interface K3sSetupPrefill {
+  label: string
+  apiServerUrl: string
+  namespaceTemplate: string
+  /**
+   * Empty when the CLI could not establish that the cluster serves an ingress-derived URL, in
+   * which case it deliberately omits the param so this form does NOT prefill a host template
+   * nothing would answer. The field is required for an `ingressTemplate` source, so an empty
+   * value stops the unserved promise being saved.
+   */
+  hostTemplate: string
+  /**
+   * The verified host port, as typed into the form's port field, or empty for the scheme default.
+   * Kept out of `hostTemplate` because that value is also the Ingress `host` a service's manifests
+   * declare, and Kubernetes rejects a `host` with a port in it.
+   */
+  ingressPort: string
+  /** Scheme the CLI verified. Absent ⇒ the form keeps its own default. */
+  urlScheme?: 'http' | 'https'
+  // Absent when the link omitted the param, so the form keeps its engine default rather than
+  // forcing verification back on (which would break a self-signed local cluster).
+  insecureSkipTlsVerify?: boolean
+}
+
+/** One task waiting on human review, as carried on a review-debt friction 409's details. */
+export interface ReviewDebtRow {
+  blockId: string
+  /** The task's title, joined in server-side; null when it couldn't be resolved. */
+  title: string | null
+  /** How long the task has been waiting on review, in minutes. */
+  waitingMinutes: number
+}
+
+/** The context a review-debt friction dialog renders + acts on (from the parsed 409). */
+export interface ReviewFrictionModalContext {
+  /** `warn` = soft friction (the human may proceed); `blocked` = hard block (they may not). */
+  kind: 'warn' | 'blocked'
+  /** Which hard trigger fired (`count` / `stuck`), for the blocked-tier message. */
+  reason?: 'count' | 'stuck'
+  /** The count / stuck-minutes threshold that fired, for the message. */
+  threshold?: number | null
+  /** The waiting tasks, worst-first, each deep-linkable to its block. */
+  debt: ReviewDebtRow[]
+  /** Retry the create with `acknowledgeReviewDebt` — present only for the soft `warn` tier. */
+  onConfirm: (() => void) | null
+  /**
+   * Whether the opener's create is in flight right now, so "Create anyway" can show its spinner and
+   * refuse a second click (UX-78). A GETTER over the opener's own `saving` ref rather than a copied
+   * boolean: the dialog's context object is captured once at open, so a snapshot would be frozen at
+   * `false` for the whole retry. Reading it inside a `computed` keeps the reactivity.
+   *
+   * Load-bearing, not cosmetic: the retry's first await resolves the staged context attachments
+   * (a network round-trip per item), so a second click during that window filed a SECOND task and
+   * started a second pipeline run against the same request.
+   */
+  pending?: () => boolean
+}
+
+/** Clears both hub came-from markers; injected into the slices whose `open*` handlers reset them. */
+type ResetHubReturn = () => void
+
+/**
+ * Startup health advisories (pipeline / merge-preset / model-preset). Each lists built-ins with a
+ * newer catalog version (reseed) + new built-ins the workspace can add; the `*Seen` flag gates
+ * auto-open to once per session so it does not re-pop on every snapshot re-hydration.
+ */
+function createHealthAdvisoryModals() {
+  const pipelineHealthOpen = ref(false)
+  const pipelineHealthSeen = ref(false)
+  const riskPolicyHealthOpen = ref(false)
+  const riskPolicyHealthSeen = ref(false)
+  const modelPresetHealthOpen = ref(false)
+  const modelPresetHealthSeen = ref(false)
+
+  /** Auto-open the pipeline-health advisory once per session (no-op after it's been shown). */
+  function maybeOpenPipelineHealth() {
+    if (pipelineHealthSeen.value) return
+    pipelineHealthSeen.value = true
+    pipelineHealthOpen.value = true
+  }
+  function openPipelineHealth() {
+    pipelineHealthSeen.value = true
+    pipelineHealthOpen.value = true
+  }
+  function closePipelineHealth() {
+    pipelineHealthOpen.value = false
+  }
+
+  /** Auto-open the merge-preset health advisory once per session (no-op after it's been shown). */
+  function maybeOpenRiskPolicyHealth() {
+    if (riskPolicyHealthSeen.value) return
+    riskPolicyHealthSeen.value = true
+    riskPolicyHealthOpen.value = true
+  }
+  function openRiskPolicyHealth() {
+    riskPolicyHealthSeen.value = true
+    riskPolicyHealthOpen.value = true
+  }
+  function closeRiskPolicyHealth() {
+    riskPolicyHealthOpen.value = false
+  }
+
+  /** Auto-open the model-preset health advisory once per session (no-op after it's been shown). */
+  function maybeOpenModelPresetHealth() {
+    if (modelPresetHealthSeen.value) return
+    modelPresetHealthSeen.value = true
+    modelPresetHealthOpen.value = true
+  }
+  function openModelPresetHealth() {
+    modelPresetHealthSeen.value = true
+    modelPresetHealthOpen.value = true
+  }
+  function closeModelPresetHealth() {
+    modelPresetHealthOpen.value = false
+  }
+
+  return {
+    pipelineHealthOpen,
+    pipelineHealthSeen,
+    riskPolicyHealthOpen,
+    riskPolicyHealthSeen,
+    modelPresetHealthOpen,
+    modelPresetHealthSeen,
+    maybeOpenPipelineHealth,
+    openPipelineHealth,
+    closePipelineHealth,
+    maybeOpenRiskPolicyHealth,
+    openRiskPolicyHealth,
+    closeRiskPolicyHealth,
+    maybeOpenModelPresetHealth,
+    openModelPresetHealth,
+    closeModelPresetHealth,
+  }
+}
+
+/**
+ * Small standalone surfaces with no hub relationship: the pipeline builder and the
+ * decision-wait window.
+ */
+function createMiscModals() {
+  const builderOpen = ref(false)
+  const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
+
+  function openBuilder() {
+    builderOpen.value = true
+  }
+  function openDecision(instanceId: string, decisionId: string) {
+    decisionContext.value = { instanceId, decisionId }
+  }
+  function closeDecision() {
+    decisionContext.value = null
+  }
+
+  return { builderOpen, decisionContext, openBuilder, openDecision, closeDecision }
+}
+
+/** What the guided review window opens on: a session, a pull request, or neither (the picker). */
+export interface GuidedReviewOpen {
+  sessionId: string | null
+  target: OpenGuidedReviewInput | null
+}
+
+/**
+ * Document- and task-source integration modals (keyed by source), plus the add-task /
+ * add-recurring / create-initiative surfaces. The `open*` connect/import handlers reset the hub
+ * came-from markers (they can be reached from the Integrations hub).
+ */
+function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
+  // Document-source integration modals, keyed by source. A spawn always creates new
+  // top-level frames: the planner decomposes a document into services, so spawning
+  // into an existing frame could only flatten those away (discarding the frame titles
+  // and types the preview shows). `documentConnect` carries the source whose connect
+  // form to show; `documentImport`'s source may be null to let the modal pick a
+  // connected one.
+  const documentConnect = ref<{ source: DocumentSourceKind } | null>(null)
+  const documentImport = ref<{ source: DocumentSourceKind | null } | null>(null)
+  // The workspace+DocKind template / exemplar management modal (WS1). A single boolean —
+  // it manages every kind's links in one place.
+  const documentTemplates = ref(false)
+  const spawnPreview = ref<{
+    source: DocumentSourceKind
+    externalId: string
+  } | null>(null)
+
+  // Task-source integration modals, keyed by source. `taskConnect` carries the
+  // source whose connect form to show; `taskImport`'s source may be null to let
+  // the modal pick a connected one (there is no spawn target — issues are linked
+  // to a block for context, not expanded into structure).
+  const taskConnect = ref<{ source: TaskSourceKind } | null>(null)
+  // `containerId` (a service frame) scopes the modal: it preselects that frame as
+  // the create-in target AND scopes the issue search to the frame's linked repo.
+  // Null → the unscoped "import an issue" surface (workspace-wide search).
+  const taskImport = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
+  // In-app assistant: the prompt box that routes one sentence to one board action. It carries no
+  // subject (a turn resolves every name it needs from the board itself), so a plain flag says
+  // everything the host needs to know.
+  const assistantOpen = ref(false)
+  // Guided PR review: either an existing session to show, or a PR to open one for. Both null
+  // opens the PR picker.
+  const guidedReview = ref<GuidedReviewOpen | null>(null)
+
+  // Bug hunt: pick a tracker + one of its boards, rank its open unassigned bugs, adopt one.
+  // `containerId` (a service frame or module) preselects where an adopted bug lands; null →
+  // opened standalone, and the modal offers every container on the board.
+  const bugHunt = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
+
+  // Start-from-design: paste a design link, and the resolved reference is staged onto a new task
+  // in `frameId`. `frameId` is always present — the affordance lives on a frame header, and the
+  // flow ends in the add-task form, which needs a container to create in.
+  const startFromDesign = ref<{ frameId: string } | null>(null)
+
+  // Add-task modal: the container (service frame or module) a new task is being
+  // added to, or null when closed. The user types the title + description; nothing
+  // is launched until they explicitly start the created task.
+  const addTaskContainerId = ref<string | null>(null)
+  // Optional values to seed the add-task form with when it is opened from another
+  // surface (e.g. "create task from issue" prefills the title + stages the issue as
+  // linked context). The user still confirms pipeline / preset before adding.
+  const addTaskPrefill = ref<AddTaskPrefill | null>(null)
+
+  // Review-debt friction dialog: opened when a task-create request is refused by the opt-in
+  // friction gate (`review_debt_warn` / `review_debt_blocked` 409). Carries the parsed conflict
+  // details the backend supplied (the waiting tasks + the trigger) so the dialog can list exactly
+  // what is in review, and — for the soft `warn` tier — an `onConfirm` the "Create anyway" button
+  // runs to retry the create with `acknowledgeReviewDebt`. Null when closed. See
+  // backend/docs/review-debt-friction.md.
+  const reviewFrictionContext = ref<ReviewFrictionModalContext | null>(null)
+
+  // Add-recurring-pipeline modal: the service frame a new recurring pipeline is
+  // being added to, or null when closed (mirrors the add-task flow — a button on
+  // the frame opens it, scoped to that frame).
+  const addRecurringFrameId = ref<string | null>(null)
+
+  // Create-initiative modal: the service frame a new initiative is being created
+  // under, or null when closed (mirrors the add-task flow).
+  const createInitiativeFrameId = ref<string | null>(null)
+
+  function openDocumentConnect(source: DocumentSourceKind) {
+    resetHubReturn()
+    documentConnect.value = { source }
+  }
+  function closeDocumentConnect() {
+    documentConnect.value = null
+  }
+  function openDocumentImport(source: DocumentSourceKind | null = null) {
+    resetHubReturn()
+    documentImport.value = { source }
+  }
+  function closeDocumentImport() {
+    documentImport.value = null
+  }
+  function openDocumentTemplates() {
+    resetHubReturn()
+    documentTemplates.value = true
+  }
+  function closeDocumentTemplates() {
+    documentTemplates.value = false
+  }
+  function openSpawnPreview(source: DocumentSourceKind, externalId: string) {
+    spawnPreview.value = { source, externalId }
+  }
+  function closeSpawnPreview() {
+    spawnPreview.value = null
+  }
+  function openTaskConnect(source: TaskSourceKind) {
+    resetHubReturn()
+    taskConnect.value = { source }
+  }
+  function closeTaskConnect() {
+    taskConnect.value = null
+  }
+  function openTaskImport(source: TaskSourceKind | null = null, containerId: string | null = null) {
+    resetHubReturn()
+    taskImport.value = { source, containerId }
+  }
+  function closeTaskImport() {
+    taskImport.value = null
+  }
+  function openAssistant() {
+    resetHubReturn()
+    assistantOpen.value = true
+  }
+  function closeAssistant() {
+    assistantOpen.value = false
+  }
+  function openGuidedReview(open: GuidedReviewOpen = { sessionId: null, target: null }) {
+    resetHubReturn()
+    guidedReview.value = open
+  }
+  function closeGuidedReview() {
+    guidedReview.value = null
+  }
+  function openBugHunt(source: TaskSourceKind | null = null, containerId: string | null = null) {
+    resetHubReturn()
+    bugHunt.value = { source, containerId }
+  }
+  function closeBugHunt() {
+    bugHunt.value = null
+  }
+  function openStartFromDesign(frameId: string) {
+    resetHubReturn()
+    startFromDesign.value = { frameId }
+  }
+  function closeStartFromDesign() {
+    startFromDesign.value = null
+  }
+  function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
+    addTaskPrefill.value = prefill
+    addTaskContainerId.value = containerId
+  }
+  function closeAddTask() {
+    addTaskContainerId.value = null
+    addTaskPrefill.value = null
+  }
+  function openReviewFriction(ctx: ReviewFrictionModalContext) {
+    reviewFrictionContext.value = ctx
+  }
+  function closeReviewFriction() {
+    reviewFrictionContext.value = null
+  }
+  function openAddRecurring(frameId: string) {
+    addRecurringFrameId.value = frameId
+  }
+  function closeAddRecurring() {
+    addRecurringFrameId.value = null
+  }
+  function openCreateInitiative(frameId: string) {
+    createInitiativeFrameId.value = frameId
+  }
+  function closeCreateInitiative() {
+    createInitiativeFrameId.value = null
+  }
+
+  return {
+    documentConnect,
+    documentImport,
+    documentTemplates,
+    spawnPreview,
+    taskConnect,
+    taskImport,
+    assistantOpen,
+    guidedReview,
+    bugHunt,
+    startFromDesign,
+    addTaskContainerId,
+    addTaskPrefill,
+    reviewFrictionContext,
+    addRecurringFrameId,
+    createInitiativeFrameId,
+    openDocumentConnect,
+    closeDocumentConnect,
+    openDocumentImport,
+    closeDocumentImport,
+    openDocumentTemplates,
+    closeDocumentTemplates,
+    openSpawnPreview,
+    closeSpawnPreview,
+    openTaskConnect,
+    closeTaskConnect,
+    openTaskImport,
+    closeTaskImport,
+    openAssistant,
+    closeAssistant,
+    openGuidedReview,
+    closeGuidedReview,
+    openBugHunt,
+    closeBugHunt,
+    openStartFromDesign,
+    closeStartFromDesign,
+    openAddTask,
+    closeAddTask,
+    openReviewFriction,
+    closeReviewFriction,
+    openAddRecurring,
+    closeAddRecurring,
+    openCreateInitiative,
+    closeCreateInitiative,
+  }
+}
+
+/**
+ * Global overlays with no hub-return relationship: repo bootstrap, add-service, the fragment
+ * library, the command bar (⌘K), the shortcuts cheatsheet, the mobile nav drawer, and the
+ * Sandbox. None reset the hub came-from markers (they aren't reached from the Integrations hub).
+ */
+function createOverlayModals() {
+  // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
+  const bootstrapOpen = ref(false)
+  // "Add a service from an existing GitHub repo" modal (no bootstrap run).
+  const addServiceOpen = ref(false)
+  // Prompt-fragment library panel (manage the board's best-practice catalog +
+  // linked guideline repos; ADR 0006).
+  const fragmentLibraryOpen = ref(false)
+  // Foundational-services panel (register the shared capabilities the org already runs, and see
+  // the merged catalog an Architect designs against; backend/docs/adr/0031-foundational-services.md).
+  const foundationalServicesOpen = ref(false)
+  // Command bar (⌘K) — searchable launcher for every navbar action.
+  const commandBarOpen = ref(false)
+  // Keyboard-shortcuts cheatsheet (?) — a modal listing every global shortcut.
+  const shortcutsHelpOpen = ref(false)
+  // Mobile navigation drawer: on compact (< lg) viewports the SideBar is an
+  // off-canvas drawer toggled by a hamburger; on lg+ it is a static aside and this
+  // flag is ignored. Closed on any nav action so the board is revealed immediately.
+  const mobileNavOpen = ref(false)
+  // The Sandbox (parallel prompt/model testing) surface — an opt-in, on-demand window.
+  const sandboxOpen = ref(false)
+
+  function openBootstrap() {
+    bootstrapOpen.value = true
+  }
+  function closeBootstrap() {
+    bootstrapOpen.value = false
+  }
+  function openAddService() {
+    addServiceOpen.value = true
+  }
+  function closeAddService() {
+    addServiceOpen.value = false
+  }
+  function openFragmentLibrary() {
+    fragmentLibraryOpen.value = true
+  }
+  function closeFragmentLibrary() {
+    fragmentLibraryOpen.value = false
+  }
+  function openFoundationalServices() {
+    foundationalServicesOpen.value = true
+  }
+  function closeFoundationalServices() {
+    foundationalServicesOpen.value = false
+  }
+  function openCommandBar() {
+    commandBarOpen.value = true
+  }
+  function closeCommandBar() {
+    commandBarOpen.value = false
+  }
+  function toggleCommandBar() {
+    commandBarOpen.value = !commandBarOpen.value
+  }
+  function openShortcutsHelp() {
+    shortcutsHelpOpen.value = true
+  }
+  function closeShortcutsHelp() {
+    shortcutsHelpOpen.value = false
+  }
+  function toggleShortcutsHelp() {
+    shortcutsHelpOpen.value = !shortcutsHelpOpen.value
+  }
+  function openMobileNav() {
+    mobileNavOpen.value = true
+  }
+  function closeMobileNav() {
+    mobileNavOpen.value = false
+  }
+  function toggleMobileNav() {
+    mobileNavOpen.value = !mobileNavOpen.value
+  }
+  function openSandbox() {
+    sandboxOpen.value = true
+  }
+  function closeSandbox() {
+    sandboxOpen.value = false
+  }
+
+  return {
+    bootstrapOpen,
+    addServiceOpen,
+    fragmentLibraryOpen,
+    foundationalServicesOpen,
+    commandBarOpen,
+    shortcutsHelpOpen,
+    mobileNavOpen,
+    sandboxOpen,
+    openBootstrap,
+    closeBootstrap,
+    openAddService,
+    closeAddService,
+    openFragmentLibrary,
+    closeFragmentLibrary,
+    openFoundationalServices,
+    closeFoundationalServices,
+    openCommandBar,
+    closeCommandBar,
+    toggleCommandBar,
+    openShortcutsHelp,
+    closeShortcutsHelp,
+    toggleShortcutsHelp,
+    openMobileNav,
+    closeMobileNav,
+    toggleMobileNav,
+    openSandbox,
+    closeSandbox,
+  }
+}
+
+/**
+ * The workspace-scoped integration panels: GitHub, Slack, observability, the operator dashboard,
+ * package registries, API tokens, model config, vendor credentials, local models, user secrets and
+ * OpenRouter. Every `open*` that a hub can route to resets the hub came-from markers.
+ */
+function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
+  // GitHub integration panel (connection management + repo/PR/issue browsing).
+  const githubOpen = ref(false)
+  // Slack integration panel (connect the account's Slack + per-workspace routing).
+  const slackOpen = ref(false)
+  // The notification manager: which notification types this board delivers on which channel
+  // (the in-app push and email). Distinct from `slackOpen`, which configures Slack's
+  // DESTINATION per type — this one decides the channels whose delivery is a plain yes/no.
+  const notificationSettingsOpen = ref(false)
+  // Observability integration: the post-release-health connection panel (Datadog
+  // today, pluggable). NB: distinct from `observabilityInstanceId`, which is the
+  // LLM per-call observability panel (see the result-views slice).
+  const observabilityConnectionOpen = ref(false)
+  // Platform-operator observability: the deployment-level dashboard (aggregate run health of
+  // the account — outcomes, failure taxonomy, live depth, durations). Admin-gated. Distinct
+  // from `observabilityConnectionOpen` (the Datadog connection) AND `observabilityInstanceId`
+  // (the per-run LLM call panel).
+  const operatorDashboardOpen = ref(false)
+  // Reports: the cross-cutting usage-analytics panel over the same account scope (spend per
+  // model / agent kind, spend + activity per workspace / service / task type). Admin-gated.
+  // Distinct from `operatorDashboardOpen`, which answers the deployment-HEALTH question.
+  const reportsOpen = ref(false)
+  // NOTE: private package registries are no longer a panel of their own — they are a tab of
+  // the Infrastructure window (`infrastructureOpen`), reached from the navbar.
+  // API access tokens: the workspace's inbound public-API keys external systems present to
+  // the `/api/v1` surface. Opened from the Integrations hub.
+  const apiTokensOpen = ref(false)
+  const modelConfigOpen = ref(false)
+  // LLM-vendor subscription credentials (the token pool powering the Claude Code
+  // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
+  // the user-scoped "My subscriptions" entry opens straight onto the `personal` tab.
+  const vendorCredentialsOpen = ref(false)
+  const vendorCredentialsTab = ref('pool')
+  // Per-user settings panel: the signed-in user's own-machine local model runners.
+  const localModelsOpen = ref(false)
+  const userSecretsOpen = ref(false)
+  // Per-workspace settings panel: the OpenRouter dynamic catalog (browse/enable gateway models).
+  const openRouterOpen = ref(false)
+
+  function openGitHub() {
+    resetHubReturn()
+    githubOpen.value = true
+  }
+  function closeGitHub() {
+    githubOpen.value = false
+  }
+  function openSlack() {
+    resetHubReturn()
+    slackOpen.value = true
+  }
+  function closeSlack() {
+    slackOpen.value = false
+  }
+  function openNotificationSettings() {
+    resetHubReturn()
+    notificationSettingsOpen.value = true
+  }
+  function closeNotificationSettings() {
+    notificationSettingsOpen.value = false
+  }
+  function openObservabilityConnection() {
+    resetHubReturn()
+    observabilityConnectionOpen.value = true
+  }
+  function closeObservabilityConnection() {
+    observabilityConnectionOpen.value = false
+  }
+  function openOperatorDashboard() {
+    resetHubReturn()
+    operatorDashboardOpen.value = true
+  }
+  function closeOperatorDashboard() {
+    operatorDashboardOpen.value = false
+  }
+  function openReports() {
+    resetHubReturn()
+    reportsOpen.value = true
+  }
+  function closeReports() {
+    reportsOpen.value = false
+  }
+  function openApiTokens() {
+    resetHubReturn()
+    apiTokensOpen.value = true
+  }
+  function closeApiTokens() {
+    apiTokensOpen.value = false
+  }
+  function openModelConfig() {
+    modelConfigOpen.value = true
+  }
+  function closeModelConfig() {
+    modelConfigOpen.value = false
+  }
+  function openVendorCredentials(tab = 'pool') {
+    resetHubReturn()
+    vendorCredentialsTab.value = tab
+    vendorCredentialsOpen.value = true
+  }
+  function setVendorCredentialsTab(tab: string) {
+    vendorCredentialsTab.value = tab
+  }
+  function closeVendorCredentials() {
+    vendorCredentialsOpen.value = false
+  }
+  function openLocalModels() {
+    resetHubReturn()
+    localModelsOpen.value = true
+  }
+  function closeLocalModels() {
+    localModelsOpen.value = false
+  }
+  function openUserSecrets() {
+    resetHubReturn()
+    userSecretsOpen.value = true
+  }
+  function closeUserSecrets() {
+    userSecretsOpen.value = false
+  }
+  function openOpenRouter() {
+    resetHubReturn()
+    openRouterOpen.value = true
+  }
+  function closeOpenRouter() {
+    openRouterOpen.value = false
+  }
+
+  return {
+    githubOpen,
+    slackOpen,
+    notificationSettingsOpen,
+    observabilityConnectionOpen,
+    operatorDashboardOpen,
+    reportsOpen,
+    apiTokensOpen,
+    modelConfigOpen,
+    vendorCredentialsOpen,
+    vendorCredentialsTab,
+    localModelsOpen,
+    userSecretsOpen,
+    openRouterOpen,
+    openGitHub,
+    closeGitHub,
+    openSlack,
+    closeSlack,
+    openNotificationSettings,
+    closeNotificationSettings,
+    openObservabilityConnection,
+    closeObservabilityConnection,
+    openOperatorDashboard,
+    openReports,
+    closeReports,
+    closeOperatorDashboard,
+    openApiTokens,
+    closeApiTokens,
+    openModelConfig,
+    closeModelConfig,
+    openVendorCredentials,
+    setVendorCredentialsTab,
+    closeVendorCredentials,
+    openLocalModels,
+    closeLocalModels,
+    openUserSecrets,
+    closeUserSecrets,
+    openOpenRouter,
+    closeOpenRouter,
+  }
+}
+
+/**
+ * Workspace- and account-settings modals (single tabbed windows). `*Tab` lets a caller deep-link
+ * straight to a tab; `accountSettingsScrollTarget` is a one-shot deep-link anchor into a section
+ * within the (long) account-settings body.
+ */
+function createSettingsModals(resetHubReturn: ResetHubReturn) {
+  // Workspace-settings modal: a single tabbed window gathering the workspace-wide
+  // config (workspace / merge thresholds / issue writeback / service best practices).
+  // `workspaceSettingsTab` lets other surfaces deep-link straight to a tab.
+  const workspaceSettingsOpen = ref(false)
+  const workspaceSettingsTab = ref('workspace')
+  // Account-settings modal: a single tabbed window for the per-account configuration —
+  // the team panel (members + roles + invitations + email sender + account API keys,
+  // `AccountTeamSettings`) and the account-tier prompt-fragment library. Account-scoped
+  // (distinct from workspace settings). `accountSettingsTab` lets other surfaces deep-link
+  // straight to a tab.
+  const accountSettingsOpen = ref(false)
+  const accountSettingsTab = ref('team')
+  // A one-shot deep-link anchor: when a surface opens account settings AND wants to land on a
+  // specific section within the (long) tab body, it sets this to that section's id. The owning
+  // panel scrolls the matching element into view once, then calls `clearAccountSettingsScrollTarget`
+  // so a later plain open doesn't re-scroll. Null when no section was requested.
+  const accountSettingsScrollTarget = ref<string | null>(null)
+
+  function openWorkspaceSettings(tab = 'workspace') {
+    resetHubReturn()
+    workspaceSettingsTab.value = tab
+    workspaceSettingsOpen.value = true
+  }
+  function closeWorkspaceSettings() {
+    workspaceSettingsOpen.value = false
+  }
+  function setWorkspaceSettingsTab(tab: string) {
+    workspaceSettingsTab.value = tab
+  }
+  function openAccountSettings(tab = 'team') {
+    resetHubReturn()
+    accountSettingsTab.value = tab
+    accountSettingsOpen.value = true
+  }
+  // Deep-link to the content (binary-artifact) storage configuration, which lives near the
+  // bottom of the account settings' team tab (`AccountDeploymentSettings`). Used by the
+  // pipeline-start error prompt when a storage-reliant agent (the UI Tester) has no storage
+  // configured. Sets a scroll anchor so the panel brings the storage section into view rather
+  // than dropping the user at the top of the long team tab to hunt for it.
+  function openContentStorageSettings() {
+    accountSettingsScrollTarget.value = 'content-storage'
+    openAccountSettings('team')
+  }
+  function clearAccountSettingsScrollTarget() {
+    accountSettingsScrollTarget.value = null
+  }
+  function closeAccountSettings() {
+    accountSettingsOpen.value = false
+    accountSettingsScrollTarget.value = null
+  }
+  function setAccountSettingsTab(tab: string) {
+    accountSettingsTab.value = tab
+  }
+
+  return {
+    workspaceSettingsOpen,
+    workspaceSettingsTab,
+    accountSettingsOpen,
+    accountSettingsTab,
+    accountSettingsScrollTarget,
+    openWorkspaceSettings,
+    closeWorkspaceSettings,
+    setWorkspaceSettingsTab,
+    openAccountSettings,
+    openContentStorageSettings,
+    clearAccountSettingsScrollTarget,
+    closeAccountSettings,
+    setAccountSettingsTab,
+  }
+}
+
+/**
+ * The Infrastructure window (agent containers + test environments) and the environment setup
+ * wizard, plus the `cat-factory k3s` CLI deep-link capture that seeds the kube engine form.
+ */
+function createInfraModals(resetHubReturn: ResetHubReturn) {
+  // The single tabbed Infrastructure window — a TOP-LEVEL navbar destination (no longer
+  // reached via the Integrations hub). Its topical tabs: "Agent containers" (the execution
+  // backend + self-hosted runner pool, plus the local-mode warm pool/checkout), "Test
+  // environments" (the ephemeral-environment provider), "Shared stacks" (long-lived Compose
+  // infra an environment attaches to) and "Package registries" (the private registries a
+  // checkout installs from). `infrastructureOpen` is the modal flag; `infrastructureTab`
+  // selects the tab. `openInfrastructure()` is the navbar entry; `openProviderConnection(kind)`
+  // remains for deep-links (a banner's "Configure…" button).
+  //
+  // The ref is typed against the FULL `InfrastructureTab` union, not the provider-connection
+  // kinds: a tab this cannot name is a tab nothing can deep-link to, which is how the
+  // non-connection tabs ended up reachable only by opening the window and clicking across.
+  const infrastructureOpen = ref(false)
+  const infrastructureTab = ref<InfrastructureTab>('runner-pool')
+  // Non-secret prefill captured from the `cat-factory k3s` CLI deep-link (see
+  // `consumeK3sSetupDeepLink`). When set, the Test-environments tab's kube engine form seeds the
+  // `local-k3s` connection from it; the ServiceAccount token is deliberately NOT in the link (a
+  // secret in a URL leaks into history/logs), so the user still pastes it before Test → Save.
+  const k3sSetupPrefill = ref<K3sSetupPrefill | null>(null)
+  // A one-shot deep-link anchor into a SECTION of the open tab, mirroring
+  // `accountSettingsScrollTarget`. The Test-environments tab opens on the default-provision
+  // picker and the Compose wizard, with the per-type handler sections between them, so landing an
+  // operator at the top of it after a `cat-factory k3s` hand-off leaves them scrolling to find the
+  // very form the CLI just filled in. The owning panel scrolls the section into view once and
+  // then calls `clearInfrastructureScrollTarget`, so a later plain open doesn't re-scroll.
+  const infrastructureScrollTarget = ref<InfrastructureScrollTarget | null>(null)
+  // Environment setup wizard (shared-stacks slice 7): the guided detect → review → preflight →
+  // trial → save flow for a service frame's `docker-compose` provisioning. `environmentWizardOpen`
+  // is the modal flag; `environmentWizardFrameId` preselects the service frame the flow targets
+  // (set when launched from a frame's inspector nudge; null ⇒ the wizard's pick step chooses one).
+  const environmentWizardOpen = ref(false)
+  const environmentWizardFrameId = ref<string | null>(null)
+
+  // Top-level navbar entry into the Infrastructure window. No hub-return marker (it isn't
+  // reached from the Integrations hub), so the window shows no "Back to Integrations" control.
+  function openInfrastructure(tab: InfrastructureTab = 'runner-pool') {
+    resetHubReturn()
+    infrastructureTab.value = tab
+    infrastructureOpen.value = true
+  }
+  // Deep-link into a PROVIDER's tab specifically (a config banner's "Configure…" button), so
+  // this one stays narrowed to the connection kinds — it means "connect this provider", not
+  // "open the window somewhere". Use `openInfrastructure(tab)` for any other tab.
+  function openProviderConnection(kind: ProviderConnectionKind) {
+    resetHubReturn()
+    infrastructureTab.value = kind
+    infrastructureOpen.value = true
+  }
+  function closeProviderConnection() {
+    infrastructureOpen.value = false
+    // Drop any consumed CLI prefill so re-opening the window normally doesn't re-seed the form,
+    // and the anchor with it: an unconsumed target (the window was closed before the section
+    // rendered) would otherwise scroll the next, unrelated open.
+    k3sSetupPrefill.value = null
+    infrastructureScrollTarget.value = null
+  }
+  function clearInfrastructureScrollTarget() {
+    infrastructureScrollTarget.value = null
+  }
+  // Capture a `cat-factory k3s` deep-link (`?infraSetup=local-k3s&…`) on app load: stash the
+  // non-secret connection values, open the Infrastructure window on the Test-environments tab so
+  // the kube engine form seeds from them, then strip the params from the URL (mirrors the
+  // `?invite=` handling in the auth store) so a reload doesn't re-trigger and the link isn't left
+  // in history. No-op when the query param is absent.
+  function consumeK3sSetupDeepLink() {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('infraSetup') !== 'local-k3s') return
+    k3sSetupPrefill.value = {
+      label: params.get('label') ?? 'Local k3s',
+      apiServerUrl: params.get('apiServerUrl') ?? '',
+      namespaceTemplate: params.get('namespaceTemplate') ?? '',
+      hostTemplate: params.get('hostTemplate') ?? '',
+      // The host port the controller answers on, when it is not the scheme's default. It rides its
+      // own param rather than the host template because the rendered template is also the Ingress
+      // `host` the manifests declare, and Kubernetes rejects a `host` carrying a port.
+      ingressPort: params.get('ingressPort') ?? '',
+      // A local ingress controller serves TLS with a self-signed cert, so the CLI verifies (and
+      // links) a plain-HTTP environment URL. Without this the form would keep its `https`
+      // default and save a URL that fails on the certificate rather than on the connection.
+      urlScheme: params.get('scheme') === 'http' ? 'http' : undefined,
+      // Only carry the flag the link actually set — a missing param leaves the form's engine
+      // default (skip-TLS on for a local self-signed cluster) untouched.
+      insecureSkipTlsVerify: params.has('insecureSkipTlsVerify')
+        ? params.get('insecureSkipTlsVerify') === '1'
+        : undefined,
+    }
+    resetHubReturn()
+    infrastructureTab.value = 'environment'
+    // The hand-off is about ONE form, so land on it: the Kubernetes section sits below the
+    // default-provision picker, far enough down the tab that an operator arriving from the CLI
+    // would otherwise have to go looking for the fields it just told them about.
+    infrastructureScrollTarget.value = 'kubernetes'
+    infrastructureOpen.value = true
+    for (const key of [
+      'infraSetup',
+      'label',
+      'apiServerUrl',
+      'namespaceTemplate',
+      'hostTemplate',
+      'ingressPort',
+      'scheme',
+      'insecureSkipTlsVerify',
+    ]) {
+      params.delete(key)
+    }
+    const qs = params.toString()
+    history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }
+  // Open the Infrastructure window straight at the default test-environment provisioning
+  // mechanism (the section at the top of the Test-environments tab). Distinct from
+  // `openProviderConnection('environment')` only in intent today, but it is the target of a
+  // SHAREABLE deep link (see `consumeDefaultProvisionDeepLink`), so it gets its own entry point
+  // rather than leaving the banner and the URL to duplicate the tab choice independently.
+  function openDefaultProvisionSettings() {
+    resetHubReturn()
+    infrastructureTab.value = 'environment'
+    infrastructureOpen.value = true
+  }
+  // Capture the `?settings=default-test-env` deep link on app load — the URL the setup banner
+  // shows, so an operator can send "go configure this" to a teammate rather than describing
+  // where the screen lives. Strips the param afterwards (mirroring the k3s hand-off above) so a
+  // reload doesn't re-open the window and the link isn't left in history. No-op when absent.
+  function consumeDefaultProvisionDeepLink() {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get(DEFAULT_PROVISION_DEEP_LINK_PARAM) !== DEFAULT_PROVISION_DEEP_LINK_VALUE) return
+    openDefaultProvisionSettings()
+    params.delete(DEFAULT_PROVISION_DEEP_LINK_PARAM)
+    const qs = params.toString()
+    history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }
+  // Launch the environment setup wizard, optionally preselecting the service frame it targets
+  // (the inspector nudge passes the frame; the navbar entry opens it with the pick step active).
+  function openEnvironmentSetup(frameId: string | null = null) {
+    resetHubReturn()
+    environmentWizardFrameId.value = frameId
+    environmentWizardOpen.value = true
+  }
+  function closeEnvironmentSetup() {
+    environmentWizardOpen.value = false
+    environmentWizardFrameId.value = null
+  }
+
+  return {
+    infrastructureOpen,
+    infrastructureTab,
+    openInfrastructure,
+    k3sSetupPrefill,
+    infrastructureScrollTarget,
+    clearInfrastructureScrollTarget,
+    consumeK3sSetupDeepLink,
+    environmentWizardOpen,
+    environmentWizardFrameId,
+    openDefaultProvisionSettings,
+    consumeDefaultProvisionDeepLink,
+    openProviderConnection,
+    closeProviderConnection,
+    openEnvironmentSetup,
+    closeEnvironmentSetup,
+  }
+}
+
+/**
+ * AI-onboarding surfaces (driven by `useAiReadiness`) + the infra-setup banner's per-session
+ * dismissals. The `*Dismissed` flags are per-session: they suppress the auto-open (and let the
+ * banner be dismissed) without permanently hiding the prompt — it re-evaluates on the next load.
+ */
+function createAiOnboardingModals() {
+  // `aiProviderSetupOpen` is the "no usable AI source" dialog; `aiPresetMismatchOpen` is the
+  // "default preset points at unavailable models" dialog. Both clear themselves once the
+  // underlying gap is closed.
+  const aiProviderSetupOpen = ref(false)
+  const aiPresetMismatchOpen = ref(false)
+  const aiSetupDismissed = ref(false)
+  const aiPresetDismissed = ref(false)
+
+  // Infra-setup banner: per-SESSION dismissals, cleared on workspace switch exactly like the
+  // AI-onboarding flags (a dismissal in one workspace must not suppress the independent prompt for
+  // another). The PERMANENT "don't notify me again" dismissal is per-USER and persists in
+  // localStorage from the banner component; this only covers "hide for now".
+  //
+  // Keyed by area AND KIND, not by area alone: the two cards an area can raise are different
+  // claims. Dismissing "you haven't configured this" for the session must not also silence the
+  // OUTAGE card that appears after the operator configures it and the provider then dies — the same
+  // asymmetry that makes the permanent dismissal setup-gap-only, one tier down.
+  const infraSetupSessionDismissed = ref<InfraSetupDismissalKey[]>([])
+  function dismissInfraSetupForSession(area: InfraSetupArea, kind: InfraSetupCardKind) {
+    const key = infraSetupDismissalKey(area, kind)
+    if (!infraSetupSessionDismissed.value.includes(key))
+      infraSetupSessionDismissed.value = [...infraSetupSessionDismissed.value, key]
+  }
+  function resetInfraSetupDismissals() {
+    infraSetupSessionDismissed.value = []
+  }
+  /**
+   * Drop an area's OUTAGE session dismissal — called when that area RECOVERS, so a transient health
+   * state (`unreachable`) re-nags the next time it fails. Without it, "hide for now" on one outage
+   * would quietly cover every later outage for the rest of the session, which is precisely the
+   * semantics `isInfraSetupHealthStatus` exists to keep away from a health state. The area's
+   * setup-gap dismissal is left alone: recovery says nothing about that claim.
+   */
+  function clearInfraSetupSessionDismissal(area: InfraSetupArea) {
+    const key = infraSetupDismissalKey(area, 'outage')
+    infraSetupSessionDismissed.value = infraSetupSessionDismissed.value.filter((k) => k !== key)
+  }
+
+  // Default-test-environment banner: a single per-SESSION dismissal, cleared on workspace switch
+  // like the flags above. There is deliberately no PERMANENT dismissal here (unlike the
+  // infra-setup areas): the prompt asks for a DECISION, and every answer — including `infraless`
+  // ("services stand up no environment") — is recordable in one click, so "silence this forever
+  // without answering" would only ever produce a board nobody can tell apart from an unconfigured
+  // one. Dismissing hides it until the next load.
+  const defaultProvisionDismissed = ref(false)
+  function dismissDefaultProvision() {
+    defaultProvisionDismissed.value = true
+  }
+  function resetDefaultProvisionDismissal() {
+    defaultProvisionDismissed.value = false
+  }
+
+  function openAiProviderSetup() {
+    aiProviderSetupOpen.value = true
+  }
+  function closeAiProviderSetup() {
+    aiProviderSetupOpen.value = false
+  }
+  function openAiPresetMismatch() {
+    aiPresetMismatchOpen.value = true
+  }
+  function closeAiPresetMismatch() {
+    aiPresetMismatchOpen.value = false
+  }
+  // Banner dismissal is distinct from closing the dialog: closing the dialog leaves the
+  // banner so the user can reopen it; dismissing the banner hides the whole prompt for
+  // the session (it re-evaluates on the next load).
+  function dismissAiSetup() {
+    aiProviderSetupOpen.value = false
+    aiSetupDismissed.value = true
+  }
+  function dismissAiPresetMismatch() {
+    aiPresetMismatchOpen.value = false
+    aiPresetDismissed.value = true
+  }
+  // Clear the per-session AI-onboarding state (open dialogs + dismissed flags). Called on
+  // workspace switch: dismissals are per-session-per-workspace, so a prompt dismissed in one
+  // workspace must not suppress the (independent) prompt for another workspace that also
+  // lacks a usable AI source / has a broken default preset.
+  function resetAiOnboarding() {
+    aiProviderSetupOpen.value = false
+    aiPresetMismatchOpen.value = false
+    aiSetupDismissed.value = false
+    aiPresetDismissed.value = false
+  }
+
+  return {
+    aiProviderSetupOpen,
+    aiPresetMismatchOpen,
+    aiSetupDismissed,
+    aiPresetDismissed,
+    infraSetupSessionDismissed,
+    dismissInfraSetupForSession,
+    resetInfraSetupDismissals,
+    clearInfraSetupSessionDismissal,
+    defaultProvisionDismissed,
+    dismissDefaultProvision,
+    resetDefaultProvisionDismissal,
+    openAiProviderSetup,
+    closeAiProviderSetup,
+    openAiPresetMismatch,
+    closeAiPresetMismatch,
+    dismissAiSetup,
+    dismissAiPresetMismatch,
+    resetAiOnboarding,
+  }
+}
+
+/**
+ * The generic CONSUMER-overlay host (extension slice D — the frontend-extension-mechanism
+ * initiative). Unlike every sub-slice above, this holds NO per-modal boolean: it is a single
+ * pick-one pointer to whichever consumer-contributed overlay (the `appOverlays` slot) is
+ * currently open, so a consumer nav item's `run` closure finally has something to open. A
+ * deployment registers `{ id: '<ns>:<name>', component }` in the `appOverlays` slot and calls
+ * `ui.openOverlay(id, subject?)` (usually via the auto-imported `useAppOverlays()` composable);
+ * the single `<AppOverlayHost>` in `pages/index.vue` resolves the slot and mounts the matching
+ * component, handing it the optional `subject`. First-party modals stay hand-mounted in
+ * `index.vue` — this seam is deliberately scoped to consumer extensions (strangler discipline).
+ */
+function createConsumerOverlayHost() {
+  // The active consumer overlay: its slot id + an optional opaque subject the overlay renders
+  // against (e.g. a block id). Null when no consumer overlay is open. Only ONE at a time —
+  // opening another replaces it (a pick-one host, like the result-view seam).
+  const activeOverlay = ref<{ id: string; subject?: unknown } | null>(null)
+
+  function openOverlay(id: string, subject?: unknown) {
+    activeOverlay.value = { id, subject }
+  }
+  function closeOverlay() {
+    activeOverlay.value = null
+  }
+
+  return { activeOverlay, openOverlay, closeOverlay }
+}
+
+/**
+ * The modal / panel slice of the UI store: every open-close flag for the dozens of modals,
+ * panels and hubs (document + task import, bootstrap, integrations, workspace/account settings,
+ * infrastructure, vendor credentials, the startup health advisories, the AI-onboarding surfaces,
+ * …), their deep-link params, and the hub came-from markers. Split out of the navigation +
+ * result-view state per refactoring candidate #4 so the god-object's modal churn is contained to
+ * one place. Composed into {@link useUiStore} with the same public names, so consumers are
+ * unchanged. The state itself is grouped into cohesive sub-slices (health advisories, document +
+ * task sources, integration panels, settings, infrastructure, AI onboarding), composed here behind
+ * the shared hub came-from markers.
+ */
+export function createUiModals() {
+  // Model-providers / Integrations / My-setup hub came-from markers — the one piece of state
+  // SHARED across slices (many `open*` handlers reset it), so it lives here and `resetHubReturn`
+  // is threaded into the slices that need it. `cameFromIntegrations` is true while an
+  // integration's own panel is showing AND it was reached from the Integrations hub;
+  // `cameFromModelProviders` and `cameFromPersonal` are the analogues for the other two hubs.
+  //
+  // Three hubs, not two, because the vendor-credentials / OpenRouter / local-runner panels are
+  // reachable from more than one of them and a Back control that lands somewhere the user was
+  // never at is worse than none.
+  const cameFromIntegrations = ref(false)
+  const cameFromModelProviders = ref(false)
+  const cameFromPersonal = ref(false)
+  const integrationsOpen = ref(false)
+  const modelProvidersOpen = ref(false)
+  const personalSetupOpen = ref(false)
+
+  // Clear EVERY hub came-from marker. Every direct `open*` in the slices calls this so that a
+  // panel opened outside the hubs never grows a dead Back control, and so switching from one
+  // hub's panel to another's clears the stale marker.
+  function resetHubReturn() {
+    cameFromIntegrations.value = false
+    cameFromModelProviders.value = false
+    cameFromPersonal.value = false
+  }
+  function openIntegrations() {
+    // Reaching the hub itself (fresh, or via a panel's Back control) clears the
+    // came-from markers — we're at the hub, not inside a hub-spawned panel.
+    resetHubReturn()
+    integrationsOpen.value = true
+  }
+  function closeIntegrations() {
+    integrationsOpen.value = false
+  }
+  function openModelProviders() {
+    resetHubReturn()
+    modelProvidersOpen.value = true
+  }
+  function closeModelProviders() {
+    modelProvidersOpen.value = false
+  }
+  function openPersonalSetup() {
+    resetHubReturn()
+    personalSetupOpen.value = true
+  }
+  function closePersonalSetup() {
+    personalSetupOpen.value = false
+  }
+  // Open a user-scoped panel FROM the My-setup hub: run its open handler (which resets the
+  // markers), then mark that we came from My setup and dismiss it, so the panel's
+  // IntegrationBackTitle returns here rather than to the workspace Integrations hub.
+  function openFromPersonal(open: () => void) {
+    open()
+    cameFromPersonal.value = true
+    personalSetupOpen.value = false
+  }
+  // Open an integration's own panel FROM the hub: run its open handler (which resets
+  // `cameFromIntegrations`), then mark that we came from the hub and dismiss it. The
+  // panel reads `cameFromIntegrations` to show its Back control.
+  function openFromIntegrations(open: () => void) {
+    open()
+    cameFromIntegrations.value = true
+    integrationsOpen.value = false
+  }
+  // The Model-providers analogue of `openFromIntegrations`.
+  function openFromModelProviders(open: () => void) {
+    open()
+    cameFromModelProviders.value = true
+    modelProvidersOpen.value = false
+  }
+
+  const health = createHealthAdvisoryModals()
+  const misc = createMiscModals()
+  const documentsTasks = createDocumentTaskModals(resetHubReturn)
+  const overlays = createOverlayModals()
+  const consumerOverlays = createConsumerOverlayHost()
+  const panels = createIntegrationPanelModals(resetHubReturn)
+  const settings = createSettingsModals(resetHubReturn)
+  const infra = createInfraModals(resetHubReturn)
+  const ai = createAiOnboardingModals()
+
+  return {
+    integrationsOpen,
+    cameFromIntegrations,
+    modelProvidersOpen,
+    cameFromModelProviders,
+    personalSetupOpen,
+    cameFromPersonal,
+    openIntegrations,
+    closeIntegrations,
+    openFromIntegrations,
+    openModelProviders,
+    closeModelProviders,
+    openFromModelProviders,
+    openPersonalSetup,
+    closePersonalSetup,
+    openFromPersonal,
+    ...health,
+    ...misc,
+    ...documentsTasks,
+    ...overlays,
+    ...consumerOverlays,
+    ...panels,
+    ...settings,
+    ...infra,
+    ...ai,
+  }
+}

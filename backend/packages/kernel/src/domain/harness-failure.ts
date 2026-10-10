@@ -21,11 +21,19 @@ export const HARNESS_FAILURE_CAUSES = [
   // The two container watchdogs (both harnesses).
   'inactivity-timeout',
   'max-duration',
+  // The executor-harness's third watchdog: the agent kept streaming but completed no tool call
+  // for its window — a rabbit-hole the other two cannot see, since output keeps the inactivity
+  // timer reset and the run is well inside its wall-clock cap.
+  'no-tool-progress',
   // Executor-harness faults: the agent erred/threw, a git op failed, an upstream API call
   // failed, the model provider rejected every call (auth/quota/rate-limit), the agent finished
   // without a usable product / without a change to push.
   'agent',
   'git',
+  // A push to the work branch was refused because the branch moved under the run. Distinct from
+  // `git` because the engine RECOVERS from it (a bounded re-dispatch resumes the branch as it now
+  // stands), where any other git fault would just fail again.
+  'branch-contended',
   'api',
   'llm-upstream',
   'no-usable-output',
@@ -57,8 +65,10 @@ export function isHarnessFailureCause(value: unknown): value is HarnessFailureCa
 const FAILURE_KIND_BY_CAUSE: Record<HarnessFailureCause, 'timeout' | 'agent'> = {
   'inactivity-timeout': 'timeout',
   'max-duration': 'timeout',
+  'no-tool-progress': 'timeout',
   agent: 'agent',
   git: 'agent',
+  'branch-contended': 'agent',
   api: 'agent',
   'llm-upstream': 'agent',
   'no-usable-output': 'agent',

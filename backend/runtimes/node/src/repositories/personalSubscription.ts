@@ -1,4 +1,5 @@
 import type {
+  ActivationScopeId,
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
   SubscriptionActivationRecord,
@@ -11,7 +12,7 @@ import { and, asc, eq, gt, gte, isNull, lte, ne } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { personalSubscriptions, subscriptionActivations } from '../db/schema.js'
 
-// Postgres-backed stores for individual-usage subscriptions + per-run activations
+// Postgres-backed stores for individual-usage subscriptions + their activations
 // (mirror of D1 migration 0039 / D1PersonalSubscriptionRepository), column-for-column
 // so behaviour matches across stores.
 
@@ -154,7 +155,7 @@ type ActRow = typeof subscriptionActivations.$inferSelect
 function toActivation(row: ActRow): SubscriptionActivationRecord {
   return {
     id: row.id,
-    executionId: row.execution_id,
+    scopeId: row.scope_id as ActivationScopeId,
     userId: row.user_id,
     vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
       table: 'subscription_activations',
@@ -171,7 +172,7 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
   constructor(private readonly db: DrizzleDb) {}
 
   async get(
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
     now: number,
@@ -181,7 +182,7 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
       .from(subscriptionActivations)
       .where(
         and(
-          eq(subscriptionActivations.execution_id, executionId),
+          eq(subscriptionActivations.scope_id, scopeId),
           eq(subscriptionActivations.user_id, userId),
           eq(subscriptionActivations.vendor, vendor),
           gt(subscriptionActivations.expires_at, now),
@@ -196,7 +197,7 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
       .insert(subscriptionActivations)
       .values({
         id: record.id,
-        execution_id: record.executionId,
+        scope_id: record.scopeId,
         user_id: record.userId,
         vendor: record.vendor,
         token_cipher: record.tokenCipher,
@@ -204,9 +205,9 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
         expires_at: record.expiresAt,
       })
       .onConflictDoUpdate({
-        // Matches the (execution_id, user_id, vendor) unique index.
+        // Matches the (scope_id, user_id, vendor) unique index.
         target: [
-          subscriptionActivations.execution_id,
+          subscriptionActivations.scope_id,
           subscriptionActivations.user_id,
           subscriptionActivations.vendor,
         ],
@@ -218,10 +219,10 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
       })
   }
 
-  async deleteByExecution(executionId: string): Promise<void> {
+  async deleteByScope(scopeId: ActivationScopeId): Promise<void> {
     await this.db
       .delete(subscriptionActivations)
-      .where(eq(subscriptionActivations.execution_id, executionId))
+      .where(eq(subscriptionActivations.scope_id, scopeId))
   }
 
   async deleteExpired(now: number): Promise<number> {

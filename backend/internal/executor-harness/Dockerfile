@@ -21,17 +21,21 @@
 # the package's dev/test deps (incl. pnpm `workspace:*` entries npm can't parse)
 # are irrelevant here. typescript/@types/node are installed standalone.
 # Pinned by digest (the multi-arch index digest, valid for amd64 + arm64 via buildx)
-# so two builds of this Dockerfile always pull the identical base — the mutable
-# `node:26-trixie-slim` tag is kept in the line only for human readability. To bump:
-# `docker buildx imagetools inspect node:26-trixie-slim` and update BOTH stages.
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS build
+# so two builds of this Dockerfile always pull the identical base. The mutable
+# `node:26-trixie-slim` tag is kept in the line only for human readability, and it can
+# name a NEWER image than the digest: the base takes the same 24h supply-chain window as
+# the workspace dependencies (pnpm-workspace.yaml `minimumReleaseAge`), so the digest is
+# the newest one that has aged past it, not whatever the tag points at today. This one is
+# node 26.8.2. To bump: `docker buildx imagetools inspect node:26-trixie-slim`, check the
+# tag's age on Docker Hub, and update EVERY stage.
+FROM node:26-trixie-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS build
 WORKDIR /app
 # Install the TS toolchain BEFORE copying src so editing harness source doesn't
 # reinvalidate the dependency layer (helps local rebuilds; CI builds --no-cache).
 COPY tsconfig.json ./
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0'
+    npm install --no-save --no-package-lock typescript@^7.0.0 @types/node@^26.0.0'
 COPY src ./src
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
@@ -43,15 +47,20 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 # (see src/version.ts). Extract just the version string here — a plain JSON read, no npm,
 # so the `workspace:*` deps that stopped us copying package.json into the build stage are
 # irrelevant — and copy the resulting file into the runtime image next to dist/.
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS version
+FROM node:26-trixie-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS version
 WORKDIR /v
 COPY package.json ./
 RUN node -p "require('./package.json').version" > harness-version.txt
 
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS runtime
-ENV NODE_ENV=production
+FROM node:26-trixie-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS runtime
+# NODE_ENV is deliberately NOT set image-wide. It is the harness PROCESS's setting, and
+# `entrypoint.sh` gives it to that process alone (`exec env NODE_ENV=production node …`),
+# with `agentChildEnv` dropping it again from every child the harness spawns into the
+# agent's checkout. Baked in here it reached the agent instead: npm reads it as
+# `omit=dev`, so `npm install` in a checkout silently skipped devDependencies and a
+# measured coder run spent six of its forty tool calls discovering and undoing that.
 
 # Defense-in-depth: run as an unprivileged user, not root. Created up front so the
 # extension installs below run as it and the config lands in a home it owns and can
@@ -84,39 +93,127 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # vendor (no proxy). All three pinned to exact versions for reproducibility — bump
 # deliberately, and bump the image tag (see CONTRIBUTING / CLAUDE.md) when you do.
 #
+# `procps` + `psmisc` (ps, pgrep, pkill, killall, fuser) are here for the AGENT, not
+# for us: an agent that has just smoke-tested a service it built needs to stop it
+# again, and reaches for `pkill -f <pattern>` first. Without those binaries that call
+# fails with `command not found` and the agent falls back to something unbounded (a
+# `/proc/*/cmdline` sweep, `kill -TERM -1`), which is how a coder run once killed the
+# harness itself. The narrow tool is the safe one, and it is ~1.5 MB.
+#
+# `python3`, `jq` and `ripgrep` are on that line for the SAME reason, and it is the reason
+# the comment above gives rather than a general "handy to have": a model reaches for
+# `python3 - <<PY`, `jq`, and `rg` by reflex, and each `command not found` costs a tool
+# call and pushes the run toward a worse substitute. ~41 MB for the three. Deliberately
+# NOT here: `python3-pip` / `python3-venv` (which invite building a Python environment
+# inside a Node repo) and `fd-find` (whose binary is `fdfind`, so the reflex still misses).
+#
 # Pi is pure JS, so it installs with `--ignore-scripts` (no untrusted install
 # hooks). Claude Code and Codex, however, rely on their install scripts to place
 # the right platform binary (Codex in particular ships a native binary), so they
 # must be installed WITHOUT `--ignore-scripts` — otherwise the `claude` / `codex`
 # CLI is missing or non-functional at runtime. We then assert both CLIs actually
 # run so a broken install fails the build instead of every subscription job.
-ARG PI_VERSION=0.80.6
-ARG CLAUDE_CODE_VERSION=2.1.207
-ARG CODEX_VERSION=0.144.1
+# All THREE agent CLIs are deliberately taken at their newest release, ahead of the 24h
+# `minimumReleaseAge` window the workspace dependencies are held to: each moves several
+# times a week and the harness tracks them closely. That exemption is specific to these
+# three pins (an explicit call, re-made each time they are bumped) and does NOT extend to
+# the Pi extensions below or to anything installed through the workspace lockfile.
+#
+# The Codex pin also carries a FLOOR the catalog depends on: `gpt-6-astra` resolves only from
+# Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than falling back, so
+# moving this pin below that version silently breaks that catalog entry at dispatch. The GPT-6
+# tiers carry the same trap at higher floors: `gpt-6-sol` / `gpt-6-luna` from 0.156.1 and
+# `gpt-6.1-sol` from 0.159.0.
+#
+# The Pi pin carries a floor too: built-in MCP support (the `mcp.json` the harness writes for a
+# run's tool servers) arrived in 0.99.0. A build below it still boots, but the harness asks the
+# installed binary for its version at startup and then stops reporting `piMcpServers`, so every
+# Pi dispatch carrying tool servers is refused rather than run blind
+# (`src/capability-report.ts`).
+ARG PI_VERSION=1.1.0
+ARG CLAUDE_CODE_VERSION=2.1.295
+ARG CODEX_VERSION=0.162.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
-    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl && rm -rf /var/lib/apt/lists/*; \
+    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
     npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"; \
     claude --version; codex --version; \
     git config --system --add safe.directory "*"'
+# The installed claude-code version, readable at RUNTIME. `assertOnboardingKeysCurrent` pairs the
+# pre-seeded onboarding keys with it so a new first-run gate is diffable (ADR 0026 D4), and read it
+# from here: an unset variable left every one of those lines with no version at all. The tool-set
+# read-back takes its version off the CLI's own startup event instead, which is authoritative
+# whatever built the image; this stays for the assertion that runs BEFORE the CLI does.
+ENV CLAUDE_CLI_VERSION=${CLAUDE_CODE_VERSION}
 
 # Rootless Docker + the compose plugin, for the Tester's local-mode infra stand-up.
 # Cloudflare Containers (and most managed runners) run unprivileged, so we install
 # the rootless extras and run the daemon as the `harness` user at runtime (see
-# entrypoint.sh) — no privileged mode, no host docker socket. uidmap provides the
-# newuidmap/newgidmap helpers user namespaces need; fuse-overlayfs is the rootless
-# storage driver. Best-effort at runtime: if the sandbox forbids user namespaces the
-# daemon simply won't start and the Tester degrades to no-infra (it never blocks the
-# container from booting). Installed from Docker's official apt repo, pinned to the
-# Debian release the base image uses (trixie).
+# entrypoint.sh) — no privileged mode, no host docker socket. Installed from Docker's
+# official apt repo, pinned to the Debian release the base image uses (trixie).
+#
+# EVERY package on this line is load-bearing, which the list did not use to show:
+#   - `docker-ce` is the DAEMON. `docker-ce-rootless-extras` ships only the wrappers
+#     (`dockerd-rootless.sh`, `rootlesskit`) that START a daemon, so without it the
+#     entrypoint died on `exec: dockerd: not found` and this whole block bought the image
+#     a CLI it could never reach a daemon with. `containerd.io` is the runtime it drives.
+#   - `iproute2` gives rootlesskit the `ip` binary it builds the daemon's network with;
+#     without it the parent failed at `nsenter: failed to execute ip` before the daemon
+#     was even reached. `slirp4netns` is the userspace networking it then uses.
+#   - `uidmap` provides the newuidmap/newgidmap helpers user namespaces need;
+#     `fuse-overlayfs` is the rootless storage driver.
+#   - `docker-buildx-plugin` is what `docker build` and `docker compose build` ARE now: without
+#     it both die on "Docker Compose requires buildx plugin to be installed" before touching a
+#     Dockerfile, which an agent reads as its own build being wrong.
+#   - `busybox-static` is not for the agent. It is the payload the platform builds its one-layer
+#     probe image from (src/docker-probe-image.ts) to find out whether this daemon can actually
+#     run a container, and static is the requirement: the image it goes into has nothing else in
+#     it, no loader and no libc.
+# Runtime is still best-effort (a sandbox that forbids user namespaces has no daemon and
+# never blocks the container from booting), but it is no longer SILENT: entrypoint.sh waits
+# for the daemon on a bounded window and records the verdict, and the harness refuses a
+# local-compose stand-up that verdict says cannot work instead of degrading to no-infra
+# without saying so.
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; export CURL_CA_BUNDLE=/tmp/extra_ca.crt; fi; \
     install -m 0755 -d /etc/apt/keyrings; \
     curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
     chmod a+r /etc/apt/keyrings/docker.asc; \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list; \
-    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin docker-ce-rootless-extras uidmap fuse-overlayfs && rm -rf /var/lib/apt/lists/*'
+    apt-get update && apt-get install -y --no-install-recommends docker-ce containerd.io docker-ce-cli \
+    docker-compose-plugin docker-buildx-plugin docker-ce-rootless-extras uidmap fuse-overlayfs \
+    iproute2 slirp4netns busybox-static \
+    && rm -rf /var/lib/apt/lists/*'
+
+# Compose v1 has been gone for years and the plugin is a drop-in for it, but plenty of repo
+# scripts still spell it `docker-compose`, and in this container that is a `command not found`
+# an agent has to diagnose and shim for itself before it can run the project's own script. One
+# line removes the class.
+RUN printf '#!/bin/sh\nexec docker compose "$@"\n' > /usr/local/bin/docker-compose \
+    && chmod 0755 /usr/local/bin/docker-compose
+
+# Take the rootless daemon OFF the containerd image store.
+#
+# Docker 29 made it the default, and it is the wrong default HERE: its `overlayfs` snapshotter
+# mounts or fails, with no fallback, and inside a nested user namespace (this container's
+# rootless daemon, itself inside the deployment's sandbox) the mount returns EINVAL. The daemon
+# serves throughout while `docker pull` of a multi-layer image, `docker run` of a single-layer
+# one and `docker build` all fail on it: issue #2120, where three agents in one run each paid
+# to discover that for themselves.
+#
+# The graphdriver path this restores is the one that PROBES: dockerd tries overlay2, then the
+# `fuse-overlayfs` installed above, then `vfs`, and settles on whichever the sandbox permits.
+# `vfs` is slow and correct, and correct beats fast for a build that otherwise cannot run.
+#
+# Written as a config KEY rather than a `--feature` flag on the entrypoint's command line, and
+# that is the safe half: an unknown key inside `features` is ignored, where an unknown flag
+# takes the daemon down at startup and leaves the container with no docker at all. Whether it
+# worked is not assumed either way. The platform runs a container and reports what happened.
+RUN mkdir -p /home/harness/.config/docker \
+    && printf '{\n  "features": { "containerd-snapshotter": false }\n}\n' \
+       > /home/harness/.config/docker/daemon.json \
+    && chown -R harness:harness /home/harness/.config
 
 WORKDIR /app
 # Copy the compiled wrapper owned by the unprivileged user (no recursive chown
@@ -144,15 +241,26 @@ USER harness
 # auto-detects it, writes the config and nudges the agent to use the tools
 # (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
 # Both pinned for the same reproducibility reason as Pi itself.
-ARG PI_TODO_EXTENSION_VERSION=1.20.0
-ARG PI_WEB_TOOLS_EXTENSION_VERSION=1.20.0
+ARG PI_TODO_EXTENSION_VERSION=2.12.0
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.12.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \
     pi install "npm:@juicesharp/rpiv-web-tools@${PI_WEB_TOOLS_EXTENSION_VERSION}"'
 
 # Rootless Docker runtime config for the harness user (consumed by entrypoint.sh).
+# DOCKER_HOST is EMPTY on purpose: it is the "no external daemon was wired into this
+# container" signal the entrypoint branches on, which is how a self-hosted pool points the
+# harness at a sidecar daemon instead (it sets a real value). The entrypoint then exports
+# the rootless socket into the process it execs, so the harness and every agent descended
+# from it read the right value — but a later `docker exec` into the running container starts
+# from the IMAGE env and sees this empty one. That is a debugging artefact, not the value
+# any job runs with; read /tmp/harness-docker-status.json (or GET /health) for the truth.
 ENV XDG_RUNTIME_DIR=/home/harness/.docker/run \
     DOCKER_HOST=
-EXPOSE 8080
+# The harness's own job server. Deliberately not 8080: it shares this container's network
+# namespace with everything the agent starts, and on 8080 it both took the port a
+# containerised service defaults to and answered that service's health check (see
+# src/harness-port.ts).
+EXPOSE 27182
 ENTRYPOINT ["./entrypoint.sh"]

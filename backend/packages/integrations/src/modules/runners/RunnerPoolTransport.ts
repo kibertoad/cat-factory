@@ -1,9 +1,11 @@
 import {
   DispatchError,
   getErrorMessage,
+  type RunnerDispatchAck,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
+  type RunnerJobStopOutcome,
   type RunnerJobView,
   type RunnerPoolManifest,
   type RunnerPoolProvider,
@@ -49,7 +51,7 @@ export class RunnerPoolTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const jobId = ref.jobId
     // A pool runs the SAME executor-harness image as the Cloudflare backend, so it
     // serves every harness route. Runtime parity is the default and assumed (the "keep
@@ -64,18 +66,20 @@ export class RunnerPoolTransport implements RunnerTransport {
     // kubectl/kustomize/helm) for a container-backed Kubernetes provision, `ui` the heavier
     // Playwright image, else the default executor image.
     try {
-      await this.provider.dispatch({
-        manifest: this.manifest,
-        jobId,
-        spec: {
-          ...spec,
-          kind,
-          ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
-          ...(options?.provider ? { cloudProvider: options.provider } : {}),
-          ...(options?.image ? { image: options.image } : {}),
-        },
-        resolveSecret: this.resolveSecret,
-      })
+      return (
+        (await this.provider.dispatch({
+          manifest: this.manifest,
+          jobId,
+          spec: {
+            ...spec,
+            kind,
+            ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
+            ...(options?.provider ? { cloudProvider: options.provider } : {}),
+            ...(options?.image ? { image: options.image } : {}),
+          },
+          resolveSecret: this.resolveSecret,
+        })) ?? undefined
+      )
     } catch (error) {
       // The pool rejected the job: re-throw as a structured DispatchError (carrying the pool's
       // HTTP status) so the engine + the bootstrap / env-config services classify it as a
@@ -95,7 +99,27 @@ export class RunnerPoolTransport implements RunnerTransport {
     })
   }
 
-  release(ref: RunnerJobRef): Promise<void> {
+  async release(ref: RunnerJobRef): Promise<void> {
+    await this.provider.release({
+      manifest: this.manifest,
+      jobId: ref.jobId,
+      resolveSecret: this.resolveSecret,
+    })
+  }
+
+  /**
+   * Stop the run's in-flight job through the pool's own cancel, and report honestly what that
+   * achieved. A pool is per-JOB, so the manifest's `release` template IS the cancel, and it is the
+   * only lever there is: the harness lives inside the workspace's trust domain behind a control
+   * plane this backend never speaks to directly.
+   *
+   * That is also why this can never answer `stopped`. A manifest with no `release` template
+   * cancels nothing (`unsupported`), and one with a template gets no further than `requested`:
+   * the scheduler took the call, and nothing here can see whether the runner obeyed. Both readings
+   * reach the operator, because on this backend a refused blind run really can keep working
+   * against the repository and only a person can go and check.
+   */
+  stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
     return this.provider.release({
       manifest: this.manifest,
       jobId: ref.jobId,

@@ -14,13 +14,15 @@ const { t } = useI18n()
 // out, so it must render even when auth is required and there's no user.
 const isPublicRoute = computed(() => route.path === '/reset-password')
 
-onMounted(() => auth.bootstrap())
+// Stamp the first cold-open milestone once the auth handshake settles (app-startup initiative,
+// item 1) — bootstrap resolves even on failure (it catches internally), so `finally` always fires.
+onMounted(() => void auth.bootstrap().finally(() => markBoot('auth-ready')))
 </script>
 
 <template>
   <div
     v-if="!auth.ready"
-    class="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-400"
+    class="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-app-950 text-muted"
   >
     <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
     <span class="text-sm">{{ t('auth.gate.loading') }}</span>

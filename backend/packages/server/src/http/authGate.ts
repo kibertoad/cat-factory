@@ -1,6 +1,8 @@
+import { ForbiddenError, workspaceRoleAtLeast } from '@cat-factory/kernel'
 import type { Hono } from 'hono'
 import { requireAuth } from '../auth/middleware.js'
 import type { AppEnv } from './env.js'
+import { loadWorkspaceAccess } from './workspaceAccess.js'
 
 // The runtime-neutral authentication + authorization gate, shared by every facade.
 // Each facade builds its own app (CORS, the per-request container, runtime-specific
@@ -17,15 +19,73 @@ import type { AppEnv } from './env.js'
 //   /v1       — container LLM proxy; authenticated by a model-locked session token
 //               (ContainerSessionService), not the workspace session.
 //   /github   — GitHub webhooks + setup callback; verified by HMAC signature.
+//   /vcs      — provider-neutral VCS webhooks (GitLab first); each provider verifies its own
+//               signature/token over the raw body inside the controller, exactly like /github.
+//               Without this the session gate 401s the provider's delivery before that check
+//               (fails closed, but the receiver is then dead on any auth-enabled deployment).
+//   /webhooks — tracker webhooks (Jira / Linear / GitHub Issues), verified by a per-CONNECTION
+//               HMAC secret over the raw body inside the controller. The workspace rides the path
+//               (a tracker delivery has no installation id to resolve one from) but is NOT what
+//               authorises it — the secret is; see `TaskWebhookController`.
 //   /slack    — Slack OAuth callback; the `state` is HMAC-signed + short-lived.
+//   /tasks    — Linear OAuth callback; same shape, same HMAC-signed `state`.
+//   /documents— document-source OAuth callback (ONE receiver for every OAuth-capable source, the
+//               source riding the signed `state`); same shape again.
 //   /internal — mothership-mode machine API; authenticated by an audience-pinned machine
 //               token verified inside the controller, not by the session gate.
 //   /api      — the public external API; authenticated by an in-controller public-API key
 //               (`Authorization: Bearer cf_live_…`), not the session gate.
-const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack', '/internal', '/api']
+//   /.well-known: the OAuth metadata documents an MCP host reads BEFORE it has any credential
+//               (RFC 9728 / RFC 8414). Public by specification: they carry nothing secret and
+//               exist to be read by a client with no relationship to this deployment yet.
+//   /oauth    : this deployment's own authorization server for its hosted MCP endpoint. Every
+//               route under it is unauthenticated by construction: registering a client is the act
+//               of becoming known, and the token exchange proves itself with the PKCE verifier
+//               rather than a session. The one step that needs a signed-in human is the consent
+//               screen, which is a page in the SPA whose approval call is ordinary gated API.
+//
+// EXPORTED because it is one half of an invariant the app cannot state on its own: every
+// provider-facing receiver in `PROVIDER_CALLBACK_CONTROLLERS` mounts at a prefix that MUST appear
+// here. A vendor's browser redirect carries no `Authorization` header and a webhook delivery no
+// session, so a receiver missing from this list is not merely gated — it is unreachable, failing
+// as a 401 (or a 503 where auth is unconfigured) raised before the handler whose own signature
+// check is the real authentication ever runs. `publicPrefixes.test.ts` pins the two lists
+// together, because both times this was got wrong the receiver read correctly at its own mount.
+export const PUBLIC_PREFIXES = [
+  '/health',
+  '/auth',
+  '/v1',
+  '/github',
+  '/vcs',
+  '/webhooks',
+  '/slack',
+  '/tasks',
+  '/documents',
+  '/internal',
+  '/api',
+  '/.well-known',
+  '/oauth',
+]
 
 /** The exact WebSocket-upgrade shape that self-authenticates via `?ticket=`. */
 const WS_EVENTS_PATH = /^\/workspaces\/[^/]+\/events$/
+
+/**
+ * The one write that is read-equivalent AND required for the pure *viewing* experience, so it
+ * is allowlisted past the viewer floor: minting a read-only WebSocket stream ticket. A viewer
+ * may watch a board's live stream (the stream carries only read-tier data), so this POST is
+ * exempt from the "≥ member" floor.
+ *
+ * This is deliberately the ONLY exemption. Other non-GET routes that happen not to persist
+ * anything — the `detect` / `plan` / `search` / `test` / `validate` / `preflight` / `probe`
+ * endpoints that prefill a create/edit form or probe an integration connection — are NOT
+ * allowlisted: they belong to the `member`+ authoring / integration-setup surface, not to
+ * read-only viewing (a viewer never reaches them — the SPA gates those affordances by
+ * permission). Blocking them behind the floor is intended; do NOT widen this allowlist to
+ * "read-equivalent POST" as a class. If a genuinely viewing-required write is ever added,
+ * add its own exact-path regex here alongside this one.
+ */
+const WS_TICKET_MINT_PATH = /^\/workspaces\/[^/]+\/events\/ticket$/
 
 /**
  * Mount the default-deny session gate and the per-workspace authorization check.
@@ -66,20 +126,48 @@ export function mountAuthGate<E extends AppEnv>(app: Hono<E>): void {
     if (!user) return next()
     const match = /^\/workspaces\/([^/]+)(?:\/.*)?$/.exec(c.req.path)
     if (!match) return next()
-    const workspaceId = decodeURIComponent(match[1]!)
-    const container = c.get('container')
-    const accountId = await container.workspaceService.accountOf(workspaceId)
-    if (accountId === undefined) return next() // missing board → let the handler 404 normally
-
-    const notFound = () =>
-      c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
-
-    if (accountId === null) {
-      // Legacy/unscoped board: only the user who personally owns it may access it.
-      const owner = await container.workspaceService.ownerOf(workspaceId)
-      return owner === user.id ? next() : notFound()
+    // A malformed percent-encoding in the id segment (e.g. `/workspaces/%zz/...`) makes
+    // `decodeURIComponent` throw a `URIError`. That is not a valid workspace, so treat it as a
+    // missing board (404) rather than letting the error surface as an opaque 500 — it fails closed
+    // either way, but 404 is the correct not-found shape and matches how the gate hides a board.
+    let workspaceId: string
+    try {
+      workspaceId = decodeURIComponent(match[1]!)
+    } catch {
+      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
     }
-    if (await container.accountService.isMember(accountId, user.id)) return next()
-    return notFound()
+    const container = c.get('container')
+
+    // Resolve the caller's effective workspace-RBAC role once (the single decision point).
+    // `null` ⇒ the board doesn't exist; pass through so the handler 404s as it always has.
+    const access = await loadWorkspaceAccess(container, workspaceId, user.id)
+    if (access === null) return next()
+
+    // Denied ⇒ the SAME 404 shape the pre-RBAC gate returned, so existence isn't leaked.
+    if (!access.allowed) {
+      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+    }
+
+    // Publish the resolved access for the controllers (`requirePermission`) + the snapshot
+    // attach; carrying `workspaceId` lets a helper assert it matches its route.
+    c.set('workspaceAccess', {
+      workspaceId,
+      role: access.role,
+      permissions: access.permissions,
+    })
+
+    // The viewer write floor: any state-changing method requires at least `member`. This
+    // covers the whole member tier (`board.write` + `runs.execute`) with ZERO per-controller
+    // code — a forgotten controller check fails safe. The sole read-equivalent write, the
+    // read-only stream ticket mint, is allowlisted; the admin-tier route groups add their own
+    // `requirePermission` on top (a later slice). Insufficiency ⇒ 403 (the caller already sees
+    // the board, so only capability — not existence — is revealed).
+    const method = c.req.method
+    const isRead = method === 'GET' || method === 'HEAD'
+    const isTicketMint = method === 'POST' && WS_TICKET_MINT_PATH.test(c.req.path)
+    if (!isRead && !isTicketMint && !workspaceRoleAtLeast(access.role, 'member')) {
+      throw new ForbiddenError('This action requires at least member access to this workspace')
+    }
+    return next()
   })
 }

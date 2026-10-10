@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type { AgentJobHandle, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { NotFoundError } from '@cat-factory/kernel'
 import { HumanTestController, type HumanTestControllerDeps } from './HumanTestController.js'
 
@@ -65,6 +66,26 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     agentExecutor: fakeExecutor(),
+    // The shared async dispatch: this suite drives no delegated kind, so it takes the container
+    // path and answers with the handle its fake executor returned.
+    startStepDispatch: async ({
+      step,
+      context,
+      executor,
+    }: {
+      step: PipelineStep
+      context: { agentKind?: string }
+      // The executor the controller resolved, so a suite that overrides it with a throwing
+      // `startJob` exercises the dispatch failure rather than this fake's happy path.
+      executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+    }) => {
+      // The cold boot the real seam commits before the executor is called.
+      step.container = { status: 'starting' }
+      const handle = await executor.startJob(context as never)
+      // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+      // these suites assert, and a hand-written stub of it would assert the stub.
+      return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
+    },
     contextBuilder: {
       buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
     } as never,
@@ -100,6 +121,56 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
         },
       ),
       emitInstance: vi.fn(async () => {}),
+      // The pair helper the controllers now write through (persist under CAS, then emit, with
+      // the block-status write folded in). Faked faithfully so the sibling fakes still record
+      // the same calls the assertions read.
+      persistAndEmit: vi.fn(
+        async (
+          ws: string,
+          i: ExecutionInstance,
+          o: { blockStatus?: 'in_progress' | 'blocked' } = {},
+        ) => {
+          const sm = deps.stateMachine as unknown as {
+            updateBlockProgress: (ws: string, i: ExecutionInstance, s: string) => Promise<void>
+            casPersist: (ws: string, i: ExecutionInstance) => Promise<void>
+            emitInstance: (ws: string, i: ExecutionInstance) => Promise<void>
+          }
+          if (o.blockStatus) await sm.updateBlockProgress(ws, i, o.blockStatus)
+          await sm.casPersist(ws, i)
+          await sm.emitInstance(ws, i)
+        },
+      ),
+      // The shared settle helpers the controllers now delegate their terminal transition to.
+      // Faked FAITHFULLY (delegating to the sibling fakes) rather than as bare `vi.fn()`s, so the
+      // assertions below still observe the real sequence: a final step finalizes the block and
+      // reclaims the container, a non-final step advances the cursor and starts the next step.
+      finishHumanGateStep: vi.fn((s: PipelineStep, o: { clearPendingInterview?: boolean } = {}) => {
+        const graph = deps.stepGraph as unknown as { finishStep: (s: PipelineStep) => void }
+        graph.finishStep(s)
+        s.progress = 1
+        s.subtasks = undefined
+        s.approval = null
+        if (o.clearPendingInterview) s.pendingInterview = null
+      }),
+      settleStepAndAdvance: vi.fn(
+        async (_ws: string, i: ExecutionInstance, isFinalStep: boolean) => {
+          const sm = deps.stateMachine as unknown as {
+            finalizeBlock: () => Promise<void>
+            stopRunContainer: () => Promise<void>
+          }
+          const graph = deps.stepGraph as unknown as { startStep: (s: PipelineStep) => void }
+          if (isFinalStep) {
+            i.status = 'done'
+            await sm.finalizeBlock()
+            await sm.stopRunContainer()
+            return { kind: 'done' } as const
+          }
+          i.currentStep += 1
+          const next = i.steps[i.currentStep]
+          if (next) graph.startStep(next)
+          return { kind: 'continue' } as const
+        },
+      ),
     } as never,
     stepGraph: {
       finishStep: vi.fn((s: PipelineStep) => {
@@ -425,9 +496,14 @@ describe('HumanTestController', () => {
 
   it('advances the run (and tears the env down) on a confirm action', async () => {
     const teardownEnvironment = vi.fn(async () => {})
+    // The "ready for testing" card is settled through the indexed (block, type) seam, never by
+    // scanning the workspace inbox. Faked as FINDING a card, because the branch worth pinning is
+    // the one that settles it: a wrong type string, a wrong id or `dismiss` in place of `act`
+    // leaves the card open in the inbox, escalated red for a gate that already passed.
+    const clearOnBlock = vi.fn(async () => null)
     const deps = fakeDeps({
       teardownEnvironment,
-      notificationService: { listOpen: vi.fn(async () => []) } as never,
+      notificationService: { clearOnBlock } as never,
     })
     const c = new HumanTestController(deps)
     const s = step({
@@ -451,6 +527,8 @@ describe('HumanTestController', () => {
     expect(inst.status).toBe('done')
     expect(result).toEqual({ kind: 'done' })
     expect(s.humanTest?.phase).toBe('passed')
+    // `act`, not `dismiss`: the human did the thing the card asked for.
+    expect(clearOnBlock).toHaveBeenCalledWith('ws', 'blk_1', 'human_test_ready', 'act')
   })
 
   it('dispatches the conflict-resolver when pull-main conflicts, else loops back to the deployer', async () => {

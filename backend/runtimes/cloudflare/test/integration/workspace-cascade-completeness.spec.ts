@@ -11,8 +11,9 @@ import { D1_ONLY_WORKSPACE_SCOPED_TABLES } from '../../src/infrastructure/reposi
 // kernel list, an acknowledged special case, or the facade's D1-only list — otherwise a board
 // delete would orphan its rows forever, exactly the bug the cascade exists to prevent.
 //
-// The isolated telemetry / sandbox / provisioning stores are PHYSICALLY SEPARATE D1 databases on
-// this facade (env.TELEMETRY_DB / env.SANDBOX_DB / env.PROVISIONING_DB), not tables in env.DB, so
+// The isolated telemetry / sandbox / provisioning / audit stores are PHYSICALLY SEPARATE D1
+// databases on this facade (env.TELEMETRY_DB / env.SANDBOX_DB / env.PROVISIONING_DB /
+// env.AUDIT_DB), not tables in env.DB, so
 // introspecting env.DB alone naturally scopes this to exactly the tables the cascade owns — the
 // D1 analogue of the Node guard's `schema === undefined` filter, for free.
 describe('workspace-delete cascade completeness (Cloudflare/D1 schema)', () => {

@@ -1,1562 +1,511 @@
 # @cat-factory/observability-langfuse
 
-## 0.7.200
+## 0.11.64
 
 ### Patch Changes
 
-- Updated dependencies [2ce396d]
-  - @cat-factory/kernel@0.123.2
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/observability-otel@0.23.57
 
-## 0.7.199
+## 0.11.63
 
 ### Patch Changes
 
-- Updated dependencies [2c7ca2e]
-  - @cat-factory/kernel@0.123.1
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/observability-otel@0.23.56
 
-## 0.7.198
+## 0.11.62
 
 ### Patch Changes
 
-- Updated dependencies [e4c5abe]
-  - @cat-factory/kernel@0.123.0
+- Updated dependencies [97175f8]
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/observability-otel@0.23.55
 
-## 0.7.197
+## 0.11.61
 
 ### Patch Changes
 
-- Updated dependencies [1e684b7]
-- Updated dependencies [1e684b7]
-  - @cat-factory/kernel@0.122.0
+- @cat-factory/kernel@0.354.2
+  - @cat-factory/observability-otel@0.23.54
 
-## 0.7.196
+## 0.11.60
 
 ### Patch Changes
 
-- Updated dependencies [2a13ece]
-  - @cat-factory/kernel@0.121.8
+- @cat-factory/kernel@0.354.1
+  - @cat-factory/observability-otel@0.23.53
 
-## 0.7.195
+## 0.11.59
 
 ### Patch Changes
 
-- Updated dependencies [3ce997d]
-  - @cat-factory/kernel@0.121.7
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/observability-otel@0.23.52
 
-## 0.7.194
+## 0.11.58
 
 ### Patch Changes
 
-- Updated dependencies [67dccb6]
-  - @cat-factory/kernel@0.121.6
+- Updated dependencies [075ff13]
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/observability-otel@0.23.51
 
-## 0.7.193
+## 0.11.57
 
 ### Patch Changes
 
-- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
-  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/observability-otel@0.23.50
 
-  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
-    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
-    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
-    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
-  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
-    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
-    stays on `^6.0.3`).
-  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
-    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
-    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
-  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
-    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
-    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
-    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
-    deployed for the new tags to roll out.
+## 0.11.56
 
-- Updated dependencies [f8f1aa8]
-  - @cat-factory/kernel@0.121.5
-
-## 0.7.192
-
-### Patch Changes
-
-- Updated dependencies [4810353]
-  - @cat-factory/kernel@0.121.4
-
-## 0.7.191
-
-### Patch Changes
-
-- Updated dependencies [edad6e6]
-  - @cat-factory/kernel@0.121.3
-
-## 0.7.190
-
-### Patch Changes
-
-- @cat-factory/kernel@0.121.2
-
-## 0.7.189
-
-### Patch Changes
-
-- Updated dependencies [473e849]
-  - @cat-factory/kernel@0.121.1
-
-## 0.7.188
-
-### Patch Changes
-
-- Updated dependencies [f4482c7]
-  - @cat-factory/kernel@0.121.0
-
-## 0.7.187
-
-### Patch Changes
-
-- Updated dependencies [22a4d9e]
-  - @cat-factory/kernel@0.120.0
-
-## 0.7.186
-
-### Patch Changes
-
-- Updated dependencies [a5dcf7d]
-  - @cat-factory/kernel@0.119.0
-
-## 0.7.185
-
-### Patch Changes
-
-- @cat-factory/kernel@0.118.1
-
-## 0.7.184
-
-### Patch Changes
-
-- Updated dependencies [4f936de]
-  - @cat-factory/kernel@0.118.0
-
-## 0.7.183
-
-### Patch Changes
-
-- Updated dependencies [127fe3e]
-  - @cat-factory/kernel@0.117.6
-
-## 0.7.182
-
-### Patch Changes
-
-- Updated dependencies [774908c]
-  - @cat-factory/kernel@0.117.5
-
-## 0.7.181
-
-### Patch Changes
-
-- Updated dependencies [08a7da2]
-  - @cat-factory/kernel@0.117.4
-
-## 0.7.180
-
-### Patch Changes
-
-- Updated dependencies [6b968bb]
-  - @cat-factory/kernel@0.117.3
-
-## 0.7.179
-
-### Patch Changes
-
-- Updated dependencies [eeadc97]
-  - @cat-factory/kernel@0.117.2
-
-## 0.7.178
-
-### Patch Changes
-
-- Updated dependencies [cb7fd14]
-  - @cat-factory/kernel@0.117.1
-
-## 0.7.177
-
-### Patch Changes
-
-- Updated dependencies [be54a32]
-  - @cat-factory/kernel@0.117.0
-
-## 0.7.176
-
-### Patch Changes
-
-- Updated dependencies [51869b8]
-  - @cat-factory/kernel@0.116.0
-
-## 0.7.175
-
-### Patch Changes
-
-- Updated dependencies [a51a498]
-  - @cat-factory/kernel@0.115.1
-
-## 0.7.174
-
-### Patch Changes
-
-- Updated dependencies [b83bcc8]
-- Updated dependencies [b83bcc8]
-- Updated dependencies [a0c6934]
-  - @cat-factory/kernel@0.115.0
-
-## 0.7.173
-
-### Patch Changes
-
-- Updated dependencies [0f3c88b]
-  - @cat-factory/kernel@0.114.0
-
-## 0.7.172
-
-### Patch Changes
-
-- Updated dependencies [ed77be6]
-  - @cat-factory/kernel@0.113.0
-
-## 0.7.171
-
-### Patch Changes
-
-- Updated dependencies [7ee2530]
-  - @cat-factory/kernel@0.112.1
-
-## 0.7.170
-
-### Patch Changes
-
-- Updated dependencies [f25d5e2]
-  - @cat-factory/kernel@0.112.0
-
-## 0.7.169
-
-### Patch Changes
-
-- @cat-factory/kernel@0.111.1
-
-## 0.7.168
-
-### Patch Changes
-
-- Updated dependencies [63f7881]
-  - @cat-factory/kernel@0.111.0
-
-## 0.7.167
-
-### Patch Changes
-
-- Updated dependencies [bcc843d]
-  - @cat-factory/kernel@0.110.1
-
-## 0.7.166
-
-### Patch Changes
-
-- Updated dependencies [a2db337]
-  - @cat-factory/kernel@0.110.0
-
-## 0.7.165
-
-### Patch Changes
-
-- Updated dependencies [8319e52]
-  - @cat-factory/kernel@0.109.1
-
-## 0.7.164
-
-### Patch Changes
-
-- Updated dependencies [8728bf7]
-- Updated dependencies [7157908]
-  - @cat-factory/kernel@0.109.0
-
-## 0.7.163
-
-### Patch Changes
-
-- Updated dependencies [f1906cb]
-  - @cat-factory/kernel@0.108.0
-
-## 0.7.162
-
-### Patch Changes
-
-- Updated dependencies [44fafa4]
-  - @cat-factory/kernel@0.107.0
-
-## 0.7.161
-
-### Patch Changes
-
-- Updated dependencies [89c861a]
-  - @cat-factory/kernel@0.106.0
-
-## 0.7.160
-
-### Patch Changes
-
-- Updated dependencies [2d97812]
-- Updated dependencies [b35e1a0]
-  - @cat-factory/kernel@0.105.0
-
-## 0.7.159
-
-### Patch Changes
-
-- @cat-factory/kernel@0.104.4
-
-## 0.7.158
-
-### Patch Changes
-
-- @cat-factory/kernel@0.104.3
-
-## 0.7.157
-
-### Patch Changes
-
-- Updated dependencies [bc77f89]
-  - @cat-factory/kernel@0.104.2
-
-## 0.7.156
-
-### Patch Changes
-
-- @cat-factory/kernel@0.104.1
-
-## 0.7.155
-
-### Patch Changes
-
-- Updated dependencies [37d1517]
-  - @cat-factory/kernel@0.104.0
-
-## 0.7.154
-
-### Patch Changes
-
-- Updated dependencies [14eac27]
-  - @cat-factory/kernel@0.103.0
-
-## 0.7.153
-
-### Patch Changes
-
-- Updated dependencies [ecbcbec]
-  - @cat-factory/kernel@0.102.0
-
-## 0.7.152
-
-### Patch Changes
-
-- @cat-factory/kernel@0.101.2
-
-## 0.7.151
-
-### Patch Changes
-
-- Updated dependencies [10787c4]
-  - @cat-factory/kernel@0.101.1
-
-## 0.7.150
-
-### Patch Changes
-
-- Updated dependencies [f596090]
-  - @cat-factory/kernel@0.101.0
-
-## 0.7.149
-
-### Patch Changes
-
-- Updated dependencies [9ea1e77]
-  - @cat-factory/kernel@0.100.0
-
-## 0.7.148
-
-### Patch Changes
-
-- @cat-factory/kernel@0.99.1
-
-## 0.7.147
-
-### Patch Changes
-
-- Updated dependencies [1afa003]
-  - @cat-factory/kernel@0.99.0
-
-## 0.7.146
-
-### Patch Changes
-
-- Updated dependencies [bf31df7]
-  - @cat-factory/kernel@0.98.0
-
-## 0.7.145
-
-### Patch Changes
-
-- Updated dependencies [6f9d935]
-  - @cat-factory/kernel@0.97.0
-
-## 0.7.144
-
-### Patch Changes
-
-- Updated dependencies [5490103]
-- Updated dependencies [dd6df12]
-  - @cat-factory/kernel@0.96.0
-
-## 0.7.143
-
-### Patch Changes
-
-- Updated dependencies [accb8ec]
-  - @cat-factory/kernel@0.95.0
-
-## 0.7.142
-
-### Patch Changes
-
-- Updated dependencies [cd435d1]
-  - @cat-factory/kernel@0.94.0
-
-## 0.7.141
-
-### Patch Changes
-
-- 77bc73c: Update dependencies to the latest versions within the supply-chain release-age
-  window. The Vercel AI SDK family stays within the `ai@6` / `@ai-sdk/*` majors
-  that `workers-ai-provider@^3` peers require (`ai@6.0.219`,
-  `@ai-sdk/anthropic@3.0.92`, `@ai-sdk/openai@3.0.80`,
-  `@ai-sdk/openai-compatible@2.0.56`, `@ai-sdk/provider@3.0.13`,
-  `@ai-sdk/amazon-bedrock@4.0.128`). Other bumps include `@hono/node-server`,
-  `pg-boss`, `undici`, `markdown-it`, `@aws-sdk/client-s3`, `@clack/prompts`,
-  `@types/node`, and eligible transitive dependencies. `@cloudflare/workers-types`
-  is held at `4.x` because `wrangler@4` peers on `^4`.
-- Updated dependencies [77bc73c]
-- Updated dependencies [076d02f]
-  - @cat-factory/kernel@0.93.0
-
-## 0.7.140
-
-### Patch Changes
-
-- Updated dependencies [029a689]
-  - @cat-factory/kernel@0.92.0
-
-## 0.7.139
-
-### Patch Changes
-
-- Updated dependencies [2e4d883]
-  - @cat-factory/kernel@0.91.0
-
-## 0.7.138
-
-### Patch Changes
-
-- Updated dependencies [773695b]
-  - @cat-factory/kernel@0.90.0
-
-## 0.7.137
-
-### Patch Changes
-
-- @cat-factory/kernel@0.89.1
-
-## 0.7.136
-
-### Patch Changes
-
-- Updated dependencies [cfcb6c7]
-  - @cat-factory/kernel@0.89.0
-
-## 0.7.135
-
-### Patch Changes
-
-- Updated dependencies [f4c321e]
-  - @cat-factory/kernel@0.88.0
-
-## 0.7.134
-
-### Patch Changes
-
-- Updated dependencies [13a284f]
-  - @cat-factory/kernel@0.87.0
-
-## 0.7.133
-
-### Patch Changes
-
-- @cat-factory/kernel@0.86.1
-
-## 0.7.132
-
-### Patch Changes
-
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-- Updated dependencies [c20a69a]
-- Updated dependencies [49b498a]
-- Updated dependencies [49b498a]
-  - @cat-factory/kernel@0.86.0
-
-## 0.7.131
-
-### Patch Changes
-
-- Updated dependencies [1f6d9fc]
-  - @cat-factory/kernel@0.85.0
-
-## 0.7.130
-
-### Patch Changes
-
-- Updated dependencies [e5ddaa4]
-  - @cat-factory/kernel@0.84.0
-
-## 0.7.129
-
-### Patch Changes
-
-- Updated dependencies [9bac054]
-  - @cat-factory/kernel@0.83.0
-
-## 0.7.128
-
-### Patch Changes
-
-- Updated dependencies [6c1efd1]
-  - @cat-factory/kernel@0.82.0
-
-## 0.7.127
-
-### Patch Changes
-
-- Updated dependencies [6edcce0]
-  - @cat-factory/kernel@0.81.0
-
-## 0.7.126
-
-### Patch Changes
-
-- Updated dependencies [ef57cb1]
-  - @cat-factory/kernel@0.80.0
-
-## 0.7.125
-
-### Patch Changes
-
-- @cat-factory/kernel@0.79.1
-
-## 0.7.124
-
-### Patch Changes
-
-- Updated dependencies [47a2975]
-  - @cat-factory/kernel@0.79.0
-
-## 0.7.123
-
-### Patch Changes
-
-- Updated dependencies [b928904]
-  - @cat-factory/kernel@0.78.0
-
-## 0.7.122
-
-### Patch Changes
-
-- Updated dependencies [7fa7578]
-  - @cat-factory/kernel@0.77.0
-
-## 0.7.121
-
-### Patch Changes
-
-- Updated dependencies [55661f4]
-  - @cat-factory/kernel@0.76.0
-
-## 0.7.120
-
-### Patch Changes
-
-- Updated dependencies [ca5c3e8]
-  - @cat-factory/kernel@0.75.0
-
-## 0.7.119
-
-### Patch Changes
-
-- Updated dependencies [b216fdc]
-  - @cat-factory/kernel@0.74.0
-
-## 0.7.118
-
-### Patch Changes
-
-- Updated dependencies [7fd6a19]
-  - @cat-factory/kernel@0.73.0
-
-## 0.7.117
-
-### Patch Changes
-
-- Updated dependencies [0ac0dc4]
-  - @cat-factory/kernel@0.72.0
-
-## 0.7.116
-
-### Patch Changes
-
-- Updated dependencies [36f4cf6]
-- Updated dependencies [b78adf5]
-  - @cat-factory/kernel@0.71.0
-
-## 0.7.115
-
-### Patch Changes
-
-- Updated dependencies [e0aab3f]
-  - @cat-factory/kernel@0.70.2
-
-## 0.7.114
-
-### Patch Changes
-
-- Updated dependencies [0d51638]
-  - @cat-factory/kernel@0.70.1
-
-## 0.7.113
-
-### Patch Changes
-
-- Updated dependencies [eb67d40]
-  - @cat-factory/kernel@0.70.0
-
-## 0.7.112
-
-### Patch Changes
-
-- @cat-factory/kernel@0.69.8
-
-## 0.7.111
-
-### Patch Changes
-
-- Updated dependencies [7f9d215]
-  - @cat-factory/kernel@0.69.7
-
-## 0.7.110
-
-### Patch Changes
-
-- @cat-factory/kernel@0.69.6
-
-## 0.7.109
-
-### Patch Changes
-
-- @cat-factory/kernel@0.69.5
-
-## 0.7.108
-
-### Patch Changes
-
-- @cat-factory/kernel@0.69.4
-
-## 0.7.107
-
-### Patch Changes
-
-- @cat-factory/kernel@0.69.3
-
-## 0.7.106
-
-### Patch Changes
-
-- Updated dependencies [d7f6e1c]
-- Updated dependencies [63cf6de]
-  - @cat-factory/kernel@0.69.2
-
-## 0.7.105
-
-### Patch Changes
-
-- Updated dependencies [120de05]
-  - @cat-factory/kernel@0.69.1
-
-## 0.7.104
-
-### Patch Changes
-
-- Updated dependencies [dcc8b32]
-  - @cat-factory/kernel@0.69.0
-
-## 0.7.103
-
-### Patch Changes
-
-- Updated dependencies [16ee6cc]
-  - @cat-factory/kernel@0.68.1
-
-## 0.7.102
-
-### Patch Changes
-
-- Updated dependencies [16621f8]
-  - @cat-factory/kernel@0.68.0
-
-## 0.7.101
-
-### Patch Changes
-
-- Updated dependencies [9b26ff1]
-- Updated dependencies [e0aa45e]
-- Updated dependencies [f70c273]
-- Updated dependencies [6c51e31]
-  - @cat-factory/kernel@0.67.0
-
-## 0.7.100
-
-### Patch Changes
-
-- @cat-factory/kernel@0.66.1
-
-## 0.7.99
-
-### Patch Changes
-
-- Updated dependencies [fb53662]
-  - @cat-factory/kernel@0.66.0
-
-## 0.7.98
-
-### Patch Changes
-
-- Updated dependencies [6f95aff]
-  - @cat-factory/kernel@0.65.0
-
-## 0.7.97
-
-### Patch Changes
-
-- Updated dependencies [3643708]
-  - @cat-factory/kernel@0.64.0
-
-## 0.7.96
-
-### Patch Changes
-
-- @cat-factory/kernel@0.63.4
-
-## 0.7.95
-
-### Patch Changes
-
-- @cat-factory/kernel@0.63.3
-
-## 0.7.94
-
-### Patch Changes
-
-- Updated dependencies [2e1354f]
-  - @cat-factory/kernel@0.63.2
-
-## 0.7.93
-
-### Patch Changes
-
-- @cat-factory/kernel@0.63.1
-
-## 0.7.92
-
-### Patch Changes
-
-- Updated dependencies [f568a8c]
-  - @cat-factory/kernel@0.63.0
-
-## 0.7.91
-
-### Patch Changes
-
-- @cat-factory/kernel@0.62.4
-
-## 0.7.90
-
-### Patch Changes
-
-- @cat-factory/kernel@0.62.3
-
-## 0.7.89
-
-### Patch Changes
-
-- @cat-factory/kernel@0.62.2
-
-## 0.7.88
-
-### Patch Changes
-
-- @cat-factory/kernel@0.62.1
-
-## 0.7.87
-
-### Patch Changes
-
-- Updated dependencies [858799e]
-  - @cat-factory/kernel@0.62.0
-
-## 0.7.86
-
-### Patch Changes
-
-- @cat-factory/kernel@0.61.1
-
-## 0.7.85
-
-### Patch Changes
-
-- Updated dependencies [15c5894]
-  - @cat-factory/kernel@0.61.0
-
-## 0.7.84
-
-### Patch Changes
-
-- Updated dependencies [f383515]
-  - @cat-factory/kernel@0.60.0
-
-## 0.7.83
-
-### Patch Changes
-
-- Updated dependencies [e4cddb4]
-  - @cat-factory/kernel@0.59.0
-
-## 0.7.82
-
-### Patch Changes
-
-- Updated dependencies [337d94d]
-  - @cat-factory/kernel@0.58.0
-
-## 0.7.81
-
-### Patch Changes
-
-- Updated dependencies [6009266]
-  - @cat-factory/kernel@0.57.1
-
-## 0.7.80
-
-### Patch Changes
-
-- Updated dependencies [1952d6b]
-- Updated dependencies [1952d6b]
-  - @cat-factory/kernel@0.57.0
-
-## 0.7.79
-
-### Patch Changes
-
-- @cat-factory/kernel@0.56.1
-
-## 0.7.78
-
-### Patch Changes
-
-- Updated dependencies [f9a173f]
-  - @cat-factory/kernel@0.56.0
-
-## 0.7.77
-
-### Patch Changes
-
-- Updated dependencies [fdeb466]
-  - @cat-factory/kernel@0.55.4
-
-## 0.7.76
-
-### Patch Changes
-
-- @cat-factory/kernel@0.55.3
-
-## 0.7.75
-
-### Patch Changes
-
-- @cat-factory/kernel@0.55.2
-
-## 0.7.74
-
-### Patch Changes
-
-- @cat-factory/kernel@0.55.1
-
-## 0.7.73
-
-### Patch Changes
-
-- Updated dependencies [d5a0637]
-- Updated dependencies [915861c]
-  - @cat-factory/kernel@0.55.0
-
-## 0.7.72
-
-### Patch Changes
-
-- Updated dependencies [48a3df6]
-- Updated dependencies [48a3df6]
-  - @cat-factory/kernel@0.54.0
-
-## 0.7.71
-
-### Patch Changes
-
-- @cat-factory/kernel@0.53.1
-
-## 0.7.70
-
-### Patch Changes
-
-- Updated dependencies [69558f9]
-  - @cat-factory/kernel@0.53.0
-
-## 0.7.69
-
-### Patch Changes
-
-- Updated dependencies [29d8b5d]
-  - @cat-factory/kernel@0.52.0
-
-## 0.7.68
-
-### Patch Changes
-
-- Updated dependencies [40f687d]
-  - @cat-factory/kernel@0.51.0
-
-## 0.7.67
-
-### Patch Changes
-
-- Updated dependencies [e0f1149]
-  - @cat-factory/kernel@0.50.0
-
-## 0.7.66
-
-### Patch Changes
-
-- Updated dependencies [fc324d2]
-  - @cat-factory/kernel@0.49.0
-
-## 0.7.65
-
-### Patch Changes
-
-- Updated dependencies [e3b3540]
-  - @cat-factory/kernel@0.48.0
-
-## 0.7.64
-
-### Patch Changes
-
-- @cat-factory/kernel@0.47.2
-
-## 0.7.63
-
-### Patch Changes
-
-- @cat-factory/kernel@0.47.1
-
-## 0.7.62
-
-### Patch Changes
-
-- Updated dependencies [4b5d267]
-  - @cat-factory/kernel@0.47.0
-
-## 0.7.61
-
-### Patch Changes
-
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [8727f2b]
-- Updated dependencies [56e6ce6]
-  - @cat-factory/kernel@0.46.0
-
-## 0.7.60
-
-### Patch Changes
-
-- 8fad695: Update dependencies to latest.
-
-  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
-    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
-    so the test runner / CI is pinned to **Node 26**. Production runtime is
-    unaffected — `undici` is a dev/test dependency only, and the service still runs
-    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
-  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
-    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
-    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
-    `@aws-sdk/client-s3` 3.1075.
-  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
-    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
-    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
-  - Pinned the whole Vue runtime family to one version via a pnpm `override`
-    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
-    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
-    bundled into the SPA; Vue's render internals are module-level singletons, so the
-    second copy crashed the app on boot (`Cannot read properties of null (reading
-'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
-    version = one singleton.
-  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
-    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
-
-- Updated dependencies [8fad695]
-  - @cat-factory/kernel@0.45.5
-
-## 0.7.59
-
-### Patch Changes
-
-- @cat-factory/kernel@0.45.4
-
-## 0.7.58
-
-### Patch Changes
-
-- Updated dependencies [ab146e5]
-  - @cat-factory/kernel@0.45.3
-
-## 0.7.57
-
-### Patch Changes
-
-- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
-  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
-  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
-  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
-  removes that footgun for every publishable library.
-- Updated dependencies [c11a0cc]
-  - @cat-factory/kernel@0.45.2
-
-## 0.7.56
-
-### Patch Changes
-
-- Updated dependencies [5363166]
-  - @cat-factory/kernel@0.45.1
-
-## 0.7.55
-
-### Patch Changes
-
-- Updated dependencies [eab73b8]
-  - @cat-factory/kernel@0.45.0
-
-## 0.7.54
-
-### Patch Changes
-
-- Updated dependencies [e641417]
-  - @cat-factory/kernel@0.44.0
-
-## 0.7.53
-
-### Patch Changes
-
-- Updated dependencies [bbafec9]
-- Updated dependencies [bbafec9]
-  - @cat-factory/kernel@0.43.0
-
-## 0.7.52
-
-### Patch Changes
-
-- @cat-factory/kernel@0.42.2
-
-## 0.7.51
-
-### Patch Changes
-
-- Updated dependencies [d1027ec]
-  - @cat-factory/kernel@0.42.1
-
-## 0.7.50
-
-### Patch Changes
-
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-  - @cat-factory/kernel@0.42.0
-
-## 0.7.49
-
-### Patch Changes
-
-- Updated dependencies [b5231b0]
-  - @cat-factory/kernel@0.41.0
-
-## 0.7.48
-
-### Patch Changes
-
-- Updated dependencies [6d829bb]
-  - @cat-factory/kernel@0.40.0
-
-## 0.7.47
-
-### Patch Changes
-
-- Updated dependencies [714b7c9]
-  - @cat-factory/kernel@0.39.0
-
-## 0.7.46
-
-### Patch Changes
-
-- @cat-factory/kernel@0.38.1
-
-## 0.7.45
-
-### Patch Changes
-
-- Updated dependencies [a4ea607]
-  - @cat-factory/kernel@0.38.0
-
-## 0.7.44
-
-### Patch Changes
-
-- Updated dependencies [76543fa]
-  - @cat-factory/kernel@0.37.0
-
-## 0.7.43
-
-### Patch Changes
-
-- Updated dependencies [17adf4c]
-  - @cat-factory/kernel@0.36.0
-
-## 0.7.42
-
-### Patch Changes
-
-- Updated dependencies [eb48652]
-  - @cat-factory/kernel@0.35.0
-
-## 0.7.41
-
-### Patch Changes
-
-- Updated dependencies [9f7ee39]
-- Updated dependencies [81b60d4]
-  - @cat-factory/kernel@0.34.0
-
-## 0.7.40
-
-### Patch Changes
-
-- Updated dependencies [ea59e91]
-  - @cat-factory/kernel@0.33.0
-
-## 0.7.39
-
-### Patch Changes
-
-- Updated dependencies [b82304e]
-  - @cat-factory/kernel@0.32.0
-
-## 0.7.38
-
-### Patch Changes
-
-- Updated dependencies [765cc42]
-  - @cat-factory/kernel@0.31.0
-
-## 0.7.37
-
 ### Patch Changes
 
-- Updated dependencies [52d886a]
-  - @cat-factory/kernel@0.30.0
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/observability-otel@0.23.49
 
-## 0.7.36
+## 0.11.55
 
 ### Patch Changes
 
-- Updated dependencies [a639189]
-  - @cat-factory/kernel@0.29.0
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/observability-otel@0.23.48
 
-## 0.7.35
+## 0.11.54
 
 ### Patch Changes
 
-- @cat-factory/kernel@0.28.1
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/observability-otel@0.23.47
 
-## 0.7.34
+## 0.11.53
 
 ### Patch Changes
 
-- Updated dependencies [69d2270]
-  - @cat-factory/kernel@0.28.0
+- Updated dependencies [30d08c7]
+  - @cat-factory/kernel@0.348.1
+  - @cat-factory/observability-otel@0.23.46
 
-## 0.7.33
+## 0.11.52
 
 ### Patch Changes
 
-- Updated dependencies [3546e3d]
-  - @cat-factory/kernel@0.27.0
+- Updated dependencies [9f8cabc]
+  - @cat-factory/kernel@0.348.0
+  - @cat-factory/observability-otel@0.23.45
 
-## 0.7.32
+## 0.11.51
 
 ### Patch Changes
 
-- Updated dependencies [a62044d]
-  - @cat-factory/kernel@0.26.1
+- Updated dependencies [69fc66c]
+  - @cat-factory/kernel@0.347.0
+  - @cat-factory/observability-otel@0.23.44
 
-## 0.7.31
+## 0.11.50
 
 ### Patch Changes
 
-- Updated dependencies [2aae8bc]
-  - @cat-factory/kernel@0.26.0
+- @cat-factory/kernel@0.346.2
+  - @cat-factory/observability-otel@0.23.43
 
-## 0.7.30
+## 0.11.49
 
 ### Patch Changes
 
-- Updated dependencies [f4f954b]
-  - @cat-factory/kernel@0.25.0
+- @cat-factory/kernel@0.346.1
+  - @cat-factory/observability-otel@0.23.42
 
-## 0.7.29
+## 0.11.48
 
 ### Patch Changes
 
-- Updated dependencies [ce81233]
-  - @cat-factory/kernel@0.24.0
+- Updated dependencies [44b27a7]
+  - @cat-factory/kernel@0.346.0
+  - @cat-factory/observability-otel@0.23.41
 
-## 0.7.28
+## 0.11.47
 
 ### Patch Changes
 
-- Updated dependencies [7346a4f]
-  - @cat-factory/kernel@0.23.0
+- Updated dependencies [b75fa3c]
+  - @cat-factory/kernel@0.345.0
+  - @cat-factory/observability-otel@0.23.40
 
-## 0.7.27
+## 0.11.46
 
 ### Patch Changes
 
-- Updated dependencies [6ff1f10]
-  - @cat-factory/kernel@0.22.0
+- Updated dependencies [bba4beb]
+  - @cat-factory/kernel@0.344.0
+  - @cat-factory/observability-otel@0.23.39
 
-## 0.7.26
+## 0.11.45
 
 ### Patch Changes
 
-- Updated dependencies [04befe8]
-  - @cat-factory/kernel@0.21.0
+- @cat-factory/kernel@0.343.1
+  - @cat-factory/observability-otel@0.23.38
 
-## 0.7.25
+## 0.11.44
 
 ### Patch Changes
 
-- Updated dependencies [be182e8]
-  - @cat-factory/kernel@0.20.0
+- Updated dependencies [2ae7e2b]
+  - @cat-factory/kernel@0.343.0
+  - @cat-factory/observability-otel@0.23.37
 
-## 0.7.24
+## 0.11.43
 
 ### Patch Changes
 
-- Updated dependencies [2c24da8]
-  - @cat-factory/kernel@0.19.0
+- @cat-factory/kernel@0.342.1
+  - @cat-factory/observability-otel@0.23.36
 
-## 0.7.23
+## 0.11.42
 
 ### Patch Changes
 
-- Updated dependencies [4120ac5]
-  - @cat-factory/kernel@0.18.0
+- Updated dependencies [ca5be97]
+  - @cat-factory/kernel@0.342.0
+  - @cat-factory/observability-otel@0.23.35
 
-## 0.7.22
+## 0.11.41
 
 ### Patch Changes
 
-- Updated dependencies [25efe48]
-  - @cat-factory/kernel@0.17.0
+- Updated dependencies [5f06bfb]
+  - @cat-factory/kernel@0.341.0
+  - @cat-factory/observability-otel@0.23.34
 
-## 0.7.21
+## 0.11.40
 
 ### Patch Changes
 
-- Updated dependencies [c7b8012]
-  - @cat-factory/kernel@0.16.2
+- Updated dependencies [8dc6677]
+  - @cat-factory/kernel@0.340.0
+  - @cat-factory/observability-otel@0.23.33
 
-## 0.7.20
+## 0.11.39
 
 ### Patch Changes
 
-- Updated dependencies [aa06003]
-  - @cat-factory/kernel@0.16.1
+- 636fcf3: Re-verify every curated model route against its serving provider, take the agent CLIs at their
+  newest, and refresh the dependency tree.
+  
+  **A withdrawn route, caught by the pin checker.** OpenRouter has withdrawn the undated
+  `qwen/qwen3.8-max` and now serves the dated `qwen/qwen3.8-max-0902` instead. That is the silent
+  failure `scripts/check-openrouter-pins.mjs` exists for: nothing throws, `effectiveVariant` keeps
+  choosing the gateway for a workspace holding only an OpenRouter key, and every dispatch fails on
+  a dead slug. The two entries swap arms accordingly, and the floating entry is deliberately NOT
+  re-pointed at the dated slug: following an alias onto a snapshot is the identity the pinned entry
+  beside it exists to hold.
+  
+  **GLM-5.3 gains the two routes it was waiting for.** It shipped subscription-only because Z.ai
+  had not yet released the weights; Workers AI picked it up on 2026-08-28 and OpenRouter serves
+  `z-ai/glm-5.3` today. Both were read off the serving provider before being declared, and each
+  carries that provider's own window rather than the vendor's headline figure: Workers AI
+  1,048,576, OpenRouter 1,310,720, the coding plan 1M.
+  
+  **Qwen3.8 Flash joins the catalog**, on DashScope and OpenRouter. It is the cheapest 1M-window
+  entry here that reads images, which is what earns it a curated slot rather than the dynamic
+  OpenRouter catalog: it is the natural low-cost tier for the inline steps that reach for
+  `glm-flash` today, and a per-token rate is what those steps are chosen on.
+  
+  **One pinned rate was understating the budget gate.** `openrouter:x-ai/grok-4.6` carried xAI's
+  SHORT band ($2 / $6) with its cache tier left to derive, while the direct `xai:grok-4.6` row
+  carried the long band as its comment explains. xAI bills a request whose prompt reaches 200K
+  tokens entirely at the doubled rate and OpenRouter is a passthrough, so the gateway row now
+  matches: a cache read was metering at 60% below the live rate on a route that really does record
+  the class (`x-ai` is `auto-prefix` on the gateway). Every other pin came back at or above its
+  live rate, and every curated `openrouter` context window matches what the gateway serves.
+  
+  **Two omissions re-checked rather than assumed.** GPT-6 Astra still declares no `bedrock` arm:
+  Codex 0.153.3 did add Astra to the Bedrock picker, so the route demonstrably exists, but neither
+  AWS nor OpenAI publishes the model id it addresses, and a `baseModelId` guessed from a
+  neighbouring entry is precisely the dead pin repaired above. Still no separate "Astra Pro" entry
+  either, though the reasoning has narrowed: OpenRouter has minted its own `openai/gpt-6-astra-pro`
+  slug, while OpenAI's model doc states reasoning effort is a parameter on the single `gpt-6-astra`
+  id and Codex has no such `--model` slug. A second entry could therefore carry one arm re-badging
+  a model already here at byte-identical pricing, and the two-entry shape is for a choice made with
+  the price in front of you.
+  
+  **Agent CLIs.** Pi 0.85.0 -> 0.85.1 and Claude Code 2.1.261 -> 2.1.263 take their newest releases
+  ahead of the 24h age window, as the Dockerfile's standing note allows for those three pins. Codex
+  holds at 0.153.4 (already newest) and both Pi extensions at 2.9.0. Playwright in the UI image goes
+  1.62.1 -> 1.63.0 with `@playwright/test`. The executor image tag rolls to 1.154.0.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution: 56 resolved names moved, no
+  package name added or dropped. Four holds are unchanged and were re-verified at HEAD rather than
+  restated: vitest at 4.1.11 and wrangler at 4.124.0 (`@cloudflare/vitest-pool-workers` 0.22.0 is
+  still the newest and peers `vitest: ^4.1.0` while pinning that wrangler exactly),
+  `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date), and frontend TypeScript
+  at 6.0.3 (`vue-tsc` 3.3.11 calls `require.resolve('typescript/lib/tsc')`, which TS 7's exports map
+  does not carry). Base images are unchanged: `node:26-trixie-slim` still resolves to the digest
+  already pinned. GitHub Actions: `docker/setup-qemu-action` v4.2.0 -> v4.3.0, `pnpm/action-setup`
+  v6.0.10 -> v6.1.0, `zizmorcore/zizmor-action` v0.6.2 -> v0.6.3.
+- Updated dependencies [636fcf3]
+  - @cat-factory/kernel@0.339.0
+  - @cat-factory/observability-otel@0.23.32
 
-## 0.7.19
+## 0.11.38
 
 ### Patch Changes
 
-- Updated dependencies [208c933]
-  - @cat-factory/kernel@0.16.0
+- Updated dependencies [386c4a2]
+  - @cat-factory/kernel@0.338.0
+  - @cat-factory/observability-otel@0.23.31
 
-## 0.7.18
+## 0.11.37
 
 ### Patch Changes
 
-- Updated dependencies [494fb34]
-  - @cat-factory/kernel@0.15.1
+- Updated dependencies [76e2c1d]
+  - @cat-factory/kernel@0.337.0
+  - @cat-factory/observability-otel@0.23.30
 
-## 0.7.17
+## 0.11.36
 
 ### Patch Changes
 
-- Updated dependencies [0ac64b8]
-  - @cat-factory/kernel@0.15.0
+- Updated dependencies [5c50d30]
+  - @cat-factory/kernel@0.336.1
+  - @cat-factory/observability-otel@0.23.29
 
-## 0.7.16
+## 0.11.35
 
 ### Patch Changes
 
-- Updated dependencies [fde0437]
-  - @cat-factory/kernel@0.14.0
+- cd220f2: Add five catalog models, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Five new curated models.** Claude Fable 5.1, Gemini 3.8 Flash, a pinned Qwen3.8-Max-0902
+  snapshot, and Meta's Muse Spark 1.3 in both of its commercial tiers. Every route was checked
+  against the serving provider's live catalogue before it was declared, which is what decided three
+  of the shapes:
+  
+  - **Claude Fable 5.1** is the first Claude entry carrying subscription, OpenRouter and Bedrock arms
+    at once. Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch day rather than a
+    generation behind, so the flavour is declared against a verified route. Its OpenRouter slug is
+    DOTTED (`anthropic/claude-fable-5.1`) where the API id is dashed; the two genuinely disagree and
+    normalising either spelling yields a dead id.
+  - **Qwen3.8-Max-0902** is DashScope-only. OpenRouter serves the undated alias and publishes no dated
+    slug, and a flavour declared before its route exists is picked by `effectiveVariant` and then
+    fails at dispatch. It is a separate entry rather than a repoint of `qwen3.8-max` for the reason
+    `claude-opus-4-8` is separate: a block pinned to a snapshot must keep getting that build.
+  - **Muse Spark 1.3 ships as TWO entries**, standard and contributor. They are the same model on the
+    same route and differ only in what Meta may do with the traffic: the contributor tier costs a
+    twelfth on input in exchange for Meta training on the prompts and completions. That is a choice
+    an operator has to make with the price in front of them, and one entry could only make it
+    silently, so the two prices sit in separate rows and the SPA's "enable recommended" set omits the
+    contributor slug.
+  
+  `meta` joins the OpenRouter vendor-prefix family map beside `meta-llama`, so an account that blocks
+  the Meta family blocks Muse Spark too rather than leaving it unclassified.
+  
+  **The bare `bedrock` price row moved up a tier**, from ~$5/$30 to ~$10/$50 per 1M. A Bedrock ref
+  carries the account's own geo prefix, so `priceFor` can only ever match the bare provider key, and
+  that row is deliberately set to the frontier tier the catalog can select there. Fable 5.1 moved that
+  ceiling; leaving the row behind would have metered every Fable-5.1-on-Bedrock run at half its cost.
+  
+  **Both runner image tags roll**: the executor to 1.150.0 for the CLI bumps, and the deploy image
+  to 0.6.2 because the dependency round moved `@types/node` in its `package.json`, which the image
+  builds from. A dep bump inside a harness IS an image-source change, and republishing over a live
+  tag does not roll a deployment out.
+  
+  **Agent CLIs at their newest, ahead of the age window**, as the Dockerfile's standing note allows
+  for exactly these pins: Claude Code 2.1.252 -> 2.1.260 and Codex 0.152.0 -> 0.153.2. Pi is already
+  at its newest (0.84.4). Both Pi extensions move 2.8.0 -> 2.9.0 and have aged past the window, so
+  they take the ordinary route.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits under the `minimumReleaseAge` gate. 68 resolved
+  names move and the re-resolve adds and drops nothing, leaving 1388 names on both sides. Direct:
+  the `@ai-sdk/*` line (`amazon-bedrock@^5.0.73`, `anthropic@^4.0.49`, `openai@^4.0.57`,
+  `openai-compatible@^3.0.43`, `provider@^4.0.10`), `ai@^7.0.91`, `@aws-sdk/client-s3@^3.1125.0`, the
+  `@opentelemetry/*` set (`0.222.0` exporters, `2.11.0` SDK), `@types/node@^26.4.1`,
+  `happy-dom@^20.13.2`, `knip@^6.34.0`, `oxfmt@^0.66.0`, `oxlint@^1.81.0`, `undici@^8.10.1`. The AI
+  SDK family stays inside the `ai@^7` + `@ai-sdk/*@^4` majors that pair with `workers-ai-provider`.
+  
+  Three holds, each for a reason rather than for the age window:
+  
+  - **TypeScript stays at 6.0.3 on the frontend** while the backend is already on 7.0.2. TS 7 was
+    tried and reverted: `vue-tsc@3.3.11` resolves `typescript/lib/tsc`, which TS 7 no longer exports,
+    so the typecheck dies with `ERR_PACKAGE_PATH_NOT_EXPORTED` before reading a single file. vue-tsc
+    is the real gate for `.vue`, so the frontend moves when vue-tsc does.
+  - **wrangler holds at 4.124.0 and `@cloudflare/workers-types` at 5.20260815.1** for the fifth round
+    running. `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins wrangler
+    exactly; the types version IS the workerd date that pin resolves.
+  - **`@types/node@26.4.0` and `undici@8.10.0` keep a second resolved copy** beside the new ones, held
+    by upstream ranges (`@types/pg`, `happy-dom`, `nuxt`, `unifont`) rather than by anything here.
+  
+  Also re-pins `openrouter:deepseek/deepseek-v4-flash`, the one row `check-openrouter-pins.mjs`
+  reported as metering BELOW the live rate. The alias drifted up ~9% since the 2026-09-01 read, and a
+  budget gate is allowed to be early but never short.
+- Updated dependencies [cd220f2]
+  - @cat-factory/kernel@0.336.0
+  - @cat-factory/observability-otel@0.23.28
 
-## 0.7.15
+## 0.11.34
 
 ### Patch Changes
 
-- Updated dependencies [77b7d31]
-  - @cat-factory/kernel@0.13.4
+- Updated dependencies [d36d0a8]
+  - @cat-factory/kernel@0.335.1
+  - @cat-factory/observability-otel@0.23.27
 
-## 0.7.14
+## 0.11.33
 
 ### Patch Changes
 
-- @cat-factory/kernel@0.13.3
+- Updated dependencies [0f3fb10]
+  - @cat-factory/kernel@0.335.0
+  - @cat-factory/observability-otel@0.23.26
 
-## 0.7.13
+## 0.11.32
 
 ### Patch Changes
 
-- Updated dependencies [ce27690]
-  - @cat-factory/kernel@0.13.2
+- Updated dependencies [745eae8]
+  - @cat-factory/kernel@0.334.0
+  - @cat-factory/observability-otel@0.23.25
 
-## 0.7.12
+## 0.11.31
 
 ### Patch Changes
 
-- Updated dependencies [c8bd144]
-  - @cat-factory/kernel@0.13.1
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/kernel@0.333.0
+  - @cat-factory/observability-otel@0.23.24
 
-## 0.7.11
+## 0.11.30
 
 ### Patch Changes
 
-- Updated dependencies [5c915fd]
-  - @cat-factory/kernel@0.13.0
+- Updated dependencies [3b11b10]
+  - @cat-factory/kernel@0.332.0
+  - @cat-factory/observability-otel@0.23.23
 
-## 0.7.10
+## 0.11.29
 
 ### Patch Changes
 
-- Updated dependencies [128e12e]
-- Updated dependencies [4de2f5f]
-  - @cat-factory/kernel@0.12.0
+- Updated dependencies [9dfd40b]
+  - @cat-factory/kernel@0.331.0
+  - @cat-factory/observability-otel@0.23.22
 
-## 0.7.9
+## 0.11.28
 
 ### Patch Changes
 
-- f8a24e0: Refresh dependencies to latest. Notable major bumps: TypeScript 5→6 (tooling
-  packages), vitest 3→4, pino 9→10, `@hono/node-server` 1→2, `@hono/valibot-validator`
-  0.5→0.6, happy-dom 15→20, and `@types/node` →26. Patch/minor refreshes for `ai`,
-  `hono`, `wrangler`, `pg-boss`, `ws`, `@ai-sdk/*`, `oxlint`, and the Cloudflare
-  workers tooling.
-- Updated dependencies [f8a24e0]
-  - @cat-factory/kernel@0.11.1
+- Updated dependencies [1c79070]
+  - @cat-factory/kernel@0.330.0
+  - @cat-factory/observability-otel@0.23.21
 
-## 0.7.8
+## 0.11.27
 
 ### Patch Changes
 
-- Updated dependencies [1e31cbc]
-  - @cat-factory/kernel@0.11.0
+- Updated dependencies [8b015a3]
+  - @cat-factory/kernel@0.329.0
+  - @cat-factory/observability-otel@0.23.20
 
-## 0.7.7
+## 0.11.26
 
 ### Patch Changes
 
-- @cat-factory/kernel@0.10.1
+- Updated dependencies [ec0aba1]
+  - @cat-factory/kernel@0.328.0
+  - @cat-factory/observability-otel@0.23.19
 
-## 0.7.6
+## 0.11.25
 
 ### Patch Changes
 
-- Updated dependencies [ae29687]
-  - @cat-factory/kernel@0.10.0
+- Updated dependencies [436f373]
+  - @cat-factory/kernel@0.327.0
+  - @cat-factory/observability-otel@0.23.18
 
-## 0.7.5
+## 0.11.24
 
 ### Patch Changes
 
-- Updated dependencies [5c20968]
-  - @cat-factory/kernel@0.9.0
+- Updated dependencies [a745ee2]
+  - @cat-factory/kernel@0.326.0
+  - @cat-factory/observability-otel@0.23.17
 
-## 0.7.4
+## 0.11.23
 
 ### Patch Changes
 
-- Updated dependencies [c70df09]
-  - @cat-factory/kernel@0.8.0
+- Updated dependencies [92232a6]
+- Updated dependencies [a08d2ad]
+  - @cat-factory/kernel@0.325.0
+  - @cat-factory/observability-otel@0.23.16
 
-## 0.7.3
+## 0.11.22
 
 ### Patch Changes
 
-- Updated dependencies [a0a1bcc]
-  - @cat-factory/kernel@0.7.3
+- Updated dependencies [dc4a5d9]
+- Updated dependencies [4d999cb]
+  - @cat-factory/kernel@0.324.0
+  - @cat-factory/observability-otel@0.23.15
 
-## 0.7.2
+## 0.11.21
 
 ### Patch Changes
 
-- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
-- Updated dependencies [4fa5ed9]
-  - @cat-factory/kernel@0.7.2
+- Updated dependencies [0f426b3]
+  - @cat-factory/kernel@0.323.2
+  - @cat-factory/observability-otel@0.23.14
 
-## 0.7.1
+## 0.11.20
 
 ### Patch Changes
-
-- 7463cf2: Add `repository` metadata (url + monorepo `directory`) to every published package.json. npm provenance attestation rejected the previous release because `repository.url` was empty and could not be matched against the source repo; declaring it lets the publish (and provenance) succeed, and re-triggers publishing of all packages from the failed release.
-- Updated dependencies [7463cf2]
-  - @cat-factory/kernel@0.7.1
 
-## 0.7.0
+- Updated dependencies [332ef26]
+  - @cat-factory/kernel@0.323.1
+  - @cat-factory/observability-otel@0.23.13
 
-### Minor Changes
-
-- 918764f: Add optional, opt-in **Langfuse** LLM observability. A new fetch-based
-  `@cat-factory/observability-langfuse` package implements a runtime-neutral
-  `LlmTraceSink` (new kernel port) against Langfuse's ingestion API — no Node SDK or
-  OpenTelemetry, so it runs unchanged on BOTH the Cloudflare Worker (workerd) and Node
-  facades.
-
-  Proxied container-agent calls and inline (non-proxied) calls — requirements
-  review/rework, document planner, fragment selector, the inline agent — flow through the
-  SAME sink path: the orchestration `LlmObservabilityService` fans every recorded proxied
-  call out as a generation, and an `InstrumentedModelProvider` wraps every resolved model
-  so inline `generateText` calls surface the identical `LlmGenerationEvent`. Calls are
-  grouped under one trace per run (`executionId`); inline single-shot calls become their
-  own standalone trace.
-
-  Off unless `LANGFUSE_ENABLED=true` and both keys are set; wired symmetrically in both
-  runtime containers. Honours the existing `LLM_RECORD_PROMPTS` switch (prompt/response
-  bodies are omitted from Langfuse too when disabled). The sink never throws into the LLM
-  path — failures are swallowed and logged. The existing local metric store, spend gating
-  and board rollups are unchanged; Langfuse is an additive external sink, not a
-  replacement.
-
-### Patch Changes
+<!-- archived-releases -->
 
-- Updated dependencies [d94e75c]
-- Updated dependencies [6406c8c]
-- Updated dependencies [3d9a9d8]
-- Updated dependencies [db77061]
-- Updated dependencies [a48c620]
-- Updated dependencies [3bc8c79]
-- Updated dependencies [9d3a956]
-- Updated dependencies [8d11833]
-- Updated dependencies [ad9ba9e]
-- Updated dependencies [f83ffd7]
-- Updated dependencies [8065fed]
-- Updated dependencies [385bd93]
-- Updated dependencies [e50e78a]
-- Updated dependencies [0972696]
-- Updated dependencies [b48c455]
-- Updated dependencies [e9b9356]
-- Updated dependencies [e8005ba]
-- Updated dependencies [3a12f15]
-- Updated dependencies [b40da13]
-- Updated dependencies [3a12f15]
-- Updated dependencies [8eed38c]
-- Updated dependencies [084bf43]
-- Updated dependencies [157cd02]
-- Updated dependencies [7c37653]
-- Updated dependencies [db77061]
-- Updated dependencies [6406c8c]
-- Updated dependencies [57d70fa]
-- Updated dependencies [6406c8c]
-- Updated dependencies [918764f]
-- Updated dependencies [918764f]
-- Updated dependencies [fe0b7f8]
-- Updated dependencies [f73652c]
-- Updated dependencies [db336b1]
-- Updated dependencies [8807f5c]
-- Updated dependencies [9be11e1]
-- Updated dependencies [5ec0d25]
-- Updated dependencies [a691853]
-- Updated dependencies [4a08935]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [b287996]
-- Updated dependencies [b156b4b]
-- Updated dependencies [5c8ca33]
-- Updated dependencies [7cf2a2d]
-- Updated dependencies [2d66d34]
-- Updated dependencies [197264e]
-- Updated dependencies [3a12f15]
-- Updated dependencies [37baa7f]
-- Updated dependencies [c664fe6]
-- Updated dependencies [553a67d]
-- Updated dependencies [311a110]
-- Updated dependencies [f16ae62]
-- Updated dependencies [d65c979]
-- Updated dependencies [75a0441]
-- Updated dependencies [7157fd7]
-- Updated dependencies [21ca647]
-- Updated dependencies [8eed95b]
-- Updated dependencies [a97e485]
-- Updated dependencies [de5a9d7]
-- Updated dependencies [f647733]
-- Updated dependencies [d5e9141]
-- Updated dependencies [2d66d34]
-- Updated dependencies [a54ada2]
-- Updated dependencies [5ca8086]
-- Updated dependencies [d0697d1]
-- Updated dependencies [0090313]
-- Updated dependencies [7dc8e57]
-- Updated dependencies [cc8d96a]
-- Updated dependencies [43f2443]
-- Updated dependencies [acac735]
-- Updated dependencies [3841315]
-- Updated dependencies [48d2f0d]
-- Updated dependencies [3e6a844]
-  - @cat-factory/kernel@0.7.0
+Older releases: [`CHANGELOG-ARCHIVE.md`](./CHANGELOG-ARCHIVE.md).

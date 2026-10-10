@@ -13,21 +13,30 @@ Cloudflare Workers Observability. Two tables carry everything you need:
   `status`, the structured `failure` JSON (kind/message/hint/lastSubtasks), and a
   `detail` JSON with every pipeline step (agentKind, state, model, approvals,
   per-step `metrics`). This is the lifecycle + the failure verdict.
-- **`llm_call_metrics`** — one row per proxied LLM call (migration 0026). Holds
+- **`llm_call_metrics`** — one row per LLM call (migration 0026). Holds
   `agent_kind`, `provider`, `model`, `ok`, `http_status`, `finish_reason`,
   token counts, `request_max_tokens`, the latency split (`upstream_ms`/`overhead_ms`),
   `error_message`, and the full `prompt_text` + `response_text`. Linked to a run by
   `execution_id`. This is what the model actually saw and produced.
 
-Retention: `llm_call_metrics` is pruned aggressively (default 3 days,
-`LLM_CALL_METRICS_RETENTION_DAYS`) because the full bodies are heavy; `agent_runs`
-lives longer. Investigate recent runs promptly.
+  Three producers write here and their rows read differently, so check which one you have
+  before drawing a conclusion from a null: a **proxied** container call (Pi) carries the full
+  latency split and an `http_status`; a **subscription harness** call (Claude Code / Codex)
+  carries a `turn_index` and a `phase` but zero timing (the CLIs expose none); an **inline**
+  call (a judge, consensus, the requirements writer, an inline agent kind such as
+  `doc-researcher` / `doc-outliner` / the document interviewer) has `streaming=0`,
+  `turn_index` NULL, `http_status` NULL, `phase=''`, and `upstream_ms = total_ms` — a genuine
+  0 overhead, because there is no proxy hop. None of those nulls means data was lost.
+
+Retention: `llm_call_metrics` is pruned to `LLM_CALL_METRICS_RETENTION_DAYS` (default 14
+days) because the full bodies are heavy; `agent_runs` lives longer. A deployment may have
+lowered it, so an empty result for an older run can mean pruned rather than never recorded.
 
 ## How to query
 
 Run wrangler from `deploy/backend` (its `wrangler.toml` defines the `cat_factory`
 binding). Always pass `--remote` (production) and `--json` (parseable). Do NOT
-pre-check Cloudflare auth — assume the login is correct (see CLAUDE.md).
+pre-check Cloudflare auth — assume the login is correct (see AGENTS.md).
 
 ```bash
 cd deploy/backend
@@ -87,11 +96,31 @@ Read the columns as signals:
   output truncation; the model was cut off mid-answer (raise the output limit or
   shrink the task). `truncatedCalls` in the step metrics counts these.
 - `ok=1` + `finish_reason='tool_calls'` everywhere → the LLM side is healthy; the
-  failure is in tool EXECUTION inside the container (see step 4). The
-  `ProgressGuard` (harness `pi.ts`) counts failing tool calls from Pi's event
-  stream — those tool errors are NOT rows here, only the LLM calls that drove them.
+  failure is in tool EXECUTION inside the container (see step 4). Not in this table,
+  but each failing tool call is its own row in `agent_tool_calls` (`ok=0`), which is
+  where step 4 starts. The `ProgressGuard` (harness `pi.ts`) counts the same failures
+  live off Pi's event stream, which is what aborts the run.
 
 ## Step 4 — read the actual tool-call loop (the root cause)
+
+Read the trajectory first. `agent_tool_calls` (same telemetry DB) holds one row per tool
+invocation, so a stuck loop or a failing edit is visible without reconstructing it from
+prompt deltas:
+
+```sql
+SELECT seq, tool, ok, datetime(started_at/1000,'unixepoch') AS t,
+       substr(args,1,200) AS args, substr(result,1,300) AS result
+FROM agent_tool_calls
+WHERE execution_id='<run id>'
+ORDER BY started_at ASC, seq ASC;
+```
+
+Order by `(started_at, seq)`, never by `job_id` (a string that sorts a run's dispatches by
+agent-kind spelling) and never by `seq` alone (it restarts at zero on each dispatch). Add
+`AND job_id='<job id>'` to read one dispatch. `bodies='withheld'` means the workspace or
+deployment opted out of body capture, so an empty `args` says nothing about the call; a run
+whose image predates the sink has no rows at all, and the deltas below are then the only
+account.
 
 `prompt_text` is stored as a DELTA vs the previous call (migration 0027), so each
 call's `prompt_text` contains the new assistant message(s) plus the tool RESULT
@@ -149,5 +178,9 @@ or the board "retry" button) to spin a fresh container.
   `match(/must have required properties (\w+)/g)`.
 - The app also exposes this without SQL:
   `GET /executions/:id/llm-metrics` (per-call list) and
-  `GET /executions/:id/llm-metrics/export` (LLM-friendly JSON bundle). Use D1
+  `GET /executions/:id/llm-metrics/export` (LLM-friendly JSON bundle). With a
+  `read`-scoped public API key, the remote debugging surface (`/api/v1/debug/*`,
+  see `backend/docs/debug-api.md`) covers steps 1–4 end to end: the run
+  overview's `signals` replace step 2's manual reading, and
+  `?contains=` + `matchOffset` + `?bodyOffset=` replace step 4's grep. Use D1
   directly when you need cross-run queries or the app is unreachable.

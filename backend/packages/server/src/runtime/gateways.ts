@@ -1,4 +1,6 @@
+import type { GatewayCallReport, InputTokenClasses } from '@cat-factory/agents'
 import type { WebSearchProvider } from '@cat-factory/contracts'
+import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { Logger } from '../observability/logger.js'
 
 // Runtime "gateway" seams: the differentiator capabilities a controller needs but
@@ -42,6 +44,36 @@ export interface GitHubWebhookIngest {
   enqueueWebhook(eventName: string, payload: unknown): Promise<boolean>
   /** Enqueue an incremental single-repo resync. */
   queueRepoResync(workspaceId: string, repoGithubId: number): Promise<boolean>
+  /**
+   * Enqueue a targeted skill-source resync — the push-webhook freshness fan-out (slice 4).
+   * When a push advances a repo that skill sources are linked to, the async consumer re-syncs
+   * each affected source so its skills stay current. `false` (no queue bound: local/dev/tests)
+   * means the fan-out is skipped; freshness is then guaranteed at dispatch by the resolver's
+   * head-commit probe rather than proactively here.
+   */
+  queueSkillResync(accountId: string, sourceId: string): Promise<boolean>
+  /**
+   * The same fan-out for a repo-sourced FOUNDATIONAL-SERVICE source. Keyed on the source id
+   * alone: the source's owning tier is a stored field, and the consumer resolves it there rather
+   * than trusting a copy that rode the queue.
+   */
+  queueFoundationalResync(sourceId: string): Promise<boolean>
+}
+
+/**
+ * Hands a VERIFIED inbound tracker delivery to an async consumer so the receiver can ack fast —
+ * the task-source analogue of {@link GitHubWebhookIngest}, and wired the same way: a Cloudflare
+ * Queue on the Worker, a pg-boss queue on Node, and `false` when neither is bound so the caller
+ * applies it inline (local/dev/tests).
+ *
+ * The delivery is passed as the already-PARSED neutral event rather than the raw payload, because
+ * verification and parsing both need the provider — which the receiver has resolved and the
+ * consumer would otherwise have to resolve again. A queued job therefore carries no secret and no
+ * vendor shape, only `(workspace, event)`.
+ */
+export interface TrackerWebhookIngest {
+  /** Enqueue a verified tracker event for async handling. `false` ⇒ handle it inline. */
+  enqueueEvent(workspaceId: string, event: TrackerWebhookEvent): Promise<boolean>
 }
 
 /** OpenAI-style token usage scraped from an upstream completion, for spend metering. */
@@ -57,8 +89,17 @@ export interface LlmTokenUsage {
  */
 export interface ProxyCallObservation {
   usage: LlmTokenUsage | null
-  /** Prompt tokens served from the provider's cache (subset of usage.prompt_tokens); 0 if none. */
-  cachedPromptTokens?: number
+  /**
+   * The call's three input classes (fresh + both cache classes, additive), when the upstream
+   * path already knows them apart. Omit and the proxy derives all three from `usage` via
+   * `readInputTokenClasses`, which reconciles the inclusive (OpenAI/DeepSeek) and exclusive
+   * (Anthropic) provider shapes.
+   *
+   * All three travel together on purpose: `fresh` is only meaningful relative to the classes
+   * subtracted from it, so a path that supplied the cache classes alone would leave the proxy
+   * re-deriving `fresh` from a payload whose shape it just overrode.
+   */
+  inputTokens?: InputTokenClasses
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
   finishReason: string | null
   /** The assistant response text (concatenated for streamed calls). */
@@ -75,15 +116,35 @@ export interface ProxyCallObservation {
   errorMessage: string | null
   /** Time spent waiting on the model (ms) — measured by the path that made the call. */
   upstreamMs: number
+  /**
+   * What a GATEWAY reported about the call: its own USD ledger cost and the upstream it routed
+   * to. Absent for every provider that reports neither, which is NOT the same as zero: a reader
+   * falls back to the derived price-table estimate for the first and takes the exact figure for
+   * the second. Read off the completion with `readCompletionGatewayReport`; why it is asked for
+   * at all is in `@cat-factory/agents`' `gateway-attribution.ts`.
+   */
+  gateway?: GatewayCallReport
 }
 
 /**
- * A resolved OpenAI-compatible upstream: where to forward. The API key is NOT here —
- * it is leased per call from the DB-backed API-key pool by the proxy, so credentials
- * are no longer env-baked into the gateway.
+ * A resolved OpenAI-compatible upstream: where to forward. For a POOLED vendor the API key is
+ * deliberately absent, because it is leased per call from the DB-backed API-key pool by the
+ * proxy: vendor credentials are not env-baked into the gateway.
  */
 export interface LlmUpstreamEndpoint {
   baseURL: string
+  /**
+   * The bearer to send, for the one provider class that has no pool to lease from: a provider
+   * outside the `ApiKeyProvider` vocabulary, whose credential is a DEPLOYMENT-level fact rather
+   * than a workspace's stored vendor key. Today that is Cloudflare Workers AI reached over REST
+   * (`CLOUDFLARE_API_TOKEN`), which a runtime with no `AI` binding forwards to instead of running
+   * in-process. Set it and the proxy skips the pool lease and attributes no key to the spend row.
+   *
+   * NOT an escape hatch for a pooled vendor: setting it for `qwen` would take that provider's
+   * key back out of the pool (no rotation, no per-scope attribution, no UI). A facade resolving a
+   * pooled vendor leaves this undefined.
+   */
+  apiKey?: string
 }
 
 /** What the LLM proxy needs to run a model in-process (e.g. a Workers AI binding). */
@@ -117,14 +178,17 @@ export interface LlmInProcessRequest {
  */
 export interface LlmUpstream {
   /**
-   * Resolve the OpenAI-compatible base URL for `provider`, or null when unavailable.
-   * Key-free: the proxy leases the API key from the DB pool and injects it.
+   * Resolve the OpenAI-compatible base URL for `provider`, or null when unavailable. Key-free
+   * for a pooled vendor (the proxy leases and injects the key); see
+   * {@link LlmUpstreamEndpoint.apiKey} for the provider class that carries its own.
    */
   resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null
   /**
-   * Serve a completion in-process (no external HTTP), returning an OpenAI-shaped
-   * Response — or null when this runtime has no in-process path (the controller then
-   * replies 502 for a provider that requires it, e.g. `workers-ai`).
+   * Serve a completion in-process (no external HTTP), returning an OpenAI-shaped Response, or
+   * null when this runtime has no in-process path. The controller then falls back to the
+   * OpenAI-compatible forward path for the same provider (Node serves `workers-ai` over
+   * Cloudflare's REST endpoint), and only reports the provider unavailable when NEITHER route
+   * resolves.
    */
   runInProcess(request: LlmInProcessRequest): Promise<Response> | null
 }
@@ -167,5 +231,11 @@ export interface RuntimeGateways {
   realtime: RealtimeGateway
   githubBackfill: GitHubBackfillScheduler
   githubWebhook: GitHubWebhookIngest
+  /**
+   * Async hand-off for inbound TRACKER deliveries. Required (not optional) so a facade cannot
+   * quietly omit it and leave the receiver blocking the tracker on the whole handle — a facade
+   * with no queue supplies the INLINE seam, which is an explicit choice rather than an absence.
+   */
+  trackerWebhook: TrackerWebhookIngest
   llmUpstream: LlmUpstream
 }

@@ -50,7 +50,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     }
   }
 
-  function build(existing: Service | null, alreadyMountedHere = false) {
+  function build(existing: Service | null, alreadyMountedHere = false, homeWorkspaceId = HOME_WS) {
     const upserts: WorkspaceMount[] = []
     const deps = {
       workspaceRepository: {
@@ -66,7 +66,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
       blockRepository: {
         findById: async (id: string) =>
           existing && id === existing.frameBlockId
-            ? { workspaceId: HOME_WS, serviceId: existing.id, block: homeFrame() }
+            ? { workspaceId: homeWorkspaceId, serviceId: existing.id, block: homeFrame() }
             : null,
         listByWorkspace: async () => [],
       },
@@ -93,18 +93,45 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     return { service: new BoardService(deps), upserts }
   }
 
-  it('mounts the existing account service and returns its frame block', async () => {
+  it('mounts the existing account service, returns its frame block, and SAYS it mounted', async () => {
     const { service, upserts } = build(existingService())
-    const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
+    const { block, disposition } = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
     expect(block.id).toBe('frame_shared')
+    // The disposition is the half a caller cannot recover: this frame is homed on another board,
+    // so it was never among THIS board's blocks and a create/mount comparison against them reads
+    // the mount as a fresh import (the assistant's `created` flag rides on exactly this).
+    expect(disposition).toBe('mounted')
     expect(upserts).toHaveLength(1)
     expect(upserts[0]).toMatchObject({ workspaceId: WS, serviceId: 'svc_shared' })
   })
 
   it('is idempotent when the service is already mounted here (no second mount)', async () => {
     const { service, upserts } = build(existingService(), true)
-    const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
+    const { block, disposition } = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
     expect(block.id).toBe('frame_shared')
+    expect(disposition).toBe('mounted')
     expect(upserts).toHaveLength(0)
+  })
+
+  it('REFUSES a foreign-homed service for a caller that cannot address it, and mounts nothing', async () => {
+    // The public API's policy. Its every read is workspace-scoped, so answering 201 with the frame
+    // homed on `ws_a` would hand a key a `serviceId` that `GET /api/v1/services` does not list and
+    // `POST /api/v1/services/{id}/tasks` 404s on — a success that reads as one and is not.
+    const { service, upserts } = build(existingService())
+    await expect(
+      service.addServiceFromRepo(WS, { repoGithubId: 101 }, 'refuse'),
+    ).rejects.toMatchObject({ details: { reason: 'repo_service_homed_elsewhere' } })
+    // Refused BEFORE the write: the board does not quietly acquire a service the caller asked to
+    // CREATE and cannot then see.
+    expect(upserts).toHaveLength(0)
+  })
+
+  it('still answers under `refuse` when the service is homed on THIS board', async () => {
+    // `refuse` is about ADDRESSABILITY, not about sharing: a service whose frame is homed here is
+    // one the caller can read back, so the ordinary idempotent answer stands. Without this the
+    // policy would refuse a provisioning integration its OWN previous run's service.
+    const { service } = build(existingService(), true, WS)
+    const { block } = await service.addServiceFromRepo(WS, { repoGithubId: 101 }, 'refuse')
+    expect(block.id).toBe('frame_shared')
   })
 })

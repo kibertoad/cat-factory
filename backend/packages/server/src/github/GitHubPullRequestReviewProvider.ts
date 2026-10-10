@@ -22,8 +22,10 @@ const EMPTY: PullRequestReviewSnapshot = {
   requiredApprovingReviewCount: 1,
   assignedReviewers: [],
   approvals: 0,
+  changesRequested: false,
   unresolvedThreads: [],
   comments: [],
+  reviewSummaries: [],
 }
 
 /** A GitHub App's own comments/reviews show as `<app-slug>[bot]`; treat those as the bot. */
@@ -34,23 +36,53 @@ function isBotLogin(login: string): boolean {
 /** The standing review states that determine approval (a later COMMENTED/PENDING doesn't change it). */
 const STANDING = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'])
 
+/** The reduction over a PR's review event log the gate cares about. */
+interface ReviewReduction {
+  /** Distinct reviewers whose LATEST standing review is APPROVED. */
+  approvals: number
+  /** Whether any reviewer's LATEST standing review is CHANGES_REQUESTED (blocks the merge). */
+  changesRequested: boolean
+  /** Every non-bot CHANGES_REQUESTED / COMMENTED review that carried a summary body. */
+  summaries: PullRequestReviewSnapshot['reviewSummaries']
+}
+
 /**
- * Reduce a PR's review event log to the count of distinct reviewers whose LATEST standing review
- * is APPROVED. Mirrors GitHub's own rule: a `COMMENTED`/`PENDING` review after an approval does
- * not dismiss it (only an explicit CHANGES_REQUESTED / DISMISSED does). Approvers are NOT filtered
- * to the current requested-reviewer list — GitHub removes a reviewer from "requested" once they
- * approve, so filtering there would never count an approval.
+ * Reduce a PR's review event log to the approval count, a standing-change-requested flag, and the
+ * non-approving review summary bodies. Mirrors GitHub's own rule: a `COMMENTED`/`PENDING` review
+ * after an approval does not dismiss it (only an explicit CHANGES_REQUESTED / DISMISSED does), and
+ * a standing CHANGES_REQUESTED blocks the merge even when the required approvals are met by other
+ * reviewers. The event log is sorted by `submittedAt` before the "latest per author" reduction so
+ * the result never depends on the API's array order (submittedAt is 0 when unknown — those keep
+ * their relative order via a stable sort). Approvers are NOT filtered to the current
+ * requested-reviewer list — GitHub removes a reviewer from "requested" once they approve.
  */
-function countApprovals(reviews: GitHubPullRequestReview[]): number {
-  const latestByAuthor = new Map<string, string>()
-  for (const r of reviews) {
+function reduceReviews(reviews: GitHubPullRequestReview[]): ReviewReduction {
+  const ordered = [...reviews].sort((a, b) => a.submittedAt - b.submittedAt)
+  const latestStandingByAuthor = new Map<string, string>()
+  const summaries: ReviewReduction['summaries'] = []
+  let seq = 0
+  for (const r of ordered) {
     if (!r.author || isBotLogin(r.author)) continue
-    if (!STANDING.has(r.state)) continue
-    latestByAuthor.set(r.author, r.state)
+    // A CHANGES_REQUESTED / COMMENTED review's summary body is reviewer feedback with no inline
+    // thread — surface it as an outstanding-comment-shaped item (the cursor dedups it downstream).
+    if ((r.state === 'CHANGES_REQUESTED' || r.state === 'COMMENTED') && r.body.trim().length > 0) {
+      summaries.push({
+        id: `review-${(seq += 1)}`,
+        author: r.author,
+        body: r.body,
+        createdAt: r.submittedAt,
+        isBot: false,
+      })
+    }
+    if (STANDING.has(r.state)) latestStandingByAuthor.set(r.author, r.state)
   }
   let approvals = 0
-  for (const state of latestByAuthor.values()) if (state === 'APPROVED') approvals++
-  return approvals
+  let changesRequested = false
+  for (const state of latestStandingByAuthor.values()) {
+    if (state === 'APPROVED') approvals++
+    else if (state === 'CHANGES_REQUESTED') changesRequested = true
+  }
+  return { approvals, changesRequested, summaries }
 }
 
 function toReviewThread(t: {
@@ -130,8 +162,11 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
       gh.listPullRequestReviews?.(target.installationId, ref, number) ?? Promise.resolve([]),
       gh.listReviewThreads?.(target.installationId, ref, number) ?? Promise.resolve([]),
     ])
-    const approvals = countApprovals(reviews)
-    const approved = approvals >= Math.max(1, requiredCount)
+    const { approvals, changesRequested, summaries } = reduceReviews(reviews)
+    // `approved` MUST mirror the gate's `isApproved` (review.logic.ts): required approvals met
+    // AND no standing CHANGES_REQUESTED — so the provider never skips a read the gate would have
+    // consulted (a change-requested PR is still awaiting the human, so its comments matter).
+    const approved = approvals >= Math.max(1, requiredCount) && !changesRequested
     const [assignedReviewers, comments] = approved
       ? [[] as string[], [] as GitHubPullRequestComment[]]
       : await Promise.all([
@@ -144,6 +179,7 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
       requiredApprovingReviewCount: requiredCount,
       assignedReviewers,
       approvals,
+      changesRequested,
       unresolvedThreads: threads.filter((t) => !t.isResolved).map(toReviewThread),
       comments: comments.map((c) => ({
         id: c.id,
@@ -152,6 +188,7 @@ export class GitHubPullRequestReviewProvider implements PullRequestReviewProvide
         createdAt: c.createdAt,
         isBot: isBotLogin(c.author),
       })),
+      reviewSummaries: summaries,
     }
   }
 

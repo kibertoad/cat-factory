@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { LocalSettings } from '@cat-factory/contracts'
 import {
+  getErrorMessage,
   PREVIEW_HARNESS_JOB_ID,
   type PreviewRef,
   type PreviewTransport,
@@ -22,9 +23,10 @@ import {
   type ContainerRuntimeAdapter,
   createRuntimeAdapter,
   DockerRuntimeAdapter,
+  resolveInstallId,
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
-import { harnessAllowedHosts } from './github.js'
+import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js'
 import { resolveHarnessImage } from './harnessImage.js'
 
 const execFileAsync = promisify(execFile)
@@ -34,7 +36,7 @@ const execFileAsync = promisify(execFile)
  * {@link LocalContainerRunnerTransport} for a LONG-LIVED serve. Unlike a per-run agent container
  * (reclaimed when the run finishes), a preview container:
  *   - publishes the served app's port to an ephemeral HOST port (a SECOND `-p` alongside the
- *     harness `:8080`, read back with `docker port` — the browsable URL is formed from it), and
+ *     harness port, read back with `docker port` — the browsable URL is formed from it), and
  *   - is NOT stopped until an explicit {@link stop} (the served processes outlive the build job,
  *     exactly as the harness `preview` mode leaves them running).
  *
@@ -54,6 +56,12 @@ export interface LocalPreviewTransportOptions {
   sharedSecret: string
   network?: string
   env?: Record<string, string>
+  /**
+   * Extra container env resolved PER PREVIEW START (merged over {@link env}). Carries the
+   * clone/push host allow-list, which follows the deployment's source-control credential and can
+   * change while this transport is alive.
+   */
+  resolveEnv?: () => Record<string, string>
   exec?: ContainerExec
   fetchImpl?: typeof fetch
   readyTimeoutMs?: number
@@ -70,7 +78,7 @@ function previewRunId(frameId: string): string {
  * few ways). Used to translate a pinned-preview `-p` failure into an actionable message.
  */
 function isHostPortInUseError(err: unknown): boolean {
-  const message = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  const message = getErrorMessage(err).toLowerCase()
   return (
     message.includes('port is already allocated') ||
     message.includes('address already in use') ||
@@ -96,6 +104,7 @@ export class LocalPreviewTransport implements PreviewTransport {
   private readonly sharedSecret: string
   private readonly network?: string
   private readonly extraEnv: Record<string, string>
+  private readonly resolveExtraEnv: (() => Record<string, string>) | undefined
   private readonly exec: ContainerExec
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
@@ -114,11 +123,15 @@ export class LocalPreviewTransport implements PreviewTransport {
         addHostGateway: true,
         localDind: true,
         pooling: true,
+        // Namespace this install's containers by a secret-derived id (ADR 0026 D5); the env-based
+        // factory injects an adapter, so this default only runs on a direct construction.
+        installId: resolveInstallId({ HARNESS_SHARED_SECRET: options.sharedSecret }),
       })
     this.image = options.image
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
+    this.resolveExtraEnv = options.resolveEnv
     this.exec = options.exec ?? defaultExec(this.adapter.binary)
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
@@ -126,9 +139,9 @@ export class LocalPreviewTransport implements PreviewTransport {
   }
 
   async start(ref: PreviewRef, spec: Record<string, unknown>, servePort: number): Promise<void> {
-    const runId = previewRunId(ref.frameId)
+    const containerKey = previewRunId(ref.frameId)
     // Fresh container each start (a re-start replaces any prior preview for the frame).
-    await this.adapter.removeRun(this.exec, runId)
+    await this.adapter.removeRun(this.exec, containerKey)
     // On a localhost-publishing runtime (Docker family) PIN the host port to the serve port so
     // the browsable origin is `http://localhost:<servePort>` — deterministic and knowable ahead
     // of provision, matching the CORS origin a deployer injects (`frontendOriginsForService`).
@@ -137,13 +150,13 @@ export class LocalPreviewTransport implements PreviewTransport {
     let containerId: string
     try {
       containerId = await this.adapter.run(this.exec, {
-        runId,
+        containerKey,
         image: this.image,
         sharedSecret: this.sharedSecret,
         // A preview only builds + serves a static app (no Docker-in-Docker), so never privileged.
         privileged: false,
         network: this.network,
-        env: this.extraEnv,
+        env: { ...this.extraEnv, ...this.resolveExtraEnv?.() },
         publishPorts: [
           pinsHostPort ? { container: servePort, host: servePort } : { container: servePort },
         ],
@@ -235,7 +248,7 @@ export class LocalPreviewTransport implements PreviewTransport {
     await this.adapter.removeRun(this.exec, previewRunId(ref.frameId))
   }
 
-  /** Wait for the harness `:8080` to be reachable (the published host port to appear). */
+  /** Wait for the harness port to be reachable (the published host port to appear). */
   private async waitForEndpoint(containerId: string): Promise<HarnessEndpoint> {
     const deadline = Date.now() + this.readyTimeoutMs
     for (;;) {
@@ -283,15 +296,16 @@ export class LocalPreviewTransport implements PreviewTransport {
 export function createLocalPreviewTransportFromEnv(
   env: NodeJS.ProcessEnv,
   _settings?: LocalSettings,
+  credential?: () => LocalVcsCredential | undefined,
 ): LocalPreviewTransport {
-  const extraEnv: Record<string, string> = {}
-  const allowedHosts = harnessAllowedHosts(env)
-  if (allowedHosts) extraEnv.GITHUB_ALLOWED_HOSTS = allowedHosts
   return new LocalPreviewTransport({
     image: resolveHarnessImage(env),
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
-    ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
+    resolveEnv: (): Record<string, string> => {
+      const allowedHosts = harnessAllowedHosts(env, credential?.())
+      return allowedHosts ? { GITHUB_ALLOWED_HOSTS: allowedHosts } : {}
+    },
   })
 }

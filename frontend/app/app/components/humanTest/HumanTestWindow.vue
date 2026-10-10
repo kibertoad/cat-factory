@@ -14,18 +14,25 @@ import type {
 // The round outcome union (contracts state it inline, so derive it off the round type).
 type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
 const { t, d } = useI18n()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
+const access = useWorkspaceAccess()
 const { confirmAction, toastDone } = useConfirmAction()
 
-// Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: the gate state
-// rides on the execution step, pushed over the stream.
+// Shared seam contract (open/blockId/close). No `onOpen` loader: the gate state rides on the
+// execution step, pushed over the stream. `ResultWindowShell` owns Escape (and focus trap +
+// scroll lock + stacking).
 const { open, blockId, instanceId, stepIndex, close } = useResultView('human-test')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+const headerTitle = computed(() =>
+  block.value ? t('humanTest.titleWithBlock', { title: block.value.title }) : t('humanTest.title'),
+)
 
 const instance = computed(() =>
   instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
@@ -59,12 +66,12 @@ const ENV_STATUS_LABEL: Record<HumanTestEnvironmentStatus, string> = {
   torn_down: 'humanTest.envStatus.tornDown',
 }
 const ENV_STATUS_COLOR: Record<HumanTestEnvironmentStatus, string> = {
-  provisioning: 'text-amber-300',
-  ready: 'text-emerald-300',
-  failed: 'text-rose-300',
-  expired: 'text-slate-400',
-  tearing_down: 'text-slate-400',
-  torn_down: 'text-slate-400',
+  provisioning: 'text-app-warning-300',
+  ready: 'text-app-success-300',
+  failed: 'text-app-error-300',
+  expired: 'text-muted',
+  tearing_down: 'text-muted',
+  torn_down: 'text-muted',
 }
 
 const PHASE_LABEL: Record<NonNullable<HumanTestStepState['phase']>, string> = {
@@ -82,6 +89,18 @@ const ROUND_OUTCOME_LABEL: Record<HumanTestRoundOutcome, string> = {
 
 const findings = ref('')
 const showFindings = ref(false)
+
+/**
+ * Confirm before discarding typed findings (UX-79). This box is what a human tester saw go wrong —
+ * the one record of it anywhere — held here until Request fix is pressed, on a window Escape and a
+ * backdrop click both close. Sending it on close would resolve the gate and dispatch a fixer.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => busy.value,
+  snapshot: () => findings.value.trim(),
+})
 
 async function confirm() {
   if (!blockId.value) return
@@ -110,12 +129,7 @@ async function destroy() {
     await humanTest.destroyEnv(blockId.value)
     toastDone('destroy', noun)
   } catch (e) {
-    toast.add({
-      title: t('humanTest.destroyFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'humanTest.destroyFailed')
   }
 }
 
@@ -134,245 +148,220 @@ const canDestroy = computed(
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-user-check"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
+    :title="headerTitle"
+    :subtitle="phase ? t(PHASE_LABEL[phase]) : t('humanTest.subtitle')"
+    width="3xl"
+    @close="requestClose"
+  >
+    <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
       <div
-        class="m-4 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
+        v-if="!ht"
+        class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
-        <!-- Header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300"
-          >
-            <UIcon name="i-lucide-user-check" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{
-                block ? t('humanTest.titleWithBlock', { title: block.title }) : t('humanTest.title')
-              }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">
-              {{ phase ? t(PHASE_LABEL[phase]) : t('humanTest.subtitle') }}
-            </p>
-          </div>
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
-
-        <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
-          <div
-            v-if="!ht"
-            class="flex flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
-          >
-            <UIcon name="i-lucide-user-check" class="h-8 w-8 opacity-40" />
-            <p class="text-sm">{{ t('humanTest.notStarted') }}</p>
-          </div>
-
-          <template v-else>
-            <!-- Environment -->
-            <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('humanTest.environment.heading') }}
-              </h3>
-              <div v-if="env" class="space-y-2">
-                <div class="flex items-center gap-2 text-[13px]">
-                  <UIcon
-                    name="i-lucide-circle-dot"
-                    class="h-3.5 w-3.5"
-                    :class="ENV_STATUS_COLOR[env.status]"
-                  />
-                  <span :class="ENV_STATUS_COLOR[env.status]">{{
-                    t(ENV_STATUS_LABEL[env.status])
-                  }}</span>
-                </div>
-                <a
-                  v-if="env.url"
-                  :href="env.url"
-                  target="_blank"
-                  rel="noopener"
-                  class="inline-flex items-center gap-1.5 break-all text-[13px] text-sky-300 hover:underline"
-                >
-                  <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
-                  {{ env.url }}
-                </a>
-                <p v-else class="text-[12px] italic text-slate-500">
-                  {{ t('humanTest.environment.noUrl') }}
-                </p>
-                <p v-if="env.expiresAt" class="text-[11px] text-slate-500">
-                  {{
-                    t('humanTest.environment.expires', { date: d(new Date(env.expiresAt), 'long') })
-                  }}
-                </p>
-              </div>
-              <p v-else class="text-[12px] text-amber-300/90">
-                {{ ht.degradedReason ?? t('humanTest.environment.none') }}
-              </p>
-              <p v-if="env && ht.degradedReason" class="mt-2 text-[12px] text-amber-300/90">
-                {{ ht.degradedReason }}
-              </p>
-
-              <!-- Env management -->
-              <div class="mt-3 flex flex-wrap gap-2">
-                <UButton
-                  size="xs"
-                  variant="soft"
-                  color="neutral"
-                  icon="i-lucide-refresh-cw"
-                  :loading="busy"
-                  :disabled="busy || !canManageEnv"
-                  @click="recreate"
-                >
-                  {{ t('humanTest.actions.recreate') }}
-                </UButton>
-                <UButton
-                  size="xs"
-                  variant="soft"
-                  color="neutral"
-                  icon="i-lucide-trash-2"
-                  :disabled="busy || !canDestroy"
-                  @click="destroy"
-                >
-                  {{ t('humanTest.actions.destroy') }}
-                </UButton>
-                <UButton
-                  size="xs"
-                  variant="soft"
-                  color="neutral"
-                  icon="i-lucide-git-merge"
-                  :loading="busy"
-                  :disabled="busy || !canManageEnv"
-                  @click="pullMain"
-                >
-                  {{ t('humanTest.actions.pullMain') }}
-                </UButton>
-              </div>
-            </section>
-
-            <!-- Working state -->
-            <p
-              v-if="working"
-              class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-300"
-            >
-              <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
-              {{ phase ? t(PHASE_LABEL[phase]) : '' }}
-            </p>
-
-            <!-- Findings / fix -->
-            <section
-              v-if="awaitingHuman"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
-            >
-              <div class="flex items-center justify-between">
-                <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('humanTest.fix.heading') }}
-                </h3>
-                <button
-                  class="text-[12px] text-slate-400 hover:text-slate-200"
-                  @click="showFindings = !showFindings"
-                >
-                  {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
-                </button>
-              </div>
-              <div v-if="showFindings" class="mt-2 space-y-2">
-                <textarea
-                  v-model="findings"
-                  rows="4"
-                  :placeholder="t('humanTest.fix.placeholder')"
-                  class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
-                />
-                <UButton
-                  size="sm"
-                  color="warning"
-                  icon="i-lucide-wrench"
-                  :loading="busy"
-                  :disabled="busy || !findings.trim()"
-                  @click="submitFix"
-                >
-                  {{ t('humanTest.fix.send') }}
-                </UButton>
-              </div>
-            </section>
-
-            <!-- Rounds history -->
-            <section
-              v-if="ht.rounds && ht.rounds.length"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
-            >
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('humanTest.history.heading', { count: ht.attempts }, ht.attempts) }}
-              </h3>
-              <ol class="space-y-2">
-                <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
-                  <UIcon
-                    :name="r.kind === 'fix' ? 'i-lucide-wrench' : 'i-lucide-git-merge'"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400"
-                  />
-                  <div class="min-w-0 flex-1">
-                    <span class="text-slate-200">{{
-                      r.kind === 'fix'
-                        ? t('humanTest.history.fixRequested')
-                        : t('humanTest.history.pulledMain')
-                    }}</span>
-                    <span
-                      class="ms-1.5 rounded px-1 text-[10px] uppercase"
-                      :class="
-                        r.outcome === 'completed'
-                          ? 'bg-emerald-500/15 text-emerald-300'
-                          : r.outcome === 'failed'
-                            ? 'bg-rose-500/15 text-rose-300'
-                            : 'bg-slate-500/15 text-slate-300'
-                      "
-                    >
-                      {{
-                        r.outcome
-                          ? t(ROUND_OUTCOME_LABEL[r.outcome])
-                          : t('humanTest.roundOutcome.inProgress')
-                      }}
-                    </span>
-                    <p v-if="r.findings" class="leading-snug text-slate-400">{{ r.findings }}</p>
-                  </div>
-                </li>
-              </ol>
-            </section>
-          </template>
-        </div>
-
-        <!-- Footer: the primary confirm action -->
-        <footer
-          v-if="ht"
-          class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
-        >
-          <StepRunMeta
-            v-if="step"
-            :step="step"
-            :instance-id="instanceId ?? undefined"
-            :step-number="stepIndex === null ? undefined : stepIndex + 1"
-            :total-steps="instance?.steps.length"
-            :run-failed="instance?.status === 'failed'"
-            :failure-at="instance?.failure?.occurredAt"
-          />
-          <UButton
-            color="primary"
-            icon="i-lucide-circle-check"
-            :loading="busy"
-            :disabled="busy || !awaitingHuman"
-            @click="confirm"
-          >
-            {{ t('humanTest.confirm') }}
-          </UButton>
-        </footer>
+        <UIcon name="i-lucide-user-check" class="h-8 w-8 opacity-40" />
+        <p class="text-sm">{{ t('humanTest.notStarted') }}</p>
       </div>
+
+      <template v-else>
+        <!-- Environment -->
+        <section class="rounded-lg border border-default bg-default/60 p-4">
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('humanTest.environment.heading') }}
+          </SectionLabel>
+          <div v-if="env" class="space-y-2">
+            <div class="flex items-center gap-2 text-sm">
+              <UIcon
+                name="i-lucide-circle-dot"
+                class="h-3.5 w-3.5"
+                :class="ENV_STATUS_COLOR[env.status]"
+              />
+              <span :class="ENV_STATUS_COLOR[env.status]">{{
+                t(ENV_STATUS_LABEL[env.status])
+              }}</span>
+            </div>
+            <ULink
+              raw
+              v-if="env.url"
+              :to="env.url"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
+            >
+              <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
+              {{ env.url }}
+            </ULink>
+            <p v-else class="text-xs italic text-dimmed">
+              {{ t('humanTest.environment.noUrl') }}
+            </p>
+            <p v-if="env.expiresAt" class="text-2xs text-dimmed">
+              {{ t('humanTest.environment.expires', { date: d(new Date(env.expiresAt), 'long') }) }}
+            </p>
+          </div>
+          <p v-else class="text-xs text-app-warning-300/90">
+            {{ ht.degradedReason ?? t('humanTest.environment.none') }}
+          </p>
+          <p v-if="env && ht.degradedReason" class="mt-2 text-xs text-app-warning-300/90">
+            {{ ht.degradedReason }}
+          </p>
+
+          <!-- Env management -->
+          <div class="mt-3 flex flex-wrap gap-2">
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-refresh-cw"
+              :loading="busy"
+              :disabled="busy || !canManageEnv || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="recreate"
+            >
+              {{ t('humanTest.actions.recreate') }}
+            </UButton>
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-trash-2"
+              :disabled="busy || !canDestroy || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="destroy"
+            >
+              {{ t('humanTest.actions.destroy') }}
+            </UButton>
+            <UButton
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-git-merge"
+              :loading="busy"
+              :disabled="busy || !canManageEnv || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="pullMain"
+            >
+              {{ t('humanTest.actions.pullMain') }}
+            </UButton>
+          </div>
+        </section>
+
+        <!-- Working state -->
+        <p
+          v-if="working"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
+        >
+          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
+          {{ phase ? t(PHASE_LABEL[phase]) : '' }}
+        </p>
+
+        <!-- Findings / fix -->
+        <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-4">
+          <div class="flex items-center justify-between">
+            <SectionLabel as="h3">
+              {{ t('humanTest.fix.heading') }}
+            </SectionLabel>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="p-0 text-xs text-muted hover:bg-transparent hover:text-default"
+              @click="showFindings = !showFindings"
+            >
+              {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
+            </UButton>
+          </div>
+          <div v-if="showFindings" class="mt-2 space-y-2">
+            <UTextarea
+              v-model="findings"
+              :rows="4"
+              :placeholder="t('humanTest.fix.placeholder')"
+              size="sm"
+              class="w-full"
+            />
+            <UButton
+              size="sm"
+              color="warning"
+              icon="i-lucide-wrench"
+              :loading="busy"
+              :disabled="busy || !findings.trim() || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="submitFix"
+            >
+              {{ t('humanTest.fix.send') }}
+            </UButton>
+          </div>
+        </section>
+
+        <!-- Rounds history -->
+        <section
+          v-if="ht.rounds && ht.rounds.length"
+          class="rounded-lg border border-default bg-default/60 p-4"
+        >
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('humanTest.history.heading', { count: ht.attempts }, ht.attempts) }}
+          </SectionLabel>
+          <ol class="space-y-2">
+            <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-xs">
+              <UIcon
+                :name="r.kind === 'fix' ? 'i-lucide-wrench' : 'i-lucide-git-merge'"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted"
+              />
+              <div class="min-w-0 flex-1">
+                <span class="text-default">{{
+                  r.kind === 'fix'
+                    ? t('humanTest.history.fixRequested')
+                    : t('humanTest.history.pulledMain')
+                }}</span>
+                <span
+                  class="ms-1.5 rounded-sm px-1 text-3xs uppercase"
+                  :class="
+                    r.outcome === 'completed'
+                      ? 'bg-app-success-500/15 text-app-success-300'
+                      : r.outcome === 'failed'
+                        ? 'bg-app-error-500/15 text-app-error-300'
+                        : 'bg-app-500/15 text-toned'
+                  "
+                >
+                  {{
+                    r.outcome
+                      ? t(ROUND_OUTCOME_LABEL[r.outcome])
+                      : t('humanTest.roundOutcome.inProgress')
+                  }}
+                </span>
+                <p v-if="r.findings" class="leading-snug text-muted">{{ r.findings }}</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+      </template>
     </div>
-  </Teleport>
+
+    <!-- Footer: the primary confirm action -->
+    <footer
+      v-if="ht"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
+    >
+      <StepRunMeta
+        v-if="step"
+        :step="step"
+        :instance-id="instanceId ?? undefined"
+        :step-number="stepIndex === null ? undefined : stepIndex + 1"
+        :total-steps="instance?.steps.length"
+        :run-failed="instance?.status === 'failed'"
+        :failure-at="instance?.failure?.occurredAt"
+      />
+      <UButton
+        color="primary"
+        icon="i-lucide-circle-check"
+        :loading="busy"
+        :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        @click="confirm"
+      >
+        {{ t('humanTest.confirm') }}
+      </UButton>
+    </footer>
+  </ResultWindowShell>
 </template>

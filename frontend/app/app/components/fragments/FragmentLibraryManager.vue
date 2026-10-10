@@ -6,7 +6,8 @@
 // the merged catalog (built-in ∪ account ∪ workspace) an agent is selected from per
 // run. The account scope has no resolved/merged catalog and fetches document
 // fragments through `viaWorkspaceId` (document-source credentials are per-workspace).
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useBusyRows } from '~/composables/useBusyRows'
 import type {
   DocumentSourceKind,
   FragmentOwnerKind,
@@ -14,8 +15,11 @@ import type {
   ResolvedFragment,
 } from '~/types/domain'
 import { useFragmentLibrary, useFragmentLibraryStore } from '~/stores/fragmentLibrary'
+import { showOverrideField } from '~/utils/uiMode'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -38,6 +42,7 @@ const library =
 const documents = useDocumentsStore()
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -60,7 +65,7 @@ watch(
     void documents.probe()
     // The GitHub pickers (repo search + tree browser) need the active board's
     // installation state; probe once so they light up when the App is connected.
-    void github.probe()
+    void github.ensureProbed()
   },
   { immediate: true },
 )
@@ -102,38 +107,112 @@ function tabLabel(which: Tab): string {
   return t('fragments.tab.sources')
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 // Per-row / per-form in-flight tracking. The store's single `library.loading` flag
 // drove every row's button at once (UX-29) and cross-spun the add/link forms; key
 // each async action so only the control that triggered it shows a spinner.
-const busyRows = reactive(new Set<string>())
-const rowBusy = (key: string) => busyRows.has(key)
-async function withRow(key: string, fn: () => Promise<void>) {
-  if (busyRows.has(key)) return
-  busyRows.add(key)
-  try {
-    await fn()
-  } finally {
-    busyRows.delete(key)
-  }
-}
+const { rowBusy, withRow } = useBusyRows()
 const creating = ref(false)
 const linkingDoc = ref(false)
 const linkingSource = ref(false)
 
 // ---- create a hand-authored fragment --------------------------------------
-const draft = ref({ title: '', summary: '', body: '', tags: '' })
+const draft = ref({ title: '', summary: '', body: '', brief: '', tags: '' })
 const draftValid = computed(
   () => draft.value.title.trim() && draft.value.summary.trim() && draft.value.body.trim(),
 )
+
+// ---- auto-generate a title from the fragment's content (inline LLM call) ---
+// Shared by the create form and the inline editor; keyed so only the button that triggered it
+// spins. Generation needs a body (the title is derived from it); the summary rides along.
+const generatingTitleFor = ref<string | null>(null)
+async function autofillTitle(
+  key: string,
+  get: () => { body: string; summary?: string },
+  set: (title: string) => void,
+) {
+  const { body, summary } = get()
+  if (!body.trim() || generatingTitleFor.value) return
+  generatingTitleFor.value = key
+  try {
+    const title = await library.generateTitle({
+      body: body.trim(),
+      summary: summary?.trim() || undefined,
+    })
+    set(title)
+  } catch (e) {
+    present(e, 'fragments.authored.titleGenFailed')
+  } finally {
+    generatingTitleFor.value = null
+  }
+}
+
+// ---- edit an existing hand-authored fragment (title / summary / body / tags) ---
+const editDraft = ref<{
+  id: string
+  title: string
+  summary: string
+  body: string
+  brief: string
+  tags: string
+} | null>(null)
+// The linked SHORT VERSION is an OVERRIDE of what the platform does by default (condense a
+// long standard automatically, fold a short one in full), so it follows the override rule:
+// hidden in basic mode while unset, revealed as soon as the fragment carries one — a
+// basic-mode curator is never left unable to see or clear a brief a teammate linked.
+//
+// Both flags are LATCHED at the moment the form opens rather than tracking the live draft.
+// Recomputing per keystroke makes the control delete itself the instant a basic-mode curator
+// empties it — mid-edit, under the cursor, on the one interaction (clearing, to hand the
+// standard back to auto-generation) the rule exists to keep reachable.
+const uiMode = useUiModeStore()
+const showEditBrief = ref(false)
+const showDraftBrief = computed(() => showOverrideField(uiMode.isAdvanced, null))
+
+function startEdit(f: (typeof library.fragments)[number]) {
+  editDraft.value = {
+    id: f.id,
+    title: f.title,
+    summary: f.summary,
+    body: f.body,
+    brief: f.brief ?? '',
+    tags: (f.tags ?? []).join(', '),
+  }
+  showEditBrief.value = showOverrideField(uiMode.isAdvanced, f.brief ?? null)
+}
+function cancelEdit() {
+  editDraft.value = null
+}
+const editValid = computed(
+  () =>
+    !!editDraft.value &&
+    !!editDraft.value.title.trim() &&
+    !!editDraft.value.summary.trim() &&
+    !!editDraft.value.body.trim(),
+)
+async function saveEdit() {
+  const d = editDraft.value
+  if (!d || !editValid.value) return
+  await withRow(`edit:${d.id}`, async () => {
+    try {
+      await library.update(d.id, {
+        title: d.title.trim(),
+        summary: d.summary.trim(),
+        body: d.body.trim(),
+        // Always sent, so clearing the box UNLINKS the short version and hands the
+        // standard back to auto-generation (an omitted key would leave the old one).
+        brief: d.brief.trim(),
+        tags: d.tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+      })
+      editDraft.value = null
+      toast.add({ title: t('fragments.toast.updated'), icon: 'i-lucide-check' })
+    } catch (e) {
+      present(e, 'fragments.toast.updateFailed')
+    }
+  })
+}
 
 async function createFragment() {
   if (!draftValid.value) return
@@ -143,15 +222,16 @@ async function createFragment() {
       title: draft.value.title.trim(),
       summary: draft.value.summary.trim(),
       body: draft.value.body.trim(),
+      brief: draft.value.brief.trim() || undefined,
       tags: draft.value.tags
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean),
     })
-    draft.value = { title: '', summary: '', body: '', tags: '' }
+    draft.value = { title: '', summary: '', body: '', brief: '', tags: '' }
     toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('fragments.toast.addFailed'), e)
+    present(e, 'fragments.toast.addFailed')
   } finally {
     creating.value = false
   }
@@ -172,7 +252,7 @@ async function removeFragment(id: string) {
       await library.remove(id)
       toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
     } catch (e) {
-      notifyError(t('fragments.toast.removeFailed'), e)
+      present(e, 'fragments.toast.removeFailed')
     }
   })
 }
@@ -181,63 +261,198 @@ async function removeFragment(id: string) {
 // Link a Confluence/Notion page or GitHub file as a fragment that is re-resolved
 // from the source at run time (a living source of truth, not a frozen snapshot).
 const docDraft = ref({ source: '' as DocumentSourceKind | '', ref: '', tags: '' })
-const docDraftValid = computed(
-  () => !docLinkDisabled.value && docDraft.value.source && docDraft.value.ref.trim(),
-)
 
 // ---- GitHub file picker (documents tab) -----------------------------------
-// For a GitHub source, let the user search a repo + browse to the file instead of
-// hand-typing a `owner/repo:path` ref. Picking a file fills `docDraft.ref` (still
-// editable, so pasting a URL/shorthand keeps working). Only offered when the App is
-// connected; other sources (Confluence/Notion) keep the free-text ref field.
+// For a GitHub source, let the user search a repo + browse to one or MORE files
+// instead of hand-typing a `owner/repo:path` ref. Files are staged into a cart that
+// spans folders (browsing away never drops earlier picks), and every staged file is
+// linked as its own living fragment on submit. Only offered when the App/PAT is
+// connected; other sources (Confluence/Notion) keep the single free-text ref field.
 const isGithubDoc = computed(() => docDraft.value.source === 'github')
 const showGithubDocPicker = computed(() => isGithubDoc.value && githubReady.value)
 const docRepoId = ref<number | undefined>(undefined)
 const docRepo = ref<GitHubAvailableRepo | undefined>(undefined)
-const docFilePath = ref<string | undefined>(undefined)
+// The staged files (repo-root-relative paths) for the selected repo. Multi-select so
+// any number of files from any nesting level can be linked in one action.
+const docFilePaths = ref<string[]>([])
+// Where the tree browser opens (repo root by default); a pasted directory URL jumps it
+// straight to the pasted folder so its files can be bulk-checked.
+const docBrowsePath = ref('')
 
-// Reset the picker (and the derived ref) whenever the selected source changes.
+// Reset the picker (and the manual ref) whenever the selected source changes.
 watch(
   () => docDraft.value.source,
   () => {
     docRepoId.value = undefined
     docRepo.value = undefined
-    docFilePath.value = undefined
+    docFilePaths.value = []
+    docBrowsePath.value = ''
     docDraft.value.ref = ''
   },
 )
 
-// A new repo selection clears the previously-browsed file.
-watch(docRepoId, () => {
-  docFilePath.value = undefined
-})
+// A URL import wants the browser opened at the pasted folder in the SAME flush as its
+// repo selection (so the tree loads once, at the right path); a manual repo switch
+// wants the path reset instead. The import stages its target here for the watcher.
+let pendingBrowsePath: string | null = null
 
-// Derive the canonical `owner/repo:path` ref the GitHub docs provider expects.
-watch([docRepo, docFilePath], () => {
-  if (docRepo.value && docFilePath.value) {
-    docDraft.value.ref = `${docRepo.value.owner}/${docRepo.value.name}:${docFilePath.value}`
-  }
+// A new repo selection clears the previously-staged files (they were repo-scoped) and
+// re-roots the browser (a folder from the previous repo has no meaning in the new one).
+// When the repo is fully deselected, drop the cached repo too so no stale `docRepo`
+// lingers behind a now-empty picker.
+watch(docRepoId, (id) => {
+  docFilePaths.value = []
+  docBrowsePath.value = pendingBrowsePath ?? ''
+  pendingBrowsePath = null
+  if (id === undefined) docRepo.value = undefined
 })
 
 /** This tier's existing document-backed fragments. */
 const documentFragments = computed(() => library.fragments.filter((f) => f.documentRef))
 
+/** Add/remove a browsed file to/from the staged cart (the tree emits `toggle`). */
+function toggleDocFile(path: string) {
+  const clean = normalizeRepoPath(path)
+  const i = docFilePaths.value.indexOf(clean)
+  if (i >= 0) docFilePaths.value.splice(i, 1)
+  else docFilePaths.value.push(clean)
+}
+
+/** Files of the selected repo already linked as fragments — shown "added"/not re-pickable. */
+const docAddedPaths = computed<string[]>(() => {
+  const repo = docRepo.value
+  if (!repo) return []
+  const prefix = `${repo.owner}/${repo.name}:`
+  return documentFragments.value
+    .filter(
+      (f) => f.documentRef?.source === 'github' && f.documentRef.externalId.startsWith(prefix),
+    )
+    .map((f) => f.documentRef!.externalId.slice(prefix.length))
+})
+
+/** The canonical `owner/repo:path` refs for the staged files. */
+const stagedDocRefs = computed(() =>
+  docRepo.value
+    ? docFilePaths.value.map((path) => ({
+        path,
+        ref: `${docRepo.value!.owner}/${docRepo.value!.name}:${path}`,
+      }))
+    : [],
+)
+
+/** When the rich picker drives the ref(s); otherwise the free-text field does. */
+const usingDocPicker = computed(() => showGithubDocPicker.value)
+
+const docDraftValid = computed(() => {
+  if (docLinkDisabled.value || !docDraft.value.source) return false
+  // The GitHub picker validates on staged files; every other path on the free-text ref.
+  return usingDocPicker.value ? docFilePaths.value.length > 0 : !!docDraft.value.ref.trim()
+})
+
+/**
+ * A pasted GitHub file/directory URL resolved to a repo + location: select the repo
+ * (through the same refs the search select drives), then stage the file or jump the
+ * tree browser to the directory for bulk checking. Staging waits a tick because the
+ * `docRepoId` watcher clears the cart on a repo change.
+ */
+async function onDocUrlResolved(target: {
+  repo: GitHubAvailableRepo
+  path: string
+  kind: 'file' | 'dir'
+}) {
+  const clean = normalizeRepoPath(target.path)
+  // A file opens its parent folder (so the pick is visible in context); a dir opens itself.
+  const browseDir =
+    target.kind === 'dir'
+      ? clean
+      : clean.includes('/')
+        ? clean.slice(0, clean.lastIndexOf('/'))
+        : ''
+  if (docRepoId.value !== target.repo.githubId) {
+    pendingBrowsePath = browseDir
+    docRepo.value = target.repo
+    docRepoId.value = target.repo.githubId
+    // Let the repo-change watcher run (clears the cart, applies the browse path)
+    // before staging, or the staged file would be swept with the old repo's cart.
+    await nextTick()
+  } else {
+    docBrowsePath.value = browseDir
+  }
+  if (target.kind === 'file' && clean) {
+    if (!docFilePaths.value.includes(clean) && !docAddedPaths.value.includes(clean)) {
+      docFilePaths.value.push(clean)
+    }
+  }
+}
+
+/**
+ * The reason the "Link as living fragment" button is disabled, stated next to it —
+ * an inert button with no explanation reads as broken. Null when the button is live
+ * (or already busy linking).
+ */
+const docLinkBlockedReason = computed<string | null>(() => {
+  if (linkingDoc.value || docDraftValid.value) return null
+  if (!docDraft.value.source) return t('fragments.documents.blockedReason.noSource')
+  if (usingDocPicker.value) {
+    if (docRepoId.value === undefined) return t('fragments.documents.blockedReason.noRepo')
+    return t('fragments.documents.blockedReason.noFiles')
+  }
+  if (!docDraft.value.ref.trim()) return t('fragments.documents.blockedReason.noRef')
+  return null
+})
+
 async function linkDocumentFragment() {
   if (!docDraftValid.value) return
   linkingDoc.value = true
   try {
-    await library.createDocumentFragment({
-      source: docDraft.value.source as DocumentSourceKind,
-      ref: docDraft.value.ref.trim(),
-      tags: docDraft.value.tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
-    })
-    docDraft.value = { source: '', ref: '', tags: '' }
-    toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
+    const source = docDraft.value.source as DocumentSourceKind
+    const tags = docDraft.value.tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+
+    if (!usingDocPicker.value) {
+      // Free-text field: exactly one ref.
+      await library.createDocumentFragment({ source, ref: docDraft.value.ref.trim(), tags })
+      docDraft.value = { source: '', ref: '', tags: '' }
+      toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
+      return
+    }
+
+    // The picker stages many files (one fragment each). Link them serially — serial, not
+    // parallel, so one bad ref can't be masked by a burst of concurrent failures — and drop
+    // each from the cart the moment it succeeds. Every staged file is attempted even if an
+    // earlier one fails, so a single unlinkable ref never blocks the rest: the successes are
+    // linked and removed from the cart, and only the failures stay staged (with the first
+    // error surfaced) so a retry re-attempts just those, never re-linking what already went in.
+    let linked = 0
+    let firstError: unknown
+    for (const { path, ref } of stagedDocRefs.value) {
+      try {
+        await library.createDocumentFragment({ source, ref, tags })
+        const i = docFilePaths.value.indexOf(path)
+        if (i >= 0) docFilePaths.value.splice(i, 1)
+        linked++
+      } catch (e) {
+        firstError ??= e
+      }
+    }
+    if (linked > 0) {
+      // A vue-i18n plural message (count as the plural choice) so Slavic few/many forms
+      // render correctly, and the count==1 case reads naturally too.
+      toast.add({
+        title: t('fragments.toast.documentsLinked', { count: linked }, linked),
+        icon: 'i-lucide-link',
+      })
+    }
+    if (firstError) {
+      present(firstError, 'fragments.toast.linkDocumentFailed')
+    } else {
+      // Everything staged linked — clear the whole draft (also resets repo/source selection).
+      docDraft.value = { source: '', ref: '', tags: '' }
+    }
   } catch (e) {
-    notifyError(t('fragments.toast.linkDocumentFailed'), e)
+    present(e, 'fragments.toast.linkDocumentFailed')
   } finally {
     linkingDoc.value = false
   }
@@ -249,7 +464,7 @@ async function refreshFragment(id: string) {
       await library.refreshDocumentFragment(id)
       toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
     } catch (e) {
-      notifyError(t('fragments.toast.refreshFailed'), e)
+      present(e, 'fragments.toast.refreshFailed')
     }
   })
 }
@@ -306,7 +521,7 @@ async function linkSource() {
     await library.syncSource(source.id)
     toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {
-    notifyError(t('fragments.toast.linkSourceFailed'), e)
+    present(e, 'fragments.toast.linkSourceFailed')
   } finally {
     linkingSource.value = false
   }
@@ -325,7 +540,7 @@ async function syncSource(id: string) {
         color: 'info',
       })
     } catch (e) {
-      notifyError(t('fragments.toast.syncFailed'), e)
+      present(e, 'fragments.toast.syncFailed')
     }
   })
 }
@@ -341,7 +556,7 @@ async function checkSource(id: string) {
         icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
       })
     } catch (e) {
-      notifyError(t('fragments.toast.checkSourceFailed'), e)
+      present(e, 'fragments.toast.checkSourceFailed')
     }
   })
 }
@@ -362,25 +577,29 @@ async function unlinkSource(id: string) {
       await library.unlinkSource(id)
       toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
     } catch (e) {
-      notifyError(t('fragments.toast.unlinkSourceFailed'), e)
+      present(e, 'fragments.toast.unlinkSourceFailed')
     }
   })
 }
 </script>
 
 <template>
+  <!-- Deliberately UNNAMED. This manager is mounted at two scopes (the board's library modal and
+       the account settings' fragment tab), so a `data-testid` on its root would be one id over
+       two elements. The tutorial tour's anchor is named by the WORKSPACE entry point instead —
+       see `FragmentLibraryPanel.vue`. -->
   <div class="flex flex-col gap-4">
     <!-- The library is opt-out; if a deployment disabled it, don't offer forms that
          would fail with a raw 503 — say so instead (any entry point lands here). -->
     <div
       v-if="library.available === false"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-muted"
     >
       {{ t('fragments.unavailable') }}
     </div>
 
     <template v-else>
-      <p class="text-sm text-slate-400">
+      <p class="text-sm text-muted">
         <template v-if="isWorkspace">
           {{ t('fragments.intro.workspace') }}
         </template>
@@ -408,7 +627,7 @@ async function unlinkSource(id: string) {
 
       <!-- Resolved (merged) catalog — workspace scope only -->
       <div v-if="tab === 'catalog'" class="flex flex-col gap-2">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{
             t(
               'fragments.catalog.summary',
@@ -420,10 +639,10 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.resolved"
           :key="f.id"
-          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-default bg-default/60 p-3"
         >
           <div class="flex items-center gap-2">
-            <span class="font-medium text-slate-100">{{ f.title }}</span>
+            <span class="font-medium text-app-100">{{ f.title }}</span>
             <UBadge size="xs" :color="tierColor[f.tier]" variant="subtle">
               {{ tierLabel[f.tier] }}
             </UBadge>
@@ -436,9 +655,9 @@ async function unlinkSource(id: string) {
             >
               {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
             </UBadge>
-            <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
+            <span class="ms-auto font-mono text-2xs text-dimmed">{{ f.id }}</span>
           </div>
-          <p class="mt-1 text-sm text-slate-400">{{ f.summary }}</p>
+          <p class="mt-1 text-sm text-muted">{{ f.summary }}</p>
           <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="tag in f.tags" :key="tag" size="xs" variant="outline" color="neutral">
               {{ tag }}
@@ -452,28 +671,106 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.fragments"
           :key="f.id"
-          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-default bg-default/60 p-3"
         >
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-100">{{ f.title }}</span>
-              <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
-                t('fragments.authored.fromRepo')
-              }}</UBadge>
+          <!-- Inline editor (hand-authored fragments): title / summary / body / tags, with the
+               same auto-generate-title button as the create form. -->
+          <div v-if="editDraft && editDraft.id === f.id" class="flex flex-col gap-2">
+            <div class="flex gap-2">
+              <UInput
+                v-model="editDraft.title"
+                :placeholder="t('fragments.authored.titlePlaceholder')"
+                class="flex-1"
+              />
+              <UButton
+                icon="i-lucide-wand-2"
+                size="sm"
+                variant="outline"
+                :disabled="!editDraft.body.trim()"
+                :loading="generatingTitleFor === `edit:${f.id}`"
+                :title="t('fragments.authored.generateTitleHint')"
+                @click="
+                  autofillTitle(
+                    `edit:${f.id}`,
+                    () => ({ body: editDraft!.body, summary: editDraft!.summary }),
+                    (title) => {
+                      if (editDraft) editDraft.title = title
+                    },
+                  )
+                "
+              >
+                {{ t('fragments.authored.generateTitle') }}
+              </UButton>
             </div>
-            <p class="text-sm text-slate-400">{{ f.summary }}</p>
+            <UInput
+              v-model="editDraft.summary"
+              :placeholder="t('fragments.authored.summaryPlaceholder')"
+            />
+            <UTextarea
+              v-model="editDraft.body"
+              :placeholder="t('fragments.authored.bodyPlaceholder')"
+              :rows="4"
+            />
+            <div v-if="showEditBrief" class="flex flex-col gap-1">
+              <UTextarea
+                v-model="editDraft.brief"
+                :placeholder="t('fragments.authored.briefPlaceholder')"
+                :rows="2"
+              />
+              <p class="text-xs text-dimmed">{{ t('fragments.authored.briefHint') }}</p>
+            </div>
+            <UInput
+              v-model="editDraft.tags"
+              :placeholder="t('fragments.authored.tagsPlaceholder')"
+            />
+            <div class="flex gap-2">
+              <UButton
+                size="sm"
+                :disabled="!editValid"
+                :loading="rowBusy(`edit:${f.id}`)"
+                @click="saveEdit"
+              >
+                {{ t('common.save') }}
+              </UButton>
+              <UButton size="sm" variant="ghost" color="neutral" @click="cancelEdit">
+                {{ t('common.cancel') }}
+              </UButton>
+            </div>
           </div>
-          <UButton
-            icon="i-lucide-trash-2"
-            size="xs"
-            color="error"
-            variant="ghost"
-            class="ms-auto"
-            :loading="rowBusy(`remove:${f.id}`)"
-            @click="removeFragment(f.id)"
-          />
+          <!-- Row -->
+          <div v-else class="flex items-start gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-app-100">{{ f.title }}</span>
+                <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
+                  t('fragments.authored.fromRepo')
+                }}</UBadge>
+              </div>
+              <p class="text-sm text-muted">{{ f.summary }}</p>
+            </div>
+            <div class="ms-auto flex gap-1">
+              <!-- Editing a repo-SOURCED fragment locally would be overwritten on the next sync,
+                   so only hand-authored fragments are editable here. -->
+              <IconButton
+                v-if="!f.source"
+                icon="i-lucide-pencil"
+                size="xs"
+                variant="ghost"
+                :label="t('common.edit')"
+                @click="startEdit(f)"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                size="xs"
+                color="error"
+                variant="ghost"
+                :loading="rowBusy(`remove:${f.id}`)"
+                @click="removeFragment(f.id)"
+              />
+            </div>
+          </div>
         </div>
-        <p v-if="!library.fragments.length" class="text-sm text-slate-500">
+        <p v-if="!library.fragments.length" class="text-sm text-dimmed">
           {{
             isWorkspace
               ? t('fragments.authored.empty.workspace')
@@ -481,10 +778,36 @@ async function unlinkSource(id: string) {
           }}
         </p>
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
           <div class="flex flex-col gap-2">
-            <UInput v-model="draft.title" :placeholder="t('fragments.authored.titlePlaceholder')" />
+            <div class="flex gap-2">
+              <UInput
+                v-model="draft.title"
+                :placeholder="t('fragments.authored.titlePlaceholder')"
+                class="flex-1"
+              />
+              <UButton
+                icon="i-lucide-wand-2"
+                size="sm"
+                variant="outline"
+                :disabled="!draft.body.trim()"
+                :loading="generatingTitleFor === 'create'"
+                :title="t('fragments.authored.generateTitleHint')"
+                data-testid="fragment-generate-title"
+                @click="
+                  autofillTitle(
+                    'create',
+                    () => ({ body: draft.body, summary: draft.summary }),
+                    (title) => {
+                      draft.title = title
+                    },
+                  )
+                "
+              >
+                {{ t('fragments.authored.generateTitle') }}
+              </UButton>
+            </div>
             <UInput
               v-model="draft.summary"
               :placeholder="t('fragments.authored.summaryPlaceholder')"
@@ -494,6 +817,14 @@ async function unlinkSource(id: string) {
               :placeholder="t('fragments.authored.bodyPlaceholder')"
               :rows="4"
             />
+            <div v-if="showDraftBrief" class="flex flex-col gap-1">
+              <UTextarea
+                v-model="draft.brief"
+                :placeholder="t('fragments.authored.briefPlaceholder')"
+                :rows="2"
+              />
+              <p class="text-xs text-dimmed">{{ t('fragments.authored.briefHint') }}</p>
+            </div>
             <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
             <UButton
               icon="i-lucide-plus"
@@ -511,37 +842,37 @@ async function unlinkSource(id: string) {
 
       <!-- Document-backed (living) fragments -->
       <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{ t('fragments.documents.intro') }}
         </p>
 
         <div
           v-for="f in documentFragments"
           :key="f.id"
-          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-start gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
+          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-app-success-400" />
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-100">{{ f.title }}</span>
+              <span class="font-medium text-app-100">{{ f.title }}</span>
               <UBadge size="xs" color="success" variant="subtle">
                 {{ f.documentRef?.source }}
               </UBadge>
             </div>
-            <p class="text-sm text-slate-400">{{ f.summary }}</p>
-            <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
+            <p class="text-sm text-muted">{{ f.summary }}</p>
+            <p v-if="f.resolvedAt" class="text-2xs text-dimmed">
               {{
                 t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') })
               }}
             </p>
           </div>
           <div class="ms-auto flex gap-1">
-            <UButton
+            <IconButton
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`refresh:${f.id}`)"
-              :title="t('fragments.documents.refreshTitle')"
+              :label="t('fragments.documents.refreshTitle')"
               @click="refreshFragment(f.id)"
             />
             <UButton
@@ -554,16 +885,16 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!documentFragments.length" class="text-sm text-slate-500">
+        <p v-if="!documentFragments.length" class="text-sm text-dimmed">
           {{ t('fragments.documents.empty') }}
         </p>
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
-          <div v-if="docLinkDisabled" class="text-sm text-slate-500">
+          <div v-if="docLinkDisabled" class="text-sm text-dimmed">
             {{ t('fragments.documents.disabledHint') }}
           </div>
-          <div v-else-if="!documents.connectedSources.length" class="text-sm text-slate-500">
+          <div v-else-if="!documents.connectedSources.length" class="text-sm text-dimmed">
             {{ t('fragments.documents.connectFirst') }}
           </div>
           <div v-else class="flex flex-col gap-2">
@@ -584,35 +915,81 @@ async function unlinkSource(id: string) {
               </UButton>
             </div>
 
-            <!-- GitHub: search a repo + browse to the file instead of typing the ref -->
+            <!-- GitHub: paste a file/directory URL, or search a repo + browse to one or
+                 more files, instead of typing the ref -->
             <template v-if="showGithubDocPicker">
+              <GitHubDocUrlImport @resolved="onDocUrlResolved" />
               <GitHubRepoSearchSelect v-model="docRepoId" @update:repo="docRepo = $event" />
               <div
                 v-if="docRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('fragments.documents.githubBrowseHint') }}
                 </p>
-                <RepoTreeBrowser v-model="docFilePath" :repo-github-id="docRepoId" mode="file" />
+                <RepoTreeBrowser
+                  :repo-github-id="docRepoId"
+                  mode="file"
+                  multiple
+                  :start-path="docBrowsePath"
+                  :selected-paths="docFilePaths"
+                  :added-paths="docAddedPaths"
+                  @toggle="toggleDocFile"
+                />
+                <div v-if="stagedDocRefs.length" class="mt-2 space-y-1">
+                  <p class="text-xs font-medium text-muted">
+                    {{ t('fragments.documents.selectedFiles', { count: stagedDocRefs.length }) }}
+                  </p>
+                  <div
+                    v-for="staged in stagedDocRefs"
+                    :key="staged.path"
+                    class="flex items-center gap-1.5 rounded-sm bg-elevated/60 px-2 py-1 text-xs text-toned"
+                  >
+                    <UIcon name="i-lucide-file-code-2" class="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span class="truncate">{{ staged.path }}</span>
+                    <UButton
+                      class="ms-auto"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-lucide-x"
+                      :aria-label="t('fragments.documents.removeFile')"
+                      @click="toggleDocFile(staged.path)"
+                    />
+                  </div>
+                </div>
               </div>
             </template>
 
-            <UInput v-model="docDraft.ref" :placeholder="t('fragments.documents.refPlaceholder')" />
+            <UInput
+              v-if="!usingDocPicker"
+              v-model="docDraft.ref"
+              :placeholder="t('fragments.documents.refPlaceholder')"
+            />
             <UInput
               v-model="docDraft.tags"
               :placeholder="t('fragments.documents.tagsPlaceholder')"
             />
-            <UButton
-              icon="i-lucide-link"
-              size="sm"
-              :disabled="!docDraftValid"
-              :loading="linkingDoc"
-              class="self-start"
-              @click="linkDocumentFragment"
-            >
-              {{ t('fragments.documents.link') }}
-            </UButton>
+            <div class="flex items-center gap-2 self-start">
+              <UButton
+                icon="i-lucide-link"
+                size="sm"
+                :disabled="!docDraftValid"
+                :loading="linkingDoc"
+                data-testid="fragment-link-document"
+                @click="linkDocumentFragment"
+              >
+                {{ t('fragments.documents.link') }}
+              </UButton>
+              <p
+                v-if="docLinkBlockedReason"
+                class="flex items-center gap-1 text-xs text-dimmed"
+                data-testid="fragment-link-blocked-reason"
+              >
+                <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0" />
+                {{ docLinkBlockedReason }}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -622,15 +999,15 @@ async function unlinkSource(id: string) {
         <div
           v-for="s in library.sources"
           :key="s.id"
-          class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-center gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-slate-400" />
+          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <span class="font-mono text-sm text-slate-100">
+            <span class="font-mono text-sm text-app-100">
               {{ s.repoOwner }}/{{ s.repoName
-              }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
+              }}<span class="text-dimmed">/{{ s.dirPath || '' }}</span>
             </span>
-            <p class="text-xs text-slate-500">
+            <p class="text-xs text-dimmed">
               {{
                 s.lastSyncedAt
                   ? t('fragments.sources.metaSynced', { ref: s.gitRef })
@@ -672,11 +1049,11 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!library.sources.length" class="text-sm text-slate-500">
+        <p v-if="!library.sources.length" class="text-sm text-dimmed">
           {{ t('fragments.sources.empty') }}
         </p>
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>
           <div class="flex flex-col gap-2">
             <!-- Connected: search a repo + browse to the guideline directory -->
@@ -684,16 +1061,16 @@ async function unlinkSource(id: string) {
               <GitHubRepoSearchSelect v-model="sourceRepoId" @update:repo="sourceRepo = $event" />
               <div
                 v-if="sourceRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('fragments.sources.browseHint') }}
                 </p>
                 <RepoTreeBrowser v-model="sourceDir" :repo-github-id="sourceRepoId" mode="dir" />
-                <p class="mt-2 truncate text-xs text-slate-400">
+                <p class="mt-2 truncate text-xs text-muted">
                   <template v-if="sourceDir">
                     {{ t('fragments.sources.selectedDir') }}
-                    <code class="text-slate-200">{{ sourceDir }}</code>
+                    <code class="text-default">{{ sourceDir }}</code>
                   </template>
                   <template v-else>{{ t('fragments.sources.wholeRepo') }}</template>
                 </p>

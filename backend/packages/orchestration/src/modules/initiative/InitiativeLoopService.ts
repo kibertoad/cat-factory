@@ -8,12 +8,20 @@ import type {
   InitiativeItem,
   InitiativePhase,
   InitiativeRepository,
+  Logger,
   PipelineRepository,
   ResolveRunRepoContext,
   ServiceRepository,
   TaskEstimate,
 } from '@cat-factory/kernel'
-import { ConflictError, DomainError } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  DomainError,
+  describeError,
+  getErrorMessage,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import { commitInitiativeTracker } from '@cat-factory/agents'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import type { ExecutionService } from '../execution/ExecutionService.js'
@@ -49,6 +57,12 @@ export interface InitiativeLoopServiceDependencies {
   resolveRunRepoContext?: ResolveRunRepoContext
   /** Stamps a spawned task with the frame's service (in-org sharing). Absent ⇒ no service link. */
   serviceRepository?: ServiceRepository
+  /**
+   * Where the loop reports the failures it isolates. Every tick is swallowed by design (one bad
+   * initiative must not stall the others), which without this makes a permanently-wedged
+   * initiative indistinguishable from an idle one. Absent ⇒ `noopLogger`.
+   */
+  logger?: Logger
 }
 
 /** What one tick did, for the sweeper's aggregate log. */
@@ -89,7 +103,11 @@ export class InitiativeLoopService {
   /** In-process re-entrancy guard so a cron sweep + a terminal poke don't double-tick one initiative. */
   private readonly ticking = new Set<string>()
 
-  constructor(private readonly deps: InitiativeLoopServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: InitiativeLoopServiceDependencies) {
+    this.log = (deps.logger ?? noopLogger).child({ service: 'initiativeLoop' })
+  }
 
   /**
    * Tick every `executing` initiative across all workspaces. The cron (Worker) / interval
@@ -105,9 +123,17 @@ export class InitiativeLoopService {
         const result = await this.tick(workspaceId, initiative)
         spawned += result.spawned
         if (result.completed) completed++
-      } catch {
+      } catch (error) {
         // Isolate a bad initiative; the next sweep retries it. (Each entity write is already
-        // CAS-guarded, so a partial tick left the entity consistent.)
+        // CAS-guarded, so a partial tick left the entity consistent.) Named per-initiative rather
+        // than folded into the sweeper's aggregate: an initiative that fails EVERY tick reads as
+        // idle in the aggregate, which is the state this line exists to make visible.
+        this.log.warn('initiative tick failed; the next sweep retries it', {
+          workspaceId,
+          blockId: initiative.blockId,
+          initiativeId: initiative.id,
+          ...describeError(error),
+        })
       }
     }
     return { ticked: executing.length, spawned, completed }
@@ -139,8 +165,13 @@ export class InitiativeLoopService {
         initiativeBlockId,
       )
       if (initiative && initiative.status === 'executing') await this.tick(workspaceId, initiative)
-    } catch {
+    } catch (error) {
       // Swallow — the periodic sweep will pick the initiative up.
+      this.log.warn('initiative poke failed; the periodic sweep is the backstop', {
+        workspaceId,
+        blockId: initiativeBlockId,
+        ...describeError(error),
+      })
     }
   }
 
@@ -183,7 +214,13 @@ export class InitiativeLoopService {
       //    An idle tick (spawned tasks still running, nothing to fold) skips it entirely, so an
       //    executing initiative waiting on in-flight PRs doesn't hit GitHub every sweep. Never
       //    before a DB CAS wins; hash-short-circuited even when it does run.
-      await this.recommitTracker(workspaceId, initiative.blockId, startRev).catch(() => {})
+      const blockId = initiative.blockId
+      await runBestEffort(
+        this.log,
+        'initiative.recommitTracker',
+        () => this.recommitTracker(workspaceId, blockId, startRev),
+        { workspaceId, blockId, phase: 'tick' },
+      )
 
       return { spawned, completed: false }
     } finally {
@@ -288,7 +325,12 @@ export class InitiativeLoopService {
       return { ...current, status: 'paused' as const }
     })
     if (!didPause) return
-    await this.recommitTracker(workspaceId, initiative.blockId, startRev).catch(() => {})
+    await runBestEffort(
+      this.log,
+      'initiative.recommitTracker',
+      () => this.recommitTracker(workspaceId, initiative.blockId, startRev),
+      { workspaceId, blockId: initiative.blockId, phase: 'checkpoint' },
+    )
     await this.notify(workspaceId, initiative, 'checkpoint', phase)
   }
 
@@ -308,8 +350,18 @@ export class InitiativeLoopService {
       status: 'done',
       progress: 1,
     })
-    await this.deps.events.boardChanged(workspaceId, 'initiative-complete', done.blockId)
-    await this.recommitTracker(workspaceId, done.blockId).catch(() => {})
+    // No payload: the initiative block's own row is only half of what finished, since each item's
+    // spawned task settled separately and the board reads their rollup.
+    await this.deps.events.boardChanged(workspaceId, {
+      reason: 'initiative-complete',
+      blockId: done.blockId,
+    })
+    await runBestEffort(
+      this.log,
+      'initiative.recommitTracker',
+      () => this.recommitTracker(workspaceId, done.blockId),
+      { workspaceId, blockId: done.blockId, phase: 'complete' },
+    )
     await this.notify(workspaceId, done, 'complete')
   }
 
@@ -412,18 +464,26 @@ export class InitiativeLoopService {
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
-      await this.deps.events.boardChanged(workspaceId, 'block-added', block.id)
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
-      await this.deps.executionService.start(
-        workspaceId,
-        block.id,
-        pipelineId,
-        undefined,
-        undefined,
-        undefined,
-        item.spawn?.gates,
+      await this.deps.executionService.start(workspaceId, block.id, pipelineId, {
+        gatesOverride: item.spawn?.gates,
+      })
+      // Announced only once the run has actually started, because the rollback below deletes the
+      // block and emits nothing. A coarse signal would have healed itself (the refresh it triggers
+      // re-reads a board the row is no longer on); a targeted upsert would not, leaving a task
+      // that does not exist rendered on every open board until an unrelated event or a reconnect
+      // happens to re-hydrate. The payload is the whole point here, so the ORDER carries the fix.
+      //
+      // Best-effort for the same reason it moved: past the start there is nothing left to roll
+      // back, so a fan-out read that fails must not fall into the catch below and delete a block
+      // whose run is live. The board reconciles a missed push on its next snapshot.
+      await runBestEffort(
+        this.log,
+        'initiative.announceSpawnedBlock',
+        () => this.deps.events.boardChanged(workspaceId, { reason: 'block-added', block }),
+        { workspaceId, blockId: block.id, itemId: item.id },
       )
       return { outcome: 'spawned', entity: claimed }
     } catch (error) {
@@ -431,7 +491,14 @@ export class InitiativeLoopService {
       // transient → revert the item to `pending` for the next sweep and stop spawning this tick.
       // Any OTHER failure is (likely) a persistent config problem → block + notify so it isn't
       // retried forever.
-      await this.deps.blockRepository.deleteMany(workspaceId, [block.id]).catch(() => {})
+      // A failed rollback leaves an orphan task block on the board with no run — the one drop here
+      // whose evidence a human needs, since the board shows the symptom and nothing names the cause.
+      await runBestEffort(
+        this.log,
+        'initiative.rollbackSpawnedBlock',
+        () => this.deps.blockRepository.deleteMany(workspaceId, [block.id]),
+        { workspaceId, blockId: block.id, itemId: item.id },
+      )
       const reason = error instanceof DomainError ? error.details?.reason : undefined
       if (error instanceof ConflictError && reason === 'task_limit_reached') {
         const reverted = await this.deps.initiativeService.update(
@@ -441,7 +508,7 @@ export class InitiativeLoopService {
         )
         return { outcome: 'conflict', entity: reverted ?? claimed }
       }
-      const message = error instanceof Error ? error.message : 'Failed to start the task.'
+      const message = error instanceof Error ? getErrorMessage(error) : 'Failed to start the task.'
       const blocked = await this.blockItem(
         workspaceId,
         entity.blockId,
@@ -577,7 +644,8 @@ export class InitiativeLoopService {
     reason: 'item_blocked' | 'complete' | 'checkpoint',
     phase?: InitiativePhase,
   ): Promise<void> {
-    if (!this.deps.notificationService) return
+    const notifications = this.deps.notificationService
+    if (!notifications) return
     const items = initiative.items ?? []
     const blocked = items.filter((i) => i.status === 'blocked')
     const input =
@@ -598,16 +666,20 @@ export class InitiativeLoopService {
                   ? `A task was blocked (${blocked[0]!.title}). Retry or skip it to unblock the phase.`
                   : `${blocked.length} tasks are blocked. Retry or skip them to unblock the phase.`,
             }
-    await this.deps.notificationService
-      .raise(workspaceId, {
-        type: 'initiative',
-        blockId: initiative.blockId,
-        executionId: null,
-        title: input.title,
-        body: input.body,
-        payload: { initiativeReason: reason },
-      })
-      .catch(() => {})
+    await runBestEffort(
+      this.log,
+      'initiative.notify',
+      () =>
+        notifications.raise(workspaceId, {
+          type: 'initiative',
+          blockId: initiative.blockId,
+          executionId: null,
+          title: input.title,
+          body: input.body,
+          payload: { initiativeReason: reason },
+        }),
+      { workspaceId, blockId: initiative.blockId, reason },
+    )
   }
 }
 

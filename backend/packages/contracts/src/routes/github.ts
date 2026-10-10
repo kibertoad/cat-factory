@@ -1,6 +1,7 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
+  branchProtectionReportSchema,
   commentSchema,
   commitFilesSchema,
   createBranchSchema,
@@ -20,6 +21,7 @@ import {
   resyncRequestSchema,
   setRepoMonorepoSchema,
 } from '../github.js'
+import { githubPatCheckSchema } from '../github-pat-capability.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -117,10 +119,17 @@ export const listGitHubRepoTreeContract = defineApiContract({
   responsesByStatusCode: { 200: repoTreeViewSchema, ...errorResponses },
 })
 
+export const listGitHubRepoFilesContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: repoGithubIdParams,
+  pathResolver: ({ repoGithubId }) => `/github/repos/${repoGithubId}/files`,
+  responsesByStatusCode: { 200: repoTreeViewSchema, ...errorResponses },
+})
+
 export const disconnectGitHubContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/github/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- resync ---------------------------------------------------------------
@@ -138,6 +147,15 @@ export const listGitHubReposContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/github/repos',
   responsesByStatusCode: { 200: repoProjectionListSchema, ...errorResponses },
+})
+
+// The branch-protection preflight (see `branchProtectionReportSchema`). A GET because it is a
+// read, but a LIVE one — deliberately not folded into the repo projection list, which is a hot
+// cached read and would then make every board load probe GitHub.
+export const checkGitHubBranchProtectionContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/github/branch-protection',
+  responsesByStatusCode: { 200: branchProtectionReportSchema, ...errorResponses },
 })
 
 export const listGitHubBranchesContract = defineApiContract({
@@ -197,7 +215,7 @@ export const mergeGitHubPullRequestContract = defineApiContract({
   requestPathParamsSchema: repoPullNumberParams,
   pathResolver: ({ repoGithubId, number }) => `/github/repos/${repoGithubId}/pulls/${number}/merge`,
   requestBodySchema: mergePullRequestSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const commentGitHubIssueContract = defineApiContract({
@@ -206,5 +224,21 @@ export const commentGitHubIssueContract = defineApiContract({
   pathResolver: ({ repoGithubId, number }) =>
     `/github/repos/${repoGithubId}/issues/${number}/comments`,
   requestBodySchema: commentSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
+})
+
+/**
+ * What the personal access token this workspace's runs would authenticate with can actually do
+ * (see `github-pat-capability.ts`). A READ, so it passes the controller's writes-only
+ * `integrations.manage` mount and any member can call it — deliberately, because on a hosted
+ * deployment the token under judgement is the CALLER'S OWN stored `github_pat`, and the person
+ * who has to re-mint it is exactly the person an admin-gated route would hide it from.
+ *
+ * Answers `not_applicable` rather than 404ing when no PAT is in play, so the SPA has one call to
+ * make on board load regardless of how the deployment authenticates.
+ */
+export const getGitHubPatCheckContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/github/pat-check',
+  responsesByStatusCode: { 200: githubPatCheckSchema, ...errorResponses },
 })

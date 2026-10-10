@@ -1,3 +1,4 @@
+import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { type CliOptions } from './args.js'
 import { bootstrap } from './bootstrap.js'
@@ -282,5 +283,77 @@ describe('bootstrap (git-init nudge)', () => {
       randomBytes: fixedBytes,
     })
     expect(lines.join('\n')).not.toContain('git init')
+  })
+})
+
+describe('bootstrap (Compose project identity)', () => {
+  /** Found by suffix, so these assertions hold whatever the host's path separator is. */
+  function writtenFile(files: Map<string, string>, suffix: string): string {
+    return [...files].find(([path]) => path.split('\\').join('/').endsWith(suffix))?.[1] ?? ''
+  }
+
+  function composeProject(files: Map<string, string>): string {
+    return /^name: (.+)$/m.exec(writtenFile(files, 'local/docker-compose.yml'))?.[1] ?? ''
+  }
+
+  async function scaffold(extra: Partial<CliOptions>, seed: Record<string, string> = {}) {
+    const fs = memFs(seed)
+    const io = scriptIo()
+    const warns: string[] = []
+    io.warn = (m) => {
+      warns.push(m)
+    }
+    await bootstrap(opts({ yes: true, token: 't', ...extra }), {
+      io,
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    return { files: fs.files, warns: warns.join('\n') }
+  }
+
+  it('gives two deployments two projects, though both take the default project name', async () => {
+    const a = await scaffold({ dir: 'deploy-a' })
+    const b = await scaffold({ dir: 'deploy-b' })
+    // Same npm package name in both: the project name is a constant unless the user changes it,
+    // which is why the Compose project cannot be derived from it.
+    expect(writtenFile(a.files, 'local/package.json')).toContain('"name": "cat-factory-local"')
+    expect(writtenFile(b.files, 'local/package.json')).toContain('"name": "cat-factory-local"')
+    expect(composeProject(a.files)).toBe('deploy-a-local')
+    expect(composeProject(b.files)).toBe('deploy-b-local')
+    // `local` is the name Compose derives from the compose file's own directory in EVERY
+    // deployment, so it is the one answer that shares a Postgres volume between them.
+    expect([composeProject(a.files), composeProject(b.files)]).not.toContain('local')
+  })
+
+  it('names the Compose project a regenerate leaves behind', async () => {
+    const composePath = join(resolve('/work', 'deploy-a'), 'local', 'docker-compose.yml')
+    // A deployment scaffolded before the name was declared: Compose ran it as project `local`.
+    const { warns } = await scaffold(
+      { dir: 'deploy-a', force: true },
+      {
+        [composePath]: 'services:\n  postgres:\n    image: postgres:18\n',
+      },
+    )
+    expect(warns).toContain('Compose project "local"')
+    expect(warns).toContain('local_cat-factory-pg')
+    expect(warns).toContain('docker compose -p local down')
+  })
+
+  it('says nothing when no project is left behind', async () => {
+    const composePath = join(resolve('/work', 'deploy-a'), 'local', 'docker-compose.yml')
+    const fresh = await scaffold({ dir: 'deploy-a', force: true })
+    expect(fresh.warns).not.toContain('docker compose -p')
+    // Without --force the existing compose file is skipped, so its project does not move.
+    const skipped = await scaffold({ dir: 'deploy-a' }, { [composePath]: 'services:\n' })
+    expect(skipped.warns).not.toContain('docker compose -p')
+    // Nor does rerunning the same deployment.
+    const rerun = await scaffold(
+      { dir: 'deploy-a', force: true },
+      {
+        [composePath]: 'name: deploy-a-local\nservices:\n',
+      },
+    )
+    expect(rerun.warns).not.toContain('docker compose -p')
   })
 })

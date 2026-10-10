@@ -5,8 +5,11 @@ import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
 import { frontendOriginsForService } from '@cat-factory/contracts'
 import {
   assertSafeEnvironmentUrl,
+  boundStatusNote,
+  describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   interpolateTemplate,
+  extractAddresses,
   shouldTeardownSuperseded,
 } from './environments.logic.js'
 
@@ -125,25 +128,30 @@ describe('SSRF host guard — scheme and credential rules', () => {
 })
 
 describe('URL safety policy — trusted internal-host widening', () => {
-  const internalHosts: UrlSafetyPolicy = { schemes: ['https'], allowHosts: ['.internal', 'kargo'] }
+  const internalHosts: UrlSafetyPolicy = {
+    schemes: ['https'],
+    allowHosts: ['.internal', 'acme-envs'],
+  }
   const httpAndHosts: UrlSafetyPolicy = {
     schemes: ['https', 'http'],
     allowHosts: ['.corp', '10.1.2.3'],
   }
 
   it('still rejects internal hosts under the strict default', () => {
-    expect(() => assertSafeEnvironmentUrl('https://kargo.internal')).toThrow(ValidationError)
+    expect(() => assertSafeEnvironmentUrl('https://envs.internal')).toThrow(ValidationError)
     expect(() => assertSafeEnvironmentUrl('https://10.1.2.3')).toThrow(ValidationError)
-    expect(() => assertSafeEnvironmentUrl('http://kargo')).toThrow(ValidationError)
+    expect(() => assertSafeEnvironmentUrl('http://acme-envs')).toThrow(ValidationError)
   })
 
   it('allows an exact-match exempt host', () => {
-    expect(() => assertSafeEnvironmentUrl('https://kargo', 'base URL', internalHosts)).not.toThrow()
+    expect(() =>
+      assertSafeEnvironmentUrl('https://acme-envs', 'base URL', internalHosts),
+    ).not.toThrow()
   })
 
   it('allows a dot-suffix exempt host (and its sub-hosts)', () => {
     expect(() =>
-      assertSafeEnvironmentUrl('https://prenv.kargo.internal', 'base URL', internalHosts),
+      assertSafeEnvironmentUrl('https://box.envs.internal', 'base URL', internalHosts),
     ).not.toThrow()
     // The bare suffix host itself (`internal`) also matches `.internal`.
     expect(() =>
@@ -166,15 +174,15 @@ describe('URL safety policy — trusted internal-host widening', () => {
       ValidationError,
     )
     // http is still rejected when the policy only permits https.
-    expect(() => assertSafeEnvironmentUrl('http://kargo', 'base URL', internalHosts)).toThrow(
+    expect(() => assertSafeEnvironmentUrl('http://acme-envs', 'base URL', internalHosts)).toThrow(
       ValidationError,
     )
   })
 
   it('forbids embedded credentials regardless of policy', () => {
-    expect(() => assertSafeEnvironmentUrl('https://u:p@kargo', 'base URL', internalHosts)).toThrow(
-      ValidationError,
-    )
+    expect(() =>
+      assertSafeEnvironmentUrl('https://u:p@acme-envs', 'base URL', internalHosts),
+    ).toThrow(ValidationError)
   })
 })
 
@@ -225,5 +233,111 @@ describe('shouldTeardownSuperseded', () => {
     // The async `provisioning` insert has externalId=null; a matching type/engine ⇒ assume the
     // deterministic same-namespace overwrite, so do NOT tear down (the TTL reaper is the backstop).
     expect(shouldTeardownSuperseded(k8s('cf-env-1'), k8s(null))).toBe(false)
+  })
+})
+
+describe('describeMisresolvingEnvironmentUrl', () => {
+  it('refuses the composition that cost a run its tester step', () => {
+    // `cf-acc-5` is the per-PR namespace for pull request 5 in front of the loopback host the k3s
+    // doc recommends. It resolves to 5.127.0.0, which is not the cluster that rolled out.
+    const refusal = describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io')
+    expect(refusal).toContain('5.127.0.0')
+    expect(refusal).toContain('127.0.0.1')
+    expect(refusal).toContain('manifests, which are correct')
+  })
+
+  it('reads the host out of a URL carrying a port', () => {
+    expect(describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io:18080')).toContain(
+      '5.127.0.0',
+    )
+  })
+
+  it.each([
+    // The same cluster, addressed by a namespace whose last label ends in a letter.
+    'http://cf-env-catalog-api-pr5.127.0.0.1.nip.io',
+    // An ordinary hostname, whatever digits it carries.
+    'http://env-5.preview.example.com',
+    // A LoadBalancer address, the other URL source.
+    'http://192.168.1.40',
+    // A bracketed IPv6 literal, which carries no name to mis-read.
+    'http://[2001:db8::1]:8080',
+  ])('passes %s', (url) => {
+    expect(describeMisresolvingEnvironmentUrl(url)).toBeNull()
+  })
+
+  it('leaves an unparseable URL to the policy that already refuses it', () => {
+    // Answering here would put a DNS note in front of a failure that is not about DNS.
+    expect(describeMisresolvingEnvironmentUrl('not a url')).toBeNull()
+  })
+})
+
+describe('boundStatusNote', () => {
+  it('trims, and reads a blank note as nothing said', () => {
+    expect(boundStatusNote('  the deploy job is queued  ')).toBe('the deploy job is queued')
+    expect(boundStatusNote('   ')).toBeNull()
+    expect(boundStatusNote(null)).toBeNull()
+    expect(boundStatusNote(undefined)).toBeNull()
+  })
+
+  it('leaves an ordinary note byte-for-byte alone', () => {
+    // The built-in notes are one sentence; the cap exists for a third-party adapter, and it may
+    // not touch the shape a provider actually writes.
+    const note = "2 of 3 Deployments are still rolling out: 'api', 'worker'"
+    expect(boundStatusNote(note)).toBe(note)
+  })
+
+  it('bounds a provider that answers with a dump, and SAYS it was cut', () => {
+    // A code adapter can return a controller dump or an event list. Stored whole it rides into
+    // the run-failure message, the outcome card and a panel line beside a healthy environment.
+    const bounded = boundStatusNote('x'.repeat(1200))!
+    expect(bounded.length).toBeLessThan(500)
+    // A capped value that trailed off would read as the provider's whole account.
+    expect(bounded).toContain('note truncated: 800 of 1200 characters dropped')
+    expect(bounded.startsWith('x'.repeat(400))).toBe(true)
+  })
+})
+
+describe('extractAddresses', () => {
+  const balancers = {
+    data: {
+      addresses: ['10.4.19.22', { address: '10.4.19.23', label: 'public ALB' }],
+      names: ['alb-4.elb.example', { host: 'alb-9.elb.example', label: 'internal ALB' }],
+    },
+  }
+
+  it('reads a bare string as whichever kind the DECLARED manifest key means', () => {
+    // A bare string is unlabelled, so nothing about the VALUE says whether it is an address or a
+    // name someone is about to resolve. Which manifest key was declared is what says so, and
+    // guessing would be the one place the bridge rule rests on a parse.
+    expect(extractAddresses(balancers, 'data.addresses')).toEqual([
+      { address: '10.4.19.22' },
+      { address: '10.4.19.23', label: 'public ALB' },
+    ])
+    expect(extractAddresses(balancers, 'data.names', 'host')).toEqual([
+      { host: 'alb-4.elb.example' },
+      { host: 'alb-9.elb.example', label: 'internal ALB' },
+    ])
+  })
+
+  it('reads an OBJECT entry as it is written, so ONE path can interleave both kinds', () => {
+    // The only shape that can express a provider's preference order across the two, which is the
+    // reason the manifest offers a second path rather than a second list on the port.
+    expect(
+      extractAddresses({ out: [{ host: 'alb-4.elb.example' }, { address: '10.4.19.30' }] }, 'out'),
+    ).toEqual([{ host: 'alb-4.elb.example' }, { address: '10.4.19.30' }])
+  })
+
+  it('drops an entry naming both or neither, rather than carrying one the plan can only refuse', () => {
+    expect(
+      extractAddresses(
+        { out: [{ address: '10.4.19.30', host: 'alb.example' }, { label: 'nothing' }, 42] },
+        'out',
+      ),
+    ).toEqual([])
+  })
+
+  it('reads nothing at all for a path the manifest does not declare', () => {
+    expect(extractAddresses(balancers, undefined)).toEqual([])
+    expect(extractAddresses(balancers, 'data.missing')).toEqual([])
   })
 })

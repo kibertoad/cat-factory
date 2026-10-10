@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
 import type {
   DetectSharedStackInput,
   SharedStack,
   UpdateSharedStackInput,
 } from '~/types/sharedStacks'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -19,16 +19,11 @@ import { useWorkspaceStore } from '~/stores/workspace'
  */
 export const useSharedStacksStore = defineStore('sharedStacks', () => {
   const api = useApi()
-  const stacks = ref<SharedStack[]>([])
+  const { items: stacks, upsert: patch } = useUpsertList<SharedStack>({ key: (s) => s.id })
 
   function hydrate(list: SharedStack[]) {
+    // Keep the snapshot sorted oldest-first; the helper's plain hydrate wouldn't sort.
     stacks.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
-  }
-
-  function patch(stack: SharedStack) {
-    const idx = stacks.value.findIndex((s) => s.id === stack.id)
-    if (idx >= 0) stacks.value[idx] = stack
-    else stacks.value.push(stack)
   }
 
   async function create(input: Parameters<typeof api.createSharedStack>[1]) {

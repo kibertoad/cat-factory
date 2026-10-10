@@ -107,6 +107,8 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
       account_login: meta.owner?.login ?? owner,
       target_type: meta.owner?.type === 'Organization' ? 'Organization' : 'User',
       app_id: null,
+      // The CLI link helper reads github.com with a GitHub PAT, so it seeds a GitHub connection.
+      provider: 'github',
       cached_token: null,
       token_expires_at: null,
       created_at: now,
@@ -143,6 +145,7 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
       // shares (its analogue of the shared App installation), so a linked repo is
       // `'app'`-reachable, not a per-user `'user_pat'` repo.
       linked_via: 'app',
+      provider: 'github',
       etag: null,
       synced_at: now,
       deleted_at: null,

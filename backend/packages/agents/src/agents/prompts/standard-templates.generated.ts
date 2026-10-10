@@ -65,6 +65,7 @@ export const blockContext = {"0":function(container,depth0,helpers,partials,data
     + ((stack1 = ((helper = (helper = lookupProperty(helpers,"agentKind") || (depth0 != null ? lookupProperty(depth0,"agentKind") : depth0)) != null ? helper : alias2),(typeof helper === alias3 ? helper.call(alias1,{"name":"agentKind","hash":{},"data":data,"loc":{"start":{"line":10,"column":26},"end":{"line":10,"column":39}}}) : helper))) != null ? stack1 : "")
     + "\n"
     + ((stack1 = ((helper = (helper = lookupProperty(helpers,"output") || (depth0 != null ? lookupProperty(depth0,"output") : depth0)) != null ? helper : alias2),(typeof helper === alias3 ? helper.call(alias1,{"name":"output","hash":{},"data":data,"loc":{"start":{"line":11,"column":0},"end":{"line":11,"column":10}}}) : helper))) != null ? stack1 : "")
+    + ((stack1 = ((helper = (helper = lookupProperty(helpers,"openFindingsText") || (depth0 != null ? lookupProperty(depth0,"openFindingsText") : depth0)) != null ? helper : alias2),(typeof helper === alias3 ? helper.call(alias1,{"name":"openFindingsText","hash":{},"data":data,"loc":{"start":{"line":11,"column":10},"end":{"line":11,"column":30}}}) : helper))) != null ? stack1 : "")
     + "\n\n";
 },"compiler":[8,">= 4.3.0"],"main":function(container,depth0,helpers,partials,data) {
     var stack1, helper, alias1=depth0 != null ? depth0 : (container.nullContext || {}), alias2=container.lambda, lookupProperty = container.lookupProperty || function(parent, propertyName) {

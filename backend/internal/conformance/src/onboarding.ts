@@ -59,6 +59,17 @@ export interface OnboardingProbe {
   ): Promise<{ accountId: string; ownerUserId: string; ownerEmail: string }>
   members(accountId: string): Promise<{ userId: string }[]>
   /**
+   * Add `userId` to `accountId` with `roles` (default `developer`), acting as `actingUserId`
+   * (an account admin). The RBAC suite uses it to enroll members B/C into the owning org before
+   * scoping them at the workspace tier.
+   */
+  addAccountMember(
+    accountId: string,
+    actingUserId: string,
+    userId: string,
+    roles?: AccountRole[],
+  ): Promise<{ userId: string }>
+  /**
    * Every account a user can see and switch between (the switcher list) — resolves all of
    * their memberships' accounts in one batched read, so the suite can assert that
    * multi-account resolution maps identically across D1 and Postgres.
@@ -90,6 +101,12 @@ export interface OnboardingContainer {
       input: { name: string },
     ): Promise<{ id: string }>
     members(accountId: string): Promise<{ userId: string; email?: string | null }[]>
+    addMember(
+      accountId: string,
+      actingUserId: string,
+      userId: string,
+      roles?: AccountRole[],
+    ): Promise<{ userId: string }>
     listForUser(user: {
       id: string
       login: string
@@ -105,6 +122,8 @@ export function makeOnboardingProbe(c: OnboardingContainer): OnboardingProbe {
     users: c.userService,
     invitations: c.invitations,
     members: (accountId) => c.accountService.members(accountId),
+    addAccountMember: (accountId, actingUserId, userId, roles) =>
+      c.accountService.addMember(accountId, actingUserId, userId, roles),
     accountsForUser: (user) =>
       c.accountService
         .listForUser(user)

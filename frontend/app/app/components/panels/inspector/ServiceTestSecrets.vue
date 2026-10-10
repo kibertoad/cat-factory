@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import { uid } from '~/utils/catalog'
 
 // Per-service (frame) SENSITIVE test credentials: a genuinely secret token a Tester needs
 // to exercise a third-party integration (e.g. a Stripe API key). Unlike the non-sensitive
@@ -18,12 +19,20 @@ const props = defineProps<{ block: Block }>()
 
 const store = useTestSecretsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const busy = ref(false)
 
 interface DraftRow {
+  /**
+   * Client-only stable row identity (UX-94, the UX-23 convention). The `v-for` MUST key on this
+   * rather than the array index: an index key rebinds a deleted row's inputs onto its neighbour,
+   * and because the value field is masked that rebind is invisible — so removing a middle row
+   * could save one secret's value under the next row's key.
+   */
+  uid: string
   key: string
   description: string
   value: string
@@ -33,7 +42,7 @@ const draft = reactive<{ rows: DraftRow[] }>({ rows: [] })
 const configured = computed(() => store.entriesForBlock(props.block.id))
 const available = computed(() => store.available !== false)
 
-const blankRow = (): DraftRow => ({ key: '', description: '', value: '' })
+const blankRow = (): DraftRow => ({ uid: uid('sec'), key: '', description: '', value: '' })
 
 // Load this frame's configured refs once, then (re)hydrate the editor from them. Runs again
 // after a save/clear (the store refs change) so the just-typed secret values don't linger in
@@ -45,7 +54,7 @@ watch(
   configured,
   (entries) => {
     draft.rows = entries.length
-      ? entries.map((e) => ({ key: e.key, description: e.description, value: '' }))
+      ? entries.map((e) => ({ uid: uid('sec'), key: e.key, description: e.description, value: '' }))
       : [blankRow()]
   },
   { immediate: true },
@@ -86,17 +95,10 @@ const canSave = computed(
 function addRow() {
   draft.rows.push(blankRow())
 }
-function removeRow(index: number) {
-  draft.rows.splice(index, 1)
-}
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
+/** Remove by row identity, so it can never be read against a stale index. */
+function removeRow(rowUid: string) {
+  const at = draft.rows.findIndex((r) => r.uid === rowUid)
+  if (at >= 0) draft.rows.splice(at, 1)
 }
 
 async function save() {
@@ -115,7 +117,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('inspector.testSecrets.saveFailed'), e)
+    present(e, 'inspector.testSecrets.saveFailed')
   } finally {
     busy.value = false
   }
@@ -129,7 +131,7 @@ async function clearAll() {
     await store.clear(props.block.id)
     toastDone('clear', noun)
   } catch (e) {
-    notifyError(t('inspector.testSecrets.clearFailed'), e)
+    present(e, 'inspector.testSecrets.clearFailed')
   } finally {
     busy.value = false
   }
@@ -163,21 +165,22 @@ async function clearAll() {
 
     <!-- These are REAL secrets: an unmistakable sensitivity + replace-all warning. -->
     <div
-      class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-snug text-amber-200"
+      class="flex items-start gap-2 rounded-md border border-app-warning-500/40 bg-app-warning-500/10 px-2.5 py-2 text-2xs leading-snug text-app-warning-200"
     >
-      <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+      <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
       <span>{{ t('inspector.testSecrets.warning') }}</span>
     </div>
 
-    <p class="text-[11px] leading-snug text-slate-500">
+    <p class="text-2xs leading-snug text-dimmed">
       {{ t('inspector.testSecrets.replaceNote') }}
     </p>
 
     <div class="space-y-3">
+      <!-- Keyed by the row's own `uid`, never the index — see DraftRow.uid. -->
       <div
         v-for="(row, index) in draft.rows"
-        :key="index"
-        class="space-y-2 rounded-md border border-slate-800 p-2.5"
+        :key="row.uid"
+        class="space-y-2 rounded-md border border-default p-2.5"
         :data-testid="`test-secret-row-${index}`"
       >
         <div class="flex items-start gap-2">
@@ -206,7 +209,7 @@ async function clearAll() {
             class="mt-5 shrink-0"
             :aria-label="t('inspector.testSecrets.removeRow')"
             :data-testid="`test-secret-remove-${index}`"
-            @click="removeRow(index)"
+            @click="removeRow(row.uid)"
           />
         </div>
 
@@ -231,7 +234,7 @@ async function clearAll() {
         </UFormField>
       </div>
 
-      <p v-if="duplicateKeys.size" class="text-[11px] text-error-400">
+      <p v-if="duplicateKeys.size" class="text-2xs text-app-error-400">
         {{ t('inspector.testSecrets.duplicateKey') }}
       </p>
 

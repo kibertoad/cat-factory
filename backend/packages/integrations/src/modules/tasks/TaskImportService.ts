@@ -94,7 +94,7 @@ export class TaskImportService {
       throw new ValidationError(`Could not resolve a ${source} issue key from '${ref}'`)
     }
     const credentials = await this.resolveCredentials(workspaceId, source, provider)
-    const content = await provider.fetchTask(credentials, externalId)
+    const content = await provider.fetchTask(credentials, externalId, workspaceId)
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.taskRepository.get(workspaceId, source, content.externalId)
@@ -127,14 +127,16 @@ export class TaskImportService {
    * provider `search`), so the controller can answer cleanly.
    *
    * `scope` (resolved by the controller from the search's originating block) pins
-   * a repo-backed source to one repository; the provider ignores it when the
-   * source has no repo notion.
+   * a repo-backed source to one repository; a repo-less source has nothing to
+   * narrow and takes `null`. It is required-but-nullable so that "this source has
+   * no repo" is something a caller STATES rather than something it reaches by
+   * leaving an argument off — see the kernel port for why the difference matters.
    */
   async search(
     workspaceId: string,
     source: TaskSourceKind,
     query: string,
-    scope?: TaskSearchRepoScope,
+    scope: TaskSearchRepoScope | null,
   ): Promise<TaskSearchResult[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
@@ -148,14 +150,25 @@ export class TaskImportService {
   /**
    * Every issue imported into the workspace, across sources, as wire shapes.
    *
-   * `scope` (resolved by the controller from an originating block) pins a
-   * repo-backed source to one repository: GitHub issues from other repos are
-   * dropped so a service's quick-pick list stays in-repo, while repo-less sources
-   * (Jira, Linear) are returned in full. Omitted → the whole workspace.
+   * `scope` (resolved by the controller from an originating block) pins EVERY repo-backed
+   * source to one repository: an issue from another repository is dropped so a service's
+   * quick-pick list stays in-repo, while repo-less sources (Jira, Linear) are returned in full.
+   * Which sources are repo-backed is the registry's answer, never a list restated here, so a
+   * source added to the deployment narrows on the same day it can be imported. Omitted → the
+   * whole workspace.
+   *
+   * The provider for each source is resolved ONCE (rows routinely run into the hundreds and a
+   * workspace has a handful of sources), so the filter is a map lookup per row rather than a
+   * registry walk.
    */
   async listTasks(workspaceId: string, scope?: TaskSearchRepoScope): Promise<SourceTask[]> {
     const records = await this.deps.taskRepository.listByWorkspace(workspaceId)
-    const scoped = scope ? records.filter((r) => taskInRepoScope(r, scope)) : records
+    if (!scope) return records.map(toSourceTask)
+    const providers = new Map<TaskSourceKind, TaskSourceProvider | undefined>()
+    const scoped = records.filter((r) => {
+      if (!providers.has(r.source)) providers.set(r.source, this.deps.registry.get(r.source))
+      return taskInRepoScope(r, scope, providers.get(r.source))
+    })
     return scoped.map(toSourceTask)
   }
 

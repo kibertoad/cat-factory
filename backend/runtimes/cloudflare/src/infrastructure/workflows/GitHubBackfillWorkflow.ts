@@ -6,6 +6,7 @@ import {
 } from 'cloudflare:workers'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
+import { withWorkflowLogExport } from './logExport'
 
 /** Params for a full-repo backfill of one installation. */
 interface GitHubBackfillParams {
@@ -29,10 +30,15 @@ export class GitHubBackfillWorkflow extends WorkflowEntrypoint<Env, GitHubBackfi
     event: WorkflowEvent<GitHubBackfillParams>,
     step: WorkflowStep,
   ): Promise<void> {
-    const { installationId } = event.payload
-    await step.do(`backfill-${installationId}`, STEP_CONFIG, async () => {
-      const github = buildContainer(this.env).github
-      if (github) await github.syncService.backfillInstallation(installationId)
+    // Every workflow wake brackets its body this way: the isolate workerd starts it in has had
+    // no other entry point apply the logging settings, and gives itself back at each durable
+    // suspension. See `./logExport.ts`.
+    await withWorkflowLogExport(this.env, step, async (step) => {
+      const { installationId } = event.payload
+      await step.do(`backfill-${installationId}`, STEP_CONFIG, async () => {
+        const github = buildContainer(this.env).github
+        if (github) await github.syncService.backfillInstallation(installationId)
+      })
     })
   }
 }

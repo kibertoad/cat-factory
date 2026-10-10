@@ -72,10 +72,14 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     // scope opts are moot (the token already scopes the listing).
     searchInstallationRepos: async (installationId, query, opts) => {
       const q = query.trim().toLowerCase()
-      if (!q) return []
-      const { items } = await vcs.listRepos(conn(installationId))
+      if (!q) return { items: [], truncated: false }
+      const { items, truncated } = await vcs.listRepos(conn(installationId))
       const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
-      return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+      const cap = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+      // Truncated by EITHER cap, and the listing's is the one a result count cannot show: a
+      // project beyond the page cap was never filtered, so a search matching three of four
+      // hundred looks complete while a fourth match sits past the window.
+      return { items: matched.slice(0, cap), truncated: truncated === true || matched.length > cap }
     },
 
     // ---- reads ------------------------------------------------------------
@@ -92,6 +96,7 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     listRootEntries: (i, ref) => vcs.listRootEntries(conn(i), toRepoRef(ref)),
     listDirectory: (i, ref, path, gitRef) =>
       vcs.listDirectory(conn(i), toRepoRef(ref), path, gitRef),
+    listTree: (i, ref, gitRef) => vcs.listTree(conn(i), toRepoRef(ref), gitRef),
     getFileContent: (i, ref, path, gitRef) =>
       vcs.getFileContent(conn(i), toRepoRef(ref), path, gitRef),
     latestCommitSha: (i, ref, path, gitRef) =>
@@ -115,6 +120,7 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     openPullRequest: (i, ref, input) => vcs.openPullRequest(conn(i), toRepoRef(ref), input),
     updatePullRequest: (i, ref, n, patch) =>
       vcs.updatePullRequest(conn(i), toRepoRef(ref), n, patch),
+    getPullRequestBody: (i, ref, n) => vcs.getPullRequestBody(conn(i), toRepoRef(ref), n),
     getPullRequestMergeability: (i, ref, n) =>
       vcs.getPullRequestMergeability(conn(i), toRepoRef(ref), n),
     mergePullRequest: (i, ref, n, input) => vcs.mergePullRequest(conn(i), toRepoRef(ref), n, input),
@@ -125,8 +131,23 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
 
   // Optional reads: expose only when the underlying provider implements them, so a
   // capability check on the GitHubClient stays honest.
+  if (vcs.searchProjectIssues) {
+    client.searchProjectIssues = (i, ref, query) =>
+      vcs.searchProjectIssues!(conn(i), toRepoRef(ref), query)
+  }
   if (vcs.listSubIssues) {
     client.listSubIssues = (i, ref, n) => vcs.listSubIssues!(conn(i), toRepoRef(ref), n)
+  }
+  // The issue-writeback pair. Deliberately NOT folded into `comment`/omitted: `comment` maps to
+  // MERGE-REQUEST notes here (that is what the gates use it for), so an issue comment routed
+  // through it lands on whatever MR shares the number.
+  if (vcs.commentOnIssue) {
+    client.commentOnIssue = (i, ref, n, body) =>
+      vcs.commentOnIssue!(conn(i), toRepoRef(ref), n, body)
+  }
+  if (vcs.applyIssueLabel) {
+    client.applyIssueLabel = (i, ref, n, label) =>
+      vcs.applyIssueLabel!(conn(i), toRepoRef(ref), n, label)
   }
   if (vcs.listRequestedReviewers) {
     client.listRequestedReviewers = (i, ref, n) =>
@@ -143,9 +164,26 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.getRequiredApprovingReviewCount = (i, ref, branch, n) =>
       vcs.getRequiredApprovingReviewCount!(conn(i), toRepoRef(ref), branch, n)
   }
+  if (vcs.getPullRequest) {
+    client.getPullRequest = (i, ref, n) => vcs.getPullRequest!(conn(i), toRepoRef(ref), n)
+  }
   if (vcs.getPullRequestBaseRef) {
     client.getPullRequestBaseRef = (i, ref, n) =>
       vcs.getPullRequestBaseRef!(conn(i), toRepoRef(ref), n)
+  }
+  if (vcs.getPullRequestHeadRef) {
+    client.getPullRequestHeadRef = (i, ref, n) =>
+      vcs.getPullRequestHeadRef!(conn(i), toRepoRef(ref), n)
+  }
+  if (vcs.getPullRequestHeadSha) {
+    client.getPullRequestHeadSha = (i, ref, n) =>
+      vcs.getPullRequestHeadSha!(conn(i), toRepoRef(ref), n)
+  }
+  if (vcs.createReview) {
+    client.createReview = (i, ref, n, input) => vcs.createReview!(conn(i), toRepoRef(ref), n, input)
+  }
+  if (vcs.listChangedFiles) {
+    client.listChangedFiles = (i, ref, n) => vcs.listChangedFiles!(conn(i), toRepoRef(ref), n)
   }
   if (vcs.listReviewThreads) {
     client.listReviewThreads = (i, ref, n) => vcs.listReviewThreads!(conn(i), toRepoRef(ref), n)

@@ -42,14 +42,14 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
          renders only its card and re-enables pointer events on it. -->
     <div v-if="show" class="pointer-events-auto w-full max-w-3xl">
       <div
-        class="w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border-2 border-app-warning-500/70 bg-app-warning-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-4">
-          <UIcon name="i-lucide-plug" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
+          <UIcon name="i-lucide-plug" class="mt-0.5 h-9 w-9 shrink-0 text-app-warning-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">
+              <h2 class="text-lg font-semibold text-app-warning-100">
                 {{
                   pending.length > 1
                     ? t('layout.providerConfigBanner.titleMany')
@@ -69,7 +69,7 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
                 "
               />
             </div>
-            <p class="mt-1 text-sm text-amber-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.providerConfigBanner.body') }}
             </p>
             <div class="mt-4 flex flex-wrap gap-2">

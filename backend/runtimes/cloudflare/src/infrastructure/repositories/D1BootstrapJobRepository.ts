@@ -1,11 +1,17 @@
 import type {
-  BootstrapFailure,
+  AdoptionPlan,
+  BootstrapDelivery,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
+  BootstrapPhase,
+  MonorepoBootstrapRef,
+  ResolvedAdoption,
+  SurveyClaim,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseSubtasks } from '@cat-factory/kernel'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 import { chunkForIn } from './chunk'
 
 /**
@@ -32,7 +38,13 @@ interface AgentRunRow {
   updated_at: number
 }
 
-/** The bootstrap-specific payload packed into `agent_runs.detail`. */
+/**
+ * The bootstrap-specific payload packed into `agent_runs.detail`.
+ *
+ * The monorepo flow's state rides here too rather than in new columns: nothing queries on any
+ * of it (a run is always read by id, or listed by workspace/service), so a column would buy
+ * indexes nobody uses at the cost of a migration on both runtimes.
+ */
 interface BootstrapDetail {
   referenceArchitectureId: string | null
   referenceArchitectureName: string | null
@@ -40,56 +52,42 @@ interface BootstrapDetail {
   repoOwner: string | null
   repoUrl: string | null
   instructions: string
+  monorepo: MonorepoBootstrapRef | null
+  phase: BootstrapPhase | null
+  driveId: string | null
+  adoptionPlan: AdoptionPlan | null
+  adoptionReview: ResolvedAdoption | null
+  prUrl: string | null
+  /**
+   * How the run delivers its work. A row written before the delivery toggle existed carries
+   * none, and `rowToRecord` resolves it from the TARGET rather than defaulting blindly: a
+   * monorepo run of that vintage opened a pull request and a new-repo one force-pushed, which
+   * is what those runs actually did.
+   */
+  delivery: BootstrapDelivery | null
+  /**
+   * The work branch a `pull_request` run pushes; null under `direct_push` and on a row written
+   * before the field existed, whose dispatch derived one off the run id instead.
+   */
+  workBranch: string | null
 }
 
-/** Parse the JSON-encoded subtask counts column, tolerating a null/garbage value. */
-function parseSubtasks(raw: string | null): BootstrapJobRecord['subtasks'] {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (
-      typeof o.completed === 'number' &&
-      typeof o.inProgress === 'number' &&
-      typeof o.total === 'number'
-    ) {
-      type Item = NonNullable<NonNullable<BootstrapJobRecord['subtasks']>['items']>[number]
-      let items: Item[] | undefined
-      if (Array.isArray(o.items)) {
-        items = []
-        for (const it of o.items as unknown[]) {
-          if (!it || typeof it !== 'object') continue
-          const r = it as Record<string, unknown>
-          const status = r.status
-          if (
-            typeof r.label === 'string' &&
-            (status === 'pending' || status === 'in_progress' || status === 'completed')
-          ) {
-            items.push({ label: r.label, status })
-          }
-        }
-      }
-      return { completed: o.completed, inProgress: o.inProgress, total: o.total, items }
-    }
-  } catch {
-    // fall through
-  }
-  return null
-}
-
-/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
-function parseFailure(raw: string | null): BootstrapFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as BootstrapFailure
-    // LEGACY: drop a failure carrying a removed kind (e.g. `decision_timeout`); the obsolete
-    // value would fail the contract picklist and brick the snapshot. Remove after 2026-07-15.
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
+/** The value every absent/garbled detail field falls back to. */
+const EMPTY_DETAIL: BootstrapDetail = {
+  referenceArchitectureId: null,
+  referenceArchitectureName: null,
+  repoName: '',
+  repoOwner: null,
+  repoUrl: null,
+  instructions: '',
+  monorepo: null,
+  phase: null,
+  driveId: null,
+  adoptionPlan: null,
+  adoptionReview: null,
+  prUrl: null,
+  delivery: null,
+  workBranch: null,
 }
 
 /** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
@@ -97,22 +95,15 @@ function parseDetail(raw: string): BootstrapDetail {
   try {
     const o = JSON.parse(raw) as Partial<BootstrapDetail>
     return {
-      referenceArchitectureId: o.referenceArchitectureId ?? null,
-      referenceArchitectureName: o.referenceArchitectureName ?? null,
-      repoName: o.repoName ?? '',
-      repoOwner: o.repoOwner ?? null,
-      repoUrl: o.repoUrl ?? null,
-      instructions: o.instructions ?? '',
+      ...EMPTY_DETAIL,
+      // `null` is dropped alongside `undefined`, which is safe because every NULLABLE field's
+      // empty default already IS null: what it protects are the two fields typed as plain
+      // strings (`repoName`, `instructions`), where a row storing a null would otherwise flow
+      // one through as a string and reach a prompt as the word "null".
+      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value != null)),
     }
   } catch {
-    return {
-      referenceArchitectureId: null,
-      referenceArchitectureName: null,
-      repoName: '',
-      repoOwner: null,
-      repoUrl: null,
-      instructions: '',
-    }
+    return { ...EMPTY_DETAIL }
   }
 }
 
@@ -131,7 +122,23 @@ function rowToRecord(row: AgentRunRow): BootstrapJobRecord {
     blockId: row.block_id ?? null,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
+    monorepo: detail.monorepo,
+    phase: detail.phase,
+    // A row written before the monorepo flow existed carries no `driveId`, and its drive WAS
+    // keyed on the run id, so falling back to the row id is the historically true value, not a
+    // guess. (Its drive is long finished either way; what this protects is a re-drive.)
+    driveId: detail.driveId ?? row.id,
+    adoptionPlan: detail.adoptionPlan,
+    adoptionReview: detail.adoptionReview,
+    prUrl: detail.prUrl,
+    // A row predating the delivery toggle records what that run DID: a monorepo run opened a
+    // pull request and a new-repo run force-pushed its initial commit, which was the only
+    // behaviour either target had. Historically true, not a guess.
+    delivery: detail.delivery ?? (detail.monorepo ? 'pull_request' : 'direct_push'),
+    // A row predating the field recorded no branch; that run's dispatch derived one off its own
+    // id, so there is nothing to carry forward and null is the honest read.
+    workBranch: detail.workBranch,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -153,6 +160,23 @@ function encodeTopLevel(key: string, value: unknown): string | number | null {
   return value as string | number | null
 }
 
+/**
+ * Patch fields that live INSIDE `detail`, and whether each holds a JSON value rather than a
+ * scalar. The split matters: a `json_set` given a stringified object with a bare `?` stores the
+ * TEXT of the object, so a plan written that way reads back as a string where the reader expects
+ * a plan; `json(?)` is what makes it a nested value.
+ */
+const DETAIL_FIELDS: Partial<Record<keyof BootstrapJobRecordPatch, 'scalar' | 'json'>> = {
+  repoOwner: 'scalar',
+  repoUrl: 'scalar',
+  phase: 'scalar',
+  driveId: 'scalar',
+  prUrl: 'scalar',
+  monorepo: 'json',
+  adoptionPlan: 'json',
+  adoptionReview: 'json',
+}
+
 /** D1-backed bootstrap runs, stored as `kind='bootstrap'` rows of `agent_runs`. */
 export class D1BootstrapJobRepository implements BootstrapJobRepository {
   private readonly db: D1Database
@@ -169,6 +193,14 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       repoOwner: record.repoOwner,
       repoUrl: record.repoUrl,
       instructions: record.instructions,
+      monorepo: record.monorepo,
+      phase: record.phase,
+      driveId: record.driveId,
+      adoptionPlan: record.adoptionPlan,
+      adoptionReview: record.adoptionReview,
+      prUrl: record.prUrl,
+      delivery: record.delivery,
+      workBranch: record.workBranch,
     }
     // Stamp `service_id` from the materialised service frame (when known) so a shared
     // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.
@@ -197,6 +229,26 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       .run()
   }
 
+  /**
+   * One conditional UPDATE: stamp the survey claim only while the row carries none, or carries one
+   * that has gone stale. `meta.changes` is the verdict, so the winner is decided by SQLite rather
+   * than by a read this caller did first. See the port for why a marker written after the model
+   * call cannot serve.
+   */
+  async claimSurvey(workspaceId: string, id: string, claim: SurveyClaim): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE agent_runs
+            SET detail = json_set(COALESCE(detail, '{}'), '$.surveyClaimedAt', ?)
+          WHERE workspace_id = ? AND id = ? AND kind = 'bootstrap'
+            AND (json_extract(detail, '$.surveyClaimedAt') IS NULL
+                 OR json_extract(detail, '$.surveyClaimedAt') <= ?)`,
+      )
+      .bind(claim.at, workspaceId, id, claim.staleBefore)
+      .run()
+    return (result.meta?.changes ?? 0) > 0
+  }
+
   async update(workspaceId: string, id: string, patch: BootstrapJobRecordPatch): Promise<void> {
     const entries = Object.entries(patch).filter(([, value]) => value !== undefined)
     if (entries.length === 0) return
@@ -208,16 +260,16 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
     // single json_set so a partial patch leaves the other field untouched.
     const jsonSets: string[] = []
     for (const [key, value] of entries) {
-      if (key === 'repoOwner' || key === 'repoUrl') {
-        jsonSets.push(`'$.${key}'`, '?')
-        values.push(value as string | null)
-      }
+      const kind = DETAIL_FIELDS[key as keyof BootstrapJobRecordPatch]
+      if (!kind) continue
+      jsonSets.push(`'$.${key}'`, kind === 'json' ? 'json(?)' : '?')
+      values.push(kind === 'json' ? JSON.stringify(value ?? null) : (value as string | null))
     }
     if (jsonSets.length > 0) setClauses.push(`detail = json_set(detail, ${jsonSets.join(', ')})`)
 
     for (const [key, value] of entries) {
       const column = TOP_LEVEL_COLUMNS[key as keyof BootstrapJobRecordPatch]
-      if (!column) continue // repoOwner/repoUrl handled above
+      if (!column) continue // the `detail` fields are handled above
       setClauses.push(`${column} = ?`)
       values.push(encodeTopLevel(key, value))
     }
@@ -256,16 +308,6 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
         `SELECT * FROM agent_runs WHERE workspace_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
       )
       .bind(workspaceId)
-      .all<AgentRunRow>()
-    return (results ?? []).map(rowToRecord)
-  }
-
-  async listByService(serviceId: string): Promise<BootstrapJobRecord[]> {
-    const { results } = await this.db
-      .prepare(
-        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
-      )
-      .bind(serviceId)
       .all<AgentRunRow>()
     return (results ?? []).map(rowToRecord)
   }

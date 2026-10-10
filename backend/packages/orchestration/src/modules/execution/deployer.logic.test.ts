@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import type { PipelineStep, ServiceProvisioning } from '@cat-factory/kernel'
 import {
+  appendAttemptLog,
   decideDeployerConfig,
   deployerServiceConfigIssues,
-  deployEvictionEpoch,
+  deployDispatchEpoch,
   deployJobId,
   hasEnabledDeployerStep,
   orderProvisionTargets,
@@ -16,9 +17,6 @@ const step = (over: Partial<PipelineStep> = {}): PipelineStep =>
 describe('deployJobId', () => {
   it('is deterministic from the run id (replay-stable, no epoch suffix at epoch 0)', () => {
     expect(deployJobId('exec1', 0)).toBe(`exec1-${DEPLOYER_AGENT_KIND}`)
-    // Same inputs reproduce the same id, so a replayed dispatch re-attaches rather than
-    // starting a duplicate deploy container.
-    expect(deployJobId('exec1', 0)).toBe(deployJobId('exec1', 0))
   })
 
   it('suffixes the eviction epoch so each re-dispatch is a distinct job', () => {
@@ -77,17 +75,29 @@ describe('orderProvisionTargets', () => {
   })
 })
 
-describe('deployEvictionEpoch', () => {
-  it('is 0 for a first dispatch', () => {
-    expect(deployEvictionEpoch(step())).toBe(0)
+describe('deployDispatchEpoch', () => {
+  it('is 0 for a first dispatch, stamped or not', () => {
+    expect(deployDispatchEpoch(step())).toBe(0)
+    expect(deployDispatchEpoch(step({ attempts: 1 }))).toBe(0)
   })
 
   it('sums genuine + transient eviction recoveries', () => {
-    expect(deployEvictionEpoch(step({ evictionRecoveries: 2 }))).toBe(2)
-    expect(deployEvictionEpoch(step({ transientEvictionRecoveries: 3 }))).toBe(3)
+    expect(deployDispatchEpoch(step({ evictionRecoveries: 2 }))).toBe(2)
+    expect(deployDispatchEpoch(step({ transientEvictionRecoveries: 3 }))).toBe(3)
     expect(
-      deployEvictionEpoch(step({ evictionRecoveries: 1, transientEvictionRecoveries: 4 })),
+      deployDispatchEpoch(step({ evictionRecoveries: 1, transientEvictionRecoveries: 4 })),
     ).toBe(5)
+  })
+
+  it('counts the step RE-STARTS too, so a rebuild loop-back cannot re-attach', () => {
+    // The human-test gate's "rebuild the environment" resets the deployer and starts it again
+    // (`rerunRange`), which bumps only `attempts`. Without this term the rebuild re-derived the
+    // FIRST deploy's job id and the idempotent transport re-attached to its completed provision
+    // job: nothing was re-provisioned, and the gate read back a stale environment as a fresh one.
+    expect(deployDispatchEpoch(step({ attempts: 2 }))).toBe(1)
+    expect(deployDispatchEpoch(step({ attempts: 3 }))).toBe(2)
+    // Both terms in play: two rebuilds, one of which was also evicted and recovered.
+    expect(deployDispatchEpoch(step({ attempts: 3, evictionRecoveries: 1 }))).toBe(3)
   })
 })
 
@@ -226,5 +236,28 @@ describe('decideDeployerConfig', () => {
         handlerResolution: ok,
       }),
     ).toEqual(ok)
+  })
+})
+
+describe('appendAttemptLog', () => {
+  const round = (attempt: number) => ({ attempt })
+
+  it('keeps every round while the log is within its cap', () => {
+    const first = appendAttemptLog(undefined, round(1), 3, undefined)
+    const second = appendAttemptLog(first.attemptLog, round(2), 3, first.droppedAttempts)
+
+    expect(second).toEqual({ attemptLog: [round(1), round(2)], droppedAttempts: 0 })
+  })
+
+  it('drops the OLDEST round past the cap and counts what went', () => {
+    // The logs survive the whole run inside the compare-and-swapped run blob, so an uncapped one
+    // grows with every loop-back. The drop is counted because the verification report reduces the
+    // surviving rows: a silently dropped round reads as one that never ran.
+    let state = { attemptLog: [round(1), round(2)] as { attempt: number }[], droppedAttempts: 0 }
+    state = appendAttemptLog(state.attemptLog, round(3), 2, state.droppedAttempts)
+    expect(state).toEqual({ attemptLog: [round(2), round(3)], droppedAttempts: 1 })
+
+    state = appendAttemptLog(state.attemptLog, round(4), 2, state.droppedAttempts)
+    expect(state).toEqual({ attemptLog: [round(3), round(4)], droppedAttempts: 2 })
   })
 })

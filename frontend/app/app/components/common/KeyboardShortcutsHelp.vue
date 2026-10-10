@@ -37,7 +37,7 @@ const shortcuts = computed(() => [
           :key="i"
           class="flex items-center justify-between gap-4 rounded-md px-1 py-1.5"
         >
-          <dt class="text-sm text-slate-300">{{ s.label }}</dt>
+          <dt class="text-sm text-toned">{{ s.label }}</dt>
           <dd class="flex shrink-0 items-center gap-1">
             <UKbd v-for="k in s.keys" :key="k" :value="k" />
           </dd>

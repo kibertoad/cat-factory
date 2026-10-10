@@ -12,10 +12,14 @@
 //   - a MANIFEST-driven provider (no template) → the full JSON manifest editor
 //     (ProviderManifestEditor), which replaces the old "use the API" disclaimer.
 import { computed, ref, toRaw, watch } from 'vue'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConfigField, ProviderConnectionKind } from '~/types/providerConnections'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   kind: ProviderConnectionKind
@@ -33,6 +37,7 @@ const emit = defineEmits<{ connected: [] }>()
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const descriptor = computed(() => store.descriptorFor(props.kind))
@@ -56,7 +61,7 @@ const showLogs = ref(false)
 
 // --- Shared state -------------------------------------------------------------------
 const values = ref<Record<string, string>>({})
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<ConnectionTestResult | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
@@ -202,15 +207,6 @@ function buildFlatPayload() {
   return isNativeConfig.value ? buildConfigPayload() : buildManifestPayload()
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 function toastSaved() {
   toast.add({
     title: t('settings.providerConnection.toast.saved', { title: title.value }),
@@ -243,7 +239,7 @@ async function saveNative() {
     resetDraft()
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -277,7 +273,7 @@ async function saveManifest(payload: {
     emit('connected')
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -322,7 +318,7 @@ async function saveConfig(payload: {
     emit('connected')
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -336,7 +332,7 @@ async function remove() {
     resetDraft()
     toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.removeFailed'), e)
+    present(e, 'settings.providerConnection.toast.removeFailed')
   } finally {
     busy.value = false
   }
@@ -358,7 +354,7 @@ function fieldHelp(key: string): string | undefined {
 <template>
   <div v-if="descriptor" class="space-y-4">
     <div class="flex items-start justify-between gap-3">
-      <p class="text-xs text-slate-400">{{ blurb }}</p>
+      <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
@@ -384,11 +380,11 @@ function fieldHelp(key: string): string | undefined {
     <!-- Saved connection summary -->
     <div
       v-if="connection"
-      class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+      class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
     >
       <div>
-        <span class="font-medium text-slate-200">{{ connection.label }}</span>
-        <div class="text-[11px] text-emerald-400">
+        <span class="font-medium text-default">{{ connection.label }}</span>
+        <div class="text-2xs text-app-success-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
       </div>
@@ -405,7 +401,7 @@ function fieldHelp(key: string): string | undefined {
     <!-- Mandatory-fields warning (mirrors the banner) -->
     <div
       v-if="descriptor.missingRequired.length"
-      class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+      class="rounded-md border border-app-warning-500/40 bg-app-warning-950/40 px-3 py-2 text-xs text-app-warning-200"
     >
       {{
         t('settings.providerConnection.missingConfig', {
@@ -430,18 +426,15 @@ function fieldHelp(key: string): string | undefined {
     />
 
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
-    <div
-      v-else-if="isNative"
-      class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-    >
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+      <SectionLabel as="p">
         {{
           connection
             ? t('settings.providerConnection.form.updateConfiguration')
             : t('settings.providerConnection.form.connect')
         }}
-      </p>
-      <p v-if="connection && hasSecretFields" class="text-[11px] text-amber-300/80">
+      </SectionLabel>
+      <p v-if="connection && hasSecretFields" class="text-2xs text-app-warning-300/80">
         {{
           t(
             'settings.providerConnection.form.reenterSecrets',
@@ -496,7 +489,7 @@ function fieldHelp(key: string): string | undefined {
         />
       </UFormField>
 
-      <div v-if="descriptor.supportsTest" class="flex items-center gap-2">
+      <div v-if="descriptor.supportsTest" class="space-y-1.5">
         <UButton
           color="neutral"
           variant="soft"
@@ -507,13 +500,10 @@ function fieldHelp(key: string): string | undefined {
         >
           {{ t('settings.providerConnection.test.button') }}
         </UButton>
-        <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-        </span>
-        <span v-else-if="testResult" class="text-xs text-rose-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-        </span>
+        <ConnectionTestVerdict :result="testResult" />
       </div>
+
+      <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
         <UButton

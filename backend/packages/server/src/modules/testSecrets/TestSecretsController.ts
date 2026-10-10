@@ -8,23 +8,17 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { TestSecretsService } from '@cat-factory/integrations'
 import type { AppEnv } from '../../http/env.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the test-secrets service or send a 503, returning null when unconfigured. */
-function requireTestSecrets<E extends AppEnv>(c: Context<E>): TestSecretsService | null {
-  return c.get('container').testSecrets ?? null
-}
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'The sensitive test-credential store is not configured (needs ENCRYPTION_KEY)',
-      },
-    },
-    503,
+/** Resolve the test-secrets service, or refuse with a 503 naming what isn't wired. */
+function requireTestSecrets<E extends AppEnv>(c: Context<E>): TestSecretsService {
+  return requireCapability(
+    c.get('container').testSecrets,
+    'The sensitive test-credential store is not configured (needs ENCRYPTION_KEY)',
   )
+}
 
 /**
  * The SENSITIVE per-service test-credential store: sealed at rest, delivered to the Tester
@@ -34,16 +28,15 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function testSecretsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  mountWorkspacePermission(app, 'secrets.manage', ['/services/:blockId/test-secrets'])
 
   buildHonoRoute(app, getServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)
-    if (!svc) return unavailable(c)
     return c.json(await svc.getView(param(c, 'workspaceId'), c.req.valid('param').blockId), 200)
   })
 
   buildHonoRoute(app, setServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)
-    if (!svc) return unavailable(c)
     const view = await svc.set(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
@@ -54,7 +47,6 @@ export function testSecretsController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)
-    if (!svc) return unavailable(c)
     await svc.deleteFor(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.body(null, 204)
   })

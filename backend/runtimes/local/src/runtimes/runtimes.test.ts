@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_POST_MORTEM_CHARS } from '@cat-factory/kernel'
 import type { ContainerExec } from './containerRuntime.js'
+import { formatContainerLogs, HARNESS_PORT, MAX_CONTAINER_LOG_CHARS } from './containerRuntime.js'
 import {
   createRuntimeAdapter,
   resolveHostAlias,
+  resolveInstallId,
   resolveRuntimeId,
   unrecognizedRuntimeId,
 } from './index.js'
@@ -61,6 +64,18 @@ describe('runtime selection', () => {
     expect(apple.capabilities.localDind).toBe(false)
   })
 
+  // ADR 0026 D5: a stable per-install fingerprint that partitions containers by the axis the
+  // isolation protects — the baked HARNESS_SHARED_SECRET.
+  it('resolveInstallId is stable, secret-derived, and never leaks the secret verbatim', () => {
+    const a = resolveInstallId({ HARNESS_SHARED_SECRET: 'secret-A' })
+    expect(a).toBe(resolveInstallId({ HARNESS_SHARED_SECRET: 'secret-A' })) // stable
+    expect(a).not.toBe(resolveInstallId({ HARNESS_SHARED_SECRET: 'secret-B' })) // per-secret
+    expect(a).not.toContain('secret-A') // one-way fingerprint, not the secret
+    // Falls back to other stable config when the secret is unset, so the id is always defined.
+    expect(resolveInstallId({ DATABASE_URL: 'postgres://x/5433' })).toBeTruthy()
+    expect(resolveInstallId({})).toBeTruthy()
+  })
+
   it('honours LOCAL_DOCKER_BINARY and LOCAL_HARNESS_HOST_ALIAS overrides', () => {
     const a = createRuntimeAdapter({
       LOCAL_CONTAINER_RUNTIME: 'docker',
@@ -82,10 +97,11 @@ describe('DockerRuntimeAdapter', () => {
       addHostGateway: true,
       localDind: true,
       pooling: true,
+      installId: 'i0',
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     const id = await adapter.run(exec, {
-      runId: 'r1',
+      containerKey: 'r1',
       image: 'img:test',
       sharedSecret: 'sek',
       privileged: true,
@@ -93,9 +109,39 @@ describe('DockerRuntimeAdapter', () => {
     })
     expect(id).toBe('cid')
     const run = calls[0]!
-    expect(run.join(' ')).toContain('-p 127.0.0.1:0:8080')
+    expect(run.join(' ')).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
     expect(run).toContain('--privileged')
     expect(run).toContain('--add-host=host.docker.internal:host-gateway')
+  })
+
+  it('tells the container which port to bind, so a pinned older image stays reachable', async () => {
+    // The published port and the served one are otherwise joined only by the image happening to
+    // default to the same number. An operator-pinned older harness (supported: it warns, it does
+    // not refuse) would bind its own default, answer on nothing the transport addresses, and die
+    // on the ready timeout with the version handshake, which needs a reachable harness, unable to
+    // name the skew. Stating PORT is what keeps that configuration diagnosable.
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    const { exec, calls } = fakeExec({ run: 'cid\n' })
+    await adapter.run(exec, {
+      containerKey: 'r1',
+      image: 'img:test',
+      sharedSecret: 'sek',
+      privileged: false,
+      // A job asking for its own PORT must NOT move the harness off the port just published for
+      // it: the platform's value is emitted last and wins.
+      env: { PORT: '8080' },
+    })
+    const run = calls[0]!.join(' ')
+    expect(run).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
+    expect(run.lastIndexOf(`PORT=${HARNESS_PORT}`)).toBeGreaterThan(run.indexOf('PORT=8080'))
   })
 
   it('omits the add-host when disabled (e.g. Colima)', async () => {
@@ -106,10 +152,11 @@ describe('DockerRuntimeAdapter', () => {
       addHostGateway: false,
       localDind: true,
       pooling: true,
+      installId: 'i0',
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'r',
+      containerKey: 'r',
       image: 'i',
       sharedSecret: 's',
       privileged: false,
@@ -126,12 +173,13 @@ describe('DockerRuntimeAdapter', () => {
       addHostGateway: true,
       localDind: true,
       pooling: true,
+      installId: 'i0',
     })
     const { exec } = fakeExec({ port: '127.0.0.1:49170\n' })
     expect(await adapter.endpoint(exec, 'cid')).toEqual({ host: '127.0.0.1', port: 49170 })
   })
 
-  it('pins a preview serve port to a deterministic host port alongside the harness :8080', async () => {
+  it('pins a preview serve port to a deterministic host port alongside the harness port', async () => {
     const adapter = new DockerRuntimeAdapter({
       id: 'docker',
       binary: 'docker',
@@ -139,10 +187,11 @@ describe('DockerRuntimeAdapter', () => {
       addHostGateway: true,
       localDind: true,
       pooling: true,
+      installId: 'i0',
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'preview-blk_fe',
+      containerKey: 'preview-blk_fe',
       image: 'img',
       sharedSecret: 's',
       privileged: false,
@@ -150,7 +199,7 @@ describe('DockerRuntimeAdapter', () => {
       publishPorts: [{ container: 4173, host: 4173 }],
     })
     const run = calls[0]!.join(' ')
-    expect(run).toContain('-p 127.0.0.1:0:8080')
+    expect(run).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
     // A pinned `host` gives a deterministic, pre-knowable host port (the preview origin).
     expect(run).toContain('-p 127.0.0.1:4173:4173')
     expect(adapter.publishesToLocalhost).toBe(true)
@@ -164,10 +213,11 @@ describe('DockerRuntimeAdapter', () => {
       addHostGateway: true,
       localDind: true,
       pooling: true,
+      installId: 'i0',
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'preview-blk_fe',
+      containerKey: 'preview-blk_fe',
       image: 'img',
       sharedSecret: 's',
       privileged: false,
@@ -185,36 +235,168 @@ describe('DockerRuntimeAdapter', () => {
       addHostGateway: true,
       localDind: true,
       pooling: true,
+      installId: 'i0',
     })
     const { exec, calls } = fakeExec({ port: '127.0.0.1:51999\n' })
     expect(await adapter.endpoint(exec, 'cid', 4173)).toEqual({ host: '127.0.0.1', port: 51999 })
-    // The `docker port` query targets the requested in-container port, not the default 8080.
+    // The `docker port` query targets the requested in-container port, not the harness default.
     expect(calls[0]).toEqual(['port', 'cid', '4173/tcp'])
+  })
+
+  // The endpoint contract (see `ContainerRuntimeAdapter.endpoint`): a container that has EXITED
+  // is "not ready", NOT an error — `find()` returns exited containers by design, and the
+  // transport re-creates one it can't reach. `docker port` exits non-zero for such a container,
+  // so letting that escape wedges the run on its own corpse and reports the CLI line as the cause
+  // of death. A fault against a LIVE container is a real problem and must still surface.
+  it('resolves an EXITED container to "not ready" when `docker port` fails', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'port') {
+        return Promise.reject(new Error(`no public port '${HARNESS_PORT}/tcp' published for cid`))
+      }
+      return Promise.resolve({ stdout: 'false\n', stderr: '' })
+    }
+    expect(await adapter.endpoint(exec, 'cid')).toBeUndefined()
+  })
+
+  it('rethrows a port lookup that fails against a RUNNING container', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'port') return Promise.reject(new Error('docker daemon connection reset'))
+      return Promise.resolve({ stdout: 'true\n', stderr: '' })
+    }
+    await expect(adapter.endpoint(exec, 'cid')).rejects.toThrow(/connection reset/)
+  })
+
+  it('reports the exit code + an OOM kill for a stopped container, nothing for a live one', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    // `{{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}`, the mid-run post-mortem's
+    // only way to tell an OOM kill (empty log tail) from a process that threw and printed nothing.
+    const oom = fakeExec({ inspect: 'false 137 true\n' })
+    expect(await adapter.exitState(oom.exec, 'cid')).toEqual({
+      description: 'exit code 137, OOM-killed by the container runtime',
+      code: 137,
+    })
+    const plain = fakeExec({ inspect: 'false 1 false\n' })
+    expect(await adapter.exitState(plain.exec, 'cid')).toEqual({
+      description: 'exit code 1',
+      code: 1,
+    })
+    // The code is PARSED, not just rendered: a 0 is what separates a harness that was SHUT DOWN
+    // mid-job (terminal) from one that crashed (recovered on the eviction budget).
+    const clean = fakeExec({ inspect: 'false 0 false\n' })
+    expect(await adapter.exitState(clean.exec, 'cid')).toEqual({
+      description: 'exit code 0',
+      code: 0,
+    })
+    // Still running ⇒ no exit state (it is a diagnostic, never a lifecycle signal).
+    const live = fakeExec({ inspect: 'true 0 false\n' })
+    expect(await adapter.exitState(live.exec, 'cid')).toBeUndefined()
+    // A reaped container can't be inspected at all: best-effort, so undefined rather than a throw.
+    const gone: ContainerExec = () => Promise.reject(new Error('No such object: cid'))
+    expect(await adapter.exitState(gone, 'cid')).toBeUndefined()
+  })
+
+  // ADR 0026 D5: namespace every managed container by install id so a shared daemon can't cross
+  // installs (a pool member bakes THIS install's HARNESS_SHARED_SECRET in).
+  it('stamps the per-install label on run (per-run AND pool) and filters every enumeration on it', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'inst-A',
+    })
+    const { exec, calls } = fakeExec({ run: 'cid\n' })
+    await adapter.run(exec, {
+      containerKey: 'r1',
+      image: 'i',
+      sharedSecret: 's',
+      privileged: false,
+      env: {},
+    })
+    expect(calls[0]!.join(' ')).toContain('--label cat-factory.install=inst-A')
+    calls.length = 0
+    // A warm-pool member carries the SAME per-install label, so a neighbour never re-leases it.
+    await adapter.run(exec, {
+      containerKey: 'm1',
+      image: 'i',
+      sharedSecret: 's',
+      privileged: false,
+      env: {},
+      pool: true,
+    })
+    expect(calls[0]!.join(' ')).toContain('--label cat-factory.install=inst-A')
+
+    // Every daemon-wide enumeration is scoped strictly to this install's label.
+    const enu = fakeExec()
+    await adapter.reapExited(enu.exec)
+    await adapter.listPoolMembers(enu.exec)
+    await adapter.listRunContainers(enu.exec)
+    await adapter.find(enu.exec, 'r1')
+    for (const c of enu.calls) {
+      expect(c.join(' ')).toContain('--filter label=cat-factory.install=inst-A')
+    }
   })
 })
 
 describe('AppleContainerRuntimeAdapter', () => {
-  const adapter = new AppleContainerRuntimeAdapter({ hostAlias: '192.168.64.1' })
+  // The container NAME is `cf-<installId>-<containerKey>` — the install id namespaces the reaper +
+  // enumerations so a shared `container` daemon can't cross installs (ADR 0026 D5).
+  const adapter = new AppleContainerRuntimeAdapter({ hostAlias: '192.168.64.1', installId: 'i0' })
+  /** This install's deterministic name for a container key whose variant is the default one. */
+  const n = (containerKey: string) => `cf-i0-${containerKey}`
 
-  it('runs detached by deterministic name, no published port, no privileged', async () => {
+  it('runs detached by a per-install deterministic name, no published port, no privileged', async () => {
     const { exec, calls } = fakeExec()
     const id = await adapter.run(exec, {
-      runId: 'run_42',
+      containerKey: 'run_42',
       image: 'ghcr.io/x/harness:1',
       sharedSecret: 'sek',
       privileged: true, // ignored: Apple has no DinD
       env: { FOO: 'bar' },
       publishPorts: [{ container: 4173, host: 4173 }], // ignored: no published-port model
     })
-    expect(id).toBe('cf-run_42')
+    expect(id).toBe(n('run_42'))
     expect(adapter.publishesToLocalhost).toBe(false)
     const run = calls[0]!
     expect(run.slice(0, 2)).toEqual(['run', '-d'])
     expect(run).toContain('--name')
-    expect(run).toContain('cf-run_42')
+    expect(run).toContain(n('run_42'))
+    // The per-install label rides along for parity/inspectability.
+    expect(run.join(' ')).toContain('cat-factory.install=i0')
     expect(run.join(' ')).not.toContain('-p ')
     expect(run).not.toContain('--privileged')
     expect(run.join(' ')).toContain('FOO=bar')
+    // `endpoint()` reaches the harness at HARNESS_PORT on the container's own VM IP, so the
+    // container is TOLD to bind it rather than inheriting whatever its image defaults to.
+    expect(run.join(' ')).toContain(`PORT=${HARNESS_PORT}`)
     expect(run[run.length - 1]).toBe('ghcr.io/x/harness:1')
   })
 
@@ -224,7 +406,10 @@ describe('AppleContainerRuntimeAdapter', () => {
     ])
     const { exec } = fakeExec({ inspect })
     // Must pick the container address, not the gateway.
-    expect(await adapter.endpoint(exec, 'cf-run_42')).toEqual({ host: '192.168.64.5', port: 8080 })
+    expect(await adapter.endpoint(exec, n('run_42'))).toEqual({
+      host: '192.168.64.5',
+      port: HARNESS_PORT,
+    })
   })
 
   it('reaches an extra in-container port at the container IP (no published-port model)', async () => {
@@ -233,7 +418,7 @@ describe('AppleContainerRuntimeAdapter', () => {
     ])
     const { exec } = fakeExec({ inspect })
     // The preview serve port is reached directly on the container's own IP.
-    expect(await adapter.endpoint(exec, 'cf-run_42', 4173)).toEqual({
+    expect(await adapter.endpoint(exec, n('run_42'), 4173)).toEqual({
       host: '192.168.64.5',
       port: 4173,
     })
@@ -242,64 +427,223 @@ describe('AppleContainerRuntimeAdapter', () => {
   it('reports running state from inspect', async () => {
     const running = fakeExec({ inspect: JSON.stringify({ status: 'running' }) })
     const stopped = fakeExec({ inspect: JSON.stringify({ status: 'stopped' }) })
-    expect(await adapter.isRunning(running.exec, 'cf-x')).toBe(true)
-    expect(await adapter.isRunning(stopped.exec, 'cf-x')).toBe(false)
+    expect(await adapter.isRunning(running.exec, n('x'))).toBe(true)
+    expect(await adapter.isRunning(stopped.exec, n('x'))).toBe(false)
   })
 
-  it('finds a run container by its deterministic id in `container list`', async () => {
+  it('reports the terminal status as the exit state, and nothing while running', async () => {
+    // Apple `container inspect` exposes no exit code and no OOM flag, so the post-mortem gets the
+    // coarse status verbatim rather than the Docker-shaped detail.
+    const stopped = fakeExec({ inspect: JSON.stringify({ status: 'stopped' }) })
+    // No `code`, deliberately: an absent exit code must never read as a clean (0) exit, or every
+    // container death on this runtime would be reported as somebody shutting the harness down.
+    expect(await adapter.exitState(stopped.exec, n('x'))).toEqual({ description: 'status stopped' })
+    const running = fakeExec({ inspect: JSON.stringify({ status: 'running' }) })
+    expect(await adapter.exitState(running.exec, n('x'))).toBeUndefined()
+    const gone: ContainerExec = () => Promise.reject(new Error('not found'))
+    expect(await adapter.exitState(gone, n('x'))).toBeUndefined()
+  })
+
+  it('resolves the endpoint to "not ready" when inspect faults (a reaped container)', async () => {
+    // The endpoint contract again: never throw for a container that is gone, or the transport
+    // can't replace it. Apple can't distinguish a reaped container from a runtime fault here, so
+    // it takes the safe half of the contract (see the port docs).
+    const gone: ContainerExec = () => Promise.reject(new Error('not found'))
+    expect(await adapter.endpoint(gone, n('run_42'))).toBeUndefined()
+  })
+
+  it('finds a run container by its per-install deterministic id in `container list`', async () => {
     const list = JSON.stringify([
-      { id: 'cf-run_42', status: 'running' },
+      { id: n('run_42'), status: 'running' },
       { id: 'unrelated', status: 'running' },
     ])
     const { exec } = fakeExec({ list })
-    expect(await adapter.find(exec, 'run_42')).toBe('cf-run_42')
+    expect(await adapter.find(exec, 'run_42')).toBe(n('run_42'))
     expect(await adapter.find(exec, 'other')).toBeUndefined()
   })
 
   it('deletes via `container delete --force`', async () => {
     const { exec, calls } = fakeExec()
-    await adapter.remove(exec, 'cf-x')
-    expect(calls[0]).toEqual(['delete', '--force', 'cf-x'])
+    await adapter.remove(exec, n('x'))
+    expect(calls[0]).toEqual(['delete', '--force', n('x')])
   })
 
   it('reaps stopped managed containers and returns the count', async () => {
     const list = JSON.stringify([
-      { id: 'cf-a', status: 'stopped' },
-      { id: 'cf-b', status: 'running' },
-      { id: 'cf-c', status: 'stopped' },
+      { id: n('a'), status: 'stopped' },
+      { id: n('b'), status: 'running' },
+      { id: n('c'), status: 'stopped' },
       { id: 'other', status: 'stopped' },
     ])
     const { exec, calls } = fakeExec({ list })
     expect(await adapter.reapExited(exec)).toBe(2)
     const del = calls.find((c) => c[0] === 'delete')!
-    expect(del).toEqual(['delete', '--force', 'cf-a', 'cf-c'])
+    expect(del).toEqual(['delete', '--force', n('a'), n('c')])
+  })
+
+  it('never adopts/reaps ANOTHER install’s container (different install prefix)', async () => {
+    const list = JSON.stringify([
+      { id: n('mine'), status: 'stopped' }, // this install → reaped
+      { id: 'cf-other-theirs', status: 'stopped' }, // a DIFFERENT install → left alone
+    ])
+    const { exec, calls } = fakeExec({ list })
+    // A neighbour's per-run container is invisible to find + reap.
+    expect(await adapter.find(exec, 'theirs')).toBeUndefined()
+    expect(await adapter.reapExited(exec)).toBe(1)
+    const del = calls.find((c) => c[0] === 'delete')!
+    expect(del).toEqual(['delete', '--force', n('mine')])
   })
 
   it('never reaps a managed container with an unrecognised/empty status (could be running)', async () => {
     const list = JSON.stringify([
-      { id: 'cf-a', status: 'stopped' }, // terminal → reaped
-      { id: 'cf-b', status: 'starting' }, // not terminal → left alone
-      { id: 'cf-c' }, // no status at all → left alone
-      { id: 'cf-d', status: 'EXITED' }, // case-insensitive terminal → reaped
+      { id: n('a'), status: 'stopped' }, // terminal → reaped
+      { id: n('b'), status: 'starting' }, // not terminal → left alone
+      { id: n('c') }, // no status at all → left alone
+      { id: n('d'), status: 'EXITED' }, // case-insensitive terminal → reaped
     ])
     const { exec, calls } = fakeExec({ list })
     expect(await adapter.reapExited(exec)).toBe(2)
     const del = calls.find((c) => c[0] === 'delete')!
-    expect(del).toEqual(['delete', '--force', 'cf-a', 'cf-d'])
+    expect(del).toEqual(['delete', '--force', n('a'), n('d')])
   })
 
   it('finds and reaps by the `name` field when `id` is a content hash', async () => {
     // Some CLI versions report a hash `id` plus the assigned `--name` separately.
     const list = JSON.stringify([
-      { id: 'sha256:deadbeef', name: 'cf-run_42', status: 'running' },
-      { id: 'sha256:c0ffee', name: 'cf-old', status: 'stopped' },
+      { id: 'sha256:deadbeef', name: n('run_42'), status: 'running' },
+      { id: 'sha256:c0ffee', name: n('old'), status: 'stopped' },
     ])
     const { exec, calls } = fakeExec({ list })
     // find matches on `name` and returns the addressable deterministic handle.
-    expect(await adapter.find(exec, 'run_42')).toBe('cf-run_42')
+    expect(await adapter.find(exec, 'run_42')).toBe(n('run_42'))
     // reap detects the managed container via its name and deletes by that handle.
     expect(await adapter.reapExited(exec)).toBe(1)
     const del = calls.find((c) => c[0] === 'delete')!
-    expect(del).toEqual(['delete', '--force', 'cf-old'])
+    expect(del).toEqual(['delete', '--force', n('old')])
+  })
+
+  it('recovers the container key by stripping the per-install prefix in listRunContainers', async () => {
+    const list = JSON.stringify([
+      { id: n('run_42'), status: 'running' },
+      { id: 'cf-other-nope', status: 'running' }, // a neighbour's — excluded
+      { id: n('run_7'), status: 'stopped' }, // terminal — excluded
+    ])
+    const { exec } = fakeExec({ list })
+    expect(await adapter.listRunContainers(exec)).toEqual([
+      { containerKey: 'run_42', containerId: n('run_42') },
+    ])
+  })
+
+  it('round-trips a variant-qualified key through the container name', async () => {
+    // The name sanitiser cannot keep the key's `:`, so the variant is re-encoded with a `.`. The
+    // property that matters is the ROUND TRIP: `reapOrphanedRuns` maps what this reports back to
+    // a run to ask whether that run is live, so a key it cannot recover names no run and the
+    // sweep deletes a browser container out from under a step still using it.
+    const { exec, calls } = fakeExec()
+    await adapter.run(exec, {
+      containerKey: 'ui:run_42',
+      image: 'ghcr.io/x/harness-ui:1',
+      sharedSecret: 'sek',
+      privileged: false,
+      env: {},
+    })
+    const name = calls[0]![calls[0]!.indexOf('--name') + 1]!
+    expect(name).toBe('cf-i0-ui.run_42')
+
+    const listed = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
+    expect(await adapter.listRunContainers(listed.exec)).toEqual([
+      { containerKey: 'ui:run_42', containerId: name },
+    ])
+  })
+
+  it('keeps a UI container distinct from a run whose id looks like one', async () => {
+    // Sanitising the `:` to a `-` collapsed `ui:run_42` and a run literally called `ui-run_42`
+    // onto ONE container name, so the two runs shared a container and the sweep could not tell
+    // which run either belonged to.
+    const { exec, calls } = fakeExec()
+    const base = {
+      image: 'ghcr.io/x/harness:1',
+      sharedSecret: 'sek',
+      privileged: false,
+      env: {},
+    }
+    await adapter.run(exec, { containerKey: 'ui:run_42', ...base })
+    await adapter.run(exec, { containerKey: 'ui-run_42', ...base })
+    const names = calls.map((c) => c[c.indexOf('--name') + 1])
+    expect(new Set(names).size).toBe(2)
+  })
+
+  it('leaves a container name whose leading segment could not be a variant whole', async () => {
+    // A run id is `[a-zA-Z0-9_]` today, but the inverse must not split one that is not on its
+    // first dot: a leading segment outside the variant SHAPE is part of the key, not a variant.
+    // Shape rather than a known-names list because variant names are open, so an underscore (or
+    // any other spelling a registration is refused for) is what makes this one decidable.
+    const name = 'cf-i0-not_a.variant'
+    const { exec } = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
+    expect(await adapter.listRunContainers(exec)).toEqual([
+      { containerKey: 'not_a.variant', containerId: name },
+    ])
+  })
+
+  it("round-trips a DEPLOYMENT's own variant through the name encoding", async () => {
+    // The reason the check above is a shape and not a lookup: this name is one only the
+    // deployment's runner config can map, and the reaper still has to recover the run behind it.
+    const name = 'cf-i0-pixel-tools.run_42'
+    const { exec } = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
+    expect(await adapter.listRunContainers(exec)).toEqual([
+      { containerKey: 'pixel-tools:run_42', containerId: name },
+    ])
+  })
+
+  it('refuses a key it cannot name reversibly, rather than naming it lossily', async () => {
+    // The case the shape test cannot decide: `not.a.variant` as a RUN ID, whose leading segment is a
+    // legal variant name, so the name `cf-i0-not.a.variant` decodes to a DIFFERENT key (`not:a.variant`)
+    // and the sweep asks about a run called `a.variant` that does not exist. The second is the
+    // SANITISER: `run@1` becomes `run-1` in the name and comes back as a run id that is not the one
+    // the container belongs to. Both were silent; both are refused at creation now.
+    const base = {
+      image: 'ghcr.io/x/harness:1',
+      sharedSecret: 'sek',
+      privileged: false,
+      env: {},
+    }
+    const { exec } = fakeExec()
+    await expect(adapter.run(exec, { containerKey: 'not.a.variant', ...base })).rejects.toThrow(
+      /does not decode back/,
+    )
+    await expect(adapter.run(exec, { containerKey: 'ui:run@1', ...base })).rejects.toThrow(
+      /does not decode back/,
+    )
+    // A run id whose leading dot-segment could NOT be a variant is unambiguous and still allowed:
+    // the refusal is about ambiguity, not about dots.
+    await expect(adapter.run(exec, { containerKey: 'not_a.variant', ...base })).resolves.toBe(
+      'cf-i0-not_a.variant',
+    )
+  })
+})
+
+describe('formatContainerLogs', () => {
+  it('joins the two streams and drops an empty one', () => {
+    expect(formatContainerLogs('out\n', '  ')).toBe('out')
+    expect(formatContainerLogs('', 'err')).toBe('err')
+  })
+
+  it('keeps only the last `tailLines` for a CLI that cannot tail itself', () => {
+    expect(formatContainerLogs('a\nb\nc\nd', '', 2)).toBe('c\nd')
+  })
+
+  it('bounds the output by CHARACTERS, which a line tail does not', () => {
+    // `docker logs --tail 50` counts lines, and fifty lines of an agent echoing a diff or a
+    // base64 blob is tens of kilobytes. Unbounded it then meets composePostMortem's
+    // head-keeping cap, which keeps the boot chatter and drops the crash at the end: the one
+    // part the tail was read for.
+    const noisy = `${'x'.repeat(MAX_CONTAINER_LOG_CHARS * 2)}\nFATAL: heap out of memory`
+
+    const shaped = formatContainerLogs(noisy, '')
+
+    expect(shaped.endsWith('FATAL: heap out of memory')).toBe(true)
+    expect(shaped).toContain('earlier characters dropped')
+    // Well under the post-mortem cap, so the composed verdict in front of it always survives.
+    expect(shaped.length).toBeLessThan(MAX_POST_MORTEM_CHARS)
   })
 })

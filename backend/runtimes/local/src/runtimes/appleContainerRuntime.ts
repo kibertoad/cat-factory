@@ -1,6 +1,8 @@
+import { isImageVariantName, parseContainerKey, ValidationError } from '@cat-factory/kernel'
 import {
   type ContainerEndpoint,
   type ContainerExec,
+  type ContainerExitState,
   type ContainerRuntimeAdapter,
   formatContainerLogs,
   HARNESS_PORT,
@@ -11,10 +13,10 @@ import {
 // Docker CLI in three ways that the seam absorbs:
 //   1. Verbs: `container run | list | inspect | delete` (no `ps`/`rm`, no `--filter`,
 //      no `inspect -f` template) — so we list-all + filter client-side and parse JSON.
-//   2. Identity: `--name` IS the container id, so a run is addressed by a deterministic
-//      name (`cf-<runId>`); a managed label marks ours for reaping.
+//   2. Identity: `--name` IS the container id, so a container is addressed by a deterministic
+//      name (`cf-<installId>-<containerKey>`); a managed label marks ours for reaping.
 //   3. Networking: each container runs in its own VM with its own IP — there is no
-//      published-port-on-loopback, so the orchestrator connects to `<containerIP>:8080`
+//      published-port-on-loopback, so the orchestrator connects to `<containerIP>:<harness port>`
 //      directly (read from `container inspect`). There is no Docker-in-Docker, so
 //      `capabilities.localDind` is false (the engine refuses the Tester's local infra
 //      mode on this runtime — see ExecutionService limited-mode gating).
@@ -26,6 +28,8 @@ import {
 
 const NAME_PREFIX = 'cf-'
 const LABEL_MANAGED = 'cat-factory.managed=apple'
+/** Per-install label (parity with the Docker adapter; the actual scoping is the name prefix). */
+const LABEL_INSTALL = 'cat-factory.install'
 
 /**
  * Statuses we treat as terminal — i.e. safe to reap. A container whose status we can't
@@ -34,23 +38,11 @@ const LABEL_MANAGED = 'cat-factory.managed=apple'
  */
 const TERMINAL_STATUSES = new Set(['stopped', 'exited', 'dead'])
 
-/** The deterministic container name (== id) for a run. */
-function runName(runId: string): string {
-  // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
-  // but sanitise defensively so an unusual id can't produce an invalid name.
-  return `${NAME_PREFIX}${runId.replace(/[^a-zA-Z0-9_.-]/g, '-')}`
-}
-
 interface ListEntry {
   id: string
   /** The assigned `--name`, when the CLI reports it separately from `id`. */
   name?: string
   status: string
-}
-
-/** Whether a listed container is one we manage (matched on either the id or the name). */
-function isManaged(row: ListEntry): boolean {
-  return row.id.startsWith(NAME_PREFIX) || (row.name?.startsWith(NAME_PREFIX) ?? false)
 }
 
 /** Parse `container list --format json` into a normalised {id,name,status} list, tolerantly. */
@@ -111,7 +103,7 @@ function extractIp(node: unknown, keyHint = ''): string | undefined {
 }
 
 /** Parse `container inspect` output (array or object) into {ip?, running}. */
-function parseInspect(stdout: string): { ip?: string; running: boolean } {
+function parseInspect(stdout: string): { ip?: string; running: boolean; status?: string } {
   const trimmed = stdout.trim()
   if (!trimmed) return { running: false }
   let parsed: unknown
@@ -124,7 +116,7 @@ function parseInspect(stdout: string): { ip?: string; running: boolean } {
   if (typeof node !== 'object' || node === null) return { running: false }
   const obj = node as Record<string, unknown>
   const status = (asString(obj.status) ?? asString(obj.state) ?? '').toLowerCase()
-  return { ip: extractIp(obj), running: status === 'running' }
+  return { ip: extractIp(obj), running: status === 'running', ...(status ? { status } : {}) }
 }
 
 export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
@@ -134,18 +126,94 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   // One VM per container with its own IP and no published-port model: a preview's served-app
   // port is reached at the container's IP, not a pinnable localhost port (see the transport).
   readonly publishesToLocalhost = false
+  // Apple's `container` has no `--add-host`, so a job handed an unreachable environment name gets
+  // no mapping here. Stated rather than left to a silently ignored spec field, because the cost
+  // lands on a tester that reports the environment dead.
+  readonly honoursHostBridges = false
   // One-VM-per-container with a deterministic-name identity: no Docker-in-Docker, and the
   // warm pool isn't supported (re-leasing a name-keyed VM is messy) — so the transport
   // keeps the per-run path here even when a pool size is configured.
   readonly capabilities = { localDind: false, pooling: false }
 
-  constructor(options: { binary?: string; hostAlias: string }) {
+  /**
+   * The deterministic container-name PREFIX for this installation: `cf-<installId>-`. Folding the
+   * install id into the name (Apple `container` has no reliable label filter, so identity is
+   * name-based) NAMESPACES the reaper + enumerations, so a machine running two installs against one
+   * `container` daemon never reaps or lists a neighbour's per-run container (ADR 0026 D5). Absent
+   * install id ⇒ the bare `cf-` prefix.
+   */
+  private readonly namePrefix: string
+  private readonly installId: string
+
+  constructor(options: { binary?: string; hostAlias: string; installId: string }) {
     this.binary = options.binary ?? 'container'
     this.hostAlias = options.hostAlias
+    this.installId = options.installId
+    this.namePrefix = `${NAME_PREFIX}${options.installId}-`
+  }
+
+  /**
+   * The deterministic container name (== id) for a CONTAINER KEY, scoped to this installation.
+   *
+   * The key is `<variant>:<runId>` for a non-default executor image, and `:` is not a legal
+   * container-name character — so the variant is re-encoded with a `.` rather than left to the
+   * sanitiser below. Sanitising it would map `ui:run-1` onto `ui-run-1`, which
+   * {@link listRunContainers} cannot tell from a run genuinely called `ui-run-1`: the orphan
+   * sweep then asks about a run that does not exist, finds nothing, and deletes a live UI-tester
+   * container mid-step. `.` round-trips because a run id uses `[a-zA-Z0-9_]` only.
+   */
+  private runName(containerKey: string): string {
+    const { runId, image } = parseContainerKey(containerKey)
+    // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
+    // but sanitise defensively so an unusual id can't produce an invalid name.
+    const sanitised = runId.replace(/[^a-zA-Z0-9_.-]/g, '-')
+    const name = `${this.namePrefix}${image ? `${image}.${sanitised}` : sanitised}`
+    // The same producer-side check kernel's `containerKeyForRef` makes, in this runtime's own
+    // alphabet, and needed for its own reason: the name IS the only place the key is stored here, so
+    // `listRunContainers` recovers it by decoding the name and the orphan sweep asks about the run
+    // behind it. A name this adapter cannot decode back names no run, and the sweep then deletes a
+    // live container. TWO things break the round trip and neither is visible afterwards: a run id
+    // whose leading dot-segment is variant-shaped (indistinguishable from the `<variant>.` prefix
+    // this writes), and one the sanitiser above had to rewrite (`ui:run@1` and `ui:run-1` collapse
+    // onto one name). Refusing at creation says which, once, instead of paying for it later.
+    if (this.containerKeyFromName(name) !== containerKey) {
+      throw new ValidationError(
+        `Cannot name a container for "${containerKey}" on the Apple \`container\` runtime: the name ` +
+          `"${name}" does not decode back to that key, so the orphan sweep would read it as ` +
+          `belonging to another run (or to no run at all) and could delete it mid-step. A run id ` +
+          `here must be [a-zA-Z0-9_.-] and must not put a variant-shaped segment before a ".".`,
+        { reason: 'container_name_not_reversible', containerKey, name },
+      )
+    }
+    return name
+  }
+
+  /**
+   * The inverse of {@link runName}: the container key a managed container's name encodes.
+   *
+   * A leading `<variant>.` segment is decoded back to the `<variant>:` prefix
+   * `containerKeyForRef` produced, and ONLY when it is SHAPED like a variant name: a run id that
+   * happened to contain a dot is left whole rather than split at it. Shape rather than
+   * membership for the reason `parseContainerKey` gives: the names are open, so a deployment's
+   * own variant is one no build can enumerate and every one must still reap.
+   */
+  private containerKeyFromName(name: string): string {
+    const rest = name.slice(this.namePrefix.length)
+    const dot = rest.indexOf('.')
+    if (dot <= 0) return rest
+    const prefix = rest.slice(0, dot)
+    return isImageVariantName(prefix) && prefix !== 'default'
+      ? `${prefix}:${rest.slice(dot + 1)}`
+      : rest
+  }
+
+  /** Whether a listed container is one THIS install manages (matched on either the id or the name). */
+  private isManaged(row: ListEntry): boolean {
+    return row.id.startsWith(this.namePrefix) || (row.name?.startsWith(this.namePrefix) ?? false)
   }
 
   async run(exec: ContainerExec, spec: RunContainerSpec): Promise<string> {
-    const name = runName(spec.runId)
+    const name = this.runName(spec.containerKey)
     const args = [
       'run',
       '-d',
@@ -153,6 +221,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
       name,
       '-l',
       LABEL_MANAGED,
+      '-l',
+      `${LABEL_INSTALL}=${this.installId}`,
       '-e',
       `HARNESS_SHARED_SECRET=${spec.sharedSecret}`,
     ]
@@ -161,14 +231,19 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     // run local infra here — see capabilities.localDind=false).
     if (spec.instanceSize) args.push('-m', spec.instanceSize.memory, '-c', spec.instanceSize.cpus)
     for (const [k, v] of Object.entries(spec.env)) args.push('-e', `${k}=${v}`)
+    // Stated for the same reason the Docker adapter states it: `endpoint()` below addresses the
+    // harness at `HARNESS_PORT` on the container's own IP, so the container has to be TOLD to bind
+    // that port rather than inheriting whichever default its image was built with. Emitted last so
+    // a job's own `env` cannot disagree with the port the transport then connects to.
+    args.push('-e', `PORT=${HARNESS_PORT}`)
     args.push(spec.image)
     await exec(args)
     // The name IS the container id; the transport addresses everything by it.
     return name
   }
 
-  async find(exec: ContainerExec, runId: string): Promise<string | undefined> {
-    const name = runName(runId)
+  async find(exec: ContainerExec, containerKey: string): Promise<string | undefined> {
+    const name = this.runName(containerKey)
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout)
     // The deterministic name is the addressable handle (inspect/delete accept it). Match it
     // against either the `id` or the `name` field, since `container list`'s `id` may be a
@@ -183,8 +258,13 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     inContainerPort: number = HARNESS_PORT,
   ): Promise<ContainerEndpoint | undefined> {
     // One VM per container with its own IP and no published-port model, so ANY in-container
-    // port (the harness :8080 or the preview's served-app port) is reached directly on that IP.
-    const { ip } = parseInspect((await exec(['inspect', containerId])).stdout)
+    // port (the harness's own or the preview's served-app port) is reached directly on that IP.
+    // `inspect` faults for a container that was reaped out from under us; an exited one still
+    // inspects but has no IP. Both are "not ready" per the port contract — never a throw, which
+    // would escape the transport's `resolve()` and skip the fresh-container recovery.
+    const inspected = await exec(['inspect', containerId]).catch(() => undefined)
+    if (!inspected) return undefined
+    const { ip } = parseInspect(inspected.stdout)
     if (!ip) return undefined
     return { host: ip, port: inContainerPort }
   }
@@ -195,6 +275,22 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     } catch {
       return false
     }
+  }
+
+  async exitState(
+    exec: ContainerExec,
+    containerId: string,
+  ): Promise<ContainerExitState | undefined> {
+    // Apple `container inspect` reports a coarse status only (no exit code, no OOM flag), so
+    // the post-mortem gets the terminal status verbatim rather than the Docker-shaped detail,
+    // and `code` stays ABSENT rather than guessed. That absence is load-bearing: a stopped
+    // container here could equally be a crash or a clean shutdown, and the reading that costs
+    // less when wrong is the eviction (one fresh container) rather than a terminal failure.
+    const inspected = await exec(['inspect', containerId]).catch(() => undefined)
+    if (!inspected) return undefined
+    const { status, running } = parseInspect(inspected.stdout)
+    if (running || !status) return undefined
+    return { description: `status ${status}` }
   }
 
   async logs(exec: ContainerExec, containerId: string): Promise<string> {
@@ -211,8 +307,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     await exec(['delete', '--force', containerId]).catch(() => undefined)
   }
 
-  async removeRun(exec: ContainerExec, runId: string): Promise<void> {
-    await this.remove(exec, runName(runId))
+  async removeRun(exec: ContainerExec, containerKey: string): Promise<void> {
+    await this.remove(exec, this.runName(containerKey))
   }
 
   async reapExited(exec: ContainerExec): Promise<number> {
@@ -221,7 +317,7 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     // `status=exited` filter). Address by the assigned name when present (always a valid
     // handle), else the id.
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
-      (r) => isManaged(r) && TERMINAL_STATUSES.has(r.status),
+      (r) => this.isManaged(r) && TERMINAL_STATUSES.has(r.status),
     )
     if (rows.length) {
       await exec(['delete', '--force', ...rows.map((r) => r.name ?? r.id)]).catch(() => undefined)
@@ -236,20 +332,22 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
 
   async listRunContainers(
     exec: ContainerExec,
-  ): Promise<Array<{ runId: string; containerId: string }>> {
-    // Running (non-terminal) managed VMs. The deterministic name IS `cf-<runId>`, so the run
-    // id is recovered by stripping the prefix (run ids only ever use `[a-zA-Z0-9_]`, which the
-    // name sanitizer leaves untouched, so this round-trips). Pooling is unsupported here, so
-    // every managed container is a per-run one.
+  ): Promise<Array<{ containerKey: string; containerId: string }>> {
+    // Running (non-terminal) managed VMs for THIS install. The deterministic name IS
+    // `cf-<installId>-<containerKey>` with the key's variant separator re-encoded, so
+    // `containerKeyFromName` recovers exactly what `runName` was given. Pooling is unsupported
+    // here, so every managed container is a per-run one. The port's `runId` field carries the
+    // CONTAINER KEY (the transport maps it back to a run); a lossy recovery here is what makes
+    // the orphan sweep delete a live container, so the two functions are exact inverses.
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
-      (r) => isManaged(r) && !TERMINAL_STATUSES.has(r.status),
+      (r) => this.isManaged(r) && !TERMINAL_STATUSES.has(r.status),
     )
     return rows
       .map((r) => {
         const handle = r.name ?? r.id
-        const named = handle.startsWith(NAME_PREFIX) ? handle : (r.id ?? handle)
-        return { runId: named.slice(NAME_PREFIX.length), containerId: handle }
+        const named = handle.startsWith(this.namePrefix) ? handle : (r.id ?? handle)
+        return { containerKey: this.containerKeyFromName(named), containerId: handle }
       })
-      .filter((c) => c.runId && c.containerId)
+      .filter((c) => c.containerKey && c.containerId)
   }
 }

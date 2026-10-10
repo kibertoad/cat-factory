@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures'
 import {
+  createSimplePipeline,
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
-  createSimplePipeline,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -39,7 +40,7 @@ test.describe('pipeline progress (async job)', () => {
     // The run goes live; open the inspector so its run panel (which lists the steps + live
     // subtask counts) is mounted while the coder is still polling.
     await expect(card).toHaveAttribute('data-status', 'in_progress', { timeout: LIVE_TIMEOUT })
-    await card.click()
+    await selectTask(card)
 
     // LIVE: the coder step is listed and its subtask count is pushed in while it polls.
     const coderStep = page.locator('[data-testid="run-step"][data-step-kind="coder"]')

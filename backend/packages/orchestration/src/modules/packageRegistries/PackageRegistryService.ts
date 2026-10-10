@@ -79,11 +79,12 @@ export class PackageRegistryService {
     // One entry per vendor: the harness renders a single host-keyed `_authToken` line
     // per registry host (which derives from the vendor), so a second entry for the same
     // vendor would have its token silently dropped (last-write-wins) and leave one org's
-    // installs unauthenticated. Reject it and steer the user to edit (delete + re-add
-    // with all scopes) the existing entry instead.
+    // installs unauthenticated. Reject it and steer the user to edit (delete + re-add) the
+    // existing entry instead. Deliberately not "re-add with all scopes": scopes are optional,
+    // so the instruction is to restate whatever set they want, which may be none.
     if (entries.some((entry) => entry.vendor === input.vendor)) {
       throw new ConflictError(
-        `A ${input.vendor} registry entry already exists; remove it and re-add with all scopes.`,
+        `A ${input.vendor} registry entry already exists; remove it and re-add it with the scopes you want.`,
       )
     }
     entries.push({

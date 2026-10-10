@@ -8,6 +8,7 @@ import type {
   HarnessFailureCause,
   PullRequestRef,
   PeerPullRequest,
+  RunReclaimTarget,
   TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
@@ -15,6 +16,7 @@ import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
   isCompanionKind,
+  RALPH_AGENT_KIND,
 } from '@cat-factory/agents'
 
 export interface FakeAgentOptions {
@@ -50,6 +52,20 @@ export interface FakeAgentOptions {
   pollFailCause?: HarnessFailureCause
   /** The extended `detail` a {@link pollFailKinds} poll reports. Default a phase-timing breadcrumb. */
   pollFailDetail?: string
+  /**
+   * Fail only the FIRST job of each {@link pollFailKinds} kind IN EACH RUN; a later job of that
+   * kind runs normally, and a re-poll of the job that failed keeps failing (a failed job in
+   * production does not heal). What a RECOVERABLE failure cause needs in order to be asserted at
+   * all: with the default (fail forever) a recovery loop is indistinguishable from no recovery,
+   * since both end in a failed run.
+   *
+   * It only measures the recovery when the re-dispatch mints a NEW job id, which is why the
+   * recovery suites pair it with {@link pooledContainer}: that is the mode whose ids come off the
+   * run's dispatch epoch, exactly as the container executor's do. Under the default per-(run, step)
+   * id a re-dispatch re-attaches to the same job, so the assertion would pass just as well against
+   * an engine re-dispatching under a stale id, which is a bug this repo has shipped before.
+   */
+  pollFailOnce?: boolean
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
   /**
@@ -74,12 +90,29 @@ export interface FakeAgentOptions {
    */
   echoFragments?: boolean
   /**
+   * When set, the (generic-kind) agent echoes each resolved fragment's CONDENSED variant as
+   * `[briefs]id=brief;id=brief[/briefs]` (a fragment resolved without one contributes
+   * `id=`), so a test can assert WHICH short version the engine resolved for an implementer
+   * kind — a linked one, a generated one, or none. The fold itself is unit-tested; what
+   * needs asserting on every runtime is that the stores round-trip the brief at all.
+   */
+  echoFragmentBriefs?: boolean
+  /**
    * When set, the (generic-kind) agent echoes the initiative-preset steering it was handed
    * as `[preset]label|promptAddition[/preset]`, so a test can assert the engine resolved the
    * preset's per-kind methodology onto a SPAWNED run's context (D1). Empty `[preset][/preset]`
    * when no preset reached the run.
    */
   echoPreset?: boolean
+  /**
+   * When set, the (generic-kind) agent echoes the per-case PARAMETERS a custom-typed task was
+   * invoked with as `[params]label|key=value;key=value[/params]`, so a test can assert the engine
+   * resolved a REUSABLE OPERATION's create-form values onto the run context under the registered
+   * descriptor's labels. Empty `[params][/params]` when the run collected none. The prompt
+   * rendering itself is unit-tested; what needs asserting on every runtime is that the sparse
+   * `custom` bag survives the persistence round-trip and reaches dispatch.
+   */
+  echoTaskParams?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
   /**
@@ -117,6 +150,20 @@ export interface FakeAgentOptions {
    */
   taskEstimate?: { complexity: number; risk: number; impact: number; rationale: string }
   /**
+   * The MEASUREMENT a `task-reassessor` step emits, in the same JSON-as-output shape for the same
+   * reason: the kind returns prose so an unreadable reply cannot fail a run whose change already
+   * shipped, and the engine reads the scores tolerantly out of the reply. A partial object (no
+   * axes) is the honest way to drive the "unreadable measurement leaves the forecast standing"
+   * assertion. Omitted ⇒ this arm stands down and the kind falls through to the generic prose
+   * result, which carries no scores, so a test that wants a measurement has to ask for one.
+   */
+  taskAssessment?: Partial<{
+    complexity: number
+    risk: number
+    impact: number
+    rationale: string
+  }>
+  /**
    * Overall quality rating (0..1) every companion step returns, so the engine's
    * companion review + rework loop can be exercised deterministically. When omitted a
    * companion returns a passing rating of 1.
@@ -136,6 +183,13 @@ export interface FakeAgentOptions {
    * silently treated as a perfect pass — the bug where a truncated reviewer showed 100%.
    */
   companionMalformed?: boolean
+  /**
+   * When true, the point every companion raises is graded `blocker` (a must-fix) rather than the
+   * ordinary `major`. Combined with a PASSING `companionRating` it produces the verdict a rating
+   * alone cannot express — work that scored above its bar and still contains something the
+   * reviewer says must not ship — which is what the engine's blocking-findings rule exists for.
+   */
+  companionBlockingFinding?: boolean
   /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
@@ -186,6 +240,14 @@ export interface FakeAgentOptions {
    */
   customResult?: unknown
   /**
+   * Per-agent-kind override of {@link customResult}, so ONE test can drive several structured
+   * container-explore kinds that return DIFFERENT payloads (e.g. a `pr-reviewer` returning findings
+   * AND the `challenge-investigator` returning an uphold/retract verdict on the same run). Keyed by
+   * the DISPATCHED kind (`context.agentKind` — the helper's kind, not the step's). A kind absent
+   * here falls back to {@link customResult}, then `{ ok: true }`.
+   */
+  customResultByKind?: Record<string, unknown>
+  /**
    * The multi-phase plan draft the `initiative-planner` step returns as `result.initiativePlan`
    * (an {@link InitiativePlanDraft}); the engine ingests it via `InitiativeService.ingestPlan`.
    * Set it whenever a test drives an initiative PLANNING pipeline to completion — the planner's
@@ -209,12 +271,48 @@ export interface FakeAgentOptions {
    *  - jobs are keyed by the SAME identity the real {@link ContainerAgentExecutor} uses —
    *    `run + agentKind + dispatchEpoch` — rather than the step index, and
    *  - a re-dispatch RE-ATTACHES to an existing entry and replays its STORED result (the
-   *    harness never re-runs a job it already has), and `stopJob` does NOT clear it.
+   *    harness never re-runs a job it already has), and `reclaimRun` does NOT clear it.
    * This reproduces the Tester→Fixer bug where a re-test silently replayed the first
    * round's report: it loops/“passes regardless” WITHOUT the per-round `dispatchEpoch`
    * fix, and re-runs correctly WITH it. Default false (per-run container, fresh each round).
    */
   pooledContainer?: boolean
+  /**
+   * Ralph loop: the 1-based iteration on which the harness-run validation command first
+   * "passes" (exit 0). Every earlier iteration reports a failing verdict, so the engine loops.
+   * The fake bases this on `context.ralphValidation.iteration` (the engine folds it in per
+   * dispatch), so it's robust to how the job is re-dispatched. Default 1 (passes immediately);
+   * set it higher than the task's `maxIterations` to drive the budget-exhausted (give-up) path.
+   */
+  ralphPassOnIteration?: number
+  /**
+   * Ralph loop: the 1-based iteration from which the loop stops COMMITTING — it and every later
+   * iteration report the head the iteration BEFORE it left, the deterministic analogue of a
+   * harness whose agent produced no commit. The engine must then end the loop early (`stalled`)
+   * rather than spending the rest of its iteration budget; the guard needs two consecutive
+   * unchanged heads, so the loop stops one iteration after this. Absent ⇒ every iteration moves
+   * the head, so only the budget can end a never-passing loop.
+   */
+  ralphStalledFromIteration?: number
+  /**
+   * The effort self-assessment every result carries (the deterministic analogue of the harness
+   * reading the agent's `.cat-effort.json` sentinel file). Set it to assert the engine records
+   * the report on the step — including on the kinds whose verdict drives run flow and therefore
+   * never reach the normal completion. Omitted ⇒ no report, exactly like an inline agent or an
+   * older harness image.
+   */
+  effortReport?: AgentRunResult['effortReport']
+  /**
+   * The tool-server record every dispatch's job handle carries (the deterministic analogue of
+   * `ContainerAgentExecutor` resolving a kind's declared MCP servers against the run's harness and
+   * the workspace's credentials). Set it to assert the engine FOLDS the record onto the step and
+   * each runtime's store round-trips it; omitted ⇒ no record, exactly like an inline agent.
+   *
+   * The resolution itself is observed through the harness's `toolServerDispatch()` probe instead,
+   * because a fake cannot assert a facade's credential wiring, which is the half that actually
+   * differs between deployments.
+   */
+  toolServers?: AgentJobHandle['toolServers']
   /**
    * The app-owned agent-kind registry the fake reads to detect a structured `container-explore`
    * kind (built-in `bug-investigator` or a registered CUSTOM kind) so it returns `result.custom`.
@@ -222,6 +320,42 @@ export interface FakeAgentOptions {
    * omitted ⇒ a fresh {@link defaultAgentKindRegistry} (built-ins only).
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * Observer called with EVERY {@link AgentRunContext} the engine dispatches. The fake stands in
+   * for `ContainerAgentExecutor`, which is what turns the context into a harness job body — so
+   * this is the conformance suite's window onto what would have ridden the body (e.g. the
+   * service frame's resolved pre-PR `validationChecks`). Purely observational: it never affects
+   * the mimicked result.
+   */
+  onContext?: (context: AgentRunContext) => void
+  /**
+   * The pre-PR validation report every coding result carries (the deterministic analogue of the
+   * harness running the service's check commands against the checkout). Set it to assert the
+   * engine records the report on the step; omitted ⇒ no report, exactly like a service that
+   * configured no checks.
+   */
+  validationReport?: AgentRunResult['validationReport']
+  /**
+   * The BUGFIX REPRODUCTION PROOF every coding result carries (the deterministic analogue of the
+   * harness running the declared reproduction command against the pre-fix and final trees). Set
+   * it to assert the engine records the report on the step; omitted ⇒ no report, exactly like a
+   * run that carried no declaration.
+   */
+  reproductionReport?: AgentRunResult['reproductionReport']
+}
+
+/**
+ * Whether this step is one that states an OVERALL confidence for the run.
+ *
+ * The last step of a pipeline is the usual answer, but not the only one: a `merger` states the
+ * confidence it merged on, and the engine deliberately persists that position-independently so a
+ * step AFTER the merge (the terminal `disposer` every deploying preset now carries, a
+ * post-release-health gate) cannot silently switch it off. Keying the fake on `isFinalStep` alone
+ * made those pipelines report no confidence at all, which is a property of the fake and not of
+ * the engine it stands in for.
+ */
+function reportsConfidence(context: AgentRunContext): boolean {
+  return context.isFinalStep || context.agentKind === 'merger'
 }
 
 /**
@@ -262,7 +396,12 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
   }
 
-  async run(context: AgentRunContext): Promise<AgentRunResult> {
+  /**
+   * The producer/companion half of {@link run}: the decision park, the blueprints/spec-writer
+   * structured producers, and the companion grade. Returns the mimicked result, or `undefined`
+   * when `context.agentKind` isn't one of these so {@link run} continues to the remaining kinds.
+   */
+  private runProducerKinds(context: AgentRunContext): AgentRunResult | undefined {
     const raisesDecision =
       this.options.decisionOnSteps?.includes(context.stepIndex) && !context.resolvedDecision
     if (raisesDecision) {
@@ -309,7 +448,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     // Mimic a companion step grading the prior producer: return the configured rating
     // (default 1 = pass) as the JSON assessment the engine parses. A `companionRatings`
     // sequence walks one rating per grade (last repeats) so a test can fail then pass.
-    if (isCompanionKind(context.agentKind)) {
+    if (isCompanionKind(context.agentKind, this.agentKindRegistry)) {
       // A companion whose reply can't be parsed: return prose, not JSON, so the engine's
       // verdict parse (and its repair retry) fail and the run surfaces for a human.
       if (this.options.companionMalformed) {
@@ -325,21 +464,52 @@ export class FakeAgentExecutor implements AgentExecutor {
         ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)
         : (this.options.companionRating ?? 1)
       this.companionCalls += 1
-      // A downrating critic also returns anchor-based per-item comments (the shape the
-      // real Spec Reviewer emits: `{anchorId, body}`, with NO `quotedSource`). Emitting
-      // them here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema`
-      // parse the engine runs — guarding the regression where an anchor-only comment made
-      // the verdict unparseable and the rating silently defaulted to a passing 1.
+      // A critic with something to say returns anchor-based per-item comments (the shape the real
+      // Spec Reviewer emits: `{anchorId, severity, body}`, with NO `quotedSource`). Emitting them
+      // here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema` parse the
+      // engine runs — guarding the regression where an anchor-only comment made the verdict
+      // unparseable and the rating silently defaulted to a passing 1.
+      //
+      // A BLOCKING finding is emitted on demand rather than derived from the rating, because the
+      // pair the engine has to tell apart is exactly "cleared the bar with a must-fix open" vs
+      // "cleared the bar with a nit": tying severity to the rating would make that unreachable.
+      const blocking = this.options.companionBlockingFinding
       const comments =
-        rating < 1 ? [{ anchorId: `${context.agentKind}-1`, body: 'address this gap' }] : undefined
+        rating < 1 || blocking
+          ? [
+              {
+                anchorId: `${context.agentKind}-1`,
+                severity: blocking ? 'blocker' : 'major',
+                // Markdown, with the bolded short title the shipped prompt asks each finding to
+                // open with: the panel renders a finding through the same reader as the summary,
+                // and a fake writing flat text cannot tell a panel that renders it from one that
+                // dumps it (the e2e rework-loop spec asserts the rendered `<strong>`).
+                body: '**The gap**: address this gap in the next pass.',
+              },
+            ]
+          : undefined
       // The spec-companion corroborates the writer's business-vs-technical determination
       // when configured, so the engine's `technical`-label inference can be exercised.
       const corroborated =
         context.agentKind === 'spec-companion' ? this.options.technicalCorroborated : undefined
+      // The summary is a VERDICT and never a restatement of the findings, which is what the
+      // shipped companion prompt asks for (see `REVIEW_FINDINGS_LAYOUT`): the points live in
+      // `comments`, and the panel renders both. A fake that answered in one flat paragraph
+      // carrying its own points could not tell those two renderings apart.
+      //
+      // It carries the INLINE MARKDOWN that prompt asks a verdict to use for identifiers, because
+      // the summary goes through the same reader the findings do and nothing else asserts that it
+      // does (the e2e rework-loop spec asserts the rendered `<code>`). Its own markdown used to be
+      // the `**Must fix**` group headings, and dropping those left the summary rendering untested.
+      const summary =
+        `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%` +
+        (comments
+          ? '\n\nThe work is broadly sound; one point in `handler.ts` is worth taking further.'
+          : '')
       return {
         output: JSON.stringify({
           rating,
-          summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
+          summary: summary.trimEnd(),
           ...(comments ? { comments } : {}),
           ...(corroborated !== undefined ? { technicalCorroborated: corroborated } : {}),
         }),
@@ -348,23 +518,113 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
+    return undefined
+  }
+
+  /**
+   * The deterministic analogue of the harness lifting the agent's effort self-assessment off
+   * its sentinel file: fold the configured report onto EVERY result, whichever kind produced
+   * it. Wrapping the single exit (rather than threading the option through each kind's branch)
+   * is what lets the suite assert the engine records it on the kinds whose verdict drives run
+   * flow — a parked `pr-reviewer`, a companion, a Tester withholding its greenlight — not just
+   * on a plainly-completing step.
+   */
+  async run(context: AgentRunContext): Promise<AgentRunResult> {
+    // Surface the dispatched context to the suite BEFORE producing a result: the fake stands in
+    // for the container executor, so this is where a conformance case observes what the engine
+    // resolved onto the context (and would therefore have put in the harness job body).
+    this.options.onContext?.(context)
+    const result = await this.produceResult(context)
+    const withValidation = this.options.validationReport
+      ? { ...result, validationReport: this.options.validationReport }
+      : result
+    // Only a dispatch that actually RESOLVED a reproduction spec gets a proof back, mirroring the
+    // harness: it runs the phase off the job-body field, so a run carrying no declaration comes
+    // back with nothing. Without this gate the fake would report a proof on every step and the
+    // "unconfigured means unchanged" assertion below would pass vacuously.
+    const withReproduction =
+      this.options.reproductionReport && context.reproduction
+        ? { ...withValidation, reproductionReport: this.options.reproductionReport }
+        : withValidation
+    return this.options.effortReport
+      ? { ...withReproduction, effortReport: this.options.effortReport }
+      : withReproduction
+  }
+
+  private async produceResult(context: AgentRunContext): Promise<AgentRunResult> {
+    // The producer/companion cluster (decision park, blueprints, spec-writer, companion grade)
+    // is split into its own dispatcher to keep `run` under the complexity ceiling; it returns
+    // `undefined` when the kind isn't one of those, so control falls through to the rest.
+    const produced = this.runProducerKinds(context)
+    if (produced) return produced
+
+    // The structured / verdict kinds (tester, fixer, estimator, planner, generic-structured,
+    // ralph, merger, on-call) are split into their own dispatcher so `run` stays under the
+    // complexity ceiling; it returns undefined when the kind is none of those, so control falls
+    // through to the generic prose result below.
+    const confidence = this.options.confidence ?? 1
+    const structured = this.runStructuredKinds(context, confidence)
+    if (structured) return structured
+
+    // Surface revision feedback (and any per-block comment count) so a "request
+    // changes" re-run — freeform and/or comment-driven — can be asserted.
+    const commentCount = context.revision?.comments?.length ?? 0
+    const revisionSuffix = context.revision
+      ? ` [revised: ${context.revision.feedback ?? ''}${commentCount ? ` +${commentCount} comments` : ''}]`
+      : ''
+    const descSuffix = this.options.echoDescription
+      ? ` [desc]${context.block.description}[/desc]`
+      : ''
+    const fragSuffix = this.options.echoFragments
+      ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
+      : ''
+    const briefSuffix = this.options.echoFragmentBriefs
+      ? ` [briefs]${(context.block.resolvedFragments ?? [])
+          .map((f) => `${f.id}=${f.brief ?? ''}`)
+          .join(';')}[/briefs]`
+      : ''
+    const preset = context.initiative?.preset
+    const presetSuffix = this.options.echoPreset
+      ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
+      : ''
+    const params = context.customTaskType
+    const paramsSuffix = this.options.echoTaskParams
+      ? ` [params]${
+          params
+            ? `${params.label}|${params.fields.map((f) => `${f.label ?? f.key}=${f.value}`).join(';')}`
+            : ''
+        }[/params]`
+      : ''
+    return {
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${briefSuffix}${presetSuffix}${paramsSuffix}`,
+      model: 'fake',
+      confidence: reportsConfidence(context) ? confidence : undefined,
+      ...this.usageFields(),
+      // Mimic the container "implementer" agent opening a PR for repo-operating work.
+      ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
+      // ...and, for a multi-repo run, the PRs it opened in the connected services' repos.
+      ...(this.options.peerPullRequests?.length
+        ? { peerPullRequests: this.options.peerPullRequests }
+        : {}),
+    }
+  }
+
+  /**
+   * The structured / verdict agent kinds, split out of {@link run} to keep both within the
+   * complexity budget. Returns the deterministic result for its kind, or `undefined` when the
+   * kind is none of these (so `run` falls through to the generic prose result). `confidence` is
+   * threaded in (the merger derives its assessment from it). Behaviour is byte-identical — the
+   * per-kind branches moved verbatim.
+   */
+  private runStructuredKinds(
+    context: AgentRunContext,
+    confidence: number,
+  ): AgentRunResult | undefined {
     // The `tester` step returns a structured report. A `testReports` sequence walks
     // one report per Tester call (last repeats) so a test can drive a withheld
     // greenlight → fixer loop → greenlight; omitted ⇒ greenlight immediately.
     if (context.agentKind === 'tester-api' || context.agentKind === 'tester-ui') {
-      const seq = this.options.testReports
-      const report: TestReport = seq?.length
-        ? (seq[Math.min(this.testerCalls, seq.length - 1)] ?? greenReport())
-        : greenReport()
-      this.testerCalls += 1
-      return {
-        output: `[tester] ${report.greenlight ? 'greenlit' : 'found issues for'} "${context.block.title}"`,
-        model: 'fake',
-        testReport: report,
-        // The in-container compose stand-up record rides back exactly as the harness sends it,
-        // so the engine's persist → reload round-trip onto `step.test.infraSetup` is asserted.
-        ...(this.options.testerInfraSetup ? { infraSetup: this.options.testerInfraSetup } : {}),
-      }
+      return this.runTesterKind(context)
     }
 
     // The `fixer` step just reports success so the engine re-dispatches the Tester.
@@ -385,16 +645,13 @@ export class FakeAgentExecutor implements AgentExecutor {
       return { output: JSON.stringify(estimate), model: 'fake' }
     }
 
-    // A registered CUSTOM kind whose agent step declares a structured output returns its
-    // parsed JSON as `custom` — exactly what the generic manifest-driven `agent` dispatch
-    // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
-    // without a container. Detected from the registry, so the shared fake needs no per-kind id.
-    if (this.agentKindRegistry.agentStep(context.agentKind)?.output?.kind === 'structured') {
-      return {
-        output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
-        model: 'fake',
-        custom: this.options.customResult ?? { ok: true },
-      }
+    // The `task-reassessor` step emits the same three axes, MEASURED against the change the run
+    // landed, and the engine reads them off the reply exactly as it does the estimator's (both
+    // kinds return the JSON as their output; only the surface differs). No default: a test that
+    // wants a measurement supplies one, so a pipeline carrying the step but not the option
+    // exercises the "nothing readable came back" path rather than a silent success.
+    if (context.agentKind === 'task-reassessor' && this.options.taskAssessment !== undefined) {
+      return { output: JSON.stringify(this.options.taskAssessment), model: 'fake' }
     }
 
     // The initiative PLANNER returns the multi-phase plan the engine ingests
@@ -402,6 +659,12 @@ export class FakeAgentExecutor implements AgentExecutor {
     // then the loop spawns the decorated tasks. Without this channel the planner's
     // post-completion resolver faults the run (an absent plan is a hard error), so a test that
     // drives create-with-preset → auto-plan → spawn supplies the draft via `initiativePlan`.
+    //
+    // The planner is a registered kind whose `agent` spec declares `output.kind === 'structured'`,
+    // so it is also one of the kinds the generic structured-output branch below stands down for:
+    // it declares a `mapStructuredResult`, which on the real path coerces its `custom` into
+    // `initiativePlan` rather than passing the raw JSON through. Its dedicated channel here is the
+    // fake's half of that mapping.
     if (context.agentKind === 'initiative-planner' && this.options.initiativePlan !== undefined) {
       return {
         output: `[initiative-planner] planned "${context.block.title}"`,
@@ -410,7 +673,40 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    const confidence = this.options.confidence ?? 1
+    // A registered CUSTOM kind whose agent step declares a structured output returns its
+    // parsed JSON as `custom` — exactly what the generic manifest-driven `agent` dispatch
+    // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
+    // without a container. Detected from the registry, so the shared fake needs no per-kind id.
+    //
+    // Gated on the kind declaring NO `mapStructuredResult`, which is precisely the rule the real
+    // path applies: `coerceCustomResult` hands a kind's own mapper the reply when it has one and
+    // falls back to a raw `custom` only when it does not. A built-in with an engine channel
+    // (`merger` → `mergeAssessment`, `on-call` → `onCallAssessment`, the testers → `testReport`,
+    // `blueprints`/`spec-writer`/`initiative-planner` → theirs) declares that mapper, and the
+    // fake owns the matching channel itself — in dedicated arms below and in `runProducerKinds`.
+    // Reading the same declaration keeps the two in step with no hand-maintained id list: a
+    // built-in registering a structured output plus a mapper cannot silently start returning
+    // `custom: {ok:true}` here and shadow the arm that answers it.
+    if (
+      this.agentKindRegistry.mapStructuredResult(context.agentKind) === undefined &&
+      this.agentKindRegistry.agentStep(context.agentKind)?.output?.kind === 'structured'
+    ) {
+      return {
+        output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
+        model: 'fake',
+        custom: this.options.customResultByKind?.[context.agentKind] ??
+          this.options.customResult ?? { ok: true },
+      }
+    }
+
+    // A `ralph` iteration: the harness runs the validation command and reports the verdict.
+    // The fake derives pass/fail from the iteration number the engine folded in (attempts + 1)
+    // vs `ralphPassOnIteration`, so the loop advances deterministically: iterations before the
+    // target report a failing exit code (the engine re-dispatches), the target iteration passes
+    // (the engine finishes + advances). A target above `maxIterations` never passes (exhaust).
+    if (context.agentKind === RALPH_AGENT_KIND) {
+      return this.runRalphKind(context)
+    }
 
     // The `merger` step returns a PR assessment the engine compares to the task's
     // thresholds. Derive it from `confidence` (unless explicitly supplied) so the
@@ -426,7 +722,7 @@ export class FakeAgentExecutor implements AgentExecutor {
       return {
         output: `[merger] assessed "${context.block.title}"`,
         model: 'fake',
-        confidence: context.isFinalStep ? confidence : undefined,
+        confidence: reportsConfidence(context) ? confidence : undefined,
         ...this.usageFields(),
         mergeAssessment,
       }
@@ -451,33 +747,62 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    // Surface revision feedback (and any per-block comment count) so a "request
-    // changes" re-run — freeform and/or comment-driven — can be asserted.
-    const commentCount = context.revision?.comments?.length ?? 0
-    const revisionSuffix = context.revision
-      ? ` [revised: ${context.revision.feedback ?? ''}${commentCount ? ` +${commentCount} comments` : ''}]`
-      : ''
-    const descSuffix = this.options.echoDescription
-      ? ` [desc]${context.block.description}[/desc]`
-      : ''
-    const fragSuffix = this.options.echoFragments
-      ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
-      : ''
-    const preset = context.initiative?.preset
-    const presetSuffix = this.options.echoPreset
-      ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
-      : ''
+    return undefined
+  }
+
+  /**
+   * The `tester` (api/ui) arm, split out of {@link runStructuredKinds} to keep it within the
+   * complexity budget. A `testReports` sequence walks one report per Tester call (last repeats)
+   * so a test can drive a withheld greenlight → fixer loop → greenlight; omitted ⇒ greenlight
+   * immediately. Behaviour is byte-identical — the arm body moved verbatim.
+   */
+  private runTesterKind(context: AgentRunContext): AgentRunResult {
+    const seq = this.options.testReports
+    const report: TestReport = seq?.length
+      ? (seq[Math.min(this.testerCalls, seq.length - 1)] ?? greenReport())
+      : greenReport()
+    this.testerCalls += 1
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
+      output: `[tester] ${report.greenlight ? 'greenlit' : 'found issues for'} "${context.block.title}"`,
       model: 'fake',
-      confidence: context.isFinalStep ? confidence : undefined,
-      ...this.usageFields(),
-      // Mimic the container "implementer" agent opening a PR for repo-operating work.
+      testReport: report,
+      // The in-container compose stand-up record rides back exactly as the harness sends it,
+      // so the engine's persist → reload round-trip onto `step.test.infraSetup` is asserted.
+      ...(this.options.testerInfraSetup ? { infraSetup: this.options.testerInfraSetup } : {}),
+    }
+  }
+
+  /**
+   * The `ralph` arm, split out of {@link runStructuredKinds} to keep it within the complexity
+   * budget. The fake derives pass/fail from the iteration number the engine folded in
+   * (attempts + 1) vs `ralphPassOnIteration`, so the loop advances deterministically. Behaviour
+   * is byte-identical — the arm body moved verbatim.
+   */
+  private runRalphKind(context: AgentRunContext): AgentRunResult {
+    const iteration = context.ralphValidation?.iteration ?? 1
+    const passed = iteration >= (this.options.ralphPassOnIteration ?? 1)
+    // The work-branch head the harness reports the validation ran against. Distinct per
+    // iteration by default (the agent committed something). From `ralphStalledFromIteration` on
+    // it is pinned to what the iteration BEFORE it reported, so that iteration is itself the
+    // first one to commit nothing — and the engine's no-progress guard must fire one iteration
+    // later, when the second consecutive unchanged head arrives.
+    const stallFrom = this.options.ralphStalledFromIteration
+    const headSha =
+      stallFrom !== undefined && iteration >= stallFrom
+        ? `sha-iter-${stallFrom - 1}`
+        : `sha-iter-${iteration}`
+    return {
+      output: `[ralph] iteration ${iteration} — ${passed ? 'validation passed' : 'validation failed'}`,
+      model: 'fake',
+      ralphVerdict: {
+        validationPassed: passed,
+        exitCode: passed ? 0 : 1,
+        ...(passed ? {} : { validationOutputTail: 'fake: 1 check still failing' }),
+        iteration,
+        headSha,
+      },
       ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
-      // ...and, for a multi-repo run, the PRs it opened in the connected services' repos.
-      ...(this.options.peerPullRequests?.length
-        ? { peerPullRequests: this.options.peerPullRequests }
-        : {}),
+      ...this.usageFields(),
     }
   }
 }
@@ -501,7 +826,7 @@ function greenReport(): TestReport {
  * the durable driver's `awaiting_job` poll loop (Cloudflare Workflows / pg-boss) on BOTH
  * runtimes, so that path can't silently drift between them. Kept as a SEPARATE class so the
  * default fake stays a plain (non-async) `AgentExecutor` — flipping `isAsyncAgentExecutor`
- * for every test would change the CI-fixer / conflict-resolver / stopJob gates.
+ * for every test would change the CI-fixer / conflict-resolver / reclaim gates.
  */
 export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAgentExecutor {
   private readonly jobs = new Map<
@@ -516,7 +841,17 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly pollFailKinds: ReadonlySet<AgentKind>
   private readonly pollFailCause: HarnessFailureCause
   private readonly pollFailDetail: string
+  private readonly pollFailOnce: boolean
+  /**
+   * Which JOB owns the one scripted {@link pollFailOnce} failure, per (execution, kind). Keyed on
+   * the run rather than the kind alone because one executor serves every execution in a suite, so a
+   * kind-keyed set would silently let a second run's step of the same kind sail through; keyed on
+   * the job so a re-poll of the job that failed stays failed while a NEW job of that kind runs.
+   */
+  private readonly pollFailedJobs = new Map<string, string>()
   protected readonly followUpItems: FakeAgentOptions['followUps']
+  /** The tool-server record every dispatch's handle carries, if the suite set one. */
+  protected readonly toolServers: FakeAgentOptions['toolServers']
 
   constructor(options: FakeAgentOptions = {}) {
     super(options)
@@ -531,7 +866,9 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     this.pollFailDetail =
       options.pollFailDetail ??
       'Phase timings: clone=2s, agent=600s. last completed tool bash 600s ago.'
+    this.pollFailOnce = options.pollFailOnce ?? false
     this.followUpItems = options.followUps
+    this.toolServers = options.toolServers
   }
 
   runsAsync(context: AgentRunContext): boolean {
@@ -560,23 +897,52 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     }
     const jobId = this.jobIdFor(context)
     if (!this.jobs.has(jobId)) this.jobs.set(jobId, { polled: 0, context })
-    return { jobId, model: 'fake', workspaceId: context.workspaceId }
+    // The attribution a real dispatch resolves and the poll site can only get back off the step:
+    // the model, the leased pool row, and the run initiator. Carried here so the conformance
+    // suite pins that the engine PERSISTS them at dispatch and RE-SUPPLIES them when polling —
+    // without which a subscription run's usage is attributed to nobody.
+    return {
+      jobId,
+      model: 'fake',
+      workspaceId: context.workspaceId,
+      subscriptionTokenId: 'fake-pool-token',
+      ...(this.toolServers ? { toolServers: this.toolServers } : {}),
+      ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+    }
   }
 
   /**
-   * Release the run's jobs — the deterministic analogue of reclaiming the per-run
-   * container. The engine releases by run id (executionId) between Tester→Fixer loop
+   * Release the run's jobs — the deterministic analogue of reclaiming the run's
+   * containers. The engine releases by run id (executionId) between Tester→Fixer loop
    * iterations so the next job runs fresh; clearing every slot for the run lets the
    * re-dispatched job re-run (and the `testReports` sequence advance) rather than
-   * re-attaching to a finished result.
+   * re-attaching to a finished result. Image variants have no analogue here: this fake
+   * models one job registry, so the reclaim is total whatever the run dispatched.
    */
-  async stopJob(handle: AgentJobHandle): Promise<void> {
+  async reclaimRun(target: RunReclaimTarget): Promise<void> {
     // A pooled member is RETURNED to the pool, not destroyed, so its harness JobRegistry
     // survives — modelled by NOT clearing the run's jobs. (This is the whole point of the
     // mode: the re-dispatch must rely on a fresh dispatch epoch, not on container teardown.)
     if (this.pooledContainer) return
-    const prefix = `fakejob:${handle.jobId}:`
+    const prefix = `fakejob:${target.jobId}:`
     for (const id of this.jobs.keys()) if (id.startsWith(prefix)) this.jobs.delete(id)
+  }
+
+  /**
+   * Whether THIS poll reports the scripted failure for a {@link FakeAgentOptions.pollFailKinds}
+   * kind. Without `pollFailOnce` every poll does. With it, the failure belongs to ONE job per
+   * (execution, kind): that job keeps reporting it however often the driver re-polls, and any later
+   * job of the same kind (the recovery's re-dispatch, under a fresh id) runs normally.
+   */
+  private failsThisPoll(context: AgentRunContext, handle: AgentJobHandle): boolean {
+    if (!this.pollFailOnce) return true
+    const key = `${context.executionId ?? 'noexec'}:${context.agentKind}`
+    const owner = this.pollFailedJobs.get(key)
+    if (owner === undefined) {
+      this.pollFailedJobs.set(key, handle.jobId)
+      return true
+    }
+    return owner === handle.jobId
   }
 
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
@@ -586,7 +952,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     if (!job) return { state: 'done', result: { output: '[async] done', model: 'fake' } }
     // Report a structured-cause failure (the deterministic analogue of the harness's failed
     // job view) so the engine's cause → AgentFailureKind mapping is exercised on both runtimes.
-    if (this.pollFailKinds.has(job.context.agentKind)) {
+    if (this.pollFailKinds.has(job.context.agentKind) && this.failsThisPoll(job.context, handle)) {
       return {
         state: 'failed',
         error: 'Aborted: no agent activity for 600s (likely hung in agent phase)',
@@ -629,12 +995,29 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     // STALE job id replay the prior round — exactly the production bug the epoch fix prevents.
     if (this.pooledContainer) {
       if (!job.result) job.result = await this.run(job.context)
-      return { state: 'done', result: job.result, ...(followUps ? { followUps } : {}) }
+      return {
+        state: 'done',
+        result: withHandleModel(job.result, handle),
+        ...(followUps ? { followUps } : {}),
+      }
     }
     return {
       state: 'done',
-      result: await this.run(job.context),
+      result: withHandleModel(await this.run(job.context), handle),
       ...(followUps ? { followUps } : {}),
     }
   }
+}
+
+/**
+ * Model the container executor's attribution rule: an ASYNC job's result carries no model of its
+ * own (the harness reports a job view, which has no model field) — the only source is the model
+ * captured at dispatch and re-supplied by the engine on the poll handle. Reproducing that here is
+ * what makes the conformance suite's `step.model` assertions actually pin the poll site: forget to
+ * re-supply `handle.model` there and the model resolves to 'unknown', exactly as it did in
+ * production, instead of the fake quietly stamping its own.
+ */
+function withHandleModel(result: AgentRunResult, handle: AgentJobHandle): AgentRunResult {
+  const { model: _ownModel, ...rest } = result
+  return handle.model ? { ...rest, model: handle.model } : rest
 }

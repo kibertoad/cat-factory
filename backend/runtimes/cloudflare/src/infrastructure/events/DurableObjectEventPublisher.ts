@@ -5,6 +5,7 @@ import type {
   ConsensusSession,
   ClarityReview,
   DocInterviewSession,
+  GuidedReviewChange,
   EnvConfigRepairJob,
   EnvironmentTestRun,
   ExecutionInstance,
@@ -15,7 +16,15 @@ import type {
   RequirementReview,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
-import type { ExecutionEventPublisher } from '@cat-factory/kernel'
+import {
+  type BoardChange,
+  boardWireEvent,
+  bootstrapWireEvent,
+  describeError,
+  type ExecutionEventPublisher,
+  type InfraSetupTransition,
+} from '@cat-factory/kernel'
+import { logger } from '../observability/logger'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
 
@@ -28,6 +37,15 @@ import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
  */
 export class DurableObjectEventPublisher implements ExecutionEventPublisher {
   constructor(private readonly namespace: DurableObjectNamespace<WorkspaceEventsHub>) {}
+
+  /**
+   * Publishes stay best-effort, but no longer SILENT. A persistently-broken hub — a DO that
+   * throws on every fetch, a serialisation error on a new event shape — used to leave every
+   * browser stale with zero log lines, indistinguishable from "nobody is watching this board".
+   * `warn`, not `error`: the DB write is authoritative and the client's reconnect-resync
+   * recovers, so this degrades the UI's liveness, it does not lose work.
+   */
+  private readonly log = logger.child({ publisher: 'durable-object' })
 
   async executionChanged(
     workspaceId: string,
@@ -42,17 +60,12 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     })
   }
 
-  async boardChanged(
-    workspaceId: string,
-    reason: string,
-    _blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void> {
-    // `_blockId` is used by the FanOutEventPublisher decorator to resolve which workspaces a
-    // shared service's change reaches; the per-workspace publish itself is block-agnostic.
-    // `originConnectionId` (when present) rides as a side-channel header so the hub can skip
-    // the socket that caused the change — the wire event stays identical across all clients.
-    await this.publish(workspaceId, { type: 'board', reason, at: Date.now() }, originConnectionId)
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    // The wire shape (above all WHICH payloads may ride) is assembled by the shared kernel
+    // builder, so this facade and its Node twin cannot drift. `originConnectionId` stays a
+    // side-channel argument: it tells the hub which socket to skip, and the wire event itself is
+    // identical for every client that does receive it.
+    await this.publish(workspaceId, boardWireEvent(change, Date.now()), change.originConnectionId)
   }
 
   async bootstrapChanged(
@@ -60,12 +73,7 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     job: BootstrapJob,
     block?: Block | null,
   ): Promise<void> {
-    await this.publish(workspaceId, {
-      type: 'bootstrap',
-      job,
-      block: block ?? null,
-      at: Date.now(),
-    })
+    await this.publish(workspaceId, bootstrapWireEvent(job, block, Date.now()))
   }
 
   async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {
@@ -78,6 +86,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
     await this.publish(workspaceId, { type: 'notification', notification, at: Date.now() })
+  }
+
+  async infraSetupChanged(workspaceId: string, change: InfraSetupTransition): Promise<void> {
+    await this.publish(workspaceId, { type: 'infraSetup', ...change, at: Date.now() })
   }
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {
@@ -112,6 +124,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     await this.publish(workspaceId, { type: 'docInterview', session, at: Date.now() })
   }
 
+  async guidedReviewChanged(workspaceId: string, change: GuidedReviewChange): Promise<void> {
+    await this.publish(workspaceId, { type: 'guidedReview', change, at: Date.now() })
+  }
+
   private async publish(
     workspaceId: string,
     event: WorkspaceEvent,
@@ -128,9 +144,12 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
         headers,
         body: JSON.stringify(event),
       })
-    } catch {
-      // No subscribers / transient DO error — the DB write is authoritative and
-      // the client's reconnect-resync covers any missed event.
+    } catch (error) {
+      this.log.warn('realtime publish failed; browsers may be stale until they resync', {
+        workspaceId,
+        eventType: event.type,
+        ...describeError(error),
+      })
     }
   }
 }

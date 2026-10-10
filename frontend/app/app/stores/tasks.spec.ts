@@ -32,6 +32,12 @@ const jiraDescriptor: TaskSourceState = {
   refPlaceholder: 'PROJ-123',
   available: true,
   enabled: true,
+  supportsIntake: true,
+  ignoredIntakePredicates: [],
+  // Jira issues belong to a project, not a repository, so a hunt on it picks a board.
+  repoBacked: false,
+  // Jira carries its own credentials, so it rides no VCS connection.
+  ridesVcsProvider: null,
 }
 
 const jiraConnection: TaskConnection = { source: 'jira', label: 'acme', connectedAt: 0 }

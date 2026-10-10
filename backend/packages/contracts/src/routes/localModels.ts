@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   localModelEndpointSchema,
@@ -41,7 +41,7 @@ export const removeLocalModelEndpointContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: providerParams,
   pathResolver: ({ provider }) => `/local-model-endpoints/${provider}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const testLocalModelEndpointContract = defineApiContract({

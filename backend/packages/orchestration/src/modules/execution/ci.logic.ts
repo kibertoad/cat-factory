@@ -59,33 +59,37 @@ export const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
  */
 export const REPRO_TEST_AGENT_KIND = 'repro-test'
 
-/**
- * The agent kind of the container agent that writes the service's unified, in-repo
- * specification (`spec.json`). It runs BEFORE the coder and aggregates the collected
- * requirements of every task under the service frame — including their acceptance
- * scenarios — onto the implementation branch.
- */
-export const SPEC_WRITER_AGENT_KIND = 'spec-writer'
+// The `integration-test` container kind: a structured `container-coding` step that commits the
+// integration tests (and the test doubles they run against) proving a fix, then reports
+// `{ outcome, testPaths, mocks, uncovered, notes }`. It stands NO environment up and is handed
+// none, which is the whole point of the preset built around it (`pl_bugfix_tested`): the fix is
+// established by tests the `ci` gate re-runs for real, not by an agent probing a preview
+// environment. Producing no test never fails the run; the gap is reported as `uncovered`.
+// DEFINED in `@cat-factory/agents` beside the registration (agents cannot import orchestration)
+// and re-exported here for the engine's own call sites.
+export { INTEGRATION_TEST_KIND } from '@cat-factory/agents'
 
-/**
- * The agent kind of the container agent that maps a repository into the canonical
- * service → modules blueprint and (re)generates the in-repo `blueprints/` artifact. It
- * runs as a read-only `container-explore` structured agent; the deterministic render +
- * commit of the artifact is a BACKEND post-op (`blueprintPostOp`), not harness code.
- */
-export const BLUEPRINTS_AGENT_KIND = 'blueprints'
+// The `spec-writer` + `blueprints` container kinds are now real `registerAgentKind` entries in
+// `@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`, refactoring-candidates.md #5), so
+// their ids are DEFINED there — next to the definition — and re-exported here for the engine's
+// existing internal call sites, exactly as the gate/helper + inline-reviewer kinds are.
+export { BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from '@cat-factory/agents'
 
-/** The agent kind of the container agent that scores a PR for the merge decision. */
-export const MERGER_AGENT_KIND = 'merger'
-
-/**
- * The agent kind of the API/general tester gate step (formerly `tester`): a container
- * agent that runs the project's tests (local docker-compose infra or an ephemeral env)
- * and returns a structured report. On a withheld greenlight the engine loops the `fixer`
- * agent with the report and re-tests — mirroring the CI gate / ci-fixer loop. The UI
- * tester ({@link UI_TESTER_AGENT_KIND}) is its browser-driven, screenshot-capturing sibling.
- */
-export const TESTER_AGENT_KIND = 'tester-api'
+// The remaining built-in CONTAINER kinds are real `registerAgentKind` entries too now (the last
+// slice of the agent-kind strangler, `docs/internal/refactoring-candidates.md` #5), so their ids
+// are DEFINED beside those definitions in `@cat-factory/agents`
+// (`kinds/built-in-container.ts`) — agents can't import orchestration, so the definition owns the
+// id — and re-exported here for the engine's existing internal call sites:
+//
+// - `merger` scores a PR's complexity/risk/impact for the merge decision; the ENGINE merges.
+// - `tester-api` is the API/general tester gate step: it runs the project's tests (local
+//   docker-compose infra or an ephemeral env) and returns a structured report. On a withheld
+//   greenlight the engine loops the `fixer` with the report and re-tests, mirroring the CI gate /
+//   ci-fixer loop. `tester-ui` ({@link UI_TESTER_AGENT_KIND}) is its browser-driven sibling.
+// - `analysis` is the read-only agent that opens the tech-debt recurring pipeline: it inspects
+//   the repo and emits a prioritized markdown report (no commits).
+export { ANALYSIS_AGENT_KIND, MERGER_AGENT_KIND, TESTER_AGENT_KIND } from '@cat-factory/agents'
+import { TESTER_AGENT_KIND } from '@cat-factory/agents'
 
 /**
  * The agent kind of the UI tester gate step: like {@link TESTER_AGENT_KIND} but it drives
@@ -104,17 +108,14 @@ import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 /** Both tester gate kinds (API + UI). They share the Tester→Fixer loop + infra choice. */
 export const TESTER_KINDS: readonly string[] = [TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND]
 
-/** Whether an agent kind is one of the tester gate kinds (API or UI). */
-export function isTesterKind(kind: string): boolean {
-  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND
-}
-
 /**
- * The agent kind of the read-only code-analysis agent that opens the tech-debt
- * recurring pipeline: it inspects the repo and emits a prioritized markdown report
- * (no commits). Reuses the generic container run path — no special engine handling.
+ * Whether an agent kind is one of the tester gate kinds (API or UI).
+ *
+ * Re-exported from `@cat-factory/contracts` rather than restated: it is the first question every
+ * reduction of a run's test evidence asks, and the SPA has to ask it too, which is exactly how
+ * the engine's copy and a hand-written frontend one came to be two spellings of one rule.
  */
-export const ANALYSIS_AGENT_KIND = 'analysis'
+export { isTesterKind } from '@cat-factory/contracts'
 
 /**
  * The agent kind of the special `tracker` step: a non-LLM step that files a GitHub
@@ -131,8 +132,12 @@ export const TRACKER_AGENT_KIND = 'tracker'
  * `conflict-resolver` (when a "pull latest main" hits a conflict). Confirming tears the env
  * down and advances. Handled by the {@link HumanTestController}; passes through to a manual
  * (no-env) mode when no ephemeral-environment provider is wired.
+ *
+ * Re-exported from `@cat-factory/contracts` rather than restated: it is one of the steps that
+ * CONSUME a provisioned environment, and the pipeline builder has to name the same set to warn a
+ * draft that reaches one with no Deployer in front of it.
  */
-export const HUMAN_TEST_AGENT_KIND = 'human-test'
+export { HUMAN_TEST_AGENT_KIND } from '@cat-factory/contracts'
 
 /**
  * The agent kind of the special `visual-confirmation` gate: a non-LLM engine step that

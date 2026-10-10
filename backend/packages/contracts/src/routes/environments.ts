@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   bootstrapEnvironmentRepoSchema,
@@ -26,7 +26,7 @@ import {
   repoValidationResultSchema,
 } from '../provider-config.js'
 import { detectFrontendConfigSchema, frontendConfigRecommendationSchema } from '../frontend.js'
-import { environmentTestRunSchema } from '../environment-test.js'
+import { environmentTestModeSchema, environmentTestRunSchema } from '../environment-test.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ export const updateEnvironmentSecretsContract = defineApiContract({
 export const unregisterEnvironmentProviderContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/environments/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const describeEnvironmentProviderContract = defineApiContract({
@@ -89,7 +89,7 @@ export const testEnvironmentConnectionContract = defineApiContract({
 })
 
 // Validate that a target repo satisfies the provider's config expectations (e.g. a
-// Kargo `.kargo.yml` is present + well-formed). Nothing persisted.
+// provider's `.deploy.yml` is present + well-formed). Nothing persisted.
 export const validateEnvironmentRepoContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/environments/connection/validate-repo',
@@ -180,7 +180,7 @@ export const unregisterEnvironmentHandlerContract = defineApiContract({
   requestPathParamsSchema: provisionTypeParams,
   requestQuerySchema: handlerManifestIdQuery,
   pathResolver: ({ provisionType }) => `/environments/handlers/${provisionType}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const upsertCustomManifestTypeContract = defineApiContract({
@@ -195,7 +195,7 @@ export const removeCustomManifestTypeContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: manifestIdParams,
   pathResolver: ({ manifestId }) => `/environments/custom-types/${manifestId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listEnvironmentsContract = defineApiContract({
@@ -238,12 +238,21 @@ export const teardownEnvironmentContract = defineApiContract({
 const environmentTestIdParams = singleStringParam('id')
 const environmentTestBlockParams = singleStringParam('blockId')
 
+/**
+ * What a self-test start asks for. `mode` is optional and defaults to `provision`, so the
+ * provisioning self-test keeps its byte-for-byte existing request; an agent dry run names itself.
+ */
+export const startEnvironmentTestSchema = v.object({
+  mode: v.optional(environmentTestModeSchema),
+})
+export type StartEnvironmentTestInput = v.InferOutput<typeof startEnvironmentTestSchema>
+
 /** Start an environment-test run against a service frame's provisioning config. */
 export const startEnvironmentTestContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: environmentTestBlockParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/environment-test`,
-  requestBodySchema: ContractNoBody,
+  requestBodySchema: startEnvironmentTestSchema,
   responsesByStatusCode: { 201: environmentTestRunSchema, ...errorResponses },
 })
 

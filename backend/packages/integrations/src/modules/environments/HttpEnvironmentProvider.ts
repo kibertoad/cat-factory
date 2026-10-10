@@ -7,16 +7,18 @@ import {
   type EnvironmentManifest,
   type EnvironmentProvider,
   type EnvironmentRequestTemplate,
+  type EnvironmentStatus,
   type EnvironmentStatusRequest,
   type EnvironmentTeardownRequest,
-  type EnvironmentStatus,
+  getErrorMessage,
   type ProviderConfigField,
+  type ProvisionedEnvironment,
   type ProvisionEnvironmentRequest,
   type ProvisionFields,
-  type ProvisionedEnvironment,
   type SecretResolver,
-  type UrlSafetyPolicy,
   STRICT_URL_SAFETY_POLICY,
+  type TeardownProbe,
+  type UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import * as environmentsLogic from './environments.logic.js'
 import { referencedSecretKeys } from './environments.logic.js'
@@ -95,7 +97,11 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         status: 'ready',
         expiresAt: null,
         access: null,
-        fields: req.provisionFields,
+        // `null`, not the bag it was handed: nothing was ASKED, so this response states nothing
+        // about what the provider has captured, and the stored bag stays as it is. Echoing it back
+        // would be indistinguishable from a statement, which is the distinction that keeps a
+        // narrower answer from erasing teardown state (see `ProvisionedEnvironment.fields`).
+        fields: null,
       }
     }
     const json = await this.execute(
@@ -108,7 +114,87 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
       req.resolveSecret,
     )
     const mapped = this.mapResponse(req.manifest, json, 'ready')
-    return { ...mapped, externalId: mapped.externalId ?? req.externalId }
+    return {
+      ...mapped,
+      externalId: mapped.externalId ?? req.externalId,
+      // The COMPLETE bag this provider knows about the environment now, which is what a statement
+      // has to be: {@link ProvisionedEnvironment.fields} REPLACES the stored bag whole, and
+      // `mapResponse` builds one out of the two paths it happened to resolve on THIS response.
+      // A status endpoint that omits the id or the URL is the ordinary shape (the id is usually in
+      // the request path rather than the body), and a path that did not resolve is not the
+      // provider retracting what it said at create time. Handing the raw mapping over erased the
+      // teardown state instead: the next `status:`/`teardown:` template interpolated an empty
+      // `{{provision.externalId}}`, `GET /environments/` answered a collection listing that mapped
+      // to `ready`, and the environment read healthy forever while nothing could reclaim it.
+      //
+      // The freshly mapped values win, so a provider that MOVES an environment's URL is still
+      // followed. Only a key this response said nothing about is carried over.
+      fields: { ...req.provisionFields, ...mapped.fields },
+    }
+  }
+
+  /**
+   * Confirm a torn-down environment is gone, as far as a manifest can say.
+   *
+   * This provider is the reason the confirmation seam exists. Its {@link teardown} reports
+   * `torn_down` unconditionally, so a manifest that declares no `teardown:` template destroys
+   * nothing and still returns success — and before this, that was recorded as a reclaimed
+   * environment. Both halves of the manifest are therefore checked, and each missing one is
+   * reported as the distinct thing it is:
+   *
+   *  - No `teardown:` template ⇒ `present`, NOT unknown. Nothing was called, so the environment
+   *    is definitionally still there; this is the one case the provider can be certain about
+   *    without asking anyone, and it is exactly the case that was being reported as a reclaim.
+   *  - No `status:` template ⇒ `unknown`. A teardown really ran and there is no endpoint to ask
+   *    about the result. Note that `status()` would answer `ready` here (its documented fallback
+   *    for a live environment), which as a teardown verdict would wrongly read as still-standing.
+   *  - Otherwise the `status:` template is run, and a mapped terminal state (or a 404-shaped
+   *    failure) is the proof.
+   */
+  async confirmTeardown(req: EnvironmentTeardownRequest): Promise<TeardownProbe> {
+    if (!req.manifest.teardown) {
+      return {
+        state: 'present',
+        terminating: false,
+        detail:
+          'This environment manifest declares no `teardown:` request, so nothing was destroyed.',
+      }
+    }
+    if (!req.manifest.status) {
+      return {
+        state: 'unknown',
+        // Permanent until somebody adds a `status:` request to the manifest.
+        retryable: false,
+        reason:
+          'This environment manifest declares no `status:` request, so the teardown cannot be verified.',
+      }
+    }
+    let mapped: ProvisionedEnvironment
+    try {
+      mapped = await this.status({
+        manifest: req.manifest,
+        externalId: req.externalId,
+        provisionFields: req.provisionFields,
+        resolveSecret: req.resolveSecret,
+      })
+    } catch (err) {
+      // A management API that 404s a destroyed environment is the common shape, and it surfaces
+      // here as a throw. It is still reported as `unknown` rather than `gone`: a 404 from a
+      // misconfigured base URL and a 404 from a reclaimed environment are the same response, and
+      // this provider cannot tell them apart. Under-claiming is the only safe direction for a
+      // signal whose whole purpose is to be trusted.
+      return {
+        state: 'unknown',
+        retryable: true,
+        reason: getErrorMessage(err),
+      }
+    }
+    if (mapped.status === 'torn_down' || mapped.status === 'expired') return { state: 'gone' }
+    return {
+      state: 'present',
+      terminating: mapped.status === 'tearing_down',
+      detail: `The management API still reports this environment as '${mapped.status}'.`,
+    }
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }> {
@@ -139,9 +225,11 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
     try {
       headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
-    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy, {
+      subject: 'the environment management API',
+    })
   }
 
   // --- internals ----------------------------------------------------------
@@ -327,9 +415,24 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
     if (externalId) fields.externalId = externalId
     if (url) fields.url = url
 
+    // The addresses the API states carry traffic for `url`'s host. A first-class field rather than
+    // a `fields` entry: `fields` is teardown state, encrypted and absent from every handle, so an
+    // address written there reaches nobody who could dial it.
+    //
+    // Present whenever the manifest DECLARES an `addressesPath` or a `hostsPath`, empty list
+    // included, and absent when it declares neither. That is a statement about none versus no statement at all, and
+    // `foldStatedAddresses` needs the difference: an absent field keeps what is stored, so a
+    // provider whose status endpoint answers a narrower shape than its create endpoint cannot
+    // silently erase the balancer list the create response supplied.
+    const addresses = [
+      ...environmentsLogic.extractAddresses(json, r.addressesPath),
+      ...environmentsLogic.extractAddresses(json, r.hostsPath, 'host'),
+    ]
+
     return {
       externalId,
       url,
+      ...(r.addressesPath || r.hostsPath ? { addresses } : {}),
       status,
       expiresAt,
       access: this.mapAccess(r.access, json),

@@ -42,6 +42,10 @@ export class GitHubMergeabilityProvider implements PullRequestMergeabilityProvid
 
     // One remote round-trip per PR (each is a distinct GitHub PR), independent across repos, so
     // run them concurrently. The block is read once (above). Order preserved: own PR first.
+    //
+    // A peer PR is reported with the FIRST of its frames: see `RepoMergeability.frameId` — a
+    // conflict is per-repo, and the id travels only so the resolver can resolve that repo's
+    // checkout, which every frame co-located in it addresses identically.
     const repos: RepoMergeability[] = await Promise.all(
       prs.map(async (pr): Promise<RepoMergeability> => {
         const [owner, name] = pr.repo ? splitRepo(pr.repo) : [ownTarget.owner, ownTarget.name]
@@ -50,7 +54,7 @@ export class GitHubMergeabilityProvider implements PullRequestMergeabilityProvid
         if (number === undefined) {
           return {
             repo: repoFull,
-            ...(pr.frameId ? { frameId: pr.frameId } : {}),
+            ...(pr.frameIds?.[0] ? { frameId: pr.frameIds[0] } : {}),
             headSha: null,
             verdict: 'unknown',
           }
@@ -63,7 +67,7 @@ export class GitHubMergeabilityProvider implements PullRequestMergeabilityProvid
           )
         return {
           repo: repoFull,
-          ...(pr.frameId ? { frameId: pr.frameId } : {}),
+          ...(pr.frameIds?.[0] ? { frameId: pr.frameIds[0] } : {}),
           headSha,
           verdict: classifyMergeability(mergeable, mergeableState),
         }

@@ -12,3 +12,7 @@ await applyD1Migrations(env.SANDBOX_DB!, env.TEST_SANDBOX_MIGRATIONS)
 // The provisioning event log lives in a separate D1 database (its own binding +
 // migrations); apply its schema so the logs feature + conformance can exercise it.
 await applyD1Migrations(env.PROVISIONING_DB!, env.TEST_MIGRATIONS_PROVISIONING)
+
+// The account audit log lives in its own required D1 database (AUDIT_DB), with its own
+// migrations lineage; apply it so the audit conformance suite runs against the true schema.
+await applyD1Migrations(env.AUDIT_DB, env.TEST_MIGRATIONS_AUDIT)

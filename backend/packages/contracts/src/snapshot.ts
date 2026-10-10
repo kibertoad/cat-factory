@@ -2,35 +2,54 @@ import * as v from 'valibot'
 import {
   blockSchema,
   budgetCapsSchema,
-  executionInstanceSchema,
   pipelineSchema,
   spendStatusSchema,
   workspaceSchema,
 } from './entities.js'
+import { executionInstanceSchema } from './execution.js'
+import { tutorialProgressSchema } from './tutorial.js'
 import { userSettingsSchema } from './user-settings.js'
 import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
 import { environmentTestRunSchema } from './environment-test.js'
 import { notificationSchema } from './notifications.js'
-import { riskPolicySchema } from './merge.js'
+import { riskPolicyLibraryEntrySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelPresetSchema } from './model-presets.js'
+import { consensusGroupSchema } from './consensus.js'
 import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
-import { customAgentKindSchema } from './agent-presentation.js'
+import { agentKindVariantSchema, customAgentKindSchema } from './agent-presentation.js'
+import { customTaskTypeSchema } from './task-types.js'
+import { gateConfigFormSchema } from './gate-config.js'
+import { registeredBinaryGeneratorSchema } from './binary-generators.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
 import { initiativePresetDescriptorSchema } from './initiative-preset.js'
 import { sharedStackSchema } from './shared-stacks.js'
+import { skillSummarySchema } from './skill-library.js'
+import { workspaceAccessSchema } from './workspace-members.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
 // ./bootstrap, and ./bootstrap imports from ./entities — defining it in either
 // would be a circular import.
+
+/**
+ * A built-in pipeline withdrawn from the catalog. Mirrors kernel's `RetiredPipeline`: an id plus,
+ * when one exists, the catalog id that supersedes it. Deliberately not a `pipelineSchema` — a
+ * retired pipeline has no definition left, and a tombstone must never be mistaken for something the
+ * SPA can run or seed.
+ */
+export const retiredPipelineSchema = v.object({
+  id: v.string(),
+  replacedBy: v.optional(v.string()),
+})
+export type RetiredPipelineWire = v.InferOutput<typeof retiredPipelineSchema>
 
 /** A selectable infra backend kind advertised to the SPA's connect form. */
 export const backendKindOptionSchema = v.object({
@@ -96,6 +115,14 @@ export const workspaceSnapshotSchema = v.object({
    */
   userSettings: v.optional(userSettingsSchema),
   /**
+   * The signed-in caller's in-app tutorial progress. Carried here rather than fetched, for the
+   * same reason `userSettings` is: it is read on EVERY board load (the launch prompt and the
+   * contextual offer both need it before the first render), and a separate request would let the
+   * prompt decide whether to appear against a copy it has not reconciled yet. Absent ⇒ no store is
+   * wired on this facade, and the SPA keeps using its browser-persisted copy alone.
+   */
+  tutorialProgress: v.optional(tutorialProgressSchema),
+  /**
    * Operator hard ceilings on the account/user budget tiers (from the deployment env
    * vars). Attached so the budget configuration screens can show the hard limit and
    * cap the input. Absent ⇒ this facade sets no ceilings.
@@ -109,10 +136,15 @@ export const workspaceSnapshotSchema = v.object({
    */
   notifications: v.optional(v.array(notificationSchema)),
   /**
-   * The workspace's merge threshold presets (the library a task picks its
-   * auto-merge policy from). Attached by the worker, so optional on the wire.
+   * The library a task picks its auto-merge policy from: the board's OWN policies merged with the
+   * ones it inherits from its account, each tagged with the tier that owns it. Attached by the
+   * facade, so optional on the wire.
+   *
+   * The MERGED library rather than the board's own rows, because this is what every picker offers
+   * and what the engine resolves a pin against: shipping only the local tier would let a board
+   * pick a policy the snapshot never mentioned, or (worse) render an inherited pin as unresolvable.
    */
-  riskPolicies: v.optional(v.array(riskPolicySchema)),
+  riskPolicies: v.optional(v.array(riskPolicyLibraryEntrySchema)),
   /**
    * The workspace's shared stacks (long-lived compose infra a consumer environment
    * attaches to over an external network — the acme-shared-services shape). Carried in
@@ -135,6 +167,13 @@ export const workspaceSnapshotSchema = v.object({
    * optional on the wire.
    */
   modelPresets: v.optional(v.array(modelPresetSchema)),
+  /**
+   * The workspace's consensus-GROUP library — the reusable, estimate-gated panels a pipeline
+   * step escalates to. Carried in the snapshot so the pipeline builder's per-step tier picker
+   * and the settings editor have their options on load, exactly like the model presets above.
+   * Attached by the facade, so optional on the wire.
+   */
+  consensusGroups: v.optional(v.array(consensusGroupSchema)),
   /**
    * The deployment's env-routing defaults as `provider:model` refs: the model an
    * agent kind runs on when neither the task nor the workspace pins one. `default`
@@ -196,6 +235,70 @@ export const workspaceSnapshotSchema = v.object({
    */
   customAgentKinds: v.optional(v.array(customAgentKindSchema)),
   /**
+   * Registered VARIATIONS of existing agent kinds (id + base kind + label) a deployment mixed in
+   * via `AgentKindRegistry.registerVariant`. The pipeline builder offers the ones whose
+   * `baseKind` matches a step's kind as that step's alternate prompt, and the run views name the
+   * one a step ran under. Static (process-global registry), workspace-independent; attached by
+   * the facade, so optional on the wire and omitted when no variant is registered.
+   */
+  agentKindVariants: v.optional(v.array(agentKindVariantSchema)),
+  /**
+   * Registered CUSTOM task types (namespaced id + presentation + create-form fields) a
+   * deployment mixed in via its app-owned `TaskTypeRegistry`. The SPA merges these into its
+   * task-type catalog so a proprietary work item becomes a first-class create-task choice +
+   * card badge instead of the generic fallback — symmetric with {@link customAgentKinds}.
+   * Attached by the facade, so optional on the wire and omitted when nothing is offered.
+   *
+   * What this board OFFERS, not what the deployment registers: an operation a workspace admin
+   * hid is absent (`backend/docs/reusable-operations.md`). Its complement is
+   * {@link suppressedTaskTypes}.
+   */
+  customTaskTypes: v.optional(v.array(customTaskTypeSchema)),
+  /**
+   * The registered task-type ids this board HIDES: the complement of {@link customTaskTypes},
+   * exactly as `retiredPipelines` is the complement of `pipelineCatalogVersions`, and present for
+   * the same reason. A suppressed type is BY CONSTRUCTION absent from the offered catalog, so a
+   * SPA reading only that catalog cannot tell "this deployment registers no operations" from
+   * "this board hid the ones it has", and the second is the state whose settings screen is the
+   * only way back. Hiding the last one would otherwise remove the surface that un-hides it.
+   *
+   * Ids only. The descriptors live in the registry, which the settings screen reads through its
+   * own endpoint; copying presentation here would be a second projection to keep in step for a
+   * list nothing renders as a task type.
+   */
+  suppressedTaskTypes: v.optional(v.array(v.string())),
+  /**
+   * The per-step parameters each registered GATE declares (`GateRegistry.register(kind, factory,
+   * { configFields })`), so the pipeline builder renders a gate's own config form through the
+   * shared `DescriptorFields` component instead of hard-coding one form per gate. This is the
+   * ambient half of per-step gate config: a deployment's gate gets an authoring form from its
+   * registration alone, and what the builder can save is exactly what run admission validates.
+   * Static (app-owned registry), workspace-independent; attached by the facade, so optional on
+   * the wire and omitted when no registered gate declares any fields.
+   */
+  gateConfigForms: v.optional(v.array(gateConfigFormSchema)),
+  /**
+   * The GENERATIVE BINARY INTEGRATIONS a deployment registered in CODE on its app-owned
+   * `BinaryGeneratorRegistry` — identity and the content types each produces, never a credential
+   * key name. The pipeline builder offers a binary-generating step's `generatorIds` from these,
+   * so the ids it can save are exactly the ids run admission resolves against; without them the
+   * generative half of the selection would be reachable only through the API, and a step saved in
+   * the builder could hit `binary_output_generator_invalid` with nothing in the UI able to fix it.
+   * Static (engine-level registry), workspace-independent; attached by the facade, so optional on
+   * the wire and omitted when the deployment registers none — which is the default.
+   */
+  binaryGenerators: v.optional(v.array(registeredBinaryGeneratorSchema)),
+  /**
+   * Set when the deployment's registered integrations could not be READ, which on a
+   * mothership-mode node means the mothership was unreachable. Its own field rather than an empty
+   * `binaryGenerators`, because the two are opposite facts a picker must not render alike: an
+   * absent list says "this deployment registers none, look in the build", and someone acting on
+   * that during an outage goes looking in the wrong place entirely. Never set alongside
+   * `binaryGenerators`, and absent on every healthy deployment — including the stock product,
+   * which registers none.
+   */
+  binaryGeneratorsUnavailable: v.optional(v.literal(true)),
+  /**
    * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
    * deployment registered into the app-owned backend registries), each `{ kind, label }`. The
    * SPA drives the provider-connect backend-kind selector from these instead of a hardcoded
@@ -214,8 +317,51 @@ export const workspaceSnapshotSchema = v.object({
    * (or absent → treated as 0) means an update is available. Static, workspace-independent;
    * built by the shared `WorkspaceService.snapshot()` (so it is automatically symmetric across
    * runtimes), but optional on the wire for forward-compatibility.
+   *
+   * OFFERED entries only: an INTERNAL pipeline is withheld here for the same reason it is withheld
+   * from `pipelines`. This map is not merely a version lookup — the health advisory reads its keys
+   * as the set of built-ins that EXIST, and derives "new built-ins available" as those keys minus
+   * the rows the SPA can see. An internal entry is in the first set and never in the second, so
+   * listing it would advertise a pipeline nobody may pick, permanently and un-dismissably.
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * The catalog's own NAME for each catalog id: the companion map, built from the same
+   * `seedPipelines()` read.
+   *
+   * It exists for the moments a catalog id has no stored row to read a name off. The first is the
+   * "new built-ins available" advisory. Without it the SPA humanised the id, which is passable for
+   * a shipped built-in (`pl_review` → "review") and wrong for the case that made this reachable, a
+   * deployment's own registered pipeline behind a reusable operation: `pl_org_introduce_api`
+   * rendered as "org introduce api", offering the operation's pipeline under a name that appears
+   * nowhere else in the product. The second is a task PINNED to an INTERNAL pipeline (the
+   * docs-refresh preset spawns onto one): the card that starts it has no library row to name.
+   *
+   * So this is a SUPERSET of `pipelineCatalogVersions` — a display dictionary for any catalog id
+   * the SPA may hold, where that map is the narrower "what may be offered". Do not index one by
+   * the other's keys; ask each for what it answers.
+   *
+   * A separate map rather than widening the versions record, because that record is a
+   * `Record<string, number>` the SPA compares numerically.
+   */
+  pipelineCatalogNames: v.optional(v.record(v.string(), v.string())),
+  /**
+   * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`) — the complement of
+   * `pipelineCatalogVersions`, and the only signal that a stored built-in is no longer relevant.
+   * A workspace seeded before the withdrawal still holds the row, so the SPA cross-references this
+   * against its library and offers a REMOVAL (`DELETE /pipelines/:id`, which accepts a built-in only
+   * while it is named here) rather than the reseed it offers for a live built-in.
+   *
+   * The two sets are disjoint by construction, so an id here never appears in
+   * `pipelineCatalogVersions` — which is also what stops the SPA's "new built-ins available"
+   * advisory from offering to add back the pipeline it just told the user to remove.
+   *
+   * `replacedBy` names the catalog id that supersedes it, when one does. It carries no prose: the
+   * backend does not localize copy, so the SPA resolves that id to its pipeline name and writes the
+   * sentence itself. Static, workspace-independent; built by the shared `WorkspaceService.snapshot()`
+   * (automatically symmetric across runtimes), optional on the wire for forward-compatibility.
+   */
+  retiredPipelines: v.optional(v.array(retiredPipelineSchema)),
   /**
    * Current built-in merge-preset catalog versions (`seedRiskPolicies()`), keyed by preset id.
    * The SPA compares each persisted built-in's `version` against this to detect a stale copy
@@ -234,6 +380,21 @@ export const workspaceSnapshotSchema = v.object({
    * symmetric across runtimes), optional on the wire for forward-compatibility.
    */
   modelPresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * The catalog's own NAME per built-in model-preset id, built from the same `seedModelPresets()`
+   * read as `modelPresetCatalogVersions`: the `pipelineCatalogNames` companion, for the same
+   * reason and with the same one moment of use.
+   *
+   * A NEW built-in has no stored row to take a name off, and that is exactly the state the startup
+   * advisory offers to fix. Without this the SPA humanised the id, which reads acceptably for the
+   * three built-ins whose ids ARE their names (`mdp_kimi` to "Kimi") and wrongly for the first one
+   * where it is not: `mdp_chatgpt` was offered as "Chatgpt" on every board seeded before it
+   * shipped, a name for the product's GPT-5.6 Sol preset that appears nowhere else in the UI.
+   *
+   * Keyed identically to the versions map rather than a superset, unlike the pipeline pair: a model
+   * preset has no INTERNAL tier to withhold, so the two maps span the same ids by construction.
+   */
+  modelPresetCatalogNames: v.optional(v.record(v.string(), v.string())),
   /**
    * The workspace's initiatives (long-running multi-task bodies of work, each
    * anchored to an `initiative`-level block). Carried in the snapshot so the
@@ -259,5 +420,21 @@ export const workspaceSnapshotSchema = v.object({
    * wire (absent on an older backend), the SPA then simply shows no banner.
    */
   infraSetup: v.optional(infraSetupSchema),
+  /**
+   * The account's repo-sourced Claude Skills catalog (lightweight `{ id, name, description }`),
+   * shared across the account's workspaces. The pipeline builder's per-step skill picker binds a
+   * `skill` step's `stepOptions.skillId` to one of these. Attached by the shared
+   * `WorkspaceController` from the account skill-catalog cache (one read) when the skill library
+   * is wired; optional on the wire and omitted when the feature is off or the account has no
+   * skills. Full instructions/resources are fetched on demand by the management surface, not here.
+   */
+  skills: v.optional(v.array(skillSummarySchema)),
+  /**
+   * The signed-in caller's resolved workspace-RBAC access to this board — their effective
+   * role + the permission set it grants — attached from the auth gate's resolution (zero
+   * extra reads). The SPA hides/disables affordances the caller lacks. Optional on the wire:
+   * absent ⇒ dev-open (auth disabled) ⇒ the SPA allows all (backend-parity).
+   */
+  access: v.optional(workspaceAccessSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

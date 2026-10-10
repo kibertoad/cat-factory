@@ -1,0 +1,11 @@
+-- The source's own version token the stored `body` was imported at (a Figma file version, a
+-- Confluence version number, a git sha). What the dispatch-time linked-context refresh compares a
+-- cheap `probeVersion` against, so a run can tell "the page has not moved" from "this copy is behind
+-- the live page" without re-downloading the body on every step dispatch.
+--
+-- NULL for a source that exposes no version, for an `upload` (no source at all), and for every row
+-- imported before this column existed. All three mean the same thing to the refresh — it cannot prove
+-- the copy is current — so each self-heals on its next re-import, which records the token. Deliberately
+-- nullable rather than DEFAULT '': a backfilled empty string would be indistinguishable from a source
+-- that genuinely has no version, and the refresh reacts to those differently.
+ALTER TABLE documents ADD COLUMN source_version TEXT;

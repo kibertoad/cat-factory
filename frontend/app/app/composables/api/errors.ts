@@ -29,10 +29,17 @@ export class ApiError extends Error {
 
 /** The error envelope every controller emits (`handleError` / contract request-validator). */
 export interface ApiErrorEnvelope {
+  /** The status class — an `ApiErrorCode` from `@cat-factory/contracts`, when recognised. */
   code?: string
   message?: string
   details?: unknown
   issues?: { path?: string; message: string }[]
+  /**
+   * The request's correlation id (`mountRequestLogging` mints or adopts `X-Request-Id` and
+   * `handleError` puts it on EVERY envelope). It is the join between what the user saw and the
+   * one server log line that explains it, so any surface showing failure detail should quote it.
+   */
+  requestId?: string
 }
 
 /** Read the `{ error: {...} }` envelope out of a parsed response body, else undefined. */
@@ -52,6 +59,22 @@ export function apiErrorEnvelope(error: unknown): ApiErrorEnvelope | undefined {
   if (error instanceof ApiError) return error.envelope
   const e = error as { body?: unknown; data?: unknown }
   return envelopeOf(e?.body) ?? envelopeOf(e?.data)
+}
+
+/**
+ * The backend's machine-readable `error.details.reason` code, when it sent one.
+ *
+ * This is the client half of the "backend strings" contract (see AGENTS.md): a localizable
+ * server condition emits a stable code and the SPA maps it to a message key, with the raw
+ * prose `message` as the untranslated last resort. Callers compare the result against a union
+ * imported from `@cat-factory/contracts`, so a renamed code fails the typecheck instead of
+ * silently falling through to the generic wording.
+ */
+export function apiErrorReason(error: unknown): string | null {
+  const details = apiErrorEnvelope(error)?.details
+  if (!details || typeof details !== 'object') return null
+  const reason = (details as Record<string, unknown>).reason
+  return typeof reason === 'string' ? reason : null
 }
 
 /** The HTTP status of a thrown API error, when present (contract client or `$fetch`). */

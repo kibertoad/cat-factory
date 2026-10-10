@@ -5,6 +5,7 @@ import {
   READ_ONLY_GUARDRAIL,
   renderStandardUserPrompt,
   STANDARD_PHASE_BY_KIND,
+  STANDARDS_SECTION_OPENER,
   standardSystemPrompt,
   systemPromptFor as _systemPromptFor,
   defaultAgentKindRegistry,
@@ -86,10 +87,15 @@ describe('standard solution-phase prompts', () => {
       expect(systemPromptFor('whatever')).toContain('"whatever"')
     })
 
-    it('defers to the appended best-practice standards', () => {
-      // The hook the fragment system composes onto must be present in each phase.
+    it('leaves the best-practice-standards imperative to the FOLD, not to the phase text', () => {
+      // It used to be the closing line of each phase prompt, pointing at standards "appended
+      // below" that the fold does not append when a block resolved none. The section owns the line
+      // now, so on every phase the pointer and its target arrive together or not at all.
       for (const phase of ['design', 'build', 'review', 'test'] as const) {
-        expect(standardSystemPrompt(phase)).toContain('best-practice standard')
+        const bare = standardSystemPrompt(phase)
+        expect(bare).not.toContain(STANDARDS_SECTION_OPENER)
+        expect(composeSystemPrompt(bare, [])).toBe(bare)
+        expect(composeSystemPrompt(bare, ['node.performance'])).toContain(STANDARDS_SECTION_OPENER)
       }
     })
 
@@ -108,6 +114,17 @@ describe('standard solution-phase prompts', () => {
       expect(build).toMatch(/do NOT use the `gh` CLI/i)
       // The root-cause guard: do not rabbit-hole on credentials / git remotes.
       expect(build).toMatch(/Do NOT probe the environment for credentials/i)
+    })
+
+    it('tells the build agent its commits are already published, so it never rewrites them', () => {
+      const build = standardSystemPrompt('build')
+      // The harness checkpoint-pushes commits about once a minute, which the agent cannot observe
+      // from inside the container, so an amend of its own commit is a delivery failure it had no
+      // way to predict. The rule has to be STATED; it is not inferable from anything the agent sees.
+      expect(build).toMatch(/Add commits; never rewrite them/i)
+      expect(build).toMatch(/publishes your commits to the branch WHILE you work/i)
+      expect(build).toMatch(/git commit --amend/i)
+      expect(build).toMatch(/make another commit on top/i)
     })
 
     it('bounds the build effort so it cannot spin forever', () => {
@@ -145,12 +162,13 @@ describe('standard solution-phase prompts', () => {
       const prompt = renderStandardUserPrompt(
         'design',
         ctx({ block: { title: 'X', type: 'api', description: '' } }),
+        _agentKindRegistry,
       )
       expect(prompt).toContain('Description: (none provided)')
     })
 
     it('omits optional sections when absent', () => {
-      const prompt = renderStandardUserPrompt('build', ctx())
+      const prompt = renderStandardUserPrompt('build', ctx(), _agentKindRegistry)
       expect(prompt).not.toContain('Resolved decisions')
       expect(prompt).not.toContain('Work from earlier agents')
       // No stray runs of blank lines left by skipped conditionals.
@@ -170,6 +188,7 @@ describe('standard solution-phase prompts', () => {
           resolvedDecision: { question: 'Cache?', chosen: 'Redis' },
           priorOutputs: [{ agentKind: 'architect', output: 'Use a token service.' }],
         }),
+        _agentKindRegistry,
       )
       expect(prompt).toContain('- DB? → Postgres')
       expect(prompt).toContain('- Cache? → Redis')

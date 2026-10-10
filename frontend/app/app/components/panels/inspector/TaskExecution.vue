@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isDryRun, stepHasOutput } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import {
@@ -6,6 +7,9 @@ import {
   COMPANION_STATE_META,
   isCompanionKind,
   containerPhaseLabel,
+  dedicatedParkView,
+  REDIRECT_PARK_PRESENTATION,
+  type RedirectParkView,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
@@ -13,6 +17,12 @@ import EmptyState from '~/components/common/EmptyState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { PipelineStep } from '~/types/execution'
+import type { ChangeClass, ReviewEffort } from '~/types/merge'
+import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
+import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
+import { inputGateNoticeFor } from '~/utils/inputGate'
+import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -21,6 +31,8 @@ const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
+const trackRecords = useMergeTrackRecordsStore()
+const access = useWorkspaceAccess()
 const { t, te } = useI18n()
 const { confirm } = useConfirm()
 
@@ -41,6 +53,19 @@ const reviewStageLabel = computed(() =>
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
 
+// Whether this run may land its work at all. Read through the contracts helper rather than an
+// equality here, so a run persisted before the mode existed (absent ⇒ live) is never badged as a
+// sandbox. Both routes into the mode look identical from here on purpose: what the reader needs
+// is that nothing will merge, and WHY is answered by the run's own notes and the merge decision.
+const sandboxed = computed(() => isDryRun(instance.value?.mode))
+
+// A failed pipeline run surfaces the shared failure banner + retry — the
+// execution failure surface that the old `pr_ready` flip used to hide.
+const failedRun = computed(() => {
+  const run = agentRuns.byBlock[props.block.id]
+  return run && run.status === 'failed' ? run : null
+})
+
 // Nothing to show yet: no run, no failed run, no PR, and not awaiting a merge — render an
 // empty state instead of a blank gap so the section reads as "no runs yet" rather than broken.
 const isEmpty = computed(
@@ -53,17 +78,34 @@ const isEmpty = computed(
 // A failed run is no longer executing: a step left mid-flight must stop showing
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
-
-// A failed pipeline run surfaces the shared failure banner + retry — the
-// execution failure surface that the old `pr_ready` flip used to hide.
-const failedRun = computed(() => {
-  const run = agentRuns.byBlock[props.block.id]
-  return run && run.status === 'failed' ? run : null
-})
+/**
+ * The run's PRE-DISPATCH INPUT GATE notice: the park while it holds the run, the waiver once
+ * somebody overruled it, and the ADVISORY findings a `passed` verdict still carries (which is
+ * the entire product of `advisory` mode, and how `standard` mode reports a thin description).
+ * Read off the RUN, not a step: the gate guards the first dispatch and leaves nothing
+ * kind-specific behind. Which verdicts earn a notice is `inputGateNoticeFor`'s call.
+ */
+const inputGateNotice = computed(() => inputGateNoticeFor(instance.value))
 
 // Failures from prior attempts, preserved across retries — shown regardless of the run's
 // CURRENT status, so the error trail stays viewable after a restart clears the top banner.
 const failureHistory = computed(() => agentRuns.byBlock[props.block.id]?.failureHistory ?? [])
+
+/**
+ * Whether this task has a result worth reading in product terms: a pull request, or a step that
+ * recorded evidence. Asked of the shared reduction rather than re-derived here, so the panel and
+ * the board card can never disagree about which runs have an outcome to open.
+ *
+ * The spec is deliberately not loaded for this check: it only ever adds TITLES to requirement
+ * rows, never sections, so nothing about whether there is something to show depends on it. The
+ * window loads it on open.
+ */
+const outcomeReadable = computed(() =>
+  hasOutcomeToShow(composeRunOutcome({ block: props.block, instance: instance.value ?? null })),
+)
+function openOutcome() {
+  ui.openOutcome(props.block.id, instance.value?.id ?? null)
+}
 
 const pr = computed(() => props.block.pullRequest)
 /** A PR is merged once the block is `done`; otherwise it is open awaiting merge. */
@@ -145,9 +187,34 @@ function openStep(i: number) {
   if (instance.value) ui.openStepDetail(instance.value.id, i)
 }
 
-// Open the implementation-fork decision window for a coder step parked awaiting a choice.
-function openForkFor(i: number) {
-  if (instance.value) ui.openForkDecision(instance.value.id, i)
+/**
+ * The window-owned park holding a step, or null. `input-gate` is filtered out because it has no
+ * window: it is answered by the inline notice this list renders above itself, so offering a
+ * button here would send a human to an overlay that does not exist.
+ */
+function redirectPark(step: PipelineStep): RedirectParkView | null {
+  const park = dedicatedParkView(step, instance.value)
+  return park && park !== 'input-gate' ? park : null
+}
+
+/**
+ * Open the window that resolves a park. A `Record` over the vocabulary, so a park added to it
+ * fails to compile until it names its opener rather than rendering a button that does nothing.
+ */
+const PARK_OPENERS: Record<RedirectParkView, (instanceId: string, stepIndex: number) => void> = {
+  'follow-ups': (id, idx) => ui.openFollowUps(id, idx),
+  'fork-decision': (id, idx) => ui.openForkDecision(id, idx),
+  'binary-candidates': (id, idx) => ui.openBinaryCandidates(id, idx),
+}
+
+function openParkFor(park: RedirectParkView, i: number) {
+  if (instance.value) PARK_OPENERS[park](instance.value.id, i)
+}
+
+// Open the PR deep-review findings-selection window for a pr-reviewer step parked awaiting
+// a selection (its dedicated chip, mirroring the fork-decision one above).
+function openPrReviewFor(i: number) {
+  if (instance.value) ui.openPrReview(instance.value.id, i)
 }
 
 // Stop the run WITHOUT deleting it: halts the container + driver and records a
@@ -175,26 +242,44 @@ async function stopRun() {
     stopping.value = false
   }
 }
-const resetting = ref(false)
-async function resetRun() {
-  if (resetting.value) return
-  // Destructive: discards the run and returns the task to planned — gate it behind a confirm,
-  // matching the confirm-then-mutate contract the board delete path uses.
-  const ok = await confirm({
-    title: t('inspector.execution.resetConfirm.title'),
-    description: t('inspector.execution.resetConfirm.body'),
-    variant: 'destructive',
-    confirmLabel: t('inspector.execution.resetConfirm.confirm'),
-    icon: 'i-lucide-trash-2',
-  })
-  if (!ok) return
-  resetting.value = true
-  try {
-    await execution.cancel(props.block.id)
-  } finally {
-    resetting.value = false
-  }
-}
+// Destructive: discards the run and returns the block to planned, behind a confirm. Shared with
+// the initiative planning window (which offers the same escape hatch in place) so the two can't
+// drift on the prompt or on what "discard" means.
+const { resetting, resetRun: discardRun } = useRunReset()
+const resetRun = () => discardRun(props.block.id)
+
+/**
+ * The reviewer-effort tag for this merge, preselected from evidence rather than starting blank: if
+ * the run's `pr-reviewer` step recorded findings, review comments plausibly drove rework
+ * (`minor`); if it did not, the PR needed nothing (`none`). One tap confirms or corrects it, and
+ * `null` merges untagged — tagging is a nudge, never a gate.
+ */
+const mergeEffort = ref<ReviewEffort | null>(null)
+
+watch(
+  () => props.block.status === 'pr_ready',
+  (awaiting) => {
+    if (!awaiting) return
+    // ONE request for every class, only once and only when a merge decision is actually pending.
+    if (!trackRecords.loaded && !trackRecords.loading) void trackRecords.load()
+    // Preselect from evidence rather than leaving it blank. Set HERE (not at setup) because the
+    // run instance may still be loading when this component first mounts.
+    mergeEffort.value ??= (instance.value?.steps ?? []).some(
+      (s) => (s.prReview?.findings?.length ?? 0) > 0,
+    )
+      ? 'minor'
+      : 'none'
+  },
+  { immediate: true },
+)
+
+/** The change class the engine recorded on the run's merger step, when one resolved. */
+const mergeChangeClass = computed<ChangeClass | undefined>(() => {
+  const decision = instance.value?.steps.find((s) => s.agentKind === 'merger')?.custom as
+    | { changeClass?: ChangeClass }
+    | undefined
+  return decision?.changeClass
+})
 
 // Merging a PR is consequential and effectively irreversible — confirm first. `execution.mergePr`
 // surfaces its own error toast, so no catch is needed here.
@@ -206,7 +291,7 @@ async function mergePr() {
     icon: 'i-lucide-git-merge',
   })
   if (!ok) return
-  await execution.mergePr(props.block.id)
+  await execution.mergePr(props.block.id, mergeEffort.value)
 }
 </script>
 
@@ -221,8 +306,23 @@ async function mergePr() {
     <!-- running pipeline -->
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ instance.pipelineName }}
+        <span class="flex min-w-0 items-center gap-1.5">
+          <SectionLabel as="span" class="truncate">
+            {{ instance.pipelineName }}
+          </SectionLabel>
+          <!-- A sandboxed run looks exactly like one that simply has not reached the merge yet,
+               right up until it stops there, so it says what it is from the start. -->
+          <UBadge
+            v-if="sandboxed"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            icon="i-lucide-shield"
+            :title="t('inspector.execution.dryRunHint')"
+            data-testid="run-dry-run"
+          >
+            {{ t('inspector.execution.dryRun') }}
+          </UBadge>
         </span>
         <div class="flex items-center gap-1">
           <!-- Stop without deleting: halts the run but keeps it readable + retryable. -->
@@ -232,8 +332,12 @@ async function mergePr() {
             variant="ghost"
             size="xs"
             :loading="stopping"
-            :disabled="resetting"
-            :title="t('inspector.execution.stopTooltip')"
+            :disabled="resetting || !access.canExecuteRuns.value"
+            :title="
+              access.canExecuteRuns.value
+                ? t('inspector.execution.stopTooltip')
+                : t('access.noRunExecute')
+            "
             data-testid="run-stop"
             @click="stopRun"
           >
@@ -246,8 +350,12 @@ async function mergePr() {
             variant="ghost"
             size="xs"
             :loading="resetting"
-            :disabled="stopping"
-            :title="t('inspector.execution.resetTooltip')"
+            :disabled="stopping || !access.canExecuteRuns.value"
+            :title="
+              access.canExecuteRuns.value
+                ? t('inspector.execution.resetTooltip')
+                : t('access.noRunExecute')
+            "
             data-testid="run-reset"
             @click="resetRun"
           >
@@ -255,12 +363,22 @@ async function mergePr() {
           </UButton>
         </div>
       </div>
+      <!-- What the task's input check found. Rendered above the step list because it is a fact
+           about the RUN, and because the remedy for a park is to edit the task, not open a step.
+           An advisory verdict renders here too: nothing was parked, but something was found. -->
+      <InputGateNotice
+        v-if="inputGateNotice"
+        :gate="inputGateNotice.gate"
+        :tone="inputGateNotice.tone"
+        :execution-id="instance.id"
+        class="mb-2"
+      />
       <ul class="space-y-1">
         <li
           v-for="(s, i) in instance.steps"
           :key="i"
           class="rounded-md px-2 py-1"
-          :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
+          :class="i === instance.currentStep ? 'bg-elevated/70' : ''"
           data-testid="run-step"
           :data-step-kind="s.agentKind"
           :data-step-state="s.state"
@@ -268,11 +386,13 @@ async function mergePr() {
           <div class="flex items-center gap-2">
             <!-- Every agent is clickable: it opens the step-detail overlay (timing,
                  model, subtasks + the prose output when there is one). -->
-            <button
-              type="button"
-              class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-white"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex min-w-0 cursor-pointer items-center gap-2 p-0 text-start transition hover:bg-transparent hover:text-highlighted"
+              data-testid="run-step-open"
               :title="
-                s.output
+                stepHasOutput(s)
                   ? t('inspector.execution.viewDetailsOutput')
                   : t('inspector.execution.viewDetails')
               "
@@ -283,24 +403,24 @@ async function mergePr() {
                 class="h-4 w-4 shrink-0"
                 :style="{ color: agentKindMeta(s.agentKind).color }"
               />
-              <span class="truncate text-xs text-slate-200">
+              <span class="truncate text-xs text-default">
                 {{ agentKindMeta(s.agentKind).label }}
               </span>
               <span
                 v-if="isCompanionKind(s.agentKind)"
-                class="shrink-0 rounded bg-slate-700/60 px-1 text-[9px] font-medium uppercase tracking-wide text-slate-300"
+                class="shrink-0 rounded-sm bg-accented/60 px-1 text-3xs font-medium uppercase tracking-wide text-toned"
                 :title="t('inspector.execution.companionTooltip')"
               >
                 {{ t('inspector.execution.companion') }}
               </span>
               <UIcon
-                :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
-                class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                :name="stepHasOutput(s) ? 'i-lucide-book-open-text' : 'i-lucide-info'"
+                class="h-3.5 w-3.5 shrink-0 text-dimmed"
               />
-            </button>
+            </UButton>
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
-              class="ms-auto font-mono text-[10px] tabular-nums text-slate-300"
+              class="ms-auto font-mono text-3xs tabular-nums text-toned"
               data-testid="run-subtasks"
               :title="
                 s.subtasks.inProgress > 0
@@ -318,9 +438,9 @@ async function mergePr() {
               {{ s.subtasks.completed }}/{{ s.subtasks.total }}
             </span>
             <span
-              class="inline-flex items-center gap-1 text-[10px]"
+              class="inline-flex items-center gap-1 text-3xs"
               :class="[
-                stepFailed(s) ? 'text-rose-400' : 'text-slate-400',
+                stepFailed(s) ? 'text-app-error-400' : 'text-muted',
                 { 'ms-auto': !s.subtasks },
               ]"
             >
@@ -329,7 +449,7 @@ async function mergePr() {
               <!-- live elapsed clock: a running step counts up, a finished one shows total -->
               <span
                 v-if="stepElapsed(s)"
-                class="inline-flex items-center gap-0.5 font-mono tabular-nums text-slate-500"
+                class="inline-flex items-center gap-0.5 font-mono tabular-nums text-dimmed"
                 :title="t('inspector.execution.elapsedTooltip')"
               >
                 · {{ stepElapsed(s) }}
@@ -349,7 +469,7 @@ async function mergePr() {
                  indicator, NOT a "Review" gate (the human is summoned only if needed) -->
             <span
               v-else-if="reviews.isBackground(s.agentKind, block.id) && reviewStage"
-              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-indigo-300"
+              class="inline-flex shrink-0 items-center gap-1 text-3xs text-primary"
             >
               <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
               {{ reviewStageLabel }}
@@ -368,24 +488,52 @@ async function mergePr() {
             >
               {{ t('inspector.execution.decide') }}
             </UButton>
-            <!-- A coder step parked on the implementation-fork decision: pick an approach
-                 (or enter a custom one) in the dedicated window, not a plain approval. -->
+            <!-- A step parked on something a dedicated WINDOW answers: the implementation-fork
+                 choice, undecided follow-up items, or a candidate comparison. None of them is a
+                 plain approval (the generic resolver refuses all three server-side), and all
+                 three present the same way here: one button into the window that can resolve
+                 it. Driven by the shared per-park table rather than a branch each, because a
+                 branch each is how the candidate park shipped with no button at all. -->
+            <UButton
+              v-else-if="s.approval && s.approval.status === 'pending' && redirectPark(s)"
+              color="primary"
+              variant="soft"
+              size="xs"
+              :icon="REDIRECT_PARK_PRESENTATION[redirectPark(s)!].icon"
+              :data-park="redirectPark(s)"
+              data-testid="dedicated-park-open"
+              @click="openParkFor(redirectPark(s)!, i)"
+            >
+              {{ t(REDIRECT_PARK_PRESENTATION[redirectPark(s)!].railActionKey) }}
+            </UButton>
+            <!-- A pr-reviewer step parked awaiting a finding selection: open the dedicated
+                 findings-selection window, not the generic approval gate. -->
             <UButton
               v-else-if="
                 s.approval &&
                 s.approval.status === 'pending' &&
-                s.forkDecision?.status === 'awaiting_choice'
+                s.prReview?.status === 'awaiting_selection'
               "
               color="primary"
               variant="soft"
               size="xs"
-              icon="i-lucide-git-fork"
-              @click="openForkFor(i)"
+              icon="i-lucide-clipboard-check"
+              data-testid="pr-review-open"
+              @click="openPrReviewFor(i)"
             >
-              {{ t('inspector.execution.chooseApproach') }}
+              {{ t('inspector.execution.reviewFindings') }}
             </UButton>
+            <!-- The generic approve/review rail. Reached only once no dedicated surface owns
+                 the park: the branches above took the fork and follow-up windows, so the one
+                 left to exclude is the PRE-DISPATCH INPUT GATE, which rides `step.approval` too
+                 but is refused by the generic resolver server-side (approving it would mark the
+                 run's first working step done and skip the work). It is answered by the notice
+                 above the list. Asked of `dedicatedParkView` rather than re-derived here, so
+                 the rule that decides which surface owns a park lives in exactly one place. -->
             <UButton
-              v-else-if="s.approval && s.approval.status === 'pending'"
+              v-else-if="
+                s.approval && s.approval.status === 'pending' && !dedicatedParkView(s, instance)
+              "
               color="warning"
               variant="soft"
               size="xs"
@@ -405,16 +553,16 @@ async function mergePr() {
           </div>
           <div
             v-if="s.subtasks && s.subtasks.total > 0"
-            class="mt-1 ms-6 h-1 overflow-hidden rounded-full bg-slate-700/60"
+            class="mt-1 ms-6 h-1 overflow-hidden rounded-full bg-accented/60"
           >
             <div
-              class="h-full rounded-full bg-indigo-400 transition-all duration-500"
+              class="h-full rounded-full bg-primary transition-all duration-500"
               :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
             />
           </div>
           <div
             v-if="s.model"
-            class="mt-0.5 flex items-center gap-1 ps-6 text-[10px] text-slate-500"
+            class="mt-0.5 flex items-center gap-1 ps-6 text-3xs text-dimmed"
             :title="s.model"
           >
             <UIcon name="i-lucide-cpu" class="h-3 w-3" />
@@ -423,7 +571,7 @@ async function mergePr() {
           <!-- Prompt-fragment standards the library selected for this step. -->
           <div
             v-if="s.selectedFragmentIds && s.selectedFragmentIds.length"
-            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-[10px] text-slate-500"
+            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-3xs text-dimmed"
             :title="
               t('inspector.execution.fragmentsTooltip', {
                 fragments: s.selectedFragmentIds.join(', '),
@@ -443,7 +591,7 @@ async function mergePr() {
                completed/skipped, so it's clear whether a fix pass ran. -->
           <div
             v-if="gateCompanionFor(s, runFailed)"
-            class="mt-0.5 flex items-center gap-1.5 ps-6 text-[10px]"
+            class="mt-0.5 flex items-center gap-1.5 ps-6 text-3xs"
           >
             <UIcon
               :name="agentKindMeta(gateCompanionFor(s, runFailed)!.kind).icon"
@@ -453,7 +601,7 @@ async function mergePr() {
                 gateCompanionFor(s, runFailed)!.state === 'running' ? 'animate-spin' : '',
               ]"
             />
-            <span class="text-slate-400">
+            <span class="text-muted">
               {{
                 t('inspector.execution.companionOf', {
                   label: agentKindMeta(gateCompanionFor(s, runFailed)!.kind).label,
@@ -477,11 +625,27 @@ async function mergePr() {
     <!-- error trail of prior attempts (survives a retry/restart that cleared the banner) -->
     <AgentFailureHistory :failures="failureHistory" />
 
+    <!-- Read the result: the outcome summary is the way in, and the pull request below is the
+         way to the diff. Offered whenever there is evidence or a PR to read, which includes a
+         merged task whose run instance is long gone. -->
+    <UButton
+      v-if="outcomeReadable"
+      color="primary"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-clipboard-check"
+      block
+      data-testid="inspector-open-outcome"
+      @click="openOutcome"
+    >
+      {{ t('inspector.execution.readOutcome') }}
+    </UButton>
+
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SectionLabel as="span">
         {{ t('inspector.execution.pullRequest') }}
-      </span>
+      </SectionLabel>
       <UButton
         :to="pr.url"
         target="_blank"
@@ -501,7 +665,7 @@ async function mergePr() {
           </UBadge>
         </span>
       </UButton>
-      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-[10px] text-slate-500">
+      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-3xs text-dimmed">
         <UIcon name="i-lucide-git-branch" class="h-3 w-3 shrink-0" />
         <span class="truncate" :title="pr.branch">{{ pr.branch }}</span>
       </p>
@@ -516,17 +680,25 @@ async function mergePr() {
       :description="t('inspector.execution.empty.body')"
     />
 
-    <!-- PR ready: merge -->
-    <UButton
-      v-if="block.status === 'pr_ready'"
-      color="success"
-      variant="solid"
-      size="sm"
-      icon="i-lucide-git-merge"
-      block
-      @click="mergePr"
-    >
-      {{ t('inspector.execution.mergePr') }}
-    </UButton>
+    <!-- PR ready: record how much review it needed, then merge. -->
+    <template v-if="block.status === 'pr_ready'">
+      <MergeEffortChips
+        v-model="mergeEffort"
+        :change-class="mergeChangeClass"
+        :rollup="mergeChangeClass ? trackRecords.byClass[mergeChangeClass] : null"
+      />
+      <UButton
+        class="mt-2"
+        color="success"
+        variant="solid"
+        size="sm"
+        icon="i-lucide-git-merge"
+        block
+        data-testid="inspector-merge-pr"
+        @click="mergePr"
+      >
+        {{ t('inspector.execution.mergePr') }}
+      </UButton>
+    </template>
   </InspectorSection>
 </template>
