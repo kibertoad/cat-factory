@@ -183,28 +183,38 @@ describe('redactSecrets', () => {
     // Index 0 is the baseline, held by position rather than by name so no shape can replace it.
     // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
     // a millisecond's granularity is noise against samples an order of magnitude larger.
-    const bodies = [prose, ...Object.values(shapes)]
+    const bodies = [prose, ...Object.values(shapes)].map((body, index) => ({ body, index }))
     const fastest = bodies.map(() => Number.POSITIVE_INFINITY)
-    // One sample this slow is no contention burst but a rescanning rule (the PEM regression
-    // took ~19s per body), so the round in progress is the last: the ratios below already fail,
-    // and further rounds would only hold the worker for the same answer.
-    const regressionSampleMs = 2000
-    for (let round = 0; round < 7; round++) {
-      let slowest = 0
-      for (let step = 0; step < bodies.length; step++) {
-        const index = (round + step) % bodies.length
+    // A rescanning rule makes each round cost seconds (the PEM regression took ~19s per body),
+    // and more rounds only hold the worker for the same answer. So the loop stops early, but
+    // only on evidence a contention burst cannot produce: in TWO consecutive rounds, a SHAPE
+    // sample over 2s AND over 50x the prose sample of its own round. One stall covers one
+    // round, and a stall on the prose sample raises the bar instead of meeting it. The
+    // regressed shape's fastest sample is then far above 4x, so its ratio below fails.
+    const rescanSampleMs = 2000
+    const rescanRatio = 50
+    let rescannedRounds = 0
+    for (let round = 0; round < 7 && rescannedRounds < 2; round++) {
+      const start = round % bodies.length
+      const samples = bodies.map(() => 0)
+      for (const { body, index } of [...bodies.slice(start), ...bodies.slice(0, start)]) {
         const started = Date.now()
-        redactSecrets(bodies[index] ?? '')
-        const elapsed = Date.now() - started
-        fastest[index] = Math.min(fastest[index] ?? Number.POSITIVE_INFINITY, elapsed)
-        slowest = Math.max(slowest, elapsed)
+        redactSecrets(body)
+        samples[index] = Date.now() - started
       }
-      if (slowest > regressionSampleMs) break
+      const [roundProse = 0, ...roundShapes] = samples
+      for (const [index, sample] of samples.entries()) {
+        fastest[index] = Math.min(fastest[index] ?? Number.POSITIVE_INFINITY, sample)
+      }
+      const rescanned = roundShapes.some(
+        (sample) => sample > rescanSampleMs && sample > rescanRatio * roundProse,
+      )
+      rescannedRounds = rescanned ? rescannedRounds + 1 : 0
     }
     const baseline = fastest[0] ?? 0
     // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
-    // with no hint of why, so it is asserted as its own condition. 2MB of prose is ~17ms, so
-    // this only trips if the body stopped being scrubbed at all.
+    // with no hint of why, so it is asserted as its own condition. 2MB of prose takes several
+    // milliseconds, so this only trips if the body stopped being scrubbed at all.
     expect(
       baseline,
       'prose baseline must be measurable at millisecond granularity',
