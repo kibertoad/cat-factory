@@ -1,7 +1,7 @@
-// The tree walk, the comment rule and the template reader shared by the SPA guards
-// (`check-frontend-palette.mjs`, `check-frontend-radius.mjs`, `check-frontend-type-scale.mjs`,
+// The tree walk, the comment rule, the template reader and the waiver rules shared by the SPA
+// guards (`check-frontend-palette.mjs`, `check-frontend-radius.mjs`, `check-frontend-type-scale.mjs`,
 // `check-frontend-primitives.mjs`, `check-frontend-variants.mjs`). They must scan the same files
-// with the same idea of what a comment and an opening tag are, so each lives here once.
+// with the same idea of what a comment, an opening tag and a waiver are, so each lives here once.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -163,4 +163,106 @@ export function templateHalf(source) {
     .replace(/<script[\s\S]*?<\/script>/g, blank)
     .replace(/<style[\s\S]*?<\/style>/g, blank)
     .replace(/<!--[\s\S]*?-->/g, blank)
+}
+
+/**
+ * Whether a LINE carries the waiver `marker`, on itself or on the line before it. The line-scoped
+ * waiver every guard that matches a line uses, so its rule lives in one place.
+ */
+export function isWaived(line, prevLine, marker) {
+  return line.includes(marker) || prevLine.includes(marker)
+}
+
+/**
+ * Whether the line directly above a TAG is a comment carrying the waiver `marker`. A tag-scoped
+ * waiver: unlike {@link isWaived} it cannot leak onto a second tag that starts on the same line or
+ * the one after, because it has to sit on its own line, above the tag it justifies.
+ */
+export function isWaivedAbove(prevLine, marker) {
+  const trimmed = prevLine.trim()
+  return (trimmed.startsWith('<!--') || trimmed.startsWith('//')) && trimmed.includes(marker)
+}
+
+// Elements that never have children, so they open no frame in {@link walkTemplate}.
+const VOID_TAGS = new Set([
+  'area',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'wbr',
+])
+
+/** `u-button` → `UButton`; a PascalCase name passes through. Vue resolves both to one component. */
+export function componentName(tagName) {
+  return tagName.includes('-')
+    ? tagName.replace(/(^|-)([a-z])/g, (_, __, char) => char.toUpperCase())
+    : tagName
+}
+
+/**
+ * Walk the element tree of a `.vue` source's TEMPLATE half, calling `open(node, ancestors)` for
+ * every opening tag and `close(node)` when it ends. A node is `{ name, tag, index, line,
+ * selfClosing, data }`: `name` normalised by {@link componentName}, `tag` the whole opening tag,
+ * `line` 1-based, `data` a scratch object the caller owns. `ancestors` is the open chain, outermost
+ * first.
+ *
+ * Comments, the script and style blocks, and `{{ … }}` mustaches are blanked first, and the scan
+ * resumes AFTER each opening tag, so a `<` inside a binding (`Array<Item>`) or an expression
+ * (`n<max`) is never read as an element. A stray closing tag closes nothing.
+ */
+export function walkTemplate(source, { open = () => {}, close = () => {} }) {
+  const blank = (m) => m.replace(/[^\n]/g, ' ')
+  const text = templateHalf(source).replace(/\{\{[\s\S]*?\}\}/g, blank)
+  const lineStarts = [0]
+  for (let i = 0; i < text.length; i++) if (text[i] === '\n') lineStarts.push(i + 1)
+  const lineOf = (index) => {
+    let lo = 0
+    let hi = lineStarts.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (lineStarts[mid] <= index) lo = mid
+      else hi = mid - 1
+    }
+    return lo + 1
+  }
+  const stack = []
+  const tagRe = /<(\/?)([A-Za-z][\w.-]*)/g
+  let m
+  while ((m = tagRe.exec(text))) {
+    const name = componentName(m[2])
+    if (m[1]) {
+      const at = stack.findLastIndex((node) => node.name === name)
+      if (at >= 0) while (stack.length > at) close(stack.pop())
+      continue
+    }
+    const tag = tagAt(text, m.index)
+    tagRe.lastIndex = m.index + tag.length
+    const selfClosing = tag.trimEnd().endsWith('/>') || VOID_TAGS.has(m[2].toLowerCase())
+    const node = { name, tag, index: m.index, line: lineOf(m.index), selfClosing, data: {} }
+    open(node, stack)
+    if (selfClosing) close(node)
+    else stack.push(node)
+  }
+  while (stack.length) close(stack.pop())
+}
+
+/** The opening tag starting at `from`, up to its first `>` outside a quoted value. */
+function tagAt(text, from) {
+  let quote = null
+  for (let i = from; i < text.length; i++) {
+    const char = text[i]
+    if (quote) {
+      if (char === quote) quote = null
+    } else if (char === '"' || char === "'") {
+      quote = char
+    } else if (char === '>') {
+      return text.slice(from, i + 1)
+    }
+  }
+  return text.slice(from)
 }

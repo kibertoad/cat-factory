@@ -53,6 +53,7 @@
 import { readFileSync } from 'node:fs'
 import {
   isCliEntry,
+  isWaived,
   MAX_TAG_LINES,
   openingTag,
   readCodeLines,
@@ -89,7 +90,7 @@ const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
  */
 export function findRawControls(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const found = []
   for (const element of Object.keys(REPLACEMENTS)) {
     const re = new RegExp(`<${element}(?![a-zA-Z0-9-])`, 'g')
@@ -119,14 +120,14 @@ const RENDER_ELEMENT = new RegExp(`(?<![\\w$.])h\\(\\s*['"\`](${ELEMENTS})['"\`]
 /** Every banned control a component or `:is` binding is told to render on a template line. */
 export function findDynamicControls(line, prevLine = '') {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const found = [...line.matchAll(AS_ELEMENT), ...line.matchAll(IS_ELEMENT)].map((m) => m[1])
   return [...new Set(found)]
 }
 
 /** Every banned control a render function creates, on one line from `codeLines` (a `.ts` file). */
 export function findRenderedControls({ raw, code, prev }) {
-  if (raw.includes(RAW_OK) || prev.includes(RAW_OK)) return []
+  if (isWaived(raw, prev, RAW_OK)) return []
   return [...new Set([...code.matchAll(RENDER_ELEMENT)].map((m) => m[1]))]
 }
 
@@ -139,7 +140,7 @@ export function findTitleOnlyIconButton(
   bodyOf = () => '',
 ) {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const match = /<UButton(?![a-zA-Z0-9-])/.exec(line)
   if (!match) return []
   const tag = tagOf(match.index)
@@ -164,7 +165,7 @@ export function buttonBody(lines, index, from = 0) {
 /** `title=` on a primitive that already owns its tooltip. */
 export function findRedundantTitle(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const match = /<(?:IconButton|CopyButton)(?![a-zA-Z0-9-])/.exec(line)
   if (!match) return []
   // Same reason as the anchor above: an IconButton with a `title` is never one line long.

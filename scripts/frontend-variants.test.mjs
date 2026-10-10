@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { findInTemplate, readDefaults } from './check-frontend-variants.mjs'
+import { deriveWrappers, findInTemplate, readDefaults } from './check-frontend-variants.mjs'
 import { repoRoot } from './lib/frontend-scan.mjs'
 
 // A synthetic config whose button and badge defaults DIFFER, so the per-component lookup is
@@ -22,7 +22,9 @@ const CONFIG = `export default defineAppConfig({
 })`
 const defaults = readDefaults(CONFIG)
 const sfc = (template) => `<template>\n${template}\n</template>\n`
-const find = (template) => findInTemplate(sfc(template), defaults)
+// The Nuxt UI pair plus the one wrapper the real tree derives.
+const TAG_KEYS = { UButton: 'button', UBadge: 'badge', IconButton: 'button' }
+const find = (template) => findInTemplate(sfc(template), defaults, TAG_KEYS)
 
 describe('readDefaults', () => {
   it('reads each component block', () => {
@@ -39,6 +41,15 @@ describe('readDefaults', () => {
     for (const key of ['button', 'badge']) {
       assert.deepEqual(Object.keys(parsed[key]).sort(), ['color', 'size', 'variant'])
     }
+  })
+
+  it('tolerates a sibling key first, a comment and double quotes', () => {
+    const edited = CONFIG.replace(
+      "button: {\n      defaultVariants: { color: 'neutral', variant: 'ghost', size: 'xs' },",
+      'button: {\n      slots: { base: "gap-1" },\n      // the quiet control\n      defaultVariants: { color: "neutral", /* why */ variant: "ghost", size: "xs" },',
+    )
+    assert.notEqual(edited, CONFIG)
+    assert.deepEqual(readDefaults(edited).button, defaults.button)
   })
 
   it('throws when a block or a prop is missing, rather than passing everything', () => {
@@ -98,8 +109,60 @@ describe('findInTemplate', () => {
     assert.deepEqual(findInTemplate(source, defaults), [])
   })
 
-  it('honours the waiver on the tag line or the line before it', () => {
-    assert.deepEqual(find('<UButton size="xs" /> <!-- variant-default-ok: why -->'), [])
+  it('honours a waiver on its own line directly above the tag, for that tag only', () => {
     assert.deepEqual(find('<!-- variant-default-ok: why -->\n<UButton size="xs" />'), [])
+    // A trailing comment does not waive, and a waiver does not leak onto the next tag.
+    assert.deepEqual(find('<UButton size="xs" /> <!-- variant-default-ok: why -->'), [
+      { line: 2, matches: ['<UButton>', 'size="xs"'] },
+    ])
+    assert.deepEqual(
+      find('<!-- variant-default-ok: why -->\n<UButton size="xs" />\n<UButton size="xs" />'),
+      [{ line: 4, matches: ['<UButton>', 'size="xs"'] }],
+    )
+  })
+
+  it('reads kebab-case tags, single quotes and v-bind object literals', () => {
+    assert.deepEqual(find('<u-button size="xs" />'), [
+      { line: 2, matches: ['<UButton>', 'size="xs"'] },
+    ])
+    assert.deepEqual(find("<UButton size='xs' />"), [
+      { line: 2, matches: ['<UButton>', 'size="xs"'] },
+    ])
+    assert.deepEqual(find(`<UButton v-bind="{ size: 'xs', block: true }" />`), [
+      { line: 2, matches: ['<UButton>', 'size="xs"'] },
+    ])
+    assert.deepEqual(find(`<UButton :color='"neutral"' />`), [
+      { line: 2, matches: ['<UButton>', 'color="neutral"'] },
+    ])
+  })
+
+  it('does not flag size inside a field group, which sets the size itself', () => {
+    assert.deepEqual(find('<UFieldGroup size="sm">\n  <UButton size="xs" />\n</UFieldGroup>'), [])
+    // ...but the group does not excuse colour or variant.
+    assert.deepEqual(
+      find('<UFieldGroup size="sm">\n  <UButton color="neutral" />\n</UFieldGroup>'),
+      [{ line: 3, matches: ['<UButton>', 'color="neutral"'] }],
+    )
+  })
+
+  it('does not read a < inside a binding or a mustache as a tag', () => {
+    assert.deepEqual(
+      find('<UButton :x="y as Array<Item>" />\n<span>{{ n<max }}</span>\n<UButton size="xs" />'),
+      [{ line: 4, matches: ['<UButton>', 'size="xs"'] }],
+    )
+  })
+})
+
+describe('deriveWrappers', () => {
+  it('finds a component that spreads its attributes into a UButton or UBadge', () => {
+    const wrapper = (inner) => `<template>\n  <span>${inner}</span>\n</template>\n`
+    assert.deepEqual(
+      deriveWrappers([
+        { name: 'IconButton', source: wrapper('<UButton v-bind="buttonAttrs" />') },
+        { name: 'ChipBadge', source: wrapper('<u-badge v-bind="$attrs" />') },
+        { name: 'CopyButton', source: wrapper('<UButton :size="size" />') },
+      ]),
+      { IconButton: 'button', ChipBadge: 'badge' },
+    )
   })
 })
