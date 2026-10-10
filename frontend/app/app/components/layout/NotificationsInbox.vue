@@ -466,30 +466,37 @@ function revealDecision(n: Notification) {
                 class="mt-1.5 flex flex-col gap-0.5"
                 data-testid="notification-failing-runs"
               >
-                <component
-                  :is="canOpenFailingRun(run) ? 'button' : 'span'"
-                  v-for="run in failingRuns(n)"
-                  :key="run.executionId"
-                  :type="canOpenFailingRun(run) ? 'button' : undefined"
-                  class="flex items-center gap-1 text-start text-2xs"
-                  :class="
-                    canOpenFailingRun(run)
-                      ? 'text-app-info-400 hover:underline'
-                      : 'cursor-default text-dimmed'
-                  "
-                  :title="
-                    canOpenFailingRun(run) ? undefined : t('layout.notifications.failingRunGone')
-                  "
-                  @click="canOpenFailingRun(run) && revealFailingRun(run)"
-                >
-                  <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
-                  <span class="truncate">{{
-                    t('layout.notifications.failingRun', {
-                      kind: run.failureKind,
-                      at: d(new Date(run.createdAt), 'short'),
-                    })
-                  }}</span>
-                </component>
+                <template v-for="run in failingRuns(n)" :key="run.executionId">
+                  <UButton
+                    v-if="canOpenFailingRun(run)"
+                    color="neutral"
+                    variant="link"
+                    size="xs"
+                    class="gap-1 p-0 text-start text-2xs text-app-info-400 hover:text-app-info-400 hover:underline"
+                    @click="revealFailingRun(run)"
+                  >
+                    <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{
+                      t('layout.notifications.failingRun', {
+                        kind: run.failureKind,
+                        at: d(new Date(run.createdAt), 'short'),
+                      })
+                    }}</span>
+                  </UButton>
+                  <span
+                    v-else
+                    class="flex cursor-default items-center gap-1 text-start text-2xs text-dimmed"
+                    :title="t('layout.notifications.failingRunGone')"
+                  >
+                    <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{
+                      t('layout.notifications.failingRun', {
+                        kind: run.failureKind,
+                        at: d(new Date(run.createdAt), 'short'),
+                      })
+                    }}</span>
+                  </span>
+                </template>
                 <span v-if="failingRunsOmitted(n) > 0" class="text-2xs text-dimmed">
                   {{ t('layout.notifications.failingRunsMore', { count: failingRunsOmitted(n) }) }}
                 </span>

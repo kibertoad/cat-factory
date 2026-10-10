@@ -74,19 +74,22 @@ function toggle(id: string) {
     </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
-        <SectionLabel
-          as="button"
-          type="button"
-          class="flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-start transition hover:text-default"
+        <UButton
+          color="neutral"
+          variant="link"
+          class="group w-full rounded-sm px-1 py-1"
+          :aria-expanded="!isCollapsed(g.id)"
           @click="toggle(g.id)"
         >
-          <UIcon
-            :name="isCollapsed(g.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-            class="h-3.5 w-3.5 shrink-0"
-          />
-          <span>{{ g.label }}</span>
-          <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
-        </SectionLabel>
+          <SectionLabel as="span" class="flex w-full items-center gap-1.5 group-hover:text-default">
+            <UIcon
+              :name="isCollapsed(g.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+              class="h-3.5 w-3.5 shrink-0"
+            />
+            <span>{{ g.label }}</span>
+            <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
+          </SectionLabel>
+        </UButton>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
           <UButton
             color="neutral"
