@@ -1,0 +1,48 @@
+{
+  "name": "@cat-factory/webhooks",
+  "version": "0.1.0",
+  "description": "Verify cat-factory outbound webhook deliveries: the HMAC-SHA256 signature over the raw body and the timestamp replay window, with Web Crypto only, so one receiver runs on Node, in a browser or in a worker isolate.",
+  "keywords": [
+    "cat-factory",
+    "hmac",
+    "signature",
+    "webhooks"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "sdk/webhooks"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

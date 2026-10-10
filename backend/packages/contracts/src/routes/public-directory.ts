@@ -18,7 +18,7 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // Route contracts for the public DIRECTORY surface (`/api/v1/directory/*`): the account's
 // workspaces, users, memberships and linked repositories, as keyset-paged snapshots and an ordered
 // change feed. Account-scoped rather than workspace-scoped, so no `x-cat-factory-workspace`
-// header is read. Design: docs/initiatives/directory-sync.md.
+// header is read. Design: backend/docs/adr/0067-directory-sync.md.
 //
 // All `read`: mirroring a directory changes nothing on the platform. Users and account memberships
 // are account-wide facts, so a key limited to some workspaces is refused them; the other three are

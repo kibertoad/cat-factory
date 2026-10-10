@@ -19,7 +19,7 @@ import {
   type WorkspaceMembershipKey,
 } from '@cat-factory/kernel'
 
-// The public directory read side (docs/initiatives/directory-sync.md): an account's workspaces,
+// The public directory read side (backend/docs/adr/0067-directory-sync.md): an account's workspaces,
 // users, memberships and linked repositories as keyset-paged snapshots, plus the change feed that
 // keeps a mirror of them current. The repository answers in SQL; this service owns the rules the
 // two runtimes must agree on: which key sees what, when a feed cursor has expired, where a page of

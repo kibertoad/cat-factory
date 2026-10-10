@@ -159,7 +159,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByIds: { scope: { kind: 'accountList', arg: 0 } },
     findPersonalByUser: { scope: { kind: 'selfUser', arg: 0 } },
   },
-  // The public directory read side (docs/initiatives/directory-sync.md), so a mothership-mode node
+  // The public directory read side (backend/docs/adr/0067-directory-sync.md), so a mothership-mode node
   // can serve `/api/v1/directory/*` over the account's real directory. Reads only, every one bound
   // to the account it names: the feed rows are appended by the mothership's own writes, and
   // `pruneChanges` is the mothership's retention sweep, which a node never runs. `headSeqs` reads

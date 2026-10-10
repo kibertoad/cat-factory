@@ -1,5 +1,5 @@
 -- Account-level endpoints that receive the directory change feed as signed pushes
--- (docs/initiatives/directory-sync.md, slice 4). `delivered_seq` is the feed position pushed
+-- (backend/docs/adr/0067-directory-sync.md). `delivered_seq` is the feed position pushed
 -- through. A sweeper takes the lease (`lease_token`, held until `lease_until`) before a push and
 -- moves `delivered_seq` only after the push succeeds, so two sweepers never push overlapping
 -- pages, a failed push is retried, and a page whose sweeper died is offered again once the lease

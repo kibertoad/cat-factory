@@ -197,6 +197,7 @@ jobs:
               - 'deploy/gatekeeper/**'
               - 'sdk/gatekeeper/**'
               - 'sdk/gatekeeper-worker/**'
+              - 'sdk/webhooks/**'
               - 'sdk/typescript/**'
               - 'backend/packages/server/src/modules/publicApi/**'
               - 'backend/packages/orchestration/**'

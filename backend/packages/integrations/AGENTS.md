@@ -118,7 +118,7 @@ prerequisites are configured.
   rather than an emission per write. Each endpoint's delivery position is claimed by
   compare-and-swap before a push and released after a failed one; it reuses
   `notificationWebhook/`'s signing and SSRF-guarded delivery. Design:
-  [`directory-sync.md`](../../../docs/initiatives/directory-sync.md).
+  [ADR 0067](../../docs/adr/0067-directory-sync.md).
 - `slack/`, `email/`, `notificationWebhook/`: notification channels (`email/` carries both the
   per-account sender connection and the `EmailNotificationChannel` over it; the last one is the
   outbound HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions).

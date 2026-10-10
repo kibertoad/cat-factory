@@ -2,7 +2,7 @@ import { type DirectoryEntityType, isDirectoryEntityType } from '@cat-factory/co
 import type { DirectoryChangeRecord } from '../ports/directory-changes.js'
 
 // The rules both facades' directory repositories apply to stored change-feed rows
-// (docs/initiatives/directory-sync.md), kept here so the D1 and Postgres readers cannot drift.
+// (backend/docs/adr/0067-directory-sync.md), kept here so the D1 and Postgres readers cannot drift.
 
 /** A `directory_changes` row as both facades store it. */
 export interface StoredDirectoryChange {

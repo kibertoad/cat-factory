@@ -7,10 +7,17 @@ can drive. Product/design notes: [`README.md`](./README.md) and
 [`mcp/README.md`](./mcp/README.md); the API itself:
 [`backend/docs/public-api.md`](../backend/docs/public-api.md).
 
-One member is not a projection at all: `gatekeeper-worker/` (`@cat-factory/gatekeeper-worker`) is
-the hand-written Cloudflare OS Gatekeeper machinery a deployment installs, built on the generated
-`gatekeeper/` table and the TypeScript client. Nothing in `scripts/sdk/` emits it, and the rule
-below does not apply to it; `deploy/gatekeeper` is the template that installs it.
+Three members are not projections at all, and the rule below does not apply to them; nothing in
+`scripts/sdk/` emits them:
+
+- `gatekeeper-worker/` (`@cat-factory/gatekeeper-worker`): the Cloudflare OS Gatekeeper machinery a
+  deployment installs, built on the generated `gatekeeper/` table and the TypeScript client;
+  `deploy/gatekeeper` is the template that installs it.
+- `webhooks/` (`@cat-factory/webhooks`): the signed-delivery verifier. Web Crypto only, so it runs
+  wherever a receiver does; `gatekeeper-worker` re-exports it rather than carrying a copy.
+- `directory-sync/` (`@cat-factory/directory-sync`): keeps a copy of an account's directory in sync
+  over a `DirectoryStore` the integrator implements. Design:
+  [ADR 0067](../backend/docs/adr/0067-directory-sync.md).
 
 **The rule that governs everything here: models and operations are GENERATED, transports are
 HAND-WRITTEN.** The chain is `contracts → docs/openapi.json → sdk/*`, with no hand-editing at any

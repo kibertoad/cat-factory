@@ -12,8 +12,8 @@ defineWorkspaceAccessSuite(harness)
 // Workspace-RBAC initiative (slice 3): the gate's resolution + viewer write floor + list
 // filtering, enforced over the real HTTP gate — identically on D1 and Postgres.
 defineWorkspaceRbacSuite(harness)
-// Directory-sync slice 2: account-level public-API keys, their workspace reach and the per-request
+// Directory sync (ADR 0067): account-level public-API keys, their workspace reach and the per-request
 // workspace resolution, over the real grant rows and the real auth gate.
 definePublicKeyReachSuite(harness)
-// Directory-sync slice 3: the public directory snapshots and change feed, over HTTP.
+// Directory sync (ADR 0067): the public directory snapshots and change feed, over HTTP.
 definePublicDirectorySuite(harness)

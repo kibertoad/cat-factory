@@ -1,0 +1,16 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    // Published and consumed by ordinary Node/bundler projects, resolved and emitted exactly as
+    // `@cat-factory/sdk` is.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2022", "DOM"],
+    // Web platform types alone: a syncer runs on Node, in a browser or in a worker isolate, so
+    // a Node-only reference must fail to compile here rather than for half the consumers.
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}

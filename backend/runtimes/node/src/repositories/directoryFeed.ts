@@ -1,7 +1,7 @@
 import { type SQL, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 
-// The append half of the directory change feed (docs/initiatives/directory-sync.md), shared by
+// The append half of the directory change feed (backend/docs/adr/0067-directory-sync.md), shared by
 // every repository that writes a directory entity. Mirror of the Cloudflare facade's
 // `directoryFeed.ts`; the conformance suite `defineDirectoryFeedSuite` holds the two to one
 // behaviour.

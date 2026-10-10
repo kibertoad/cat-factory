@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { verifyDelivery } from '../src/webhook/signature.js'
+import { verifyDelivery } from '../src/signature.ts'
+import { verifyRequest } from '../src/request.ts'
 
 const SECRET = 'test-webhook-secret-0123456789ab'
 const NOW = 1_800_000_000_000
@@ -116,5 +117,35 @@ describe('verifyDelivery', () => {
       NOW,
     )
     expect(result).toEqual({ ok: false, reason: 'bad_signature' })
+  })
+})
+
+describe('verifyRequest', () => {
+  it('reads the body once and hands back the verified text', async () => {
+    const body = '{"event":"directory.changed"}'
+    const request = new Request('https://receiver.example.com/hook', {
+      method: 'POST',
+      body,
+      headers: {
+        'x-cat-factory-timestamp': String(NOW),
+        'x-cat-factory-signature': await sign(NOW, body),
+      },
+    })
+    expect(await verifyRequest(request, SECRET, { now: NOW })).toEqual({ ok: true, rawBody: body })
+  })
+
+  it('refuses a tampered body', async () => {
+    const request = new Request('https://receiver.example.com/hook', {
+      method: 'POST',
+      body: '{"event":"forged"}',
+      headers: {
+        'x-cat-factory-timestamp': String(NOW),
+        'x-cat-factory-signature': await sign(NOW, '{"event":"original"}'),
+      },
+    })
+    expect(await verifyRequest(request, SECRET, { now: NOW })).toEqual({
+      ok: false,
+      reason: 'bad_signature',
+    })
   })
 })
