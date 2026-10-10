@@ -1,6 +1,6 @@
 import type { AgentKindCapabilityView, BundledSkillDefinition } from '@cat-factory/agents'
 import type { McpServerDefinition } from '@cat-factory/kernel'
-import { isRecord } from '../modules/toolServers/mcpDialect.js'
+import { isRecord } from '../shared/guards.js'
 
 // The wire shape of `GET /internal/agent-kinds`, shared by the controller that encodes it and the
 // `HttpAgentKindSource` that decodes it, so the two halves cannot drift.
@@ -77,7 +77,7 @@ function definitionTable<T extends object>() {
  */
 export function decodeAgentKindLayer(
   body: unknown,
-): { views: AgentKindCapabilityView[] } | { unreadable: string; versionMismatch?: true } {
+): { views: AgentKindCapabilityView[] } | { unreadable: string } | { versionMismatch: true } {
   const { kinds, bundledSkills, toolServers } = (body ?? {}) as {
     kinds?: unknown
     bundledSkills?: unknown
@@ -85,10 +85,10 @@ export function decodeAgentKindLayer(
   }
   if (!Array.isArray(kinds)) return { unreadable: 'kinds' }
   // Named apart from a corrupt reply because the fix is different: this node is newer than its
-  // mothership, and the remedy is to run the same build on both, not to look for damage.
-  if (bundledSkills === undefined && toolServers === undefined && kinds.some(isInlineShapeView)) {
-    return { unreadable: 'kinds[]', versionMismatch: true }
-  }
+  // mothership, and the remedy is to run the same build on both, not to look for damage. Both
+  // tables missing IS the older shape, whatever `kinds` holds: the stock product's empty layer
+  // (`{ kinds: [] }`) is the commonest reply an older mothership sends.
+  if (bundledSkills === undefined && toolServers === undefined) return { versionMismatch: true }
   if (!Array.isArray(bundledSkills) || !bundledSkills.every(isBundledSkill)) {
     return { unreadable: 'bundledSkills' }
   }
@@ -143,17 +143,6 @@ function isWireView(entry: unknown): entry is AgentKindWireView {
   )
 }
 
-/** A kind entry in the shape a mothership sent before definitions rode by reference. */
-function isInlineShapeView(entry: unknown): boolean {
-  return (
-    isRecord(entry) &&
-    isRecord(entry.skills) &&
-    Array.isArray(entry.skills.bundled) &&
-    isRecord(entry.toolServers) &&
-    Array.isArray(entry.toolServers.servers)
-  )
-}
-
 /** A catalog ref the engine resolves later: the skill id, and whether a miss may be skipped. */
 function isCatalogRef(entry: unknown): boolean {
   return isRecord(entry) && typeof entry.skillId === 'string' && typeof entry.optional === 'boolean'
@@ -178,19 +167,20 @@ function isBundledSkill(entry: unknown): entry is BundledSkillDefinition {
 
 /**
  * Every field the executor READS to wire a server: its id, a transport it can reach (a stdio
- * command with string arguments, or an http URL), and the string lists it renders into the
- * harness config. A missing one would reach the container as an `undefined` command or URL.
+ * command, or an http URL), and every string the harness renders into the CLI's MCP config or the
+ * prompt. A wrong type would reach the container as an `undefined` command or a non-string header.
  */
 function isToolServer(entry: unknown): entry is McpServerDefinition {
   if (!isRecord(entry) || typeof entry.id !== 'string' || !isTransport(entry.transport)) {
     return false
   }
-  const { allowedTools, secretKeys } = entry
   return (
-    (allowedTools === undefined || isStringList(allowedTools)) &&
-    (secretKeys === undefined ||
-      (Array.isArray(secretKeys) &&
-        secretKeys.every((ref) => isRecord(ref) && typeof ref.key === 'string')))
+    optional(entry.label, isString) &&
+    optional(entry.guidance, isString) &&
+    optional(entry.allowedTools, isStringList) &&
+    optional(entry.harnesses, isStringList) &&
+    optional(entry.secretKeys, (refs) => Array.isArray(refs) && refs.every(isSecretRef)) &&
+    optional(entry.oauth, isOAuthConfig)
   )
 }
 
@@ -198,10 +188,58 @@ function isTransport(value: unknown): boolean {
   if (!isRecord(value)) return false
   if (value.kind === 'stdio') {
     return (
-      typeof value.command === 'string' && (value.args === undefined || isStringList(value.args))
+      isString(value.command) &&
+      optional(value.args, isStringList) &&
+      optional(value.env, isStringMap)
     )
   }
-  return value.kind === 'http' && typeof value.url === 'string'
+  return value.kind === 'http' && isString(value.url) && optional(value.headers, isStringMap)
+}
+
+function isSecretRef(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isString(value.key) &&
+    optional(value.envName, isString) &&
+    optional(value.header, isString) &&
+    optional(value.headerTemplate, isString) &&
+    optional(value.required, isBoolean) &&
+    optional(value.usage, isString)
+  )
+}
+
+function isOAuthConfig(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.grant === 'authorization_code' || value.grant === 'client_credentials') &&
+    isString(value.clientId) &&
+    [
+      value.clientSecretKey,
+      value.authorizationUrl,
+      value.tokenUrl,
+      value.resource,
+      value.header,
+      value.headerTemplate,
+    ].every((field) => optional(field, isString)) &&
+    optional(value.scopes, isStringList)
+  )
+}
+
+/** An optional field: absent, or present and valid. */
+function optional(value: unknown, check: (value: unknown) => boolean): boolean {
+  return value === undefined || check(value)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean'
+}
+
+function isStringMap(value: unknown): boolean {
+  return isRecord(value) && Object.values(value).every(isString)
 }
 
 function isIndexList(value: unknown): value is number[] {
@@ -209,5 +247,5 @@ function isIndexList(value: unknown): value is number[] {
 }
 
 function isStringList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+  return Array.isArray(value) && value.every(isString)
 }

@@ -34,6 +34,17 @@ import { decodeAgentKindLayer } from './agentKindsWire.js'
  * puts this on a path that runs per STEP rather than per dispatch, it earns a real entry on the
  * `AppCaches` seam, not a memo here.
  *
+ * Every refusal carries `details.reason: 'agent_kinds_unreachable'`, the one machine-readable
+ * cause the rest of the platform maps. Its other `details` keys say which failure it was, for the
+ * operator reading the log, and are not a second reason vocabulary:
+ *
+ * - `status`: the mothership answered with this non-2xx HTTP status (404 from a mothership older
+ *   than this route);
+ * - `field`: the reply parsed but this part of it was unreadable;
+ * - `cause: 'mothership_version_mismatch'`: the reply is in the shape an OLDER mothership sends
+ *   (`agentKindsWire.ts`), so the fix is to run the same build on both sides. The only `cause`
+ *   value; a new one is added here, next to the other two keys.
+ *
  * The bound holds in BYTES too because a `bundled` skill rides by reference (`agentKindsWire.ts`):
  * each distinct body is sent once however many kinds declare it, and this client denormalises it
  * back into every kind's view.
@@ -84,9 +95,8 @@ export class HttpAgentKindSource implements AgentKindSource {
     // that must never be reachable is answering an unknown layer with an empty one. An empty layer
     // is spelled `kinds: []`, which no honest server omits.
     const decoded = decodeAgentKindLayer(body)
-    if ('unreadable' in decoded) {
-      throw decoded.versionMismatch ? versionMismatch() : unreadable(decoded.unreadable)
-    }
+    if ('versionMismatch' in decoded) throw versionMismatch()
+    if ('unreadable' in decoded) throw unreadable(decoded.unreadable)
     return decoded.views
   }
 }

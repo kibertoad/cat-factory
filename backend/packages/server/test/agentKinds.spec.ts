@@ -247,6 +247,19 @@ describe('mothership-mode agent-kind capability layer', () => {
       reply({ toolServers: [{ ...TRACKER_SERVER, transport: { kind: 'http' } }] }),
       reply({ toolServers: [{ ...TRACKER_SERVER, allowedTools: [1] }] }),
       reply({ toolServers: [{ ...TRACKER_SERVER, secretKeys: [{}] }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, secretKeys: [{ key: 'K', header: 5 }] }] }),
+      reply({
+        toolServers: [
+          { ...TRACKER_SERVER, transport: { ...TRACKER_SERVER.transport, env: { A: 1 } } },
+        ],
+      }),
+      reply({
+        toolServers: [
+          { ...TRACKER_SERVER, transport: { kind: 'http', url: 'https://x', headers: [] } },
+        ],
+      }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, oauth: { grant: 'implicit', clientId: 'c' } }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, guidance: 7 }] }),
       // A catalog ref with no id would reach the resolver as skill `undefined`.
       reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [{}], unknown: [] } })] }),
       reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [], unknown: [1] } })] }),
@@ -270,10 +283,14 @@ describe('mothership-mode agent-kind capability layer', () => {
         },
       ],
     }
-    await expect(sourceOver(inline).capabilities()).rejects.toMatchObject({
-      code: 'unavailable',
-      details: { reason: 'agent_kinds_unreachable', cause: 'mothership_version_mismatch' },
-    })
+    // The stock product's empty layer too: the commonest reply an older mothership sends, and one
+    // with no inline kind to recognise it by.
+    for (const payload of [inline, { kinds: [] }]) {
+      await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
+        code: 'unavailable',
+        details: { reason: 'agent_kinds_unreachable', cause: 'mothership_version_mismatch' },
+      })
+    }
   })
 
   it('THROWS on a transport failure, with the cause scrubbed onto the details', async () => {
