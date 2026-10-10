@@ -527,7 +527,7 @@ function toastRemoved() {
               class="h-3.5 w-3.5"
             />
             {{ t('settings.infrastructure.handler.personalOverride') }}
-            <UBadge v-if="kubeUserHandler" color="primary" variant="subtle" size="sm">
+            <UBadge v-if="kubeUserHandler" variant="subtle" size="sm">
               {{ t('settings.infrastructure.handler.overrideActive') }}
             </UBadge>
           </SectionLabel>

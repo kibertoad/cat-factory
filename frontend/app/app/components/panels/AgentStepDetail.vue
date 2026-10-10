@@ -614,7 +614,6 @@ async function copyOutput() {
             </p>
             <UButton
               class="mt-3"
-              color="primary"
               size="sm"
               :icon="parkPresentation.icon"
               data-testid="dedicated-park-open"
@@ -899,7 +898,6 @@ async function copyOutput() {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 size="xs"
                 data-testid="step-review-comment-add"
                 :disabled="!draftBody.trim()"
@@ -962,7 +960,6 @@ async function copyOutput() {
         class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
         <UButton
-          color="primary"
           size="sm"
           icon="i-lucide-check"
           block
@@ -988,7 +985,6 @@ async function copyOutput() {
         class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
         <UButton
-          color="primary"
           data-testid="step-approve"
           size="sm"
           icon="i-lucide-check"
@@ -1001,7 +997,6 @@ async function copyOutput() {
         </UButton>
         <UButton
           v-if="proposalEditableNow"
-          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-pencil"

@@ -118,7 +118,6 @@ const statusColor = (row: TutorialCatalogueRow) =>
             </div>
             <UButton
               size="sm"
-              color="primary"
               :variant="row.state === 'completed' ? 'soft' : 'solid'"
               :disabled="!row.startable"
               :data-testid="`tutorial-catalogue-start-${row.tour.id}`"

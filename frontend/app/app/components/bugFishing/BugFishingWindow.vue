@@ -612,7 +612,6 @@ const PHASE_ICON: Record<string, string> = {
             <div v-if="isOpen(finding) && canAct" class="mt-2 flex items-center gap-2">
               <UButton
                 size="xs"
-                color="primary"
                 icon="i-lucide-wrench"
                 :loading="bugFishing.spawning.has(finding.id)"
                 :disabled="finding.dismissed || bugFishing.spawning.has(finding.id)"
@@ -654,7 +653,6 @@ const PHASE_ICON: Record<string, string> = {
         }}
       </p>
       <UButton
-        color="primary"
         icon="i-lucide-check"
         :loading="bugFishing.resolving"
         :disabled="!canAct"

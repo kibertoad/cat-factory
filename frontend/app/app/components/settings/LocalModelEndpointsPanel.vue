@@ -472,7 +472,6 @@ async function remove(p: LocalRunner) {
 
           <div class="flex justify-end">
             <UButton
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-save"

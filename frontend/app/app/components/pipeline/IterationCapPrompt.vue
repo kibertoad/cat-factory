@@ -41,7 +41,6 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
     <p class="mt-1 text-xs text-app-warning-200/80">{{ detail }}</p>
     <div class="mt-3 flex flex-wrap gap-2">
       <UButton
-        color="primary"
         variant="soft"
         size="xs"
         icon="i-lucide-rotate-cw"

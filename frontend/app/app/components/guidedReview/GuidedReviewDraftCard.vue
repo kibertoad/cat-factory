@@ -111,7 +111,7 @@ async function discard(): Promise<void> {
           ]"
           :aria-label="t('guidedReview.drafts.sideLabel')"
         />
-        <UButton size="sm" color="primary" :loading="saving" @click="save">
+        <UButton size="sm" :loading="saving" @click="save">
           {{ t('guidedReview.drafts.save') }}
         </UButton>
         <UButton size="sm" variant="ghost" :disabled="saving" @click="editing = false">

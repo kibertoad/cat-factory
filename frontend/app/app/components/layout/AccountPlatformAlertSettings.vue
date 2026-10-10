@@ -342,7 +342,6 @@ const hasOverrides = computed(
 
     <div class="flex gap-2">
       <UButton
-        color="primary"
         size="xs"
         icon="i-lucide-save"
         :loading="saving"

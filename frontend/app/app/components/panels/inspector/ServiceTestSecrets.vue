@@ -250,7 +250,6 @@ async function clearAll() {
           {{ t('inspector.testSecrets.addRow') }}
         </UButton>
         <UButton
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-save"

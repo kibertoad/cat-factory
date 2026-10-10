@@ -206,9 +206,7 @@ function fmtTime(ms: number) {
           "
           >{{ t('common.cancel') }}</UButton
         >
-        <UButton size="xs" color="primary" :loading="busy" @click="saveEdit">{{
-          t('common.save')
-        }}</UButton>
+        <UButton size="xs" :loading="busy" @click="saveEdit">{{ t('common.save') }}</UButton>
       </div>
     </template>
 

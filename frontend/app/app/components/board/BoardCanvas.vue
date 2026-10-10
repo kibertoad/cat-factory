@@ -179,7 +179,6 @@ function onPaneClick() {
       >
         <UButton
           v-if="access.canManageIntegrations.value"
-          color="primary"
           icon="i-lucide-git-branch-plus"
           @click="ui.openBootstrap()"
         >
@@ -187,7 +186,6 @@ function onPaneClick() {
         </UButton>
         <UButton
           v-if="github.available && access.canWriteBoard.value"
-          color="primary"
           variant="soft"
           icon="i-lucide-folder-git-2"
           @click="ui.openAddService()"

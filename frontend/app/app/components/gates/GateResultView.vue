@@ -303,7 +303,6 @@ const conflictVerdict = computed(() => {
               <div class="mt-2 flex justify-end">
                 <UButton
                   size="sm"
-                  color="primary"
                   icon="i-lucide-wrench"
                   :loading="fixBusy"
                   :disabled="

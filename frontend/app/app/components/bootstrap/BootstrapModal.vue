@@ -900,7 +900,6 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
           <div class="flex justify-end">
             <UButton
-              color="primary"
               icon="i-lucide-rocket"
               :loading="launching"
               :disabled="!canLaunch"
@@ -1082,12 +1081,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               >
                 {{ t('common.cancel') }}
               </UButton>
-              <UButton
-                color="primary"
-                :loading="savingArch"
-                :disabled="!canSaveArch"
-                @click="saveArch"
-              >
+              <UButton :loading="savingArch" :disabled="!canSaveArch" @click="saveArch">
                 {{ archForm.id ? t('common.save') : t('bootstrap.arch.add') }}
               </UButton>
             </div>

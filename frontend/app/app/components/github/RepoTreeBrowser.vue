@@ -207,7 +207,6 @@ watch(
           class="flex items-center justify-between gap-2 px-3 py-1.5"
         >
           <UButton
-            color="primary"
             variant="ghost"
             class="flex items-center gap-2 truncate p-0 text-sm text-default hover:bg-transparent hover:text-primary"
             @click="browseTo(entry.path)"
@@ -258,7 +257,6 @@ watch(
               @update:model-value="toggleAllFiles"
             />
             <UButton
-              color="primary"
               variant="ghost"
               class="p-0 text-xs text-muted hover:bg-transparent hover:text-primary"
               @click="toggleAllFiles"
@@ -285,7 +283,6 @@ watch(
                 @update:model-value="pick(entry.path)"
               />
               <UButton
-                color="primary"
                 variant="ghost"
                 class="flex items-center gap-2 truncate p-0 text-sm hover:bg-transparent hover:text-primary"
                 :class="isPicked(entry.path) ? 'text-primary' : 'text-toned'"

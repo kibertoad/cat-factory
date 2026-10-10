@@ -97,7 +97,7 @@ function go(action: () => void) {
           >
             {{ t('providers.presetMismatch.configureVendors') }}
           </UButton>
-          <UButton color="primary" size="sm" icon="i-lucide-cpu" @click="go(ui.openModelConfig)">
+          <UButton size="sm" icon="i-lucide-cpu" @click="go(ui.openModelConfig)">
             {{ t('providers.presetMismatch.editPresets') }}
           </UButton>
         </div>

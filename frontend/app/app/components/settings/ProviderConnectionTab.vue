@@ -506,13 +506,7 @@ function fieldHelp(key: string): string | undefined {
       <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          size="sm"
-          :loading="busy"
-          :disabled="!canSave"
-          @click="saveNative()"
-        >
+        <UButton size="sm" :loading="busy" :disabled="!canSave" @click="saveNative()">
           {{ connection ? t('common.save') : t('settings.providerConnection.form.connect') }}
         </UButton>
       </div>

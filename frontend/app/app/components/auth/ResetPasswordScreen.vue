@@ -62,7 +62,7 @@ function goToLogin() {
         <p class="mb-4 text-sm text-toned">
           {{ t('auth.resetPassword.doneBody') }}
         </p>
-        <UButton block size="lg" color="primary" @click="goToLogin">{{
+        <UButton block size="lg" @click="goToLogin">{{
           t('auth.resetPassword.goToSignIn')
         }}</UButton>
       </template>
@@ -94,12 +94,11 @@ function goToLogin() {
           class="w-full"
         />
         <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
-        <UButton block size="lg" color="primary" type="submit" :loading="busy">
+        <UButton block size="lg" type="submit" :loading="busy">
           {{ t('auth.resetPassword.submit') }}
         </UButton>
         <p class="text-center text-xs text-muted">
           <UButton
-            color="primary"
             variant="link"
             class="p-0 text-xs text-primary hover:underline"
             @click="goToLogin"

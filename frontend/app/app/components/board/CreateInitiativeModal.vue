@@ -285,7 +285,6 @@ async function create() {
         </UButton>
         <UButton
           data-testid="create-initiative-submit"
-          color="primary"
           :loading="submitting || initiatives.creating"
           :disabled="!canSubmit"
           @click="create"

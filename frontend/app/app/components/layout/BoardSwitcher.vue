@@ -339,7 +339,7 @@ async function submitPrompt() {
             >
               {{ t('common.cancel') }}
             </UButton>
-            <UButton type="submit" color="primary" :loading="busy">
+            <UButton type="submit" :loading="busy">
               {{ prompt ? promptMeta[prompt].cta : '' }}
             </UButton>
           </div>

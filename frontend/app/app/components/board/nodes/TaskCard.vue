@@ -495,7 +495,6 @@ function selectTask() {
       <template v-if="task.status === 'pr_ready'">
         <UButton
           v-if="outcomeReadable"
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-clipboard-check"
@@ -530,13 +529,7 @@ function selectTask() {
         >
           {{ t('board.task.review') }}
         </UButton>
-        <UButton
-          color="success"
-          variant="solid"
-          size="xs"
-          icon="i-lucide-git-merge"
-          @click.stop="merge"
-        >
+        <UButton color="success" size="xs" icon="i-lucide-git-merge" @click.stop="merge">
           {{ t('board.task.merge') }}
         </UButton>
       </template>

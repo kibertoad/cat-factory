@@ -77,7 +77,6 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
                 v-for="k in pending"
                 :key="k"
                 color="warning"
-                variant="solid"
                 icon="i-lucide-settings"
                 @click="ui.openProviderConnection(k)"
               >

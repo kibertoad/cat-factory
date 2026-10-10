@@ -387,7 +387,6 @@ watch(open, (isOpen) => {
             {{ t('common.cancel') }}
           </UButton>
           <UButton
-            color="primary"
             icon="i-lucide-play"
             :loading="submitting"
             :disabled="!canSubmit"

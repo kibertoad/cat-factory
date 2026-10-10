@@ -219,7 +219,6 @@ async function spawn() {
             t('common.cancel')
           }}</UButton>
           <UButton
-            color="primary"
             icon="i-lucide-wand-sparkles"
             :loading="spawning"
             :disabled="!plan || loadingPlan"

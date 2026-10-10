@@ -332,7 +332,6 @@ function manageKeys() {
             </UButton>
             <UButton
               v-if="recommendedAvailable.length"
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-sparkles"
@@ -397,14 +396,7 @@ function manageKeys() {
             <span class="text-xs text-dimmed">{{
               t('settings.openRouterCatalog.enabledCount', { count: selectedCount }, selectedCount)
             }}</span>
-            <UButton
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-save"
-              :loading="busy"
-              @click="save()"
-            >
+            <UButton variant="soft" size="sm" icon="i-lucide-save" :loading="busy" @click="save()">
               {{ t('common.save') }}
             </UButton>
           </div>

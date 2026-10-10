@@ -242,7 +242,6 @@ function revisionLabel(revision: AgentPromptRevision): string {
 
         <div class="flex flex-wrap items-center gap-2">
           <UButton
-            color="primary"
             size="sm"
             icon="i-lucide-save"
             :loading="prompts.saving"
@@ -308,7 +307,6 @@ function revisionLabel(revision: AgentPromptRevision): string {
             >
               <UBadge
                 v-if="revision.revision === detail.revisions[0]?.revision"
-                color="primary"
                 variant="subtle"
                 size="sm"
               >

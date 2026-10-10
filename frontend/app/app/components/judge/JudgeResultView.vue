@@ -293,7 +293,6 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             </UButton>
             <UButton
               size="sm"
-              color="primary"
               icon="i-lucide-circle-check"
               :loading="busy"
               :disabled="!canAct"

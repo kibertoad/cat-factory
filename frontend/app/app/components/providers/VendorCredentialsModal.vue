@@ -206,13 +206,7 @@ function vendorLabel(v: SubscriptionVendor): string {
               <p class="min-w-0 flex-1 text-sm text-toned">
                 {{ t('providers.vendorCredentials.personalCallout.text') }}
               </p>
-              <UButton
-                size="xs"
-                color="primary"
-                variant="subtle"
-                class="shrink-0"
-                @click="activeTab = 'personal'"
-              >
+              <UButton size="xs" variant="subtle" class="shrink-0" @click="activeTab = 'personal'">
                 {{ t('providers.vendorCredentials.personalCallout.cta') }}
               </UButton>
             </div>

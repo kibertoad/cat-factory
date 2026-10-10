@@ -345,7 +345,6 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           <UButton
             v-for="choice in addableSources"
             :key="choice.source"
-            color="primary"
             variant="soft"
             :icon="choice.icon"
             @click="addSource(choice.source)"
@@ -479,7 +478,6 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
 
         <div class="flex items-center gap-2">
           <UButton
-            color="primary"
             icon="i-lucide-radar"
             :loading="hunt.hunting"
             :disabled="!canHunt"
@@ -565,7 +563,6 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                   {{ t('bugHunt.recommended') }}
                 </UBadge>
                 <UButton
-                  color="primary"
                   variant="soft"
                   icon="i-lucide-play"
                   size="xs"

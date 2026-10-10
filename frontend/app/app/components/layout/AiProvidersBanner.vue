@@ -47,12 +47,7 @@ const show = computed(() => showSetup.value || showPreset.value)
               {{ t('layout.aiProvidersBanner.setup.body') }}
             </p>
             <div class="mt-4">
-              <UButton
-                color="warning"
-                variant="solid"
-                icon="i-lucide-settings"
-                @click="ui.openAiProviderSetup()"
-              >
+              <UButton color="warning" icon="i-lucide-settings" @click="ui.openAiProviderSetup()">
                 {{ t('layout.aiProvidersBanner.setup.action') }}
               </UButton>
             </div>
@@ -92,7 +87,6 @@ const show = computed(() => showSetup.value || showPreset.value)
               <UButton
                 size="sm"
                 color="warning"
-                variant="solid"
                 icon="i-lucide-cpu"
                 @click="ui.openAiPresetMismatch()"
               >

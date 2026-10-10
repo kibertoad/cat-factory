@@ -1456,7 +1456,6 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           t('common.cancel')
         }}</UButton>
         <UButton
-          color="primary"
           data-testid="add-task-submit"
           :icon="isRecurring ? 'i-lucide-arrow-right' : 'i-lucide-plus'"
           :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"

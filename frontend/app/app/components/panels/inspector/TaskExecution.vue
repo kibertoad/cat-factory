@@ -496,7 +496,6 @@ async function mergePr() {
                  branch each is how the candidate park shipped with no button at all. -->
             <UButton
               v-else-if="s.approval && s.approval.status === 'pending' && redirectPark(s)"
-              color="primary"
               variant="soft"
               size="xs"
               :icon="REDIRECT_PARK_PRESENTATION[redirectPark(s)!].icon"
@@ -514,7 +513,6 @@ async function mergePr() {
                 s.approval.status === 'pending' &&
                 s.prReview?.status === 'awaiting_selection'
               "
-              color="primary"
               variant="soft"
               size="xs"
               icon="i-lucide-clipboard-check"
@@ -630,7 +628,6 @@ async function mergePr() {
          merged task whose run instance is long gone. -->
     <UButton
       v-if="outcomeReadable"
-      color="primary"
       variant="soft"
       size="sm"
       icon="i-lucide-clipboard-check"
@@ -690,7 +687,6 @@ async function mergePr() {
       <UButton
         class="mt-2"
         color="success"
-        variant="solid"
         size="sm"
         icon="i-lucide-git-merge"
         block
