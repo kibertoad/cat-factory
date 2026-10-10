@@ -1,5 +1,18 @@
 # @cat-factory/node-server
 
+## 0.238.1
+
+### Patch Changes
+
+- Updated dependencies [22b6812]
+  - @cat-factory/server@0.332.3
+  - @cat-factory/agents@0.171.5
+  - @cat-factory/orchestration@0.320.3
+  - @cat-factory/binary-generators@0.3.66
+  - @cat-factory/consensus@0.19.14
+  - @cat-factory/provider-bedrock@0.7.559
+  - @cat-factory/provider-cloudflare@0.7.560
+
 ## 0.238.0
 
 ### Minor Changes
