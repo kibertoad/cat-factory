@@ -1477,7 +1477,7 @@ the same list, plus the install-free frontend guards.
 ```bash
 # From the repo root:
 pnpm install
-pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running Worker
+pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running backend
 pnpm exec turbo run typecheck --filter=@cat-factory/app   # typecheck goes through Turbo
 pnpm lint                                            # oxlint + oxfmt over the whole tree
 
@@ -1486,6 +1486,11 @@ pnpm exec vitest run <file>                          # run the spec your change 
 pnpm i18n:check                                      # catalog is well-formed
 pnpm i18n:parity                                     # locales are in parity
 ```
+
+To see the SPA with data while you work on it, run it against the e2e backend: it needs only a
+Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards into the states the e2e specs reach.
+See
+[Running the SPA against the e2e backend](https://github.com/kibertoad/cat-factory/blob/main/backend/internal/e2e/README.md#running-the-spa-against-the-e2e-backend-ui-development).
 
 > Building/deploying the static site is covered in the deployment docs: see the
 > [top-level README → Deployment](https://github.com/kibertoad/cat-factory/blob/main/README.md#deployment) and

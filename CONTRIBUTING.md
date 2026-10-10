@@ -74,9 +74,13 @@ pnpm typecheck          # typecheck every package
 pnpm test               # run the unit/integration suites (mutation testing is NOT in here)
 pnpm lint               # oxlint + oxfmt (repo-wide)
 pnpm dev:backend        # run the worker locally (deploy/backend)
-pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL)
+pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL + ENCRYPTION_KEY)
 pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 ```
+
+For UI work, run the SPA against the e2e backend instead of `dev:node`: it needs only a Postgres,
+fakes the LLM, the agent runner and GitHub, and can seed boards. See
+[Running the SPA against the e2e backend](./backend/internal/e2e/README.md#running-the-spa-against-the-e2e-backend-ui-development).
 
 The cross-package task graph (build/typecheck/test/generate/deploy/dev) is
 orchestrated by [Turborepo](https://turbo.build) (`turbo.json`): each task declares
