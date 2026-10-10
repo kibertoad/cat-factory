@@ -37,6 +37,8 @@ import {
 } from '~/utils/binaryOutput'
 import { effortBand, effortHint } from '~/utils/effort'
 import {
+  RESULT_WINDOW_GUTTER_CLASS,
+  RESULT_WINDOW_SCROLL_CONTAIN_CLASS,
   RESULT_WINDOW_WIDTH_CLASS,
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
@@ -256,12 +258,14 @@ const chipClass = computed(() =>
 
 const backdropClass = computed(() => [
   'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-app-950/70 backdrop-blur-sm',
-  props.variant === 'centered' ? 'items-center p-4' : 'items-stretch',
+  RESULT_WINDOW_GUTTER_CLASS,
+  props.variant === 'centered' ? 'items-center' : 'items-stretch',
 ])
 const panelClass = computed(() => [
   'flex w-full flex-col overflow-hidden rounded-2xl border border-default bg-default shadow-2xl',
   RESULT_WINDOW_WIDTH_CLASS[props.width],
-  props.variant === 'centered' ? 'max-h-[90dvh]' : 'm-4',
+  RESULT_WINDOW_SCROLL_CONTAIN_CLASS,
+  props.variant === 'centered' && 'max-h-[90dvh]',
 ])
 </script>
 
