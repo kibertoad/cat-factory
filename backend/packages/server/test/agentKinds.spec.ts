@@ -260,6 +260,8 @@ describe('mothership-mode agent-kind capability layer', () => {
       }),
       reply({ toolServers: [{ ...TRACKER_SERVER, oauth: { grant: 'implicit', clientId: 'c' } }] }),
       reply({ toolServers: [{ ...TRACKER_SERVER, guidance: 7 }] }),
+      // Both tables missing, but a kind in NEITHER shape: unreadable, not a version mismatch.
+      { kinds: [{ kind: 'coder' }] },
       // A catalog ref with no id would reach the resolver as skill `undefined`.
       reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [{}], unknown: [] } })] }),
       reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [], unknown: [1] } })] }),

@@ -1,5 +1,15 @@
-import type { AgentKindCapabilityView, BundledSkillDefinition } from '@cat-factory/agents'
-import type { McpServerDefinition } from '@cat-factory/kernel'
+import type {
+  AgentKindCapabilityView,
+  BundledSkillDefinition,
+  NormalizedSkillRefs,
+} from '@cat-factory/agents'
+import type {
+  McpHttpTransport,
+  McpOAuthConfig,
+  McpSecretRef,
+  McpServerDefinition,
+  McpStdioTransport,
+} from '@cat-factory/kernel'
 import { isRecord } from '../shared/guards.js'
 
 // The wire shape of `GET /internal/agent-kinds`, shared by the controller that encodes it and the
@@ -86,9 +96,12 @@ export function decodeAgentKindLayer(
   if (!Array.isArray(kinds)) return { unreadable: 'kinds' }
   // Named apart from a corrupt reply because the fix is different: this node is newer than its
   // mothership, and the remedy is to run the same build on both, not to look for damage. Both
-  // tables missing IS the older shape, whatever `kinds` holds: the stock product's empty layer
-  // (`{ kinds: [] }`) is the commonest reply an older mothership sends.
-  if (bundledSkills === undefined && toolServers === undefined) return { versionMismatch: true }
+  // tables missing AND every kind in the inline shape is the older reply. `every` holds for the
+  // stock product's empty layer (`{ kinds: [] }`), the commonest reply an older mothership sends,
+  // while a reply in neither shape stays an unreadable `kinds[]`.
+  if (bundledSkills === undefined && toolServers === undefined && kinds.every(isInlineShapeView)) {
+    return { versionMismatch: true }
+  }
   if (!Array.isArray(bundledSkills) || !bundledSkills.every(isBundledSkill)) {
     return { unreadable: 'bundledSkills' }
   }
@@ -143,91 +156,117 @@ function isWireView(entry: unknown): entry is AgentKindWireView {
   )
 }
 
-/** A catalog ref the engine resolves later: the skill id, and whether a miss may be skipped. */
+/** A kind entry in the shape a mothership sent before definitions rode by reference. */
+function isInlineShapeView(entry: unknown): boolean {
+  return (
+    isRecord(entry) &&
+    isRecord(entry.skills) &&
+    Array.isArray(entry.skills.bundled) &&
+    isRecord(entry.toolServers) &&
+    Array.isArray(entry.toolServers.servers)
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Definition checks. Each is a table with ONE entry per field of the type it checks, optional
+// fields included (`-?`), so a field added to the type fails to compile here until it is given a
+// check. That is what keeps "every field the harness reads is checked" true as the types grow.
+// ---------------------------------------------------------------------------
+
+type Check = (value: unknown) => boolean
+type FieldChecks<T> = { [K in keyof T]-?: Check }
+
+function matches<T>(value: unknown, checks: FieldChecks<T>): value is T {
+  return (
+    isRecord(value) &&
+    Object.entries(checks).every(([field, check]) => (check as Check)(value[field]))
+  )
+}
+
+const CATALOG_REF: FieldChecks<NormalizedSkillRefs['catalog'][number]> = {
+  skillId: isString,
+  optional: isBoolean,
+}
+
+const SKILL_RESOURCE: FieldChecks<NonNullable<BundledSkillDefinition['resources']>[number]> = {
+  relPath: isString,
+  content: isString,
+}
+
+/** The skill directory name, the frontmatter description, the body, and each resource file. */
+const BUNDLED_SKILL: FieldChecks<BundledSkillDefinition> = {
+  id: isString,
+  name: isString,
+  description: isString,
+  instructions: isString,
+  resources: optional(listOf((resource) => matches(resource, SKILL_RESOURCE))),
+}
+
+const STDIO_TRANSPORT: FieldChecks<McpStdioTransport> = {
+  kind: (value) => value === 'stdio',
+  command: isString,
+  args: optional(isStringList),
+  env: optional(isStringMap),
+}
+
+const HTTP_TRANSPORT: FieldChecks<McpHttpTransport> = {
+  kind: (value) => value === 'http',
+  url: isString,
+  headers: optional(isStringMap),
+}
+
+const SECRET_REF: FieldChecks<McpSecretRef> = {
+  key: isString,
+  envName: optional(isString),
+  header: optional(isString),
+  headerTemplate: optional(isString),
+  required: optional(isBoolean),
+  usage: optional(isString),
+}
+
+const OAUTH_CONFIG: FieldChecks<McpOAuthConfig> = {
+  grant: (value) => value === 'authorization_code' || value === 'client_credentials',
+  clientId: isString,
+  clientSecretKey: optional(isString),
+  authorizationUrl: optional(isString),
+  tokenUrl: optional(isString),
+  scopes: optional(isStringList),
+  resource: optional(isString),
+  header: optional(isString),
+  headerTemplate: optional(isString),
+}
+
+/** An id to name its tools under, a transport to reach it, and every string the harness renders. */
+const TOOL_SERVER: FieldChecks<McpServerDefinition> = {
+  id: isString,
+  label: optional(isString),
+  guidance: optional(isString),
+  transport: (value) => matches(value, STDIO_TRANSPORT) || matches(value, HTTP_TRANSPORT),
+  allowedTools: optional(isStringList),
+  harnesses: optional(isStringList),
+  secretKeys: optional(listOf((ref) => matches(ref, SECRET_REF))),
+  oauth: optional((config) => matches(config, OAUTH_CONFIG)),
+}
+
 function isCatalogRef(entry: unknown): boolean {
-  return isRecord(entry) && typeof entry.skillId === 'string' && typeof entry.optional === 'boolean'
+  return matches(entry, CATALOG_REF)
 }
 
-/**
- * Every field the harness READS: the skill directory name, the frontmatter description, the body,
- * and each resource's path and content. A missing one would be written to disk as `undefined`.
- */
 function isBundledSkill(entry: unknown): entry is BundledSkillDefinition {
-  if (!isRecord(entry)) return false
-  const { id, name, description, instructions, resources } = entry
-  return (
-    [id, name, description, instructions].every((field) => typeof field === 'string') &&
-    (resources === undefined ||
-      (Array.isArray(resources) &&
-        resources.every(
-          (r) => isRecord(r) && typeof r.relPath === 'string' && typeof r.content === 'string',
-        )))
-  )
+  return matches(entry, BUNDLED_SKILL)
 }
 
-/**
- * Every field the executor READS to wire a server: its id, a transport it can reach (a stdio
- * command, or an http URL), and every string the harness renders into the CLI's MCP config or the
- * prompt. A wrong type would reach the container as an `undefined` command or a non-string header.
- */
 function isToolServer(entry: unknown): entry is McpServerDefinition {
-  if (!isRecord(entry) || typeof entry.id !== 'string' || !isTransport(entry.transport)) {
-    return false
-  }
-  return (
-    optional(entry.label, isString) &&
-    optional(entry.guidance, isString) &&
-    optional(entry.allowedTools, isStringList) &&
-    optional(entry.harnesses, isStringList) &&
-    optional(entry.secretKeys, (refs) => Array.isArray(refs) && refs.every(isSecretRef)) &&
-    optional(entry.oauth, isOAuthConfig)
-  )
-}
-
-function isTransport(value: unknown): boolean {
-  if (!isRecord(value)) return false
-  if (value.kind === 'stdio') {
-    return (
-      isString(value.command) &&
-      optional(value.args, isStringList) &&
-      optional(value.env, isStringMap)
-    )
-  }
-  return value.kind === 'http' && isString(value.url) && optional(value.headers, isStringMap)
-}
-
-function isSecretRef(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    isString(value.key) &&
-    optional(value.envName, isString) &&
-    optional(value.header, isString) &&
-    optional(value.headerTemplate, isString) &&
-    optional(value.required, isBoolean) &&
-    optional(value.usage, isString)
-  )
-}
-
-function isOAuthConfig(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    (value.grant === 'authorization_code' || value.grant === 'client_credentials') &&
-    isString(value.clientId) &&
-    [
-      value.clientSecretKey,
-      value.authorizationUrl,
-      value.tokenUrl,
-      value.resource,
-      value.header,
-      value.headerTemplate,
-    ].every((field) => optional(field, isString)) &&
-    optional(value.scopes, isStringList)
-  )
+  return matches(entry, TOOL_SERVER)
 }
 
 /** An optional field: absent, or present and valid. */
-function optional(value: unknown, check: (value: unknown) => boolean): boolean {
-  return value === undefined || check(value)
+function optional(check: Check): Check {
+  return (value) => value === undefined || check(value)
+}
+
+function listOf(check: Check): Check {
+  return (value) => Array.isArray(value) && value.every(check)
 }
 
 function isString(value: unknown): value is string {

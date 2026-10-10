@@ -38,12 +38,13 @@ import { decodeAgentKindLayer } from './agentKindsWire.js'
  * cause the rest of the platform maps. Its other `details` keys say which failure it was, for the
  * operator reading the log, and are not a second reason vocabulary:
  *
+ * - `err` / `errKind`: the request never got an answer; the cause chain, through `describeError`;
  * - `status`: the mothership answered with this non-2xx HTTP status (404 from a mothership older
  *   than this route);
  * - `field`: the reply parsed but this part of it was unreadable;
  * - `cause: 'mothership_version_mismatch'`: the reply is in the shape an OLDER mothership sends
  *   (`agentKindsWire.ts`), so the fix is to run the same build on both sides. The only `cause`
- *   value; a new one is added here, next to the other two keys.
+ *   value; a new one is added here, next to the other keys.
  *
  * The bound holds in BYTES too because a `bundled` skill rides by reference (`agentKindsWire.ts`):
  * each distinct body is sent once however many kinds declare it, and this client denormalises it
@@ -119,11 +120,12 @@ function unreadable(field: string): UnavailableError {
  * The refusal for a reply in the shape an OLDER mothership sends. The same `reason` as every other
  * failure of this read (it is still an unreachable capability layer), with a `cause` and a message
  * that name the fix: run the same build on the node and the mothership
- * (`docs/initiatives/mothership-mode.md`).
+ * (`docs/initiatives/mothership-mode.md`). The message says "different" rather than "older",
+ * because the node knows only that the shape is not its own.
  */
 function versionMismatch(): UnavailableError {
   return new UnavailableError(
-    'The mothership runs an older build whose agent-kind capability reply this node cannot read. Update the mothership and its nodes to the same build.',
+    'The mothership runs a different build, whose agent-kind capability reply this node cannot read. Update the mothership and its nodes to the same build.',
     'agent_kinds_unreachable',
     { cause: 'mothership_version_mismatch' },
   )
