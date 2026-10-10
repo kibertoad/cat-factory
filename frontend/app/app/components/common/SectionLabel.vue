@@ -16,12 +16,15 @@
 // A label that merely SHARES the uppercase styling is not this component: a pill or chip carrying
 // a fill and a radius, an accent-coloured label signalling state or category, or a metadata row
 // (`board/nodes/BlockNode.vue`'s composition line) that states counts rather than titling the
-// block after it. Those keep their own classes on a named step.
+// block after it. Nor is a caption INSIDE a control: a switcher trigger's "Language" line above its
+// value, a slider's end labels. A caption names part of the control and titles nothing after it.
+// Those keep their own classes on a named step.
 //
 // What a caller DOES control:
 //   - `as`, the element. The default `div` suits a label that titles a region without being a
 //     document heading; pass `h3` / `h4` when the section is a real heading, `label` with an `:id`
-//     when it names a field, `button` when the section collapses.
+//     when it names a field. A collapsing section is a `UButton` around `as="span"`: the button
+//     owns the focus ring and the disabled state, which a raw `as="button"` would not have.
 //   - Layout, through the ordinary `class` attribute (`mb-2`, `px-2 pt-2`), which Vue merges onto
 //     the root. Spacing is the caller's business because it belongs to the surrounding block.
 //   - Every other attribute and listener, which fall through to the root element.
