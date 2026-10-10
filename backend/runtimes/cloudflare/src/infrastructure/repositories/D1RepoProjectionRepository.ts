@@ -61,14 +61,19 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     githubIds: number[],
   ): Promise<StoredDirectoryRepo[]> {
     const stored: StoredDirectoryRepo[] = []
-    for (const chunk of chunkForIn(githubIds)) {
-      const placeholders = chunk.map(() => '?').join(', ')
-      const { results } = await this.db
-        .prepare(
-          `SELECT * FROM github_repos WHERE workspace_id = ? AND github_id IN (${placeholders})`,
-        )
-        .bind(workspaceId, ...chunk)
-        .all<GitHubRepoRow & { deleted_at: number | null }>()
+    // One batch for every chunk, so a large sync reads its stored rows in a single round trip.
+    const reads = await this.db.batch<GitHubRepoRow & { deleted_at: number | null }>(
+      chunkForIn(githubIds).map((chunk) =>
+        this.db
+          .prepare(
+            `SELECT * FROM github_repos WHERE workspace_id = ? AND github_id IN (${chunk
+              .map(() => '?')
+              .join(', ')})`,
+          )
+          .bind(workspaceId, ...chunk),
+      ),
+    )
+    for (const { results } of reads) {
       for (const row of results) {
         const repo = rowToRepo(row)
         stored.push({

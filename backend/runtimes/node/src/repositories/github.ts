@@ -90,32 +90,36 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
 
   async upsertMany(workspaceId: string, repos: GitHubRepo[]): Promise<void> {
     if (repos.length === 0) return
-    const unique = dedupeByKey(repos, (r) => String(r.githubId))
-    await this.db.transaction(async (tx) => {
-      await lockDirectoryFeed(tx, workspaceSource(workspaceId))
-      const stored = await tx
-        .select()
-        .from(githubRepos)
-        .where(
-          and(
-            eq(githubRepos.workspace_id, workspaceId),
-            inArray(
-              githubRepos.github_id,
-              unique.map((r) => r.githubId),
+    // `is_monorepo` and `linked_via` are link-owned (set via setMonorepo / at link time),
+    // not sync: the update set deliberately omits them so sync never clobbers them. Each chunk is
+    // its own transaction, so a large sync holds the account's feed lock for one chunk at a time.
+    const at = Date.now()
+    for (const batch of chunks(
+      dedupeByKey(repos, (r) => String(r.githubId)),
+      UPSERT_CHUNK,
+    )) {
+      await this.db.transaction(async (tx) => {
+        await lockDirectoryFeed(tx, workspaceSource(workspaceId))
+        const stored = await tx
+          .select()
+          .from(githubRepos)
+          .where(
+            and(
+              eq(githubRepos.workspace_id, workspaceId),
+              inArray(
+                githubRepos.github_id,
+                batch.map((r) => r.githubId),
+              ),
             ),
-          ),
+          )
+        const changed = changedDirectoryRepoIds(
+          stored.map((row) => ({
+            ...rowToRepo(row),
+            provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
+            tombstoned: row.deleted_at !== null,
+          })),
+          batch,
         )
-      const changed = changedDirectoryRepoIds(
-        stored.map((row) => ({
-          ...rowToRepo(row),
-          provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
-          tombstoned: row.deleted_at !== null,
-        })),
-        unique,
-      )
-      // `is_monorepo` and `linked_via` are link-owned (set via setMonorepo / at link time),
-      // not sync: the update set deliberately omits them so sync never clobbers them.
-      for (const batch of chunks(unique, UPSERT_CHUNK)) {
         await tx
           .insert(githubRepos)
           .values(
@@ -147,11 +151,11 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
               deleted_at: null,
             },
           })
-      }
-      if (changed.length > 0) {
-        await appendDirectoryChanges(tx, reposSource(workspaceId, changed), Date.now())
-      }
-    })
+        if (changed.length > 0) {
+          await appendDirectoryChanges(tx, reposSource(workspaceId, changed), at)
+        }
+      })
+    }
   }
 
   async list(workspaceId: string): Promise<GitHubRepo[]> {
