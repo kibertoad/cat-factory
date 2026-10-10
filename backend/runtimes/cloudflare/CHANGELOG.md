@@ -1,5 +1,40 @@
 # @cat-factory/worker
 
+## 0.224.0
+
+### Minor Changes
+
+- 5ec1794: Record a per-account directory change feed. Every write to a user, account membership, workspace,
+  workspace membership or repo projection row now appends a `directory_changes` row naming the entity,
+  in the same transaction (Postgres) or batch (D1), with a per-account `seq` whose commit order equals
+  its numeric order. New migrations: D1 `0107_directory_changes.sql` and Drizzle
+  `20261009141534_directory_changes`. Nothing reads the feed yet; the public directory API and
+  webhooks follow (docs/initiatives/directory-sync.md).
+  
+  The local `linkRepo` helper now writes the repo through `DrizzleRepoProjectionRepository`, so
+  re-linking a repo keeps its monorepo flag instead of resetting it.
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/binary-generators@0.3.66
+  - @cat-factory/consensus@0.19.13
+  - @cat-factory/eks@0.1.405
+  - @cat-factory/gates@0.12.2
+  - @cat-factory/gitlab@0.24.2
+  - @cat-factory/integrations@0.175.2
+  - @cat-factory/observability-otel@0.23.59
+  - @cat-factory/orchestration@0.320.2
+  - @cat-factory/prompt-fragments@1.1.62
+  - @cat-factory/server@0.332.2
+  - @cat-factory/spend@0.23.11
+  - @cat-factory/caching@0.20.100
+  - @cat-factory/observability-langfuse@0.11.66
+  - @cat-factory/provider-cloudflare@0.7.559
+
 ## 0.223.1
 
 ### Patch Changes
