@@ -153,14 +153,18 @@ const decisionItems = computed(() =>
          drops on narrow viewports) so the zoom level is never a mystery. -->
     <button
       type="button"
-      class="w-16 rounded text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
+      class="w-16 rounded-sm text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
       :title="t('board.toolbar.resetZoom')"
       :aria-label="t('board.toolbar.resetZoom')"
       data-testid="board-zoom-reset"
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <span class="hidden text-[9px] uppercase tracking-wide text-dimmed sm:block">{{
+      <!-- The zoom band this readout is currently in, under the percentage: a second VALUE
+           annotating the first, not a heading over what follows, so it is not a
+           `common/SectionLabel.vue`. It stays a step smaller and unweighted so it does not compete
+           with the percentage inside a `w-20` button. -->
+      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
         lodLabel
       }}</span>
     </button>

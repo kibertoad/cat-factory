@@ -25,7 +25,7 @@ const error = computed(() => execution.fullError(props.instanceId))
 <template>
   <div
     v-if="loading || error"
-    class="flex items-center gap-2 border-b border-default px-4 py-2 text-[11px]"
+    class="flex items-center gap-2 border-b border-default px-4 py-2 text-2xs"
     :class="error ? 'text-app-error-300' : 'text-muted'"
     data-testid="run-detail-load-state"
   >

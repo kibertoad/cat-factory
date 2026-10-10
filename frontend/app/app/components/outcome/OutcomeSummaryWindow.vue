@@ -45,6 +45,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import type { BadgeColor } from '~/utils/badge'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const documents = useDocumentsStore()
@@ -458,16 +459,16 @@ function openTestReport() {
 
       <!-- What was asked, in the requester's own words. -->
       <section class="mb-5">
-        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.ask.title') }}
-        </h3>
+        </SectionLabel>
         <MarkdownProse
           v-if="outcome.ask"
           :text="outcome.ask"
-          class="text-[13px] leading-relaxed text-toned"
+          class="text-sm leading-relaxed text-toned"
           data-testid="outcome-ask"
         />
-        <p v-else class="text-[13px] italic leading-relaxed text-dimmed">
+        <p v-else class="text-sm italic leading-relaxed text-dimmed">
           {{ t('outcome.ask.none') }}
         </p>
       </section>
@@ -477,9 +478,9 @@ function openTestReport() {
            agents actually read, and every section below is a statement about work done against
            it. A design that moved mid-run is the reading that changes all of them. -->
       <section class="mb-5" data-testid="outcome-sources">
-        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.sources.title') }}
-        </h3>
+        </SectionLabel>
         <div v-if="outcome.sources.status === 'reported'" class="space-y-1">
           <div
             v-for="source in sourceRows"
@@ -495,7 +496,7 @@ function openTestReport() {
               <UIcon :name="source.icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
               <span class="truncate">{{ source.title }}</span>
             </DocumentOriginLink>
-            <p class="mt-0.5 text-[11px] text-dimmed" data-testid="outcome-source-revision">
+            <p class="mt-0.5 text-2xs text-dimmed" data-testid="outcome-source-revision">
               {{ source.revision }}
             </p>
             <!-- Stated separately from the revision above: the last revision alone says the run
@@ -503,23 +504,23 @@ function openTestReport() {
                  changed under it. -->
             <p
               v-if="source.movedDuringRun"
-              class="mt-0.5 text-[11px] text-app-warning-300"
+              class="mt-0.5 text-2xs text-app-warning-300"
               data-testid="outcome-source-moved"
             >
               {{ t('outcome.sources.moved') }}
             </p>
           </div>
         </div>
-        <p v-else class="text-[13px] italic leading-relaxed text-dimmed">
+        <p v-else class="text-sm italic leading-relaxed text-dimmed">
           {{ t(SOURCES_GAP_KEYS[outcome.sources.gap]) }}
         </p>
       </section>
 
       <!-- Requirement coverage: which required behaviours were checked, and what was seen. -->
       <section class="mb-5" data-testid="outcome-requirements">
-        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.requirements.title') }}
-        </h3>
+        </SectionLabel>
         <template v-if="outcome.requirements.status === 'reported'">
           <div class="mb-2 flex flex-wrap items-center gap-1.5">
             <UBadge color="success" variant="subtle" size="sm">
@@ -550,7 +551,7 @@ function openTestReport() {
                and do not cover rather than letting them read as the whole picture. -->
           <p
             v-if="specNote"
-            class="mb-2 text-[11px] leading-relaxed text-app-warning-300/90"
+            class="mb-2 text-2xs leading-relaxed text-app-warning-300/90"
             data-testid="outcome-spec-note"
           >
             {{ specNote }}
@@ -560,7 +561,7 @@ function openTestReport() {
                deciding which of the two numbers to distrust. -->
           <p
             v-if="unmatchedVerdicts > 0"
-            class="mb-2 text-[11px] leading-relaxed text-app-warning-300/90"
+            class="mb-2 text-2xs leading-relaxed text-app-warning-300/90"
             data-testid="outcome-unmatched-verdicts"
           >
             {{ t('outcome.requirements.unmatchedVerdicts', { count: unmatchedVerdicts }) }}
@@ -578,7 +579,7 @@ function openTestReport() {
               />
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="text-[13px] text-default">{{ req.title ?? req.id }}</span>
+                  <span class="text-sm text-default">{{ req.title ?? req.id }}</span>
                   <UBadge
                     v-if="req.regression"
                     color="error"
@@ -588,18 +589,18 @@ function openTestReport() {
                   >
                     {{ t('outcome.requirements.regressionTag') }}
                   </UBadge>
-                  <span class="text-[10px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="span">
                     {{ t(VERDICT_META[req.verdict].key) }}
-                  </span>
+                  </SectionLabel>
                 </div>
-                <p v-if="req.detail" class="mt-0.5 text-[12px] leading-relaxed text-muted">
+                <p v-if="req.detail" class="mt-0.5 text-xs leading-relaxed text-muted">
                   {{ req.detail }}
                 </p>
               </div>
             </li>
           </ul>
         </template>
-        <p v-else class="text-[13px] italic leading-relaxed text-dimmed">
+        <p v-else class="text-sm italic leading-relaxed text-dimmed">
           {{ t(REQUIREMENTS_GAP_KEYS[outcome.requirements.gap]) }}
         </p>
       </section>
@@ -607,9 +608,9 @@ function openTestReport() {
       <!-- How it was tested: the tester's own verdict and prose, attributed as its account. -->
       <section class="mb-5" data-testid="outcome-tests">
         <div class="mb-1.5 flex flex-wrap items-center gap-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3">
             {{ t('outcome.tests.title') }}
-          </h3>
+          </SectionLabel>
           <UBadge
             v-if="outcome.tests.status === 'reported'"
             :color="TESTS_VERDICT_COLOR[outcome.tests.verdict]"
@@ -642,15 +643,15 @@ function openTestReport() {
         <template v-if="outcome.tests.status === 'reported'">
           <p
             v-if="outcome.tests.abortReason"
-            class="mb-2 rounded-md border border-app-error-900/70 bg-app-error-500/10 p-2 text-[13px] leading-relaxed text-app-error-200"
+            class="mb-2 rounded-md border border-app-error-900/70 bg-app-error-500/10 p-2 text-sm leading-relaxed text-app-error-200"
             data-testid="outcome-tests-abort"
           >
             {{ t('outcome.tests.abort', { reason: outcome.tests.abortReason }) }}
           </p>
-          <p v-if="outcome.tests.summary" class="text-[13px] leading-relaxed text-toned">
+          <p v-if="outcome.tests.summary" class="text-sm leading-relaxed text-toned">
             {{ t('outcome.tests.summary', { summary: outcome.tests.summary }) }}
           </p>
-          <p class="mt-1.5 text-[12px] text-muted">
+          <p class="mt-1.5 text-xs text-muted">
             {{
               t('outcome.tests.counts', {
                 passed: outcome.tests.passed,
@@ -663,7 +664,7 @@ function openTestReport() {
             <li
               v-for="(concern, i) in outcome.tests.concerns"
               :key="i"
-              class="flex items-start gap-2 text-[12px] text-toned"
+              class="flex items-start gap-2 text-xs text-toned"
               data-testid="outcome-concern"
             >
               <UBadge :color="SEVERITY_COLOR[concern.severity]" variant="subtle" size="sm">
@@ -673,18 +674,18 @@ function openTestReport() {
             </li>
           </ul>
         </template>
-        <p v-else class="text-[13px] italic leading-relaxed text-dimmed">
+        <p v-else class="text-sm italic leading-relaxed text-dimmed">
           {{ t(TESTS_GAP_KEYS[outcome.tests.gap]) }}
         </p>
       </section>
 
       <!-- What it looks like: the captured views, and whether a human was asked about them. -->
       <section class="mb-5" data-testid="outcome-visuals">
-        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.visuals.title') }}
-        </h3>
+        </SectionLabel>
         <template v-if="outcome.visuals.status === 'reported'">
-          <p class="mb-2 text-[12px] leading-relaxed text-muted">
+          <p class="mb-2 text-xs leading-relaxed text-muted">
             {{
               outcome.visuals.source === 'visual_confirm'
                 ? t('outcome.visuals.source.visual_confirm')
@@ -718,7 +719,7 @@ function openTestReport() {
                 />
               </div>
               <span
-                class="flex items-center gap-1 truncate px-1.5 py-1 text-[11px] text-toned"
+                class="flex items-center gap-1 truncate px-1.5 py-1 text-2xs text-toned"
                 :title="view.view"
               >
                 <UIcon
@@ -733,12 +734,12 @@ function openTestReport() {
           </div>
         </template>
         <template v-else>
-          <p class="text-[13px] italic leading-relaxed text-dimmed">
+          <p class="text-sm italic leading-relaxed text-dimmed">
             {{ t(VISUALS_GAP_KEYS[outcome.visuals.gap]) }}
           </p>
           <p
             v-if="outcome.visuals.detail"
-            class="mt-1 text-[12px] leading-relaxed text-dimmed"
+            class="mt-1 text-xs leading-relaxed text-dimmed"
             data-testid="outcome-visuals-detail"
           >
             {{ outcome.visuals.detail }}
@@ -750,9 +751,9 @@ function openTestReport() {
            not read diffs starts from. Beside the captured views on purpose: the shots are what
            this run saw, this is the thing itself. -->
       <section class="mb-5" data-testid="outcome-environments">
-        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.environments.title') }}
-        </h3>
+        </SectionLabel>
         <template v-if="outcome.environments.status === 'reported'">
           <div
             v-for="row in environmentRows"
@@ -765,10 +766,10 @@ function openTestReport() {
               <UBadge :color="ENVIRONMENT_STATE_COLOR[row.state]" variant="subtle" size="sm">
                 {{ t(ENVIRONMENT_STATE_KEYS[row.state]) }}
               </UBadge>
-              <span v-if="row.service" class="truncate text-[12px] text-toned">
+              <span v-if="row.service" class="truncate text-xs text-toned">
                 {{ row.service }}
               </span>
-              <span class="text-[11px] text-dimmed">
+              <span class="text-2xs text-dimmed">
                 {{ t(ENVIRONMENT_ORIGIN_KEYS[row.origin]) }}
               </span>
             </div>
@@ -789,15 +790,15 @@ function openTestReport() {
             </UButton>
             <p
               v-else-if="row.url"
-              class="mt-1.5 break-all text-[12px] text-dimmed"
+              class="mt-1.5 break-all text-xs text-dimmed"
               data-testid="outcome-environment-url"
             >
               {{ row.url }}
             </p>
-            <p v-if="row.retained" class="mt-1 text-[11px] text-muted">
+            <p v-if="row.retained" class="mt-1 text-2xs text-muted">
               {{ t('outcome.environments.retained') }}
             </p>
-            <p v-if="row.expiresAt" class="mt-1 text-[11px] text-dimmed">
+            <p v-if="row.expiresAt" class="mt-1 text-2xs text-dimmed">
               {{
                 row.lapsed
                   ? t('outcome.environments.expired', { date: d(new Date(row.expiresAt), 'long') })
@@ -810,7 +811,7 @@ function openTestReport() {
                  otherwise holds "quota exceeded" reports a fault the environment does not have. -->
             <p
               v-if="row.detail"
-              class="mt-1 break-words text-[12px] leading-relaxed text-dimmed"
+              class="mt-1 break-words text-xs leading-relaxed text-dimmed"
               data-testid="outcome-environment-detail"
               :data-detail-kind="row.detailKind"
             >
@@ -822,16 +823,16 @@ function openTestReport() {
             </p>
           </div>
         </template>
-        <p v-else class="text-[13px] italic leading-relaxed text-dimmed">
+        <p v-else class="text-sm italic leading-relaxed text-dimmed">
           {{ t(ENVIRONMENTS_GAP_KEYS[outcome.environments.gap]) }}
         </p>
       </section>
 
       <!-- The machine checks, listed only where one actually recorded a verdict. -->
       <section v-if="checkRows.length" data-testid="outcome-checks">
-        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.checks.title') }}
-        </h3>
+        </SectionLabel>
         <div class="flex flex-wrap items-center gap-1.5">
           <UBadge
             v-for="check in checkRows"

@@ -96,7 +96,7 @@ function choose(id: string) {
           <li v-if="noneLabel !== undefined">
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
               :class="modelValue ? 'text-toned' : 'text-app-100'"
               data-testid="pipeline-option-none"
               @mouseenter="hoverId = ''"
@@ -114,7 +114,7 @@ function choose(id: string) {
           <li v-for="p in options" :key="p.id">
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
               :class="modelValue === p.id ? 'text-app-100' : 'text-toned'"
               :data-testid="`pipeline-option-${p.id}`"
               @mouseenter="hoverId = p.id"
@@ -134,7 +134,7 @@ function choose(id: string) {
         <!-- right: preview of the hovered (or selected) pipeline -->
         <div class="w-1/2 overflow-y-auto p-3">
           <PipelinePreview v-if="previewPipeline" :pipeline="previewPipeline" />
-          <div v-else class="text-[12px] leading-snug text-dimmed">{{ emptyHint }}</div>
+          <div v-else class="text-xs leading-snug text-dimmed">{{ emptyHint }}</div>
         </div>
       </div>
     </template>

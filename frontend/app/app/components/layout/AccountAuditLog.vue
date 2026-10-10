@@ -117,7 +117,7 @@ function timestamp(at: number): string {
       <li
         v-for="event in events"
         :key="event.id"
-        class="rounded border border-default bg-default/40 px-3 py-2"
+        class="rounded-sm border border-default bg-default/40 px-3 py-2"
       >
         <div class="flex flex-wrap items-baseline gap-x-2">
           <span class="font-medium text-highlighted">{{ actor(event) }}</span>

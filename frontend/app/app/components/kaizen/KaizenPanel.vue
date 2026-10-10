@@ -107,7 +107,7 @@ function statusLabel(g: KaizenGrading): string {
                 t('kaizen.verifiedCombos.count', { count: kaizen.verifiedCount })
               }}</span>
             </h2>
-            <p class="mb-3 text-[11px] text-dimmed">
+            <p class="mb-3 text-2xs text-dimmed">
               {{ t('kaizen.verifiedCombos.hint') }}
             </p>
             <ul class="space-y-2">
@@ -130,11 +130,11 @@ function statusLabel(g: KaizenGrading): string {
                     name="i-lucide-badge-check"
                     class="ms-auto h-3.5 w-3.5 text-app-success-400"
                   />
-                  <span v-else class="ms-auto text-[11px] text-dimmed">
+                  <span v-else class="ms-auto text-2xs text-dimmed">
                     {{ t('kaizen.verifiedCombos.progress', { count: c.consecutiveHighGrades }) }}
                   </span>
                 </div>
-                <div class="mt-1 truncate text-[11px] text-dimmed" :title="c.model">
+                <div class="mt-1 truncate text-2xs text-dimmed" :title="c.model">
                   {{
                     t('kaizen.verifiedCombos.modelPrompt', {
                       model: c.model,
@@ -157,7 +157,7 @@ function statusLabel(g: KaizenGrading): string {
             </h2>
             <div class="overflow-hidden rounded-lg border border-default">
               <table class="w-full text-start text-xs">
-                <thead class="bg-default/60 text-[11px] uppercase tracking-wide text-dimmed">
+                <thead class="bg-default/60 text-2xs uppercase tracking-wide text-dimmed">
                   <tr>
                     <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.when') }}</th>
                     <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.agent') }}</th>

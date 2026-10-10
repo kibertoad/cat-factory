@@ -7,6 +7,7 @@
 // serviceFragmentDefaults store (the backend replaces the whole list on each change).
 import { onMounted, ref } from 'vue'
 import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const fragments = useFragmentsStore()
@@ -59,9 +60,9 @@ function remove(id: string) {
     </p>
 
     <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('settings.serviceFragmentDefaults.defaultFragments') }}
-      </span>
+      </SectionLabel>
       <UDropdownMenu v-if="menu.length" :items="menu" :ui="{ content: 'max-h-72 overflow-y-auto' }">
         <UButton
           size="xs"
@@ -90,11 +91,11 @@ function remove(id: string) {
         {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <p v-else class="text-[11px] text-dimmed">
+    <p v-else class="text-2xs text-dimmed">
       {{ t('settings.serviceFragmentDefaults.empty') }}
     </p>
 
-    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-default pt-3 text-[11px]">
+    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-default pt-3 text-2xs">
       <span class="text-dimmed">
         {{ t('settings.serviceFragmentDefaults.footer.question') }}
       </span>

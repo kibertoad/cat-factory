@@ -17,6 +17,7 @@ import {
 } from '~/types/localModels'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -301,7 +302,7 @@ async function remove(p: LocalRunner) {
           <div>
             <span class="font-medium text-default">{{ e.label }}</span>
             <span class="ms-2 text-xs text-dimmed">{{ LOCAL_RUNNER_LABELS[e.provider] }}</span>
-            <div class="text-[11px] text-dimmed">
+            <div class="text-2xs text-dimmed">
               {{ e.baseUrl }} ·
               {{
                 t(
@@ -316,7 +317,7 @@ async function remove(p: LocalRunner) {
             </div>
             <!-- A row whose URL the deployment no longer permits: its models are withheld
                  from the picker, so this is the only place that can say why. -->
-            <div v-if="e.urlBlockedReason" class="mt-1 text-[11px] text-app-warning-400">
+            <div v-if="e.urlBlockedReason" class="mt-1 text-2xs text-app-warning-400">
               {{ t('settings.localModelEndpoints.blocked') }}
               <span class="block text-app-warning-300/70">{{
                 urlReasonText(e.urlBlockedReason)
@@ -325,7 +326,7 @@ async function remove(p: LocalRunner) {
             <!-- Part of the stored model list could not be read and was discarded. Without this
                  the shortened list reads exactly like a runner nothing was ever enabled on, and
                  only one of those is fixed by re-ticking. -->
-            <div v-if="e.unreadableModels" class="mt-1 text-[11px] text-app-warning-400">
+            <div v-if="e.unreadableModels" class="mt-1 text-2xs text-app-warning-400">
               {{ t('settings.localModelEndpoints.modelsDiscarded') }}
             </div>
           </div>
@@ -352,13 +353,13 @@ async function remove(p: LocalRunner) {
 
         <!-- add / edit form -->
         <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="p">
             {{
               existing
                 ? t('settings.localModelEndpoints.editRunner')
                 : t('settings.localModelEndpoints.addRunner')
             }}
-          </p>
+          </SectionLabel>
 
           <div class="flex flex-wrap items-end gap-3">
             <UFormField :label="t('settings.localModelEndpoints.runnerType')">
@@ -415,7 +416,7 @@ async function remove(p: LocalRunner) {
             </UButton>
             <span v-if="testError" class="text-xs text-app-error-400">
               {{ testError }}
-              <span v-if="testErrorDetail" class="block text-[11px] text-app-error-300/70">{{
+              <span v-if="testErrorDetail" class="block text-2xs text-app-error-300/70">{{
                 testErrorDetail
               }}</span>
             </span>
@@ -435,10 +436,10 @@ async function remove(p: LocalRunner) {
 
           <!-- discovered models multi-select, each with its declared image support -->
           <div v-if="discovered.length" class="space-y-1.5">
-            <span class="block text-[10px] uppercase tracking-wide text-dimmed">
+            <SectionLabel as="span" class="block">
               {{ t('settings.localModelEndpoints.enableModels') }}
-            </span>
-            <p class="text-[11px] text-dimmed">
+            </SectionLabel>
+            <p class="text-2xs text-dimmed">
               {{ t('settings.localModelEndpoints.imageInputHint') }}
             </p>
             <div class="space-y-1.5">

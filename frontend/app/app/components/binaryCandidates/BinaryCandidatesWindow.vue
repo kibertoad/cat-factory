@@ -202,7 +202,7 @@ const { requestClose } = useUnsavedGuard({
            declared its candidates and one whose block was unreadable need different fixes. -->
       <p
         v-if="noChoiceKey"
-        class="mb-3 rounded border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-200"
+        class="mb-3 rounded-sm border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-200"
         data-testid="binary-candidates-no-choice"
       >
         {{ t(noChoiceKey) }}
@@ -211,7 +211,7 @@ const { requestClose } = useUnsavedGuard({
       <!-- An automatic keep is NOT a review, and must never render as one. -->
       <p
         v-if="view.automatic"
-        class="mb-3 rounded border border-app-600/40 bg-elevated/40 px-3 py-2 text-xs text-toned"
+        class="mb-3 rounded-sm border border-app-600/40 bg-elevated/40 px-3 py-2 text-xs text-toned"
         data-testid="binary-candidates-automatic"
       >
         {{ t('binaryCandidates.automatic') }}
@@ -243,7 +243,7 @@ const { requestClose } = useUnsavedGuard({
           <div
             v-for="row in group.rows"
             :key="row.id"
-            class="rounded border p-2 transition"
+            class="rounded-sm border p-2 transition"
             :class="[
               selected.includes(row.id) || row.kept
                 ? 'border-app-info-400/60 bg-app-info-500/5'
@@ -268,7 +268,7 @@ const { requestClose } = useUnsavedGuard({
                  that is no longer selected. -->
             <label
               v-if="view.awaiting"
-              class="mb-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-muted"
+              class="mb-1.5 flex cursor-pointer items-center gap-2 text-2xs text-muted"
               @click.stop
             >
               <input
@@ -297,14 +297,14 @@ const { requestClose } = useUnsavedGuard({
               v-else-if="row.previewUrl"
               :src="row.previewUrl"
               :alt="row.label ?? row.id"
-              class="mb-2 max-h-56 w-full rounded object-contain"
+              class="mb-2 max-h-56 w-full rounded-sm object-contain"
               data-testid="binary-candidate-preview"
             />
             <!-- No preview is ORDINARY (a private asset store issues no link), so it is stated
                  rather than left as an empty frame the reader reads as a failed generation. -->
             <p
               v-else
-              class="mb-2 flex h-24 items-center justify-center rounded bg-elevated/60 px-2 text-center text-[10px] text-muted"
+              class="mb-2 flex h-24 items-center justify-center rounded-sm bg-elevated/60 px-2 text-center text-3xs text-muted"
               data-testid="binary-candidate-no-preview"
             >
               {{ t('binaryCandidates.noPreview') }}
@@ -316,10 +316,10 @@ const { requestClose } = useUnsavedGuard({
                   : t('binaryCandidates.unattributed')
               }}
             </p>
-            <p v-if="row.note" class="mt-1 text-[11px] text-muted">{{ row.note }}</p>
-            <p class="mt-1 break-all text-[10px] text-dimmed">{{ row.location }}</p>
-            <p v-if="row.contentType" class="text-[10px] text-dimmed">{{ row.contentType }}</p>
-            <p v-if="row.kept" class="mt-1 text-[11px] text-app-success-300">
+            <p v-if="row.note" class="mt-1 text-2xs text-muted">{{ row.note }}</p>
+            <p class="mt-1 break-all text-3xs text-dimmed">{{ row.location }}</p>
+            <p v-if="row.contentType" class="text-3xs text-dimmed">{{ row.contentType }}</p>
+            <p v-if="row.kept" class="mt-1 text-2xs text-app-success-300">
               {{
                 row.storeAs
                   ? t('binaryCandidates.keptAs', { id: row.storeAs })
@@ -352,19 +352,19 @@ const { requestClose } = useUnsavedGuard({
         />
         <p
           v-if="missingAliases.length"
-          class="mt-1 text-[11px] text-app-warning-300"
+          class="mt-1 text-2xs text-app-warning-300"
           data-testid="binary-candidates-missing-alias"
         >
           {{ t('binaryCandidates.missingAlias') }}
         </p>
         <p
           v-else-if="duplicateAliases"
-          class="mt-1 text-[11px] text-app-warning-300"
+          class="mt-1 text-2xs text-app-warning-300"
           data-testid="binary-candidates-duplicate-alias"
         >
           {{ t('binaryCandidates.duplicateAlias') }}
         </p>
-        <p v-if="candidates.error" class="mt-1 text-[11px] text-app-error-300">
+        <p v-if="candidates.error" class="mt-1 text-2xs text-app-error-300">
           {{ candidates.error }}
         </p>
         <div class="mt-2 flex justify-end">
@@ -395,7 +395,7 @@ const { requestClose } = useUnsavedGuard({
     >
       <UIcon name="i-lucide-unlink" class="h-8 w-8 opacity-40" />
       <p class="text-sm">{{ t('binaryCandidates.noRun.title') }}</p>
-      <p class="max-w-md text-[11px] text-dimmed">{{ t('binaryCandidates.noRun.hint') }}</p>
+      <p class="max-w-md text-2xs text-dimmed">{{ t('binaryCandidates.noRun.hint') }}</p>
     </div>
     <div
       v-else-if="absence === 'loading'"
@@ -411,7 +411,7 @@ const { requestClose } = useUnsavedGuard({
     >
       <UIcon name="i-lucide-triangle-alert" class="h-8 w-8 text-app-warning-400/70" />
       <p class="text-sm">{{ t('binaryCandidates.loadFailed') }}</p>
-      <p class="max-w-md break-words text-[11px] text-dimmed">{{ candidates.error }}</p>
+      <p class="max-w-md break-words text-2xs text-dimmed">{{ candidates.error }}</p>
       <UButton
         size="xs"
         color="neutral"

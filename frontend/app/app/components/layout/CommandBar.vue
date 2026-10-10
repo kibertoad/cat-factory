@@ -6,6 +6,8 @@
 // from the add-task flow.) Commands are assembled from the live stores so only
 // available actions (connected integrations, etc.) show.
 
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 interface Command {
   id: string
   label: string
@@ -276,9 +278,9 @@ function indexOf(cmd: Command) {
           </p>
 
           <div v-for="group in groups" :key="group.name" class="mb-1">
-            <p class="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="p" class="px-2 pb-1 pt-2">
               {{ group.name }}
-            </p>
+            </SectionLabel>
             <button
               v-for="cmd in group.items"
               :key="cmd.id"

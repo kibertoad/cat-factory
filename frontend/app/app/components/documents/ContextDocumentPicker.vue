@@ -49,6 +49,7 @@ import {
   reconcileSource,
   sourceMenuItems,
 } from '~/utils/sourcePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
@@ -420,12 +421,9 @@ onMounted(() => {
          here (each opens the connect modal over the caller's form). Rendered as plain text when
          there is nothing to decide, which for a member is the usual case. -->
     <div class="flex items-center gap-1.5">
-      <span
-        :id="sourceLabelId"
-        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
-      >
+      <SectionLabel as="span" :id="sourceLabelId" class="shrink-0">
         {{ t('documents.picker.sourceLabel') }}
-      </span>
+      </SectionLabel>
       <UDropdownMenu
         v-if="sourcePickable"
         :items="sourceMenu"
@@ -490,7 +488,7 @@ onMounted(() => {
         @keydown.enter="refRow && pickRef(refRow)"
       />
 
-      <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
+      <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
         {{ t('documents.picker.searchFailed', { error: searchError }) }}
       </p>
 
@@ -498,14 +496,14 @@ onMounted(() => {
            the user can still edit, rather than as a toast after the task is created. -->
       <p
         v-if="refState.status === 'checking'"
-        class="px-1 text-[11px] text-dimmed"
+        class="px-1 text-2xs text-dimmed"
         data-testid="doc-ref-checking"
       >
         {{ t('documents.picker.refChecking') }}
       </p>
       <div
         v-else-if="refRejection"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-app-warning-400"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-2xs text-app-warning-400"
         data-testid="doc-ref-rejected"
       >
         <span>{{ refRejection }}</span>
@@ -523,7 +521,7 @@ onMounted(() => {
       </div>
       <p
         v-else-if="refState.status === 'unchecked'"
-        class="px-1 text-[11px] text-app-warning-400"
+        class="px-1 text-2xs text-app-warning-400"
         data-testid="doc-ref-unchecked"
       >
         {{ t('documents.picker.refCheckFailed', { error: refState.message }) }}
@@ -532,7 +530,7 @@ onMounted(() => {
            at all reads as a picker that dropped it. -->
       <p
         v-else-if="refAlreadyAttached"
-        class="px-1 text-[11px] text-dimmed"
+        class="px-1 text-2xs text-dimmed"
         data-testid="doc-ref-already-attached"
       >
         {{ t('documents.picker.refAlreadyAttached') }}
@@ -585,7 +583,7 @@ onMounted(() => {
                 </template>
               </i18n-t>
             </span>
-            <span v-if="refRow.trimmed" class="block truncate text-[11px] text-dimmed">
+            <span v-if="refRow.trimmed" class="block truncate text-2xs text-dimmed">
               {{ t('documents.picker.refTrimmed') }}
             </span>
             <!-- A WIDENED reference, which the trim note above must never be left to imply: the
@@ -593,7 +591,7 @@ onMounted(() => {
                  around it. Amber and separate, because it is a loss rather than tidying. -->
             <span
               v-if="refRow.droppedScope"
-              class="block text-[11px] text-app-warning-400"
+              class="block text-2xs text-app-warning-400"
               data-testid="doc-ref-widened"
             >
               {{ t('documents.picker.refWidened', { scope: refRow.droppedScope }) }}

@@ -10,6 +10,7 @@
 // second one plus a nested border would just be chrome inside chrome.
 import type { AgentEffortReport } from '~/types/execution'
 import { effortBand } from '~/utils/effort'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = withDefaults(
   defineProps<{ report: AgentEffortReport; variant?: 'card' | 'flat' }>(),
@@ -37,16 +38,13 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
       variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
     "
   >
-    <div
-      v-if="variant === 'card'"
-      class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel v-if="variant === 'card'" class="mb-2 flex items-center gap-1.5">
       <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.effort.heading') }}</span>
-    </div>
+    </SectionLabel>
 
     <div class="flex items-center gap-2">
-      <span class="text-[12px] text-toned" :title="t('panels.stepDetail.effort.difficultyHint')">
+      <span class="text-xs text-toned" :title="t('panels.stepDetail.effort.difficultyHint')">
         {{ t('panels.stepDetail.effort.difficulty') }}
       </span>
       <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-accented/60">
@@ -58,38 +56,35 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
       </div>
       <span
         data-testid="step-effort-difficulty"
-        class="text-[12px] font-medium text-default"
+        class="text-xs font-medium text-default"
         :title="t('panels.stepDetail.effort.difficultyHint')"
       >
         {{ t('panels.stepDetail.effort.outOfTen', { value: report.difficulty }) }}
       </span>
     </div>
 
-    <p
-      v-if="report.summary"
-      class="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-toned"
-    >
+    <p v-if="report.summary" class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-toned">
       {{ report.summary }}
     </p>
 
     <div v-if="report.reducedEffectiveness" class="mt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="p">
         {{ t('panels.stepDetail.effort.reduced') }}
-      </p>
-      <p class="mt-0.5 whitespace-pre-wrap text-[12px] text-toned">
+      </SectionLabel>
+      <p class="mt-0.5 whitespace-pre-wrap text-xs text-toned">
         {{ report.reducedEffectiveness }}
       </p>
     </div>
 
     <div v-if="report.obstacles?.length" class="mt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="p">
         {{ t('panels.stepDetail.effort.obstacles') }}
-      </p>
+      </SectionLabel>
       <ul class="mt-0.5 space-y-1">
         <li
           v-for="(obstacle, i) in report.obstacles"
           :key="i"
-          class="flex items-start gap-1.5 text-[12px] text-toned"
+          class="flex items-start gap-1.5 text-xs text-toned"
         >
           <UIcon
             name="i-lucide-alert-triangle"

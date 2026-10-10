@@ -20,6 +20,7 @@ import UiRoleSwitcher from '~/components/layout/UiRoleSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 
@@ -248,12 +249,9 @@ watch(
       <template v-for="section in sidebarGroups" :key="section.group">
         <USeparator />
         <section>
-          <h2
-            v-if="!railed"
-            class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted"
-          >
+          <SectionLabel v-if="!railed" as="h2" class="mb-2 px-1">
             {{ t(section.labelKey) }}
-          </h2>
+          </SectionLabel>
           <div class="space-y-1.5">
             <UButton
               v-for="item in section.items"

@@ -189,7 +189,7 @@ async function remove(service: FoundationalService) {
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-dimmed">{{ s.id }}</code>
+            <code class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
           </p>
           <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
@@ -198,7 +198,7 @@ async function remove(service: FoundationalService) {
             </UBadge>
           </div>
           <FoundationalContractSummary :contracts="s.contracts" :format-label="formatLabel" />
-          <p v-if="s.sourceId" class="mt-1 text-[11px] text-dimmed">
+          <p v-if="s.sourceId" class="mt-1 text-2xs text-dimmed">
             {{ t('foundational.registry.fromSource', { path: s.sourcePath ?? '' }) }}
           </p>
         </div>
@@ -274,7 +274,7 @@ async function remove(service: FoundationalService) {
           <p class="text-xs font-medium text-toned">
             {{ t('foundational.registry.contractsTitle') }}
           </p>
-          <p class="mb-2 text-[11px] text-dimmed">
+          <p class="mb-2 text-2xs text-dimmed">
             {{
               draft.contractsTouched
                 ? t('foundational.registry.contractsReplace')

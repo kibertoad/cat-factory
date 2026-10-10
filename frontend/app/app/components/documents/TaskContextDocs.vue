@@ -165,7 +165,7 @@ async function attach(item: PendingContext) {
         <DocumentSyncState :doc="doc" class="mt-1" />
       </div>
     </div>
-    <p v-else class="text-[11px] text-dimmed">
+    <p v-else class="text-2xs text-dimmed">
       {{ emptyHint }}
     </p>
   </InspectorSection>

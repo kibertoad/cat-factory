@@ -166,7 +166,7 @@ const { requestClose } = useUnsavedGuard({
       >
         <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
         <p class="text-sm">{{ t('forkDecision.proposing.title') }}</p>
-        <p class="max-w-sm text-[11px] text-dimmed">
+        <p class="max-w-sm text-2xs text-dimmed">
           {{ t('forkDecision.proposing.hint') }}
         </p>
       </div>
@@ -176,10 +176,10 @@ const { requestClose } = useUnsavedGuard({
         v-else-if="status === 'single_path'"
         class="rounded-xl border border-default bg-default/60 px-4 py-3 text-toned"
       >
-        <p class="text-[13px] font-medium text-app-100">
+        <p class="text-sm font-medium text-app-100">
           {{ t('forkDecision.singlePath.title') }}
         </p>
-        <p v-if="state?.singlePathReason" class="mt-1 text-[12px]">
+        <p v-if="state?.singlePathReason" class="mt-1 text-xs">
           {{ state.singlePathReason }}
         </p>
       </div>
@@ -189,16 +189,16 @@ const { requestClose } = useUnsavedGuard({
         v-else-if="status === 'chosen'"
         class="rounded-xl border border-app-secondary-500/40 bg-default/60 px-4 py-3 text-toned"
       >
-        <p class="text-[13px] font-medium text-app-secondary-200">
+        <p class="text-sm font-medium text-app-secondary-200">
           {{ t('forkDecision.chosen.title') }}
         </p>
-        <p v-if="state?.chosen?.custom" class="mt-1 whitespace-pre-wrap text-[12px]">
+        <p v-if="state?.chosen?.custom" class="mt-1 whitespace-pre-wrap text-xs">
           {{ state.chosen.custom }}
         </p>
-        <p v-else-if="state?.chosen?.forkId" class="mt-1 text-[12px]">
+        <p v-else-if="state?.chosen?.forkId" class="mt-1 text-xs">
           {{ forks.find((f) => f.id === state?.chosen?.forkId)?.title }}
         </p>
-        <p v-if="state?.chosen?.note" class="mt-1 text-[11px] text-muted">
+        <p v-if="state?.chosen?.note" class="mt-1 text-2xs text-muted">
           {{ t('forkDecision.chosen.note', { note: state.chosen.note }) }}
         </p>
       </div>
@@ -207,15 +207,12 @@ const { requestClose } = useUnsavedGuard({
       <div v-else-if="interactive" class="space-y-3">
         <p
           v-if="forkDecision.error"
-          class="rounded-md bg-app-error-500/10 px-3 py-2 text-[12px] text-app-error-300"
+          class="rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
         >
           {{ forkDecision.error }}
         </p>
 
-        <p
-          v-if="state?.seamSummary"
-          class="rounded-md bg-elevated/50 px-3 py-2 text-[12px] text-toned"
-        >
+        <p v-if="state?.seamSummary" class="rounded-md bg-elevated/50 px-3 py-2 text-xs text-toned">
           <span class="text-dimmed">{{ t('forkDecision.seam') }}</span>
           {{ state.seamSummary }}
         </p>
@@ -242,29 +239,29 @@ const { requestClose } = useUnsavedGuard({
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <h3 class="min-w-0 flex-1 text-[13px] font-medium text-app-100">
+                <h3 class="min-w-0 flex-1 text-sm font-medium text-app-100">
                   {{ fork.title }}
                 </h3>
                 <UBadge v-if="fork.recommended" color="primary" variant="subtle" size="sm">
                   {{ t('forkDecision.recommended') }}
                 </UBadge>
               </div>
-              <p v-if="fork.summary" class="mt-0.5 text-[12px] text-muted">
+              <p v-if="fork.summary" class="mt-0.5 text-xs text-muted">
                 {{ fork.summary }}
               </p>
-              <p class="mt-1.5 whitespace-pre-wrap text-[12px] text-toned">
+              <p class="mt-1.5 whitespace-pre-wrap text-xs text-toned">
                 {{ fork.approach }}
               </p>
               <ul v-if="fork.tradeoffs.length" class="mt-1.5 space-y-0.5">
                 <li
                   v-for="(tr, i) in fork.tradeoffs"
                   :key="i"
-                  class="flex gap-1.5 text-[11px] text-muted"
+                  class="flex gap-1.5 text-2xs text-muted"
                 >
                   <span class="text-app-600">•</span>{{ tr }}
                 </li>
               </ul>
-              <p v-if="fork.riskNotes" class="mt-1.5 text-[11px] text-app-warning-300/90">
+              <p v-if="fork.riskNotes" class="mt-1.5 text-2xs text-app-warning-300/90">
                 <span class="text-app-warning-500/70">{{ t('forkDecision.riskNotes') }}</span>
                 {{ fork.riskNotes }}
               </p>
@@ -283,7 +280,7 @@ const { requestClose } = useUnsavedGuard({
         >
           <label class="flex cursor-pointer items-center gap-2" @click="selected = 'custom'">
             <input type="radio" class="accent-app-secondary-500" :checked="selected === 'custom'" />
-            <span class="text-[13px] font-medium text-app-100">{{
+            <span class="text-sm font-medium text-app-100">{{
               t('forkDecision.custom.title')
             }}</span>
           </label>
@@ -292,25 +289,25 @@ const { requestClose } = useUnsavedGuard({
             data-testid="fork-custom-input"
             rows="3"
             :placeholder="t('forkDecision.custom.placeholder')"
-            class="mt-2 w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
+            class="mt-2 w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
             @focus="selected = 'custom'"
           />
         </article>
 
         <!-- Optional steering note -->
         <div>
-          <label class="mb-1 block text-[11px] text-muted">{{ t('forkDecision.noteLabel') }}</label>
+          <label class="mb-1 block text-2xs text-muted">{{ t('forkDecision.noteLabel') }}</label>
           <input
             v-model="note"
             type="text"
             :placeholder="t('forkDecision.notePlaceholder')"
-            class="w-full rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none"
+            class="w-full rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none"
           />
         </div>
 
         <!-- Grounded chat: ask about the forks before deciding. -->
         <section class="rounded-xl border border-default bg-default/40 px-4 py-3">
-          <p class="text-[11px] font-medium text-muted">
+          <p class="text-2xs font-medium text-muted">
             {{ t('forkDecision.chat.title') }}
           </p>
           <div v-if="chat.length || answering" class="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
@@ -322,7 +319,7 @@ const { requestClose } = useUnsavedGuard({
               :class="msg.role === 'human' ? 'justify-end' : 'justify-start'"
             >
               <p
-                class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-[12px]"
+                class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-xs"
                 :class="
                   msg.role === 'human'
                     ? 'bg-app-secondary-500/15 text-app-secondary-100'
@@ -334,14 +331,14 @@ const { requestClose } = useUnsavedGuard({
             </div>
             <div v-if="answering" class="flex justify-start">
               <p
-                class="flex items-center gap-1.5 rounded-lg bg-elevated/70 px-3 py-1.5 text-[12px] text-muted"
+                class="flex items-center gap-1.5 rounded-lg bg-elevated/70 px-3 py-1.5 text-xs text-muted"
               >
                 <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
                 {{ t('forkDecision.chat.thinking') }}
               </p>
             </div>
           </div>
-          <p v-else class="mt-1 text-[11px] text-dimmed">
+          <p v-else class="mt-1 text-2xs text-dimmed">
             {{ t('forkDecision.chat.hint') }}
           </p>
           <div class="mt-2 flex items-end gap-2">
@@ -355,7 +352,7 @@ const { requestClose } = useUnsavedGuard({
                   ? t('forkDecision.chat.budgetSpent')
                   : t('forkDecision.chat.placeholder')
               "
-              class="min-h-0 flex-1 resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none disabled:opacity-50"
+              class="min-h-0 flex-1 resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none disabled:opacity-50"
               @keydown.enter.exact.prevent="onSend"
             />
             <UButton

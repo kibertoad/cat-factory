@@ -5,6 +5,8 @@
 // previously sat, confusingly, among the workspace-wide integrations. Each row reuses the
 // existing per-panel handlers via `ui.openFromPersonal(...)`, so opening one closes this
 // hub, reveals that panel, and gives it a "Back to My setup" control (IntegrationBackTitle).
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const userSecrets = useUserSecretsStore()
@@ -117,9 +119,9 @@ const groups = computed<PersonalGroup[]>(() => {
         </p>
 
         <section v-for="group in groups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
             <button
               v-for="item in group.items"
@@ -135,7 +137,7 @@ const groups = computed<PersonalGroup[]>(() => {
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.personalSetup.connected') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-dimmed">
+                  <span v-else class="text-2xs text-dimmed">
                     {{ t('layout.personalSetup.notConnected') }}
                   </span>
                 </div>
