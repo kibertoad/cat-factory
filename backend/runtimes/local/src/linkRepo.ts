@@ -160,6 +160,19 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
         syncedAt: now,
       },
     ])
+    // `upsertMany` leaves `linked_via` alone on an existing row, because sync must not clobber it.
+    // A local link is the one write that owns it: re-linking a repo first projected as
+    // `'user_pat'` makes it `'app'`-reachable. The directory feed does not publish `linked_via`,
+    // so this write needs no feed row of its own.
+    await db
+      .update(schema.githubRepos)
+      .set({ linked_via: 'app', etag: null })
+      .where(
+        and(
+          eq(schema.githubRepos.workspace_id, options.workspaceId),
+          eq(schema.githubRepos.github_id, meta.id),
+        ),
+      )
 
     // Bind the frame's account-owned Service to the repo — the sole linkage
     // `resolveRepoTarget` reads. Update the service the board created for the frame; if

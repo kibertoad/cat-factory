@@ -43,6 +43,7 @@ import {
   appendDirectoryChanges,
   lockDirectoryFeed,
   workspaceMembershipSource,
+  workspaceMoveSource,
   workspaceSource,
   workspaceTreeSource,
 } from '../directoryFeed.js'
@@ -178,8 +179,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
     // the new one, so both feeds record the whole tree: before the move and after it.
     await this.db.transaction(async (tx) => {
       const at = Date.now()
+      await lockDirectoryFeed(tx, workspaceMoveSource(id, accountId))
       await appendDirectoryChanges(tx, workspaceTreeSource(id), at)
-      await lockDirectoryFeed(tx, accountSource(accountId))
       await tx.update(workspaces).set({ account_id: accountId }).where(eq(workspaces.id, id))
       await appendDirectoryChanges(tx, workspaceTreeSource(id), at)
     })
