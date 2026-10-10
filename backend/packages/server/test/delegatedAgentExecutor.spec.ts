@@ -13,8 +13,14 @@ import type {
   DelegationUpdate,
   ToolSecretResolver,
 } from '@cat-factory/kernel'
-import { defaultDelegatedExecutorRegistry, DomainError, noopLogger } from '@cat-factory/kernel'
+import {
+  DELEGATED_USAGE_PROVIDER,
+  defaultDelegatedExecutorRegistry,
+  DomainError,
+  noopLogger,
+} from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import { describe, expect, it } from 'vitest'
 import { buildDelegatedAgentExecutor } from '../src/agents/delegatedExecutorHost.js'
 import { githubRepoOrigin } from '../src/agents/containerAgentBody.js'
@@ -111,6 +117,8 @@ function build(
     onDeps?: (deps: DelegatedExecutorDeps) => void
     /** The runtime fetch the guard wraps; absent ⇒ the host's own default is never called. */
     fetchImpl?: DelegatedExecutorDeps['fetchImpl']
+    /** The telemetry writer a facade wires; absent ⇒ the arm is built with none. */
+    recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   } = {},
 ) {
   const agentKindRegistry = defaultAgentKindRegistry()
@@ -141,6 +149,7 @@ function build(
     // Answered explicitly: the host requires an answer so a facade cannot leave the outbound guard
     // declared-but-unwired, which is exactly what both of them had done.
     urlSafetyPolicy: undefined,
+    recordHarnessCalls: options.recordHarnessCalls,
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     logger: noopLogger,
     clock: { now: () => 0 },
@@ -266,6 +275,7 @@ describe('DelegatedAgentExecutor: dispatch', () => {
       resolveRepoTarget: async () => REPO,
       resolveRepoOrigin: githubRepoOrigin,
       urlSafetyPolicy: policy,
+      recordHarnessCalls: undefined,
       logger: noopLogger,
       clock: { now: () => 0 },
       // A fetch that records rather than calls: what matters is WHICH urls reach it.
@@ -516,6 +526,113 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
       result: { summary: 'done', usage: { inputTokens: 10, outputTokens: 5 } },
     })
     expect(update).toMatchObject({ result: { usage: { inputTokens: 10, outputTokens: 5 } } })
+  })
+
+  /** Poll once against a recorder, answering what it was handed. */
+  async function recorded(update: DelegationUpdate, fail = false) {
+    const inputs: HarnessCallsRecordInput[] = []
+    const settled = await build(fakeExecutor({ poll: async () => update }), {
+      recordHarnessCalls: async (input) => {
+        inputs.push(input)
+        if (fail) throw new Error('telemetry DB unavailable')
+      },
+    }).pollJob(handle())
+    return { settled, inputs }
+  }
+
+  it('files a REPORTED figure as the job row the step metrics are read from', async () => {
+    // The step's metrics fold `llm_call_metrics`, not the usage ledger a result's usage is written
+    // to, so a figure filed only in the ledger reads as "usage not reported" on the card.
+    const { inputs } = await recorded({
+      state: 'done',
+      result: {
+        summary: 'done',
+        usage: {
+          inputTokens: 29_010,
+          outputTokens: 3_100,
+          inputClasses: { promptTokens: 10, cacheReadTokens: 18_000, cacheWriteTokens: 11_000 },
+        },
+      },
+    })
+    expect(inputs).toEqual([
+      {
+        workspaceId: 'ws_1',
+        executionId: 'ex_1',
+        agentKind: 'acme:impl',
+        provider: DELEGATED_USAGE_PROVIDER,
+        model: 'delegated:acme:executor',
+        // Keyed on the job, so a replayed poll mints the same row id and re-records nothing.
+        jobId: 'ex_1-acme:impl',
+        calls: [
+          expect.objectContaining({
+            inputTokens: 10,
+            cacheReadTokens: 18_000,
+            cacheWriteTokens: 11_000,
+            outputTokens: 3_100,
+            seq: 0,
+            // No turn to attribute it to, and the job's ONLY record: a step that spent tokens must
+            // not read as one that made no calls, which is exactly what the reporting gap counts.
+            standsForJob: true,
+            spendOnly: false,
+          }),
+        ],
+      },
+    ])
+  })
+
+  it("files a FAILED run's figure too, since a late failure spent most of it", async () => {
+    const { settled, inputs } = await recorded({
+      state: 'failed',
+      error: 'stopped at review',
+      usage: { inputTokens: 500, outputTokens: 40 },
+    })
+    // Carried to the engine as the executor's own spend, so the ledger and the step's billing
+    // label see it as they see a completed result's.
+    expect(settled).toMatchObject({
+      state: 'failed',
+      usage: { inputTokens: 500, outputTokens: 40 },
+      usageBilling: 'subscription',
+    })
+    // No split reported, so the whole input is filed as fresh: an over-statement, never an under.
+    expect(inputs[0]?.calls[0]).toMatchObject({
+      inputTokens: 500,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 40,
+    })
+  })
+
+  it("keeps the reported total authoritative over an executor's split that does not sum to it", async () => {
+    const { inputs } = await recorded({
+      state: 'done',
+      result: {
+        summary: 'done',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 10,
+          inputClasses: { promptTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 400 },
+        },
+      },
+    })
+    expect(inputs[0]?.calls[0]).toMatchObject({
+      inputTokens: 0,
+      cacheReadTokens: 600,
+      cacheWriteTokens: 400,
+    })
+  })
+
+  it('files nothing for a run still in flight, or one that reported no figure', async () => {
+    expect((await recorded({ state: 'running' })).inputs).toEqual([])
+    expect((await recorded({ state: 'done', result: { summary: 'done' } })).inputs).toEqual([])
+    expect((await recorded({ state: 'failed', error: 'no' })).inputs).toEqual([])
+  })
+
+  it('settles the step even when the telemetry write fails', async () => {
+    const { settled } = await recorded(
+      { state: 'done', result: { summary: 'done', usage: { inputTokens: 1, outputTokens: 1 } } },
+      true,
+    )
+    expect(settled).toMatchObject({ state: 'done' })
   })
 
   it('refuses a poll whose handle carries no delegation, NAMING the run state rather than a registration', async () => {

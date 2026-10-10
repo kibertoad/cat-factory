@@ -106,11 +106,11 @@ const ITEM_ICON: Record<string, string> = {
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}
     </SectionLabel>
-    <div v-for="(s, i) in steps" :key="i" class="rounded bg-default/60 px-1.5 py-1">
+    <div v-for="(s, i) in steps" :key="i" class="rounded-sm bg-default/60 px-1.5 py-1">
       <UButton
         color="neutral"
         variant="ghost"
-        class="flex w-full cursor-pointer items-center gap-1 rounded p-0 text-start hover:bg-transparent"
+        class="flex w-full cursor-pointer items-center gap-1 rounded-sm p-0 text-start hover:bg-transparent"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >
@@ -165,7 +165,7 @@ const ITEM_ICON: Record<string, string> = {
           instance &&
           !reviews.isBackground(s.agentKind, props.taskId)
         "
-        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-3xs font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
+        class="mt-1 flex w-full items-center justify-center gap-1 rounded-sm bg-app-warning-500 px-1.5 py-0.5 text-3xs font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
@@ -175,10 +175,10 @@ const ITEM_ICON: Record<string, string> = {
       <!-- per-step subtask progress bar -->
       <div
         v-if="s.subtasks && s.subtasks.total > 0"
-        class="mt-1 h-0.5 w-full overflow-hidden rounded bg-accented/60"
+        class="mt-1 h-0.5 w-full overflow-hidden rounded-sm bg-accented/60"
       >
         <div
-          class="h-full rounded bg-primary transition-all"
+          class="h-full rounded-sm bg-primary transition-all"
           :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
         />
       </div>

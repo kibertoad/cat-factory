@@ -193,7 +193,7 @@ watch(
     </div>
 
     <!-- listing -->
-    <div class="max-h-56 overflow-auto rounded border border-default">
+    <div class="max-h-56 overflow-auto rounded-sm border border-default">
       <div v-if="loading" class="p-3 text-sm text-muted">
         {{ t('github.repoTree.loading') }}
       </div>

@@ -3,7 +3,7 @@ import enCatalog from '../i18n/locales/en.json'
 /**
  * Resolve a dotted vue-i18n key against the layer's base `en` catalog.
  *
- * The drift guards described in CLAUDE.md leave exactly one gap, and this closes it. Typed
+ * The drift guards described in AGENTS.md leave exactly one gap, and this closes it. Typed
  * message keys only see a key written literally as `t('a.b.c')`, and `vue-i18n-extract`
  * (`i18n:check`) scans for the same shape — so a key held in a `Record<SomeEnum, string>`
  * lookup table is invisible to both. The exhaustive `Record` proves every ENUM MEMBER has an

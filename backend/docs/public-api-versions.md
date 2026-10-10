@@ -404,3 +404,49 @@ this says what they do NOT cover, which is the whole point. A delegated step's m
 reach this deployment's proxy or recorder, so its tokens are in no total here, and a missing number
 is invisible. A caller reading spend off this surface should treat a non-zero
 `delegatedStepsWithoutUsage` as "this run cost more than this number says", not as a zero.
+
+## 1.76.0
+
+`/api/v1/guided-reviews` is new: guided pull request review. A session explains one PR (what it
+does, its meaningful changes, consequences, risks, where to focus, suggested questions) and holds
+independent question threads answered by a model that reads the PR at the commit under review.
+A thread can also turn its conclusions into comment drafts placed on lines inside the diff.
+`GET /api/v1/guided-reviews/{sessionId}/events` streams the session view as it changes.
+
+Additive: nine contract operations, one hand-documented stream, and the shapes they carry. Three
+of those shapes reuse value sets other operations published first (a diff side, a VCS provider and
+a `true`/`false` query flag); the SDK generator pins the existing type names, so no released type
+is renamed. Nothing here posts to a pull request.
+
+## 1.77.0
+
+Guided review drafts can be edited and posted: `PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}`
+edits, re-anchors or discards one, and `POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post`
+publishes the chosen drafts on the pull request as plain review comments.
+
+Additive. What a consumer notices beyond the new operations: `ConflictError` reasons gain
+`draft_conflict` (an edit from a stale `rev`) and `session_stale` (a post after the pull request
+moved past the reviewed commit). The guided review group's `write` scope now also covers posting,
+which publishes on the host under the key's identity; it still never approves or requests changes.
+
+## 1.78.0
+
+A guided review question asked with `depth: "deep"` is now answered from a read-only checkout of
+the repository rather than refused. Its assistant message stays `running` for minutes rather than
+seconds while the container works, and a deployment with no runner still settles it as
+`failed` with `failure.reason: "depth_unavailable"`. No shape changes; the version records that a
+documented value started doing what it names.
+
+## 1.79.0
+
+The task-type vocabulary gains `resolve-conflicts`: a task that ATTACHES an existing open pull
+request (named by `fields.prNumber` or `fields.prUrl`, exactly as a `review` task names one) and
+runs the `conflicts` gate against it under the new built-in `pl_resolve_conflicts` pipeline. A
+pull request that already merges cleanly finishes `done` with nothing pushed; a conflicted one
+loops the conflict resolver onto its own head branch and fails the run once the attempt budget is
+spent, with a failure message saying the conflicts could not be resolved automatically.
+
+Additive: a new enum value and a new set of `details.reason` codes on the existing `422`
+(`attached_pr_unresolvable`, `attached_pr_not_found`, `attached_pr_repo_mismatch`,
+`attached_pr_not_open`, `attached_pr_from_fork`, `attached_pr_base_mismatch`). The pipeline parks
+nowhere, so a plain `write` key can start it with an empty body.

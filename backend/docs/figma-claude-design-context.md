@@ -208,7 +208,7 @@ review's and the first dispatch's) free to disagree.
   whether it has children, and a tree the FETCH truncated arrives identical to a complete one.
 - **Layout fidelity:** each node's line carries its styling in brackets, the facts an agent would
   otherwise invent: `[fill #3366ff; Inter 16/600 lh 24; radius 8; auto-layout vertical gap 12
-padding 16/24]`. Bounded by the same depth/node caps as the tree.
+  padding 16/24]`. Bounded by the same depth/node caps as the tree.
 - **Tokens:** `GET /v1/files/:key/variables/local` when the plan serves it; a **403/404 is the
   Enterprise plan gate**, and the fallback is the file's **published styles** (the `styles` map
   joined to the fills/text styles of the nodes referencing them), which every plan serves. The two
@@ -233,7 +233,7 @@ current API when touched: treat them as the intended shape, not a frozen contrac
 
 - **Auth:** a per-workspace Zeplin PAT (`Authorization: Bearer`), sealed like Figma.
 - **Fetch:** `GET /v1/projects/:id` (name), `/projects/:id/screens` (→ blocks), `/projects/:id/
-components` (→ grouped components), `/projects/:id/design_tokens` (→ colours/typography/spacing).
+  components` (→ grouped components), `/projects/:id/design_tokens` (→ colours/typography/spacing).
   The components/tokens reads are best-effort (a single failing section is dropped, not fatal),
   exactly like Figma's variables, and the drop is NAMED in `### Notes` / `tokenOrigin` rather than
   left to read as a project that has none.
@@ -354,5 +354,5 @@ platform had.
   (provider port, connect/import/link surface, credential sealing).
 - [`visual-confirmation.md`](./visual-confirmation.md): the binary-artifact store + Visual
   Confirmation gate (the image-capable surface this text path does not cover).
-- `CLAUDE.md` → "Telemetry & agent-context observability": how to inspect, after a run, the exact
+- `AGENTS.md` → "Telemetry & agent-context observability": how to inspect, after a run, the exact
   `.cat-context/*` content an agent was given (the manual-verification surface for this feature).

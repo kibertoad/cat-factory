@@ -319,6 +319,7 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
@@ -399,6 +400,7 @@ export { DrizzleNotificationRepository } from './repositories/notifications.js'
 export { DrizzleDocumentRepository } from './repositories/documents.js'
 export { DrizzleTaskRepository } from './repositories/tasks.js'
 export { DrizzleDocInterviewRepository } from './repositories/drizzle.js'
+export { DrizzleGuidedReviewRepository } from './repositories/drizzle.js'
 export { DrizzleEnvironmentUserHandlerRepository } from './repositories/environmentUserHandler.js'
 export * as schema from './db/schema.js'
 export {

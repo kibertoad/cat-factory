@@ -129,6 +129,7 @@
     "commandBar": "Wyszukaj lub uruchom polecenie…",
     "create": "Utwórz",
     "assistant": "Asystent",
+    "guidedReview": "Przegląd z przewodnikiem",
     "buildPipeline": "Zbuduj potok",
     "repositories": "Repozytoria",
     "addFromRepo": "Dodaj z istniejącego repozytorium",
@@ -219,7 +220,8 @@
         "recurring": "Cykliczne",
         "review": "Przegląd",
         "ralph": "Pętla Ralph",
-        "bugFishing": "Polowanie na błędy"
+        "bugFishing": "Polowanie na błędy",
+        "resolveConflicts": "Rozwiąż konflikty"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -638,7 +640,8 @@
         "assistant_generation_failed": "Dostawca modelu asystenta nie odpowiedział. Jest poprawnie skonfigurowany i nie ma tu nic do ustawienia: spróbuj ponowić żądanie za chwilę.",
         "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli.",
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
-        "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego."
+        "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
+        "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę."
       }
     },
     "reason": {
@@ -725,7 +728,10 @@
         "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą",
         "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany",
         "delegated_step_async_only": "Ten krok jest odpytywany, a nie oczekiwany",
-        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia"
+        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
+        "thread_busy": "Ten wątek wciąż odpowiada",
+        "draft_conflict": "Ten szkic się zmienił",
+        "session_stale": "Pull request poszedł dalej"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -782,7 +788,10 @@
         "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie.",
         "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj.",
         "delegated_step_async_only": "Ten krok działa na zewnętrznym wykonawcy i może trwać godzinami, więc jest wysyłany, a następnie odpytywany, zamiast wykonywany w obrębie jednego żądania. Uruchom przebieg z tablicy; jeśli trafiłeś tu z własnego kodu, steruj krokiem ścieżką asynchroniczną.",
-        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi."
+        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
+        "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
+        "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
+        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1678,7 +1687,7 @@
         "allTools": "Wszystkie narzędzia udostępniane przez ten serwer.",
         "narrowed": "Ograniczone do: {tools}",
         "reason": {
-          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie ma klienta MCP.",
+          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie mogło go udostępnić.",
           "transportUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie dosięga serwera tego rodzaju.",
           "missingSecret": "nie był dostępny: potrzebne mu poświadczenie nie jest ustawione dla tej tablicy.",
           "reservedSecret": "nie był dostępny: prosi o zmienną należącą do konfiguracji samej platformy, więc trzeba zmienić deklarację.",
@@ -1690,7 +1699,7 @@
           "unknown": "nie był dostępny ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Uruchom krok na CLI agenta, które zna MCP, albo poszerz listę harnessów serwera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
+          "harnessUnsupported": "Poszerz listę harnessów serwera o CLI agenta, na którym działał ten krok, albo uruchom krok na CLI z tej listy. Krok Pi zapisany, zanim Pi potrafił obsługiwać serwery narzędzi, wystarczy uruchomić ponownie na aktualnym obrazie runnera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
           "transportUnsupported": "Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI agenta, które dosięga serwerów HTTP.",
           "missingSecret": "Ustaw wskazane poświadczenie jako zmienną środowiskową wdrożenia albo w poświadczeniach możliwości, w oknie Infrastruktura.",
           "reservedSecret": "Zmień deklarację tak, by prosiła o inny klucz; ustawienie tej zmiennej to właśnie to, co nie pomoże.",
@@ -2603,6 +2612,7 @@
       "cmd": {
         "newPipeline": "Zbuduj potok",
         "assistant": "Otwórz asystenta",
+        "guidedReview": "Zbadaj pull request",
         "addFromRepo": "Dodaj usługę z istniejącego repozytorium",
         "bootstrapRepo": "Zainicjuj nowe repozytorium",
         "githubManage": "Zarządzaj połączeniem GitHub",
@@ -2631,6 +2641,7 @@
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
         "assistant": "ai asystent zapytaj polecenie zrób za mnie",
+        "guidedReview": "przegląd z przewodnikiem pull request pr zbadaj wyjaśnij pytania",
         "addFromRepo": "github importuj istniejące",
         "bootstrapRepo": "rusztowanie utwórz architektura referencyjna",
         "github": "git repozytoria pull requesty zgłoszenia",
@@ -5112,6 +5123,105 @@
       "unresolved_issue_service": "Asystent nie ustalił, pod którą usługą to utworzyć. Podaj usługę w swojej prośbie."
     }
   },
+  "guidedReview": {
+    "title": "Przegląd z przewodnikiem",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Wczytywanie przeglądu…",
+    "outOfDate": "Aktualizacje na żywo nie powiodły się, więc ten widok może być nieaktualny.",
+    "openFromTask": "Zbadaj w przeglądzie z przewodnikiem",
+    "picker": {
+      "intro": "Wybierz repozytorium i pull request. Dostaniesz przegląd zmiany i możesz zadawać pytania w osobnych wątkach.",
+      "loading": "Wczytywanie repozytoriów…",
+      "noRepos": "Do tego obszaru roboczego nie podłączono jeszcze żadnych repozytoriów.",
+      "repo": "Repozytorium",
+      "openPulls": "Otwarte pull requesty",
+      "number": "Numer pull requesta",
+      "open": "Otwórz przegląd"
+    },
+    "overview": {
+      "title": "Podsumowanie",
+      "stale": "Pull request ma nowe commity",
+      "refresh": "Odśwież",
+      "working": "Przygotowywanie podsumowania…",
+      "intent": "Cel",
+      "changes": "Istotne zmiany",
+      "consequences": "Konsekwencje",
+      "risks": "Ryzyka",
+      "focus": "Warto sprawdzić",
+      "suggested": "Proponowane pytania"
+    },
+    "severity": {
+      "low": "Niskie",
+      "medium": "Średnie",
+      "high": "Wysokie"
+    },
+    "failure": {
+      "budget_exhausted": "Ten obszar roboczy wyczerpał budżet na modele.",
+      "model_unavailable": "Brak dostępnego modelu dla przeglądu z przewodnikiem.",
+      "repo_unavailable": "Nie udało się odczytać pull requesta z repozytorium.",
+      "generation_failed": "Wywołanie modelu nie powiodło się.",
+      "unreadable_reply": "Model odpowiedział w formie, której nie da się odczytać.",
+      "depth_unavailable": "Szczegółowe odpowiedzi z użyciem checkoutu nie są jeszcze dostępne.",
+      "head_moved": "Pull request wyszedł poza przeglądany commit. Odśwież, aby przejrzeć jego najnowszy commit.",
+      "detail": "Szczegóły"
+    },
+    "dropped": {
+      "outside_diff": "wiersz jest poza diffem",
+      "not_in_pr": "plik nie należy do tego pull requesta",
+      "incomplete": "propozycja była niekompletna"
+    },
+    "thread": {
+      "new": "Nowy wątek",
+      "untitled": "Wątek bez tytułu",
+      "empty": "Zapytaj o cokolwiek w tym pull requeście.",
+      "waiting": "Przygotowywanie odpowiedzi…",
+      "placeholder": "Zadaj pytanie o zmianę",
+      "busy": "Czekam na odpowiedź na poprzednie pytanie",
+      "send": "Zapytaj",
+      "draftRequest": "Poproszono o komentarze do przeglądu",
+      "deep": "Dogłębna analiza",
+      "deepHint": "Odpowiedź z kopii repozytorium: wolniej, ale można przeszukać całe drzewo.",
+      "investigating": "Trwa analiza w kopii repozytorium. Może to potrwać kilka minut."
+    },
+    "drafts": {
+      "title": "Szkice komentarzy",
+      "request": "Przygotuj komentarze do przeglądu",
+      "summary": "Zachowano {kept} z {proposed} proponowanych komentarzy jako szkice.",
+      "side": {
+        "RIGHT": "nowy kod",
+        "LEFT": "stary kod"
+      },
+      "select": "Wybierz ten szkic do opublikowania",
+      "status": {
+        "proposed": "Szkic",
+        "posting": "Publikowanie",
+        "posted": "Opublikowany",
+        "failed": "Nieopublikowany",
+        "discarded": "Odrzucony"
+      },
+      "edit": "Edytuj",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "discard": "Odrzuć",
+      "line": "Linia",
+      "sideLabel": "Strona",
+      "postFailed": "Host odrzucił ten komentarz",
+      "summaryPlaceholder": "Opcjonalny komentarz podsumowujący do pull requesta",
+      "summaryFailed": "Host odrzucił komentarz podsumowujący",
+      "post": "Opublikuj {count} w pull requeście",
+      "postResult": "Opublikowane: {posted}, nieopublikowane: {failed}, już obsłużone: {skipped}."
+    },
+    "errors": {
+      "load": "Nie udało się wczytać przeglądu",
+      "repos": "Nie udało się wczytać podłączonych repozytoriów",
+      "open": "Nie udało się otworzyć przeglądu",
+      "ask": "Nie udało się zadać pytania",
+      "drafts": "Nie udało się poprosić o szkice komentarzy",
+      "refresh": "Nie udało się odświeżyć przeglądu",
+      "editDraft": "Nie udało się zapisać szkicu",
+      "postDrafts": "Nie udało się opublikować szkiców"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Jeszcze jedna runda",
@@ -5185,7 +5295,8 @@
         "review": "Przegląd",
         "research": "Badania",
         "planning": "Planowanie",
-        "media": "Multimedia"
+        "media": "Multimedia",
+        "maintenance": "Utrzymanie PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",

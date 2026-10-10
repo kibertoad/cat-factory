@@ -170,7 +170,7 @@ definition cannot stay bridgeable here.
   dialling them proved. An unreadable or stale blob reads as ABSENT rather than throwing, because
   "no proof" and "an unparseable proof" are the same fact to every reader.
 - **A provider that says nothing about addresses is not one stating none.** `ProvisionedEnvironment
-.addresses` is present (empty list included) only when the manifest DECLARES an `addressesPath`,
+  .addresses` is present (empty list included) only when the manifest DECLARES an `addressesPath`,
   and `foldStatedAddresses` keeps the stored candidates when a response carries no statement. An
   async provider states its balancer list on the CREATE response and answers `{state, url}` from
   its status endpoint, so re-deriving from each poll erased the list before the proof ever ran.
@@ -193,7 +193,7 @@ definition cannot stay bridgeable here.
   than the address alone: a peer the platform could not reach has no address, and passing only the
   address rendered it as a plain healthy URL.
 - A provisioning failure can now be `environment_unreachable`. It is in `REPO_FIXABLE_ENVIRONMENT_
-FAILURES` as `false`: a DNS zone, a security group or a load balancer is not in the checkout, and
+  FAILURES` as `false`: a DNS zone, a security group or a load balancer is not in the checkout, and
   an agent handed the failure and a repo has exactly one move, which is to change the address the
   manifest publishes.
 - `RunnerDispatchOptions.environmentUrls` is replaced by `environments`, a list of

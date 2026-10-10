@@ -450,7 +450,7 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   silently fallen back to `noopLogger`; putting exactly the best-effort paths this initiative
   exists to surface back in the dark. Both facades now wire it at the TOP of their dependency
   literal, next to each other, so the pair reads as the obligation it is.
-- **Docs**: [`backend/docs/logging.md`](../../backend/docs/logging.md) (the patterns), a CLAUDE.md
+- **Docs**: [`backend/docs/logging.md`](../../backend/docs/logging.md) (the patterns), a AGENTS.md
   convention section, `LOG_LEVEL` in `docs/environment-variables.md` and all three deployment
   examples.
 

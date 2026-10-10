@@ -100,7 +100,7 @@ export interface NodeTasksDeps {
 /**
  * Wire the task-source integration for the Node facade (Jira + Linear always; the two VCS-backed
  * issue sources only when their client is available, since each reuses the workspace's own VCS
- * connection). Mirrors the Cloudflare facade's gating (see CLAUDE.md parity rule). Whether a
+ * connection). Mirrors the Cloudflare facade's gating (see AGENTS.md parity rule). Whether a
  * workspace OFFERS a source is the per-workspace toggle (task_source_settings), not a deployment
  * env gate.
  */

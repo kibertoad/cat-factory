@@ -232,9 +232,16 @@ from contracts' `delegatedSpendUnreported`, over what actually LANDED rather tha
 executor's declared `telemetry`: an executor declaring `self-reported` that silently stops filing
 is precisely the case a declaration-based check reports as covered. The declaration still decides
 what the card says while the work is IN FLIGHT, where nothing has landed yet and a `self-reported`
-executor is correctly silent. An executor that fills `DelegationResult.usage` is metered as
-`subscription`: recorded, excluded from the budget gate, because the tokens were spent on its
-account rather than this deployment's.
+executor is correctly silent. A step re-dispatched after a retryable failure is judged by its
+FINAL attempt: each settled attempt records `usageReported`, and one saying `false` is a gap even
+when an earlier attempt's row put calls in the step's metrics.
+
+An executor that fills `DelegationResult.usage` (or `usage` on a `failed` update) is metered as
+`subscription`: recorded in the usage ledger, excluded from the budget gate, because the tokens
+were spent on its account rather than this deployment's. The same figure is filed as one job-level
+row in `llm_call_metrics` under the `delegated` provider (`DELEGATED_USAGE_PROVIDER`), which is
+what the step's metrics and the run totals read. That row is never priced: the platform never sees
+the executor's model or its rate, so the cost reads as unknown rather than as a guessed amount.
 
 **A cancel that could not happen is SAID.** An executor declaring no `cancel` leaves its run alive:
 it will finish, open its pull request and bill its tokens long after the platform recorded this run

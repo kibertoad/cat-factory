@@ -49,6 +49,10 @@ import {
   startEnvTestSweeper,
   startEnvTestWorker,
 } from './execution/envTestRunner.js'
+import {
+  startGuidedReviewSweeper,
+  startGuidedReviewWorker,
+} from './execution/guidedReviewRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
 import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLoop.js'
@@ -546,6 +550,8 @@ async function startDurableWorkers(
     // Durably drive ephemeral-environment self-test runs (the Worker uses a per-run
     // EnvironmentTestWorkflow); a no-op queue when the environments module isn't wired.
     startEnvTestWorker(boss, container, runtime.drive, logger, opts),
+    // Guided PR review jobs (the Worker uses a GuidedReviewWorkflow per delivery).
+    startGuidedReviewWorker(boss, container, logger, opts),
     // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
     // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
     // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
@@ -588,6 +594,14 @@ function startBackgroundSweepers(deps: {
     new PgBossEnvironmentTestRunner(boss, runtime.queue),
     new DrizzleEnvironmentTestRunRepository(db),
     { leaseMs: runtime.sweeper.leaseMs, intervalMs: runtime.sweeper.intervalMs },
+    logger,
+    operationalMetrics,
+    sweepHealth,
+  )
+  // Re-wakes guided-review jobs whose claim lapsed (the Worker re-drives them from cron).
+  const stopGuidedReviewSweeper = startGuidedReviewSweeper(
+    container,
+    { intervalMs: runtime.sweeper.intervalMs },
     logger,
     operationalMetrics,
     sweepHealth,
@@ -738,6 +752,7 @@ function startBackgroundSweepers(deps: {
     stopSweeper,
     stopDeadLetter,
     stopEnvTestSweeper,
+    stopGuidedReviewSweeper,
     stopRetention,
     stopArtifactRetention,
     stopScheduleSweeper,

@@ -937,6 +937,36 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md): per-user exploration state a
+  // teammate can open, so org state. Every method takes the workspaceId as arg0. `listStaleJobs` is
+  // the cross-workspace sweeper scan and stays mothership-internal.
+  guidedReviewRepository: {
+    openSession: { scope: { kind: 'workspace', arg: 0 } },
+    getSession: { scope: { kind: 'workspace', arg: 0 } },
+    listSessions: { scope: { kind: 'workspace', arg: 0 } },
+    pageSessions: { scope: { kind: 'workspace', arg: 0 } },
+    deleteSession: { scope: { kind: 'workspace', arg: 0 } },
+    restartOverview: { scope: { kind: 'workspace', arg: 0 } },
+    claimOverview: { scope: { kind: 'workspace', arg: 0 } },
+    settleOverview: { scope: { kind: 'workspace', arg: 0 } },
+    createThread: { scope: { kind: 'workspace', arg: 0 } },
+    getThread: { scope: { kind: 'workspace', arg: 0 } },
+    listThreads: { scope: { kind: 'workspace', arg: 0 } },
+    appendExchange: { scope: { kind: 'workspace', arg: 0 } },
+    getMessage: { scope: { kind: 'workspace', arg: 0 } },
+    listMessages: { scope: { kind: 'workspace', arg: 0 } },
+    claimMessage: { scope: { kind: 'workspace', arg: 0 } },
+    settleMessage: { scope: { kind: 'workspace', arg: 0 } },
+    recordInvestigation: { scope: { kind: 'workspace', arg: 0 } },
+    getInvestigation: { scope: { kind: 'workspace', arg: 0 } },
+    heartbeatMessage: { scope: { kind: 'workspace', arg: 0 } },
+    settleDrafts: { scope: { kind: 'workspace', arg: 0 } },
+    getDraft: { scope: { kind: 'workspace', arg: 0 } },
+    listDrafts: { scope: { kind: 'workspace', arg: 0 } },
+    editDraft: { scope: { kind: 'workspace', arg: 0 } },
+    claimDraftsForPost: { scope: { kind: 'workspace', arg: 0 } },
+    settleDraftPosts: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // The merge lifecycle's kaizen step reads any prior verified model/prompt combo
   // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0. The Kaizen
   // screen also lists the whole verified-combo library (`listByWorkspace`, part of the same

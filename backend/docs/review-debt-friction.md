@@ -263,8 +263,8 @@ invariant (same stance as the task-limit gate).
 
 - Four new columns on `workspace_settings`, mirrored on both runtimes:
   - D1: a new numbered migration (`ALTER TABLE workspace_settings ADD COLUMN
-review_friction_mode TEXT NOT NULL DEFAULT 'off'`, `review_friction_warn_count
-INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
+    review_friction_mode TEXT NOT NULL DEFAULT 'off'`, `review_friction_warn_count
+    INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
     `review_friction_block_stuck_minutes INTEGER`); the `0012_store_agent_context.sql`
     shape.
   - Node: the same fields on the Drizzle `workspaceSettings` table in `db/schema.ts` +
@@ -298,7 +298,7 @@ INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
 4. Runtimes: D1 migration ⇄ Drizzle schema + migration; settings repo column mapping.
 5. Conformance slice; unit tests.
 6. Frontend: settings panel group, friction dialog, pre-warn badge, i18n (all locales).
-7. Docs sweep: this document gains links to the landed code; `CLAUDE.md` gets a pointer if
+7. Docs sweep: this document gains links to the landed code; `AGENTS.md` gets a pointer if
    the flow proves non-obvious; changesets for every touched versioned package.
 
 ## Alternatives considered

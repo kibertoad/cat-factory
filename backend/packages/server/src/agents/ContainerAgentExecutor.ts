@@ -24,7 +24,7 @@ import {
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
 import { ConflictError, VCS_DOC_URLS, noopLogger } from '@cat-factory/kernel'
-import { resolveAprioriWorkingBranch } from '@cat-factory/contracts'
+import { resolveAprioriWorkingBranch, taskTypeAttachesPullRequest } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -62,7 +62,7 @@ import { containerJobLog, settleFailureFields } from './containerAgentLogging.js
 import { acceptContainerJob } from './containerAgentDispatch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
-import { isTesterKind, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
+import { isTesterKind, type RecordHarnessCalls } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import {
@@ -123,16 +123,6 @@ type RecordSubscriptionQuotaUsage = (
   target: SubscriptionQuotaTarget,
   usage: { inputTokens: number; outputTokens: number },
 ) => Promise<void>
-
-/**
- * Record a finished subscription harness's per-call telemetry into `llm_call_metrics`
- * — the proxy-bypassing analogue of the per-call rows the LLM proxy writes for Pi. The
- * facade maps each harness call metric onto the observability sink. NOT gated on a
- * pooled token id (a personal/individual subscription leases no tokenId yet still
- * produces telemetry), unlike {@link RecordSubscriptionUsage}. The payload is the
- * orchestration recorder's own {@link HarnessCallsRecordInput}, so the two can't drift.
- */
-type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
 
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
@@ -642,6 +632,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (context.block.pullRequest?.branch === workBranch) {
       return true
     }
+    // An attached pull request is worked on its own branch alone, so creating the per-task work
+    // branch would leave a stray ref in a repository whose pull request belongs to someone else.
+    if (taskTypeAttachesPullRequest(context.block.taskType)) return false
     if (aprioriWork) {
       // Apriori working branch: probe only (create: false). It must pre-exist — a missing
       // branch is a loud dispatch failure, never a silent create off base (which would look

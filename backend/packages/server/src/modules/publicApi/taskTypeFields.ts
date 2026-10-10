@@ -38,6 +38,7 @@ const BUILTIN_LABELS: Readonly<Record<string, string>> = {
   document: 'Document',
   spike: 'Spike',
   review: 'Pull request review',
+  'resolve-conflicts': 'Resolve merge conflicts',
   ralph: 'Ralph',
   media: 'Media',
 }

@@ -346,6 +346,43 @@ func (q *ReposListAvailableQuery) values() map[string]string {
 	return out
 }
 
+// GuidedReviewsListQuery holds the query parameters for GuidedReviewsService.List.
+type GuidedReviewsListQuery struct {
+	// RepoID zero value means "not sent".
+	RepoID *string
+	// PRNumber zero value means "not sent".
+	PRNumber *int
+	// Mine zero value means "not sent".
+	Mine *ListPublicGuidedReviewsMine
+	// Limit zero value means "not sent".
+	Limit *int
+	// Cursor zero value means "not sent".
+	Cursor *string
+}
+
+func (q *GuidedReviewsListQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.RepoID != nil {
+		out["repoId"] = fmt.Sprintf("%v", *q.RepoID)
+	}
+	if q.PRNumber != nil {
+		out["prNumber"] = fmt.Sprintf("%v", *q.PRNumber)
+	}
+	if q.Mine != nil {
+		out["mine"] = fmt.Sprintf("%v", *q.Mine)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	return out
+}
+
 // JobsListQuery holds the query parameters for JobsService.List.
 type JobsListQuery struct {
 	// Limit zero value means "not sent".
@@ -503,6 +540,11 @@ type ListDebugSearchQueriesResponseItem = DebugSearchQuery
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
 type ListDebugToolCallsResponseItem = ListDebugToolCallsResponseToolCall
+
+// PublicGuidedReviewListItem is the element type of PublicGuidedReviewList.Sessions.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type PublicGuidedReviewListItem = GuidedReviewSession
 
 // ListPublicJobsResponseItem is the element type of ListPublicJobsResponse.Jobs.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
@@ -3492,6 +3534,294 @@ func (s *KaizenService) ListEntriesAll(ctx context.Context, query *KaizenListEnt
 			page.Cursor = result.NextCursor
 		}
 	}
+}
+
+// GuidedReviewsService guided pull request review: a structured explanation of a PR (what it does, meaningful changes,
+// consequences, risks, where to focus, suggested questions), independent question threads
+// answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the
+// lines they are about. Following a review takes a `read` key; opening one, asking, drafting and
+// posting drafts take a `write` key. Posting publishes plain comments on the pull request and
+// never approves or requests changes.
+type GuidedReviewsService struct {
+	client *Client
+}
+
+// Ask ask a question in a thread
+// Append a question and the placeholder that will answer it, and answer with both at once; the
+// answer is produced in the background. A thread holds one unanswered question at a time: asking
+// again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads
+// are unaffected. `depth: "deep"` answers from a read-only checkout of the repository instead, so
+// it can search the whole tree and run read-only commands; it takes minutes rather than seconds
+// and stays `running` meanwhile, and a deployment with no runner settles it as
+// `depth_unavailable`.
+// POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages (operation
+// askPublicGuidedReview).
+func (s *GuidedReviewsService) Ask(ctx context.Context, sessionID string, threadID string, body AskGuidedReview) (*GuidedReviewExchange, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/threads/%s/messages", pathEscape(sessionID), pathEscape(threadID)),
+		Body:   body,
+	}
+	var out GuidedReviewExchange
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Delete delete a guided review
+// Delete the session with its threads, messages and drafts. Only the identity that opened it may;
+// anyone else is `403` with `details.reason: "not_session_owner"`. Nothing on the pull request is
+// touched.
+// DELETE /api/v1/guided-reviews/{sessionId} (operation deletePublicGuidedReview).
+func (s *GuidedReviewsService) Delete(ctx context.Context, sessionID string) error {
+	req := requestSpec{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s", pathEscape(sessionID)),
+	}
+	return s.client.requestNoContent(ctx, req)
+}
+
+// EditDraft edit, re-anchor or discard a comment draft
+// Change a draft's body or the line it sits on, or discard it with `discard: true`. Send the
+// `rev` you loaded: a draft edited, posted or discarded since is refused `409` with
+// `details.reason: "draft_conflict"`, so reload and decide again. A new anchor must be a line
+// inside the diff on its side, or the edit is `422` with `details.reason:
+// "draft_anchor_outside_diff"`. Only the session's owner may edit.
+// PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId} (operation
+// editPublicGuidedReviewDraft).
+func (s *GuidedReviewsService) EditDraft(ctx context.Context, sessionID string, draftID string, body EditGuidedReviewDraft) (*GuidedReviewCommentDraft, error) {
+	req := requestSpec{
+		Method: "PATCH",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/comment-drafts/%s", pathEscape(sessionID), pathEscape(draftID)),
+		Body:   body,
+	}
+	var out GuidedReviewCommentDraft
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Get get a guided review
+// The session with its overview, its threads (each naming the answer it is waiting on, if any)
+// and its comment drafts. The overview's `status` is `pending` or `running` while it is
+// generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`,
+// `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author
+// pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves)
+// and the raw cause in `failure.detail`.
+// GET /api/v1/guided-reviews/{sessionId} (operation getPublicGuidedReview).
+func (s *GuidedReviewsService) Get(ctx context.Context, sessionID string) (*GuidedReviewSessionView, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s", pathEscape(sessionID)),
+	}
+	var out GuidedReviewSessionView
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetThread get a thread with its messages
+// The thread and its messages in order. An assistant message is `pending` or `running` until
+// answered, then `complete` with markdown `content` and the `citations` (file spans) it rests on,
+// or `failed` with a `failure`. A `comment-drafts` message's drafts are on the session; its
+// `draftReport` names every proposed comment that was refused (`outside_diff`, `not_in_pr`,
+// `incomplete`).
+// GET /api/v1/guided-reviews/{sessionId}/threads/{threadId} (operation
+// getPublicGuidedReviewThread).
+func (s *GuidedReviewsService) GetThread(ctx context.Context, sessionID string, threadID string) (*GuidedReviewThreadView, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/threads/%s", pathEscape(sessionID), pathEscape(threadID)),
+	}
+	var out GuidedReviewThreadView
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the workspace's guided reviews
+// Guided review sessions in the workspace, newest created first, optionally narrowed to one
+// repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`).
+// Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to
+// pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with
+// `code: "invalid_cursor"`.
+// GET /api/v1/guided-reviews (operation listPublicGuidedReviews).
+func (s *GuidedReviewsService) List(ctx context.Context, query *GuidedReviewsListQuery) (*PublicGuidedReviewList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/guided-reviews",
+		Query:  query.values(),
+	}
+	var out PublicGuidedReviewList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListAll iterates every sessions across every page of List.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *GuidedReviewsService) ListAll(ctx context.Context, query *GuidedReviewsListQuery) iter.Seq2[PublicGuidedReviewListItem, error] {
+	return func(yield func(PublicGuidedReviewListItem, error) bool) {
+		var page GuidedReviewsListQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.List(ctx, &page)
+			if err != nil {
+				var zero PublicGuidedReviewListItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Sessions {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero PublicGuidedReviewListItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
+// Open open a guided review of a pull request
+// Open a guided review of one pull request in a repository linked to the workspace, or return the
+// one the calling key's identity already has for it. A guided review explains the PR (what it
+// does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and
+// holds question threads answered by a model that reads the PR at the commit under review.
+// Answers with the session at once; its overview is generated in the background, so follow `GET
+// /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that
+// person; an unbound key owns its own sessions and runs on the workspace's credentials, never a
+// person's; `createdByKind` says which of the two owns a session. An unlinked repository is `404`
+// with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with
+// `details.reason: "pr_not_found"`.
+// POST /api/v1/guided-reviews (operation openPublicGuidedReview).
+func (s *GuidedReviewsService) Open(ctx context.Context, body OpenGuidedReview) (*GuidedReviewSessionView, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/guided-reviews",
+		Body:   body,
+	}
+	var out GuidedReviewSessionView
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// OpenThread open an exploration thread
+// Open a thread in the session, optionally asking its first question in the same call. A thread
+// is an independent line of questioning: waiting on an answer in one never blocks another. Pass a
+// suggested question from the overview verbatim to ask it.
+// POST /api/v1/guided-reviews/{sessionId}/threads (operation openPublicGuidedReviewThread).
+func (s *GuidedReviewsService) OpenThread(ctx context.Context, sessionID string, body *OpenGuidedReviewThread) (*GuidedReviewThreadView, error) {
+	if body == nil {
+		body = &OpenGuidedReviewThread{}
+	}
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/threads", pathEscape(sessionID)),
+		Body:   body,
+	}
+	var out GuidedReviewThreadView
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PostDrafts post comment drafts to the pull request
+// Publish the named drafts as review comments on the pull request, as the key's identity, with an
+// optional summary comment. Each comment posts on its own, so a partial post is normal: the
+// result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted
+// again) and lists in `skipped` the named drafts this call did not claim because they were
+// already posted, discarded or being posted, so a retried call never posts a comment twice. The
+// summary posts only alongside a draft this call claimed, so an identical retry after a complete
+// post publishes nothing. Refused `409` with `details.reason: "session_stale"` when the pull
+// request has commits past `reviewedHeadSha`: refresh the review and check the drafts first.
+// Posting never approves or requests changes.
+// POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post (operation
+// postPublicGuidedReviewDrafts).
+func (s *GuidedReviewsService) PostDrafts(ctx context.Context, sessionID string, body PostGuidedReviewDrafts) (*GuidedReviewPostResult, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/comment-drafts/post", pathEscape(sessionID)),
+		Body:   body,
+	}
+	var out GuidedReviewPostResult
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Refresh point a guided review at the PR's current head
+// Re-read the pull request and regenerate the overview at its current head commit, keeping every
+// thread. Use it after the author pushes: the overview, answers and draft anchors are computed
+// against the commit recorded as `reviewedHeadSha`.
+// POST /api/v1/guided-reviews/{sessionId}/refresh (operation refreshPublicGuidedReview).
+func (s *GuidedReviewsService) Refresh(ctx context.Context, sessionID string) (*GuidedReviewSessionView, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/refresh", pathEscape(sessionID)),
+	}
+	var out GuidedReviewSessionView
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RequestDrafts draft review comments from a thread's conclusions
+// Ask the model to turn what the thread concluded into review comments, each placed on the line
+// it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside
+// the PR's diff; posting them is a separate, explicit call. Busy like a question: `409` with
+// `details.reason: "thread_busy"` while the thread is waiting on an answer.
+// POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts (operation
+// requestPublicGuidedReviewDrafts).
+func (s *GuidedReviewsService) RequestDrafts(ctx context.Context, sessionID string, threadID string, body *RequestGuidedReviewDrafts) (*GuidedReviewExchange, error) {
+	if body == nil {
+		body = &RequestGuidedReviewDrafts{}
+	}
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/threads/%s/comment-drafts", pathEscape(sessionID), pathEscape(threadID)),
+		Body:   body,
+	}
+	var out GuidedReviewExchange
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Stream stream a guided review (SSE)
+// Server-sent events for one guided review: a `state` frame carrying the session view (the same
+// body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it changes, `deleted` when the
+// session is removed, and `timeout` when the connection cap is reached (reconnect to continue). A
+// thread whose `pendingMessageId` clears has an answer to fetch with `GET
+// /api/v1/guided-reviews/{sessionId}/threads/{threadId}`. Authenticated by the API key header.
+// GET /api/v1/guided-reviews/{sessionId}/events (operation streamPublicGuidedReview).
+func (s *GuidedReviewsService) Stream(ctx context.Context, sessionID string) (*EventStream, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/events", pathEscape(sessionID)),
+	}
+	return s.client.stream(ctx, req)
 }
 
 // KeysService the workspace's own API keys: provision one headlessly, list them, revoke one (and what it

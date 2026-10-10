@@ -17,6 +17,7 @@ export {
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
+export type { GuidedReviewOwner } from './modules/guidedReview/GuidedReviewService.js'
 export type {
   PublicRepoOption,
   RepoUse,
@@ -301,6 +302,7 @@ export {
   type LlmObservabilityServiceDependencies,
   type RecordLlmCallInput,
   type HarnessCallsRecordInput,
+  type RecordHarnessCalls,
   // Exported for the same reason `MAX_AGENT_CONTEXT_TOTAL_CHARS` below is: a transport that moves
   // whole rows has to size its own limits against what capture can store, and deriving them from
   // the one ceiling beats a second copy that drifts (see `MAX_TELEMETRY_READ_CHARS`).
@@ -482,6 +484,7 @@ export {
   type DocumentsModule,
   type TasksModule,
   type AssistantModule,
+  type GuidedReviewModule,
   type EnvironmentsModule,
   type RunnersModule,
   type ProvisioningLogsModule,

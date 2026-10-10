@@ -106,6 +106,7 @@ function build(
     resolveRepoOrigin: githubRepoOrigin,
     ...(resolveRunRepoContext ? { resolveRunRepoContext } : {}),
     urlSafetyPolicy: undefined,
+    recordHarnessCalls: undefined,
     logger: noopLogger,
     clock: { now: () => 0 },
   })

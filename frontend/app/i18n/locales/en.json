@@ -153,6 +153,7 @@
     "commandBar": "Search or run a command…",
     "create": "Create",
     "assistant": "Assistant",
+    "guidedReview": "Guided review",
     "buildPipeline": "Build a pipeline",
     "repositories": "Repositories",
     "addFromRepo": "Add from existing repo",
@@ -255,7 +256,8 @@
         "recurring": "Recurring",
         "review": "Review",
         "ralph": "Ralph loop",
-        "bugFishing": "Bug fishing"
+        "bugFishing": "Bug fishing",
+        "resolveConflicts": "Resolve conflicts"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -710,7 +712,8 @@
         "assistant_generation_failed": "The assistant's model provider did not answer. It is configured correctly and nothing here needs setting up: try the request again in a moment.",
         "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings.",
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
-        "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which."
+        "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
+        "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment."
       }
     },
     "reason": {
@@ -803,7 +806,10 @@
         "no_host_frame": "This expedition is not under a service",
         "delegated_executor_unwired": "External executor not registered",
         "delegated_step_async_only": "This step is polled, not awaited",
-        "delegated_claim_missing": "This step has no external work to check"
+        "delegated_claim_missing": "This step has no external work to check",
+        "thread_busy": "This thread is still answering",
+        "draft_conflict": "This draft changed",
+        "session_stale": "The pull request has moved on"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -863,7 +869,10 @@
         "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again.",
         "delegated_executor_unwired": "A step in this pipeline runs on an external executor this deployment does not register, so there is nowhere to send the work. Register the executor in code, or change the step to one that runs here.",
         "delegated_step_async_only": "This step runs on an external executor, which can take hours, so it is dispatched and then polled rather than run inside one request. Start the run from the board; if you reached this from your own code, drive the step through the async path.",
-        "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck."
+        "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck.",
+        "thread_busy": "The previous question in this thread has not been answered yet. Wait for that answer, or ask in another thread.",
+        "draft_conflict": "Someone edited, posted or discarded this comment draft since you loaded it. Reload the drafts and make your change again.",
+        "session_stale": "New commits landed after this review was prepared, so its drafts may point at the wrong lines. Refresh the review, check the drafts, then post."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1799,7 +1808,7 @@
         "allTools": "Every tool this server exposes.",
         "narrowed": "Narrowed to: {tools}",
         "reason": {
-          "harnessUnsupported": "was not available: the agent CLI this step ran on has no MCP client.",
+          "harnessUnsupported": "was not available: the agent CLI this step ran on could not serve it.",
           "transportUnsupported": "was not available: the agent CLI this step ran on cannot reach this kind of server.",
           "missingSecret": "was not available: a credential it needs is not set for this board.",
           "reservedSecret": "was not available: it asks for a variable the platform's own configuration owns, so the declaration has to change.",
@@ -1811,7 +1820,7 @@
           "unknown": "was not available ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Run the step on an agent CLI that speaks MCP, or widen the server's harness list. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
+          "harnessUnsupported": "Widen the server's harness list to include the agent CLI this step ran on, or run the step on one it lists. A Pi step recorded before Pi could serve tool servers needs only a rerun on a current runner image. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
           "transportUnsupported": "Declare a stdio server for it, or run the step on an agent CLI that reaches HTTP servers.",
           "missingSecret": "Set the credential it names, either as a deployment environment variable or under capability credentials in the Infrastructure window.",
           "reservedSecret": "Change the declaration to ask for another key; setting that variable is exactly what will not help.",
@@ -2758,6 +2767,7 @@
       "cmd": {
         "newPipeline": "Build a pipeline",
         "assistant": "Open the assistant",
+        "guidedReview": "Explore a pull request",
         "addFromRepo": "Add service from existing repo",
         "bootstrapRepo": "Bootstrap a new repo",
         "githubManage": "Manage GitHub connection",
@@ -2786,6 +2796,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chain",
         "assistant": "ai assistant ask prompt do it for me",
+        "guidedReview": "guided review pull request pr explore explain questions",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -5306,6 +5317,105 @@
       "unresolved_issue_service": "The assistant could not tell which service to file this under. Name the service in your request."
     }
   },
+  "guidedReview": {
+    "title": "Guided review",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Loading the review…",
+    "outOfDate": "Live updates failed, so this view may be out of date.",
+    "openFromTask": "Explore with guided review",
+    "picker": {
+      "intro": "Pick a repository and a pull request. You get an overview of the change and can ask questions about it in separate threads.",
+      "loading": "Loading repositories…",
+      "noRepos": "No repositories are linked to this workspace yet.",
+      "repo": "Repository",
+      "openPulls": "Open pull requests",
+      "number": "Pull request number",
+      "open": "Open review"
+    },
+    "overview": {
+      "title": "Overview",
+      "stale": "The pull request has new commits",
+      "refresh": "Refresh",
+      "working": "Preparing the overview…",
+      "intent": "Intent",
+      "changes": "Meaningful changes",
+      "consequences": "Consequences",
+      "risks": "Risks",
+      "focus": "Worth reviewing",
+      "suggested": "Suggested questions"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "failure": {
+      "budget_exhausted": "This workspace has spent its model budget.",
+      "model_unavailable": "No model is available for guided review.",
+      "repo_unavailable": "The pull request could not be read from the repository.",
+      "generation_failed": "The model call failed.",
+      "unreadable_reply": "The model replied in a form that could not be read.",
+      "depth_unavailable": "Deep answers that use a checkout are not available yet.",
+      "head_moved": "The pull request moved past the reviewed commit. Refresh to review its latest commit.",
+      "detail": "Details"
+    },
+    "dropped": {
+      "outside_diff": "the line is outside the diff",
+      "not_in_pr": "the file is not part of this pull request",
+      "incomplete": "the proposal was incomplete"
+    },
+    "thread": {
+      "new": "New thread",
+      "untitled": "Untitled thread",
+      "empty": "Ask anything about this pull request.",
+      "waiting": "Working on an answer…",
+      "placeholder": "Ask a question about the change",
+      "busy": "Waiting for the answer to the previous question",
+      "send": "Ask",
+      "draftRequest": "Asked for review comments",
+      "deep": "Deep dive",
+      "deepHint": "Answer from a checkout of the repository: slower, but can search the whole tree.",
+      "investigating": "Investigating in a checkout of the repository. This can take several minutes."
+    },
+    "drafts": {
+      "title": "Comment drafts",
+      "request": "Draft review comments",
+      "summary": "{kept} of {proposed} proposed comments kept as drafts.",
+      "side": {
+        "RIGHT": "new code",
+        "LEFT": "old code"
+      },
+      "select": "Select this draft for posting",
+      "status": {
+        "proposed": "Draft",
+        "posting": "Posting",
+        "posted": "Posted",
+        "failed": "Not posted",
+        "discarded": "Discarded"
+      },
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "discard": "Discard",
+      "line": "Line",
+      "sideLabel": "Side",
+      "postFailed": "The host refused this comment",
+      "summaryPlaceholder": "Optional summary comment for the pull request",
+      "summaryFailed": "The host refused the summary comment",
+      "post": "Post {count} to the pull request",
+      "postResult": "{posted} posted, {failed} not posted, {skipped} already handled."
+    },
+    "errors": {
+      "load": "Could not load the review",
+      "repos": "Could not load the linked repositories",
+      "open": "Could not open the review",
+      "ask": "Could not ask the question",
+      "drafts": "Could not request comment drafts",
+      "refresh": "Could not refresh the review",
+      "editDraft": "Could not save the draft",
+      "postDrafts": "Could not post the drafts"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "One more round",
@@ -5382,7 +5492,8 @@
         "review": "Review",
         "research": "Research",
         "planning": "Planning",
-        "media": "Media"
+        "media": "Media",
+        "maintenance": "PR maintenance"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

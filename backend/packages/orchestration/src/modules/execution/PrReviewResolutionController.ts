@@ -11,7 +11,8 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { FIXER_AGENT_KIND, getErrorMessage } from '@cat-factory/kernel'
-import { CHALLENGE_INVESTIGATOR_KIND, resolvePrNumber } from '@cat-factory/agents'
+import { resolvePrNumber } from '@cat-factory/contracts'
+import { CHALLENGE_INVESTIGATOR_KIND } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import {
   buildPrReviewPost,

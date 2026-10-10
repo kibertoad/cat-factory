@@ -228,7 +228,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span
-                  class="rounded border px-1.5 py-0.5 text-3xs uppercase tracking-wide"
+                  class="rounded-sm border px-1.5 py-0.5 text-3xs uppercase tracking-wide"
                   :class="SEVERITY_CLASSES[finding.severity]"
                 >
                   {{ SEVERITY_LABELS[finding.severity] }}

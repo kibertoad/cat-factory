@@ -26,6 +26,7 @@ import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerPrReviewerAgent } from './pr-reviewer.js'
 import { registerChallengeInvestigatorAgent } from './challenge-investigator.js'
+import { registerGuidedReviewInvestigatorAgent } from './guided-review-investigator.js'
 import { registerDeployFixerAgent } from './deploy-fixer.js'
 import { registerReproTestAgent } from './repro-test.js'
 import { registerIntegrationTestAgent } from './integration-test.js'
@@ -239,7 +240,7 @@ export interface AgentKindDefinition {
    * `AgentRunContext.toolServers`, the executor threads their configuration (and any resolved
    * credentials) into the job body, and the harness wires them into the agent CLI.
    *
-   * A server the running harness cannot serve (Pi has no MCP client) or whose required
+   * A server the running harness cannot serve (Codex reaches stdio only) or whose required
    * credential does not resolve is DROPPED and stated in the prompt, never silently missing.
    * Omitted ⇒ the kind gets the harness's built-in tools only.
    */
@@ -749,6 +750,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerForkProposerAgent(registry)
   registerPrReviewerAgent(registry)
   registerChallengeInvestigatorAgent(registry)
+  registerGuidedReviewInvestigatorAgent(registry)
   registerReproTestAgent(registry)
   registerIntegrationTestAgent(registry)
   registerDeployFixerAgent(registry)

@@ -249,7 +249,7 @@ to one bullet. Three separate defects, filed together, all landed:
 
   Land the two together, not the context alone. An optional field on this port that no shipped
   provider reads and that does not answer the case it was added for is the half-wired feature
-  CLAUDE.md's governing principle is about. `remediate` takes it on the same terms (its request
+  AGENTS.md's governing principle is about. `remediate` takes it on the same terms (its request
   extends the status request), and it is a diagnostics-only addition: `status()` and
   `teardown()` are also driven by the TTL sweep, which has no run in scope.
 

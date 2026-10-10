@@ -17,7 +17,7 @@ import * as v from 'valibot'
 //     in its fenced JSON block. A second, API-shaped projection of the same facts is how the
 //     two surfaces start disagreeing about what a run proved. The consequence is worth
 //     stating: from here on the report schema is part of the STABLE public surface, so it
-//     grows additively (see CLAUDE.md, "The public API does not break").
+//     grows additively (see AGENTS.md, "The public API does not break").
 //  2. **An artifact row carries no storage vocabulary.** `storage`/`storageKey` name the
 //     account's blob backend (R2 / S3 / a `bytea` table) and are an implementation detail the
 //     bytes endpoint exists to hide; what a consumer needs is the id to fetch, the type and

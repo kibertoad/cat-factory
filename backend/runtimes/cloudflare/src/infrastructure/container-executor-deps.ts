@@ -45,6 +45,7 @@ import {
   LlmObservabilityService,
   ToolCallObservabilityService,
   makeHarnessCallRecorder,
+  type RecordHarnessCalls,
   makeToolCallRecorder,
 } from '@cat-factory/orchestration'
 import {
@@ -129,6 +130,11 @@ export interface WorkerExecutorDeps {
   subscriptions?: ProviderSubscriptionService
   personalSubscriptions?: PersonalSubscriptionService
   agentContextObservability?: AgentContextRecorder
+  /**
+   * The `llm_call_metrics` writer for calls that bypass the LLM proxy. Taken rather than built so
+   * the container arm and the delegated arm beside it file through ONE recorder.
+   */
+  recordHarnessCalls: RecordHarnessCalls
   /**
    * Resolve a workspace's private package registries onto a container job, so the checkout can
    * install private dependencies. Passed in rather than built here: the builder is the
@@ -303,13 +309,12 @@ export function buildWorkerJobAuthDeps(args: {
  * capture gate an open one.
  */
 export function buildWorkerJobAccountingDeps(args: {
-  env: Env
-  config: AppConfig
   db: D1Database
   clock: Clock
+  recordHarnessCalls: RecordHarnessCalls
   subscriptions?: ProviderSubscriptionService
 }): ContainerJobAccountingDeps {
-  const { env, config, db, clock, subscriptions } = args
+  const { db, clock, recordHarnessCalls, subscriptions } = args
   // Modeled quota-cycle provider (usage-and-quota-tracking, Part B): folds a finished
   // subscription run's tokens into rolling windows. Built once here rather than inside the
   // closure, which would construct one per settled job.
@@ -320,16 +325,7 @@ export function buildWorkerJobAccountingDeps(args: {
     registry: defaultSubscriptionQuotaRegistry,
   })
   return {
-    recordHarnessCalls: makeHarnessCallRecorder(
-      new LlmObservabilityService({
-        llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
-        idGenerator: new CryptoIdGenerator(),
-        clock,
-        recordPrompts: config.observability.recordPrompts,
-        workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-        logger,
-      }),
-    ),
+    recordHarnessCalls,
     ...(subscriptions
       ? {
           recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
@@ -338,6 +334,29 @@ export function buildWorkerJobAccountingDeps(args: {
       : {}),
     recordSubscriptionQuotaUsage: (target, usage) => quota.recordUsage(target, usage),
   }
+}
+
+/**
+ * The writer of `llm_call_metrics` for calls that bypass the LLM proxy: a subscription harness's
+ * per-call telemetry, and the usage a delegated executor reports.
+ */
+export function buildWorkerHarnessCallRecorder(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+}): RecordHarnessCalls {
+  const { env, config, db, clock } = args
+  return makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+      idGenerator: new CryptoIdGenerator(),
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+      logger,
+    }),
+  )
 }
 
 /**
@@ -699,10 +718,9 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // What a SETTLED job's tokens are recorded against, from the same shared composition: the
     // per-call telemetry rows, the leased pool token's rotation counters and the quota cycle.
     ...buildWorkerJobAccountingDeps({
-      env,
-      config,
       db,
       clock,
+      recordHarnessCalls: deps.recordHarnessCalls,
       ...(subscriptions ? { subscriptions } : {}),
     }),
     recordToolCalls,

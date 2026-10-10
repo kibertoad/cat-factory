@@ -19,7 +19,7 @@ catalog, not a second storage subsystem.
 ## Model
 
 - **A generator opts in by TRAIT, never a kind-id list**: `registerAgentKind({ traits:
-['binary-output'] })` (`BINARY_OUTPUT_TRAIT`, `@cat-factory/agents`). No built-in kind carries
+  ['binary-output'] })` (`BINARY_OUTPUT_TRAIT`, `@cat-factory/agents`). No built-in kind carries
   it. The trait contributes the workflow guidance (consult scope first, store through the named
   service's contract, never commit binaries to the repo, declare what you stored).
 - **The step selects the services and the INTEGRATIONS**: `stepOptions.binaryOutput`:
@@ -456,7 +456,7 @@ true while both processes ship the same build, which is the exact assumption the
 `builtin` tier had already been fixed for. A local node one build behind is the NORMAL state of a
 mothership deployment.
 
-It is also the case CLAUDE.md's own rule names: **state a deployment registers in CODE and a RUN
+It is also the case AGENTS.md's own rule names: **state a deployment registers in CODE and a RUN
 resolves is org state**, and it rides its own `/internal/*` read rather than a second copy. This
 registry shipped in violation of that rule, and a downstream deployment (stefka) hit it on its
 first generative integration.

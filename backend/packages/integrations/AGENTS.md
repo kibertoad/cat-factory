@@ -111,7 +111,7 @@ prerequisites are configured.
 - `testSecrets/`: sealed per-service test credentials; `validation/`: per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved) plus
   the DEPENDENCY PREPOPULATION install on the same row (run before the agent's first turn, and
-  independently settable; see `CLAUDE.md` → "Dependency prepopulation"),
+  independently settable; see `AGENTS.md` → "Dependency prepopulation"),
   plus `detectValidationChecksFromRepo` (the repo-root read behind the inspector's "Detect"
   button: one listing, then only the manifests it proved exist; the rules are pure kernel).
 - `slack/`, `email/`, `notificationWebhook/`: notification channels (`email/` carries both the
@@ -136,5 +136,5 @@ prerequisites are configured.
   because an empty page and an unreachable store are opposite facts.
 - `backend-registries.ts`: a loose registration file sitting among the module dirs.
 
-**See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
+**See also:** `AGENTS.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
 {`runner-pool-integration`, `environments-integration`, `github-integration`, `document-sources`, `bug-hunt`}`.md`.

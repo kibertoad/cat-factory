@@ -13,6 +13,7 @@ import type { BrainstormSession } from './brainstorm.js'
 import type { KaizenGrading } from './kaizen.js'
 import type { Initiative } from './initiative.js'
 import type { DocInterviewSession } from './doc-interview.js'
+import type { GuidedReviewChange } from './guided-review.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -163,3 +164,8 @@ export type WorkspaceEvent =
    * reflects the transition (new questions, an answer, convergence) live without a refetch.
    */
   | { type: 'docInterview'; session: DocInterviewSession; at: number }
+  /**
+   * A guided PR review moved: its overview, one thread's messages, or its drafts. Ids only; an
+   * open review window refetches what it shows.
+   */
+  | { type: 'guidedReview'; change: GuidedReviewChange; at: number }

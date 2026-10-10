@@ -6,7 +6,7 @@
 // repo-guards job runs.
 //
 // It replaces a top-level `wrangler` override, which held the invariant only until the next
-// @cloudflare/vitest-pool-workers bump and then silently held the wrong thing. Asserting the
+// @cloudflare/vitest-plugin bump and then silently held the wrong thing. Asserting the
 // RESULT off the lockfile costs no install and no network, and it names the fix.
 //
 // Usage:  node scripts/check-cloudflare-runtime-pins.mjs

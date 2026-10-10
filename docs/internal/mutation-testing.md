@@ -147,7 +147,7 @@ tested module wants assertions. Where the mutants sit in a data table rather tha
 answer is nothing at all. `domain/seed.ts` is the standing example of the last case: it carries one of the
 largest counts in kernel, and most of it is string literals in the demo board and the built-in
 pipeline catalog. Pinning those means asserting shipped copy line by line, which is the
-re-pinned-unread test CLAUDE.md's testing conventions warn about; the logic around the data (the
+re-pinned-unread test AGENTS.md's testing conventions warn about; the logic around the data (the
 named-step lowering, version defaulting, the seed's structural invariants) is what is worth
 holding.
 

@@ -407,7 +407,7 @@ const { requestClose } = useUnsavedGuard({
                   <UButton
                     color="neutral"
                     variant="ghost"
-                    class="rounded bg-primary/90 px-2.5 py-1 text-2xs font-medium text-inverted hover:bg-primary disabled:opacity-50"
+                    class="rounded-sm bg-primary/90 px-2.5 py-1 text-2xs font-medium text-inverted hover:bg-primary disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-resume"
                     @click="checkpointControl('resume')"
@@ -417,7 +417,7 @@ const { requestClose } = useUnsavedGuard({
                   <UButton
                     color="neutral"
                     variant="ghost"
-                    class="rounded border border-app-error-500/50 px-2.5 py-1 text-2xs font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
+                    class="rounded-sm border border-app-error-500/50 px-2.5 py-1 text-2xs font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-cancel"
                     @click="checkpointControl('cancel')"
@@ -601,7 +601,7 @@ const { requestClose } = useUnsavedGuard({
                 color="neutral"
                 variant="ghost"
                 v-if="editable && !editingPolicy"
-                class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
+                class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                 data-testid="initiative-policy-edit"
                 @click="startEditPolicy"
               >
@@ -662,7 +662,7 @@ const { requestClose } = useUnsavedGuard({
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
+                  class="rounded-sm bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                   :disabled="initiatives.curating"
                   data-testid="initiative-policy-save"
                   @click="savePolicy"
@@ -672,7 +672,7 @@ const { requestClose } = useUnsavedGuard({
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  class="rounded border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
+                  class="rounded-sm border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                   @click="editingPolicy = false"
                 >
                   {{ t('initiative.curation.cancel') }}
@@ -755,7 +755,7 @@ const { requestClose } = useUnsavedGuard({
                       <UButton
                         color="neutral"
                         variant="ghost"
-                        class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
+                        class="rounded-sm bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                         :disabled="initiatives.curating || !promoteForm.phaseId"
                         data-testid="initiative-promote-submit"
                         @click="submitPromote(f)"
@@ -765,7 +765,7 @@ const { requestClose } = useUnsavedGuard({
                       <UButton
                         color="neutral"
                         variant="ghost"
-                        class="rounded border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
+                        class="rounded-sm border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                         @click="promotingId = null"
                       >
                         {{ t('initiative.curation.cancel') }}
@@ -776,7 +776,7 @@ const { requestClose } = useUnsavedGuard({
                     <UButton
                       color="neutral"
                       variant="ghost"
-                      class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
+                      class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                       data-testid="initiative-followup-promote"
                       @click="startPromote(f)"
                     >
@@ -785,7 +785,7 @@ const { requestClose } = useUnsavedGuard({
                     <UButton
                       color="neutral"
                       variant="ghost"
-                      class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
+                      class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
                       :disabled="initiatives.curating"
                       data-testid="initiative-followup-dismiss"
                       @click="dismissFollowUp(f)"

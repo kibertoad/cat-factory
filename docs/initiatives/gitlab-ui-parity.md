@@ -30,13 +30,13 @@ pipelines entirely through the UI, at feature parity with GitHub.
 
 - **Ride the existing GitHub-shaped stores**: this is the architecture's explicit design:
   `useGitHubStore` / `listGitHubAvailableRepos` already return GitLab projects through the
-  adapter, and "there is no separate GitLab store; do not add one" (CLAUDE.md, VCS section).
+  adapter, and "there is no separate GitLab store; do not add one" (AGENTS.md, VCS section).
   Parity work therefore means: (a) a connect flow that creates the GitLab connection rows
   the projection needs, (b) making the shared components provider-aware in _presentation_
   (labels, icons, URL shapes) while staying provider-neutral in _data_.
 - **Provider-neutral vocabulary** everywhere new: `VcsProvider` / `VcsRepoRef` /
   `VcsConnectionRef` (`kernel/src/domain/vcs-types.ts`), never a new `github*`-named field
-  (see "Git-provider-agnostic naming" in CLAUDE.md).
+  (see "Git-provider-agnostic naming" in AGENTS.md).
 - **Connect flow**: per-workspace GitLab connect (PAT first; the mode the backend already
   supports; OAuth app flow as a later slice), persisting the connection and seeding the
   repo projection via the existing sync service, mirroring the GitHub connect shape in
@@ -83,7 +83,7 @@ this before picking up slice 2.
   connection wire types and populated. That field addition is the real first code slice, and
   it must land symmetrically across both runtimes (D1 mappers + Drizzle mappers +
   `github_repos`/`github_installations` projections) with a conformance assertion: see "Keep
-  the runtimes symmetric" in CLAUDE.md.
+  the runtimes symmetric" in AGENTS.md.
 - **GitLab has no per-workspace connection today.** The backend GitLab provider is
   **deployment-level**: one `GITLAB_TOKEN` (`backend/packages/gitlab`, registered via
   `registerVcsProvider('gitlab')`; wired in each facade's `container.ts` when

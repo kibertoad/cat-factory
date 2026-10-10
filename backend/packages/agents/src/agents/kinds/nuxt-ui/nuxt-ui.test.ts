@@ -53,7 +53,7 @@ describe('nuxt-ui capability', () => {
     }
     // Public endpoint: no credential to resolve, so nothing lands in the operator's checklist.
     expect(nuxtUiToolServer.secretKeys).toBeUndefined()
-    // No `harnesses` allow-list: the drop on Codex/Pi comes from kernel's transport table
+    // No `harnesses` allow-list: the drop on Codex comes from kernel's transport table
     // (`MCP_HARNESS_TRANSPORTS`), which already refuses HTTP there, not from a restated pin here.
     expect(nuxtUiToolServer.harnesses).toBeUndefined()
   })

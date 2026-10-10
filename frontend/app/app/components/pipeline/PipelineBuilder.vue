@@ -952,7 +952,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       variant="ghost"
                       v-for="group in consensusGroups.groups"
                       :key="group.id"
-                      class="rounded border px-1.5 py-0.5 text-2xs hover:bg-transparent"
+                      class="rounded-sm border px-1.5 py-0.5 text-2xs hover:bg-transparent"
                       :class="
                         isGroupSelected(unit.index, group.id)
                           ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'

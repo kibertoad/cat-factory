@@ -81,7 +81,7 @@ export class RiskPolicyService {
   /**
    * Drop the workspace's cached preset library after a write commits. Coarse (one group == one
    * workspace) because a write can flip which preset is the default, so a single edit's blast
-   * radius is the whole library — over-invalidation is always safe (CLAUDE.md caching rule).
+   * radius is the whole library — over-invalidation is always safe (AGENTS.md caching rule).
    */
   private async invalidate(workspaceId: string): Promise<void> {
     await this.cache?.invalidateGroup(workspaceId)
@@ -219,7 +219,7 @@ export class RiskPolicyService {
    *
    * Gated on the same store the WRITES are, so an unwired facade REFUSES here rather than answering
    * an empty list: "this board hides nothing" and "this deployment cannot say what it hides" are
-   * different facts, and only the refusal states the second one (CLAUDE.md's absent-≠-zero rule).
+   * different facts, and only the refusal states the second one (AGENTS.md's absent-≠-zero rule).
    * Answering `[]` positively claimed the first while the very next `suppress` returned a 503.
    */
   async listSuppressions(workspaceId: string): Promise<RiskPolicySuppression[]> {

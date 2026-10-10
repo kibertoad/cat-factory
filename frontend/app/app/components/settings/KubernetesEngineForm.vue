@@ -401,7 +401,7 @@ async function copyAutoSetupCommand() {
       </p>
       <div class="flex items-center gap-1.5">
         <code
-          class="flex-1 rounded bg-app-950 px-2 py-1 font-mono text-2xs text-default select-all"
+          class="flex-1 rounded-sm bg-app-950 px-2 py-1 font-mono text-2xs text-default select-all"
         >
           {{ AUTO_SETUP_COMMAND }}
         </code>

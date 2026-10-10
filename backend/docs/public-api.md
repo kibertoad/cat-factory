@@ -216,10 +216,11 @@ machine-readable; `message` is operator prose. Codes fall in two families:
 ### Pagination
 
 Bounded lists (`GET /jobs`, `GET /services/:id/tasks`, `GET /kaizen/entries`,
-`GET /prompt-fragments`, and everything under `/debug`) are **keyset**-paginated:
+`GET /prompt-fragments`, `GET /guided-reviews`, and everything under `/debug`) are
+**keyset**-paginated:
 
-- `?limit=`: 1..100, digits only (defaults: jobs 25, tasks 50, prompt fragments 100). Anything else
-  is a 400.
+- `?limit=`: 1..100, digits only (defaults: jobs 25, tasks 50, guided reviews 50, prompt fragments
+  100). Anything else is a 400.
 - `?cursor=`: opaque; echo a previous page's `nextCursor` back verbatim. A tampered or truncated
   cursor is `400 invalid_cursor`, never a silent reset to page one.
 - `nextCursor: null` means last page. Non-null means "there may be more": page until null; the next
@@ -230,7 +231,9 @@ Ordering caveats: the **jobs** list is newest-first and takes `?status=` (coarse
 `?since=` (epoch ms, created-at-or-after) filters; the **task** list is ordered by stable task id,
 deterministic and safe to page, but **not** chronological, and it has no `since` (see ADR 0030 for
 why). The **prompt-fragment** list is likewise ordered by stable `fragmentId`, which is the merge's
-own key, so the order does not move when a standard is edited.
+own key, so the order does not move when a standard is edited. The **guided-review** list is
+newest-created first: ordering by last update would let an update move an unseen session ahead of
+the cursor.
 
 ### Runs park indefinitely: plan the exits
 
@@ -1597,7 +1600,7 @@ Five rules govern it:
 - **`appliesTo` is a hint, not a gate.** Nothing refuses a standard whose hint does not name the task
   it is pinned onto; the platform's own picker uses it to narrow what it OFFERS.
 - **An id the board does not resolve is refused**, `422` with `details.reason:
-'prompt_fragment_not_found'` and `details.fragmentIds` naming every one that missed. A run drops a
+  'prompt_fragment_not_found'` and `details.fragmentIds` naming every one that missed. A run drops a
   standard deleted after its task was filed rather than failing, on purpose, and that disposition is
   wrong at the door: a typo would answer `201` for a review that folded nothing, which reads
   afterwards exactly like a review nobody asked to be judged against anything. A deployment with no
@@ -1615,6 +1618,50 @@ Sending an empty array clears the inheritance from the service. It does **not** 
 nothing: the chosen `taskType`'s own defaults still apply on top, so a `document` task created with
 `"fragmentIds": []` comes back carrying the platform's writing standards. Read the response rather
 than assuming the request is the answer.
+
+#### Resolving a pull request's conflicts
+
+A `resolve-conflicts` task points the platform's conflict resolver at a pull request that already
+exists and that the platform did not open: the "Resolve conflicts" button an external review tool
+offers. Name the pull request the way a `review` task does, with `fields.prNumber` or
+`fields.prUrl` (one is required; the number wins when both are given), and start it with an empty
+body. The task is pinned to `pl_resolve_conflicts` at creation, and that pipeline parks nowhere, so
+a plain `write` key can drive it end to end.
+
+```bash
+curl -sX POST "$BASE/api/v1/services/$SERVICE/tasks" -H "Authorization: Bearer $KEY" \
+  -H 'content-type: application/json' \
+  -d '{"title":"Resolve conflicts on #4558","description":"Requested from the review tool.",
+       "taskType":"resolve-conflicts","fields":{"prNumber":4558}}'
+curl -sX POST "$BASE/api/v1/tasks/$TASK/start" -H "Authorization: Bearer $KEY" -d '{}'
+```
+
+The pipeline is the `conflicts` gate alone, run against the attached pull request. One that already
+merges cleanly passes straight through: the run ends `done` and nothing is pushed. A conflicted one
+dispatches the conflict resolver, which merges the repository's base branch into the pull request's
+own head branch, resolves the conflicts and pushes the merge commit there; the gate then re-probes.
+When its attempt budget runs out the run ends `failed`, and the run's `error.message` says the
+conflicts could not be resolved automatically, carrying the resolver's account of its last attempt
+(which files it left conflicting). Either way the pull request stays open: it belongs to whoever
+opened it, so the task finishes without asking anyone to merge it, and a start naming a pipeline
+with a merge step is refused with a `409`.
+
+The pull request is checked when the task is CREATED, and every reference the run could not push
+onto is refused there with a `422` and one of these `details.reason` codes:
+
+| `details.reason`            | Why                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_type_fields_invalid`  | Neither `prNumber` nor `prUrl` was given.                                                                                                          |
+| `attached_pr_not_found`     | The provider reports no such pull request on the service's linked repository.                                                                      |
+| `attached_pr_repo_mismatch` | `prUrl` names another repository than the service's; `details.expected` names the right one.                                                       |
+| `attached_pr_not_open`      | The pull request is closed or merged; `details.state` says which.                                                                                  |
+| `attached_pr_from_fork`     | Its head branch lives in a fork, which the push to the service's repository cannot reach.                                                          |
+| `attached_pr_base_mismatch` | It targets a branch other than the repository's base branch, which is what the resolver merges in; `details.expected` names it.                    |
+| `attached_pr_unresolvable`  | The service has no linked repository the platform can read pull requests from, or the provider did not say where the pull request's branches live. |
+
+When the repository provider fails to answer (an outage, a rate limit, a revoked token), the pull
+request cannot be confirmed and creation is refused with a `503` and `details.reason`
+`attached_pr_provider_unreachable`. Nothing is created, and the same request can be retried.
 
 ### Task runs & streaming
 
@@ -2679,6 +2726,43 @@ curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
 # What one agent kind is being told to fix, since the last sweep.
 curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEEP_MS"
 ```
+
+### Guided PR review (`/api/v1/guided-reviews`)
+
+The sessions the app's guided review window drives, so another UI can offer the same experience.
+Design record: [`backend/docs/adr/0066-guided-pr-review.md`](../../backend/docs/adr/0066-guided-pr-review.md).
+
+| Method | Path                                                            | Scope   | Effect                                          |
+| ------ | --------------------------------------------------------------- | ------- | ----------------------------------------------- |
+| POST   | `/guided-reviews`                                               | `write` | Open a session for a PR, or return the caller's |
+| GET    | `/guided-reviews`                                               | `read`  | List sessions (`repoId`, `prNumber`, `mine`)    |
+| GET    | `/guided-reviews/{sessionId}`                                   | `read`  | Overview, thread summaries, drafts              |
+| DELETE | `/guided-reviews/{sessionId}`                                   | `write` | Delete a session (its owner only)               |
+| POST   | `/guided-reviews/{sessionId}/refresh`                           | `write` | Regenerate the overview at the PR's new head    |
+| POST   | `/guided-reviews/{sessionId}/threads`                           | `write` | Open a thread, optionally asking a question     |
+| GET    | `/guided-reviews/{sessionId}/threads/{threadId}`                | `read`  | The thread's messages                           |
+| POST   | `/guided-reviews/{sessionId}/threads/{threadId}/messages`       | `write` | Ask a question                                  |
+| POST   | `/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts` | `write` | Draft comments from the thread                  |
+| PATCH  | `/guided-reviews/{sessionId}/comment-drafts/{draftId}`          | `write` | Edit, re-anchor or discard a draft (`rev`)      |
+| POST   | `/guided-reviews/{sessionId}/comment-drafts/post`               | `write` | Post drafts on the PR as plain comments         |
+| GET    | `/guided-reviews/{sessionId}/events`                            | `read`  | SSE: `state`, `deleted`, `timeout`              |
+
+- **Identity.** A key bound to a person (`actsAsUserId`) acts as that person: their sessions,
+  their initiator token for reading the PR, their model scope. An unbound key owns its own
+  sessions and runs on the workspace's credentials, never a person's. `createdByKind` (`user` or
+  `api-key`) says which kind of identity `createdBy` names.
+- **Writes answer at once.** The overview and each answer are produced in the background. Follow
+  the stream, or re-read: an assistant message is `pending`/`running` until it settles `complete`
+  or `failed` with a `failure.reason`.
+- **One unanswered question per thread.** A second one is refused `409` with the reason
+  `thread_busy`; other threads are unaffected, so open more threads for parallel questions.
+- **`write`, not `admin`.** Opening, asking and drafting spend model budget; posting publishes
+  plain review comments as the key's identity. Nothing here approves, merges or requests changes.
+- **`depth: "deep"`** answers from a read-only checkout of the repository: slower (minutes), but
+  it can search the whole tree. A deployment with no runner settles it as `depth_unavailable`.
+- **Posting claims each draft first,** so a retried post never publishes a comment twice, and it
+  is refused with `session_stale` once the PR has commits past `reviewedHeadSha`. The summary
+  posts only alongside a draft the call claimed, so an identical retry publishes nothing.
 
 ### Service specification
 

@@ -379,9 +379,10 @@ jobs:
         with:
           node-modules-cache: 'false'
 
-      # Pure-logic unit tests (no Docker / cluster needed) — the pre-publish gate.
+      # Pure-logic unit tests (no Docker / cluster needed): the pre-publish gate. Through Turbo so
+      # `^build` builds @cat-factory/contracts, whose `dist` the conformity test imports.
       - name: Unit tests
-        run: pnpm --filter @cat-factory/deploy-harness run test:run
+        run: pnpm exec turbo run test:run --filter=@cat-factory/deploy-harness
 
       - name: Resolve config
         id: cfg

@@ -2213,7 +2213,7 @@
         "allTools": "Tutti gli strumenti esposti da questo server.",
         "narrowed": "Limitato a: {tools}",
         "reason": {
-          "harnessUnsupported": "non era disponibile: la CLI dell'agente di questo passo non ha un client MCP.",
+          "harnessUnsupported": "non era disponibile: la CLI dell'agente di questo passo non poteva fornirlo.",
           "transportUnsupported": "non era disponibile: la CLI dell'agente di questo passo non riesce a raggiungere server di questo tipo.",
           "missingSecret": "non era disponibile: una credenziale che gli serve non è impostata per questa lavagna.",
           "reservedSecret": "non era disponibile: chiede una variabile che appartiene alla configurazione della piattaforma, quindi va cambiata la dichiarazione.",
@@ -2225,7 +2225,7 @@
           "unknown": "non era disponibile ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Esegui il passo su una CLI dell'agente che parla MCP, oppure amplia l'elenco di harness del server. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
+          "harnessUnsupported": "Amplia l'elenco di harness del server per includere la CLI dell'agente di questo passo, oppure esegui il passo su una CLI presente nell'elenco. Un passo Pi registrato prima che Pi potesse servire i server di strumenti richiede solo una nuova esecuzione su un'immagine runner aggiornata. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
           "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
           "missingSecret": "Imposta la credenziale che indica, come variabile d'ambiente del deployment oppure nelle credenziali delle capability, dalla finestra Infrastruttura.",
           "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",
@@ -2740,6 +2740,7 @@
       "cmd": {
         "newPipeline": "Costruisci una pipeline",
         "assistant": "Apri l'assistente",
+        "guidedReview": "Esplora una pull request",
         "addFromRepo": "Aggiungi servizio da repo esistente",
         "bootstrapRepo": "Esegui il bootstrap di un nuovo repo",
         "githubManage": "Gestisci la connessione GitHub",
@@ -2768,6 +2769,7 @@
       "keywords": {
         "newPipeline": "pipeline agenti catena",
         "assistant": "ia assistente chiedere richiesta fallo per me",
+        "guidedReview": "revisione guidata pull request pr esplora spiega domande",
         "addFromRepo": "github importa esistente",
         "bootstrapRepo": "scaffold crea architettura di riferimento",
         "github": "git repo pull request issue",
@@ -3065,7 +3067,8 @@
         "recurring": "Ricorrente",
         "review": "Revisione",
         "ralph": "Ciclo Ralph",
-        "bugFishing": "Pesca di bug"
+        "bugFishing": "Pesca di bug",
+        "resolveConflicts": "Risolvi conflitti"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4591,6 +4594,105 @@
       "unresolved_issue_service": "L'assistente non ha potuto capire sotto quale servizio crearla. Indica il servizio nella richiesta."
     }
   },
+  "guidedReview": {
+    "title": "Revisione guidata",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Caricamento della revisione…",
+    "outOfDate": "Gli aggiornamenti in tempo reale non sono riusciti, quindi questa vista potrebbe non essere aggiornata.",
+    "openFromTask": "Esplora con la revisione guidata",
+    "picker": {
+      "intro": "Scegli un repository e una pull request. Ottieni una panoramica della modifica e puoi fare domande in discussioni separate.",
+      "loading": "Caricamento dei repository…",
+      "noRepos": "Nessun repository è ancora collegato a questo workspace.",
+      "repo": "Repository",
+      "openPulls": "Pull request aperte",
+      "number": "Numero della pull request",
+      "open": "Apri la revisione"
+    },
+    "overview": {
+      "title": "Panoramica",
+      "stale": "La pull request ha nuovi commit",
+      "refresh": "Aggiorna",
+      "working": "Preparazione della panoramica…",
+      "intent": "Intento",
+      "changes": "Modifiche rilevanti",
+      "consequences": "Conseguenze",
+      "risks": "Rischi",
+      "focus": "Da esaminare",
+      "suggested": "Domande suggerite"
+    },
+    "severity": {
+      "low": "Bassa",
+      "medium": "Media",
+      "high": "Alta"
+    },
+    "failure": {
+      "budget_exhausted": "Questo workspace ha esaurito il budget dei modelli.",
+      "model_unavailable": "Nessun modello è disponibile per la revisione guidata.",
+      "repo_unavailable": "Non è stato possibile leggere la pull request dal repository.",
+      "generation_failed": "La chiamata al modello non è riuscita.",
+      "unreadable_reply": "Il modello ha risposto in una forma illeggibile.",
+      "depth_unavailable": "Le risposte approfondite con un checkout non sono ancora disponibili.",
+      "head_moved": "La pull request è andata oltre il commit revisionato. Aggiorna per revisionare il suo ultimo commit.",
+      "detail": "Dettagli"
+    },
+    "dropped": {
+      "outside_diff": "la riga è fuori dal diff",
+      "not_in_pr": "il file non fa parte di questa pull request",
+      "incomplete": "la proposta era incompleta"
+    },
+    "thread": {
+      "new": "Nuova discussione",
+      "untitled": "Discussione senza titolo",
+      "empty": "Chiedi qualsiasi cosa su questa pull request.",
+      "waiting": "Preparazione di una risposta…",
+      "placeholder": "Fai una domanda sulla modifica",
+      "busy": "In attesa della risposta alla domanda precedente",
+      "send": "Chiedi",
+      "draftRequest": "Richiesti commenti di revisione",
+      "deep": "Analisi approfondita",
+      "deepHint": "Risponde da un checkout del repository: più lento, ma può cercare in tutto l'albero.",
+      "investigating": "Analisi in corso in un checkout del repository. Può richiedere alcuni minuti."
+    },
+    "drafts": {
+      "title": "Bozze di commenti",
+      "request": "Prepara commenti di revisione",
+      "summary": "{kept} commenti proposti su {proposed} conservati come bozze.",
+      "side": {
+        "RIGHT": "codice nuovo",
+        "LEFT": "codice precedente"
+      },
+      "select": "Seleziona questa bozza per la pubblicazione",
+      "status": {
+        "proposed": "Bozza",
+        "posting": "In pubblicazione",
+        "posted": "Pubblicato",
+        "failed": "Non pubblicato",
+        "discarded": "Scartato"
+      },
+      "edit": "Modifica",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "discard": "Scarta",
+      "line": "Riga",
+      "sideLabel": "Lato",
+      "postFailed": "L'host ha rifiutato questo commento",
+      "summaryPlaceholder": "Commento di riepilogo facoltativo per la pull request",
+      "summaryFailed": "L'host ha rifiutato il commento di riepilogo",
+      "post": "Pubblica {count} nella pull request",
+      "postResult": "{posted} pubblicati, {failed} non pubblicati, {skipped} già gestiti."
+    },
+    "errors": {
+      "load": "Impossibile caricare la revisione",
+      "repos": "Impossibile caricare i repository collegati",
+      "open": "Impossibile aprire la revisione",
+      "ask": "Impossibile fare la domanda",
+      "drafts": "Impossibile richiedere le bozze di commenti",
+      "refresh": "Impossibile aggiornare la revisione",
+      "editDraft": "Impossibile salvare la bozza",
+      "postDrafts": "Impossibile pubblicare le bozze"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Un altro giro",
@@ -4664,7 +4766,8 @@
         "review": "Revisione",
         "research": "Ricerca",
         "planning": "Pianificazione",
-        "media": "Media"
+        "media": "Media",
+        "maintenance": "Manutenzione PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",
@@ -6173,6 +6276,7 @@
     "commandBar": "Cerca o esegui un comando…",
     "create": "Crea",
     "assistant": "Assistente",
+    "guidedReview": "Revisione guidata",
     "buildPipeline": "Crea una pipeline",
     "repositories": "Repository",
     "addFromRepo": "Aggiungi da un repository esistente",
@@ -6226,7 +6330,8 @@
         "assistant_generation_failed": "Il fornitore di modelli dell'assistente non ha risposto. È configurato correttamente e qui non c'è nulla da impostare: riprova la richiesta tra un momento.",
         "assistant_reply_unreadable": "Il modello dell'assistente ha risposto con qualcosa che questa piattaforma non può eseguire come decisione. Riformulare aiuta di rado: scegli un altro modello per l'assistente nelle impostazioni dei modelli.",
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
-        "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due."
+        "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due.",
+        "attached_pr_provider_unreachable": "Il provider del repository non ha risposto, quindi non è stato possibile verificare la pull request e non è stata creata alcuna attività. Non c'è nulla da configurare qui: riprova tra un momento."
       }
     },
     "reason": {
@@ -6313,7 +6418,10 @@
         "no_host_frame": "Questa spedizione non si trova sotto un servizio",
         "delegated_executor_unwired": "Esecutore esterno non registrato",
         "delegated_step_async_only": "Questo passo viene interrogato, non atteso",
-        "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare"
+        "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare",
+        "thread_busy": "Questa discussione sta ancora rispondendo",
+        "draft_conflict": "Questa bozza è cambiata",
+        "session_stale": "La pull request è andata avanti"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6370,7 +6478,10 @@
         "no_host_frame": "Un'attività di correzione ha bisogno di un servizio in cui vivere e di un repository da correggere. Sposti l'attività della spedizione sotto un frame di servizio e riprovi.",
         "delegated_executor_unwired": "Un passaggio di questa pipeline viene eseguito su un esecutore esterno che questa installazione non registra, quindi il lavoro non ha una destinazione. Registra l’esecutore nel codice oppure sostituisci il passaggio con uno eseguito qui.",
         "delegated_step_async_only": "Questo passo gira su un esecutore esterno e può durare ore, quindi viene avviato e poi interrogato invece di essere eseguito dentro una sola richiesta. Avvia l’esecuzione dalla board; se sei arrivato qui dal tuo codice, guida il passo attraverso il percorso asincrono.",
-        "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato."
+        "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato.",
+        "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione.",
+        "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
+        "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

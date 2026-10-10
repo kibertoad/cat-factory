@@ -257,6 +257,7 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
@@ -522,6 +523,7 @@ export type {
   DelegationUpdate,
 } from './ports/delegated-executor.js'
 export {
+  DELEGATED_USAGE_PROVIDER,
   DELEGATED_WORK_BRANCH_POLICIES,
   DelegatedExecutorRegistrationError,
 } from './ports/delegated-executor.js'
@@ -714,6 +716,7 @@ export {
 // the three-state answer a dispatch draws from that. See `domain/harness-capabilities.ts`.
 export {
   HARNESS_BODY_CAPABILITIES,
+  HARNESS_BODY_CAPABILITY_FIELDS,
   type BlindJobStopOutcome,
   type HarnessBodyCapability,
   type HarnessCapabilitySupport,

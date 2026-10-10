@@ -430,7 +430,6 @@ export {
   registerPrReviewerAgent,
   renderPriorReviewContext,
   resolvePrHeadNumber,
-  resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {
   CHALLENGE_INVESTIGATOR_KIND,
@@ -440,6 +439,12 @@ export {
   type PrReviewChallengeOutput,
   registerChallengeInvestigatorAgent,
 } from './agents/kinds/challenge-investigator.js'
+export {
+  GUIDED_REVIEW_INVESTIGATOR_KIND,
+  GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT,
+  guidedReviewInvestigation,
+  registerGuidedReviewInvestigatorAgent,
+} from './agents/kinds/guided-review-investigator.js'
 export {
   FORK_CHAT_AGENT_KIND,
   FORK_CHAT_SYSTEM_PROMPT,
@@ -489,6 +494,25 @@ export {
   renderSurveyFile,
 } from './agents/prompts/monorepo-adoption.js'
 export { monorepoExplorationTools } from './agents/runtime/monorepo-exploration-tools.js'
+export {
+  guidedReviewTools,
+  type GuidedReviewExplorer,
+  type GuidedReviewFileRequest,
+} from './agents/runtime/guided-review-tools.js'
+export {
+  GUIDED_REVIEW_AGENT_KIND,
+  GUIDED_REVIEW_ANSWER_SYSTEM_PROMPT,
+  GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
+  GUIDED_REVIEW_OVERVIEW_SYSTEM_PROMPT,
+  renderGuidedReviewAnswerPrompt,
+  renderGuidedReviewDraftsPrompt,
+  renderGuidedReviewOverviewPrompt,
+  type GuidedReviewChangedFileSummary,
+  type GuidedReviewOverviewPromptInput,
+  type GuidedReviewPrHeader,
+  type GuidedReviewThreadPromptInput,
+  type GuidedReviewTurn,
+} from './agents/prompts/guided-review.js'
 export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,

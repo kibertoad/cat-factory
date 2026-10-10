@@ -650,6 +650,8 @@ export function settleDelegation(
     outcome?: string | undefined
     url?: string | undefined
     note?: string | undefined
+    /** Whether the settled update carried usage; absent for a settlement no poll produced. */
+    usageReported?: boolean | undefined
     /**
      * The branch the work LANDED on, when the executor reported one. The product of a step whose
      * executor pushed without opening a pull request, and recorded here because the platform holds
@@ -673,6 +675,9 @@ export function settleDelegation(
             ...attempt,
             ...(settlement.outcome ? { outcome: settlement.outcome } : {}),
             ...(settlement.url ? { url: settlement.url } : {}),
+            ...(settlement.usageReported !== undefined
+              ? { usageReported: settlement.usageReported }
+              : {}),
           }
         : attempt,
     ),
@@ -704,20 +709,22 @@ export function settleDelegation(
 export function settleDelegatedJob(
   step: PipelineStep,
   update:
-    | { state: 'done'; delegated?: { url?: string; branch?: string } }
-    | { state: 'failed'; error: string; delegated?: { url?: string } },
+    | { state: 'done'; result?: { usage?: unknown }; delegated?: { url?: string; branch?: string } }
+    | { state: 'failed'; error: string; usage?: unknown; delegated?: { url?: string } },
 ): void {
   if (!inFlightDelegation(step)) return
   if (update.state === 'failed') {
     settleDelegation(step, {
       status: 'failed',
       outcome: update.error,
+      usageReported: update.usage !== undefined,
       ...(update.delegated?.url ? { url: update.delegated.url } : {}),
     })
     return
   }
   settleDelegation(step, {
     status: 'done',
+    usageReported: update.result?.usage !== undefined,
     ...(update.delegated?.url ? { url: update.delegated.url } : {}),
     ...(update.delegated?.branch ? { branch: update.delegated.branch } : {}),
   })

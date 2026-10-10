@@ -16,6 +16,7 @@ export {
   BootstrapWorkflow,
   EnvConfigRepairWorkflow,
   EnvironmentTestWorkflow,
+  GuidedReviewWorkflow,
   ExecutionContainer,
   DeployContainer,
   WorkspaceEventsHub,

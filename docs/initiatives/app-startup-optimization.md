@@ -66,7 +66,7 @@ run) and Playwright traces for the SPA cold-open waterfall.
 - **Snapshot-carried readiness over extra probes**: the workspace snapshot already
   aggregates ~18 parallel reads (`WorkspaceController`); a cheap per-workspace fact the
   SPA needs before first paint belongs in it, not in a separate blocking round-trip.
-- **Frontend live-push changes obey the coherence rules** (CLAUDE.md "Real-time
+- **Frontend live-push changes obey the coherence rules** (AGENTS.md "Real-time
   store coherence"): monotonic refresh guard, resync-before-`connected`, REPLACE-hydrates
   never dropping live-only state, store-level unit test pinning any new ordering.
 
@@ -145,7 +145,7 @@ On a cold open the SPA fetches the full workspace snapshot **twice**:
    `api.getWorkspace(id)` (`frontend/app/app/composables/useWorkspaceStream.ts:181-212`).
 
 The resync design is correct and deliberate (reconcile anything missed while
-disconnected before announcing `connected`; see the long comment there and CLAUDE.md's
+disconnected before announcing `connected`; see the long comment there and AGENTS.md's
 coherence rules). But on a **first** connect immediately following the initial load,
 nothing can have been missed that the resync's own fetch wouldn't equally capture: the
 heaviest payload in the app (the ~18-read aggregate) is paid twice, back to back.
@@ -160,7 +160,7 @@ path, resync semantics unchanged for genuine REconnects). Must keep: monotonic r
 guard, `connected` only after hydrate settles, provisional-state reconcile. Ship with a
 store-level unit test pinning the single-fetch cold open AND that a genuine reconnect
 still refreshes. The e2e suite gates on `data-connected`, so it is the regression guard;
-a flake after this change is a blocking bug (CLAUDE.md).
+a flake after this change is a blocking bug (AGENTS.md).
 
 ### 4. Leading 15s sleep before the first execution poll (P1)
 
@@ -311,7 +311,7 @@ mainly on high-RTT managed databases.
 **Fix (only if item 1's numbers say it matters):** collapse the consistency probe into
 one round trip (a single SQL statement returning ledger-exists + count + anchor regclass
 columns). Do NOT weaken the guard semantics or the advisory lock; the drift-guard
-behaviour is load-bearing (see CLAUDE.md → "Migrations"). Skipping `migrate()`
+behaviour is load-bearing (see AGENTS.md → "Migrations"). Skipping `migrate()`
 entirely on a "current" fast-path is explicitly rejected: the ledger read IS the
 fast-path, and any shortcut re-opens the ledger↔schema-split window the guard exists
 to close.
@@ -448,7 +448,7 @@ the _perceived_ gap, making this not worth its cost.
 - **Fire-and-forget probes must stay observable**: a deferred diagnostic still logs
   exactly once, still never throws, and gets a unit test pinning "boot does not await
   it". Copy `preflightHarnessImage`.
-- **Frontend slices (3, 7, 8) are coherence-sensitive.** The live-push rules in CLAUDE.md
+- **Frontend slices (3, 7, 8) are coherence-sensitive.** The live-push rules in AGENTS.md
   are the contract: monotonic refresh guard, `connected` only after reconcile,
   REPLACE-hydrate never dropping live-only state. Every ordering change ships a
   store-level unit test; the e2e suite is the guard and a post-change flake is a
@@ -459,7 +459,7 @@ the _perceived_ gap, making this not worth its cost.
   per "Keep the runtimes symmetric": the substrates differ but the loop shape must not.
 - **The executor-harness image is out of scope** (see below); nothing in this initiative
   may touch `backend/internal/executor-harness`. An image change is separate,
-  deliberate, image-tag-bumping work (CLAUDE.md release rules).
+  deliberate, image-tag-bumping work (AGENTS.md release rules).
 - Changeset per slice for versioned packages; empty changeset for doc-only tracker
   updates. Format the whole tree (`pnpm exec oxfmt .`), never a subset.
 

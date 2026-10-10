@@ -30,12 +30,12 @@ When the committed scope completes, the tracker becomes an ADR under
 Consequences, checklists dropped) and is `git rm`'d in the same PR. So the ADR
 set is the record of what was decided and shipped, and this directory is
 strictly the set of things still open. Several documents here are already cited
-by [`CLAUDE.md`](../../CLAUDE.md) as the authority for a flow's design; that
+by [`AGENTS.md`](../../AGENTS.md) as the authority for a flow's design; that
 makes them the best available account of the intent, not evidence the work is
 done.
 
-Full rules for when work earns a tracker: [`CLAUDE.md` → Bigger initiatives get
-a tracker document](../../CLAUDE.md).
+Full rules for when work earns a tracker: [`AGENTS.md` → Bigger initiatives get
+a tracker document](../../AGENTS.md).
 
 ## Open initiatives
 

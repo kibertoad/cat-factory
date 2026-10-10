@@ -9,7 +9,7 @@ import {
 // forms so they cannot drift on what a bad paste is or on what to say about it.
 //
 // The rule itself is in `@cat-factory/contracts` because the backend enforces the same one (see
-// `KubernetesApiClient`), and this is the SPA half of the split CLAUDE.md prescribes: the backend
+// `KubernetesApiClient`), and this is the SPA half of the split AGENTS.md prescribes: the backend
 // emits a machine-readable code, the SPA owns the translated prose. So the map below is the one
 // place a problem code becomes copy.
 

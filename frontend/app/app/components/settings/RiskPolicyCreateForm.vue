@@ -72,11 +72,12 @@ function submit() {
           data-testid="risk-policy-create-name"
         />
       </label>
-      <label class="block w-20">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.complexity') }}
         </SectionLabel>
         <UInput
+          class="w-20"
           v-model.number="draft.maxComplexity"
           type="number"
           :min="0"
@@ -85,11 +86,12 @@ function submit() {
           data-testid="risk-policy-create-complexity"
         />
       </label>
-      <label class="block w-20">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.risk') }}
         </SectionLabel>
         <UInput
+          class="w-20"
           v-model.number="draft.maxRisk"
           type="number"
           :min="0"
@@ -98,11 +100,12 @@ function submit() {
           data-testid="risk-policy-create-risk"
         />
       </label>
-      <label class="block w-20">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.impact') }}
         </SectionLabel>
         <UInput
+          class="w-20"
           v-model.number="draft.maxImpact"
           type="number"
           :min="0"
@@ -111,17 +114,25 @@ function submit() {
           data-testid="risk-policy-create-impact"
         />
       </label>
-      <label class="block w-20">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.ciFix') }}
         </SectionLabel>
-        <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
+        <UInput
+          class="w-20"
+          v-model.number="draft.ciMaxAttempts"
+          type="number"
+          :min="0"
+          :max="50"
+          size="sm"
+        />
       </label>
-      <label class="block w-20">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.reqIter') }}
         </SectionLabel>
         <UInput
+          class="w-20"
           v-model.number="draft.maxRequirementIterations"
           type="number"
           :min="1"
@@ -129,11 +140,12 @@ function submit() {
           size="sm"
         />
       </label>
-      <label class="block w-20">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.companionRework') }}
         </SectionLabel>
         <UInput
+          class="w-20"
           v-model.number="draft.companionMaxReworks"
           type="number"
           :min="0"
@@ -141,11 +153,12 @@ function submit() {
           size="sm"
         />
       </label>
-      <label class="block w-32">
+      <label class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.autoPass') }}
         </SectionLabel>
         <USelect
+          class="w-32"
           v-model="draft.maxRequirementConcernAllowed"
           :items="concernOptions"
           value-key="value"

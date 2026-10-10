@@ -1166,9 +1166,9 @@ describe('writeAgentsContext', () => {
     guidance?: string
     hasBlueprints?: boolean
   }): Promise<string> {
-    const home = await stubTempHome()
-    await writeAgentsContext('ROLE PROMPT', opts)
-    return readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
+    const agentDir = await mkdtemp(join(tmpdir(), 'cf-pi-agent-test-'))
+    await writeAgentsContext('ROLE PROMPT', { ...opts, agentDir })
+    return readFile(join(agentDir, 'AGENTS.md'), 'utf8')
   }
 
   it('appends the blueprint orientation note only when the checkout ships blueprints/', async () => {

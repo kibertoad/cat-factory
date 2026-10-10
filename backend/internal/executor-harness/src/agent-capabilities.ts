@@ -341,10 +341,16 @@ export function parseSkillSpecs(value: unknown): SkillSpec[] | undefined {
  * {@link MCP_SERVER_ID_PATTERN} uses.
  *
  * A member is added here in the SAME change that teaches the parser the field, never ahead of it:
- * the whole value of the list is that it is the image's own honest answer.
+ * the whole value of the list is that it is the image's own honest answer. `piMcpServers` is the
+ * one member that names no field of its own: it is `mcpServers` on a Pi run, which this image
+ * wires into Pi's own MCP client (`writePiMcpConfig`) and every image before it silently dropped
+ * while still reporting `mcpServers` for the subscription CLIs. It is also the one member the
+ * image REPORTS conditionally, because the installed Pi binary serves it rather than this code:
+ * see `reportedBodyCapabilities`.
  */
 export const HARNESS_BODY_CAPABILITIES: readonly string[] = [
   'mcpServers',
+  'piMcpServers',
   'skills',
   'designImages',
   'generateImages',
@@ -557,6 +563,74 @@ export function claudeAllowedToolPatterns(
     s.allowedTools?.length ? s.allowedTools.map((t) => `mcp__${s.id}__${t}`) : [`mcp__${s.id}`],
   )
   return [...mcp, ...builtIns]
+}
+
+/**
+ * A value Pi takes LITERALLY. Pi reads an `env` / `headers` value that STARTS WITH `!` as a shell
+ * command and substitutes its output, and interpolates `$NAME` / `${NAME}` anywhere in it. A
+ * credential is an opaque vendor string and may contain either, so every value is escaped with
+ * Pi's own two escapes: `$$` for a literal `$`, and a leading `$!` for a literal `!` (only the
+ * first character can start a command). Measured against Pi 0.99.1: `$!touch x` reached the
+ * server as `!touch x` and ran nothing, and `a$$b$${HOME}` as `a$b${HOME}`.
+ */
+export function piLiteralValue(value: string): string {
+  const escaped = value.replace(/\$/g, () => '$$')
+  return escaped.startsWith('!') ? `$${escaped}` : escaped
+}
+
+/**
+ * Pi's `mcp.json` for this run.
+ *
+ * Every `env` and `headers` value is written as a {@link piLiteralValue}, so nothing a vendor
+ * minted can be read as a command or a variable reference. The values sit in the file rather than
+ * in Pi's environment on purpose: see `writePiMcpConfig`.
+ *
+ * `command` and `args` stay as they are: Pi interpolates neither. Exposure is `direct`, so the
+ * tools are declared to the model like built-ins under Pi's documented `mcp__<server>__<tool>`
+ * naming (Pi's `docs/mcp.md`, measured on 0.99.1), which is the name the prompt states and the
+ * progress guard's `isMcpToolCall` recognises. A server narrowed by `allowedTools` is `hidden` with
+ * each permitted tool re-exposed by exact name, which makes the narrowing ENFORCED on Pi (the other
+ * tools are registered but cannot be called), where on claude-code it is only scoping. Tool names
+ * are validated against {@link MCP_TOOL_NAME_PATTERN}, which admits no `*`, so no entry here can
+ * be read as a pattern. `autoEnableCodemode: false` keeps the run's tool surface what the backend
+ * composed the prompt against: nothing here is exposed through codemode.
+ */
+export function piMcpConfig(servers: readonly McpServerSpec[]): {
+  autoEnableCodemode: false
+  mcpServers: Record<string, Record<string, unknown>>
+} {
+  const literals = (values: Record<string, string> | undefined) =>
+    values
+      ? Object.fromEntries(Object.entries(values).map(([k, v]) => [k, piLiteralValue(v)]))
+      : undefined
+  const mcpServers: Record<string, Record<string, unknown>> = {}
+  for (const server of servers) {
+    const exposure = server.allowedTools?.length
+      ? {
+          exposure: 'hidden',
+          toolExposure: Object.fromEntries(server.allowedTools.map((t) => [t, 'direct'])),
+        }
+      : { exposure: 'direct' }
+    if (server.transport === 'http') {
+      const headers = literals(server.headers)
+      mcpServers[server.id] = {
+        type: 'http',
+        url: server.url,
+        ...(headers ? { headers } : {}),
+        ...exposure,
+      }
+      continue
+    }
+    const env = literals(server.env)
+    mcpServers[server.id] = {
+      type: 'stdio',
+      command: server.command,
+      ...(server.args ? { args: server.args } : {}),
+      ...(env ? { env } : {}),
+      ...exposure,
+    }
+  }
+  return { autoEnableCodemode: false, mcpServers }
 }
 
 /** Escape a string as a TOML basic string (Codex config is TOML, not JSON). */

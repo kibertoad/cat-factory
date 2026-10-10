@@ -69,8 +69,10 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   compatibility is a non-goal, and a dispatch that could carry a step's pick AND a kind's playbooks
   with two disjoint mechanisms would double every rendering, materialisation and pinning path.
   `step.skillVersion` likewise became `skillVersions` (step JSON, so no migration).
-- **Tool servers are filtered in the executor, and their absence is STATED.** Pi has no MCP client
-  and an ambient Codex run has no per-run config home to write servers into. Dropping a server
+- **Tool servers are filtered in the executor, and their absence is STATED.** An ambient Codex run
+  has no per-run config home to write servers into, and Codex's client reaches stdio only. (Pi had
+  no MCP client when this was decided; Pi 0.99 added one and the runner image wires it from 1.162.0,
+  with the `piMcpServers` body capability refusing a Pi run on an older image.) Dropping a server
   silently would let an agent plan around a tool that was never there and discover the gap
   mid-run; the prompt's "not available on this run" line is what makes that a planning input.
 - **A required credential that does not resolve DROPS the server.** Handing an agent a tool whose

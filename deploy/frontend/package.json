@@ -15,11 +15,11 @@
   "dependencies": {
     "@cat-factory/app": "workspace:*",
     "@modular-vue/core": "^1.5.0",
-    "nuxt": "^4.5.2"
+    "nuxt": "^4.6.0"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vue-tsc": "^3.3.11",
-    "wrangler": "4.124.0"
+    "vue-tsc": "^3.3.12",
+    "wrangler": "4.148.0"
   }
 }

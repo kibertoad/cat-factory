@@ -160,7 +160,7 @@ Statuses: `todo` / `in-progress` / `done`. Update (+ PR link) at the end of each
   only if repo-less spikes (gap 6) become the primary use case.
 - **D2: structured vs prose output.** Structured (recommendation/options/confidence) enables
   a real result view and future "verdict gate"-style policy (cf. the latent family noted in
-  CLAUDE.md's gates section); prose is cheaper and renders today. Recommended: structured
+  AGENTS.md's gates section); prose is cheaper and renders today. Recommended: structured
   with a mandatory prose `findings` body; both surfaces work.
 - **D3: does `pl_spike` end in a human gate?** A timeboxed spike arguably wants a human
   acknowledgement ("findings reviewed") before `done`. If yes, that is exactly the

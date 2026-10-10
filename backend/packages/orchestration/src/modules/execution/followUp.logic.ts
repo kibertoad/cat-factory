@@ -34,7 +34,7 @@ export function pendingFollowUpCount(state: FollowUpsStepState | null | undefine
  * evaluation of the same state (a re-driven advance, a lost CAS race re-applying on the winner's
  * snapshot) reads `settled` and re-reports nothing. Without it the drop is re-counted on every
  * pass over a step that already dropped, which is the "a periodic read fed to a delta counter
- * re-reports the same rows" mistake in CLAUDE.md, one layer up.
+ * re-reports the same rows" mistake in AGENTS.md, one layer up.
  */
 export function followUpsToSendBack(state: FollowUpsStepState): FollowUpItem[] {
   return state.items.filter(

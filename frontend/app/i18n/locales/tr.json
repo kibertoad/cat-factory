@@ -129,6 +129,7 @@
     "commandBar": "Arayın veya bir komut çalıştırın…",
     "create": "Oluştur",
     "assistant": "Asistan",
+    "guidedReview": "Rehberli inceleme",
     "buildPipeline": "Bir işlem hattı oluştur",
     "repositories": "Depolar",
     "addFromRepo": "Mevcut depodan ekle",
@@ -219,7 +220,8 @@
         "recurring": "Yinelenen",
         "review": "İnceleme",
         "ralph": "Ralph döngüsü",
-        "bugFishing": "Hata avı"
+        "bugFishing": "Hata avı",
+        "resolveConflicts": "Çakışmaları çöz"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -638,7 +640,8 @@
         "assistant_generation_failed": "Asistanın model sağlayıcısı yanıt vermedi. Doğru yapılandırılmış durumda ve burada kurulacak bir şey yok: isteği birazdan yeniden deneyin.",
         "assistant_reply_unreadable": "Asistanın modeli, bu platformun karar olarak uygulayamayacağı bir yanıt verdi. Yeniden ifade etmek nadiren işe yarar: model ayarlarından asistan için başka bir model seçin.",
         "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
-        "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor."
+        "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor.",
+        "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin."
       }
     },
     "reason": {
@@ -725,7 +728,10 @@
         "no_host_frame": "Bu sefer bir hizmetin altında değil",
         "delegated_executor_unwired": "Dış yürütücü kayıtlı değil",
         "delegated_step_async_only": "Bu adım beklenmez, yoklanır",
-        "delegated_claim_missing": "Bu adımın kontrol edilecek harici işi yok"
+        "delegated_claim_missing": "Bu adımın kontrol edilecek harici işi yok",
+        "thread_busy": "Bu konu hâlâ yanıtlanıyor",
+        "draft_conflict": "Bu taslak değişti",
+        "session_stale": "Pull request ilerledi"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -782,7 +788,10 @@
         "no_host_frame": "Bir düzeltme görevinin altında yaşayacağı bir hizmete ve düzeltilecek bir depoya ihtiyacı var. Sefer görevini bir hizmet çerçevesinin altına taşıyıp yeniden deneyin.",
         "delegated_executor_unwired": "Bu hattın bir adımı, bu kurulumun kaydetmediği bir dış yürütücüde çalışıyor; dolayısıyla işin gönderileceği bir yer yok. Yürütücüyü kodda kaydedin ya da adımı burada çalışan biriyle değiştirin.",
         "delegated_step_async_only": "Bu adım harici bir yürütücüde çalışır ve saatler sürebilir; bu yüzden tek bir istek içinde çalıştırılmak yerine gönderilip ardından yoklanır. Çalıştırmayı panodan başlatın; buraya kendi kodunuzdan geldiyseniz adımı asenkron yoldan sürün.",
-        "delegated_claim_missing": "Çalıştırmanın harici yürütücüye ne gönderdiğine dair kaydı eksik, dolayısıyla yoklanacak bir şey yok. Yürütücünün kendisinde bir sorun yok. Çalıştırmayı yeniden yükleyin ve adım hâlâ takılıysa yeniden çalıştırın."
+        "delegated_claim_missing": "Çalıştırmanın harici yürütücüye ne gönderdiğine dair kaydı eksik, dolayısıyla yoklanacak bir şey yok. Yürütücünün kendisinde bir sorun yok. Çalıştırmayı yeniden yükleyin ve adım hâlâ takılıysa yeniden çalıştırın.",
+        "thread_busy": "Bu konudaki önceki soru henüz yanıtlanmadı. Yanıtı bekleyin ya da başka bir konuda sorun.",
+        "draft_conflict": "Bu yorum taslağı siz yükledikten sonra düzenlendi, gönderildi ya da atıldı. Taslakları yeniden yükleyip değişikliğinizi tekrar yapın.",
+        "session_stale": "Bu inceleme hazırlandıktan sonra yeni commit'ler geldi, bu yüzden taslaklar yanlış satırları gösteriyor olabilir. İncelemeyi yenileyin, taslakları kontrol edin, sonra gönderin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1678,7 +1687,7 @@
         "allTools": "Bu sunucunun sunduğu tüm araçlar.",
         "narrowed": "Şunlarla sınırlandı: {tools}",
         "reason": {
-          "harnessUnsupported": "kullanılamadı: bu adımın çalıştığı ajan CLI'sinde MCP istemcisi yok.",
+          "harnessUnsupported": "kullanılamadı: bu adımın çalıştığı ajan CLI'si onu sunamadı.",
           "transportUnsupported": "kullanılamadı: bu adımın çalıştığı ajan CLI'si bu türden bir sunucuya erişemiyor.",
           "missingSecret": "kullanılamadı: ihtiyaç duyduğu kimlik bilgisi bu pano için ayarlanmamış.",
           "reservedSecret": "kullanılamadı: platformun kendi yapılandırmasına ait bir değişken istiyor, bu yüzden bildirimin değişmesi gerekiyor.",
@@ -1690,7 +1699,7 @@
           "unknown": "kullanılamadı ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Adımı MCP konuşan bir ajan CLI'sinde çalıştırın ya da sunucunun harness listesini genişletin. Kendi CLI oturumunuzla yapılan bir Codex çalıştırmasında sunucuyu o çalıştırmaya özel tutacak bir yer yoktur; bunun yerine bir platform kimlik bilgisi kullanın.",
+          "harnessUnsupported": "Sunucunun harness listesini bu adımın çalıştığı ajan CLI'sini içerecek şekilde genişletin ya da adımı listedeki bir CLI'de çalıştırın. Pi araç sunucularını sunabilmeden önce kaydedilmiş bir Pi adımının yalnızca güncel bir runner imajında yeniden çalıştırılması yeterlidir. Kendi CLI oturumunuzla yapılan bir Codex çalıştırmasında sunucuyu o çalıştırmaya özel tutacak bir yer yoktur; bunun yerine bir platform kimlik bilgisi kullanın.",
           "transportUnsupported": "Onun için bir stdio sunucusu bildirin ya da adımı HTTP sunucularına erişen bir ajan CLI'sinde çalıştırın.",
           "missingSecret": "Adı geçen kimlik bilgisini dağıtımın ortam değişkeni olarak ya da Altyapı penceresindeki yetenek kimlik bilgilerinde ayarlayın.",
           "reservedSecret": "Bildirimi başka bir anahtar isteyecek şekilde değiştirin; o değişkeni ayarlamak tam da yardımcı olmayacak şeydir.",
@@ -2603,6 +2612,7 @@
       "cmd": {
         "newPipeline": "Boru hattı oluştur",
         "assistant": "Asistanı aç",
+        "guidedReview": "Bir pull request incele",
         "addFromRepo": "Mevcut depodan servis ekle",
         "bootstrapRepo": "Yeni depo başlat",
         "githubManage": "GitHub bağlantısını yönet",
@@ -2631,6 +2641,7 @@
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
         "assistant": "yapay zeka asistan sor istem benim yerime yap",
+        "guidedReview": "rehberli inceleme pull request pr incele açıkla sorular",
         "addFromRepo": "github içe aktar mevcut",
         "bootstrapRepo": "iskele oluştur referans mimari",
         "github": "git depolar çekme istekleri sorunlar",
@@ -5112,6 +5123,105 @@
       "unresolved_issue_service": "Asistan bunun hangi servis altında oluşturulacağını belirleyemedi. İsteğinizde servisi adıyla belirtin."
     }
   },
+  "guidedReview": {
+    "title": "Rehberli inceleme",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "İnceleme yükleniyor…",
+    "outOfDate": "Canlı güncellemeler başarısız oldu, bu nedenle bu görünüm güncel olmayabilir.",
+    "openFromTask": "Rehberli incelemeyle keşfet",
+    "picker": {
+      "intro": "Bir depo ve bir pull request seçin. Değişikliğin özetini görür, ayrı konularda onunla ilgili soru sorabilirsiniz.",
+      "loading": "Depolar yükleniyor…",
+      "noRepos": "Bu çalışma alanına henüz bağlı bir depo yok.",
+      "repo": "Depo",
+      "openPulls": "Açık pull requestler",
+      "number": "Pull request numarası",
+      "open": "İncelemeyi aç"
+    },
+    "overview": {
+      "title": "Özet",
+      "stale": "Pull requestte yeni commitler var",
+      "refresh": "Yenile",
+      "working": "Özet hazırlanıyor…",
+      "intent": "Amaç",
+      "changes": "Önemli değişiklikler",
+      "consequences": "Sonuçlar",
+      "risks": "Riskler",
+      "focus": "İncelemeye değer",
+      "suggested": "Önerilen sorular"
+    },
+    "severity": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek"
+    },
+    "failure": {
+      "budget_exhausted": "Bu çalışma alanı model bütçesini tüketti.",
+      "model_unavailable": "Rehberli inceleme için kullanılabilir bir model yok.",
+      "repo_unavailable": "Pull request depodan okunamadı.",
+      "generation_failed": "Model çağrısı başarısız oldu.",
+      "unreadable_reply": "Model okunamayan bir biçimde yanıt verdi.",
+      "depth_unavailable": "Kod kopyası kullanan ayrıntılı yanıtlar henüz kullanılamıyor.",
+      "head_moved": "Pull request incelenen commit'in ötesine geçti. En son commit'ini incelemek için yenileyin.",
+      "detail": "Ayrıntılar"
+    },
+    "dropped": {
+      "outside_diff": "satır diff dışında",
+      "not_in_pr": "dosya bu pull requestin parçası değil",
+      "incomplete": "öneri eksikti"
+    },
+    "thread": {
+      "new": "Yeni konu",
+      "untitled": "Başlıksız konu",
+      "empty": "Bu pull request hakkında her şeyi sorabilirsiniz.",
+      "waiting": "Yanıt hazırlanıyor…",
+      "placeholder": "Değişiklik hakkında bir soru sorun",
+      "busy": "Önceki sorunun yanıtı bekleniyor",
+      "send": "Sor",
+      "draftRequest": "İnceleme yorumları istendi",
+      "deep": "Derin inceleme",
+      "deepHint": "Deponun bir kopyasından yanıtlar: daha yavaş ama tüm ağaçta arama yapabilir.",
+      "investigating": "Deponun bir kopyasında inceleniyor. Bu birkaç dakika sürebilir."
+    },
+    "drafts": {
+      "title": "Yorum taslakları",
+      "request": "İnceleme yorumları taslağı oluştur",
+      "summary": "Önerilen {proposed} yorumdan {kept} tanesi taslak olarak tutuldu.",
+      "side": {
+        "RIGHT": "yeni kod",
+        "LEFT": "eski kod"
+      },
+      "select": "Bu taslağı göndermek için seç",
+      "status": {
+        "proposed": "Taslak",
+        "posting": "Gönderiliyor",
+        "posted": "Gönderildi",
+        "failed": "Gönderilmedi",
+        "discarded": "Atıldı"
+      },
+      "edit": "Düzenle",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "discard": "At",
+      "line": "Satır",
+      "sideLabel": "Taraf",
+      "postFailed": "Sunucu bu yorumu reddetti",
+      "summaryPlaceholder": "Pull request için isteğe bağlı özet yorumu",
+      "summaryFailed": "Sunucu özet yorumunu reddetti",
+      "post": "{count} tanesini pull request'e gönder",
+      "postResult": "{posted} gönderildi, {failed} gönderilmedi, {skipped} zaten işlendi."
+    },
+    "errors": {
+      "load": "İnceleme yüklenemedi",
+      "repos": "Bağlı depolar yüklenemedi",
+      "open": "İnceleme açılamadı",
+      "ask": "Soru sorulamadı",
+      "drafts": "Yorum taslakları istenemedi",
+      "refresh": "İnceleme yenilenemedi",
+      "editDraft": "Taslak kaydedilemedi",
+      "postDrafts": "Taslaklar gönderilemedi"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Bir tur daha",
@@ -5185,7 +5295,8 @@
         "review": "İnceleme",
         "research": "Araştırma",
         "planning": "Planlama",
-        "media": "Medya"
+        "media": "Medya",
+        "maintenance": "PR bakımı"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",

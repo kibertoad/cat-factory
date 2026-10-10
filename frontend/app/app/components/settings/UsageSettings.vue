@@ -75,7 +75,7 @@ const hasAny = computed(() => usage.rows.length > 0)
         >
           <div class="flex items-center justify-between gap-2 text-2xs">
             <span class="min-w-0 truncate font-medium text-toned">{{ row.model }}</span>
-            <span class="shrink-0 rounded bg-accented/60 px-1.5 py-0.5 text-3xs text-toned">
+            <span class="shrink-0 rounded-sm bg-accented/60 px-1.5 py-0.5 text-3xs text-toned">
               {{ row.vendor ?? row.provider }}
             </span>
           </div>

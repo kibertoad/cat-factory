@@ -36,12 +36,12 @@
     "@changesets/cli": "^3.0.3",
     "@stryker-mutator/api": "10.0.0",
     "@valibot/to-json-schema": "^1.8.0",
-    "knip": "^6.37.0",
-    "oxfmt": "^0.70.0",
-    "oxlint": "^1.85.0",
-    "publint": "^0.3.24",
+    "knip": "^6.40.0",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
+    "publint": "^0.3.25",
     "sherif": "^1.13.0",
-    "turbo": "^2.11.3",
+    "turbo": "^2.11.7",
     "typescript": "7.0.2"
   },
   "engines": {

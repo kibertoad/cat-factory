@@ -28,7 +28,7 @@ import { jiraWriteback } from './writeback/jira.writeback.js'
 //
 // Runtime-neutral: it depends only on the kernel ports + the shared pure logic and
 // the global `fetch`/`btoa` (present on both runtimes), so the Cloudflare and the
-// Node facade wire the SAME class (see CLAUDE.md "Keep the runtimes symmetric").
+// Node facade wire the SAME class (see AGENTS.md "Keep the runtimes symmetric").
 
 const USER_AGENT = 'cat-factory'
 

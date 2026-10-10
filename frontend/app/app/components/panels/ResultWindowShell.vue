@@ -336,7 +336,7 @@ const panelClass = computed(() => [
                 {{ t('panels.stepDetail.effort.heading') }}
               </SectionLabel>
               <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
+                class="shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium tabular-nums"
                 :class="chipClass"
               >
                 {{ t('panels.stepDetail.effort.outOfTen', { value: effortReport.difficulty }) }}
@@ -381,7 +381,7 @@ const panelClass = computed(() => [
                 {{ t('panels.stepDetail.validation.heading') }}
               </SectionLabel>
               <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
+                class="shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium tabular-nums"
                 :class="
                   validationReport.passed
                     ? 'bg-app-success-500/15 text-app-success-300'
@@ -440,7 +440,7 @@ const panelClass = computed(() => [
                 {{ t('panels.stepDetail.reproduction.heading') }}
               </SectionLabel>
               <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium"
+                class="shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium"
                 :class="
                   reproductionKeys!.proven
                     ? 'bg-app-success-500/15 text-app-success-300'

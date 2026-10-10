@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 import { defineConfig } from 'vitest/config'
 
 // Integration tests run inside the real Workers runtime (workerd, the same
@@ -15,7 +15,7 @@ export default defineConfig(async () => {
   const auditMigrations = await readD1Migrations('./audit-migrations')
 
   return {
-    // vitest-pool-workers v4 wires the Workers pool through a Vite plugin
+    // `@cloudflare/vitest-plugin` wires the Workers pool through a Vite plugin
     // (`cloudflareTest`) instead of the old `test.poolOptions.workers` block.
     plugins: [
       cloudflareTest({
@@ -133,7 +133,7 @@ export default defineConfig(async () => {
       // `toad-cache` is dual-published (`"type": "module"` with `require` →
       // `.cjs`, `import` → `.mjs`), and `layered-loader` (our AppCaches backend)
       // consumes it from compiled CJS via `require("toad-cache")`. The
-      // `@cloudflare/vitest-pool-workers` module-fallback resolves a `require()`
+      // `@cloudflare/vitest-plugin` module-fallback resolves a `require()`
       // by asking Vite for the `require` export condition (it threads
       // `custom["node-resolve"].isRequire` into `resolveId`), then shims the CJS
       // module's named exports via `cjs-module-lexer`. Under Vite 8 that

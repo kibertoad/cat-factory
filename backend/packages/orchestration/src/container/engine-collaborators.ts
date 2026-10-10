@@ -35,6 +35,7 @@ import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { WorkspaceService } from '@cat-factory/workspaces'
 import { createAssistantModule } from './assistant-module.js'
+import { createGuidedReviewModule } from './guided-review-module.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
 import type { CoreDependencies, DocumentsModule, NotificationsModule } from '../container.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -179,6 +180,8 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   modules.build('assistant', () =>
     createAssistantModule({ dependencies, workspaceService, boardService, tasks, spend }),
   )
+
+  modules.build('guidedReview', () => createGuidedReviewModule({ dependencies, spend }))
 
   return {
     initiativeService,

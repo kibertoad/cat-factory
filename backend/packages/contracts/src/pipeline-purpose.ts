@@ -60,8 +60,9 @@ const NON_BUILD_HIDDEN_CATEGORIES: readonly AgentCategory[] = ['build', 'test']
  * The purposes that SHIP CODE, and so have a use for every palette category. `bugfix` is here
  * beside `build` because the two differ only in what they are offered TO ({@link
  * pipelineAllowedForTaskType}): a bug fix designs, implements, tests and merges like any change.
+ * `maintenance` writes code too, onto the pull request it works on in place.
  */
-const CODE_SHIPPING_PURPOSES: readonly PipelinePurpose[] = ['build', 'bugfix']
+const CODE_SHIPPING_PURPOSES: readonly PipelinePurpose[] = ['build', 'bugfix', 'maintenance']
 
 /**
  * The purpose to narrow BY, or `null` for "this build has nothing to narrow by".
@@ -157,6 +158,16 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
   // Decomposes an initiative: no code, no repo documentation of its own (the plan is the
   // in-repo tracker its own steps commit) and no pull request, so nothing to gate either.
   planning: { review: true, design: true, build: false, test: false, docs: false, gates: false },
+  // Repairs an attached pull request in place: commits land on its own branch, so implementing,
+  // testing, reviewing and gating all apply, while there is nothing new to design or document.
+  maintenance: {
+    review: true,
+    design: false,
+    build: true,
+    test: true,
+    docs: false,
+    gates: true,
+  },
   // Produces binary assets: the generating kinds group under `design`, and a human checkpoint
   // is the whole point of a candidate comparison, so `gates` stays. Nothing here writes code,
   // runs a suite or authors a document, and a `review` kind judges a diff this purpose never
@@ -298,6 +309,15 @@ const BUG_PURPOSES: readonly PipelinePurpose[] = ['build', 'bugfix', 'research']
  */
 const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => p !== 'bugfix')
 
+/** The built-in task types offered exactly ONE purpose, and which. */
+const EXACT_PURPOSE_FOR_TASK_TYPE: ReadonlyMap<string, PipelinePurpose> = new Map([
+  ['document', 'document'],
+  ['review', 'review'],
+  ['media', 'media'],
+  ['bug-fishing', 'research'],
+  ['resolve-conflicts', 'maintenance'],
+])
+
 /**
  * Whether `pipeline` should be offered when starting a task of `taskType` — the pickers' gate.
  *
@@ -316,6 +336,9 @@ const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => 
  *    people use most.
  *  - `feature` → the same, minus `bugfix` ({@link FEATURE_PURPOSES}): a preset that investigates a
  *    defect report and reproduces it has neither input on a feature.
+ *  - `resolve-conflicts` → only `maintenance` pipelines, and a `maintenance` pipeline is offered to
+ *    no other type. It works on the pull request the task ATTACHED at creation, which no other
+ *    type carries, so on any other task its gate would find nothing to resolve.
  *  - anything else, including a CUSTOM (namespaced) type and an undefined `taskType`, is
  *    unrestricted — a deployment's own task type has no purpose mapping we could infer.
  *
@@ -338,16 +361,14 @@ export function pipelineAllowedForTaskType(
   pipeline: Pick<Pipeline, 'purpose'>,
   taskType: TaskType | undefined,
 ): boolean {
-  if (taskType === 'document') return pipeline.purpose === 'document'
-  if (taskType === 'review') return pipeline.purpose === 'review'
-  if (taskType === 'media') return pipeline.purpose === 'media'
-  if (taskType === 'bug-fishing') return pipeline.purpose === 'research'
+  const exact = taskType === undefined ? undefined : EXACT_PURPOSE_FOR_TASK_TYPE.get(taskType)
+  if (exact) return pipeline.purpose === exact
   if (taskType === 'feature' || taskType === 'bug') {
     const own = classifierFor(pipeline.purpose)
     const offered = taskType === 'bug' ? BUG_PURPOSES : FEATURE_PURPOSES
     return own === null || offered.includes(own)
   }
-  return true
+  return taskType === undefined || pipeline.purpose !== 'maintenance'
 }
 
 /**

@@ -19,6 +19,12 @@ import {
 import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
+import {
+  GUIDED_REVIEW_ANSWER_SYSTEM_PROMPT,
+  GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
+  GUIDED_REVIEW_OVERVIEW_SYSTEM_PROMPT,
+} from '../prompts/guided-review.js'
+import { GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT } from './guided-review-investigator.js'
 import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
 import { isCompanionKind } from './companions.js'
 import { SPEC_WRITER_SYSTEM_PROMPT } from './spec-blueprints.js'
@@ -110,6 +116,26 @@ export const PROMPT_VERSIONS = {
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
   'fork-chat': { id: 'fork-chat', version: 1, text: FORK_CHAT_SYSTEM_PROMPT },
+  'guided-review-overview': {
+    id: 'guided-review-overview',
+    version: 1,
+    text: GUIDED_REVIEW_OVERVIEW_SYSTEM_PROMPT,
+  },
+  'guided-review-answer': {
+    id: 'guided-review-answer',
+    version: 1,
+    text: GUIDED_REVIEW_ANSWER_SYSTEM_PROMPT,
+  },
+  'guided-review-investigator': {
+    id: 'guided-review-investigator',
+    version: 1,
+    text: GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT,
+  },
+  'guided-review-drafts': {
+    id: 'guided-review-drafts',
+    version: 1,
+    text: GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
+  },
   // v2: the summary is now rendered as markdown beside the `findings` list, so the prompt asks for
   // a short whole-verdict paragraph that does NOT restate the findings. Scoring is untouched.
   //

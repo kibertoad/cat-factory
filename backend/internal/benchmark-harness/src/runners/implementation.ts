@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
   cloneRepo,
+  createPiAgentDir,
   runPi,
   writeAgentsContext,
   writePiModelsConfig,
@@ -36,14 +37,12 @@ export async function runImplementation(
   }
 
   const dir = await mkdtemp(join(tmpdir(), 'cat-bench-impl-'))
-  // `writeAgentsContext`/`writePiModelsConfig` write Pi's GLOBAL context + provider
-  // config under `~/.pi/agent` (resolved from $HOME), and `pi` reads them from the
-  // same place. In a per-run container that home is disposable, but cat-bench runs
-  // on a developer's real machine, so point Pi at a throwaway HOME for the run —
-  // otherwise we'd clobber and leave behind the developer's own `~/.pi/agent`
-  // (AGENTS.md / models.json). Restored + removed in `finally`.
-  const piHome = await mkdtemp(join(tmpdir(), 'cat-bench-pihome-'))
-  const realHome = process.env.HOME
+  // Pi's context + provider config go into a throwaway config dir made for the run and
+  // handed to `pi` through `runPi`. cat-bench runs on a developer's real machine, so their own
+  // `~/.pi/agent` is never read or written (unseeded: their personal Pi setup stays out of the
+  // run). Removed in `finally`.
+  const piAgentDir = await createPiAgentDir()
+  const agentDir = piAgentDir.path
   try {
     await cloneRepo({
       repo: fixture.repo,
@@ -51,9 +50,8 @@ export async function runImplementation(
       dir,
       signal: deps.signal,
     })
-    process.env.HOME = piHome
-    await writeAgentsContext(prompt.system)
-    await writePiModelsConfig({ model: modelRef.model, proxyBaseUrl: endpoint.baseUrl })
+    await writeAgentsContext(prompt.system, { agentDir })
+    await writePiModelsConfig({ agentDir, model: modelRef.model, proxyBaseUrl: endpoint.baseUrl })
 
     const userPrompt = [
       `Block: ${fixture.block.title} (${fixture.block.type})`,
@@ -66,6 +64,7 @@ export async function runImplementation(
 
     const outcome = await runPi({
       cwd: dir,
+      agentDir,
       model: modelRef.model,
       userPrompt,
       sessionToken,
@@ -86,9 +85,7 @@ export async function runImplementation(
       },
     }
   } finally {
-    if (realHome === undefined) delete process.env.HOME
-    else process.env.HOME = realHome
     await rm(dir, { recursive: true, force: true })
-    await rm(piHome, { recursive: true, force: true })
+    await piAgentDir.dispose()
   }
 }

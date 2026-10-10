@@ -13,7 +13,7 @@
 // not be: filing an issue is not something this product does for you.
 //
 // **Provider-keyed, and a provider it cannot serve answers NULL rather than being served wrongly.**
-// The table is the seam CLAUDE.md's "never re-hardcode GitHub" asks for; `gitlab` is null for the
+// The table is the seam AGENTS.md's "never re-hardcode GitHub" asks for; `gitlab` is null for the
 // same reason `configureEnv.ts`'s `REPO_CREATION_URL` is, and it is worth stating because it is not
 // laziness: GitLab's API lives on the INSTANCE, and no `/api/v1` read publishes which instance a
 // workspace's connection talks to. The only base this code could invent is `gitlab.com`, which for a

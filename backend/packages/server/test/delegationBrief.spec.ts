@@ -144,6 +144,7 @@ async function delegationBrief(): Promise<DelegationBrief> {
     resolveRepoTarget: async () => REPO,
     resolveRepoOrigin: githubRepoOrigin,
     urlSafetyPolicy: undefined,
+    recordHarnessCalls: undefined,
     logger: noopLogger,
     clock: { now: () => 1_700_000_000_000 },
   })
@@ -223,6 +224,7 @@ describe('the brief and the harness job body compose the same instructions', () 
       resolveRepoTarget: async () => REPO,
       resolveRepoOrigin: githubRepoOrigin,
       urlSafetyPolicy: undefined,
+      recordHarnessCalls: undefined,
       logger: noopLogger,
       clock: { now: () => 0 },
     })

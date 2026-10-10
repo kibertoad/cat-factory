@@ -54,4 +54,4 @@ there.
 
 Both providers can be configured on one deployment at once: a workspace's repos just need to
 resolve to the right connection. The naming rules that keep that true (never re-hardcode `github`,
-never build a `https://github.com/...` URL) are in the root `CLAUDE.md`.
+never build a `https://github.com/...` URL) are in the root `AGENTS.md`.

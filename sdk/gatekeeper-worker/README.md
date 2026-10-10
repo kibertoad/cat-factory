@@ -325,7 +325,7 @@ key with no permissions.
 
 ## Tests
 
-The suite runs inside real `workerd` under `@cloudflare/vitest-pool-workers`, against a Worker
+The suite runs inside real `workerd` under `@cloudflare/vitest-plugin`, against a Worker
 built from this package's own factory with a real Durable Object, real WebCrypto and a real Cap'n
 Web client, talking to a scripted cat-factory origin bound as the pool's outbound service. The
 credential-custody story IS "the key is a Worker secret", so a Node mock of a Worker would prove

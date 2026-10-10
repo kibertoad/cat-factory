@@ -1,5 +1,312 @@
 # @cat-factory/node-server
 
+## 0.237.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/gates@0.12.0
+  - @cat-factory/orchestration@0.320.0
+  - @cat-factory/integrations@0.175.0
+  - @cat-factory/gitlab@0.24.0
+  - @cat-factory/server@0.332.0
+  - @cat-factory/agents@0.171.2
+  - @cat-factory/binary-generators@0.3.64
+  - @cat-factory/consensus@0.19.11
+  - @cat-factory/eks@0.1.403
+  - @cat-factory/observability-otel@0.23.57
+  - @cat-factory/prompt-fragments@1.1.60
+  - @cat-factory/spend@0.23.9
+  - @cat-factory/caching@0.20.98
+  - @cat-factory/observability-langfuse@0.11.64
+  - @cat-factory/provider-bedrock@0.7.556
+  - @cat-factory/provider-cloudflare@0.7.557
+  - @cat-factory/provider-s3@0.2.471
+
+## 0.236.1
+
+### Patch Changes
+
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/spend@0.23.8
+  - @cat-factory/agents@0.171.1
+  - @cat-factory/caching@0.20.97
+  - @cat-factory/consensus@0.19.10
+  - @cat-factory/eks@0.1.402
+  - @cat-factory/integrations@0.174.12
+  - @cat-factory/observability-otel@0.23.56
+  - @cat-factory/orchestration@0.319.1
+  - @cat-factory/provider-bedrock@0.7.555
+  - @cat-factory/provider-cloudflare@0.7.556
+  - @cat-factory/provider-s3@0.2.470
+  - @cat-factory/server@0.331.1
+  - @cat-factory/binary-generators@0.3.63
+  - @cat-factory/gates@0.11.63
+  - @cat-factory/gitlab@0.23.26
+  - @cat-factory/observability-langfuse@0.11.63
+  - @cat-factory/prompt-fragments@1.1.59
+
+## 0.236.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+  - @cat-factory/orchestration@0.319.0
+  - @cat-factory/server@0.331.0
+  - @cat-factory/binary-generators@0.3.62
+  - @cat-factory/consensus@0.19.9
+  - @cat-factory/eks@0.1.401
+  - @cat-factory/gates@0.11.62
+  - @cat-factory/gitlab@0.23.25
+  - @cat-factory/integrations@0.174.11
+  - @cat-factory/observability-otel@0.23.55
+  - @cat-factory/prompt-fragments@1.1.58
+  - @cat-factory/spend@0.23.7
+  - @cat-factory/caching@0.20.96
+  - @cat-factory/observability-langfuse@0.11.62
+  - @cat-factory/provider-bedrock@0.7.554
+  - @cat-factory/provider-cloudflare@0.7.555
+  - @cat-factory/provider-s3@0.2.469
+
+## 0.235.2
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/orchestration@0.318.0
+  - @cat-factory/server@0.330.0
+  - @cat-factory/agents@0.170.1
+  - @cat-factory/binary-generators@0.3.61
+  - @cat-factory/consensus@0.19.8
+  - @cat-factory/eks@0.1.400
+  - @cat-factory/gates@0.11.61
+  - @cat-factory/gitlab@0.23.24
+  - @cat-factory/integrations@0.174.10
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/observability-otel@0.23.54
+  - @cat-factory/prompt-fragments@1.1.57
+  - @cat-factory/spend@0.23.6
+  - @cat-factory/provider-bedrock@0.7.553
+  - @cat-factory/provider-cloudflare@0.7.554
+  - @cat-factory/caching@0.20.95
+  - @cat-factory/observability-langfuse@0.11.61
+  - @cat-factory/provider-s3@0.2.468
+
+## 0.235.1
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/orchestration@0.317.1
+  - @cat-factory/binary-generators@0.3.60
+  - @cat-factory/consensus@0.19.7
+  - @cat-factory/eks@0.1.399
+  - @cat-factory/gates@0.11.60
+  - @cat-factory/gitlab@0.23.23
+  - @cat-factory/integrations@0.174.9
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/observability-otel@0.23.53
+  - @cat-factory/prompt-fragments@1.1.56
+  - @cat-factory/server@0.329.1
+  - @cat-factory/spend@0.23.5
+  - @cat-factory/provider-bedrock@0.7.552
+  - @cat-factory/provider-cloudflare@0.7.553
+  - @cat-factory/caching@0.20.94
+  - @cat-factory/observability-langfuse@0.11.60
+  - @cat-factory/provider-s3@0.2.467
+
+## 0.235.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review gets its engine. `GuidedReviewService` opens a session for a linked repository's pull request, generates a structured overview of it, answers questions in independent threads and turns a thread's conclusions into comment drafts. Each of those is background work: the request persists a pending row and returns, and a `GuidedReviewRunner` drives it (a Cloudflare Workflow, a pg-boss queue on Node and standard local, a `node:sqlite` queue on a mothership-mode node), with a sweeper re-waking work whose claim lapsed.
+  
+  Answers come from an inline model with read tools over the PR pinned to the reviewed commit (`list_changed_files`, `read_diff`, `read_file` on either side, `list_directory`), under a per-job read budget, with file contents scrubbed of secrets. Drafts are kept only where the host could place them (a line inside a diff hunk on that side), and every refused proposal is recorded in the message's `draftReport`. A failure is settled with a reason from a closed vocabulary, which gains `head_moved`: once the PR moves past the reviewed commit, its changed files no longer describe that commit, so the job fails until the session is refreshed.
+  
+  `ConflictError` gains the `thread_busy` reason, translated in every locale. `fenceVerbatim` is extracted into `@cat-factory/agents`' shared prompt helpers. No routes expose the service yet; they land in the next slice.
+- 0ea28b8: Guided PR review is on the public API (surface version 1.76.0). `/api/v1/guided-reviews` opens, lists, reads, refreshes and deletes sessions, opens threads, asks questions and requests comment drafts, and `GET /api/v1/guided-reviews/{sessionId}/events` streams the session view as it changes. Reading takes a `read` key; opening, asking and drafting take `write`, because they spend model budget, and nothing here posts to the pull request. A key bound to a person acts as that person; an unbound key owns its own sessions on the workspace's credentials, and a session's `createdByKind` says which of the two owns it. The session list is keyset-paginated, newest created first.
+  
+  The four SDKs gain a `guidedReviews` resource group and the MCP server its tools (the stream excepted: a tool call has no streaming channel). Three value sets the new shapes share with earlier operations are pinned to their published type names, so no released SDK type is renamed.
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+
+### Patch Changes
+
+- 0ea28b8: The guided review store binds every settle to the claim that won it. `claimOverview` and `claimMessage` return a `GuidedReviewClaim` (or null), and `settleOverview`, `settleMessage` and `settleDrafts` require it, so a driver whose lease lapsed cannot land over the driver that took the work over. Every write is checked against the contracts schema the reads decode with, so an oversized outcome is refused at its writer instead of making the thread unreadable; `guidedReviewFailure` builds a failure whose raw detail fits. `settleDrafts` takes `GuidedReviewDraftProposal` and the store fills in the ids it owns. Deleting a session removes threads before messages and drafts on both runtimes, and a node recovers its own jobs from its local durable queue.
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+  - @cat-factory/orchestration@0.317.0
+  - @cat-factory/server@0.329.0
+  - @cat-factory/binary-generators@0.3.59
+  - @cat-factory/consensus@0.19.6
+  - @cat-factory/eks@0.1.398
+  - @cat-factory/gates@0.11.59
+  - @cat-factory/gitlab@0.23.22
+  - @cat-factory/integrations@0.174.8
+  - @cat-factory/observability-otel@0.23.52
+  - @cat-factory/prompt-fragments@1.1.55
+  - @cat-factory/spend@0.23.4
+  - @cat-factory/caching@0.20.93
+  - @cat-factory/observability-langfuse@0.11.59
+  - @cat-factory/provider-bedrock@0.7.551
+  - @cat-factory/provider-cloudflare@0.7.552
+  - @cat-factory/provider-s3@0.2.466
+
+## 0.234.0
+
+### Minor Changes
+
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/orchestration@0.316.0
+  - @cat-factory/server@0.328.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/binary-generators@0.3.58
+  - @cat-factory/consensus@0.19.5
+  - @cat-factory/eks@0.1.397
+  - @cat-factory/gates@0.11.58
+  - @cat-factory/gitlab@0.23.21
+  - @cat-factory/integrations@0.174.7
+  - @cat-factory/observability-otel@0.23.51
+  - @cat-factory/prompt-fragments@1.1.54
+  - @cat-factory/spend@0.23.3
+  - @cat-factory/caching@0.20.92
+  - @cat-factory/observability-langfuse@0.11.58
+  - @cat-factory/provider-bedrock@0.7.550
+  - @cat-factory/provider-cloudflare@0.7.551
+  - @cat-factory/provider-s3@0.2.465
+
+## 0.233.0
+
+### Minor Changes
+
+- 57d9db3: A delegated executor's reported usage now reaches the step it belongs to. The step's metrics, the run totals and the "usage not reported by <executor>" gap all read `llm_call_metrics`, while a result's `usage` was written only to the usage ledger, so a `self-reported` executor's step still read as unreported. The delegated arm now files the figure as one job-level call metric through the same recorder a subscription harness uses (`standsForJob`, counted as the job's call), keyed on the dispatch's job id so a replayed poll records nothing twice.
+  
+  That row is filed under kernel's new `DELEGATED_USAGE_PROVIDER` and is never priced: `LlmObservabilityService` answers no rate for it, so the step and the run totals show the tokens with an unknown cost instead of the deployment's fallback rate.
+  
+  `DelegationUpdate`'s `failed` arm gains `usage`, with the meaning it has on a result. A run that fails late has usually spent most of its tokens, and it previously had no way to say so. `AgentJobUpdate`'s `failed` arm gains `usage` and `usageBilling` to carry it, and the failed-poll path meters it into the usage ledger and stamps the step's `usageBilling`, as the completion path does for a result.
+  
+  Each settled delegation attempt records `usageReported`, and `delegatedSpendUnreported` reports a gap when the FINAL attempt reported nothing, even if an earlier attempt's row put calls in the step's metrics.
+  
+  `RecordHarnessCalls` is exported from `@cat-factory/orchestration` as the one recorder type. `buildDelegatedAgentExecutor` takes a required `recordHarnessCalls` (its value may be `undefined`), so a facade cannot wire it on one runtime and forget it on the other. The Worker builds one recorder and hands it to both the container and the delegated arm; `buildWorkerJobAccountingDeps` now takes that recorder instead of building its own. Conformance's `withDelegatedArm` takes the facade's recorder, and a new conformance assertion checks on every runtime that a self-reported usage lands on the step unpriced.
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/orchestration@0.315.0
+  - @cat-factory/server@0.327.0
+  - @cat-factory/agents@0.168.3
+  - @cat-factory/binary-generators@0.3.57
+  - @cat-factory/caching@0.20.91
+  - @cat-factory/consensus@0.19.4
+  - @cat-factory/eks@0.1.396
+  - @cat-factory/gates@0.11.57
+  - @cat-factory/gitlab@0.23.20
+  - @cat-factory/integrations@0.174.6
+  - @cat-factory/observability-langfuse@0.11.57
+  - @cat-factory/observability-otel@0.23.50
+  - @cat-factory/prompt-fragments@1.1.53
+  - @cat-factory/provider-bedrock@0.7.549
+  - @cat-factory/provider-cloudflare@0.7.550
+  - @cat-factory/provider-s3@0.2.464
+  - @cat-factory/spend@0.23.2
+
+## 0.232.3
+
+### Patch Changes
+
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/consensus@0.19.3
+  - @cat-factory/integrations@0.174.5
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/orchestration@0.314.3
+  - @cat-factory/provider-bedrock@0.7.548
+  - @cat-factory/provider-cloudflare@0.7.549
+  - @cat-factory/provider-s3@0.2.463
+  - @cat-factory/server@0.326.3
+  - @cat-factory/spend@0.23.1
+  - @cat-factory/binary-generators@0.3.56
+  - @cat-factory/eks@0.1.395
+  - @cat-factory/caching@0.20.90
+  - @cat-factory/gates@0.11.56
+  - @cat-factory/gitlab@0.23.19
+  - @cat-factory/observability-langfuse@0.11.56
+  - @cat-factory/observability-otel@0.23.49
+  - @cat-factory/prompt-fragments@1.1.52
+
 ## 0.232.2
 
 ### Patch Changes

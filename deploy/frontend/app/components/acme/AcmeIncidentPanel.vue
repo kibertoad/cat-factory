@@ -43,7 +43,7 @@ const compliant = computed(() => (block.value?.id.length ?? 0) % 2 === 0)
     <div class="flex flex-col gap-2 pt-1" data-testid="acme-incident-panel">
       <div class="flex items-center gap-2">
         <span
-          class="rounded px-1.5 py-0.5 text-3xs font-semibold uppercase"
+          class="rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase"
           :class="
             compliant
               ? 'bg-app-success-500/15 text-app-success-300'

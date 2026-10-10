@@ -74,20 +74,34 @@ export async function recordJobFacts(
   // `'subscription'` so it's counted for the usage report but EXCLUDED from the budget
   // rollups (a flat-rate quota plan costs nothing per token); an inline metered call
   // defaults to `'metered'` and is summed by the spend gate as before.
-  if (result.usage) {
-    const billing = result.usageBilling ?? 'metered'
-    await deps.spend.record({
-      workspaceId,
-      executionId: instance.id,
-      agentKind: step.agentKind,
-      model: result.model ?? 'unknown',
-      usage: result.usage,
-      billing,
-      vendor: result.usageVendor ?? null,
-    })
-    // The same fact on the STEP, because that is where the money is read: `step.metrics`
-    // carries a `costEstimate` priced identically for both billing kinds, and without this a
-    // subscription step's list price renders as spend.
-    step.usageBilling = billing
-  }
+  await meterJobUsage(deps.spend, workspaceId, instance, step, result)
+}
+
+/**
+ * Meter a settled job's reported usage into the ledger and stamp its billing on the step. Shared
+ * by the completed path above and the failed poll, because a job that fails late has spent its
+ * tokens all the same.
+ */
+export async function meterJobUsage(
+  spend: SpendService,
+  workspaceId: string,
+  instance: ExecutionInstance,
+  step: PipelineStep,
+  job: Pick<AgentRunResult, 'usage' | 'usageBilling' | 'usageVendor' | 'model'>,
+): Promise<void> {
+  if (!job.usage) return
+  const billing = job.usageBilling ?? 'metered'
+  await spend.record({
+    workspaceId,
+    executionId: instance.id,
+    agentKind: step.agentKind,
+    model: job.model ?? 'unknown',
+    usage: job.usage,
+    billing,
+    vendor: job.usageVendor ?? null,
+  })
+  // The same fact on the STEP, because that is where the money is read: `step.metrics`
+  // carries a `costEstimate` priced identically for both billing kinds, and without this a
+  // subscription step's list price renders as spend.
+  step.usageBilling = billing
 }

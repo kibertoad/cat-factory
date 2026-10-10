@@ -143,7 +143,7 @@ function choose(id: string) {
             <UButton
               color="neutral"
               variant="ghost"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm"
               :class="[
                 refused.has('') ? 'cursor-not-allowed opacity-50' : 'hover:bg-elevated/60',
                 modelValue ? 'text-toned' : 'text-app-100',
@@ -171,7 +171,7 @@ function choose(id: string) {
             <UButton
               color="neutral"
               variant="ghost"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm"
               :class="[
                 refused.has(p.id) ? 'cursor-not-allowed opacity-50' : 'hover:bg-elevated/60',
                 modelValue === p.id ? 'text-app-100' : 'text-toned',

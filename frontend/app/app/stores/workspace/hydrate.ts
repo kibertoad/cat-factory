@@ -10,6 +10,7 @@ import { useEnvironmentTestStore } from '~/stores/environmentTest'
 import { useExecutionStore } from '~/stores/execution'
 import { useFragmentsStore } from '~/stores/fragments'
 import { useGitHubStore } from '~/stores/github'
+import { useGuidedReviewStore } from '~/stores/guidedReview'
 import { useInitiativesStore } from '~/stores/initiative'
 import { useKaizenStore } from '~/stores/kaizen'
 import { useObservabilityStore } from '~/stores/observability'
@@ -45,6 +46,7 @@ export function resetPerBoardCaches() {
   useGitHubStore().reset()
   useInitiativesStore().reset()
   useDocInterviewStore().reset()
+  useGuidedReviewStore().reset()
   // The per-RUN observability + Kaizen caches. An execution id belongs to the board that owns it
   // and neither store is part of the snapshot, so nothing else ever evicted a key: a session that
   // visited several boards kept every run it had ever opened a panel on.

@@ -89,7 +89,7 @@ const diffCanvas = ref<HTMLCanvasElement | null>(null)
 // there reads as "no difference", the same zero the difference composite produces, in either colour
 // mode, so no mode-following token fits. Bound as a const so the guard's `fixed-colour-ok:` marker
 // stays on the class string; the inline-template form gets reflowed off its own line by oxfmt.
-const DIFF_CANVAS_CLASS = 'w-full rounded border border-default bg-black' // fixed-colour-ok: diff canvas backdrop
+const DIFF_CANVAS_CLASS = 'w-full rounded-sm border border-default bg-black' // fixed-colour-ok: diff canvas backdrop
 const CAP = 2000
 // Bumped on every renderDiff entry so a render whose async work (image decode) is overtaken
 // by a newer mode/image change bails out instead of drawing stale pixels onto the canvas.
@@ -164,7 +164,7 @@ watch(pendingRef, (file) => {
           variant="ghost"
           v-for="m in MODES"
           :key="m.id"
-          class="rounded px-1.5 py-1 text-muted hover:bg-transparent hover:text-default"
+          class="rounded-sm px-1.5 py-1 text-muted hover:bg-transparent hover:text-default"
           :class="mode === m.id ? 'bg-elevated text-app-100' : ''"
           :title="m.label"
           @click="mode = m.id"
@@ -184,7 +184,7 @@ watch(pendingRef, (file) => {
           v-if="actualUrl"
           color="neutral"
           variant="ghost"
-          class="block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600 hover:bg-transparent"
+          class="block w-full overflow-hidden rounded-sm border border-default p-0 hover:border-app-600 hover:bg-transparent"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -195,7 +195,7 @@ watch(pendingRef, (file) => {
         </UButton>
         <div
           v-else
-          class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-2xs text-app-600"
+          class="flex h-32 items-center justify-center rounded-sm border border-dashed border-muted text-2xs text-app-600"
         >
           {{
             props.blobs.statusFor(actualId) === 'error'
@@ -230,7 +230,7 @@ watch(pendingRef, (file) => {
             <UButton
               variant="ghost"
               color="neutral"
-              class="group relative block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600 hover:bg-transparent"
+              class="group relative block w-full overflow-hidden rounded-sm border border-default p-0 hover:border-app-600 hover:bg-transparent"
               @click="referenceId && emit('expand', referenceId)"
             >
               <img
@@ -239,7 +239,7 @@ watch(pendingRef, (file) => {
                 class="w-full cursor-zoom-in"
               />
               <span
-                class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
+                class="absolute bottom-1 end-1 rounded-sm bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
                 @click.stop="open()"
               >
                 {{ t('media.compare.replace') }}
@@ -252,7 +252,7 @@ watch(pendingRef, (file) => {
 
     <!-- OVERLAY (onion-skin) -->
     <div v-else-if="mode === 'overlay'" class="space-y-2">
-      <div class="relative w-full overflow-hidden rounded border border-default">
+      <div class="relative w-full overflow-hidden rounded-sm border border-default">
         <img :src="refUrl" :alt="t('media.compare.referenceAlt', { view })" class="w-full" />
         <!-- object-contain so a differing aspect ratio onion-skins undistorted over the reference. -->
         <img
@@ -280,7 +280,7 @@ watch(pendingRef, (file) => {
     <div
       v-else-if="mode === 'swipe'"
       ref="swipeBox"
-      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded border border-default"
+      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded-sm border border-default"
       @pointerdown="onSwipeDown"
       @pointermove="moveSwipe"
       @pointerup="onSwipeUp"
@@ -312,11 +312,11 @@ watch(pendingRef, (file) => {
         </span>
       </div>
       <span
-        class="absolute left-1 top-1 rounded bg-app-950/70 px-1 text-3xs uppercase text-toned"
+        class="absolute left-1 top-1 rounded-sm bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.actual') }}</span
       >
       <span
-        class="absolute right-1 top-1 rounded bg-app-950/70 px-1 text-3xs uppercase text-toned"
+        class="absolute right-1 top-1 rounded-sm bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.reference') }}</span
       >
     </div>

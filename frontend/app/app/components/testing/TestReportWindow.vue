@@ -456,7 +456,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               <pre
                 v-if="showInfraSetupLogs"
                 data-testid="tester-infra-setup-logs"
-                class="mt-2 max-h-64 overflow-auto rounded bg-app-950/70 p-2 font-mono text-2xs leading-relaxed text-toned"
+                class="mt-2 max-h-64 overflow-auto rounded-sm bg-app-950/70 p-2 font-mono text-2xs leading-relaxed text-toned"
                 >{{ infraSetup.logs }}</pre>
             </template>
           </div>
@@ -545,7 +545,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     class="flex items-center gap-1.5 text-xs text-toned"
                   >
                     <span
-                      class="rounded px-1 text-3xs uppercase"
+                      class="rounded-sm px-1 text-3xs uppercase"
                       :class="SEVERITY_META[c.severity].chip"
                       >{{ SEVERITY_LABELS[c.severity] }}</span
                     >
@@ -754,7 +754,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     <div class="flex items-center gap-1.5">
                       <span class="text-xs font-medium text-default">{{ c.title }}</span>
                       <span
-                        class="rounded px-1 text-3xs uppercase"
+                        class="rounded-sm px-1 text-3xs uppercase"
                         :class="SEVERITY_META[c.severity].chip"
                       >
                         {{ SEVERITY_LABELS[c.severity] }}
@@ -776,7 +776,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     v-for="(s, si) in g.screenshots"
                     :key="`shot${si}`"
                     data-testid="tester-screenshot"
-                    class="group relative block h-20 w-28 shrink-0 overflow-hidden rounded border border-default bg-app-950/60 p-0 hover:border-app-600 hover:bg-transparent"
+                    class="group relative block h-20 w-28 shrink-0 overflow-hidden rounded-sm border border-default bg-app-950/60 p-0 hover:border-app-600 hover:bg-transparent"
                     :title="s.view"
                     @click="openShot(s.artifactId)"
                   >

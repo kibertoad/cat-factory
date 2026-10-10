@@ -97,7 +97,7 @@ function choose(id: string) {
             <UButton
               color="neutral"
               variant="ghost"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
               :class="modelValue ? 'text-toned' : 'text-app-100'"
               data-testid="pipeline-option-none"
               @mouseenter="hoverId = ''"
@@ -116,7 +116,7 @@ function choose(id: string) {
             <UButton
               color="neutral"
               variant="ghost"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
               :class="modelValue === p.id ? 'text-app-100' : 'text-toned'"
               :data-testid="`pipeline-option-${p.id}`"
               @mouseenter="hoverId = p.id"

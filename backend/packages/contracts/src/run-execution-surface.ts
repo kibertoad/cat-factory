@@ -94,6 +94,11 @@ export const runDelegationAttemptSchema = v.object({
   url: v.optional(v.nullable(v.string())),
   /** How the attempt ended, in the executor's own words. Absent while it is still running. */
   outcome: v.optional(v.nullable(v.string())),
+  /**
+   * Whether the settled attempt reported its usage. Absent while it runs, and on an attempt
+   * settled without a poll (a cancellation, a dispatch that threw).
+   */
+  usageReported: v.optional(v.boolean()),
 })
 export type RunDelegationAttempt = v.InferOutput<typeof runDelegationAttemptSchema>
 
@@ -188,7 +193,7 @@ export type RunDelegation = v.InferOutput<typeof runDelegationSchema>
  * Here rather than in the engine because both sides have to agree about the answer: the backend
  * folds it into the debug overview's reporting gaps, and the SPA prints "usage not reported by
  * <executor>" on the step card. Stated twice, the two drifted in both directions at once, which is
- * what this seam exists to make impossible (see the contracts rule in CLAUDE.md).
+ * what this seam exists to make impossible (see the contracts rule in AGENTS.md).
  *
  * Read off the STEP's own record, never off the executor's declared `telemetry`. The declaration
  * is a deployment's INTENTION, and what a reader needs is what actually landed: an executor
@@ -202,12 +207,16 @@ export type RunDelegation = v.InferOutput<typeof runDelegationSchema>
  * "never will" on exactly the reads a person takes while watching a run.
  */
 export function delegatedSpendUnreported(step: {
-  delegated?: { status: string } | null
+  delegated?: { status: string; attempts?: ReadonlyArray<{ usageReported?: boolean }> } | null
   metrics?: { calls: number } | null
 }): boolean {
   const record = step.delegated
   if (!record) return false
   if (record.status === 'starting' || record.status === 'running') return false
+  // The FINAL attempt saying it reported nothing is a gap even when the metrics hold calls: those
+  // belong to an earlier attempt, because a step's metrics are folded per agent kind across every
+  // re-dispatch.
+  if (record.attempts?.at(-1)?.usageReported === false) return true
   // `metrics` is the per-step LLM rollup the observability sink folds. Absent, or present with no
   // calls in it, both mean the same thing here: nothing about this step's model work reached the
   // platform.

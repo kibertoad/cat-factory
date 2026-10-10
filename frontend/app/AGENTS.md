@@ -3,8 +3,8 @@
 The user-facing app, packaged as a **reusable Nuxt 4 layer** a deployment consumes with
 `extends: ['@cat-factory/app']`. Thin client, no business logic: every mutation calls the backend
 Worker and the Pinia stores hydrate from server snapshots and live WebSocket updates. The full
-guide is [`README.md`](./README.md); this file is the short orientation and the pointers Claude
-Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
+guide is [`README.md`](./README.md); this file is the short orientation and the pointers a coding
+agent loads as instructions when it reads a file here.
 
 **Entry:** `nuxt.config.ts` (the layer's `main`). Source lives under `app/` (the Nuxt srcDir):
 `app.vue` is the root; `app/pages/index.vue` is the board, beside three standalone routes
@@ -36,6 +36,10 @@ Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
   literal, which does not scale with a theme's `fontSize`; a section eyebrow is
   `common/SectionLabel.vue`. [Rule](./README.md#type-through-named-steps-never-a-pixel-literal),
   guarded by `scripts/check-frontend-type-scale.mjs`.
+- **Radius through any `rounded-*` step** (`main.css` binds the whole scale onto `--ui-radius`),
+  never an arbitrary value; in CSS, `var(--ui-radius)` or a `calc()` of it, never a `--radius-*`
+  variable or a literal. [Rule](./README.md#radius-through-the-theme-scale), guarded by
+  `scripts/check-frontend-radius.mjs`.
 - **A control is its Nuxt UI component** (`UButton`, `UInput`, `USelect`, `UTable`, `UCollapsible`,
   `UForm`, `ULink`), never the raw element; an icon-only button is `common/IconButton.vue`, which
   owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
@@ -51,7 +55,7 @@ never drift. Where the SPA's own rules override the skill: [`README.md` → Nuxt
 ## Verify
 
 The frontend has no `dev` or `lint` script of its own: it is consumed through `extends`, and linting
-is whole-tree from the root (CLAUDE.md). Run these where stated:
+is whole-tree from the root (AGENTS.md). Run these where stated:
 
 - `pnpm dev:frontend` from the repo root, with `NUXT_PUBLIC_API_BASE` pointing at a running Worker
   (the dev server lives in `deploy/frontend`).
@@ -61,8 +65,8 @@ is whole-tree from the root (CLAUDE.md). Run these where stated:
 - `pnpm lint` from the repo root (oxlint + oxfmt over the whole tree, once).
 - `pnpm --filter @cat-factory/app i18n:check` and `i18n:parity` when you touch copy or the catalog.
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
-  `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-primitives.mjs`,
-  `node scripts/check-file-size.mjs` from the repo
+  `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
+  `node scripts/check-frontend-primitives.mjs`, `node scripts/check-file-size.mjs` from the repo
   root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),

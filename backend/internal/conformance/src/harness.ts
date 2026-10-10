@@ -11,6 +11,7 @@ import type {
   BlockRepository,
   BoardChange,
   DocInterviewRepository,
+  GuidedReviewRepository,
   AccountRiskPolicyRepository,
   AccountSettingsRepository,
   DocumentRepository,
@@ -362,6 +363,11 @@ export interface ConformanceApp {
    * through the repository directly rather than an HTTP flow.
    */
   docInterviewRepository(): DocInterviewRepository
+  /**
+   * The facade's guided-PR-review repository over its real store. Its contract is concurrency
+   * (one live answer per thread, single-claim drivers), so it is asserted at the repository layer.
+   */
+  guidedReviewRepository(): GuidedReviewRepository
   /**
    * The facade's account-settings repository over its real store, so the suite can assert the
    * NON-SECRET config read (`getConfigByAccount`) behaves identically on D1 and Postgres.

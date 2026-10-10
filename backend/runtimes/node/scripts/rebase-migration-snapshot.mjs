@@ -31,7 +31,7 @@
 // delta from the prior state to the merged schema — usually it already does, since it
 // was the human-authored intent; eyeball it after running, then `pnpm db:check`.
 //
-// See CLAUDE.md → "Resolving conflicting Drizzle migrations" for the full playbook.
+// See AGENTS.md → "Resolving conflicting Drizzle migrations" for the full playbook.
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
