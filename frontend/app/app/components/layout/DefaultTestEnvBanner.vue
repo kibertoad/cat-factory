@@ -90,14 +90,15 @@ function openConfig(event: MouseEvent) {
               {{ t('layout.defaultTestEnvBanner.action') }}
             </UButton>
             <!-- The URL itself, shown so it can be read and copied, not just clicked. -->
-            <a
-              :href="configUrl"
+            <ULink
+              raw
+              :to="configUrl"
               class="min-w-0 truncate font-mono text-2xs text-app-info-300/80 underline decoration-dotted underline-offset-2 hover:text-app-info-200"
               data-testid="default-test-env-url"
               @click="openConfig"
             >
               {{ configUrl }}
-            </a>
+            </ULink>
           </div>
         </div>
       </div>

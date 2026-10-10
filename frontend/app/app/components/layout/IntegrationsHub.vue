@@ -427,10 +427,11 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
             {{ group.title }}
           </SectionLabel>
           <div class="space-y-1.5">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="item in group.items"
               :key="item.key"
-              type="button"
               class="flex w-full items-center gap-3 rounded-lg border border-default bg-default/50 px-3 py-2.5 text-start transition hover:border-muted hover:bg-default"
               @click="item.onClick()"
             >
@@ -462,13 +463,14 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                 name="i-lucide-chevron-right"
                 class="h-4 w-4 shrink-0 text-dimmed rtl:-scale-x-100"
               />
-            </button>
+            </UButton>
           </div>
 
           <!-- De-emphasised workspace-config link (e.g. issue tracker settings). -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="group.footerLink"
-            type="button"
             class="mt-1.5 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-start text-xs text-muted transition hover:bg-default/60 hover:text-default"
             @click="group.footerLink.onClick()"
           >
@@ -481,7 +483,7 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
               name="i-lucide-chevron-right"
               class="h-3.5 w-3.5 shrink-0 text-app-600 rtl:-scale-x-100"
             />
-          </button>
+          </UButton>
         </section>
       </div>
     </template>

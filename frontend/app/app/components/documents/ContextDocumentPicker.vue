@@ -538,10 +538,11 @@ onMounted(() => {
 
       <div class="max-h-56 space-y-0.5 overflow-y-auto">
         <!-- Already-imported documents (linked directly, no re-fetch). -->
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="d in importedRows"
           :key="`imp:${d.externalId}`"
-          type="button"
           class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           @click="pickImported(d.externalId, d.title, d.excerpt)"
         >
@@ -550,26 +551,28 @@ onMounted(() => {
           <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
             t('documents.picker.importedBadge')
           }}</UBadge>
-        </button>
+        </UButton>
 
         <!-- Source search hits (imported on add). -->
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="r in searchRows"
           :key="`hit:${r.externalId}`"
-          type="button"
           class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           @click="pickSearch(r)"
         >
           <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-muted" />
           <span class="truncate">{{ r.title }}</span>
-        </button>
+        </UButton>
 
         <!-- Explicit URL/ID reference, RESOLVED: the row shows the canonical form the source
              settled on, so a share link's title segment and tracking params are visibly gone
              before the attachment is staged. -->
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-if="refRow"
-          type="button"
           class="flex w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           data-testid="doc-ref-attach"
           @click="pickRef(refRow)"
@@ -606,7 +609,7 @@ onMounted(() => {
           >
             {{ t('documents.picker.importedBadge') }}
           </UBadge>
-        </button>
+        </UButton>
 
         <EmptyState
           v-if="empty"

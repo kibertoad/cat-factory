@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
       "attach": "Ekle"
-    }
+    },
+    "removePending": "{name} öğesini kaldır"
   },
   "errors": {
     "generic": {
@@ -5474,7 +5475,8 @@
         "releaseInteractive": "Uygulama içi varsayılan olmaktan çıkar",
         "claimUnattended": "Gözetimsiz varsayılan yap",
         "releaseUnattended": "Gözetimsiz varsayılan olmaktan çıkar"
-      }
+      },
+      "removeLabel": "{label} etiketini kaldır"
     },
     "progress": {
       "status": {
@@ -6398,7 +6400,8 @@
       "heading": "Referans tasarım yükle",
       "viewPlaceholder": "Görünüm adı (örn. login)",
       "tipReady": "İpucu: referansını ayarlamak için bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
-      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın."
+      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
+      "choose": "Dosya seç"
     },
     "requestFix": {
       "heading": "Düzeltme iste",
@@ -8528,6 +8531,7 @@
     "title": "Üretilen adaylar",
     "titleWithBlock": "Üretilen adaylar: {title}",
     "subtitle": "Her entegrasyonun ürettiğini karşılaştırın ve istediğinizi tutun",
+    "pickOne": "Birini seçin. Bir aday seçmek önceki seçimi kaldırır.",
     "automatic": "Yalnızca bir aday üretildi, bu yüzden otomatik olarak tutuldu. Kimse incelemedi.",
     "unlabelledSubject": "Konu bildirilmedi",
     "noPreview": "Önizleme yok",

@@ -142,6 +142,11 @@ const timeboxHours = ref<number | undefined>(undefined)
 // default — an expedition exists to cover ground nobody thought to look at, so narrowing it is
 // the deliberate act) plus an optional focus folded into every angle's prompt.
 const fishingPhaseIds = ref<string[]>([])
+function toggleFishingPhase(id: string, checked: boolean) {
+  fishingPhaseIds.value = checked
+    ? [...fishingPhaseIds.value, id]
+    : fishingPhaseIds.value.filter((x) => x !== id)
+}
 const fishingFocus = ref('')
 /** Held as a string because the input is a text field; parsed at submit, blank ⇒ the default. */
 const fishingMaxPasses = ref('')
@@ -1105,23 +1110,19 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               :description="t('board.addTask.bugFishingFields.angles.hint')"
             >
               <div class="grid gap-1.5 sm:grid-cols-2">
-                <label
+                <!-- Each angle keeps its own test hook, so the boolean is derived from the id
+                     list rather than bound through a checkbox group. -->
+                <UCheckbox
                   v-for="phase in BUG_FISHING_PHASES"
                   :key="phase.id"
-                  class="flex items-start gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-elevated/40"
-                >
-                  <input
-                    v-model="fishingPhaseIds"
-                    type="checkbox"
-                    :value="phase.id"
-                    class="mt-0.5 accent-app-info-500"
-                    :data-testid="`add-task-fishing-angle-${phase.id}`"
-                  />
-                  <span class="min-w-0">
-                    <span class="block text-default">{{ phase.title }}</span>
-                    <span class="block text-2xs text-dimmed">{{ phase.goal }}</span>
-                  </span>
-                </label>
+                  size="xs"
+                  :model-value="fishingPhaseIds.includes(phase.id)"
+                  :label="phase.title"
+                  :description="phase.goal"
+                  class="rounded-md px-1.5 py-1 hover:bg-elevated/40"
+                  :data-testid="`add-task-fishing-angle-${phase.id}`"
+                  @update:model-value="toggleFishingPhase(phase.id, $event === true)"
+                />
               </div>
               <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-2xs text-dimmed">
                 {{ t('board.addTask.bugFishingFields.angles.allSelected') }}

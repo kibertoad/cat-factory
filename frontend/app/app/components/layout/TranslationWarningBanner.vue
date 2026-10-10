@@ -39,15 +39,16 @@ function dismiss() {
         <span class="mx-1.5 text-app-warning-400/60">·</span>
         <i18n-t keypath="language.warning.body" tag="span" scope="global">
           <template #repoLink>
-            <a
-              :href="REPO_URL"
+            <ULink
+              raw
+              :to="REPO_URL"
               target="_blank"
               rel="noopener noreferrer"
               class="inline-flex items-center gap-1 font-medium text-app-info-300 hover:underline"
             >
               {{ t('language.warning.repoLinkLabel') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
         </i18n-t>
       </p>

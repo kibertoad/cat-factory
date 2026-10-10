@@ -197,8 +197,9 @@ async function retry() {
     />
 
     <div class="mt-2 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/40 text-app-error-200 hover:bg-app-error-900/70 disabled:opacity-60"
         :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
         :disabled="retrying || !access.canExecuteRuns.value"
@@ -211,11 +212,12 @@ async function retry() {
           :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
         />
         {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
-      </button>
+      </UButton>
 
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="run.kind === 'bootstrap'"
-        type="button"
         class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/20 text-app-error-300 hover:bg-app-error-900/50"
         :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
         data-testid="agent-failure-inspect"
@@ -223,16 +225,17 @@ async function retry() {
       >
         <UIcon name="i-lucide-activity" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
         {{ t('observability.modelActivity') }}
-      </button>
+      </UButton>
 
       <!-- Environment provisioning failures are almost always a deploy-backend / provider-config
            issue, so link straight to where it's set up rather than leaving the user to hunt. The
            destination + label follow the cause: a `deploy_runner_unwired` failure needs the runner
            pool (Agent containers tab), every other cause needs the environment provider (Test
            environments tab) — see `routesToRunnerPool`. -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="isEnvironmentFailure"
-        type="button"
         class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/20 text-app-error-300 hover:bg-app-error-900/50"
         :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
         data-testid="agent-failure-configure-environment"
@@ -240,7 +243,7 @@ async function retry() {
       >
         <UIcon name="i-lucide-settings" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
         {{ failureSetupLabel }}
-      </button>
+      </UButton>
     </div>
   </div>
 </template>

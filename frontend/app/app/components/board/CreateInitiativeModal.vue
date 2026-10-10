@@ -193,16 +193,17 @@ async function create() {
         <div v-if="presets.length > 1" class="space-y-1.5">
           <span class="text-xs font-medium text-toned">{{ t('initiative.create.preset') }}</span>
           <div class="grid gap-2" data-testid="initiative-preset-picker">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="p in presets"
               :key="p.id"
-              type="button"
               :data-testid="`initiative-preset-option-${p.id}`"
               :aria-pressed="p.id === selectedPresetId"
               class="flex items-start gap-3 rounded-md border px-3 py-2 text-left transition"
               :class="
                 p.id === selectedPresetId
-                  ? 'border-primary bg-primary/10'
+                  ? 'border-primary bg-primary/10 hover:bg-primary/10 focus-visible:bg-primary/10 disabled:bg-primary/10'
                   : 'border-muted hover:border-app-600'
               "
               @click="selectPreset(p.id)"
@@ -220,7 +221,7 @@ async function create() {
                   {{ p.presentation.description }}
                 </span>
               </span>
-            </button>
+            </UButton>
           </div>
         </div>
 

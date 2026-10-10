@@ -99,20 +99,22 @@ function remove(id: string) {
       <span class="text-dimmed">
         {{ t('settings.serviceFragmentDefaults.footer.question') }}
       </span>
-      <button
-        type="button"
-        class="font-medium text-primary hover:underline"
+      <UButton
+        color="primary"
+        variant="link"
+        class="p-0 text-2xs font-medium text-primary hover:underline"
         @click="ui.openFragmentLibrary()"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
-      </button>
-      <button
-        type="button"
-        class="font-medium text-primary hover:underline"
+      </UButton>
+      <UButton
+        color="primary"
+        variant="link"
+        class="p-0 text-2xs font-medium text-primary hover:underline"
         @click="ui.openAccountSettings('fragments')"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageAccount') }}
-      </button>
+      </UButton>
     </div>
   </div>
 </template>

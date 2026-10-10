@@ -514,21 +514,24 @@ function toastRemoved() {
 
       <!-- Local mode: a personal override for THIS machine, layered over the workspace handler. -->
       <div v-if="userOverridesOn" class="border-t border-default pt-2">
-        <SectionLabel
-          as="button"
-          type="button"
-          class="flex w-full items-center gap-1.5 text-start hover:text-default"
+        <UButton
+          color="neutral"
+          variant="link"
+          class="group w-full p-0"
+          :aria-expanded="showKubeOverride"
           @click="showKubeOverride = !showKubeOverride"
         >
-          <UIcon
-            :name="showKubeOverride ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-            class="h-3.5 w-3.5"
-          />
-          {{ t('settings.infrastructure.handler.personalOverride') }}
-          <UBadge v-if="kubeUserHandler" color="primary" variant="subtle" size="sm">
-            {{ t('settings.infrastructure.handler.overrideActive') }}
-          </UBadge>
-        </SectionLabel>
+          <SectionLabel as="span" class="flex w-full items-center gap-1.5 group-hover:text-default">
+            <UIcon
+              :name="showKubeOverride ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+              class="h-3.5 w-3.5"
+            />
+            {{ t('settings.infrastructure.handler.personalOverride') }}
+            <UBadge v-if="kubeUserHandler" color="primary" variant="subtle" size="sm">
+              {{ t('settings.infrastructure.handler.overrideActive') }}
+            </UBadge>
+          </SectionLabel>
+        </UButton>
         <div v-if="showKubeOverride" class="mt-2 space-y-2">
           <p class="text-2xs text-dimmed">
             {{ t('settings.infrastructure.handler.personalOverrideHint') }}

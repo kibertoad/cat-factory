@@ -40,6 +40,10 @@ agent loads as instructions when it reads a file here.
   never an arbitrary value; in CSS, `var(--ui-radius)` or a `calc()` of it, never a `--radius-*`
   variable or a literal. [Rule](./README.md#radius-through-the-theme-scale), guarded by
   `scripts/check-frontend-radius.mjs`.
+- **A control is its Nuxt UI component** (`UButton`, `UInput`, `USelect`, `UTable`, `UCollapsible`,
+  `UForm`, `ULink`), never the raw element; an icon-only button is `common/IconButton.vue`, which
+  owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
+  `scripts/check-frontend-primitives.mjs`.
 
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches
 WHEN to use which component and HOW to build well; the [`nuxt-ui` MCP server](../../.mcp.json)
@@ -62,7 +66,7 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
 - `pnpm --filter @cat-factory/app i18n:check` and `i18n:parity` when you touch copy or the catalog.
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
-  `node scripts/check-file-size.mjs` from the repo
+  `node scripts/check-frontend-primitives.mjs`, `node scripts/check-file-size.mjs` from the repo
   root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),

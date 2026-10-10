@@ -281,10 +281,11 @@ function indexOf(cmd: Command) {
             <SectionLabel as="p" class="px-2 pb-1 pt-2">
               {{ group.name }}
             </SectionLabel>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="cmd in group.items"
               :key="cmd.id"
-              type="button"
               :data-testid="`command-${cmd.id}`"
               class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-start text-sm transition"
               :class="
@@ -297,7 +298,7 @@ function indexOf(cmd: Command) {
             >
               <UIcon :name="cmd.icon" class="h-4 w-4 shrink-0 text-muted" />
               <span class="truncate">{{ cmd.label }}</span>
-            </button>
+            </UButton>
           </div>
         </div>
       </div>

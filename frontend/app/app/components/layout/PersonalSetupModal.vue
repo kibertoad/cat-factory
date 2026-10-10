@@ -123,10 +123,11 @@ const groups = computed<PersonalGroup[]>(() => {
             {{ group.title }}
           </SectionLabel>
           <div class="space-y-1.5">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="item in group.items"
               :key="item.key"
-              type="button"
               class="flex w-full items-center gap-3 rounded-lg border border-default bg-default/50 px-3 py-2.5 text-start transition hover:border-muted hover:bg-default"
               @click="item.onClick()"
             >
@@ -147,7 +148,7 @@ const groups = computed<PersonalGroup[]>(() => {
                 name="i-lucide-chevron-right"
                 class="h-4 w-4 shrink-0 text-dimmed rtl:-scale-x-100"
               />
-            </button>
+            </UButton>
           </div>
         </section>
       </div>

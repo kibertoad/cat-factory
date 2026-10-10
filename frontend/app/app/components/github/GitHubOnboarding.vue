@@ -44,9 +44,14 @@ const title = computed(() =>
         class="mt-6 border-t border-default pt-4 text-center text-xs text-dimmed"
       >
         {{ t('github.onboarding.signedInAs', { login: auth.user.login }) }} ·
-        <button class="text-toned underline-offset-2 hover:underline" @click="auth.logout()">
+        <UButton
+          color="neutral"
+          variant="link"
+          class="p-0 text-xs text-toned underline-offset-2 hover:underline"
+          @click="auth.logout()"
+        >
           {{ t('github.onboarding.signOut') }}
-        </button>
+        </UButton>
       </p>
     </div>
   </div>

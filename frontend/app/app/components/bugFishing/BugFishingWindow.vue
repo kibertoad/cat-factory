@@ -267,8 +267,9 @@ const PHASE_ICON: Record<string, string> = {
         <SectionLabel as="p" class="mb-2 px-1">
           {{ t('bugFishing.phases.heading') }}
         </SectionLabel>
-        <button
-          type="button"
+        <UButton
+          color="neutral"
+          variant="ghost"
           class="mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs"
           :class="
             selectedPassKey === null
@@ -278,7 +279,7 @@ const PHASE_ICON: Record<string, string> = {
           @click="selectedPassKey = null"
         >
           {{ t('bugFishing.phases.all', { count: findings.length }) }}
-        </button>
+        </UButton>
         <!-- Grouped by TERRITORY on a partitioned codebase. A codebase small enough to fish
              whole has one group with no label, which renders as the flat angle rail. -->
         <div v-for="group in territoryGroups" :key="group.id ?? 'whole'" class="mb-2">
@@ -291,8 +292,9 @@ const PHASE_ICON: Record<string, string> = {
           </p>
           <ul class="space-y-0.5">
             <li v-for="phase in group.passes" :key="passKey(phase)">
-              <button
-                type="button"
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left"
                 :class="
                   selectedPassKey === passKey(phase)
@@ -341,7 +343,7 @@ const PHASE_ICON: Record<string, string> = {
                     </span>
                   </span>
                 </span>
-              </button>
+              </UButton>
             </li>
           </ul>
         </div>
@@ -450,10 +452,7 @@ const PHASE_ICON: Record<string, string> = {
           <p class="text-2xs text-muted">
             {{ t('bugFishing.counts', { untriaged: untriagedCount, spawned: spawnedCount }) }}
           </p>
-          <label class="flex items-center gap-1.5 text-2xs text-muted">
-            <input v-model="showTriaged" type="checkbox" class="accent-app-info-500" />
-            {{ t('bugFishing.showTriaged') }}
-          </label>
+          <UCheckbox v-model="showTriaged" size="xs" :label="t('bugFishing.showTriaged')" />
         </div>
 
         <p v-if="bugFishing.error" class="mb-3 text-xs text-app-error-300">
@@ -520,19 +519,41 @@ const PHASE_ICON: Record<string, string> = {
             <!-- Evidence is rendered apart from the detail for the reason the contract keeps them
                  apart: a finding that cannot point at the code it describes is speculating, and
                  that should be visible without reading the prose for it. -->
-            <details v-if="finding.evidence" class="mt-2">
-              <summary class="cursor-pointer text-2xs text-muted hover:text-default">
-                {{ t('bugFishing.finding.evidence') }}
-              </summary>
-              <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-xs" />
-            </details>
+            <UCollapsible v-if="finding.evidence" class="mt-2">
+              <template #default="{ open }">
+                <UButton
+                  variant="link"
+                  color="neutral"
+                  size="xs"
+                  :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  :label="t('bugFishing.finding.evidence')"
+                  :ui="{
+                    base: 'w-full justify-start gap-1 p-0 text-2xs text-muted hover:text-default',
+                  }"
+                />
+              </template>
+              <template #content>
+                <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-xs" />
+              </template>
+            </UCollapsible>
 
-            <details v-if="finding.suggestedFix" class="mt-1">
-              <summary class="cursor-pointer text-2xs text-muted hover:text-default">
-                {{ t('bugFishing.finding.suggestedFix') }}
-              </summary>
-              <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-xs" />
-            </details>
+            <UCollapsible v-if="finding.suggestedFix" class="mt-1">
+              <template #default="{ open }">
+                <UButton
+                  variant="link"
+                  color="neutral"
+                  size="xs"
+                  :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  :label="t('bugFishing.finding.suggestedFix')"
+                  :ui="{
+                    base: 'w-full justify-start gap-1 p-0 text-2xs text-muted hover:text-default',
+                  }"
+                />
+              </template>
+              <template #content>
+                <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-xs" />
+              </template>
+            </UCollapsible>
 
             <!-- Already marked: say what was created and let the reader follow it. The three
                  spawn states are rendered apart because they are three different facts — a task
@@ -553,13 +574,14 @@ const PHASE_ICON: Record<string, string> = {
                   })
                 }}
               </span>
-              <button
-                type="button"
-                class="underline hover:text-app-success-200"
+              <UButton
+                color="neutral"
+                variant="link"
+                class="p-0 text-2xs underline hover:text-app-success-200"
                 @click="openSpawnedTask(finding.spawn.taskId)"
               >
                 {{ t('bugFishing.finding.openTask') }}
-              </button>
+              </UButton>
             </div>
 
             <!-- A claim held by a marking still in flight. No task to link yet, and no Fix

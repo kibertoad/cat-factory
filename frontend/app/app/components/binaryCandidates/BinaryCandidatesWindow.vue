@@ -235,6 +235,16 @@ const { requestClose } = useUnsavedGuard({
         >
       </p>
 
+      <!-- Single-select renders a checkbox per card, not one radio group, so this line is what
+           tells everyone (a screen reader through each box's description) that ticking one clears
+           the other. -->
+      <p
+        v-if="view.awaiting && !view.multiSelect"
+        id="binary-candidates-pick-one"
+        class="mb-3 text-xs text-muted"
+      >
+        {{ t('binaryCandidates.pickOne') }}
+      </p>
       <div v-for="group in view.groups" :key="group.subject ?? '·'" class="mb-6">
         <h3 class="mb-2 text-xs font-medium text-muted">
           {{ group.subject ?? t('binaryCandidates.unlabelledSubject') }}
@@ -255,33 +265,34 @@ const { requestClose } = useUnsavedGuard({
           >
             <!-- The REAL control, not the card's click handler: ticking a candidate is the only
                  way to keep an asset, so without a focusable input the gate could not be completed
-                 by keyboard at all (UX-80). The whole window is ONE radio group in single-select
-                 mode, because `toggle` replaces the selection across every subject rather than per
-                 group.
+                 by keyboard at all (UX-80). In single-select mode `toggle` replaces the selection
+                 across every subject rather than per group.
 
-                 `@click.stop` belongs on the LABEL, which is the element the card's own toggle has
-                 to be shielded from. On the input alone it stopped the wrong click: activating a
-                 label forwards a synthetic click to its input (which `.stop` there does not
-                 prevent, only its propagation), so a click on the label TEXT bubbled to the card
-                 and toggled, then the forwarded click toggled back. On a checkbox that nets to no
-                 change, which means no re-render, which leaves the box ticked over a candidate
-                 that is no longer selected. -->
-            <label
-              v-if="view.awaiting"
-              class="mb-1.5 flex cursor-pointer items-center gap-2 text-2xs text-muted"
-              @click.stop
-            >
-              <input
-                :type="view.multiSelect ? 'checkbox' : 'radio'"
-                name="binary-candidate"
-                class="accent-app-info-500"
-                :checked="selected.includes(row.id)"
+                 `@click.stop` belongs on the WRAPPER, which is what the card's own toggle has to
+                 be shielded from, and NOT on the control: activating a label forwards a synthetic
+                 click to its control (which `.stop` there does not prevent, only its
+                 propagation), so a click on the label TEXT bubbles to the card and toggles, then
+                 the forwarded click toggles back. On a checkbox that nets to no change, which
+                 means no re-render, which leaves the box ticked over a candidate that is no
+                 longer selected. UCheckbox is not the place for it either: Nuxt UI forwards
+                 `$attrs` onto the inner checkbox button rather than onto its root, so a listener
+                 put there is the same "on the control alone" mistake spelled differently. -->
+            <!-- One control either way. Single-select is a checkbox rather than a radio group,
+                 because the rows render per candidate across several subjects and a radio group
+                 needs the whole set in one place. So the box announces as a checkbox, and the
+                 "pick one" line above is its description: that is the cue that ticking it clears
+                 the previous pick. -->
+            <div v-if="view.awaiting" class="mb-1.5" @click.stop>
+              <UCheckbox
+                size="xs"
+                :model-value="selected.includes(row.id)"
+                :label="candidateLabel(row)"
                 :aria-label="candidateLabel(row)"
+                :aria-describedby="view.multiSelect ? undefined : 'binary-candidates-pick-one'"
                 data-testid="binary-candidate-select"
-                @change="toggle(row.id)"
+                @update:model-value="toggle(row.id)"
               />
-              <span class="truncate">{{ candidateLabel(row) }}</span>
-            </label>
+            </div>
             <!-- Staged through the platform's OWN asset storage: we hold the bytes, so the card
                  renders them (and offers to open or save one) rather than waiting for a public
                  link the shipped storage never issues. Checked first because a candidate can

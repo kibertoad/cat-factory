@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { PipelineStep, RunContainerStatus } from '~/types/execution'
 import { containerPhaseLabel } from '~/utils/pipelineRender'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // The per-run container lifecycle for a container-backed step: its status (spinning up /
 // running / errored / reclaimed), the live phase (preparing the checkout vs the agent
@@ -118,14 +119,13 @@ const { copy: copyText } = useCopyToClipboard()
           <dd class="truncate font-mono text-2xs text-toned" :title="step.container.id">
             {{ step.container.id }}
           </dd>
-          <UButton
+          <IconButton
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="xs"
             class="ms-auto shrink-0"
-            :title="t('panels.stepMeta.container.copyId')"
-            :aria-label="t('panels.stepMeta.container.copyId')"
+            :label="t('panels.stepMeta.container.copyId')"
             @click="copyText(step.container.id)"
           />
         </div>
@@ -134,23 +134,23 @@ const { copy: copyText } = useCopyToClipboard()
             {{ t('panels.stepMeta.container.url') }}
           </SectionLabel>
           <dd class="truncate font-mono text-2xs text-toned">
-            <a
-              :href="step.container.url"
+            <ULink
+              raw
+              :to="step.container.url"
               target="_blank"
               rel="noopener noreferrer"
               class="hover:underline"
             >
               {{ step.container.url }}
-            </a>
+            </ULink>
           </dd>
-          <UButton
+          <IconButton
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="xs"
             class="ms-auto shrink-0"
-            :title="t('panels.stepMeta.container.copyUrl')"
-            :aria-label="t('panels.stepMeta.container.copyUrl')"
+            :label="t('panels.stepMeta.container.copyUrl')"
             @click="copyText(step.container.url)"
           />
         </div>

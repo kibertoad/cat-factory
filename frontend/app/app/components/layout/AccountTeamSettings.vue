@@ -8,6 +8,7 @@ import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySe
 import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -207,7 +208,7 @@ async function disconnectEmail() {
       <p class="mb-3 text-muted">
         {{ t('layout.accountTeam.org.ctaBody') }}
       </p>
-      <form class="flex gap-2" @submit.prevent="createOrganization">
+      <UForm class="flex gap-2" @submit="createOrganization">
         <UInput
           v-model="newOrgName"
           :placeholder="t('layout.accountTeam.org.namePlaceholder')"
@@ -216,7 +217,7 @@ async function disconnectEmail() {
         <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-plus">
           {{ t('layout.accountTeam.org.create') }}
         </UButton>
-      </form>
+      </UForm>
     </section>
 
     <!-- members -->
@@ -249,14 +250,13 @@ async function disconnectEmail() {
           <!-- Offboarding: end every session this member holds, leaving their membership and
                roles alone. Confirmed, because it is not undoable from here (the person simply
                signs in again) and because it is the sort of thing a mis-click should not do. -->
-          <UButton
+          <IconButton
             v-if="isAdmin"
             size="xs"
             color="neutral"
             variant="ghost"
             icon="i-lucide-log-out"
-            :title="t('layout.accountTeam.members.revokeSessions')"
-            :aria-label="t('layout.accountTeam.members.revokeSessions')"
+            :label="t('layout.accountTeam.members.revokeSessions')"
             data-testid="revoke-member-sessions"
             @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
           />
@@ -272,7 +272,7 @@ async function disconnectEmail() {
       <h3 class="mb-2 font-semibold text-highlighted">
         {{ t('layout.accountTeam.invite.title') }}
       </h3>
-      <form class="flex gap-2" @submit.prevent="sendInvite">
+      <UForm class="flex gap-2" @submit="sendInvite">
         <UInput
           v-model="inviteEmail"
           type="email"
@@ -283,7 +283,7 @@ async function disconnectEmail() {
         <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-send">
           {{ t('layout.accountTeam.invite.submit') }}
         </UButton>
-      </form>
+      </UForm>
 
       <ul v-if="accounts.invitations.length" class="mt-3 space-y-1">
         <li
@@ -332,7 +332,7 @@ async function disconnectEmail() {
             {{ t('layout.accountTeam.email.disconnect') }}
           </UButton>
         </div>
-        <form v-else class="space-y-2" @submit.prevent="connectEmail">
+        <UForm v-else class="space-y-2" @submit="connectEmail">
           <USelect v-model="emailProvider" :items="EMAIL_PROVIDER_ITEMS" class="w-full" />
           <UInput
             v-model="emailFrom"
@@ -348,7 +348,7 @@ async function disconnectEmail() {
           <UButton type="submit" color="primary" :loading="busy">
             {{ t('layout.accountTeam.email.connect') }}
           </UButton>
-        </form>
+        </UForm>
       </template>
     </section>
 

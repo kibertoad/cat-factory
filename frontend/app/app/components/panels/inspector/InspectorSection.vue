@@ -28,27 +28,32 @@ if (props.defaultOpen) open.value = true
 <template>
   <section class="border-t border-default pt-2" data-testid="inspector-section">
     <div class="flex items-center gap-1.5">
-      <SectionLabel
-        as="button"
-        type="button"
-        class="flex min-w-0 flex-1 items-center gap-1.5 text-start hover:text-default"
+      <UButton
+        color="neutral"
+        variant="link"
+        class="group min-w-0 flex-1 p-0"
         :aria-expanded="open"
         data-testid="inspector-section-toggle"
         @click="open = !open"
       >
-        <UIcon
-          :name="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5 shrink-0 text-dimmed"
-        />
-        <UIcon v-if="icon" :name="icon" class="h-3.5 w-3.5 shrink-0" />
-        <span class="truncate">{{ title }}</span>
-        <span v-if="count" class="font-normal normal-case text-dimmed">({{ count }})</span>
-        <UIcon
-          v-if="warning"
-          name="i-lucide-triangle-alert"
-          class="h-3.5 w-3.5 shrink-0 text-app-warning-400"
-        />
-      </SectionLabel>
+        <SectionLabel
+          as="span"
+          class="flex min-w-0 flex-1 items-center gap-1.5 group-hover:text-default"
+        >
+          <UIcon
+            :name="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            class="h-3.5 w-3.5 shrink-0 text-dimmed"
+          />
+          <UIcon v-if="icon" :name="icon" class="h-3.5 w-3.5 shrink-0" />
+          <span class="truncate">{{ title }}</span>
+          <span v-if="count" class="font-normal normal-case text-dimmed">({{ count }})</span>
+          <UIcon
+            v-if="warning"
+            name="i-lucide-triangle-alert"
+            class="h-3.5 w-3.5 shrink-0 text-app-warning-400"
+          />
+        </SectionLabel>
+      </UButton>
       <!-- An action ("+", attach, menu) mutates the body list, so expand (never collapse)
            on interaction — otherwise the new row lands inside the collapsed body. -->
       <div v-if="$slots.actions" class="contents" @click="open = true">

@@ -28,6 +28,7 @@ import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.v
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 
@@ -559,14 +560,17 @@ function done() {
                     class="inline-flex items-center gap-1 rounded-sm bg-elevated px-2 py-0.5 text-xs text-default"
                   >
                     <code class="text-default">{{ dir }}</code>
-                    <button
-                      type="button"
-                      class="text-muted hover:text-app-100"
-                      :aria-label="t('github.addService.removeService', { directory: dir })"
+                    <IconButton
+                      color="neutral"
+                      variant="ghost"
+                      icon="i-lucide-x"
+                      :label="t('github.addService.removeService', { directory: dir })"
+                      :ui="{
+                        base: 'p-0 text-muted hover:bg-transparent hover:text-app-100',
+                        leadingIcon: 'h-3 w-3',
+                      }"
                       @click="removeSelected(dir)"
-                    >
-                      <UIcon name="i-lucide-x" class="h-3 w-3" />
-                    </button>
+                    />
                   </span>
                 </div>
                 <p v-else class="text-xs text-dimmed">

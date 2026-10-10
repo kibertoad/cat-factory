@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Esta descripción enlaza una página de {source}. ¿Adjuntarla como contexto?",
       "attach": "Adjuntar"
-    }
+    },
+    "removePending": "Quitar {name}"
   },
   "errors": {
     "generic": {
@@ -5474,7 +5475,8 @@
         "releaseInteractive": "Dejar de ser la predeterminada en la app",
         "claimUnattended": "Hacer predeterminada sin supervisión",
         "releaseUnattended": "Dejar de ser la predeterminada sin supervisión"
-      }
+      },
+      "removeLabel": "Quitar la etiqueta {label}"
     },
     "progress": {
       "status": {
@@ -6398,7 +6400,8 @@
       "heading": "Subir un diseño de referencia",
       "viewPlaceholder": "Nombre de la vista (p. ej. login)",
       "tipReady": "Consejo: arrastra una imagen directamente sobre un par de arriba para establecer su referencia.",
-      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba."
+      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba.",
+      "choose": "Elegir un archivo"
     },
     "requestFix": {
       "heading": "Solicitar una corrección",
@@ -8528,6 +8531,7 @@
     "title": "Candidatos generados",
     "titleWithBlock": "Candidatos generados: {title}",
     "subtitle": "Compara lo que produjo cada integración y conserva lo que quieras",
+    "pickOne": "Elige uno. Al elegir un candidato se quita el que elegiste antes.",
     "automatic": "Solo se generó un candidato, así que se conservó automáticamente. Nadie lo revisó.",
     "unlabelledSubject": "Sin sujeto declarado",
     "noPreview": "Sin vista previa disponible",

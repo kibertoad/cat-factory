@@ -1116,8 +1116,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    collapses as a unit (a long doc otherwise pushes the findings/recommendations
                    off-screen); the per-heading toggles below still work when it's expanded. -->
           <section v-if="outline" class="mt-6 border-t border-default pt-5">
-            <button
-              class="mb-3 flex w-full items-center gap-1.5 text-2xs text-app-success-400"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="mb-3 flex w-full items-center gap-1.5 p-0 text-2xs text-app-success-400 hover:bg-transparent"
               @click="toggleDoc"
             >
               <UIcon
@@ -1133,16 +1135,18 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     : t('requirements.incorporatedDraft')
                 }}
               </span>
-            </button>
+            </UButton>
             <!-- The same reading measure the findings' own prose takes above (see the shell's
                  `width` prop): the window is `full`-width now, and this is continuous prose that
                  would otherwise run to 200-character lines. Left-aligned rather than centred, so
                  it starts where every finding above it starts. -->
             <div v-show="!docCollapsed" class="max-w-3xl">
               <div v-for="s in outline.sections" :key="s.id" class="mb-2">
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   v-if="s.title"
-                  class="group flex w-full items-center gap-2 text-start"
+                  class="group flex w-full items-center gap-2 p-0 text-start hover:bg-transparent"
                   @click="toggle(s.id)"
                 >
                   <UIcon
@@ -1155,7 +1159,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
                     v-html="s.titleHtml"
                   />
-                </button>
+                </UButton>
                 <div
                   v-show="!s.title || !collapsed[s.id]"
                   class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
