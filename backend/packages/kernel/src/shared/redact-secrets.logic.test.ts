@@ -174,25 +174,34 @@ describe('redactSecrets', () => {
       // Single-character filler: the body the agent-context size-budget test scrubs.
       filler: fill('x'),
     }
-    // Best-of-N over INTERLEAVED rounds: each round times prose and then every shape once, and
-    // each body keeps its fastest sample. This suite shares a CI runner with several other
-    // packages' suites, and a contention burst there lasts long enough to cover consecutive
-    // samples. When each body's samples ran back to back, one burst covered all three filler
-    // samples and no prose sample, and failed the run at 4.2x although filler is the cheapest
-    // shape (~0.85x prose). Interleaved, a burst must cover the same body in EVERY round to
-    // survive the minimum, so a sustained slowdown hits both sides of the ratio.
+    // Best-of-N over INTERLEAVED rounds: each round times the baseline and every shape once,
+    // and each body keeps its fastest sample. This suite shares a CI runner with other
+    // packages' suites, and a contention burst there can cover several consecutive samples.
+    // Interleaved, a burst must slow the same body in EVERY round to survive the minimum, so
+    // a sustained slowdown hits both sides of the ratio. The start rotates per round so no
+    // body always runs after the same neighbour (and its garbage).
+    // Index 0 is the baseline, held by position rather than by name so no shape can replace it.
     // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
     // a millisecond's granularity is noise against samples an order of magnitude larger.
-    const bodies: Record<string, string> = { prose, ...shapes }
-    const fastest: Record<string, number> = {}
+    const bodies = [prose, ...Object.values(shapes)]
+    const fastest = bodies.map(() => Number.POSITIVE_INFINITY)
+    // One sample this slow is no contention burst but a rescanning rule (the PEM regression
+    // took ~19s per body), so the round in progress is the last: the ratios below already fail,
+    // and further rounds would only hold the worker for the same answer.
+    const regressionSampleMs = 2000
     for (let round = 0; round < 7; round++) {
-      for (const [name, body] of Object.entries(bodies)) {
+      let slowest = 0
+      for (let step = 0; step < bodies.length; step++) {
+        const index = (round + step) % bodies.length
         const started = Date.now()
-        redactSecrets(body)
-        fastest[name] = Math.min(fastest[name] ?? Number.POSITIVE_INFINITY, Date.now() - started)
+        redactSecrets(bodies[index] ?? '')
+        const elapsed = Date.now() - started
+        fastest[index] = Math.min(fastest[index] ?? Number.POSITIVE_INFINITY, elapsed)
+        slowest = Math.max(slowest, elapsed)
       }
+      if (slowest > regressionSampleMs) break
     }
-    const baseline = fastest.prose ?? 0
+    const baseline = fastest[0] ?? 0
     // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
     // with no hint of why, so it is asserted as its own condition. 2MB of prose is ~17ms, so
     // this only trips if the body stopped being scrubbed at all.
@@ -200,11 +209,12 @@ describe('redactSecrets', () => {
       baseline,
       'prose baseline must be measurable at millisecond granularity',
     ).toBeGreaterThan(0)
-    for (const name of Object.keys(shapes)) {
-      const ratio = (fastest[name] ?? 0) / baseline
+    for (const [offset, name] of Object.keys(shapes).entries()) {
+      // A shape with no sample is Infinity, so it fails rather than passing at 0x.
+      const ratio = (fastest[offset + 1] ?? Number.POSITIVE_INFINITY) / baseline
       // Parity is ~1x once no rule rescans per offset or per marker; both regressions above
       // are an order of magnitude away, so 4x separates them without riding on absolute
-      // timings. Measured worst case under 2x CPU oversubscription is 1.5x.
+      // timings. Measured worst case under 2x CPU oversubscription is 1.13x.
       expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline}ms)`).toBeLessThan(4)
     }
   })
