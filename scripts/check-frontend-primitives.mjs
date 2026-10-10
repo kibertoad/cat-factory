@@ -16,7 +16,11 @@
 //   <a href>    -> ULink
 //   <datalist>  -> UInputMenu with `mode="autocomplete"`, which is what a datalist is
 //
-// SCOPE: the control elements above, in the TEMPLATE half of a `.vue` file. Their structural
+// SCOPE: the control elements above, in the TEMPLATE half of a `.vue` file, however the element
+// is named: a literal tag, a component told to render one (`<SectionLabel as="button">`), a
+// `<component :is="… 'button' …">` binding, and a render function in a `.ts` file
+// (`h('button')`). The last three render the same raw element and a literal-tag scan cannot see
+// them. Their structural
 // children (`<option>`, `<summary>`, `<thead>`, `<td>`) are not listed separately: each can only
 // exist under a parent this guard already claims, so naming them would report one conversion as
 // six offences. Prose and layout markup (`<p>`, `<h1>`-`<h6>`, `<ul>`, `<li>`, `<dl>`, `<pre>`,
@@ -41,18 +45,8 @@
 // Usage:  node scripts/check-frontend-primitives.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-// The layer AND the deployment template, the same two roots the palette and type-scale guards
-// scan: `deploy/frontend` is what a consumer copies, so a raw control there ships as the pattern
-// to copy.
-const SCAN_ROOTS = [
-  join(repoRoot, 'frontend', 'app', 'app'),
-  join(repoRoot, 'deploy', 'frontend', 'app'),
-]
+import { readFileSync } from 'node:fs'
+import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 /** The banned elements, each with the component that replaces it (shown in the failure). */
 export const REPLACEMENTS = {
@@ -103,6 +97,28 @@ export function findRawControls(line, prevLine = '', tagOf = () => line) {
     }
   }
   return found
+}
+
+const ELEMENTS = Object.keys(REPLACEMENTS).join('|')
+// `as="button"` on any component, and a quoted element name inside an `:is` binding
+// (`:is="url ? 'a' : 'span'"`). Both render the raw element at runtime.
+const AS_ELEMENT = new RegExp(`\\sas="(${ELEMENTS})"`, 'g')
+const IS_ELEMENT = new RegExp(`:is="[^"]*'(${ELEMENTS})'`, 'g')
+// A render function: `h('button', …)`.
+const RENDER_ELEMENT = new RegExp(`(?<![\\w$.])h\\(\\s*['"\`](${ELEMENTS})['"\`]`, 'g')
+
+/** Every banned control a component or `:is` binding is told to render on a template line. */
+export function findDynamicControls(line, prevLine = '') {
+  if (COMMENT_LINE.test(line)) return []
+  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  const found = [...line.matchAll(AS_ELEMENT), ...line.matchAll(IS_ELEMENT)].map((m) => m[1])
+  return [...new Set(found)]
+}
+
+/** Every banned control a render function creates, on one line from `codeLines` (a `.ts` file). */
+export function findRenderedControls({ raw, code, prev }) {
+  if (raw.includes(RAW_OK) || prev.includes(RAW_OK)) return []
+  return [...new Set([...code.matchAll(RENDER_ELEMENT)].map((m) => m[1]))]
 }
 
 /** `title=` on a primitive that already owns its tooltip. */
@@ -165,27 +181,28 @@ export function templateHalf(source) {
     .replace(/<!--[\s\S]*?-->/g, blank)
 }
 
-function* sourceFiles(dirAbs) {
-  for (const entry of readdirSync(dirAbs)) {
-    if (entry === 'node_modules' || entry === '.nuxt' || entry === 'dist') continue
-    const abs = join(dirAbs, entry)
-    if (statSync(abs).isDirectory()) yield* sourceFiles(abs)
-    else if (abs.endsWith('.vue')) yield abs
-  }
-}
-
 function main() {
   const offenders = []
-  for (const file of SCAN_ROOTS.flatMap((root) => [...sourceFiles(root)])) {
-    const lines = templateHalf(readFileSync(file, 'utf8')).split('\n')
+  for (const file of spaSourceFiles()) {
+    if (file.rel.endsWith('.ts')) {
+      readCodeLines(file).forEach((line, i) => {
+        const controls = findRenderedControls(line)
+        if (controls.length) {
+          offenders.push({ file: file.rel, line: i + 1, matches: controls.map((c) => `h('${c}')`) })
+        }
+      })
+      continue
+    }
+    if (!file.rel.endsWith('.vue')) continue
+    const lines = templateHalf(readFileSync(file.abs, 'utf8')).split('\n')
     lines.forEach((line, i) => {
       const prev = lines[i - 1] ?? ''
       const tagOf = (from) => openingTag(lines, i, from)
-      const controls = findRawControls(line, prev, tagOf)
+      const controls = [...findRawControls(line, prev, tagOf), ...findDynamicControls(line, prev)]
       const titles = findRedundantTitle(line, prev, tagOf)
       if (controls.length || titles.length) {
         offenders.push({
-          file: relative(repoRoot, file),
+          file: file.rel,
           line: i + 1,
           matches: [...controls.map((c) => `<${c}>`), ...titles.map(() => 'title=')],
         })
@@ -201,7 +218,9 @@ function main() {
         Object.entries(REPLACEMENTS)
           .map(([el, to]) => `  <${el}> -> ${to}`)
           .join('\n') +
-        '\nIconButton and CopyButton own their tooltip, so a `title=` on either is a second hint\n' +
+        '\nA component told to render one (`as="button"`, `:is="\'a\'"`, `h(\'button\')`) is the same raw\n' +
+        'element. A collapsing section header is a `UButton` around `<SectionLabel as="span">`.\n' +
+        'IconButton and CopyButton own their tooltip, so a `title=` on either is a second hint\n' +
         'over the first.\n' +
         'See frontend/app/README.md, "A control is its Nuxt UI component".\n',
     )
@@ -216,6 +235,4 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-// `argv[1]` is undefined under `node -e` / the REPL, where `pathToFileURL` throws: an import
-// must never be the thing that fails.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (isCliEntry(import.meta.url)) main()

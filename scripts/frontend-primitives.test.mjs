@@ -9,11 +9,14 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import {
+  findDynamicControls,
   findRawControls,
   findRedundantTitle,
+  findRenderedControls,
   openingTag,
   templateHalf,
 } from './check-frontend-primitives.mjs'
+import { codeLines } from './lib/frontend-scan.mjs'
 
 /** The scanner's own `tagOf`, so a fixture can be written as the wrapped lines it really is. */
 const tagReader = (lines, index) => (from) => openingTag(lines, index, from)
@@ -181,4 +184,30 @@ test('a style block is blanked too', () => {
   ].join('\n')
   const lines = templateHalf(sfc).split('\n')
   assert.deepEqual(findRawControls(lines[4]), [])
+})
+
+test('claims a component told to render a banned element', () => {
+  // `<SectionLabel as="button">` renders a raw `<button>` with no focus ring or disabled state.
+  assert.deepEqual(findDynamicControls('        as="button"'), ['button'])
+  assert.deepEqual(findDynamicControls('<SectionLabel as="button" type="button">'), ['button'])
+  assert.deepEqual(findDynamicControls(`    :is="props.url ? 'a' : 'span'"`), ['a'])
+  assert.deepEqual(findDynamicControls(`    :is="open ? 'button' : 'span'"`), ['button'])
+  // A non-control element is fine, and so is a component name.
+  assert.deepEqual(findDynamicControls('<SectionLabel as="span">'), [])
+  assert.deepEqual(findDynamicControls('<SectionLabel as="h3">'), [])
+  assert.deepEqual(findDynamicControls(`    :is="compact ? 'span' : 'div'"`), [])
+  assert.deepEqual(findDynamicControls(`    :is="UButton"`), [])
+  // `:alias` and `has=` are not `as=`.
+  assert.deepEqual(findDynamicControls('    has="button"'), [])
+  assert.deepEqual(findDynamicControls('    as="button" <!-- raw-control-ok: reason -->'), [])
+})
+
+test('claims a render function that creates a banned element', () => {
+  const find = (source) => codeLines(source).flatMap(findRenderedControls)
+  assert.deepEqual(find(`return h('button', { onClick }, label)`), ['button'])
+  assert.deepEqual(find(`h("a", { href })`), ['a'])
+  assert.deepEqual(find(`h('span', label)`), [])
+  assert.deepEqual(find(`path.h('button')`), [])
+  assert.deepEqual(find(`// h('button') was the old helper`), [])
+  assert.deepEqual(find(`h('button') // raw-control-ok: reason`), [])
 })
