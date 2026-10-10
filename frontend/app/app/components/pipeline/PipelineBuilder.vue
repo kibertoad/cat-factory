@@ -955,11 +955,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       variant="ghost"
                       v-for="group in consensusGroups.groups"
                       :key="group.id"
-                      class="rounded-sm border px-1.5 py-0.5 text-2xs hover:bg-transparent"
+                      class="rounded-sm border px-1.5 py-0.5 text-2xs"
                       :class="
                         isGroupSelected(unit.index, group.id)
-                          ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
-                          : 'border-muted bg-default text-muted hover:text-default'
+                          ? 'border-app-success-600 bg-app-success-900/40 hover:bg-app-success-900/40 focus-visible:bg-app-success-900/40 disabled:bg-app-success-900/40 text-app-success-200'
+                          : 'border-muted bg-default hover:bg-default focus-visible:bg-default disabled:bg-default text-muted hover:text-default'
                       "
                       :title="group.description"
                       @click="pipelines.toggleDraftConsensusGroup(unit.index, group.id)"
