@@ -101,7 +101,11 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
-  <div v-if="showSteps" class="mt-2 space-y-1 border-t border-default pt-2">
+  <div
+    v-if="showSteps"
+    class="mt-2 space-y-1 border-t border-default pt-2"
+    data-testid="task-pipeline-mini"
+  >
     <SectionLabel class="flex items-center gap-1">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}
