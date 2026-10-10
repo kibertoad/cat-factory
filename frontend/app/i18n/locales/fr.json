@@ -2560,6 +2560,17 @@
         "action": "Vérifier la connexion"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Les agents ne peuvent pas encore s'exécuter sur ce tableau : aucun pool de runners n'est connecté.",
+        "outage": "Les agents ne peuvent pas s'exécuter pour le moment : le pool de runners de ce tableau est injoignable."
+      },
+      "owner": {
+        "workspace_admin": "Un administrateur du tableau peut corriger cela.",
+        "account_admin": "Un administrateur du compte peut corriger cela.",
+        "operator": "Seul l'opérateur du déploiement peut corriger cela."
+      }
+    },
     "spendWarningBanner": {
       "title": "Limite de dépense atteinte, exécution des agents en pause",
       "body": "La dépense en jetons de ce mois a atteint le budget configuré, les pipelines en cours ont donc été mis en pause pour éviter des coûts supplémentaires. L'exécution reprend automatiquement au renouvellement du budget le mois prochain, ou dès que la limite est relevée.",
@@ -7985,6 +7996,7 @@
     "connect": {
       "or": "ou",
       "noneConfigured": "Aucune connexion de gestion de code n'est configurée pour ce déploiement. Demandez à un opérateur de configurer une GitHub App ou un accès GitLab.",
+      "adminRequired": "Seul un administrateur du tableau peut connecter un hébergeur de dépôts. Demandez-le à un administrateur de ce tableau, ou passez à un tableau que vous gérez.",
       "gitlab": {
         "intro": "Collez un jeton d'accès personnel GitLab pour connecter cet espace de travail. cat-factory l'utilise pour lister vos projets, pousser des branches et ouvrir des merge requests.",
         "tokenLabel": "Jeton d'accès personnel",
@@ -8002,7 +8014,8 @@
     "onboarding": {
       "title": "Connecter cat-factory à {provider}",
       "titleAny": "Connecter cat-factory à vos dépôts",
-      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer."
+      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer.",
+      "switchBoard": "Ce n'est pas le bon tableau ? Passez à un autre, ou créez le vôtre."
     },
     "addService": {
       "intro": "Choisissez un dépôt {provider} existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",

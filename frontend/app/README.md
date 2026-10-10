@@ -588,6 +588,12 @@ The seams, and what a new feature should use rather than reading the store ad ho
 - **A surface that narrows inline** reads `useUiRoleStore().fullSurface` (the frame header's bug-hunt
   button, the palette's per-connection integration commands). Same rule as the tier: what remains
   must be exactly what the full surface would have shown, only less of it.
+- **A setup prompt** (a "configure this" card over the board) goes through `canActOnSetup`
+  (`app/utils/setupAudience.ts`) with the caller from `useSetupActor()`: it combines the role's
+  surface with the board and account grants and the owner the server reports for the gap
+  (`infraSetupOwners`). A caller who cannot act gets no card; a gap that stops every run reaches them
+  as one line naming who can fix it (`blockingSetupNotice`), never as a button that opens a screen
+  their save is refused on.
 - **A tutorial tour whose step clicks a non-`intake` nav entry declares
   `TUTORIAL_REQUIREMENTS.fullSurface`.** Which tours those are is not a judgement call:
   `tutorial-tours.spec.ts` derives the pairing from `navItemVisible`, so a tour that gains such a

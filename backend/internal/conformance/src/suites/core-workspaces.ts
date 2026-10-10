@@ -102,6 +102,16 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       const created = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
       expect(created.body.infraSetup).toBeDefined()
       expect(statuses).toContain(created.body.infraSetup!.binaryStorage)
+
+      // Beside it, who can close each gap. The connection areas are per workspace on every
+      // runtime; content storage depends on how the deployment wired account settings, so it
+      // only has to be a valid owner. Both responses carry it, or the SPA cannot gate the prompt.
+      for (const owners of [snap.body.infraSetupOwners, created.body.infraSetupOwners]) {
+        expect(owners).toBeDefined()
+        expect(owners!.agentExecutor).toBe('workspace_admin')
+        expect(owners!.ephemeralEnvironments).toBe('workspace_admin')
+        expect(['account_admin', 'operator']).toContain(owners!.binaryStorage)
+      }
     })
 
     it('advertises the registered initiative presets on the snapshot (both create + read)', async () => {

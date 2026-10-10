@@ -2715,6 +2715,17 @@
         "action": "Check connection"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Agents can't run on this board yet: no runner pool is connected.",
+        "outage": "Agents can't run right now: this board's runner pool is unreachable."
+      },
+      "owner": {
+        "workspace_admin": "A board admin can fix this.",
+        "account_admin": "An account admin can fix this.",
+        "operator": "Only the deployment operator can fix this."
+      }
+    },
     "spendWarningBanner": {
       "title": "Spend limit reached, agent execution paused",
       "body": "This month's token spend has hit the configured budget, so running pipelines were paused to avoid further cost. Execution resumes automatically when the budget rolls over next month, or once the limit is raised.",
@@ -8289,6 +8300,7 @@
     "connect": {
       "or": "or",
       "noneConfigured": "No source-control connection is configured for this deployment. Ask an operator to set up a GitHub App or GitLab access.",
+      "adminRequired": "Only a board admin can connect a repository host. Ask an admin of this board, or switch to a board you manage.",
       "gitlab": {
         "intro": "Paste a GitLab personal access token to connect this workspace. cat-factory uses it to list your projects, push branches and open merge requests.",
         "tokenLabel": "Personal access token",
@@ -8306,7 +8318,8 @@
     "onboarding": {
       "title": "Connect cat-factory to {provider}",
       "titleAny": "Connect cat-factory to your repositories",
-      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
+      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue.",
+      "switchBoard": "Not the board you meant? Switch to another one, or create your own."
     },
     "addService": {
       "intro": "Pick an existing {provider} repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",

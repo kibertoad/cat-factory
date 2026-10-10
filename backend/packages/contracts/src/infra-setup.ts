@@ -121,6 +121,30 @@ export function isInfraSetupProbedArea(area: InfraSetupArea): area is InfraSetup
 }
 
 /**
+ * Who can close a setup gap in one area, so the SPA can show the prompt to the people who can act
+ * on it and tell everyone else whom to ask:
+ *  - `workspace_admin` — a holder of `integrations.manage` on the board (the runner-pool and
+ *    environment connections are per workspace).
+ *  - `account_admin`   — an admin of the board's account (content storage is an account setting).
+ *  - `operator`        — nobody in the app: the deployment itself must change (for example content
+ *    storage on a deployment whose account settings can select no backend).
+ *
+ * A separate projection from {@link infraSetupSchema} because it answers a different question
+ * with a different lifetime: the status moves live (an outage arrives as an event), while the
+ * owner is a fact about how this deployment is wired and only changes on a restart.
+ */
+export const infraSetupOwnerSchema = v.picklist(['workspace_admin', 'account_admin', 'operator'])
+export type InfraSetupOwner = v.InferOutput<typeof infraSetupOwnerSchema>
+
+/** The per-area {@link InfraSetupOwner} projection carried on the snapshot beside the status. */
+export const infraSetupOwnersSchema = v.object({
+  ephemeralEnvironments: infraSetupOwnerSchema,
+  agentExecutor: infraSetupOwnerSchema,
+  binaryStorage: infraSetupOwnerSchema,
+})
+export type InfraSetupOwners = v.InferOutput<typeof infraSetupOwnersSchema>
+
+/**
  * Apply ONE observed reachability status to an area of a setup projection.
  *
  * This is the single definition of which prior state a probe verdict may overwrite, and BOTH

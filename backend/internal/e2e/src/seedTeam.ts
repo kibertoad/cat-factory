@@ -64,6 +64,11 @@ export interface TeamScenarioRequest {
    * board's fixed block ids (`task_login`) are absent there and can be asserted on.
    */
   spareBoard?: boolean
+  /**
+   * Leave the primary board WITHOUT a repository-host connection (default: connected). For a spec
+   * whose subject is the onboarding gate itself, and what each role is told on it.
+   */
+  githubConnected?: boolean
 }
 
 export interface TeamScenario {
@@ -141,7 +146,13 @@ export async function seedTeamScenario(
   sessionSecret: string,
   request: TeamScenarioRequest,
 ): Promise<TeamScenario> {
-  const { tag, restricted = false, principals: specs = [], spareBoard = false } = request
+  const {
+    tag,
+    restricted = false,
+    principals: specs = [],
+    spareBoard = false,
+    githubConnected = true,
+  } = request
   const probe = makeOnboardingProbe(container)
   const { accountId, ownerUserId } = await probe.makeOrgOwner(`team-${tag}`)
 
@@ -153,7 +164,7 @@ export async function seedTeamScenario(
     accountId,
   )
   const workspaceId = snapshot.workspace.id
-  await seedGitHubForWorkspace(db, workspaceId, {})
+  if (githubConnected) await seedGitHubForWorkspace(db, workspaceId, {})
 
   const members = new DrizzleWorkspaceMemberRepository(db)
   const principals: Record<string, SeededPrincipal> = {}

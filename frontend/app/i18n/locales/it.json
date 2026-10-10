@@ -2687,6 +2687,17 @@
         "action": "Verifica connessione"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Gli agenti non possono ancora funzionare su questa board: nessun runner pool è connesso.",
+        "outage": "Gli agenti non possono funzionare in questo momento: il runner pool di questa board non è raggiungibile."
+      },
+      "owner": {
+        "workspace_admin": "Un amministratore della board può risolvere il problema.",
+        "account_admin": "Un amministratore dell'account può risolvere il problema.",
+        "operator": "Solo l'operatore del deployment può risolvere il problema."
+      }
+    },
     "spendWarningBanner": {
       "title": "Limite di spesa raggiunto, esecuzione degli agenti sospesa",
       "body": "La spesa in token di questo mese ha raggiunto il budget configurato, quindi le pipeline in esecuzione sono state sospese per evitare ulteriori costi. L'esecuzione riprende automaticamente quando il budget si rinnova il mese prossimo, oppure una volta che il limite viene aumentato.",
@@ -7985,6 +7996,7 @@
     "connect": {
       "or": "oppure",
       "noneConfigured": "Per questo deployment non è configurata alcuna connessione al controllo del codice. Chiedi a un operatore di configurare una GitHub App o l'accesso a GitLab.",
+      "adminRequired": "Solo un amministratore della board può connettere un host di repository. Chiedilo a un amministratore di questa board, oppure passa a una board che gestisci.",
       "gitlab": {
         "intro": "Incolla un token di accesso personale GitLab per collegare questo workspace. cat-factory lo usa per elencare i tuoi progetti, inviare branch e aprire merge request.",
         "tokenLabel": "Token di accesso personale",
@@ -8002,7 +8014,8 @@
     "onboarding": {
       "title": "Collega cat-factory a {provider}",
       "titleAny": "Collega cat-factory ai tuoi repository",
-      "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Collega il tuo host di repository per continuare."
+      "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Collega il tuo host di repository per continuare.",
+      "switchBoard": "Non è la board che cercavi? Passa a un'altra, oppure creane una tua."
     },
     "addService": {
       "intro": "Scegli un repository {provider} esistente da aggiungere come servizio sulla board. Nessun bootstrapping: il repo viene collegato a un nuovo frame di servizio così com'è, e le attività che vi esegui puntano a quel repo.",

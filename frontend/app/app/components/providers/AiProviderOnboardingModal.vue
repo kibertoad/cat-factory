@@ -9,6 +9,7 @@ import { computed } from 'vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const { canManageSecrets } = useWorkspaceAccess()
 
 const open = computed({
   get: () => ui.aiProviderSetupOpen,
@@ -49,7 +50,12 @@ const routes = computed<Route[]>(() => [
     title: t('providers.onboarding.routes.keys.title'),
     body: t('providers.onboarding.routes.keys.body'),
     cta: t('providers.onboarding.routes.keys.cta'),
-    onSelect: () => go(ui.openVendorCredentials),
+    // The default tab is the workspace's pooled subscriptions, a `secrets.manage` write. Anyone else
+    // lands on the direct keys, which open on their own "My keys" scope (see ApiKeysSection).
+    onSelect: () =>
+      go(() =>
+        canManageSecrets.value ? ui.openVendorCredentials() : ui.openVendorCredentials('direct'),
+      ),
   },
   {
     icon: 'i-lucide-route',

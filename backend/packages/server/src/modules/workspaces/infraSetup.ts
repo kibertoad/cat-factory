@@ -1,4 +1,4 @@
-import type { InfraSetup, InfraSetupArea } from '@cat-factory/contracts'
+import type { InfraSetup, InfraSetupArea, InfraSetupOwners } from '@cat-factory/contracts'
 import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 import { logger as sharedLogger } from '../../observability/logger.js'
@@ -101,6 +101,29 @@ export interface InfraSetupSources {
    */
   ephemeralEnvironmentsRequireProvider?: boolean
   resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
+  /**
+   * The per-account settings service, read only to tell who owns a content-storage gap: absent
+   * (no `ENCRYPTION_KEY`) or offering no selectable backend means no account admin can fix it.
+   */
+  accountSettings?: { service: { canSelectContentStorage(): boolean } }
+}
+
+/**
+ * Who can close each area's setup gap. The connection areas are per workspace, so a holder of
+ * `integrations.manage` on the board can always act; content storage is an account setting, and
+ * falls to the operator when this deployment gives the account admin nothing to select.
+ *
+ * Computed for every area regardless of status: it is a fact about the deployment, and the SPA
+ * decides from the status whether there is anything to say.
+ */
+export function infraSetupOwners(sources: InfraSetupSources): InfraSetupOwners {
+  return {
+    ephemeralEnvironments: 'workspace_admin',
+    agentExecutor: 'workspace_admin',
+    binaryStorage: sources.accountSettings?.service.canSelectContentStorage()
+      ? 'account_admin'
+      : 'operator',
+  }
 }
 
 /**
@@ -149,4 +172,16 @@ export async function snapshotInfraSetup(
     ),
   ])
   return { ephemeralEnvironments, agentExecutor, binaryStorage }
+}
+
+/**
+ * The two infra-setup fields a workspace snapshot carries, together: the status the projection
+ * computed and who owns each gap. One spread at each response site, so the create and read
+ * responses cannot carry one without the other.
+ */
+export function infraSetupFields(
+  sources: InfraSetupSources,
+  infraSetup: InfraSetup,
+): { infraSetup: InfraSetup; infraSetupOwners: InfraSetupOwners } {
+  return { infraSetup, infraSetupOwners: infraSetupOwners(sources) }
 }

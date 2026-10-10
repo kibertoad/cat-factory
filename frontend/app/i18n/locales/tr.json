@@ -2560,6 +2560,17 @@
         "action": "Bağlantıyı denetle"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Bu panoda aracılar henüz çalışamaz: bağlı bir runner havuzu yok.",
+        "outage": "Aracılar şu anda çalışamıyor: bu panonun runner havuzuna erişilemiyor."
+      },
+      "owner": {
+        "workspace_admin": "Bir pano yöneticisi bunu düzeltebilir.",
+        "account_admin": "Bir hesap yöneticisi bunu düzeltebilir.",
+        "operator": "Bunu yalnızca dağıtımın operatörü düzeltebilir."
+      }
+    },
     "spendWarningBanner": {
       "title": "Harcama limitine ulaşıldı, ajan yürütmesi duraklatıldı",
       "body": "Bu ayki belirteç harcaması yapılandırılan bütçeye ulaştı, bu yüzden daha fazla maliyeti önlemek için çalışan boru hatları duraklatıldı. Yürütme, bütçe gelecek ay yenilendiğinde veya limit yükseltildiğinde otomatik olarak devam eder.",
@@ -7985,6 +7996,7 @@
     "connect": {
       "or": "veya",
       "noneConfigured": "Bu dağıtım için yapılandırılmış bir kaynak denetimi bağlantısı yok. Bir operatörden GitHub App veya GitLab erişimi kurmasını isteyin.",
+      "adminRequired": "Bir depo sağlayıcısını yalnızca pano yöneticisi bağlayabilir. Bu panonun bir yöneticisinden isteyin veya yönettiğiniz bir panoya geçin.",
       "gitlab": {
         "intro": "Bu çalışma alanını bağlamak için bir GitLab kişisel erişim belirteci yapıştırın. cat-factory bunu projelerinizi listelemek, dal göndermek ve merge request açmak için kullanır.",
         "tokenLabel": "Kişisel erişim belirteci",
@@ -8002,7 +8014,8 @@
     "onboarding": {
       "title": "cat-factory'yi {provider}'a bağla",
       "titleAny": "cat-factory'yi depolarınıza bağlayın",
-      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
+      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın.",
+      "switchBoard": "Aradığınız pano bu değil mi? Başka bir panoya geçin veya kendinizinkini oluşturun."
     },
     "addService": {
       "intro": "Pano servisi olarak eklenecek mevcut bir {provider} deposu seçin. Bootstrap yok: depo olduğu gibi yeni bir servis çerçevesine bağlanır ve üzerinde çalıştırdığınız görevler o depoyu hedefler.",

@@ -2687,6 +2687,17 @@
         "action": "Verbindung prüfen"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Auf diesem Board können noch keine Agenten laufen: Es ist kein Runner-Pool verbunden.",
+        "outage": "Agenten können gerade nicht laufen: Der Runner-Pool dieses Boards ist nicht erreichbar."
+      },
+      "owner": {
+        "workspace_admin": "Ein Board-Admin kann das beheben.",
+        "account_admin": "Ein Konto-Admin kann das beheben.",
+        "operator": "Nur der Betreiber des Deployments kann das beheben."
+      }
+    },
     "spendWarningBanner": {
       "title": "Ausgabenlimit erreicht, Agentenausführung pausiert",
       "body": "Die Token-Ausgaben dieses Monats haben das konfigurierte Budget erreicht, sodass laufende Pipelines pausiert wurden, um weitere Kosten zu vermeiden. Die Ausführung wird automatisch fortgesetzt, wenn das Budget im nächsten Monat zurückgesetzt wird, oder sobald das Limit angehoben wird.",
@@ -7985,6 +7996,7 @@
     "connect": {
       "or": "oder",
       "noneConfigured": "Für dieses Deployment ist keine Quellcodeverbindung konfiguriert. Bitten Sie einen Betreiber, eine GitHub App oder einen GitLab-Zugang einzurichten.",
+      "adminRequired": "Nur ein Board-Admin kann einen Repository-Host verbinden. Bitten Sie einen Admin dieses Boards darum, oder wechseln Sie zu einem Board, das Sie verwalten.",
       "gitlab": {
         "intro": "Fügen Sie ein persönliches GitLab-Zugriffstoken ein, um diesen Workspace zu verbinden. cat-factory nutzt es, um Ihre Projekte aufzulisten, Branches zu pushen und Merge Requests zu öffnen.",
         "tokenLabel": "Persönliches Zugriffstoken",
@@ -8002,7 +8014,8 @@
     "onboarding": {
       "title": "cat-factory mit {provider} verbinden",
       "titleAny": "cat-factory mit Ihren Repositorys verbinden",
-      "intro": "cat-factory funktioniert, indem es Pull Requests in Ihren Repositorys öffnet. Verbinden Sie Ihren Repository-Anbieter, um fortzufahren."
+      "intro": "cat-factory funktioniert, indem es Pull Requests in Ihren Repositorys öffnet. Verbinden Sie Ihren Repository-Anbieter, um fortzufahren.",
+      "switchBoard": "Nicht das gewünschte Board? Wechseln Sie zu einem anderen oder erstellen Sie ein eigenes."
     },
     "addService": {
       "intro": "Wählen Sie ein bestehendes {provider}-Repository, um es als Board-Service hinzuzufügen. Kein Bootstrapping: Das Repo wird unverändert mit einem neuen Service-Frame verknüpft, und Aufgaben, die Sie darauf ausführen, zielen auf dieses Repo.",

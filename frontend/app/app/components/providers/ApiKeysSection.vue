@@ -37,8 +37,13 @@ const { confirmAction, toastDone } = useConfirmAction()
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
 
-/** Which store the form writes to: the shared workspace keys or the user's own. */
-const scope = ref<'workspace' | 'user'>('workspace')
+/**
+ * Which store the form writes to: the shared workspace keys or the user's own. Opens on the
+ * workspace for whoever may write it (`secrets.manage`) and on "My keys" for everyone else, so a
+ * member's first save lands instead of being refused.
+ */
+const { canManageSecrets } = useWorkspaceAccess()
+const scope = ref<'workspace' | 'user'>(canManageSecrets.value ? 'workspace' : 'user')
 
 // "My keys" (user scope) are stored per-user, so they need a signed-in user. Block just
 // that scope when there's none (a deployment without sign-in); workspace/account keys are

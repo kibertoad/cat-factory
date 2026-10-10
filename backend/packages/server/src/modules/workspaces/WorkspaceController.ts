@@ -17,7 +17,7 @@ import { Hono } from 'hono'
 import { logger as sharedLogger } from '../../observability/logger.js'
 // The per-area infra-setup projection, extracted so the reachability watcher shares its
 // applicability rule (`infraSetupAreaApplies`) rather than re-deriving a looser one.
-import { snapshotInfraSetup } from './infraSetup.js'
+import { infraSetupFields, snapshotInfraSetup } from './infraSetup.js'
 import type { EnvironmentBackendRegistry, RunnerBackendRegistry } from '@cat-factory/integrations'
 import type {
   BackendKindOption,
@@ -818,7 +818,7 @@ export function workspaceController(): Hono<AppEnv> {
         // taking back.
         ...definedFields({ ...registryProjections, skills }),
         ...snapshotBackendKinds(container),
-        infraSetup,
+        ...infraSetupFields(container, infraSetup),
       },
       201,
     )
@@ -917,7 +917,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...snapshotBackendKinds(container),
-        infraSetup,
+        ...infraSetupFields(container, infraSetup),
         // The optional slices, present only when their module is wired / the value is non-empty.
         // Gathered through `definedFields` (truthy-gated — identical to the former
         // `...(x ? { x } : {})` ladder) so this handler stays within the complexity budget. None of
