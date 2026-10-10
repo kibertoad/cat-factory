@@ -79,7 +79,7 @@ pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 ```
 
 For UI work, run the SPA against the e2e backend instead of `dev:node`: it needs only a Postgres,
-fakes every external dependency, and can seed boards. See
+fakes the LLM, the agent runner and GitHub, and can seed boards. See
 [Running the SPA against the e2e backend](./backend/internal/e2e/README.md#running-the-spa-against-the-e2e-backend-ui-development).
 
 The cross-package task graph (build/typecheck/test/generate/deploy/dev) is

@@ -62,6 +62,7 @@ import {
   AUTH_BACKEND_PORT,
   AUTH_FRONTEND_URL,
   BACKEND_PORT,
+  BACKEND_URL,
   CONTROL_PORT,
   FRONTEND_URL,
 } from './ports.ts'
@@ -268,6 +269,41 @@ const controlServer = createServer((req, res) => {
         const body = JSON.parse(raw) as { workspaceId: string; seed?: GitHubSeed }
         await seedGitHubForWorkspace(seedDb, body.workspaceId, body.seed ?? {})
         res.writeHead(204).end()
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Create a board the way every spec starts one (sample architecture, faked GitHub connection,
+  // `infraless` provisioning choice) and return its snapshot. `createSeededWorkspace` in
+  // tests/helpers.ts calls this and documents why each step is there; a developer seeding from a
+  // shell calls it too, so the two cannot drift apart. The board is created over the app's own REST
+  // surface, as a spec would.
+  if (req.method === 'POST' && req.url === '/seeded-workspace') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!seedDb) {
+          res.writeHead(503).end('seeded workspace: db not ready')
+          return
+        }
+        const { name } = (raw ? JSON.parse(raw) : {}) as { name?: string }
+        const created = await fetch(`${BACKEND_URL}/workspaces`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ seed: true, ...(name ? { name } : {}) }),
+        })
+        if (!created.ok)
+          throw new Error(`create workspace ${created.status}: ${await created.text()}`)
+        const snapshot = (await created.json()) as { workspace: { id: string } }
+        const workspaceId = snapshot.workspace.id
+        await seedGitHubForWorkspace(seedDb, workspaceId, {})
+        const settings = await fetch(`${BACKEND_URL}/workspaces/${workspaceId}/settings`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ defaultProvisionType: 'infraless' }),
+        })
+        if (!settings.ok)
+          throw new Error(`workspace settings ${settings.status}: ${await settings.text()}`)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(snapshot))
       })
       .catch((err) => fail(res, 400, err))
     return
