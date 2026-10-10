@@ -2764,7 +2764,8 @@
         "toggleUiMode": "Oberflächenmodus wechseln",
         "chooseRole": "Rolle wechseln",
         "foundationalServices": "Basisdienste",
-        "notificationSettings": "Benachrichtigungs-Routing verwalten"
+        "notificationSettings": "Benachrichtigungs-Routing verwalten",
+        "toggleHomePreview": "Vorschau Warteschlange zuerst: ein- oder ausschalten"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2792,7 +2793,8 @@
         "chooseRole": "rolle entwickler produktmanager designer persona einfachere ansicht",
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
         "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
-        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang"
+        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang",
+        "toggleHomePreview": "warteschlange startseite vorschau layout posteingang einrichtung queue home preview inbox setup"
       }
     },
     "shortcuts": {
@@ -8736,6 +8738,161 @@
         "malformed": "Dieser Link enthält kein lesbares Design. Kopiere ihn erneut aus dem Editor.",
         "presetShorthand": "Dieser Link nennt eine Vorlage des Nuxt UI Editors, die diese App nicht kennt. Ändere eine beliebige Einstellung im Editor, damit der Link das ganze Design enthält, und kopiere ihn erneut.",
         "unsupportedVersion": "Dieses Design stammt aus einem neueren Editor-Format, als diese App versteht."
+      }
+    }
+  },
+  "queue": {
+    "title": "Warteschlange",
+    "summary": "{needsYou} warten auf dich · {ready} bereit zum Mergen",
+    "filter": {
+      "allServices": "Alle Services",
+      "service": "Nach Service filtern"
+    },
+    "describeWork": "Neue Arbeit beschreiben",
+    "setupBlocking": "Dieser Workspace kann noch keine Aufgaben ausführen. Einrichtung: {done} von {total} erledigt.",
+    "setupBlockingNoAccess": "Ein Workspace-Admin muss die Einrichtung abschließen, bevor Aufgaben laufen können.",
+    "openSetup": "Einrichtung öffnen",
+    "columns": {
+      "needsYou": {
+        "label": "Wartet auf dich",
+        "empty": "Nichts wartet auf dich."
+      },
+      "inFlight": {
+        "label": "In Arbeit",
+        "empty": "Derzeit arbeitet kein Agent."
+      },
+      "readyToMerge": {
+        "label": "Bereit zum Mergen",
+        "empty": "Kein Pull Request wartet auf den Merge."
+      }
+    },
+    "waiting": {
+      "label": "Nicht begonnen ({count})",
+      "empty": "Nichts wartet auf den Start."
+    },
+    "done": {
+      "count": "In den letzten 7 Tagen gemergt: {count}",
+      "show": "Anzeigen",
+      "hide": "Ausblenden",
+      "capped": "Zeigt die neuesten {shown} von {total}.",
+      "undated": "Nicht angezeigt, ohne Abschlussdatum: {count}"
+    },
+    "card": {
+      "waited": "wartete {duration}",
+      "active": "vor {duration} aktiv",
+      "merged": "vor {duration} gemergt",
+      "step": "Schritt {current} von {total}",
+      "openTask": "Aufgabe öffnen",
+      "showOnBoard": "Auf dem Board zeigen",
+      "retry": "Wiederholen",
+      "answer": "Antworten",
+      "budgetPaused": "Das Ausgabenlimit hat diesen Durchlauf angehalten. Er läuft weiter, sobald das Limit erhöht wird.",
+      "parked": "Der Durchlauf wartet auf einen Menschen. Öffne die Aufgabe, um zu sehen, was fehlt.",
+      "waitingOn": "Wartet auf {deps}",
+      "pr": "Pull Request #{number}"
+    }
+  },
+  "setup": {
+    "title": "Einrichtung",
+    "progress": "{done} von {total} erledigt",
+    "intro": "Was dieser Workspace braucht, damit eine Aufgabe laufen und gemergt werden kann. Nur wer diese Punkte ändern darf, sieht diese Seite. Alle anderen sehen eine Zeile in der Warteschlange.",
+    "noAccess": {
+      "title": "Du kannst die Einrichtung nicht ändern",
+      "body": "Ein Workspace-Admin kann die Einrichtung abschließen. Solange Aufgaben nicht laufen können, zeigt die Warteschlange eine Zeile dazu."
+    },
+    "required": "erforderlich",
+    "optional": "optional",
+    "action": {
+      "change": "Ändern",
+      "connect": "Einrichten",
+      "fix": "Beheben",
+      "review": "Prüfen"
+    },
+    "rows": {
+      "checking": "Wird geprüft…",
+      "notNeeded": "Diese Bereitstellung nutzt das nicht.",
+      "model": {
+        "title": "Modell",
+        "done": "Ein Modell ist verfügbar, und das Standard-Preset nutzt es.",
+        "missing": "Kein Modell verfügbar. Kein Agent kann laufen, bis du einen Anbieter verbindest.",
+        "attention": "Das Standard-Modell-Preset nennt ein Modell, das nicht verfügbar ist."
+      },
+      "sourceControl": {
+        "title": "Quellcodeverwaltung",
+        "done": "Verbunden. Agenten können Branches pushen und Pull Requests öffnen.",
+        "missing": "Nicht verbunden. Agenten können keine Pull Requests öffnen.",
+        "attention": "Der Zugriffstoken kann weder pushen noch Pull Requests öffnen."
+      },
+      "agentExecutor": {
+        "title": "Wo Agenten laufen",
+        "done": "Ein Runner ist konfiguriert.",
+        "missing": "Kein Runner konfiguriert. Nichts kann laufen, bis du einen verbindest.",
+        "attention": "Der Runner ist nicht erreichbar, oder eine erforderliche Einstellung fehlt.",
+        "notNeeded": "Diese Bereitstellung führt Agenten ohne Runner aus."
+      },
+      "testEnvironments": {
+        "title": "Testumgebungen",
+        "done": "Konfiguriert. Tester können eine Live-Vorschau nutzen.",
+        "missing": "Nicht eingerichtet. Tester, die eine Live-Vorschau brauchen, laufen nicht. Alle anderen Agenten laufen.",
+        "attention": "Der Umgebungsanbieter ist nicht erreichbar, oder eine erforderliche Einstellung fehlt."
+      },
+      "contentStorage": {
+        "title": "Screenshot-Speicher",
+        "done": "Konfiguriert. Visuelle Prüfungen sind aktiv.",
+        "missing": "Nicht eingerichtet. Visuelle Prüfungen sind aus.",
+        "attention": "Der Speicher ist nicht erreichbar."
+      }
+    },
+    "also": {
+      "title": "Außerdem hier",
+      "pipelines": "Pipelines: {count} zu reparieren, {fresh} neue Standard-Pipelines",
+      "riskPolicies": "Merge-Richtlinien: {count} veraltet, {fresh} neu",
+      "modelPresets": "Modell-Presets: {count} veraltet, {fresh} neu",
+      "settings": "Einstellungen und Verbindungen",
+      "workspaceSettings": "Workspace-Einstellungen",
+      "integrations": "Integrationen"
+    }
+  },
+  "describeWork": {
+    "title": "Neue Arbeit beschreiben",
+    "textLabel": "Was zu tun ist",
+    "textHint": "Ein Satz reicht. Füge mehr Details hinzu, wenn du welche hast.",
+    "textPlaceholder": "Füge ein Audit-Log für Anmeldeereignisse hinzu. Erfasse jede Anmeldung mit Zeit, Benutzer und Ergebnis.",
+    "savedAs": "Aufgabentitel: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Service auswählen",
+    "kindLabel": "Art",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "Weitere Arten…",
+    "changeHowItRuns": "Ablauf ändern",
+    "workspaceDefault": "Workspace-Standard",
+    "attachContext": "Kontext anhängen (öffnet das vollständige Formular)",
+    "footerHint": "Die Aufgabe wird als nicht begonnen hinzugefügt. Sie startet, wenn du auf Start drückst.",
+    "add": "Zur Warteschlange hinzufügen",
+    "addAndStart": "Hinzufügen und starten",
+    "addedToast": "„{title}“ zur Warteschlange hinzugefügt"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "Arbeit",
+      "queue": "Warteschlange",
+      "board": "Board (Karte)",
+      "setup": "Einrichtung",
+      "setupProgress": "{done} von {total}"
+    },
+    "leave": "Zurück zum aktuellen Layout",
+    "inbox": {
+      "verb": {
+        "review": "Prüfen",
+        "answer": "Antworten",
+        "test": "Testen",
+        "confirm": "Bestätigen",
+        "triage": "Sichten",
+        "choose": "Auswählen",
+        "open": "Öffnen"
       }
     }
   }

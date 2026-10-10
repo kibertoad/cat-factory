@@ -1,27 +1,18 @@
 import { computed, type Ref } from 'vue'
-import type { Block } from '~/types/domain'
 import { createLaneMemo } from '~/utils/laneIdentity'
 import {
   groupLaneTasks,
-  runActivityAt,
-  runWaitingSince,
   sortLaneTasks,
   type LaneTaskEntry,
   type RenderedLane,
 } from '~/utils/laneSort'
+import { useTaskLaneClassifier } from '~/composables/useTaskLaneClassifier'
 import {
-  classifyTask,
   selectDoneLaneTasks,
   TASK_LANES,
   type DoneLaneSelection,
   type TaskLane,
 } from '~/utils/swimlanes'
-
-/** A lane entry plus the lane it was classified into. */
-interface ClassifiedEntry {
-  readonly entry: LaneTaskEntry
-  readonly lane: TaskLane
-}
 
 /**
  * Assemble a service frame's tasks into swimlanes.
@@ -34,12 +25,9 @@ interface ClassifiedEntry {
  */
 export function useFrameLanes(frameId: Ref<string>) {
   const board = useBoardStore()
-  const execution = useExecutionStore()
-  const agentRuns = useAgentRunsStore()
-  const notifications = useNotificationsStore()
   const settings = useWorkspaceSettingsStore()
   const laneView = useLaneViewStore()
-  const reviews = useReviewStage()
+  const { classify } = useTaskLaneClassifier()
 
   /** Tasks directly in the frame plus those inside its modules: a module renders no box now. */
   const tasks = computed(() => board.allTasksUnder(frameId.value))
@@ -48,71 +36,6 @@ export function useFrameLanes(frameId: Ref<string>) {
   const moduleBlockIdByName = computed(
     () => new Map(board.modulesOf(frameId.value).map((m) => [m.title, m.id])),
   )
-
-  /**
-   * The module a task belongs to: the module BLOCK's title when it already lives in one, else
-   * the module it DECLARES. The engine only materialises the block on merge
-   * (`applyModuleAssignment`), so keying on the parent alone would leave every unmerged task in
-   * "no module" while its own card names one.
-   */
-  function moduleNameOf(task: Block): string | null {
-    const parent = task.parentId ? board.getBlock(task.parentId) : undefined
-    if (parent?.level === 'module') return parent.title
-    return task.moduleName?.trim() || null
-  }
-
-  /**
-   * One task's lane, reason and rendered entry.
-   *
-   * Every cross-block lookup here is a Map read off an index a STORE maintains, never a reduction
-   * of its own: this composable runs ONE INSTANCE PER MOUNTED FRAME, so deriving a workspace-wide
-   * fact here makes a board with n frames pay for it n times on every change. The review-debt map
-   * (`notifications.reviewDebtByBlock`) is the worked example: a reduction over the whole
-   * workspace's open notifications, and it belongs on the store that owns its input. The rule for
-   * anything else this assembly needs: a per-FRAME derivation belongs here, a workspace-wide one
-   * belongs on that store.
-   */
-  function classify(task: Block, order: number): ClassifiedEntry {
-    const run = execution.getByBlock(task.id) ?? null
-    const decisions = execution.decisionsByBlock.get(task.id) ?? []
-    const allApprovals = execution.approvalsByBlock.get(task.id) ?? []
-    // The same suppression the card and the frame badge apply: an iterative reviewer mid-cycle
-    // holds a pending approval while the driver folds answers in, and nobody is waiting on it.
-    const humanApprovals = allApprovals.filter((a) => !reviews.isBackground(a.agentKind, a.blockId))
-
-    const { lane, reason } = classifyTask({
-      status: task.status,
-      // Read from the coarse per-block summary, which also covers a bootstrap run.
-      runFailed: agentRuns.byBlock[task.id]?.status === 'failed',
-      run,
-      // A park is background exactly when everything asking was suppressed AND nothing else
-      // asks. With no approvals at all it is NOT background: it is a park on a surface this
-      // layer cannot name, which `classifyTask` reports as `parked` rather than as work.
-      parkIsBackground:
-        decisions.length === 0 &&
-        humanApprovals.length === 0 &&
-        allApprovals.length > humanApprovals.length,
-      pendingDecision: decisions.length > 0,
-      pendingApproval: humanApprovals.length > 0,
-      hasUnmetDeps: board.unmetDeps(task.id).length > 0,
-    })
-
-    return {
-      lane,
-      entry: {
-        task,
-        reason,
-        order,
-        activityAt: runActivityAt(run),
-        waitingSince: runWaitingSince(run, notifications.reviewDebtByBlock.get(task.id) ?? null),
-        moduleName: moduleNameOf(task),
-        initiativeName: task.initiativeId
-          ? (board.getBlock(task.initiativeId)?.title ?? null)
-          : null,
-        epicName: board.epicOf(task)?.title ?? null,
-      },
-    }
-  }
 
   /** Every task bucketed by lane, in board order, before sorting. */
   const byLane = computed(() => {

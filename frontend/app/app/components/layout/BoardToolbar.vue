@@ -12,6 +12,7 @@ const board = useBoardStore()
 // the sidebar/command entries with zero edits here.
 const { toolbarItems, invoke: invokeNav } = useNavContributions()
 const execution = useExecutionStore()
+const preview = useHomePreviewStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
@@ -199,8 +200,9 @@ const decisionItems = computed(() =>
 
     <USeparator orientation="vertical" class="mx-1 h-6" />
 
-    <!-- decisions queue -->
-    <UDropdownMenu v-if="execution.pendingDecisionCount" :items="decisionItems">
+    <!-- decisions queue. The queue-first preview drops it: its sidebar "Queue" count is the one
+         attention counter, and the queue lists every decision with its Answer button. -->
+    <UDropdownMenu v-if="execution.pendingDecisionCount && !preview.enabled" :items="decisionItems">
       <UButton
         color="warning"
         variant="soft"
@@ -256,8 +258,9 @@ const decisionItems = computed(() =>
       @click="invokeNav(item)"
     />
 
-    <!-- human-actionable notifications (merge review, pipeline complete, CI failed) -->
-    <NotificationsInbox />
+    <!-- human-actionable notifications (merge review, pipeline complete, CI failed). In the
+         queue-first preview the inbox lives in the queue's header instead. -->
+    <NotificationsInbox v-if="!preview.enabled" />
 
     <!-- spend safeguard usage -->
     <UButton

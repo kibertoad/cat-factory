@@ -2637,7 +2637,8 @@
         "toggleUiMode": "インターフェースモードを切り替え",
         "chooseRole": "役割を変更",
         "foundationalServices": "基盤サービス",
-        "notificationSettings": "通知ルーティングを管理"
+        "notificationSettings": "通知ルーティングを管理",
+        "toggleHomePreview": "キュー優先のプレビュー: オン・オフを切り替え"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -2665,7 +2666,8 @@
         "chooseRole": "役割 ロール エンジニア プロダクトマネージャー デザイナー 簡易表示",
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
         "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
-        "notificationSettings": "通知 メール ルーティング チャネル 受信箱"
+        "notificationSettings": "通知 メール ルーティング チャネル 受信箱",
+        "toggleHomePreview": "キュー ホーム プレビュー レイアウト 受信トレイ セットアップ queue home preview layout inbox setup"
       }
     },
     "integrationsHub": {
@@ -8736,6 +8738,161 @@
         "malformed": "このリンクには読み取れるテーマが含まれていません。エディターからもう一度コピーしてください。",
         "presetShorthand": "このリンクは、このアプリが知らない Nuxt UI エディターのプリセット名を指しています。エディターでいずれかの設定を変えてリンクにテーマ全体を含め、もう一度コピーしてください。",
         "unsupportedVersion": "このテーマは、このアプリが対応していない新しいエディター形式で作成されています。"
+      }
+    }
+  },
+  "queue": {
+    "title": "キュー",
+    "summary": "対応が必要 {needsYou} 件 · マージ可能 {ready} 件",
+    "filter": {
+      "allServices": "すべてのサービス",
+      "service": "サービスで絞り込む"
+    },
+    "describeWork": "新しい作業を記述",
+    "setupBlocking": "このワークスペースではまだタスクを実行できません。セットアップ: {total} 件中 {done} 件完了。",
+    "setupBlockingNoAccess": "タスクを実行するには、ワークスペース管理者がセットアップを完了する必要があります。",
+    "openSetup": "セットアップを開く",
+    "columns": {
+      "needsYou": {
+        "label": "対応が必要",
+        "empty": "あなたの対応を待っているものはありません。"
+      },
+      "inFlight": {
+        "label": "進行中",
+        "empty": "現在動作中のエージェントはありません。"
+      },
+      "readyToMerge": {
+        "label": "マージ可能",
+        "empty": "マージ待ちのプルリクエストはありません。"
+      }
+    },
+    "waiting": {
+      "label": "未着手（{count}）",
+      "empty": "開始待ちのものはありません。"
+    },
+    "done": {
+      "count": "過去7日間にマージ済み: {count} 件",
+      "show": "表示",
+      "hide": "非表示",
+      "capped": "{total} 件中、新しい {shown} 件を表示しています。",
+      "undated": "完了日がないため非表示: {count}"
+    },
+    "card": {
+      "waited": "{duration} 待機",
+      "active": "{duration} 前に動作",
+      "merged": "{duration} 前にマージ",
+      "step": "ステップ {current} / {total}",
+      "openTask": "タスクを開く",
+      "showOnBoard": "ボードで表示",
+      "retry": "再試行",
+      "answer": "回答",
+      "budgetPaused": "支出上限により、この実行は一時停止中です。上限を引き上げると再開します。",
+      "parked": "この実行は人の対応を待っています。タスクを開いて必要な内容を確認してください。",
+      "waitingOn": "{deps} を待機中",
+      "pr": "プルリクエスト #{number}"
+    }
+  },
+  "setup": {
+    "title": "セットアップ",
+    "progress": "{total} 件中 {done} 件完了",
+    "intro": "このワークスペースでタスクを実行してマージするために必要なものです。このページは、これらの項目を変更できる人にだけ表示されます。それ以外の人には、キューに1行だけ表示されます。",
+    "noAccess": {
+      "title": "セットアップを変更できません",
+      "body": "セットアップはワークスペース管理者が完了できます。タスクを実行できない間は、キューにその旨が1行表示されます。"
+    },
+    "required": "必須",
+    "optional": "任意",
+    "action": {
+      "change": "変更",
+      "connect": "設定",
+      "fix": "修正",
+      "review": "確認"
+    },
+    "rows": {
+      "checking": "確認中…",
+      "notNeeded": "このデプロイでは使用しません。",
+      "model": {
+        "title": "モデル",
+        "done": "利用可能なモデルがあり、既定のプリセットがそれを使用しています。",
+        "missing": "利用可能なモデルがありません。プロバイダーを接続するまで、どのエージェントも実行できません。",
+        "attention": "既定のモデルプリセットが、利用できないモデルを指しています。"
+      },
+      "sourceControl": {
+        "title": "ソース管理",
+        "done": "接続済み。エージェントはブランチをプッシュし、プルリクエストを作成できます。",
+        "missing": "未接続。エージェントはプルリクエストを作成できません。",
+        "attention": "アクセストークンでは、プッシュもプルリクエストの作成もできません。"
+      },
+      "agentExecutor": {
+        "title": "エージェントの実行場所",
+        "done": "ランナーが設定されています。",
+        "missing": "ランナーが設定されていません。接続するまで何も実行できません。",
+        "attention": "ランナーに到達できないか、必須の設定が不足しています。",
+        "notNeeded": "このデプロイでは、ランナーなしでエージェントを実行します。"
+      },
+      "testEnvironments": {
+        "title": "テスト環境",
+        "done": "設定済み。テスターはライブプレビューを使用できます。",
+        "missing": "未設定。ライブプレビューが必要なテスターは実行されません。それ以外のエージェントは実行されます。",
+        "attention": "環境プロバイダーに到達できないか、必須の設定が不足しています。"
+      },
+      "contentStorage": {
+        "title": "スクリーンショットの保存先",
+        "done": "設定済み。ビジュアルチェックは有効です。",
+        "missing": "未設定。ビジュアルチェックは無効です。",
+        "attention": "ストレージに到達できません。"
+      }
+    },
+    "also": {
+      "title": "その他",
+      "pipelines": "パイプライン: 修復が必要 {count} 件、新しい組み込み {fresh} 件",
+      "riskPolicies": "マージポリシー: 古いもの {count} 件、新規 {fresh} 件",
+      "modelPresets": "モデルプリセット: 古いもの {count} 件、新規 {fresh} 件",
+      "settings": "設定と接続",
+      "workspaceSettings": "ワークスペース設定",
+      "integrations": "連携"
+    }
+  },
+  "describeWork": {
+    "title": "新しい作業を記述",
+    "textLabel": "やるべきこと",
+    "textHint": "1文で十分です。詳細があれば追加してください。",
+    "textPlaceholder": "サインインイベントの監査ログを追加する。各サインインを、時刻、ユーザー、結果とともに記録する。",
+    "savedAs": "タスクのタイトル: {title}",
+    "serviceLabel": "サービス",
+    "servicePlaceholder": "サービスを選択",
+    "kindLabel": "種類",
+    "kind": {
+      "feature": "機能",
+      "bug": "バグ"
+    },
+    "moreKinds": "その他の種類…",
+    "changeHowItRuns": "実行方法を変更",
+    "workspaceDefault": "ワークスペースの既定",
+    "attachContext": "コンテキストを添付（完全なフォームを開きます）",
+    "footerHint": "タスクは未着手として追加されます。開始を押すと始まります。",
+    "add": "キューに追加",
+    "addAndStart": "追加して開始",
+    "addedToast": "「{title}」をキューに追加しました"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "作業",
+      "queue": "キュー",
+      "board": "ボード（マップ）",
+      "setup": "セットアップ",
+      "setupProgress": "{done} / {total}"
+    },
+    "leave": "現在のレイアウトに戻る",
+    "inbox": {
+      "verb": {
+        "review": "レビュー",
+        "answer": "回答",
+        "test": "テスト",
+        "confirm": "確認",
+        "triage": "仕分け",
+        "choose": "選択",
+        "open": "開く"
       }
     }
   }

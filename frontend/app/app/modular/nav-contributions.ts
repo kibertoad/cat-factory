@@ -220,6 +220,7 @@ export const NAV_ACTIONS = [
   'tutorial',
   'toggleUiMode',
   'chooseRole',
+  'toggleHomePreview',
 ] as const
 
 export type NavActionId = (typeof NAV_ACTIONS)[number]
@@ -735,6 +736,23 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       group: 'workspace',
       order: 95,
       keywordsKey: 'layout.commandBar.keywords.chooseRole',
+    },
+  },
+  {
+    // The queue-first preview (issue #2258): a second shell for the same app, switched per
+    // browser so the home-surface decision can be made by using both. Palette-only and in every
+    // tier and role, because it is how a person gets IN and back OUT; the sidebar carries a
+    // "back to the current layout" link only while the preview is on.
+    id: 'home-preview',
+    labelKey: 'layout.commandBar.cmd.toggleHomePreview',
+    icon: 'i-lucide-flask-conical',
+    surfaces: S('command'),
+    intake: true,
+    action: 'toggleHomePreview',
+    command: {
+      group: 'workspace',
+      order: 97,
+      keywordsKey: 'layout.commandBar.keywords.toggleHomePreview',
     },
   },
 ]

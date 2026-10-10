@@ -2764,7 +2764,8 @@
         "toggleUiMode": "Cambia modalità interfaccia",
         "chooseRole": "Cambia il tuo ruolo",
         "foundationalServices": "Servizi fondamentali",
-        "notificationSettings": "Gestisci l'instradamento delle notifiche"
+        "notificationSettings": "Gestisci l'instradamento delle notifiche",
+        "toggleHomePreview": "Anteprima con la coda in primo piano: attiva o disattiva"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2792,7 +2793,8 @@
         "chooseRole": "ruolo ingegnere responsabile di prodotto designer profilo vista semplice",
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
-        "notificationSettings": "notifiche email instradamento canali casella"
+        "notificationSettings": "notifiche email instradamento canali casella",
+        "toggleHomePreview": "coda home anteprima layout posta configurazione queue preview inbox setup"
       }
     },
     "shortcuts": {
@@ -8736,6 +8738,161 @@
         "malformed": "Questo link non contiene un tema leggibile. Copialo di nuovo dall'editor.",
         "presetShorthand": "Questo link indica una preimpostazione dell'editor Nuxt UI che questa app non conosce. Modifica un'impostazione qualsiasi nell'editor così che il link contenga l'intero tema, poi copialo di nuovo.",
         "unsupportedVersion": "Questo tema è stato creato con un formato dell'editor più recente di quello che questa app comprende."
+      }
+    }
+  },
+  "queue": {
+    "title": "Coda",
+    "summary": "{needsYou} richiedono te · {ready} pronte per il merge",
+    "filter": {
+      "allServices": "Tutti i servizi",
+      "service": "Filtra per servizio"
+    },
+    "describeWork": "Descrivi nuovo lavoro",
+    "setupBlocking": "Questo workspace non può ancora eseguire attività. Configurazione: {done} su {total} completati.",
+    "setupBlockingNoAccess": "Un amministratore del workspace deve completare la configurazione prima che le attività possano essere eseguite.",
+    "openSetup": "Apri configurazione",
+    "columns": {
+      "needsYou": {
+        "label": "Richiede te",
+        "empty": "Non c’è nulla in attesa di te."
+      },
+      "inFlight": {
+        "label": "In corso",
+        "empty": "Nessun agente sta lavorando ora."
+      },
+      "readyToMerge": {
+        "label": "Pronta per il merge",
+        "empty": "Nessuna pull request attende il merge."
+      }
+    },
+    "waiting": {
+      "label": "Non iniziato ({count})",
+      "empty": "Non c’è nulla in attesa di partire."
+    },
+    "done": {
+      "count": "Unite negli ultimi 7 giorni: {count}",
+      "show": "Mostra",
+      "hide": "Nascondi",
+      "capped": "Mostra le {shown} più recenti su {total}.",
+      "undated": "Non mostrate, senza data di completamento: {count}"
+    },
+    "card": {
+      "waited": "ha atteso {duration}",
+      "active": "attiva {duration} fa",
+      "merged": "unita {duration} fa",
+      "step": "passo {current} di {total}",
+      "openTask": "Apri attività",
+      "showOnBoard": "Mostra nella board",
+      "retry": "Riprova",
+      "answer": "Rispondi",
+      "budgetPaused": "Il limite di spesa ha messo in pausa questa esecuzione. Riprende quando il limite aumenta.",
+      "parked": "L’esecuzione attende una persona. Apri l’attività per vedere cosa serve.",
+      "waitingOn": "In attesa di {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "setup": {
+    "title": "Configurazione",
+    "progress": "{done} su {total} completati",
+    "intro": "Ciò che serve a questo workspace perché un’attività possa essere eseguita e unita. Solo chi può modificare questi elementi vede questa pagina. Gli altri vedono una riga nella coda.",
+    "noAccess": {
+      "title": "Non puoi modificare la configurazione",
+      "body": "Un amministratore del workspace può completare la configurazione. Finché le attività non possono essere eseguite, la coda mostra una riga in merito."
+    },
+    "required": "obbligatorio",
+    "optional": "facoltativo",
+    "action": {
+      "change": "Modifica",
+      "connect": "Configura",
+      "fix": "Correggi",
+      "review": "Verifica"
+    },
+    "rows": {
+      "checking": "Verifica in corso…",
+      "notNeeded": "Questo deployment non lo usa.",
+      "model": {
+        "title": "Modello",
+        "done": "Un modello è disponibile e il preset predefinito lo usa.",
+        "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider.",
+        "attention": "Il preset di modello predefinito indica un modello non disponibile."
+      },
+      "sourceControl": {
+        "title": "Controllo del codice sorgente",
+        "done": "Collegato. Gli agenti possono fare push dei branch e aprire pull request.",
+        "missing": "Non collegato. Gli agenti non possono aprire pull request.",
+        "attention": "Il token di accesso non può fare push né aprire pull request."
+      },
+      "agentExecutor": {
+        "title": "Dove vengono eseguiti gli agenti",
+        "done": "Un runner è configurato.",
+        "missing": "Nessun runner configurato. Nulla può essere eseguito finché non ne colleghi uno.",
+        "attention": "Il runner non è raggiungibile, oppure manca un’impostazione obbligatoria.",
+        "notNeeded": "Questo deployment esegue gli agenti senza runner."
+      },
+      "testEnvironments": {
+        "title": "Ambienti di test",
+        "done": "Configurato. I tester possono usare un’anteprima live.",
+        "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì.",
+        "attention": "Il provider degli ambienti non è raggiungibile, oppure manca un’impostazione obbligatoria."
+      },
+      "contentStorage": {
+        "title": "Archiviazione degli screenshot",
+        "done": "Configurato. I controlli visivi sono attivi.",
+        "missing": "Non configurato. I controlli visivi sono disattivati.",
+        "attention": "L’archiviazione non è raggiungibile."
+      }
+    },
+    "also": {
+      "title": "Anche qui",
+      "pipelines": "Pipeline: {count} da riparare, {fresh} nuove predefinite",
+      "riskPolicies": "Policy di merge: {count} obsolete, {fresh} nuove",
+      "modelPresets": "Preset di modello: {count} obsoleti, {fresh} nuovi",
+      "settings": "Impostazioni e connessioni",
+      "workspaceSettings": "Impostazioni del workspace",
+      "integrations": "Integrazioni"
+    }
+  },
+  "describeWork": {
+    "title": "Descrivi nuovo lavoro",
+    "textLabel": "Cosa va fatto",
+    "textHint": "Basta una frase. Aggiungi più dettagli se ne hai.",
+    "textPlaceholder": "Aggiungi un audit log per gli accessi. Registra ogni accesso con ora, utente ed esito.",
+    "savedAs": "Titolo dell’attività: {title}",
+    "serviceLabel": "Servizio",
+    "servicePlaceholder": "Seleziona un servizio",
+    "kindLabel": "Tipo",
+    "kind": {
+      "feature": "Funzionalità",
+      "bug": "Bug"
+    },
+    "moreKinds": "Altri tipi…",
+    "changeHowItRuns": "Cambia come viene eseguita",
+    "workspaceDefault": "Predefinito del workspace",
+    "attachContext": "Allega contesto (apre il modulo completo)",
+    "footerHint": "L’attività viene aggiunta come non iniziata. Parte quando premi Avvia.",
+    "add": "Aggiungi alla coda",
+    "addAndStart": "Aggiungi e avvia",
+    "addedToast": "«{title}» aggiunta alla coda"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "Lavoro",
+      "queue": "Coda",
+      "board": "Board (mappa)",
+      "setup": "Configurazione",
+      "setupProgress": "{done} su {total}"
+    },
+    "leave": "Torna al layout attuale",
+    "inbox": {
+      "verb": {
+        "review": "Rivedi",
+        "answer": "Rispondi",
+        "test": "Testa",
+        "confirm": "Conferma",
+        "triage": "Smista",
+        "choose": "Scegli",
+        "open": "Apri"
       }
     }
   }

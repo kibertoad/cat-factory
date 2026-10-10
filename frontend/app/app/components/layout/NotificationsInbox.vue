@@ -2,6 +2,7 @@
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { NOTIFICATION_GO_TO_KEYS } from '~/utils/notificationVerbs'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -14,6 +15,7 @@ const { t, te, d } = useI18n()
 const notifications = useNotificationsStore()
 const ui = useUiStore()
 const access = useWorkspaceAccess()
+const preview = useHomePreviewStore()
 const execution = useExecutionStore()
 const trackRecords = useMergeTrackRecordsStore()
 const toast = useToast()
@@ -131,6 +133,17 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
 function actionLabel(n: Notification): string {
   const key = ACTION_KEYS[n.type]
   return te(key) ? t(key) : t('layout.notifications.action.markRead')
+}
+
+/**
+ * The queue-first preview's primary verb for a card whose act button only marks it read: the
+ * route the title click already takes, named (see `utils/notificationVerbs.ts`). Null outside the
+ * preview, so the current inbox is unchanged.
+ */
+function goToLabel(n: Notification): string | null {
+  if (!preview.enabled || !n.blockId) return null
+  const key = NOTIFICATION_GO_TO_KEYS[n.type]
+  return key ? t(key) : null
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -511,9 +524,18 @@ function revealDecision(n: Notification) {
               />
               <div class="mt-2 flex items-center gap-1.5">
                 <UButton
-                  data-testid="notification-act"
+                  v-if="goToLabel(n)"
+                  data-testid="notification-go-to"
                   :color="accent(n)"
-                  variant="soft"
+                  size="xs"
+                  @click="reveal(n)"
+                >
+                  {{ goToLabel(n) }}
+                </UButton>
+                <UButton
+                  data-testid="notification-act"
+                  :color="goToLabel(n) ? 'neutral' : accent(n)"
+                  :variant="goToLabel(n) ? 'ghost' : 'soft'"
                   size="xs"
                   :loading="busy === n.id"
                   :disabled="!access.canExecuteRuns.value"

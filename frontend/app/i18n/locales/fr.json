@@ -2637,7 +2637,8 @@
         "toggleUiMode": "Changer le mode d'interface",
         "chooseRole": "Changer de rôle",
         "foundationalServices": "Services fondamentaux",
-        "notificationSettings": "Gérer le routage des notifications"
+        "notificationSettings": "Gérer le routage des notifications",
+        "toggleHomePreview": "Aperçu avec la file d’attente en premier : activer ou désactiver"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -2665,7 +2666,8 @@
         "chooseRole": "rôle ingénieur chef de produit designer profil vue simplifiée",
         "tutorial": "tutoriel visite guide aide apprendre découverte",
         "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue",
-        "notificationSettings": "notifications e-mail routage canaux boîte"
+        "notificationSettings": "notifications e-mail routage canaux boîte",
+        "toggleHomePreview": "file attente accueil aperçu disposition boîte configuration queue home preview layout inbox setup"
       }
     },
     "integrationsHub": {
@@ -8736,6 +8738,161 @@
         "malformed": "Ce lien ne contient pas de thème lisible. Copiez-le de nouveau depuis l'éditeur.",
         "presetShorthand": "Ce lien nomme un préréglage de l'éditeur Nuxt UI que cette application ne connaît pas. Modifiez un réglage quelconque dans l'éditeur pour que le lien contienne tout le thème, puis copiez-le de nouveau.",
         "unsupportedVersion": "Ce thème a été créé avec un format de l'éditeur plus récent que celui que cette application comprend."
+      }
+    }
+  },
+  "queue": {
+    "title": "File d’attente",
+    "summary": "{needsYou} vous attendent · {ready} prêtes à fusionner",
+    "filter": {
+      "allServices": "Tous les services",
+      "service": "Filtrer par service"
+    },
+    "describeWork": "Décrire un nouveau travail",
+    "setupBlocking": "Ce workspace ne peut pas encore exécuter de tâches. Configuration : {done} sur {total} terminées.",
+    "setupBlockingNoAccess": "Un administrateur du workspace doit terminer la configuration avant que les tâches puissent s’exécuter.",
+    "openSetup": "Ouvrir la configuration",
+    "columns": {
+      "needsYou": {
+        "label": "Vous attend",
+        "empty": "Rien ne vous attend."
+      },
+      "inFlight": {
+        "label": "En cours",
+        "empty": "Aucun agent ne travaille en ce moment."
+      },
+      "readyToMerge": {
+        "label": "Prête à fusionner",
+        "empty": "Aucune pull request n’attend d’être fusionnée."
+      }
+    },
+    "waiting": {
+      "label": "Pas commencé ({count})",
+      "empty": "Rien n’attend de démarrer."
+    },
+    "done": {
+      "count": "Fusionnées ces 7 derniers jours : {count}",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "capped": "Affiche les {shown} plus récentes sur {total}.",
+      "undated": "Non affichées, sans date de fin : {count}"
+    },
+    "card": {
+      "waited": "a attendu {duration}",
+      "active": "active il y a {duration}",
+      "merged": "fusionnée il y a {duration}",
+      "step": "étape {current} sur {total}",
+      "openTask": "Ouvrir la tâche",
+      "showOnBoard": "Afficher sur le tableau",
+      "retry": "Réessayer",
+      "answer": "Répondre",
+      "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",
+      "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",
+      "waitingOn": "Attend {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "setup": {
+    "title": "Configuration",
+    "progress": "{done} sur {total} terminées",
+    "intro": "Ce dont ce workspace a besoin pour qu’une tâche s’exécute et soit fusionnée. Seules les personnes qui peuvent modifier ces éléments voient cette page. Les autres voient une ligne dans la file d’attente.",
+    "noAccess": {
+      "title": "Vous ne pouvez pas modifier la configuration",
+      "body": "Un administrateur du workspace peut terminer la configuration. Tant que les tâches ne peuvent pas s’exécuter, la file d’attente affiche une ligne à ce sujet."
+    },
+    "required": "obligatoire",
+    "optional": "facultatif",
+    "action": {
+      "change": "Modifier",
+      "connect": "Configurer",
+      "fix": "Corriger",
+      "review": "Examiner"
+    },
+    "rows": {
+      "checking": "Vérification…",
+      "notNeeded": "Ce déploiement ne l’utilise pas.",
+      "model": {
+        "title": "Modèle",
+        "done": "Un modèle est disponible, et le préréglage par défaut l’utilise.",
+        "missing": "Aucun modèle n’est disponible. Aucun agent ne peut s’exécuter tant que vous n’avez pas connecté un fournisseur.",
+        "attention": "Le préréglage de modèle par défaut désigne un modèle qui n’est pas disponible."
+      },
+      "sourceControl": {
+        "title": "Gestion de versions",
+        "done": "Connecté. Les agents peuvent pousser des branches et ouvrir des pull requests.",
+        "missing": "Non connecté. Les agents ne peuvent pas ouvrir de pull requests.",
+        "attention": "Le jeton d’accès ne peut ni pousser ni ouvrir de pull requests."
+      },
+      "agentExecutor": {
+        "title": "Où les agents s’exécutent",
+        "done": "Un runner est configuré.",
+        "missing": "Aucun runner n’est configuré. Rien ne peut s’exécuter tant que vous n’en connectez pas un.",
+        "attention": "Le runner est injoignable, ou un réglage obligatoire manque.",
+        "notNeeded": "Ce déploiement exécute les agents sans runner."
+      },
+      "testEnvironments": {
+        "title": "Environnements de test",
+        "done": "Configuré. Les testeurs peuvent utiliser un aperçu en direct.",
+        "missing": "Non configuré. Les testeurs qui ont besoin d’un aperçu en direct ne s’exécutent pas. Tous les autres agents s’exécutent.",
+        "attention": "Le fournisseur d’environnements est injoignable, ou un réglage obligatoire manque."
+      },
+      "contentStorage": {
+        "title": "Stockage des captures d’écran",
+        "done": "Configuré. Les vérifications visuelles sont activées.",
+        "missing": "Non configuré. Les vérifications visuelles sont désactivées.",
+        "attention": "Le stockage est injoignable."
+      }
+    },
+    "also": {
+      "title": "Aussi ici",
+      "pipelines": "Pipelines : {count} à réparer, {fresh} nouveaux intégrés",
+      "riskPolicies": "Politiques de fusion : {count} obsolètes, {fresh} nouvelles",
+      "modelPresets": "Préréglages de modèle : {count} obsolètes, {fresh} nouveaux",
+      "settings": "Réglages et connexions",
+      "workspaceSettings": "Réglages du workspace",
+      "integrations": "Intégrations"
+    }
+  },
+  "describeWork": {
+    "title": "Décrire un nouveau travail",
+    "textLabel": "Ce qu’il faut faire",
+    "textHint": "Une phrase suffit. Ajoutez plus de détails si vous en avez.",
+    "textPlaceholder": "Ajouter un journal d’audit pour les connexions. Enregistrer chaque connexion avec l’heure, l’utilisateur et le résultat.",
+    "savedAs": "Titre de la tâche : {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Sélectionnez un service",
+    "kindLabel": "Type",
+    "kind": {
+      "feature": "Fonctionnalité",
+      "bug": "Bogue"
+    },
+    "moreKinds": "Plus de types…",
+    "changeHowItRuns": "Modifier le déroulement",
+    "workspaceDefault": "Défaut du workspace",
+    "attachContext": "Joindre du contexte (ouvre le formulaire complet)",
+    "footerHint": "La tâche est ajoutée comme non commencée. Elle démarre quand vous appuyez sur Démarrer.",
+    "add": "Ajouter à la file",
+    "addAndStart": "Ajouter et démarrer",
+    "addedToast": "« {title} » a été ajoutée à la file"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "Travail",
+      "queue": "File d’attente",
+      "board": "Tableau (carte)",
+      "setup": "Configuration",
+      "setupProgress": "{done} sur {total}"
+    },
+    "leave": "Retour à la disposition actuelle",
+    "inbox": {
+      "verb": {
+        "review": "Relire",
+        "answer": "Répondre",
+        "test": "Tester",
+        "confirm": "Confirmer",
+        "triage": "Trier",
+        "choose": "Choisir",
+        "open": "Ouvrir"
       }
     }
   }

@@ -2792,7 +2792,8 @@
         "toggleUiMode": "Switch interface mode",
         "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
-        "notificationSettings": "Manage notification routing"
+        "notificationSettings": "Manage notification routing",
+        "toggleHomePreview": "Queue-first preview: switch on or off"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2820,7 +2821,8 @@
         "chooseRole": "role engineer product manager designer persona simpler view",
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
-        "notificationSettings": "notifications email routing channels inbox"
+        "notificationSettings": "notifications email routing channels inbox",
+        "toggleHomePreview": "queue home preview layout inbox setup"
       }
     },
     "shortcuts": {
@@ -9067,6 +9069,161 @@
         "malformed": "This link does not carry a readable theme. Copy it again from the editor.",
         "presetShorthand": "This link names a Nuxt UI editor preset this app does not know. Change any setting in the editor so the link carries the whole theme, then copy it again.",
         "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
+      }
+    }
+  },
+  "queue": {
+    "title": "Queue",
+    "summary": "{needsYou} need you · {ready} ready to merge",
+    "filter": {
+      "allServices": "All services",
+      "service": "Filter by service"
+    },
+    "describeWork": "Describe new work",
+    "setupBlocking": "This workspace cannot run tasks yet. Setup: {done} of {total} done.",
+    "setupBlockingNoAccess": "A workspace admin must finish the setup before tasks can run.",
+    "openSetup": "Open setup",
+    "columns": {
+      "needsYou": {
+        "label": "Needs you",
+        "empty": "Nothing waits on you."
+      },
+      "inFlight": {
+        "label": "In flight",
+        "empty": "No agent is working now."
+      },
+      "readyToMerge": {
+        "label": "Ready to merge",
+        "empty": "No pull request waits to merge."
+      }
+    },
+    "waiting": {
+      "label": "Not started ({count})",
+      "empty": "Nothing waits to start."
+    },
+    "done": {
+      "count": "Merged in the last 7 days: {count}",
+      "show": "Show",
+      "hide": "Hide",
+      "capped": "Shows the newest {shown} of {total}.",
+      "undated": "Not shown, no completion date: {count}"
+    },
+    "card": {
+      "waited": "waited {duration}",
+      "active": "active {duration} ago",
+      "merged": "merged {duration} ago",
+      "step": "step {current} of {total}",
+      "openTask": "Open task",
+      "showOnBoard": "Show on the board",
+      "retry": "Retry",
+      "answer": "Answer",
+      "budgetPaused": "The spend limit paused this run. It continues when the limit goes up.",
+      "parked": "The run waits for a person. Open the task to see what it needs.",
+      "waitingOn": "Waits for {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "progress": "{done} of {total} done",
+    "intro": "What this workspace needs before a task can run and merge. Only people who can change these items see this page. Everyone else sees one line in the queue.",
+    "noAccess": {
+      "title": "You cannot change the setup",
+      "body": "A workspace admin can finish the setup. While tasks cannot run, the queue shows one line about it."
+    },
+    "required": "required",
+    "optional": "optional",
+    "action": {
+      "change": "Change",
+      "connect": "Set up",
+      "fix": "Fix",
+      "review": "Review"
+    },
+    "rows": {
+      "checking": "Checking…",
+      "notNeeded": "This deployment does not use it.",
+      "model": {
+        "title": "Model",
+        "done": "A model is available, and the default preset uses it.",
+        "missing": "No model is available. No agent can run until you connect a provider.",
+        "attention": "The default model preset names a model that is not available."
+      },
+      "sourceControl": {
+        "title": "Source control",
+        "done": "Connected. Agents can push branches and open pull requests.",
+        "missing": "Not connected. Agents cannot open pull requests.",
+        "attention": "The access token cannot push or open pull requests."
+      },
+      "agentExecutor": {
+        "title": "Where agents run",
+        "done": "A runner is configured.",
+        "missing": "No runner is configured. Nothing can run until you connect one.",
+        "attention": "The runner is unreachable, or a required setting is missing.",
+        "notNeeded": "This deployment runs agents without a runner."
+      },
+      "testEnvironments": {
+        "title": "Test environments",
+        "done": "Configured. Testers can use a live preview.",
+        "missing": "Not set up. Testers that need a live preview do not run. All other agents run.",
+        "attention": "The environment provider is unreachable, or a required setting is missing."
+      },
+      "contentStorage": {
+        "title": "Screenshot storage",
+        "done": "Configured. Visual checks are on.",
+        "missing": "Not set up. Visual checks are off.",
+        "attention": "The storage is unreachable."
+      }
+    },
+    "also": {
+      "title": "Also here",
+      "pipelines": "Pipelines: {count} to repair, {fresh} new built-ins",
+      "riskPolicies": "Merge policies: {count} outdated, {fresh} new",
+      "modelPresets": "Model presets: {count} outdated, {fresh} new",
+      "settings": "Settings and connections",
+      "workspaceSettings": "Workspace settings",
+      "integrations": "Integrations"
+    }
+  },
+  "describeWork": {
+    "title": "Describe new work",
+    "textLabel": "What must be done",
+    "textHint": "One sentence is enough. Add more detail if you have it.",
+    "textPlaceholder": "Add an audit log for sign-in events. Record each sign-in with the time, the user and the result.",
+    "savedAs": "Task title: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Select a service",
+    "kindLabel": "Kind",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "More kinds…",
+    "changeHowItRuns": "Change how this runs",
+    "workspaceDefault": "Workspace default",
+    "attachContext": "Attach context (opens the full form)",
+    "footerHint": "The task is added as not started. It starts when you press Start.",
+    "add": "Add to queue",
+    "addAndStart": "Add and start",
+    "addedToast": "Added “{title}” to the queue"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "Work",
+      "queue": "Queue",
+      "board": "Board (map)",
+      "setup": "Setup",
+      "setupProgress": "{done} of {total}"
+    },
+    "leave": "Back to the current layout",
+    "inbox": {
+      "verb": {
+        "review": "Review",
+        "answer": "Answer",
+        "test": "Test",
+        "confirm": "Confirm",
+        "triage": "Triage",
+        "choose": "Choose",
+        "open": "Open"
       }
     }
   }
