@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "התיאור הזה מקשר לדף {source}. לצרף אותו כהקשר?",
       "attach": "צרף"
-    }
+    },
+    "removePending": "הסר את {name}"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "בטל כברירת מחדל באפליקציה",
         "claimUnattended": "הפוך לברירת המחדל ללא השגחה",
         "releaseUnattended": "בטל כברירת מחדל ללא השגחה"
-      }
+      },
+      "removeLabel": "הסר את התווית {label}"
     },
     "progress": {
       "status": {

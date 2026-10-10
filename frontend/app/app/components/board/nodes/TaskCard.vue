@@ -5,6 +5,7 @@ import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ taskId: string }>()
 
@@ -360,16 +361,19 @@ function selectTask() {
         {{ statusText }}
       </span>
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
-      <UButton
+      <IconButton
         color="neutral"
         variant="ghost"
-        class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5"
-        :title="t('board.task.dragToConnect')"
+        icon="i-lucide-spline"
+        class="nodrag shrink-0"
+        :label="t('board.task.dragToConnect')"
+        :ui="{
+          base: 'cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5',
+          leadingIcon: 'h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5',
+        }"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
-      >
-        <UIcon name="i-lucide-spline" class="h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5" />
-      </UButton>
+      />
     </div>
 
     <!-- title gets a full-width row so long titles wrap to two lines rather than

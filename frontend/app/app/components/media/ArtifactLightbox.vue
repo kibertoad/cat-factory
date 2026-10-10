@@ -9,6 +9,7 @@
 import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
+import IconButton from '~/components/common/IconButton.vue'
 
 interface LightboxItem {
   artifactId: string
@@ -180,47 +181,56 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           {{ t('media.lightbox.counter', { current: index + 1, total }) }}
         </span>
         <div class="flex shrink-0 items-center gap-1">
-          <UButton
+          <IconButton
             color="neutral"
             variant="ghost"
-            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
-            :title="t('media.lightbox.zoomOut')"
+            icon="i-lucide-zoom-out"
+            :label="t('media.lightbox.zoomOut')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40',
+              leadingIcon: 'h-4 w-4',
+            }"
             :disabled="scale <= MIN_SCALE"
             @click="zoomBy(1 / 1.25)"
-          >
-            <UIcon name="i-lucide-zoom-out" class="h-4 w-4" />
-          </UButton>
+          />
           <span class="w-10 text-center text-2xs tabular-nums text-dimmed">{{
             n(scale, 'percent')
           }}</span>
-          <UButton
+          <IconButton
             color="neutral"
             variant="ghost"
-            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
-            :title="t('media.lightbox.zoomIn')"
+            icon="i-lucide-zoom-in"
+            :label="t('media.lightbox.zoomIn')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40',
+              leadingIcon: 'h-4 w-4',
+            }"
             :disabled="scale >= MAX_SCALE"
             @click="zoomBy(1.25)"
-          >
-            <UIcon name="i-lucide-zoom-in" class="h-4 w-4" />
-          </UButton>
-          <UButton
+          />
+          <IconButton
             color="neutral"
             variant="ghost"
-            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
-            :title="t('media.lightbox.reset')"
+            icon="i-lucide-maximize"
+            :label="t('media.lightbox.reset')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
             @click="resetView"
-          >
-            <UIcon name="i-lucide-maximize" class="h-4 w-4" />
-          </UButton>
-          <UButton
+          />
+          <IconButton
             color="neutral"
             variant="ghost"
-            class="ms-1 rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
-            :title="t('media.lightbox.close')"
+            icon="i-lucide-x"
+            class="ms-1"
+            :label="t('media.lightbox.close')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
             @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </UButton>
+          />
         </div>
       </div>
 
@@ -230,16 +240,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
         @wheel="onWheel"
         @click.self="close"
       >
-        <UButton
+        <IconButton
+          v-if="total > 1"
           color="neutral"
           variant="ghost"
-          v-if="total > 1"
-          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
-          :title="t('media.lightbox.prev')"
+          icon="i-lucide-chevron-left"
+          class="absolute start-3 top-1/2 z-10 -translate-y-1/2"
+          :label="t('media.lightbox.prev')"
+          :ui="{
+            base: 'rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted',
+            leadingIcon: 'h-5 w-5 rtl:-scale-x-100',
+          }"
           @click="go(-1)"
-        >
-          <UIcon name="i-lucide-chevron-left" class="h-5 w-5 rtl:-scale-x-100" />
-        </UButton>
+        />
 
         <img
           v-if="url"
@@ -278,16 +291,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           </UButton>
         </div>
 
-        <UButton
+        <IconButton
+          v-if="total > 1"
           color="neutral"
           variant="ghost"
-          v-if="total > 1"
-          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
-          :title="t('media.lightbox.next')"
+          icon="i-lucide-chevron-right"
+          class="absolute end-3 top-1/2 z-10 -translate-y-1/2"
+          :label="t('media.lightbox.next')"
+          :ui="{
+            base: 'rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted',
+            leadingIcon: 'h-5 w-5 rtl:-scale-x-100',
+          }"
           @click="go(1)"
-        >
-          <UIcon name="i-lucide-chevron-right" class="h-5 w-5 rtl:-scale-x-100" />
-        </UButton>
+        />
       </div>
     </div>
   </Teleport>

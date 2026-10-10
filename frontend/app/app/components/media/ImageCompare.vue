@@ -9,6 +9,7 @@
 // as a drag-and-drop / click upload target (emits `uploadReference`).
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   view: string
@@ -158,18 +159,23 @@ watch(pendingRef, (file) => {
         v-if="MODES.length > 1"
         class="flex items-center gap-0.5 rounded-md border border-default bg-app-950/60 p-0.5"
       >
-        <UButton
-          color="neutral"
-          variant="ghost"
+        <IconButton
           v-for="m in MODES"
           :key="m.id"
-          class="rounded-sm px-1.5 py-1 text-muted hover:bg-transparent hover:text-default"
-          :class="mode === m.id ? 'bg-elevated text-app-100' : ''"
-          :title="m.label"
+          color="neutral"
+          variant="ghost"
+          :icon="m.icon"
+          :label="m.label"
+          :aria-pressed="mode === m.id"
+          :ui="{
+            base: [
+              'rounded-sm px-1.5 py-1 text-muted hover:bg-transparent hover:text-default',
+              mode === m.id ? 'bg-elevated text-app-100' : '',
+            ].join(' '),
+            leadingIcon: 'h-3.5 w-3.5',
+          }"
           @click="mode = m.id"
-        >
-          <UIcon :name="m.icon" class="h-3.5 w-3.5" />
-        </UButton>
+        />
       </div>
     </div>
 

@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Esta descripción enlaza una página de {source}. ¿Adjuntarla como contexto?",
       "attach": "Adjuntar"
-    }
+    },
+    "removePending": "Quitar {name}"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "Dejar de ser la predeterminada en la app",
         "claimUnattended": "Hacer predeterminada sin supervisión",
         "releaseUnattended": "Dejar de ser la predeterminada sin supervisión"
-      }
+      },
+      "removeLabel": "Quitar la etiqueta {label}"
     },
     "progress": {
       "status": {

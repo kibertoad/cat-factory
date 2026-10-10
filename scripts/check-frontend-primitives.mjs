@@ -29,6 +29,11 @@
 //
 // `<a>` is claimed only when it carries an `href`. A bare `<a>` is an anchor target, not a link.
 //
+// ALSO BANNED: an icon-only `UButton` with a `title=` and no `aria-label`. Its only name is the
+// `title`, which never shows on touch and is not the app's tooltip. That is `IconButton`, which
+// names the button and shows the hint. Icon-only means an `icon` prop and no `label`, or a body
+// that is a single `<UIcon />`.
+//
 // ALSO BANNED: `title=` on `IconButton` and `CopyButton`. Both now wrap their button in a
 // `UTooltip` and pass `aria-label` themselves, so a `title` beside that renders a second, uglier
 // hint over the first. A `title` on a plain `UButton` is still allowed: on a control that already
@@ -121,6 +126,37 @@ export function findRenderedControls({ raw, code, prev }) {
   return [...new Set([...code.matchAll(RENDER_ELEMENT)].map((m) => m[1]))]
 }
 
+/** An icon-only `UButton` whose only name is a `title`: it should be `IconButton`. `bodyOf`
+ * returns the markup between the opening tag and `</UButton>` ('' for a self-closing tag). */
+export function findTitleOnlyIconButton(
+  line,
+  prevLine = '',
+  tagOf = () => line,
+  bodyOf = () => '',
+) {
+  if (COMMENT_LINE.test(line)) return []
+  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  const match = /<UButton(?![a-zA-Z0-9-])/.exec(line)
+  if (!match) return []
+  const tag = tagOf(match.index)
+  if (!/\s:?title[=\s>]/.test(tag) || /\s:?aria-label[=\s>]/.test(tag)) return []
+  const body = tag.trimEnd().endsWith('/>') ? '' : bodyOf(match.index).trim()
+  const iconProp = /\s:?icon=/.test(tag) && !/\s:?label=/.test(tag) && body === ''
+  const iconBody = /^<UIcon\b[^>]*\/>$/.test(body)
+  return iconProp || iconBody ? ['title-only icon button'] : []
+}
+
+/** The markup between the opening tag starting at `from` on `lines[index]` and its `</UButton>`. */
+export function buttonBody(lines, index, from = 0) {
+  const rest = lines
+    .slice(index, index + MAX_TAG_LINES)
+    .join('\n')
+    .slice(from)
+  const open = openingTag([rest], 0).length
+  const close = rest.indexOf('</UButton>', open)
+  return close === -1 ? '' : rest.slice(open, close)
+}
+
 /** `title=` on a primitive that already owns its tooltip. */
 export function findRedundantTitle(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
@@ -200,11 +236,14 @@ function main() {
       const tagOf = (from) => openingTag(lines, i, from)
       const controls = [...findRawControls(line, prev, tagOf), ...findDynamicControls(line, prev)]
       const titles = findRedundantTitle(line, prev, tagOf)
-      if (controls.length || titles.length) {
+      const iconOnly = findTitleOnlyIconButton(line, prev, tagOf, (from) =>
+        buttonBody(lines, i, from),
+      )
+      if (controls.length || titles.length || iconOnly.length) {
         offenders.push({
           file: file.rel,
           line: i + 1,
-          matches: [...controls.map((c) => `<${c}>`), ...titles.map(() => 'title=')],
+          matches: [...controls.map((c) => `<${c}>`), ...titles.map(() => 'title='), ...iconOnly],
         })
       }
     })
@@ -220,6 +259,8 @@ function main() {
           .join('\n') +
         '\nA component told to render one (`as="button"`, `:is="\'a\'"`, `h(\'button\')`) is the same raw\n' +
         'element. A collapsing section header is a `UButton` around `<SectionLabel as="span">`.\n' +
+        'An icon-only UButton named only by `title=` is `common/IconButton.vue`, which names it and\n' +
+        'shows the hint on hover, focus and touch.\n' +
         'IconButton and CopyButton own their tooltip, so a `title=` on either is a second hint\n' +
         'over the first.\n' +
         'See frontend/app/README.md, "A control is its Nuxt UI component".\n',

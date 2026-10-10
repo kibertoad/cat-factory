@@ -476,13 +476,13 @@ async function copyOutput() {
             <UIcon name="i-lucide-alert-triangle" class="me-1 h-3 w-3" />
             {{ t('panels.stepDetail.decisionRequired') }}
           </UBadge>
-          <UButton
+          <IconButton
             v-if="outline.sections.length"
             :icon="allCollapsed ? 'i-lucide-unfold-vertical' : 'i-lucide-fold-vertical'"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="
+            :label="
               allCollapsed ? t('panels.stepDetail.expandAll') : t('panels.stepDetail.collapseAll')
             "
             @click="setAll(!allCollapsed)"
@@ -921,15 +921,17 @@ async function copyOutput() {
               <SectionLabel>
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
               </SectionLabel>
-              <UButton
+              <IconButton
                 color="neutral"
                 variant="ghost"
-                class="p-0 text-dimmed transition hover:bg-transparent hover:text-app-error-400"
-                :title="t('panels.stepDetail.removeComment')"
+                icon="i-lucide-x"
+                :label="t('panels.stepDetail.removeComment')"
+                :ui="{
+                  base: 'p-0 text-dimmed transition hover:bg-transparent hover:text-app-error-400',
+                  leadingIcon: 'h-3.5 w-3.5',
+                }"
                 @click="removeComment(idx)"
-              >
-                <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-              </UButton>
+              />
             </div>
             <pre
               class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/50 p-1.5 text-3xs text-muted"

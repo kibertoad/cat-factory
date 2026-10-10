@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
       "attach": "添付"
-    }
+    },
+    "removePending": "{name} を削除"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "アプリ内の既定を解除",
         "claimUnattended": "無人実行の既定にする",
         "releaseUnattended": "無人実行の既定を解除"
-      }
+      },
+      "removeLabel": "ラベル {label} を削除"
     },
     "progress": {
       "status": {

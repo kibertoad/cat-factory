@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Cette description renvoie à une page {source}. L’attacher comme contexte ?",
       "attach": "Attacher"
-    }
+    },
+    "removePending": "Retirer {name}"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "Ne plus être le défaut dans l'application",
         "claimUnattended": "Définir comme défaut sans surveillance",
         "releaseUnattended": "Ne plus être le défaut sans surveillance"
-      }
+      },
+      "removeLabel": "Retirer le libellé {label}"
     },
     "progress": {
       "status": {

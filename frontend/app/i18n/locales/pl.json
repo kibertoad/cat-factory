@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
       "attach": "Dołącz"
-    }
+    },
+    "removePending": "Usuń {name}"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "Przestań być domyślnym w aplikacji",
         "claimUnattended": "Ustaw jako domyślny bez nadzoru",
         "releaseUnattended": "Przestań być domyślnym bez nadzoru"
-      }
+      },
+      "removeLabel": "Usuń etykietę {label}"
     },
     "progress": {
       "status": {

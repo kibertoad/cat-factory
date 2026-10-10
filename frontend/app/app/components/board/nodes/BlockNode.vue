@@ -461,7 +461,7 @@ const ITEM_ICON: Record<string, string> = {
                   :label="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
                 />
-                <UButton
+                <IconButton
                   v-if="documents.connectedDesignSources.length > 0"
                   class="nodrag"
                   data-testid="frame-start-from-design"
@@ -469,7 +469,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-frame"
-                  :title="t('board.frame.startFromDesignTitle')"
+                  :label="t('board.frame.startFromDesignTitle')"
                   @click.stop="startFromDesign"
                 />
                 <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan

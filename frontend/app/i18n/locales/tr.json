@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
       "attach": "Ekle"
-    }
+    },
+    "removePending": "{name} öğesini kaldır"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "Uygulama içi varsayılan olmaktan çıkar",
         "claimUnattended": "Gözetimsiz varsayılan yap",
         "releaseUnattended": "Gözetimsiz varsayılan olmaktan çıkar"
-      }
+      },
+      "removeLabel": "{label} etiketini kaldır"
     },
     "progress": {
       "status": {

@@ -6,6 +6,7 @@ import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -153,32 +154,30 @@ watch(
                 <span :data-testid="`operator-window-${item.value}`">{{ item.label }}</span>
               </template>
             </UTabs>
-            <UButton
+            <IconButton
               color="neutral"
               variant="ghost"
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :title="t('platformObservability.refresh')"
-              :aria-label="t('platformObservability.refresh')"
+              icon="i-lucide-refresh-cw"
+              :label="t('platformObservability.refresh')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+              }"
               data-testid="operator-refresh"
               @click="refresh"
-            >
-              <UIcon
-                name="i-lucide-refresh-cw"
-                class="h-4 w-4"
-                :class="{ 'animate-spin': loading }"
-              />
-            </UButton>
-            <UButton
+            />
+            <IconButton
               color="neutral"
               variant="ghost"
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :title="t('platformObservability.close')"
-              :aria-label="t('platformObservability.close')"
+              icon="i-lucide-x"
+              :label="t('platformObservability.close')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               data-testid="operator-close"
               @click="close"
-            >
-              <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </UButton>
+            />
           </div>
         </header>
 

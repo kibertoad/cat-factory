@@ -3455,7 +3455,8 @@
     "pastedLink": {
       "offer": "Questa descrizione rimanda a una pagina {source}. Allegarla come contesto?",
       "attach": "Allega"
-    }
+    },
+    "removePending": "Rimuovi {name}"
   },
   "providers": {
     "presetMismatch": {
@@ -4939,7 +4940,8 @@
         "releaseInteractive": "Non più predefinita nell'app",
         "claimUnattended": "Rendi predefinita non presidiata",
         "releaseUnattended": "Non più predefinita non presidiata"
-      }
+      },
+      "removeLabel": "Rimuovi l'etichetta {label}"
     },
     "progress": {
       "status": {

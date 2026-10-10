@@ -9,10 +9,12 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import {
+  buttonBody,
   findDynamicControls,
   findRawControls,
   findRedundantTitle,
   findRenderedControls,
+  findTitleOnlyIconButton,
   openingTag,
   templateHalf,
 } from './check-frontend-primitives.mjs'
@@ -210,4 +212,41 @@ test('claims a render function that creates a banned element', () => {
   assert.deepEqual(find(`path.h('button')`), [])
   assert.deepEqual(find(`// h('button') was the old helper`), [])
   assert.deepEqual(find(`h('button') // raw-control-ok: reason`), [])
+})
+
+test('claims an icon-only UButton named only by its title', () => {
+  const find = (source) => {
+    const lines = source.split('\n')
+    return lines.flatMap((line, i) =>
+      findTitleOnlyIconButton(line, lines[i - 1] ?? '', tagReader(lines, i), (from) =>
+        buttonBody(lines, i, from),
+      ),
+    )
+  }
+  const hit = ['title-only icon button']
+  assert.deepEqual(find('<UButton icon="i-lucide-x" :title="t(\'close\')" />'), hit)
+  assert.deepEqual(
+    find(['<UButton', '  :icon="icon"', '  variant="ghost"', '  :title="hint"', '/>'].join('\n')),
+    hit,
+  )
+  assert.deepEqual(
+    find(
+      ['<UButton :title="hint" @click="go">', '  <UIcon name="i-lucide-x" />', '</UButton>'].join(
+        '\n',
+      ),
+    ),
+    hit,
+  )
+  // Named some other way, or not icon-only: a `title` is then a hover hint, which is allowed.
+  assert.deepEqual(find('<UButton icon="i-lucide-x" title="Close" aria-label="Close" />'), [])
+  assert.deepEqual(find('<UButton icon="i-lucide-x" label="Close" title="Close the panel" />'), [])
+  assert.deepEqual(
+    find(
+      ['<UButton :title="hint">', '  <UIcon name="i-lucide-x" />', '  Close', '</UButton>'].join(
+        '\n',
+      ),
+    ),
+    [],
+  )
+  assert.deepEqual(find('<UButton icon="i-lucide-x" />'), [])
 })

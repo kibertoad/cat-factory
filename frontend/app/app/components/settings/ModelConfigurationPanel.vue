@@ -332,13 +332,13 @@ async function save() {
           >
             {{ t('settings.modelConfiguration.back') }}
           </UButton>
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
             :class="editor ? '' : 'ms-auto'"
-            :title="t('settings.modelConfiguration.closeEsc')"
+            :label="t('settings.modelConfiguration.closeEsc')"
             @click="
               () => {
                 open = false

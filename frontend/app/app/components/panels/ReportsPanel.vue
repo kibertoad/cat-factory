@@ -20,6 +20,7 @@ import {
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -238,29 +239,28 @@ watch(
                 <span :data-testid="`reports-window-${item.value}`">{{ item.label }}</span>
               </template>
             </UTabs>
-            <UButton
+            <IconButton
               color="neutral"
               variant="ghost"
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :aria-label="t('reports.refresh')"
-              :title="t('reports.refresh')"
+              icon="i-lucide-refresh-cw"
+              :label="t('reports.refresh')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+              }"
               @click="refresh"
-            >
-              <UIcon
-                name="i-lucide-refresh-cw"
-                class="h-4 w-4"
-                :class="{ 'animate-spin': loading }"
-              />
-            </UButton>
-            <UButton
+            />
+            <IconButton
               color="neutral"
               variant="ghost"
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :aria-label="t('common.close')"
+              icon="i-lucide-x"
+              :label="t('common.close')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               @click="close"
-            >
-              <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </UButton>
+            />
           </div>
         </header>
 

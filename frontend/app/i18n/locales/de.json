@@ -3455,7 +3455,8 @@
     "pastedLink": {
       "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
       "attach": "Anhängen"
-    }
+    },
+    "removePending": "{name} entfernen"
   },
   "providers": {
     "presetMismatch": {
@@ -4939,7 +4940,8 @@
         "releaseInteractive": "Nicht mehr Standard in der App",
         "claimUnattended": "Als Standard ohne Aufsicht festlegen",
         "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
-      }
+      },
+      "removeLabel": "Label {label} entfernen"
     },
     "progress": {
       "status": {

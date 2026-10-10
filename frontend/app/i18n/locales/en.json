@@ -671,7 +671,8 @@
     "pastedLink": {
       "offer": "This description links a {source} page. Attach it as context?",
       "attach": "Attach"
-    }
+    },
+    "removePending": "Remove {name}"
   },
   "errors": {
     "generic": {
@@ -5671,7 +5672,8 @@
         "releaseInteractive": "Stop being the in-app default",
         "claimUnattended": "Make the unattended default",
         "releaseUnattended": "Stop being the unattended default"
-      }
+      },
+      "removeLabel": "Remove the {label} label"
     },
     "progress": {
       "status": {

@@ -492,15 +492,18 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               class="gap-1"
             >
               {{ l }}
-              <UButton
+              <IconButton
                 color="neutral"
                 variant="ghost"
                 size="xs"
-                class="p-0 hover:bg-transparent hover:text-app-error-400"
+                icon="i-lucide-x"
+                :label="t('pipeline.builder.removeLabel', { label: l })"
+                :ui="{
+                  base: 'p-0 hover:bg-transparent hover:text-app-error-400',
+                  leadingIcon: 'h-3 w-3',
+                }"
                 @click="removeLabel(l)"
-              >
-                <UIcon name="i-lucide-x" class="h-3 w-3" />
-              </UButton>
+              />
             </UBadge>
             <UInput
               v-model="newLabel"
@@ -553,7 +556,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 </span>
                 <div class="flex shrink-0 items-center">
                   <!-- Companion toggle: attach/detach the dependent reviewer for this producer. -->
-                  <UButton
+                  <IconButton
                     v-if="companionForProducer(unit.kind)"
                     :icon="
                       unit.companionIndex !== null ? 'i-lucide-scan-eye' : 'i-lucide-scan-search'
@@ -561,7 +564,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     :color="unit.companionIndex !== null ? 'secondary' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       unit.companionIndex !== null
                         ? t('pipeline.builder.companionRemove', {
                             companion: companionLabel(unit.kind),
@@ -573,7 +576,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     @click="pipelines.toggleCompanion(unit.index)"
                   />
                   <!-- Enable/disable: keep the step in the pipeline but skip it at run. -->
-                  <UButton
+                  <IconButton
                     :icon="
                       pipelines.draftEnabled[unit.index] === false
                         ? 'i-lucide-eye-off'
@@ -582,7 +585,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     :color="pipelines.draftEnabled[unit.index] === false ? 'neutral' : 'primary'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftEnabled[unit.index] === false
                         ? t('pipeline.builder.enableTooltip')
                         : t('pipeline.builder.disableTooltip')
@@ -600,13 +603,13 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                      so the engine holds it to the same gatability rule as an estimate gate
                      (`assertValidRunConditions`) — without this the builder invited a condition on
                      `merger` and answered the save with a 422. -->
-                  <UButton
+                  <IconButton
                     v-if="mayCarrySkipAxis(unit.kind)"
                     :icon="CONDITION_ICONS[pipelines.draftStepCondition(unit.index) ?? 'always']"
                     :color="pipelines.draftStepCondition(unit.index) ? 'info' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       t(
                         `pipeline.builder.condition.${pipelines.draftStepCondition(unit.index) ?? 'always'}`,
                       )
@@ -616,14 +619,14 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
-                  <UButton
+                  <IconButton
                     :icon="
                       pipelines.draftGates[unit.index] ? 'i-lucide-shield-check' : 'i-lucide-shield'
                     "
                     :color="pipelines.draftGates[unit.index] ? 'warning' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftGates[unit.index]
                         ? t('pipeline.builder.approvalRemoveTooltip')
                         : t('pipeline.builder.approvalAddTooltip')
@@ -633,7 +636,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- Consensus: run this step through the multi-model mechanism (eligible
                      kinds only — architect/analysis/task-estimator). -->
-                  <UButton
+                  <IconButton
                     v-if="isConsensusEligibleKind(unit.kind)"
                     :icon="
                       pipelines.draftConsensus[unit.index]?.enabled
@@ -643,7 +646,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     :color="pipelines.draftConsensus[unit.index]?.enabled ? 'success' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftConsensus[unit.index]?.enabled
                         ? t('pipeline.builder.consensusRevertTooltip')
                         : t('pipeline.builder.consensusEnableTooltip')
@@ -652,7 +655,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- Follow-up companion: the future-looking Coder surfaces loose ends /
                      side-tasks / questions mid-run (coder steps only). Enabled by default. -->
-                  <UButton
+                  <IconButton
                     v-if="unit.kind === 'coder'"
                     :icon="
                       pipelines.draftFollowUps[unit.index] === false
@@ -664,7 +667,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     "
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftFollowUps[unit.index] === false
                         ? t('pipeline.builder.followUpEnableTooltip')
                         : t('pipeline.builder.followUpDisableTooltip')
@@ -674,7 +677,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   <!-- Test quality-control companion: audits the Tester's report for coverage
                      before the greenlight/fixer decision and loops the Tester on gaps (Tester
                      steps only). Enabled by default. -->
-                  <UButton
+                  <IconButton
                     v-if="isTesterKind(unit.kind)"
                     :icon="
                       pipelines.draftTesterQuality[unit.index]?.enabled === false
@@ -688,7 +691,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     "
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftTesterQuality[unit.index]?.enabled === false
                         ? t('pipeline.builder.testerQualityEnableTooltip')
                         : t('pipeline.builder.testerQualityDisableTooltip')
@@ -698,7 +701,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   <!-- Auto-recommendation: the requirements reviewer pre-answers findings it
                      judges answerable from universal practice / provided context, offering them
                      as editable default answers (requirements-review steps only). On by default. -->
-                  <UButton
+                  <IconButton
                     v-if="unit.kind === 'requirements-review'"
                     :icon="
                       pipelines.draftAutoRecommendEnabled(unit.index)
@@ -710,7 +713,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     "
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftAutoRecommendEnabled(unit.index)
                         ? t('pipeline.builder.autoRecommendDisableTooltip')
                         : t('pipeline.builder.autoRecommendEnableTooltip')
@@ -721,7 +724,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                      preview a reviewer pokes at after the PR is open. Off by default, and the
                      save boundary refuses a Deployer that neither reclaims nor declares this,
                      so the tick is how an unreclaimed environment says it is deliberate. -->
-                  <UButton
+                  <IconButton
                     v-if="showRetainEnvironmentToggle(unit.kind, unit.index)"
                     :icon="
                       pipelines.draftRetainEnvironment(unit.index)
@@ -731,7 +734,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     :color="pipelines.draftRetainEnvironment(unit.index) ? 'warning' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       pipelines.draftRetainEnvironment(unit.index)
                         ? t('pipeline.builder.retainEnvironmentClearTooltip')
                         : t('pipeline.builder.retainEnvironmentSetTooltip')
@@ -1280,24 +1283,24 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                          ARCHIVING a row that still holds one: a hidden row never holds a default,
                          so there is never one here to release. -->
                   <template v-if="uiMode.isAdvanced && !p.archived && !p.internal">
-                    <UButton
+                    <IconButton
                       :icon="p.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
                       :color="p.isDefault ? 'primary' : 'neutral'"
                       variant="ghost"
                       size="xs"
-                      :title="
+                      :label="
                         p.isDefault
                           ? t('pipeline.builder.scopeDefault.releaseInteractive')
                           : t('pipeline.builder.scopeDefault.claimInteractive')
                       "
                       @click="toggleDefault(p, 'interactive')"
                     />
-                    <UButton
+                    <IconButton
                       :icon="p.isUnattendedDefault ? 'i-lucide-bot' : 'i-lucide-bot-off'"
                       :color="p.isUnattendedDefault ? 'info' : 'neutral'"
                       variant="ghost"
                       size="xs"
-                      :title="
+                      :label="
                         p.isUnattendedDefault
                           ? t('pipeline.builder.scopeDefault.releaseUnattended')
                           : t('pipeline.builder.scopeDefault.claimUnattended')
@@ -1307,12 +1310,12 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   </template>
                   <!-- Archive/unarchive: organize the library without deleting. Works on
                          built-ins too (view metadata, not structure). -->
-                  <UButton
+                  <IconButton
                     :icon="p.archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       p.archived ? t('pipeline.builder.unarchive') : t('pipeline.builder.archive')
                     "
                     @click="toggleArchive(p)"
