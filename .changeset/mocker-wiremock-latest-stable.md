@@ -2,10 +2,12 @@
 '@cat-factory/agents': patch
 ---
 
-Have the `mocker` agent pin WireMock to the latest **stable** release.
+Have the `mocker` agent pin WireMock to the newest stable release when it adds WireMock to a
+repository.
 
-The mock-builder role prompt now instructs the agent to check what the newest stable
-(non-prerelease) `wiremock/wiremock` version is at the moment it sets up the mocks and pin
-the image / dependency to that exact tag — rather than hard-coding an older version or using
-a floating `latest` tag. This keeps generated services on a current, reproducible WireMock
-without the prompt itself going stale as new releases ship.
+The mock-builder role prompt now tells the agent to look the version up at run time (the
+`wiremock/wiremock` tags on Docker Hub, or `org.wiremock:wiremock` on Maven Central), pin the
+highest plain `X.Y.Z` release instead of the floating `latest` tag, and report a failed lookup
+rather than guess a number. A repository that already pins WireMock keeps its pin: the agent
+flags an outdated one. A frontend run is told not to add WireMock at all, because the platform
+serves its mappings with its own pinned build.
