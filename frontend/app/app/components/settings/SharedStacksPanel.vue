@@ -15,8 +15,8 @@ import type {
 
 const { t } = useI18n()
 const store = useSharedStacksStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const stacks = computed(() => store.stacks)
@@ -150,11 +150,8 @@ async function autodetect() {
       ...(form.directory.trim() ? { directory: form.directory.trim() } : {}),
     })
     if (!rec.detected) {
-      toast.add({
-        title: t('settings.sharedStacks.detect.nothing'),
+      actionToast.warning('settings.sharedStacks.detect.nothing', {
         description: rec.notes[0]?.message ?? '',
-        icon: 'i-lucide-info',
-        color: 'warning',
       })
       return
     }
@@ -163,11 +160,8 @@ async function autodetect() {
     form.composeProfiles = rec.composeProfiles.join(', ')
     form.managedNetworks = rec.managedNetworks.join(', ')
     detectedEnvFiles.value = rec.envFiles
-    toast.add({
-      title: t('settings.sharedStacks.detect.detected'),
+    actionToast.success('settings.sharedStacks.detect.detected', {
       description: t('settings.sharedStacks.detect.detectedBody'),
-      icon: 'i-lucide-wand-sparkles',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'settings.sharedStacks.detect.failed')
@@ -207,13 +201,9 @@ async function saveStack() {
       await store.create(payload)
     }
     resetForm()
-    toast.add({
-      title: t(
-        editing ? 'settings.sharedStacks.toast.updated' : 'settings.sharedStacks.toast.created',
-      ),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success(
+      editing ? 'settings.sharedStacks.toast.updated' : 'settings.sharedStacks.toast.created',
+    )
   } catch (e) {
     present(
       e,
@@ -233,7 +223,7 @@ async function start(stack: SharedStack) {
     // surface that as an error toast too — not only a thrown transport/unavailable error.
     const updated = await store.ensureUp(stack.id)
     if (updated.status === 'failed') {
-      present(updated.lastError ?? '', 'settings.sharedStacks.toast.startFailed')
+      presentReported(updated.lastError, 'settings.sharedStacks.toast.startFailed')
     }
   } catch (e) {
     present(e, 'settings.sharedStacks.toast.startFailed')

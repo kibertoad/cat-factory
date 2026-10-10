@@ -13,7 +13,7 @@ const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
 const models = useModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -173,11 +173,7 @@ async function connect() {
     // points at models this subscription doesn't cover, reactively surfaces the
     // preset-mismatch prompt (with its "pick a different preset" link).
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
-    toast.add({
-      title: t('personalSubscriptions.toast.connected', { vendor: vendorName }),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('personalSubscriptions.toast.connected', { params: { vendor: vendorName } })
   } catch (e) {
     present(e, 'personalSubscriptions.toast.connectFailed')
   } finally {
@@ -199,7 +195,7 @@ async function disconnect(v: SubscriptionVendor) {
     // Removing the subscription may drop the workspace's last usable model — refresh so the
     // AI-readiness banners re-evaluate (mirrors the API-key flow).
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
-    toast.add({ title: t('personalSubscriptions.toast.disconnected'), icon: 'i-lucide-check' })
+    actionToast.success('personalSubscriptions.toast.disconnected')
   } catch (e) {
     present(e, 'personalSubscriptions.toast.disconnectFailed')
   }

@@ -7,6 +7,7 @@ import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -158,10 +159,11 @@ watch(
               color="neutral"
               variant="ghost"
               icon="i-lucide-refresh-cw"
+              :loading="loading"
               :label="t('platformObservability.refresh')"
               :ui="{
                 base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+                leadingIcon: 'h-4 w-4',
               }"
               data-testid="operator-refresh"
               @click="refresh"
@@ -197,8 +199,9 @@ watch(
             </UButton>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
-            {{ t('platformObservability.loading') }}
+          <div v-else-if="loading && !view" class="mx-auto flex max-w-5xl flex-col gap-6">
+            <USkeleton class="h-20 w-full rounded-lg" />
+            <USkeleton v-for="n in 2" :key="n" class="h-36 w-full rounded-lg" />
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
@@ -291,9 +294,12 @@ watch(
                 {{ t('platformObservability.trend.title') }}
               </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
-                <div v-if="view.outcomes.total === 0" class="py-6 text-center text-xs text-dimmed">
-                  {{ t('platformObservability.trend.empty') }}
-                </div>
+                <EmptyState
+                  v-if="view.outcomes.total === 0"
+                  compact
+                  icon="i-lucide-chart-column"
+                  :title="t('platformObservability.trend.empty')"
+                />
                 <div v-else class="flex h-28 items-end gap-0.5" data-testid="operator-trend">
                   <div
                     v-for="p in view.trend.points"
@@ -341,9 +347,12 @@ watch(
                 {{ t('platformObservability.gates.title') }}
               </SectionLabel>
               <div class="overflow-x-auto rounded-lg border border-default bg-default/40 p-4">
-                <p v-if="!view.gates.length" class="py-4 text-center text-xs text-dimmed">
-                  {{ t('platformObservability.gates.empty') }}
-                </p>
+                <EmptyState
+                  v-if="!view.gates.length"
+                  compact
+                  icon="i-lucide-shield-check"
+                  :title="t('platformObservability.gates.empty')"
+                />
                 <UTable
                   v-else
                   :data="view.gates"
@@ -404,9 +413,12 @@ watch(
                   {{ t('platformObservability.failures.title') }}
                 </SectionLabel>
                 <div class="rounded-lg border border-default bg-default/40 p-4">
-                  <div v-if="!view.failures.length" class="py-4 text-center text-xs text-dimmed">
-                    {{ t('platformObservability.failures.empty') }}
-                  </div>
+                  <EmptyState
+                    v-if="!view.failures.length"
+                    compact
+                    icon="i-lucide-circle-x"
+                    :title="t('platformObservability.failures.empty')"
+                  />
                   <ul v-else class="flex flex-col gap-2" data-testid="operator-failures">
                     <li v-for="f in view.failures" :key="f.kind" class="text-xs">
                       <div class="mb-0.5 flex items-center justify-between">
@@ -467,12 +479,12 @@ watch(
                     {{ t('platformObservability.durations.title') }}
                   </SectionLabel>
                   <div class="rounded-lg border border-default bg-default/40 p-3 text-sm">
-                    <div
+                    <EmptyState
                       v-if="view.durations.count === 0"
-                      class="py-2 text-center text-xs text-dimmed"
-                    >
-                      {{ t('platformObservability.durations.empty') }}
-                    </div>
+                      compact
+                      icon="i-lucide-timer"
+                      :title="t('platformObservability.durations.empty')"
+                    />
                     <dl
                       v-else
                       class="grid grid-cols-3 gap-y-3 text-center"

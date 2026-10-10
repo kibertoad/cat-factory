@@ -18,11 +18,12 @@ import {
 import type { WorkspaceMetadataFieldDefinition } from '~/modular/workspace-metadata'
 import type { AppSlots } from '~/modular/slots'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const slots = useReactiveSlots<AppSlots>()
 const store = useWorkspaceSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 /**
@@ -67,11 +68,7 @@ async function save() {
     await store.update({
       metadata: metadataPatchFrom(fields.value, draft, store.settings.metadata),
     })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.workspaceSettings.toast.saved')
   } catch (e) {
     present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
@@ -99,9 +96,12 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
       </p>
     </section>
 
-    <p v-if="fields.length === 0" class="text-2xs text-dimmed">
-      {{ t('settings.workspaceSettings.metadata.empty') }}
-    </p>
+    <EmptyState
+      v-if="fields.length === 0"
+      compact
+      icon="i-lucide-tags"
+      :title="t('settings.workspaceSettings.metadata.empty')"
+    />
 
     <template v-else>
       <div class="space-y-4">

@@ -74,7 +74,7 @@ function boundLabel(key: PublicApiKey): string | null {
     ? t('settings.apiTokens.list.boundToYou')
     : t('settings.apiTokens.list.boundToOther', { user: key.actsAsUserId })
 }
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -152,11 +152,7 @@ async function createToken() {
     label.value = ''
     scope.value = 'write'
     identity.value = 'system'
-    toast.add({
-      title: t('settings.apiTokens.toast.created'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.apiTokens.toast.created')
   } catch (e) {
     present(e, 'settings.apiTokens.toast.createFailed')
   } finally {

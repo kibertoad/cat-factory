@@ -11,6 +11,7 @@ import {
   saveIntent,
 } from '~/components/pipeline/AgentPromptEditor.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The per-workspace system-prompt editor for ONE agent kind, opened from the pipeline builder
 // (where the kinds are actually chosen). It edits the SHIPPED track prompt only: the platform
@@ -30,7 +31,8 @@ const props = defineProps<{ agentKind: string | null }>()
 const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18n()
-const toast = useToast()
+const actionToast = useActionToast()
+const { present } = usePipelineErrorToast()
 const prompts = useAgentPromptsStore()
 const agentSettings = useAgentSettingsStore()
 
@@ -68,8 +70,8 @@ watch(
     try {
       const detail = await prompts.load(kind)
       draft.value = detail?.effectiveText ?? ''
-    } catch {
-      toast.add({ title: t('agentPrompt.toast.loadFailed'), color: 'error' })
+    } catch (error) {
+      present(error, 'agentPrompt.toast.loadFailed')
       emit('close')
     }
   },
@@ -97,8 +99,8 @@ async function saveBudget(value: number | null) {
   if (!kind) return
   try {
     await agentSettings.setMaxOutputTokens(kind, value)
-  } catch {
-    toast.add({ title: t('agentPrompt.toast.budgetFailed'), color: 'error' })
+  } catch (error) {
+    present(error, 'agentPrompt.toast.budgetFailed')
   }
 }
 
@@ -127,13 +129,13 @@ async function save() {
     const saved = await prompts.save(kind, intent.text, intent.restoredFrom)
     draft.value = saved?.effectiveText ?? draft.value
     restoredFrom.value = undefined
-    toast.add({ title: t('agentPrompt.toast.saved'), color: 'success', icon: 'i-lucide-check' })
+    actionToast.success('agentPrompt.toast.saved')
   } catch (error) {
     const conflict = isRevisionConflict(error)
-    toast.add({
-      title: conflict ? t('agentPrompt.toast.conflict') : t('agentPrompt.toast.saveFailed'),
-      color: 'error',
-    })
+    // A recognised refusal keeps its bespoke copy: the funnel's generic line for this reason says
+    // "reload it", but the editor has already reloaded by the time the toast shows.
+    if (conflict) actionToast.warning('agentPrompt.toast.conflict')
+    else present(error, 'agentPrompt.toast.saveFailed')
     // The server's view already replaced the store's on a conflict, so re-seed the textarea
     // from what actually landed rather than leaving the user editing a lost revision — and drop
     // the restore candidate with it, since it names a revision from the log we just replaced.
@@ -151,9 +153,9 @@ async function revert() {
     const saved = await prompts.save(kind, null)
     draft.value = saved?.effectiveText ?? draft.value
     restoredFrom.value = undefined
-    toast.add({ title: t('agentPrompt.toast.reverted'), color: 'success' })
-  } catch {
-    toast.add({ title: t('agentPrompt.toast.saveFailed'), color: 'error' })
+    actionToast.success('agentPrompt.toast.reverted')
+  } catch (error) {
+    present(error, 'agentPrompt.toast.saveFailed')
   }
 }
 
@@ -175,8 +177,10 @@ function revisionLabel(revision: AgentPromptRevision): string {
     :ui="{ content: 'max-w-[92vw] sm:max-w-3xl lg:max-w-5xl' }"
   >
     <template #body>
-      <div v-if="prompts.loadingDetail" class="py-8 text-center text-sm text-muted">
-        {{ t('common.loading') }}
+      <div v-if="prompts.loadingDetail" class="flex flex-col gap-3">
+        <USkeleton class="h-6 w-1/3" />
+        <USkeleton class="h-64 w-full" />
+        <USkeleton class="h-24 w-full" />
       </div>
       <div v-else-if="detail" class="flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -296,9 +300,12 @@ function revisionLabel(revision: AgentPromptRevision): string {
           <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.historyHeading') }}
           </SectionLabel>
-          <p v-if="!detail.revisions.length" class="text-2xs text-dimmed">
-            {{ t('agentPrompt.historyEmpty') }}
-          </p>
+          <EmptyState
+            v-if="!detail.revisions.length"
+            compact
+            icon="i-lucide-history"
+            :title="t('agentPrompt.historyEmpty')"
+          />
           <ul v-else class="max-h-52 divide-y divide-default overflow-y-auto text-xs">
             <li
               v-for="revision in detail.revisions"

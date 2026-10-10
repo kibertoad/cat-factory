@@ -7,13 +7,14 @@ import {
 } from '@cat-factory/contracts'
 import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~/types/execution'
 import type { BadgeColor } from '~/utils/badge'
-import { subtaskIconClass } from '~/utils/pipelineRender'
+import { subtaskIconSpins, subtaskIconTone } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
 import StepDelegatedStatus from '~/components/panels/StepDelegatedStatus.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
@@ -204,11 +205,7 @@ async function copyRunId() {
           {{ t('panels.stepMeta.duration') }}
         </SectionLabel>
         <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-default">
-          <UIcon
-            v-if="isRunning"
-            name="i-lucide-loader-circle"
-            class="h-3 w-3 animate-spin text-primary"
-          />
+          <Spinner v-if="isRunning" class="h-3 w-3 text-primary" />
           <span v-if="durationLabel">{{ durationLabel }}</span>
           <span v-else class="text-dimmed">—</span>
           <span v-if="isRunning" class="text-2xs text-dimmed">{{
@@ -314,10 +311,11 @@ async function copyRunId() {
                 : 'text-muted'
           "
         >
-          <UIcon
+          <Spinner
             :name="ITEM_ICON[item.status]"
+            :spinning="subtaskIconSpins(item.status, runFailed)"
             class="mt-px h-3 w-3 shrink-0"
-            :class="subtaskIconClass(item.status, runFailed)"
+            :class="subtaskIconTone(item.status)"
           />
           <span>{{ item.label }}</span>
         </li>

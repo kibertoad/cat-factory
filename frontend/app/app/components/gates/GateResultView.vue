@@ -14,6 +14,7 @@ import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -213,16 +214,12 @@ const conflictVerdict = computed(() => {
     <div class="flex min-h-0 flex-1">
       <!-- Main: the conclusion -->
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-        <div
+        <EmptyState
           v-if="!gate"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-        >
-          <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('gates.noActivity') }}</p>
-          <p class="max-w-sm text-2xs text-dimmed">
-            {{ t('gates.noActivityHint') }}
-          </p>
-        </div>
+          :icon="meta.icon"
+          :title="t('gates.noActivity')"
+          :description="t('gates.noActivityHint')"
+        />
 
         <template v-else>
           <!-- Passed -->

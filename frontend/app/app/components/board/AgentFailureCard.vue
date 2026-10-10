@@ -202,15 +202,14 @@ async function retry() {
         variant="ghost"
         class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/40 text-app-error-200 hover:bg-app-error-900/70 disabled:opacity-60"
         :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
-        :disabled="retrying || !access.canExecuteRuns.value"
+        icon="i-lucide-rotate-ccw"
+        :loading="retrying"
+        :ui="{ leadingIcon: compact ? 'h-3 w-3' : 'h-3.5 w-3.5' }"
+        :disabled="!access.canExecuteRuns.value"
         :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
         data-testid="agent-failure-retry"
         @click.stop="retry"
       >
-        <UIcon
-          :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
-          :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
-        />
         {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
       </UButton>
 

@@ -4,6 +4,7 @@ import type { DocKind, DocumentLinkRole, SourceDocument } from '~/types/domain'
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
 // A kind can be pointed at one of the workspace's already-imported documents so its parsed
@@ -97,13 +98,15 @@ async function unlink(doc: SourceDocument) {
         <p class="text-xs text-muted">{{ t('documents.templates.intro') }}</p>
 
         <!-- No imported documents yet: a template/exemplar must be an imported document. -->
-        <div v-if="!documents.documents.length" class="space-y-3 text-center">
-          <UIcon name="i-lucide-file-plus" class="mx-auto h-8 w-8 text-dimmed" />
-          <p class="text-sm text-muted">{{ t('documents.templates.importFirst') }}</p>
+        <EmptyState
+          v-if="!documents.documents.length"
+          icon="i-lucide-file-plus"
+          :title="t('documents.templates.importFirst')"
+        >
           <UButton variant="soft" icon="i-lucide-file-down" @click="ui.openDocumentImport()">
             {{ t('documents.templates.importButton') }}
           </UButton>
-        </div>
+        </EmptyState>
 
         <template v-else>
           <UFormField :label="t('documents.templates.kindLabel')">
@@ -194,9 +197,12 @@ async function unlink(doc: SourceDocument) {
                 </UButton>
               </div>
             </div>
-            <p v-else class="mt-2 text-xs text-dimmed">
-              {{ t('documents.templates.exemplarsEmpty') }}
-            </p>
+            <EmptyState
+              v-else
+              compact
+              icon="i-lucide-files"
+              :title="t('documents.templates.exemplarsEmpty')"
+            />
           </section>
 
           <!-- Picker: choose an imported document, then set as template or add as example. -->

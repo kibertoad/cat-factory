@@ -28,6 +28,7 @@ import {
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
 
@@ -36,7 +37,7 @@ const catalog =
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -163,7 +164,7 @@ async function link() {
         : {}),
     })
     resetDraft()
-    toast.add({ title: t('foundational.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
+    actionToast.success('foundational.toast.sourceLinked')
     return result
   } catch (e) {
     present(e, 'foundational.toast.linkSourceFailed')
@@ -185,17 +186,14 @@ async function sync(id: string) {
         )
       const coverage = result.folderScan ? folderScanNotes.value[result.folderScan] : null
       if (coverage) notes.push(coverage)
-      toast.add({
-        title: t('foundational.toast.synced', {
-          updated: result.upserted,
-          removed: result.tombstoned,
-        }),
+      // A folder we could not fully see, or could not find at all, is the one sync outcome a
+      // human has to act on: the counts alone would read as an ordinary quiet success.
+      const synced = {
+        params: { updated: result.upserted, removed: result.tombstoned },
         ...(notes.length ? { description: notes.join(' ') } : {}),
-        icon: 'i-lucide-refresh-cw',
-        // A folder we could not fully see, or could not find at all, is the one sync outcome a
-        // human has to act on — the counts alone would read as an ordinary quiet success.
-        color: coverage ? 'warning' : 'info',
-      })
+      }
+      if (coverage) actionToast.warning('foundational.toast.synced', synced)
+      else actionToast.success('foundational.toast.synced', synced)
     } catch (e) {
       present(e, 'foundational.toast.syncFailed')
     }
@@ -206,12 +204,9 @@ async function check(id: string) {
   await withRow(`check:${id}`, async () => {
     try {
       const status = await catalog.checkSource(id)
-      toast.add({
-        title: status.changed
-          ? t('foundational.toast.changesAvailable')
-          : t('foundational.toast.upToDate'),
-        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-      })
+      actionToast.info(
+        status.changed ? 'foundational.toast.changesAvailable' : 'foundational.toast.upToDate',
+      )
     } catch (e) {
       present(e, 'foundational.toast.checkSourceFailed')
     }
@@ -233,7 +228,7 @@ async function unlink(id: string) {
   await withRow(`unlink:${id}`, async () => {
     try {
       await catalog.unlinkSource(id)
-      toast.add({ title: t('foundational.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+      actionToast.success('foundational.toast.sourceUnlinked')
     } catch (e) {
       present(e, 'foundational.toast.unlinkSourceFailed')
     }
@@ -325,9 +320,12 @@ async function unlink(id: string) {
         />
       </div>
     </div>
-    <p v-if="!catalog.sources.length" class="text-sm text-dimmed">
-      {{ t('foundational.sources.empty') }}
-    </p>
+    <EmptyState
+      v-if="!catalog.sources.length"
+      compact
+      icon="i-lucide-git-branch"
+      :title="t('foundational.sources.empty')"
+    />
 
     <!-- Linking needs the GitHub integration; say so rather than offering a form that 503s. -->
     <div

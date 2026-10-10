@@ -6,6 +6,7 @@ import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Documents (from any source) attached to a task OR an initiative as agent
 // context, shown inside the InspectorPanel. An initiative takes the same
@@ -26,7 +27,7 @@ const props = defineProps<{ block: Block }>()
 const { t } = useI18n()
 const documents = useDocumentsStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { linkPending, presentLinkFailures } = useContextLinking()
 
 onMounted(() => {
@@ -88,7 +89,7 @@ async function attach(item: PendingContext) {
   try {
     const failures = await linkPending(props.block.id, [item])
     if (failures.length) presentLinkFailures(failures, props.block.id)
-    else toast.add({ title: t('documents.taskDocs.attached'), icon: 'i-lucide-link' })
+    else actionToast.success('documents.taskDocs.attached')
   } finally {
     linking.value = false
   }
@@ -165,8 +166,6 @@ async function attach(item: PendingContext) {
         <DocumentSyncState :doc="doc" class="mt-1" />
       </div>
     </div>
-    <p v-else class="text-2xs text-dimmed">
-      {{ emptyHint }}
-    </p>
+    <EmptyState v-else compact icon="i-lucide-file-text" :title="emptyHint" />
   </InspectorSection>
 </template>

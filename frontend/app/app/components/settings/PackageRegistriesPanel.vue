@@ -12,7 +12,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const store = usePackageRegistriesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -70,11 +70,7 @@ async function addEntry() {
     })
     form.scopes = ''
     form.token = ''
-    toast.add({
-      title: t('settings.packageRegistries.toast.added'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.packageRegistries.toast.added')
   } catch (e) {
     present(e, 'settings.packageRegistries.toast.addFailed')
   } finally {

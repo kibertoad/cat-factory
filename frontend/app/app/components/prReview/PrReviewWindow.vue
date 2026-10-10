@@ -24,13 +24,15 @@ import type {
   StepSubtaskItem,
   StepSubtasks,
 } from '~/types/execution'
-import { subtaskIconClass } from '~/utils/pipelineRender'
+import { subtaskIconSpins, subtaskIconTone } from '~/utils/pipelineRender'
 import { activeChunkLabels, chunkReviewPercent, hasNoSlicePlan } from '~/utils/prReviewProgress'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -320,7 +322,7 @@ const { requestClose } = useUnsavedGuard({
             data-testid="pr-review-planning"
             class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-muted"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+            <Spinner class="h-8 w-8 opacity-60" />
             <p class="text-sm text-default">{{ t('prReview.reviewing.planning.title') }}</p>
             <p class="max-w-sm text-2xs text-dimmed">
               {{ t('prReview.reviewing.planning.hint') }}
@@ -330,10 +332,7 @@ const { requestClose } = useUnsavedGuard({
           <!-- REVIEWING: a per-slice plan exists — show every slice with its status + which are active now. -->
           <div v-else data-testid="pr-review-reviewing-chunks" class="py-2">
             <div class="mb-1 flex items-center gap-2 text-sm text-default">
-              <UIcon
-                name="i-lucide-loader-circle"
-                class="h-4 w-4 shrink-0 animate-spin text-primary"
-              />
+              <Spinner class="h-4 w-4 shrink-0 text-primary" />
               <span>{{ t('prReview.reviewing.reviewingChunks.title') }}</span>
             </div>
             <p class="mb-3 text-2xs text-dimmed">
@@ -385,10 +384,7 @@ const { requestClose } = useUnsavedGuard({
                   :key="i"
                   class="flex items-start gap-1.5 text-xs text-app-100"
                 >
-                  <UIcon
-                    name="i-lucide-loader-circle"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary"
-                  />
+                  <Spinner class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                   <span class="min-w-0">{{ label }}</span>
                 </li>
               </ul>
@@ -416,10 +412,11 @@ const { requestClose } = useUnsavedGuard({
                         : 'text-muted'
                   "
                 >
-                  <UIcon
+                  <Spinner
                     :name="ITEM_ICON[item.status]"
+                    :spinning="subtaskIconSpins(item.status, false)"
                     class="h-3.5 w-3.5 shrink-0"
-                    :class="subtaskIconClass(item.status, false)"
+                    :class="subtaskIconTone(item.status)"
                   />
                   <span
                     class="min-w-0 flex-1 truncate"
@@ -477,7 +474,7 @@ const { requestClose } = useUnsavedGuard({
           data-testid="pr-review-working"
           class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+          <Spinner class="h-8 w-8 opacity-60" />
           <p class="text-sm">
             {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
           </p>
@@ -564,12 +561,11 @@ const { requestClose } = useUnsavedGuard({
           />
 
           <!-- A clean PR / resolved review with no findings. -->
-          <div
+          <EmptyState
             v-if="findings.length === 0"
-            class="rounded-xl border border-default bg-default/60 px-4 py-6 text-center text-sm text-toned"
-          >
-            {{ t('prReview.noFindings') }}
-          </div>
+            icon="i-lucide-circle-check"
+            :title="t('prReview.noFindings')"
+          />
 
           <template v-else>
             <!-- A challenge is in flight: the Challenge Investigator is re-examining a finding. -->
@@ -578,7 +574,7 @@ const { requestClose } = useUnsavedGuard({
               data-testid="pr-review-challenging"
               class="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary"
             >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+              <Spinner class="h-4 w-4 shrink-0" />
               <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
             </div>
 
@@ -685,7 +681,7 @@ const { requestClose } = useUnsavedGuard({
                         data-testid="pr-review-finding-investigating"
                         class="flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-primary ring-1 ring-primary/30"
                       >
-                        <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+                        <Spinner class="h-3 w-3" />
                         {{ t('prReview.challenge.investigatingBadge') }}
                       </span>
                       <h4

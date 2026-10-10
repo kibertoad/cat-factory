@@ -16,7 +16,7 @@ import { onMounted, ref, watch } from 'vue'
 const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -48,7 +48,7 @@ async function save() {
         ...(forbid.value ? { allowInitiatorPat: false } : { allowInitiatorPat: undefined }),
       },
     })
-    toast.add({ title: t('settings.runCredentialPolicy.saved'), color: 'success' })
+    actionToast.success('settings.runCredentialPolicy.saved')
   } catch (e) {
     present(e, 'settings.runCredentialPolicy.saveFailed')
   } finally {

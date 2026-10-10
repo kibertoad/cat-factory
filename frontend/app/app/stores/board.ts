@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Block } from '~/types/domain'
 import { useBlockQueries } from '~/composables/useBlockQueries'
+import { useActionToast } from '~/composables/useActionToast'
 import type { PendingRemoval } from '~/stores/board/context'
 import { createBoardMutations } from '~/stores/board/mutations'
 import { createBoardPlacement } from '~/stores/board/placement'
@@ -19,7 +20,7 @@ import { createBoardRemoval } from '~/stores/board/removal'
  */
 export const useBoardStore = defineStore('board', () => {
   const api = useApi()
-  const toast = useToast()
+  const actionToast = useActionToast()
   // Stores run outside a component `setup`, so resolve translations through the Nuxt app's
   // global i18n instance (the same handle `plugins/locale.client.ts` uses) rather than
   // `useI18n()`, which requires an active component instance.
@@ -148,7 +149,7 @@ export const useBoardStore = defineStore('board', () => {
     pendingRemovals,
     pendingDoomed,
     api,
-    toast,
+    actionToast,
     tr,
     present: usePipelineErrorToast().present,
   }

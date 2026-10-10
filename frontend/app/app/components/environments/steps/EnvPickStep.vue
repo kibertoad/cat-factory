@@ -5,6 +5,7 @@
 // advances to the review step. Rendered by `JourneyOutlet`, so it receives the
 // `ModuleEntryProps` (`input` / `exit` / `goBack`) as attributes.
 import type { EnvSelectOutput } from '~/modular/journeys/environmentSetup.logic'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 defineProps<{
   input: { frameId: string | null }
@@ -21,9 +22,12 @@ const { t } = useI18n()
     <!-- The one-service scope caveat, stated on the step that asks for the service: nothing
          here changes any other service, and running it twice just re-edits this one's recipe. -->
     <p class="text-xs leading-relaxed text-dimmed">{{ t('environmentWizard.pick.scope') }}</p>
-    <p v-if="!store.serviceFrames.length" class="text-sm text-dimmed">
-      {{ t('environmentWizard.pick.empty') }}
-    </p>
+    <EmptyState
+      v-if="!store.serviceFrames.length"
+      compact
+      icon="i-lucide-box"
+      :title="t('environmentWizard.pick.empty')"
+    />
     <div v-else class="space-y-1.5">
       <UButton
         v-for="frame in store.serviceFrames"

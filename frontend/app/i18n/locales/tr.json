@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Yükleniyor…",
     "save": "Kaydet",
     "cancel": "İptal",
     "retry": "Yeniden dene",
@@ -831,6 +830,9 @@
       "title": "Bu görünüm yüklenemedi",
       "body": "Kodu yüklenemedi. Bu genellikle bu sekme açıkken uygulamanın güncellendiği anlamına gelir; sayfanın istediği dosyalar artık sunucuda değildir. Geçerli sürümü almak için yeniden yükleyin.",
       "reload": "Yeniden yükle"
+    },
+    "reported": {
+      "description": "İşlem çalıştı ve bir hata bildirdi. Ne bildirdiğini görmek için ayrıntıları gösterin."
     }
   },
   "personalSubscriptions": {
@@ -1848,8 +1850,6 @@
     "exportJson": "JSON dışa aktar",
     "exportHint": "Bu çalıştırmanın LLM dostu JSON dışa aktarımını indirin",
     "closeEsc": "Kapat (Esc)",
-    "loadingActivity": "Model etkinliği yükleniyor…",
-    "loadingContext": "Sağlanan bağlam yükleniyor…",
     "noCalls": "Bu çalışma için kaydedilmiş model çağrısı yok.",
     "noContext": "Bu çalışma için saklanmış aracı bağlamı yok. Çalışma alanında 'Tam aracı bağlamını sakla' etkinleştirildiğinde her gönderim için yakalanır.",
     "contextError": "Sağlanan bağlam yüklenemedi.",
@@ -1941,7 +1941,6 @@
       "details": "Ayrıntılar"
     },
     "webSearch": "Web araması",
-    "loadingSearch": "Web aramaları yükleniyor…",
     "noSearch": "Bu çalıştırma için web araması kaydedilmedi. Sorgular, web araması çalıştığında ve çalışma alanında 'Tam aracı bağlamını depola' etkinleştirildiğinde yakalanır.",
     "search": {
       "available": "Kullanılabilir",
@@ -1980,7 +1979,6 @@
     "toolCalls": {
       "title": "Araç çağrıları",
       "subtitle": "aracıların ne yaptığı, yaptıkları sırayla",
-      "loading": "Araç çağrıları yükleniyor…",
       "error": "Araç çağrıları yüklenemedi.",
       "none": "Bu çalışma için kaydedilmiş araç çağrısı yok.",
       "noneMatching": "Bu filtreye uyan araç çağrısı yok.",
@@ -2001,7 +1999,6 @@
     "title": "Platform gözlemlenebilirliği",
     "refresh": "Yenile",
     "close": "Kapat",
-    "loading": "Platform durumu yükleniyor…",
     "retry": "Yeniden dene",
     "window": {
       "oneHour": "Son bir saat",
@@ -2082,7 +2079,6 @@
   "reports": {
     "title": "Raporlar",
     "refresh": "Yenile",
-    "loading": "Raporlar yükleniyor…",
     "retry": "Yeniden dene",
     "error": "Raporlar yüklenemedi.",
     "period": "{from} – {to}",
@@ -2923,7 +2919,6 @@
         "intro": "Her hazır ayar, isteğe bağlı ajan başına geçersiz kılmalarla birlikte her ajan için bir {baseModel} belirler. Bir görevde sabitlenmiş bir model yine de hazır ayarı geçersiz kılar.",
         "introBaseModel": "temel model",
         "newPreset": "Yeni hazır ayar",
-        "loadingCatalog": "Model kataloğu yükleniyor…",
         "default": "Varsayılan",
         "setDefaultTitle": "Çalışma alanı varsayılanı olarak ayarla",
         "editTitle": "Hazır ayarı düzenle",
@@ -2932,7 +2927,8 @@
         "basePrefix": "Temel:",
         "overrideCount": "{count} geçersiz kılma | {count} geçersiz kılma",
         "empty": "Henüz hazır ayar yok. Modelleri ajanlarınıza eşlemek için bir tane oluşturun.",
-        "customRouteOrder": "özel rota sırası"
+        "customRouteOrder": "özel rota sırası",
+        "catalogFailed": "Model kataloğu yüklenmedi. Hazır ayarları görmek için yeniden deneyin."
       },
       "editor": {
         "useBaseModel": "Temel modeli kullan",
@@ -2952,7 +2948,8 @@
         "deleteFailed": "Hazır ayar silinemedi",
         "nameRequiredTitle": "Ad gerekli",
         "nameRequiredBody": "Hazır ayara bir ad verin.",
-        "saveFailed": "Hazır ayar kaydedilemedi"
+        "saveFailed": "Hazır ayar kaydedilemedi",
+        "catalogFailed": "Model kataloğu yüklenemedi"
       },
       "confirmDelete": {
         "title": "Bu model ön ayarı silinsin mi?",
@@ -3111,7 +3108,6 @@
         "overrideActive": "Etkin",
         "personalOverrideHint": "Bu sağlama türü için çalışma alanı işleyicisini kendi makinende geçersiz kıl. Kullanıcı başına saklanır.",
         "removeOverride": "Geçersiz kılmayı kaldır",
-        "loading": "Altyapı ayarları yükleniyor…",
         "kubeNoun": "Kubernetes işleyicisi",
         "kubeOverrideNoun": "Kubernetes geçersiz kılması",
         "customNoun": "bu işleyici",
@@ -3290,7 +3286,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Bu dağıtımın yeniden kullanılabilir operasyonlarından hangilerinin bu panoda sunulacağını seçin. Birini gizlemek onu buradaki görev oluşturma seçicisinden kaldırır ve o türde iş oluşturmayı reddeder; diğer panolar etkilenmez.",
-      "loading": "Operasyonlar yükleniyor…",
       "empty": "Bu dağıtım hiçbir yeniden kullanılabilir operasyon kaydetmiyor.",
       "offer": "Bu panoda sun",
       "saveFailed": "Bu panoda sunulan operasyonlar değiştirilemedi"
@@ -4496,7 +4491,6 @@
     "connect": {
       "yourInstallations": "Yüklemeleriniz",
       "refresh": "Yenile",
-      "lookingForInstallations": "Yüklemeler aranıyor…",
       "noInstallations": "App için henüz bir yükleme bulunamadı. Aşağıdan yükleyin veya kimlik ile bağlanın.",
       "installationMeta": "{targetType} · yükleme {id}",
       "linked": "bağlı",
@@ -4523,14 +4517,12 @@
       "resync": "Yeniden eşitle",
       "backfill": "Geriye doldur",
       "disconnect": "Bağlantıyı kes",
-      "loading": "Yükleniyor…",
       "tabs": {
         "repos": "Depolar",
         "issues": "Sorunlar"
       },
       "linkedToBoard": "Bu panoya bağlı",
       "manageRepos": "Depoları yönet",
-      "loadingRepos": "Depolar yükleniyor…",
       "private": "özel",
       "saveSelection": "Seçimi kaydet",
       "noLinkedRepos": "Henüz bağlı depo yok. Bu panonun hangi depoları takip ettiğini seçmek için Depoları yönet seçeneğini kullanın.",
@@ -4613,7 +4605,6 @@
     },
     "repoTree": {
       "root": "kök",
-      "loading": "Yükleniyor…",
       "noSubdirectories": "Burada alt dizin yok.",
       "empty": "Burada bir şey yok.",
       "select": "Seç",
@@ -5127,12 +5118,10 @@
   "guidedReview": {
     "title": "Rehberli inceleme",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "İnceleme yükleniyor…",
     "outOfDate": "Canlı güncellemeler başarısız oldu, bu nedenle bu görünüm güncel olmayabilir.",
     "openFromTask": "Rehberli incelemeyle keşfet",
     "picker": {
       "intro": "Bir depo ve bir pull request seçin. Değişikliğin özetini görür, ayrı konularda onunla ilgili soru sorabilirsiniz.",
-      "loading": "Depolar yükleniyor…",
       "noRepos": "Bu çalışma alanına henüz bağlı bir depo yok.",
       "repo": "Depo",
       "openPulls": "Açık pull requestler",
@@ -5800,7 +5789,6 @@
     "answerVerb": "Yanıtlayın",
     "dismissVerb": "yok sayın",
     "empty": "Henüz inceleme yok. İncelemeci, bu görevin pipeline'ı başladığında ilk adım olarak otomatik çalışır.",
-    "loadingReview": "İnceleme yükleniyor…",
     "reviewing": "Gereksinimler inceleniyor…",
     "settled": "Gereksinimler kesinleşti. Aşağıdaki belge, her sonraki agent adımının kullandığı belgedir.",
     "exceeded": {
@@ -5940,7 +5928,6 @@
     "introAnswer": "Yanıtlayın",
     "introDismiss": "göz ardı edin",
     "empty": "Henüz inceleme yok. Denetleyici, bu görevin boru hattı başladığında ilk adım olarak otomatik çalışır.",
-    "loadingReview": "İnceleme yükleniyor…",
     "triaging": "Hata raporu triyaj ediliyor…",
     "converged": "Hata raporu netleştirildi. Aşağıdaki rapor, tüm sonraki agent adımlarının kullandığı rapordur.",
     "capHeading": "{max} yinelemelik sınıra bulgular hâlâ açıkken ulaşıldı.",
@@ -6014,7 +6001,6 @@
   "consensus": {
     "titlePrefix": "Konsensüs",
     "participantCount": "katılımcı yok | bir katılımcı | {count} katılımcı",
-    "loading": "Konsensüs oturumu yükleniyor…",
     "empty": "Bu adım için henüz konsensüs oturumu çalışmadı.",
     "failed": "Konsensüs başarısız oldu: {error}",
     "unknownError": "bilinmeyen hata",
@@ -6062,7 +6048,6 @@
     "introChoose": "Seçin",
     "introDismiss": "yok sayın",
     "empty": "Henüz beyin fırtınası yok. Bu görevin hattı beyin fırtınası adımına ulaştığında otomatik olarak çalışır.",
-    "loading": "Beyin fırtınası yükleniyor…",
     "generating": "Seçenekler oluşturuluyor…",
     "settledBanner": "{doc} kesinleşti. Aşağıdaki belge bir sonraki aşamanın kullandığı belgedir.",
     "exceeded": {
@@ -6140,7 +6125,6 @@
   },
   "spec": {
     "title": "Gereksinimler",
-    "loading": "Belirtim yükleniyor…",
     "error": "Belirtim yüklenemedi. Bu pencereyi yeniden açmayı deneyin.",
     "overview": "Genel bakış",
     "noFeatureGroups": "Özellik grubu yok",
@@ -6330,8 +6314,7 @@
     },
     "shot": {
       "failed": "Başarısız",
-      "failedToLoad": "Yüklenemedi",
-      "loading": "Yükleniyor…"
+      "failedToLoad": "Yüklenemedi"
     },
     "screenshotAlt": "{view} (ekran görüntüsü)",
     "screenshots": "Ekran görüntüleri",
@@ -7043,7 +7026,6 @@
       "awaiting": "{total} aday üretildi ve karşılaştırılmayı bekliyor."
     },
     "asset": {
-      "loading": "Dosya yükleniyor…",
       "loadFailed": "Saklanan dosya yüklenemedi.",
       "retry": "Yeniden dene",
       "open": "Aç",

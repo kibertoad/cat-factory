@@ -15,7 +15,7 @@ import { vcsTokenCreateUrl } from '~/utils/vcs'
 
 const { t } = useI18n()
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 
 const pat = ref('')
 const connecting = ref(false)
@@ -37,11 +37,7 @@ async function connect() {
   try {
     await github.connectGitLab(token)
     pat.value = ''
-    toast.add({
-      title: t('vcs.connect.gitlab.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('vcs.connect.gitlab.toast.connected')
   } catch (e) {
     error.value =
       apiErrorEnvelope(e)?.message ??

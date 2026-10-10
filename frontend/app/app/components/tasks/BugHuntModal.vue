@@ -43,6 +43,7 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
 import { boardFromService as isBoardFromService, huntRequest } from './BugHuntModal.logic'
 
@@ -52,8 +53,8 @@ const tasks = useTasksStore()
 const hunt = useBugHuntStore()
 const board = useBoardStore()
 const github = useGitHubStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.bugHunt !== null,
@@ -278,12 +279,13 @@ async function runHunt() {
   // `repo_not_linked` is worded by the panel itself beside the scope it invalidates.
   const attempt = await hunt.hunt(source.value, input)
   if (attempt === 'failed' && !huntNeedsRepo.value) {
-    toast.add({
-      title: t('bugHunt.huntFailed'),
-      description: refusalText(hunt.huntErrorReason, hunt.huntError) ?? undefined,
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    // A recognised refusal reads in translated copy; anything else is the backend's prose, which
+    // is detail behind the disclosure rather than the headline.
+    const reasonKey = hunt.huntErrorReason
+      ? REFUSAL_KEYS[hunt.huntErrorReason as TaskSourceReadReason]
+      : undefined
+    if (reasonKey) actionToast.error('bugHunt.huntFailed', { description: t(reasonKey) })
+    else presentReported(hunt.huntError, 'bugHunt.huntFailed')
   }
 }
 
@@ -294,10 +296,9 @@ async function adopt(candidate: BugHuntCandidate) {
     if (!blockId) return // the user cancelled the personal-credential prompt
     ui.closeBugHunt()
     ui.select(blockId)
-    toast.add({
-      title: t('bugHunt.adopted', { id: candidate.externalId }),
+    actionToast.success('bugHunt.adopted', {
+      params: { id: candidate.externalId },
       description: t('bugHunt.adoptedRunning'),
-      icon: 'i-lucide-bug-play',
     })
   } catch (e) {
     present(e, 'bugHunt.adoptFailed')
@@ -338,9 +339,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
     </template>
     <template #body>
       <!-- No tracker offered (none connected/installed, or all disabled). -->
-      <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
-        <p class="text-sm text-muted">{{ t('bugHunt.connectFirst') }}</p>
+      <EmptyState v-if="!tasks.anyOffered" icon="i-lucide-plug" :title="t('bugHunt.connectFirst')">
         <div class="flex flex-wrap justify-center gap-2">
           <UButton
             v-for="choice in addableSources"
@@ -352,7 +351,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             {{ ADD_LABEL[choice.action](choice.label) }}
           </UButton>
         </div>
-      </div>
+      </EmptyState>
 
       <!-- No service frame yet → nowhere for an adopted bug to land. -->
       <p v-else-if="!containerItems.length" class="text-center text-xs text-dimmed">
@@ -576,9 +575,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </div>
           </div>
 
-          <p v-if="!hunt.candidates.length" class="text-center text-xs text-dimmed">
-            {{ t('bugHunt.noCandidates') }}
-          </p>
+          <EmptyState
+            v-if="!hunt.candidates.length"
+            compact
+            icon="i-lucide-bug-off"
+            :title="t('bugHunt.noCandidates')"
+          />
         </div>
       </div>
     </template>

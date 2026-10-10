@@ -37,6 +37,7 @@ import {
 } from '~/utils/interviewGate'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
@@ -212,13 +213,12 @@ async function onDiscard() {
     <div class="flex min-h-0 flex-1">
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
         <!-- No entity yet -->
-        <div
+        <EmptyState
           v-if="!initiative"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-        >
-          <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('initiative.planning.empty') }}</p>
-        </div>
+          class="h-full"
+          icon="i-lucide-messages-square"
+          :title="t('initiative.planning.empty')"
+        />
 
         <template v-else>
           <p class="mb-4 text-sm leading-relaxed text-toned">

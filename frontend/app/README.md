@@ -257,13 +257,67 @@ a recognised refusal keeps that branch and drains only its fallback into the fun
 answered, so a local check that never left the browser must not be dressed up as one: a synthesized
 `new Error(t('...'))` has no envelope and no status, which is precisely the input `describeGenericFailure`
 reads as a network fault. A blank required field then renders as "The server could not be reached",
-with the real sentence hidden behind a disclosure. Client-side validation stays a plain
-`toast.add` with translated title and description (`components/settings/ModelConfigurationPanel.vue`).
+with the real sentence hidden behind a disclosure. Client-side validation is
+`useActionToast().error(titleKey, { description })` instead (see below). A failure the backend
+reports as DATA (a job row with `status: 'failed'` and its `error`, a probe verdict's `message`) is
+`presentReported(detail, titleKey, { descriptionKey })`: translated copy as the headline, the
+backend's prose behind "Show details" and in the copied report, the same as a failed call.
 
 The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
 `testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
 surface rather than a toast, and are tracked as G4 in
 [`error-message-coverage.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/error-message-coverage.md).
+
+#### Every other toast goes through the second funnel, `useActionToast`
+
+**`toast.add` is called from exactly two composables**: `usePipelineErrorToast` (with its
+`pipelineErrorToast/` factory) for a failed call, and `useActionToast` for everything else. A call
+site picks a TONE and supplies a title KEY; the tone fixes the colour, the icon and the duration, so
+two toasts of one tone render identically wherever they come from. Before this, some success toasts
+were green with a check and the next was grey with no icon, depending on who wrote the site.
+
+| Tone      | For                                                                                                      | Dismisses   |
+| --------- | -------------------------------------------------------------------------------------------------------- | ----------- |
+| `success` | The action the user asked for completed (saved, connected, removed, copied, moved).                      | After 5s    |
+| `info`    | Progress or a state report that asks nothing ("drafting", "up to date").                                 | After 5s    |
+| `warning` | The action ran, but the outcome is partial or needs a look.                                              | When closed |
+| `error`   | A refusal in translated copy that is NOT a failed call: client-side validation, a mapped refusal reason. | When closed |
+
+`warning` and `error` stay for the same reason the failure funnel's toast does: they ask the reader
+to do something. Options are content, never styling: `params` and `plural` for the title key, a
+resolved `description`, `actions` for a call-to-action, and `undo: { run, windowMs }` for a write
+held open behind an Undo (the board's delete and move), which keeps the toast exactly as long as
+the window. A toast is action feedback. Something the reader must act on later belongs in an inline
+`UAlert` or the notification inbox, not a toast.
+
+#### Loading: the component's `loading` prop, `USkeleton` for content, `Spinner` for a glyph
+
+- **A Nuxt UI component with a `loading` prop takes `:loading`.** Never spin its icon by hand
+  (`:ui="{ leadingIcon: 'animate-spin' }"`, or an `:icon` swapped to a loader while busy).
+- **A panel or list waiting on its first fetch shows `USkeleton` rows sized like the content they
+  replace**, so it does not show nothing and then everything. Its fill is `bg-accented`, set once
+  in `app.config.ts`: Nuxt UI's default `bg-elevated` is the same neutral as the light-mode overlay
+  surface, so a default skeleton inside a modal is invisible. An ACTION in progress (a button
+  press, a sync) is not a content load and keeps `:loading` or a spinner.
+- **A bare glyph showing work in progress is `<Spinner>`** (`components/common/Spinner.vue`), the
+  one file that writes `animate-spin`. `:spinning` covers a status icon that spins in one state
+  only (a running step), and `name` defaults to Nuxt UI's own loading icon so it matches the one
+  `:loading` draws. It spins under `motion-safe:` only.
+
+#### Empty states: `EmptyState`, always
+
+**A list, panel or section with nothing to show renders `common/EmptyState.vue`**, with its copy as
+`title` / `description` and any button that fills the list in its default slot. `compact` is the
+inline size for an inspector section or a picker. It wraps Nuxt UI's `UEmpty` (the structure, the
+action row and the tokens) and decides once what each `UEmpty` caller would otherwise pick: the
+`naked` variant, because an empty state sits inside a panel that already draws its border; the
+spacing, because `UEmpty` pads `p-4 sm:p-6 lg:p-8` for a page body; and plain text for the title,
+because `UEmpty` renders it as an `<h2>`, which would put a heading into every picker. An inline
+value placeholder ("None", a dash in a table cell) is not an empty state.
+
+`scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `useToast(` and `toast.add(`
+outside the two funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
+change is rewriting, and fails once one of them is clean so the entry cannot outlive the reason.
 
 ### A panel that seeds state on open uses `onModalOpen`, never a bare `watch(open)`
 
@@ -403,9 +457,12 @@ protects, so the two never contradict silently:
   skill teaches the hand-rolled `UForm` + `UFormField` shape for every form; when the backend
   declares the fields and the SPA only collects them, that shape is forbidden here.
   [Rule](#a-backend-declared-form-renders-through-descriptorfieldsvue).
-- **Failure toasts go through the funnel, not a bare `toast.add`.** The skill uses `useToast()`
-  freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`.
+- **Toasts go through the two funnels, never a bare `toast.add`.** The skill uses `useToast()`
+  freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`
+  and every other toast with `useActionToast().success|info|warning|error(key, opts)`.
   [Rule](#every-failure-toast-goes-through-one-funnel).
+- **Loading is `:loading`, `USkeleton` or `<Spinner>`; empty is `<EmptyState>`.** Never a
+  hand-written `animate-spin`. [Rule](#loading-the-components-loading-prop-uskeleton-for-content-spinner-for-a-glyph).
 - **Icon-only buttons carry an accessible name.** Use `common/IconButton.vue`
   ([source](./app/components/common/IconButton.vue)), which applies `label` as both the tooltip
   and `aria-label`, rather than a bare `<UButton icon>`.

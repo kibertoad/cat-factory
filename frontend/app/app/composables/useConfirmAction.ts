@@ -1,7 +1,7 @@
 /**
  * Confirm-gate + success-toast for the recurring destructive actions that aren't board
  * blocks (disconnect a connection, remove/revoke a credential, clear a config, destroy an
- * environment). Built on the same `useConfirm()` singleton + `useToast()` the board delete
+ * environment). Built on the same `useConfirm()` singleton + `useActionToast()` the board delete
  * path uses, so every destructive affordance across the settings/connection surfaces routes
  * through ONE confirm-then-mutate + toast path rather than each re-inventing its own copy.
  *
@@ -19,6 +19,8 @@
  * per surface. `name` is a short noun for the target (a brand like "Slack", a data value like
  * the invite email, or a feature noun like "the test environment").
  */
+import { useActionToast } from '~/composables/useActionToast'
+
 type ConfirmShape = 'disconnect' | 'remove' | 'revoke' | 'clear' | 'destroy'
 
 /**
@@ -71,7 +73,7 @@ const SHAPE_META: Record<
 
 export function useConfirmAction() {
   const { confirm } = useConfirm()
-  const toast = useToast()
+  const actionToast = useActionToast()
   const { t } = useI18n()
 
   /** Prompt before a destructive action against `name`. Resolves `true` only if confirmed. */
@@ -89,7 +91,7 @@ export function useConfirmAction() {
   /** Toast the completed destructive action (call only on real success). */
   function toastDone(shape: ConfirmShape, name: string): void {
     const meta = SHAPE_META[shape]
-    toast.add({ title: t(meta.toastKey, { name }), color: 'success', icon: 'i-lucide-check' })
+    actionToast.success(meta.toastKey, { params: { name } })
   }
 
   return { confirmAction, toastDone }

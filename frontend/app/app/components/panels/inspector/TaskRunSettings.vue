@@ -10,6 +10,7 @@ import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 import DocReferenceRepos from '~/components/panels/inspector/DocReferenceRepos.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -503,9 +504,12 @@ const technicalLabel = computed(() => {
           @update:model-value="(v: boolean | 'indeterminate') => toggleInvolved(s.id, v === true)"
         />
       </div>
-      <div v-else class="text-2xs text-dimmed">
-        {{ t('inspector.runSettings.involvedServicesEmpty') }}
-      </div>
+      <EmptyState
+        v-else
+        compact
+        icon="i-lucide-plug"
+        :title="t('inspector.runSettings.involvedServicesEmpty')"
+      />
       <div v-if="staleInvolvedServices.length" class="mt-1 flex flex-wrap gap-1">
         <UBadge
           v-for="id in staleInvolvedServices"

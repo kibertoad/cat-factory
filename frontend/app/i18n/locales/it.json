@@ -53,7 +53,6 @@
         "intro": "Ogni preset imposta un {baseModel} per ogni agente, con override facoltativi per singolo agente. Un modello fissato su una singola attivita ha comunque la precedenza sul preset.",
         "introBaseModel": "modello di base",
         "newPreset": "Nuovo preset",
-        "loadingCatalog": "Caricamento del catalogo dei modelli…",
         "default": "Predefinito",
         "setDefaultTitle": "Imposta come predefinito del workspace",
         "editTitle": "Modifica preset",
@@ -62,7 +61,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} override",
         "empty": "Ancora nessun preset. Creane uno per associare i modelli ai tuoi agenti.",
-        "customRouteOrder": "ordine rotte personalizzato"
+        "customRouteOrder": "ordine rotte personalizzato",
+        "catalogFailed": "Il catalogo dei modelli non è stato caricato. Riprova per vedere i preset."
       },
       "editor": {
         "useBaseModel": "Usa il modello di base",
@@ -82,7 +82,8 @@
         "deleteFailed": "Impossibile eliminare il preset",
         "nameRequiredTitle": "Nome obbligatorio",
         "nameRequiredBody": "Assegna un nome al preset.",
-        "saveFailed": "Impossibile salvare il preset"
+        "saveFailed": "Impossibile salvare il preset",
+        "catalogFailed": "Impossibile caricare il catalogo dei modelli"
       },
       "routes": {
         "direct": "L'API propria del fornitore del modello",
@@ -237,7 +238,6 @@
         "overrideActive": "Attivo",
         "personalOverrideHint": "Sostituisci l'handler del workspace per questo tipo di provisioning sulla tua macchina. Memorizzato per utente.",
         "removeOverride": "Rimuovi override",
-        "loading": "Caricamento delle impostazioni dell'infrastruttura…",
         "kubeNoun": "l'handler Kubernetes",
         "kubeOverrideNoun": "l'override Kubernetes",
         "customNoun": "questo handler",
@@ -416,7 +416,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Scegli quali operazioni riutilizzabili di questo deployment vengono offerte su questa board. Nasconderne una la rimuove dal selettore di creazione attività qui e rifiuta la creazione di lavoro con essa; le altre board non sono interessate.",
-      "loading": "Caricamento delle operazioni…",
       "empty": "Questo deployment non registra operazioni riutilizzabili.",
       "offer": "Offri su questa board",
       "saveFailed": "Impossibile modificare le operazioni offerte su questa board"
@@ -3663,7 +3662,6 @@
     "connect": {
       "yourInstallations": "Le tue installazioni",
       "refresh": "Aggiorna",
-      "lookingForInstallations": "Ricerca delle installazioni…",
       "noInstallations": "Nessuna installazione trovata per la App. Installala qui sotto, oppure collegala tramite ID.",
       "installationMeta": "{targetType} · installazione {id}",
       "linked": "collegata",
@@ -3690,14 +3688,12 @@
       "resync": "Risincronizza",
       "backfill": "Backfill",
       "disconnect": "Disconnetti",
-      "loading": "Caricamento…",
       "tabs": {
         "repos": "Repository",
         "issues": "Issue"
       },
       "linkedToBoard": "Collegati a questa board",
       "manageRepos": "Gestisci i repository",
-      "loadingRepos": "Caricamento dei repository…",
       "private": "privato",
       "saveSelection": "Salva selezione",
       "noLinkedRepos": "Nessun repository ancora collegato. Usa Gestisci i repository per scegliere quali repository questa board traccia.",
@@ -3780,7 +3776,6 @@
     },
     "repoTree": {
       "root": "root",
-      "loading": "Caricamento…",
       "noSubdirectories": "Nessuna sottodirectory qui.",
       "empty": "Niente qui.",
       "select": "Seleziona",
@@ -3863,8 +3858,6 @@
     "exportJson": "Esporta JSON",
     "exportHint": "Scarica un export JSON di questa esecuzione ottimizzato per LLM",
     "closeEsc": "Chiudi (Esc)",
-    "loadingActivity": "Caricamento dell'attività del modello…",
-    "loadingContext": "Caricamento del contesto fornito…",
     "noCalls": "Nessuna chiamata al modello registrata per questa esecuzione.",
     "noContext": "Nessun contesto dell'agente memorizzato per questa esecuzione. Viene catturato a ogni dispatch quando il workspace ha 'Memorizza il contesto completo dell'agente' abilitato.",
     "contextError": "Impossibile caricare il contesto fornito.",
@@ -3956,7 +3949,6 @@
       "details": "Dettagli"
     },
     "webSearch": "Ricerca web",
-    "loadingSearch": "Caricamento delle ricerche web…",
     "noSearch": "Nessuna ricerca web registrata per questa esecuzione. Le query vengono catturate quando viene eseguita la ricerca web e il workspace ha 'Memorizza il contesto completo dell'agente' abilitato.",
     "search": {
       "available": "Disponibile",
@@ -3995,7 +3987,6 @@
     "toolCalls": {
       "title": "Chiamate a strumenti",
       "subtitle": "che cosa hanno fatto gli agenti, nell'ordine in cui l'hanno fatto",
-      "loading": "Caricamento delle chiamate a strumenti…",
       "error": "Impossibile caricare le chiamate a strumenti.",
       "none": "Nessuna chiamata a strumento registrata per questa esecuzione.",
       "noneMatching": "Nessuna chiamata a strumento corrisponde a questo filtro.",
@@ -4016,7 +4007,6 @@
     "title": "Osservabilità della piattaforma",
     "refresh": "Aggiorna",
     "close": "Chiudi",
-    "loading": "Caricamento dello stato della piattaforma…",
     "retry": "Riprova",
     "window": {
       "oneHour": "Ultima ora",
@@ -4097,7 +4087,6 @@
   "reports": {
     "title": "Report",
     "refresh": "Aggiorna",
-    "loading": "Caricamento dei report…",
     "retry": "Riprova",
     "error": "Impossibile caricare i report.",
     "period": "Dal {from} al {to}",
@@ -4598,12 +4587,10 @@
   "guidedReview": {
     "title": "Revisione guidata",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "Caricamento della revisione…",
     "outOfDate": "Gli aggiornamenti in tempo reale non sono riusciti, quindi questa vista potrebbe non essere aggiornata.",
     "openFromTask": "Esplora con la revisione guidata",
     "picker": {
       "intro": "Scegli un repository e una pull request. Ottieni una panoramica della modifica e puoi fare domande in discussioni separate.",
-      "loading": "Caricamento dei repository…",
       "noRepos": "Nessun repository è ancora collegato a questo workspace.",
       "repo": "Repository",
       "openPulls": "Pull request aperte",
@@ -5108,7 +5095,6 @@
     "answerVerb": "Rispondi a",
     "dismissVerb": "ignora",
     "empty": "Nessuna revisione ancora. Il revisore viene eseguito automaticamente come primo step all'avvio della pipeline di questa attivita.",
-    "loadingReview": "Caricamento della revisione…",
     "reviewing": "Revisione dei requisiti in corso…",
     "settled": "I requisiti sono definiti. Il documento qui sotto e quello che utilizza ogni step successivo dell'agente.",
     "exceeded": {
@@ -5824,7 +5810,6 @@
       "awaiting": "Sono stati generati {total} candidati e attendono di essere confrontati."
     },
     "asset": {
-      "loading": "Caricamento del file…",
       "loadFailed": "Non è stato possibile caricare il file archiviato.",
       "retry": "Riprova",
       "open": "Apri",
@@ -5850,7 +5835,6 @@
     "introChoose": "Scegli",
     "introDismiss": "ignora",
     "empty": "Nessun brainstorm ancora. Viene eseguito automaticamente quando la pipeline di questa attivita raggiunge lo step di brainstorm.",
-    "loading": "Caricamento del brainstorm…",
     "generating": "Generazione delle opzioni…",
     "settledBanner": "Il {doc} e definito. Il documento qui sotto e quello che utilizza la fase successiva.",
     "exceeded": {
@@ -5934,7 +5918,6 @@
     "introAnswer": "Rispondi a",
     "introDismiss": "ignora",
     "empty": "Nessuna revisione ancora. Il revisore viene eseguito automaticamente come primo step all'avvio della pipeline di questa attivita.",
-    "loadingReview": "Caricamento della revisione…",
     "triaging": "Triage della segnalazione di bug in corso…",
     "converged": "La segnalazione di bug e chiarita. Il report qui sotto e quello che utilizza ogni step successivo dell'agente.",
     "capHeading": "Raggiunto il limite di {max} iterazioni con rilievi ancora aperti.",
@@ -6201,7 +6184,6 @@
     }
   },
   "common": {
-    "loading": "Caricamento…",
     "save": "Salva",
     "cancel": "Annulla",
     "retry": "Riprova",
@@ -6522,6 +6504,9 @@
       "title": "Impossibile caricare questa vista",
       "body": "Il suo codice non è stato caricato. Di solito significa che l'applicazione è stata aggiornata mentre questa scheda era aperta, quindi i file richiesti da questa pagina non sono più sul server. Ricarica per ottenere la versione attuale.",
       "reload": "Ricarica"
+    },
+    "reported": {
+      "description": "L'operazione è stata eseguita e ha segnalato un errore. Mostra i dettagli per vedere cosa ha riportato."
     }
   },
   "slack": {
@@ -6838,7 +6823,6 @@
   "consensus": {
     "titlePrefix": "Consenso",
     "participantCount": "nessun partecipante | un partecipante | {count} partecipanti",
-    "loading": "Caricamento della sessione di consenso…",
     "empty": "Nessuna sessione di consenso è ancora stata eseguita per questo passaggio.",
     "failed": "Consenso non riuscito: {error}",
     "unknownError": "errore sconosciuto",
@@ -6870,7 +6854,6 @@
   },
   "spec": {
     "title": "Requisiti",
-    "loading": "Caricamento della specifica…",
     "error": "Impossibile caricare la specifica. Prova a riaprire questa finestra.",
     "overview": "Panoramica",
     "noFeatureGroups": "Nessun gruppo di funzionalità",
@@ -7060,8 +7043,7 @@
     },
     "shot": {
       "failed": "Non riuscito",
-      "failedToLoad": "Caricamento non riuscito",
-      "loading": "Caricamento…"
+      "failedToLoad": "Caricamento non riuscito"
     },
     "screenshotAlt": "{view} (screenshot)",
     "screenshots": "Screenshot",

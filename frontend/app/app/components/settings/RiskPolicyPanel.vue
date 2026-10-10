@@ -18,7 +18,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 
 const store = useRiskPoliciesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -69,11 +69,7 @@ async function run(key: string, titleKey: string, action: () => Promise<unknown>
 async function save(policy: RiskPolicyLibraryEntry, patch: UpdateRiskPolicyInput) {
   await run(policy.id, 'settings.riskPolicy.toast.saveFailed', async () => {
     await store.update(policy.id, patch)
-    toast.add({
-      title: t('settings.riskPolicy.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.saved')
   })
 }
 
@@ -112,11 +108,7 @@ async function create(input: Parameters<typeof store.create>[0]) {
   creating.value = true
   try {
     await store.create(input)
-    toast.add({
-      title: t('settings.riskPolicy.toast.created'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.created')
   } catch (e) {
     present(e, 'settings.riskPolicy.toast.createFailed')
   } finally {
@@ -136,11 +128,7 @@ function clone(policy: RiskPolicyLibraryEntry) {
       t('settings.riskPolicy.inherited.copyName', { name: source }),
     )
     await store.clone(policy.id, name)
-    toast.add({
-      title: t('settings.riskPolicy.toast.cloned'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.cloned')
   })
 }
 

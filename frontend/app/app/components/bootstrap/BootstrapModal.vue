@@ -29,8 +29,8 @@ const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const board = useBoardStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -367,11 +367,8 @@ async function openCreateRepo() {
       private: isPrivate.value,
       description: description.value.trim() || undefined,
     })
-    toast.add({
-      title: t('bootstrap.toast.repoCreated'),
+    actionToast.success('bootstrap.toast.repoCreated', {
       description: `${repo.owner}/${repo.name}`,
-      icon: 'i-lucide-check',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'bootstrap.toast.repoCreateFailed')
@@ -426,26 +423,20 @@ async function launch() {
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
       // repo isn't empty) — surfaced synchronously, before any board frame.
-      toast.add({
-        title: t('bootstrap.toast.failed'),
-        description: job.error ?? t('bootstrap.toast.failedFallback'),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
+      presentReported(job.error, 'bootstrap.toast.failed', {
+        descriptionKey: 'bootstrap.toast.failedFallback',
       })
     } else {
       // Running: the container is spinning up. A provisional service card now
       // shows on the board and tracks live progress; the run continues in the
       // background and becomes a real, droppable service when it finishes.
-      toast.add({
-        title: t('bootstrap.toast.started'),
+      actionToast.info('bootstrap.toast.started', {
         // A monorepo run does not run straight through: it surveys, then waits for the
         // reviewer. Saying "bootstrapping…" there would set the wrong expectation about who
         // the next move belongs to.
         description: job.monorepo
           ? t('bootstrap.toast.startedMonorepoDesc', { directory: job.monorepo.directory })
           : t('bootstrap.toast.startedDesc', { repo: job.repoName }),
-        icon: 'i-lucide-loader-circle',
-        color: 'info',
       })
       repoName.value = ''
       description.value = ''

@@ -4,6 +4,8 @@
 import { isPostableDraft } from '@cat-factory/contracts'
 import type { GuidedReviewCommentDraft, GuidedReviewThreadView } from '~/types/domain'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 import GuidedReviewFailure from '~/components/guidedReview/GuidedReviewFailure.vue'
 import GuidedReviewDraftCard from '~/components/guidedReview/GuidedReviewDraftCard.vue'
 import {
@@ -112,9 +114,12 @@ async function draftComments(): Promise<void> {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3" data-testid="guided-review-thread">
     <div class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-      <p v-if="!messages.length" class="text-sm text-muted">
-        {{ t('guidedReview.thread.empty') }}
-      </p>
+      <EmptyState
+        v-if="!messages.length"
+        compact
+        icon="i-lucide-message-circle-question"
+        :title="t('guidedReview.thread.empty')"
+      />
       <div
         v-for="m in messages"
         :key="m.id"
@@ -129,7 +134,7 @@ async function draftComments(): Promise<void> {
           <p class="whitespace-pre-wrap">{{ m.content }}</p>
         </template>
         <p v-else-if="isLive(m)" class="flex items-center gap-2 text-muted">
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+          <Spinner class="h-4 w-4" />
           {{
             m.depth === 'deep'
               ? t('guidedReview.thread.investigating')

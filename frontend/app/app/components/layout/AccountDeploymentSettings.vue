@@ -13,7 +13,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction } = useConfirmAction()
@@ -178,10 +178,7 @@ async function saveStorage() {
   }
   if (backend === 's3') {
     if (!cs.region.trim() || !cs.bucket.trim()) {
-      toast.add({
-        title: t('layout.accountDeployment.contentStorage.regionBucketValidation'),
-        color: 'error',
-      })
+      actionToast.error('layout.accountDeployment.contentStorage.regionBucketValidation')
       return
     }
     config.s3 = {
@@ -203,16 +200,10 @@ async function saveStorage() {
     if (id && key) {
       input.secrets = { s3: { accessKeyId: id, secretAccessKey: key } }
     } else if (id || key) {
-      toast.add({
-        title: t('layout.accountDeployment.contentStorage.bothKeysValidation'),
-        color: 'error',
-      })
+      actionToast.error('layout.accountDeployment.contentStorage.bothKeysValidation')
       return
     } else if (!storageSummary.value?.s3CredentialsConfigured) {
-      toast.add({
-        title: t('layout.accountDeployment.contentStorage.keysValidation'),
-        color: 'error',
-      })
+      actionToast.error('layout.accountDeployment.contentStorage.keysValidation')
       return
     }
     // else: keys already stored and none re-entered → leave them unchanged.
@@ -224,11 +215,7 @@ async function saveStorage() {
   try {
     await store.save(props.accountId, input)
     hydrateStorage()
-    toast.add({
-      title: t('layout.accountDeployment.contentStorage.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.contentStorage.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.contentStorage.saveFailed')
   } finally {
@@ -238,7 +225,7 @@ async function saveStorage() {
 
 async function saveSlack() {
   if (!slack.clientId.trim() || !slack.clientSecret.trim() || !slack.redirectUrl.trim()) {
-    toast.add({ title: t('layout.accountDeployment.slack.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.slack.validation')
     return
   }
   savingSlack.value = true
@@ -255,11 +242,7 @@ async function saveSlack() {
     slack.clientId = ''
     slack.clientSecret = ''
     slack.redirectUrl = ''
-    toast.add({
-      title: t('layout.accountDeployment.slack.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.slack.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.slack.saveFailed')
   } finally {
@@ -272,11 +255,7 @@ async function clearSlack() {
   savingSlack.value = true
   try {
     await store.save(props.accountId, { secrets: { slackOAuth: null } })
-    toast.add({
-      title: t('layout.accountDeployment.slack.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.slack.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.slack.clearFailed')
   } finally {
@@ -286,7 +265,7 @@ async function clearSlack() {
 
 async function saveLinear() {
   if (!linear.clientId.trim() || !linear.clientSecret.trim() || !linear.redirectUrl.trim()) {
-    toast.add({ title: t('layout.accountDeployment.linear.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.linear.validation')
     return
   }
   savingLinear.value = true
@@ -303,11 +282,7 @@ async function saveLinear() {
     linear.clientId = ''
     linear.clientSecret = ''
     linear.redirectUrl = ''
-    toast.add({
-      title: t('layout.accountDeployment.linear.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.linear.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.linear.saveFailed')
   } finally {
@@ -320,11 +295,7 @@ async function clearLinear() {
   savingLinear.value = true
   try {
     await store.save(props.accountId, { secrets: { linearOAuth: null } })
-    toast.add({
-      title: t('layout.accountDeployment.linear.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.linear.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.linear.clearFailed')
   } finally {
@@ -334,7 +305,7 @@ async function clearLinear() {
 
 async function saveFigma() {
   if (!figma.clientId.trim() || !figma.clientSecret.trim() || !figma.redirectUrl.trim()) {
-    toast.add({ title: t('layout.accountDeployment.figma.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.figma.validation')
     return
   }
   savingFigma.value = true
@@ -351,11 +322,7 @@ async function saveFigma() {
     figma.clientId = ''
     figma.clientSecret = ''
     figma.redirectUrl = ''
-    toast.add({
-      title: t('layout.accountDeployment.figma.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.figma.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.figma.saveFailed')
   } finally {
@@ -368,11 +335,7 @@ async function clearFigma() {
   savingFigma.value = true
   try {
     await store.save(props.accountId, { secrets: { figmaOAuth: null } })
-    toast.add({
-      title: t('layout.accountDeployment.figma.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.figma.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.figma.clearFailed')
   } finally {
@@ -384,7 +347,7 @@ async function saveWeb() {
   const brave = web.braveApiKey.trim()
   const searxng = web.searxngUrl.trim()
   if (!brave && !searxng) {
-    toast.add({ title: t('layout.accountDeployment.web.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.web.validation')
     return
   }
   savingWeb.value = true
@@ -401,11 +364,7 @@ async function saveWeb() {
     web.braveApiKey = ''
     web.searxngUrl = ''
     web.searxngApiKey = ''
-    toast.add({
-      title: t('layout.accountDeployment.web.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.web.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.web.saveFailed')
   } finally {
@@ -418,11 +377,7 @@ async function clearWeb() {
   savingWeb.value = true
   try {
     await store.save(props.accountId, { secrets: { webSearch: null } })
-    toast.add({
-      title: t('layout.accountDeployment.web.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.web.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.web.clearFailed')
   } finally {

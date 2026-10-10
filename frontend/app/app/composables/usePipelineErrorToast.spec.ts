@@ -272,6 +272,30 @@ describe('usePipelineErrorToast', () => {
   })
 })
 
+describe('presentReported', () => {
+  it('keeps a failure reported as data behind the disclosure, under translated copy', () => {
+    // A job row's `error` is backend prose: it must be copyable detail, never the headline, and it
+    // must not be read as a network fault the way `present` reads a bare string.
+    usePipelineErrorToast().presentReported('stack exited with code 1', 'x.startFailed')
+    const arg = add.mock.calls[0]![0]
+    expect(arg.title).toBe('x.startFailed')
+    expect(arg.description).toBe('errors.reported.description')
+    expect(arg.duration).toBe(0)
+    arg.actions[0].onClick()
+    expect(update).toHaveBeenCalledWith('toast-1', {
+      description: 'stack exited with code 1',
+      actions: [expect.objectContaining({ label: 'common.copyDetails' })],
+    })
+  })
+
+  it('takes a site description key, and offers no disclosure when nothing was reported', () => {
+    usePipelineErrorToast().presentReported(null, 'x.failed', { descriptionKey: 'x.fallback' })
+    const arg = add.mock.calls[0]![0]
+    expect(arg.description).toBe('x.fallback')
+    expect(arg.actions).toEqual([expect.objectContaining({ label: 'common.copyDetails' })])
+  })
+})
+
 describe('describeGenericFailure', () => {
   it('maps each known status class to its own description key', () => {
     for (const code of [

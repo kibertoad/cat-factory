@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { ReportSpendCap, ReportSpendRow } from '~/types/execution'
 import { maxOf, segmentPct, spendMagnitude } from './ReportsPanel.logic'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // One ranked spend breakdown: a horizontal bar per slice, split into the metered
 // (`violet-500`, real money) and subscription (`amber-600`, illustrative equivalent-API
@@ -34,9 +35,12 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
 
 <template>
   <div class="rounded-lg border border-default bg-default/40 p-4">
-    <div v-if="!rows.length" class="py-4 text-center text-xs text-dimmed">
-      {{ t('reports.spend.empty') }}
-    </div>
+    <EmptyState
+      v-if="!rows.length"
+      compact
+      icon="i-lucide-wallet"
+      :title="t('reports.spend.empty')"
+    />
     <ul v-else class="flex flex-col gap-2.5" :data-testid="testId">
       <li v-for="row in rows" :key="row.key" class="text-xs" data-testid="reports-spend-row">
         <div class="mb-1 flex items-baseline justify-between gap-2">

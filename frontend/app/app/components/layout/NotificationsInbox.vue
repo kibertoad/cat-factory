@@ -16,7 +16,7 @@ const ui = useUiStore()
 const access = useWorkspaceAccess()
 const execution = useExecutionStore()
 const trackRecords = useMergeTrackRecordsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const busy = ref<string | null>(null)
@@ -197,11 +197,7 @@ async function act(n: Notification) {
     // Only the merge cards carry a tag; passing `undefined` elsewhere keeps the historical
     // no-body act, so a non-merge card's action is completely unchanged.
     await notifications.act(n.id, collectsEffort(n) ? effortFor(n) : undefined)
-    toast.add({
-      title: t('layout.notifications.toast.acted'),
-      color: 'success',
-      icon: 'i-lucide-check',
-    })
+    actionToast.success('layout.notifications.toast.acted')
   } catch (e) {
     present(e, 'layout.notifications.toast.actFailed')
   } finally {
@@ -213,11 +209,7 @@ async function dismiss(n: Notification) {
   busy.value = n.id
   try {
     await notifications.dismiss(n.id)
-    toast.add({
-      title: t('layout.notifications.toast.dismissed'),
-      color: 'neutral',
-      icon: 'i-lucide-check',
-    })
+    actionToast.success('layout.notifications.toast.dismissed')
   } catch (e) {
     present(e, 'layout.notifications.toast.dismissFailed')
   } finally {

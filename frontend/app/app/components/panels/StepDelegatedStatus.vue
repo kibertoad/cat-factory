@@ -8,6 +8,7 @@ import {
 import type { PipelineStep } from '~/types/execution'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
@@ -81,10 +82,10 @@ const { copy: copyText } = useCopyToClipboard()
   <div v-if="record" data-testid="step-delegated-status">
     <div class="rounded-lg border px-3 py-2 text-xs" :class="statusView.meta.cls">
       <div class="flex items-center gap-2">
-        <UIcon
+        <Spinner
           :name="statusView.meta.icon"
+          :spinning="statusView.meta.spin"
           class="h-4 w-4 shrink-0"
-          :class="statusView.meta.spin ? 'animate-spin' : ''"
         />
         <!-- A status this build does not know is NAMED as unrecognised, carrying the stored value,
              rather than guessed onto a current one or silently dropped. -->

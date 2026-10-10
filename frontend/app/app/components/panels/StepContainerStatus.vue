@@ -4,6 +4,7 @@ import type { PipelineStep, RunContainerStatus } from '~/types/execution'
 import { containerPhaseLabel } from '~/utils/pipelineRender'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // The per-run container lifecycle for a container-backed step: its status (spinning up /
 // running / errored / reclaimed), the live phase (preparing the checkout vs the agent
@@ -74,7 +75,7 @@ const CONTAINER_STATUS_META: Record<
 
 // Whether the status icon animates: only a cold-boot genuinely in flight, i.e. one whose run is
 // still being driven. A `starting` container on a parked or terminated run keeps its label and
-// freezes, the same way a mid-flight subtask item does (`subtaskIconClass`).
+// freezes, the same way a mid-flight subtask item does (`subtaskIconSpins`).
 const spinIcon = computed(
   () =>
     props.runActive && !!containerStatus.value && CONTAINER_STATUS_META[containerStatus.value].spin,
@@ -100,10 +101,10 @@ const { copy: copyText } = useCopyToClipboard()
       :class="CONTAINER_STATUS_META[containerStatus].cls"
     >
       <div class="flex items-center gap-2">
-        <UIcon
+        <Spinner
           :name="CONTAINER_STATUS_META[containerStatus].icon"
+          :spinning="spinIcon"
           class="h-4 w-4 shrink-0"
-          :class="spinIcon ? 'animate-spin' : ''"
         />
         <span class="font-medium">{{ t(CONTAINER_STATUS_KEYS[containerStatus]) }}</span>
         <template v-if="phaseLabel && containerStatus === 'up'">

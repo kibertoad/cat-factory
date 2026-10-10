@@ -6,6 +6,7 @@ import { filterToolCallsByOutcome, formatMs } from '~/utils/observability'
 import { agentKindMeta } from '~/utils/catalog'
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The tool-call TRAJECTORY drill-down: what the run's agents DID, oldest first, in the order
 // they did it. The sibling of the model-call list, and the one that holds the failures no LLM
@@ -153,13 +154,9 @@ function prettyArgs(raw: string): string {
 
     <!-- Every state below is gated on having NOTHING to show: rows already in hand outrank a
          read still in flight behind them, and outrank one that failed. -->
-    <p
-      v-if="source.loading && !visible.length"
-      class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
-    >
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-      {{ t('observability.toolCalls.loading') }}
-    </p>
+    <div v-if="source.loading && !visible.length" class="space-y-2">
+      <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+    </div>
     <div
       v-else-if="source.error && !visible.length"
       class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-6 text-center text-sm text-app-error-400"
@@ -178,20 +175,18 @@ function prettyArgs(raw: string): string {
     </div>
     <!-- "The run made no tool calls" is a claim about the RUN, so it comes off the aggregate,
          never off an empty prefix that may simply not have loaded. -->
-    <p
+    <EmptyState
       v-else-if="!counts.all"
-      class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-    >
-      {{ t('observability.toolCalls.none') }}
-    </p>
+      icon="i-lucide-wrench"
+      :title="t('observability.toolCalls.none')"
+    />
     <!-- Narrowed to nothing is a different statement from recorded nothing, and it is the more
          reassuring of the two: the operator asked for the failures and there are none. -->
-    <p
+    <EmptyState
       v-else-if="!visible.length"
-      class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-    >
-      {{ t('observability.toolCalls.noneMatching') }}
-    </p>
+      icon="i-lucide-list-filter"
+      :title="t('observability.toolCalls.noneMatching')"
+    />
 
     <template v-else>
       <!-- What this view is bounded by, when it is. A cap nobody can see is a prefix read as a

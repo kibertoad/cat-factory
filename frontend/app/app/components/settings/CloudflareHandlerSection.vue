@@ -18,7 +18,7 @@ type CloudflareConfig = CloudflareHandlerConfig['cloudflare']
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -101,11 +101,7 @@ async function save() {
     })
     token.value = ''
     editing.value = false
-    toast.add({
-      title: t('settings.infrastructure.handler.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.infrastructure.handler.saved')
   } catch (e) {
     present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
@@ -133,7 +129,7 @@ async function remove() {
   busy.value = true
   try {
     await infra.unregisterHandler('cloudflare')
-    toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.infrastructure.handler.removed')
   } catch (e) {
     present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {

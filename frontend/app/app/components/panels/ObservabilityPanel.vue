@@ -32,6 +32,7 @@ import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -837,13 +838,9 @@ function exportJson() {
             </section>
 
             <!-- states -->
-            <p
-              v-if="loading && !calls.length"
-              class="flex items-center gap-2 py-8 text-center text-sm text-dimmed justify-center"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ t('observability.loadingActivity') }}
-            </p>
+            <div v-if="loading && !calls.length" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+            </div>
             <div
               v-else-if="error"
               class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-6 text-center text-sm text-app-error-400"
@@ -860,12 +857,11 @@ function exportJson() {
                 {{ t('common.retry') }}
               </UButton>
             </div>
-            <p
+            <EmptyState
               v-else-if="!calls.length"
-              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-            >
-              {{ t('observability.noCalls') }}
-            </p>
+              icon="i-lucide-activity"
+              :title="t('observability.noCalls')"
+            />
 
             <!-- per-call list, narrowable by outcome -->
             <template v-else>
@@ -879,12 +875,11 @@ function exportJson() {
               <!-- Narrowed to nothing reads differently from recorded nothing, and on this
                    surface it is the good news: the operator asked for the failures and there
                    are none. -->
-              <p
+              <EmptyState
                 v-if="!visibleCalls.length"
-                class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-              >
-                {{ t('observability.noCallsMatching') }}
-              </p>
+                icon="i-lucide-list-filter"
+                :title="t('observability.noCallsMatching')"
+              />
 
               <ul v-else class="space-y-2">
                 <li
@@ -1085,13 +1080,9 @@ function exportJson() {
 
           <!-- Provided context: the complete context each container agent was given. -->
           <div v-else-if="view === 'context'" class="mx-auto max-w-4xl space-y-5">
-            <p
-              v-if="contextLoading && !contextSnapshots.length"
-              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ t('observability.loadingContext') }}
-            </p>
+            <div v-if="contextLoading && !contextSnapshots.length" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+            </div>
             <div
               v-else-if="contextError && !contextSnapshots.length"
               class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-8 text-center text-sm text-app-error-400"
@@ -1108,12 +1099,11 @@ function exportJson() {
                 {{ t('common.retry') }}
               </UButton>
             </div>
-            <p
+            <EmptyState
               v-else-if="!contextSnapshots.length"
-              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-            >
-              {{ t('observability.noContext') }}
-            </p>
+              icon="i-lucide-file-text"
+              :title="t('observability.noContext')"
+            />
 
             <ul v-else class="space-y-2">
               <li
@@ -1244,19 +1234,14 @@ function exportJson() {
               </span>
             </section>
 
-            <p
-              v-if="searchLoading && !searchQueries.length"
-              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ t('observability.loadingSearch') }}
-            </p>
-            <p
+            <div v-if="searchLoading && !searchQueries.length" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+            </div>
+            <EmptyState
               v-else-if="!searchQueries.length"
-              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-            >
-              {{ t('observability.noSearch') }}
-            </p>
+              icon="i-lucide-search"
+              :title="t('observability.noSearch')"
+            />
 
             <div v-else>
               <SectionLabel class="mb-2">

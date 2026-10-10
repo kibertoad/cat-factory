@@ -17,6 +17,7 @@ import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import { defineAsyncView } from '~/utils/asyncView'
 import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue'
 
@@ -438,7 +439,7 @@ watch(
         v-if="workspace.ready && githubProbePending"
         class="m-auto flex flex-col items-center gap-3 text-muted"
       >
-        <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+        <Spinner class="h-8 w-8" />
         <span class="text-sm">{{ $t('app.loading') }}</span>
       </div>
 
@@ -567,7 +568,7 @@ watch(
 
       <!-- Initial load -->
       <div v-else class="m-auto flex flex-col items-center gap-3 text-muted">
-        <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+        <Spinner class="h-8 w-8" />
         <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
       </div>
     </div>

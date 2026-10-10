@@ -175,10 +175,16 @@ const title = computed(() =>
         @open="openFor"
       />
 
-      <p v-else-if="!session" class="flex items-center gap-2 text-sm text-muted">
-        <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-        {{ t('guidedReview.loading') }}
-      </p>
+      <div v-else-if="!session" class="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
+        <div class="space-y-3 lg:w-2/5 lg:pr-2">
+          <USkeleton class="h-6 w-2/3" />
+          <USkeleton v-for="n in 4" :key="n" class="h-4 w-full" />
+        </div>
+        <div class="flex flex-1 flex-col gap-3">
+          <USkeleton class="h-8 w-1/2" />
+          <USkeleton class="h-48 w-full rounded-lg" />
+        </div>
+      </div>
 
       <div v-else class="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
         <div class="min-h-0 space-y-3 overflow-y-auto lg:w-2/5 lg:pr-2">
@@ -210,8 +216,7 @@ const title = computed(() =>
               :aria-selected="tab === activeTab"
               :variant="tab === activeTab ? 'soft' : 'ghost'"
               :color="tab === activeTab ? 'primary' : 'neutral'"
-              :icon="threadBusy(tab) ? 'i-lucide-loader-circle' : undefined"
-              :ui="{ leadingIcon: threadBusy(tab) ? 'animate-spin' : '' }"
+              :loading="threadBusy(tab)"
               :data-testid="`guided-review-tab-${tab}`"
               @click="activeTab = tab"
             >

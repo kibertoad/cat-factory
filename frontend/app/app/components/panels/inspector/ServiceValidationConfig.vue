@@ -10,6 +10,7 @@ import {
   type ValidationEcosystem,
 } from '~/types/validationChecks'
 import { mergeDetectedChecks } from '~/utils/validationDetection'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Per-service (frame) PRE-PR VALIDATION CHECKS: the shell commands the executor-harness runs
 // against the checkout after the coder settles and BEFORE the PR opens. A failing command's
@@ -19,7 +20,7 @@ import { mergeDetectedChecks } from '~/utils/validationDetection'
 const props = defineProps<{ block: Block }>()
 
 const store = useValidationChecksStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -104,11 +105,11 @@ async function detect() {
     if (result.status !== 'ok') {
       // The backend distinguishes "no repo linked" from "the repo could not be read"; say
       // which, because they send the operator to different places.
-      toast.add({
-        title: t(`inspector.validationChecks.detect.${result.status}`),
-        icon: 'i-lucide-triangle-alert',
-        color: 'warning',
-      })
+      actionToast.warning(
+        result.status === 'repo_unavailable'
+          ? 'inspector.validationChecks.detect.repo_unavailable'
+          : 'inspector.validationChecks.detect.failed',
+      )
       return
     }
     const merged = mergeDetectedChecks(rows.value, result.checks, VALIDATION_MAX_CHECKS)
@@ -120,39 +121,37 @@ async function detect() {
     const filledInstall = suggestedInstall !== '' && dependencyInstall.value.trim() === ''
     if (filledInstall) dependencyInstall.value = suggestedInstall
     if (merged.added === 0 && !filledInstall) {
-      toast.add({
-        title: t('inspector.validationChecks.detect.nothingNew'),
+      actionToast.info('inspector.validationChecks.detect.nothingNew', {
         description:
           result.checks.length > 0
             ? t('inspector.validationChecks.detect.alreadyPresent')
             : t('inspector.validationChecks.detect.unrecognised'),
-        icon: 'i-lucide-info',
-        color: 'neutral',
       })
       return
     }
     const names = result.ecosystems.map(ecosystemLabel).join(', ')
-    toast.add({
-      // An install-only detection fills nothing but the install field, and reporting it as
-      // "0 checks added" would read as a failed press on the one repo shape prepopulation is
-      // most for (dependencies to install, nothing declared to verify).
-      title:
-        merged.added === 0
-          ? t('inspector.validationChecks.detect.installOnly')
-          : t('inspector.validationChecks.detect.added', { count: merged.added }, merged.added),
-      // Name what was recognised AND what was left out: a cap that silently swallowed a
-      // suggestion reads as "that is everything your repo has".
-      description: [
-        names ? t('inspector.validationChecks.detect.found', { ecosystems: names }) : '',
-        merged.dropped > 0 || result.truncated
-          ? t('inspector.validationChecks.detect.capped', { max: VALIDATION_MAX_CHECKS })
-          : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-      icon: 'i-lucide-wand-sparkles',
-      color: 'success',
-    })
+    // An install-only detection fills nothing but the install field, and reporting it as
+    // "0 checks added" would read as a failed press on the one repo shape prepopulation is
+    // most for (dependencies to install, nothing declared to verify).
+    actionToast.success(
+      merged.added === 0
+        ? 'inspector.validationChecks.detect.installOnly'
+        : 'inspector.validationChecks.detect.added',
+      {
+        params: { count: merged.added },
+        plural: merged.added === 0 ? undefined : merged.added,
+        // Name what was recognised AND what was left out: a cap that silently swallowed a
+        // suggestion reads as "that is everything your repo has".
+        description: [
+          names ? t('inspector.validationChecks.detect.found', { ecosystems: names }) : '',
+          merged.dropped > 0 || result.truncated
+            ? t('inspector.validationChecks.detect.capped', { max: VALIDATION_MAX_CHECKS })
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      },
+    )
   } catch (e) {
     present(e, 'inspector.validationChecks.detect.failed')
   } finally {
@@ -169,11 +168,7 @@ async function save() {
       maxAttempts.value,
       dependencyInstall.value.trim() || undefined,
     )
-    toast.add({
-      title: t('inspector.validationChecks.savedToast'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('inspector.validationChecks.savedToast')
   } catch (e) {
     present(e, 'inspector.validationChecks.saveFailed')
   } finally {
@@ -273,9 +268,13 @@ async function clear() {
         />
       </div>
 
-      <p v-if="rows.length === 0" class="text-2xs text-dimmed" data-testid="validation-empty">
-        {{ t('inspector.validationChecks.empty') }}
-      </p>
+      <EmptyState
+        v-if="rows.length === 0"
+        compact
+        icon="i-lucide-list-checks"
+        :title="t('inspector.validationChecks.empty')"
+        data-testid="validation-empty"
+      />
 
       <div class="flex items-end justify-between gap-2">
         <UFormField

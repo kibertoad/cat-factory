@@ -1,4 +1,5 @@
 import type { Block } from '~/types/domain'
+import { useActionToast } from '~/composables/useActionToast'
 
 /**
  * The single, confirm-gated block deletion used by BOTH the inspector's Delete button and
@@ -15,7 +16,7 @@ export function useBlockDeletion() {
   const execution = useExecutionStore()
   const ui = useUiStore()
   const recurring = useRecurringPipelinesStore()
-  const toast = useToast()
+  const actionToast = useActionToast()
   const { present } = usePipelineErrorToast()
   const { confirm } = useConfirm()
   const { t } = useI18n()
@@ -52,11 +53,7 @@ export function useBlockDeletion() {
     ui.select(null)
     try {
       await board.archiveService(block.id)
-      toast.add({
-        title: t('board.toast.archived', { name: block.title }),
-        icon: 'i-lucide-archive',
-        color: 'neutral',
-      })
+      actionToast.success('board.toast.archived', { params: { name: block.title } })
     } catch (e) {
       present(e, 'board.toast.archiveFailed')
     }

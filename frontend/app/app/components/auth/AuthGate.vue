@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import BackendMisconfiguredScreen from '~/components/auth/BackendMisconfiguredScreen.vue'
 import LoginScreen from '~/components/auth/LoginScreen.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // Resolves auth state once on mount, then either renders the app (auth off, or
 // on with a signed-in user) or the login screen. The board's own bootstrap runs
@@ -24,7 +25,7 @@ onMounted(() => void auth.bootstrap().finally(() => markBoot('auth-ready')))
     v-if="!auth.ready"
     class="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-app-950 text-muted"
   >
-    <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+    <Spinner class="h-8 w-8" />
     <span class="text-sm">{{ t('auth.gate.loading') }}</span>
   </div>
 

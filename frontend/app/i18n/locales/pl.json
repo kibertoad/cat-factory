@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Ładowanie…",
     "save": "Zapisz",
     "cancel": "Anuluj",
     "retry": "Ponów",
@@ -831,6 +830,9 @@
       "title": "Nie udało się wczytać tego widoku",
       "body": "Nie udało się wczytać jego kodu. Zwykle oznacza to, że aplikacja została zaktualizowana, gdy ta karta była otwarta, więc plików żądanych przez tę stronę nie ma już na serwerze. Odśwież, aby pobrać aktualną wersję.",
       "reload": "Odśwież"
+    },
+    "reported": {
+      "description": "Operacja została wykonana i zgłosiła błąd. Pokaż szczegóły, aby zobaczyć, co zgłosiła."
     }
   },
   "personalSubscriptions": {
@@ -1848,8 +1850,6 @@
     "exportJson": "Eksportuj JSON",
     "exportHint": "Pobierz przyjazny dla LLM eksport JSON tego uruchomienia",
     "closeEsc": "Zamknij (Esc)",
-    "loadingActivity": "Ładowanie aktywności modelu…",
-    "loadingContext": "Ładowanie dostarczonego kontekstu…",
     "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
     "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
     "contextError": "Nie udało się załadować dostarczonego kontekstu.",
@@ -1941,7 +1941,6 @@
       "details": "Szczegóły"
     },
     "webSearch": "Wyszukiwanie w sieci",
-    "loadingSearch": "Ładowanie wyszukań w sieci…",
     "noSearch": "Nie zarejestrowano wyszukań w sieci dla tego uruchomienia. Zapytania są rejestrowane, gdy wyszukiwanie w sieci jest uruchomione, a przestrzeń robocza ma włączone „Przechowuj pełny kontekst agenta”.",
     "search": {
       "available": "Dostępne",
@@ -1980,7 +1979,6 @@
     "toolCalls": {
       "title": "Wywołania narzędzi",
       "subtitle": "co zrobiły agenty, w kolejności, w jakiej to robiły",
-      "loading": "Ładowanie wywołań narzędzi…",
       "error": "Nie udało się załadować wywołań narzędzi.",
       "none": "Brak zarejestrowanych wywołań narzędzi dla tego uruchomienia.",
       "noneMatching": "Żadne wywołanie narzędzia nie pasuje do tego filtra.",
@@ -2001,7 +1999,6 @@
     "title": "Obserwowalność platformy",
     "refresh": "Odśwież",
     "close": "Zamknij",
-    "loading": "Ładowanie stanu platformy…",
     "retry": "Ponów",
     "window": {
       "oneHour": "Ostatnia godzina",
@@ -2082,7 +2079,6 @@
   "reports": {
     "title": "Raporty",
     "refresh": "Odśwież",
-    "loading": "Wczytywanie raportów…",
     "retry": "Spróbuj ponownie",
     "error": "Nie udało się wczytać raportów.",
     "period": "Od {from} do {to}",
@@ -2923,7 +2919,6 @@
         "intro": "Każde ustawienie wybiera {baseModel} dla każdego agenta, z opcjonalnymi nadpisaniami dla poszczególnych agentów. Model przypięty do pojedynczego zadania nadal ma pierwszeństwo przed ustawieniem.",
         "introBaseModel": "model bazowy",
         "newPreset": "Nowe ustawienie",
-        "loadingCatalog": "Wczytywanie katalogu modeli…",
         "default": "Domyślne",
         "setDefaultTitle": "Ustaw jako domyślne dla obszaru roboczego",
         "editTitle": "Edytuj ustawienie",
@@ -2932,7 +2927,8 @@
         "basePrefix": "Bazowy:",
         "overrideCount": "{count} nadpisanie | {count} nadpisania | {count} nadpisań",
         "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów.",
-        "customRouteOrder": "własna kolejność tras"
+        "customRouteOrder": "własna kolejność tras",
+        "catalogFailed": "Katalog modeli nie został wczytany. Ponów, aby zobaczyć ustawienia."
       },
       "editor": {
         "useBaseModel": "Użyj modelu bazowego",
@@ -2952,7 +2948,8 @@
         "deleteFailed": "Nie udało się usunąć ustawienia",
         "nameRequiredTitle": "Wymagana nazwa",
         "nameRequiredBody": "Nadaj ustawieniu nazwę.",
-        "saveFailed": "Nie udało się zapisać ustawienia"
+        "saveFailed": "Nie udało się zapisać ustawienia",
+        "catalogFailed": "Nie udało się wczytać katalogu modeli"
       },
       "confirmDelete": {
         "title": "Usunąć ten preset modelu?",
@@ -3148,7 +3145,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Wybierz, które operacje wielokrotnego użytku tego wdrożenia są dostępne na tej tablicy. Ukrycie usuwa operację z listy wyboru przy tworzeniu zadania i blokuje tworzenie pracy tego typu; inne tablice pozostają bez zmian.",
-      "loading": "Wczytywanie operacji…",
       "empty": "To wdrożenie nie rejestruje żadnych operacji wielokrotnego użytku.",
       "offer": "Udostępnij na tej tablicy",
       "saveFailed": "Nie udało się zmienić operacji dostępnych na tej tablicy"
@@ -4083,7 +4079,6 @@
         "overrideActive": "Aktywne",
         "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
         "removeOverride": "Usuń nadpisanie",
-        "loading": "Ładowanie ustawień infrastruktury…",
         "kubeNoun": "obsługę Kubernetes",
         "kubeOverrideNoun": "nadpisanie Kubernetes",
         "customNoun": "tę obsługę",
@@ -4496,7 +4491,6 @@
     "connect": {
       "yourInstallations": "Twoje instalacje",
       "refresh": "Odśwież",
-      "lookingForInstallations": "Szukanie instalacji…",
       "noInstallations": "Nie znaleziono jeszcze żadnych instalacji aplikacji. Zainstaluj ją poniżej lub połącz za pomocą ID.",
       "installationMeta": "{targetType} · instalacja {id}",
       "linked": "powiązana",
@@ -4523,14 +4517,12 @@
       "resync": "Zsynchronizuj ponownie",
       "backfill": "Uzupełnij",
       "disconnect": "Rozłącz",
-      "loading": "Ładowanie…",
       "tabs": {
         "repos": "Repozytoria",
         "issues": "Zgłoszenia"
       },
       "linkedToBoard": "Powiązane z tą tablicą",
       "manageRepos": "Zarządzaj repozytoriami",
-      "loadingRepos": "Ładowanie repozytoriów…",
       "private": "prywatne",
       "saveSelection": "Zapisz wybór",
       "noLinkedRepos": "Nie powiązano jeszcze żadnych repozytoriów. Użyj opcji Zarządzaj repozytoriami, aby wybrać, które repozytoria śledzi ta tablica.",
@@ -4613,7 +4605,6 @@
     },
     "repoTree": {
       "root": "katalog główny",
-      "loading": "Ładowanie…",
       "noSubdirectories": "Brak podkatalogów.",
       "empty": "Pusto.",
       "select": "Wybierz",
@@ -5127,12 +5118,10 @@
   "guidedReview": {
     "title": "Przegląd z przewodnikiem",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "Wczytywanie przeglądu…",
     "outOfDate": "Aktualizacje na żywo nie powiodły się, więc ten widok może być nieaktualny.",
     "openFromTask": "Zbadaj w przeglądzie z przewodnikiem",
     "picker": {
       "intro": "Wybierz repozytorium i pull request. Dostaniesz przegląd zmiany i możesz zadawać pytania w osobnych wątkach.",
-      "loading": "Wczytywanie repozytoriów…",
       "noRepos": "Do tego obszaru roboczego nie podłączono jeszcze żadnych repozytoriów.",
       "repo": "Repozytorium",
       "openPulls": "Otwarte pull requesty",
@@ -5800,7 +5789,6 @@
     "answerVerb": "Odpowiedz",
     "dismissVerb": "odrzuć",
     "empty": "Brak przeglądu. Recenzent uruchamia się automatycznie jako pierwszy krok po starcie potoku tego zadania.",
-    "loadingReview": "Ładowanie przeglądu…",
     "reviewing": "Przeglądanie wymagań…",
     "settled": "Wymagania są ustalone. Poniższy dokument jest tym, którego używa każdy kolejny krok agenta.",
     "exceeded": {
@@ -5940,7 +5928,6 @@
     "introAnswer": "Odpowiedz",
     "introDismiss": "odrzuć",
     "empty": "Brak recenzji. Recenzent uruchamia się automatycznie jako pierwszy krok przy starcie potoku tego zadania.",
-    "loadingReview": "Wczytywanie recenzji…",
     "triaging": "Klasyfikowanie zgłoszenia błędu…",
     "converged": "Zgłoszenie błędu jest doprecyzowane. Poniższy raport jest tym, czego używa każdy kolejny krok agenta.",
     "capHeading": "Osiągnięto limit {max} iteracji z wciąż otwartymi uwagami.",
@@ -6014,7 +6001,6 @@
   "consensus": {
     "titlePrefix": "Konsensus",
     "participantCount": "jeden uczestnik | {count} uczestnicy | {count} uczestników",
-    "loading": "Ładowanie sesji konsensusu…",
     "empty": "Dla tego kroku nie uruchomiono jeszcze żadnej sesji konsensusu.",
     "failed": "Konsensus nie powiódł się: {error}",
     "unknownError": "nieznany błąd",
@@ -6062,7 +6048,6 @@
     "introChoose": "Wybierz",
     "introDismiss": "odrzuć",
     "empty": "Jeszcze nie ma burzy mózgów. Uruchamia się automatycznie, gdy pipeline tego zadania osiągnie krok burzy mózgów.",
-    "loading": "Wczytywanie burzy mózgów…",
     "generating": "Generowanie opcji…",
     "settledBanner": "{doc} jest ustalony. Dokument poniżej jest tym, czego używa następny etap.",
     "exceeded": {
@@ -6140,7 +6125,6 @@
   },
   "spec": {
     "title": "Wymagania",
-    "loading": "Ładowanie specyfikacji…",
     "error": "Nie udało się załadować specyfikacji. Spróbuj otworzyć to okno ponownie.",
     "overview": "Przegląd",
     "noFeatureGroups": "Brak grup funkcji",
@@ -6330,8 +6314,7 @@
     },
     "shot": {
       "failed": "Błąd",
-      "failedToLoad": "Błąd ładowania",
-      "loading": "Ładowanie…"
+      "failedToLoad": "Błąd ładowania"
     },
     "screenshotAlt": "{view} (zrzut ekranu)",
     "screenshots": "Zrzuty ekranu",
@@ -7043,7 +7026,6 @@
       "awaiting": "Wygenerowano {total} kandydatów i czekają na porównanie."
     },
     "asset": {
-      "loading": "Wczytywanie pliku…",
       "loadFailed": "Nie udało się wczytać zapisanego pliku.",
       "retry": "Spróbuj ponownie",
       "open": "Otwórz",

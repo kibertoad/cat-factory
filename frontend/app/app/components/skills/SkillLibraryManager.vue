@@ -13,12 +13,13 @@ import { SKILL_GROUP_LABEL_KEYS } from '~/utils/skills'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ accountId: string }>()
 
 const library = useSkillLibrary(props.accountId)
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -85,7 +86,7 @@ async function linkSource() {
       gitRef: sourceRef.value.trim() || undefined,
     })
     resetSourceDraft()
-    toast.add({ title: t('skills.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
+    actionToast.success('skills.toast.sourceLinked')
   } catch (e) {
     present(e, 'skills.toast.linkSourceFailed')
   } finally {
@@ -97,13 +98,11 @@ async function syncSource(id: string) {
   await withRow(`sync:${id}`, async () => {
     try {
       const result = await library.syncSource(id)
-      toast.add({
-        title: t('skills.toast.synced', {
+      actionToast.success('skills.toast.synced', {
+        params: {
           updated: result.upserted,
           removed: result.tombstoned,
-        }),
-        icon: 'i-lucide-refresh-cw',
-        color: 'info',
+        },
       })
     } catch (e) {
       present(e, 'skills.toast.syncFailed')
@@ -115,10 +114,7 @@ async function checkSource(id: string) {
   await withRow(`check:${id}`, async () => {
     try {
       const status = await library.checkSource(id)
-      toast.add({
-        title: status.changed ? t('skills.toast.changesAvailable') : t('skills.toast.upToDate'),
-        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-      })
+      actionToast.info(status.changed ? 'skills.toast.changesAvailable' : 'skills.toast.upToDate')
     } catch (e) {
       present(e, 'skills.toast.checkSourceFailed')
     }
@@ -139,7 +135,7 @@ async function unlinkSource(id: string) {
   await withRow(`unlink:${id}`, async () => {
     try {
       await library.unlinkSource(id)
-      toast.add({ title: t('skills.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+      actionToast.success('skills.toast.sourceUnlinked')
     } catch (e) {
       present(e, 'skills.toast.unlinkSourceFailed')
     }
@@ -195,9 +191,12 @@ async function unlinkSource(id: string) {
             </p>
           </div>
         </div>
-        <p v-if="!library.catalog.length" class="text-sm text-dimmed">
-          {{ t('skills.catalog.empty') }}
-        </p>
+        <EmptyState
+          v-if="!library.catalog.length"
+          compact
+          icon="i-lucide-book-open-check"
+          :title="t('skills.catalog.empty')"
+        />
       </div>
 
       <!-- Repo sources -->
@@ -264,9 +263,12 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!library.sources.length" class="text-sm text-dimmed">
-          {{ t('skills.sources.empty') }}
-        </p>
+        <EmptyState
+          v-if="!library.sources.length"
+          compact
+          icon="i-lucide-git-branch"
+          :title="t('skills.sources.empty')"
+        />
 
         <!-- Link a new source. Needs the GitHub integration; hide the form when it's off. -->
         <div

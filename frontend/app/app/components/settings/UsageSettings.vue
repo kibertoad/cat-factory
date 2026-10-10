@@ -5,6 +5,7 @@
 // only the metered rows. See docs/initiatives/usage-and-quota-tracking.md.
 import { computed, watch } from 'vue'
 import type { UsageBreakdownRow } from '@cat-factory/contracts'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t, n, d } = useI18n()
 const usage = useUsageStore()
@@ -46,9 +47,17 @@ const hasAny = computed(() => usage.rows.length > 0)
       {{ t('settings.usage.period', { date: d(new Date(usage.report.periodStart), 'short') }) }}
     </p>
 
-    <p v-if="usage.loading" class="text-2xs text-dimmed">{{ t('common.loading') }}</p>
+    <div v-if="usage.loading" class="space-y-3">
+      <USkeleton class="h-5 w-1/3" />
+      <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
+    </div>
     <p v-else-if="usage.error" class="text-2xs text-app-error-400">{{ usage.error }}</p>
-    <p v-else-if="!hasAny" class="text-2xs text-dimmed">{{ t('settings.usage.empty') }}</p>
+    <EmptyState
+      v-else-if="!hasAny"
+      compact
+      icon="i-lucide-chart-bar"
+      :title="t('settings.usage.empty')"
+    />
 
     <template v-else>
       <!-- Subscriptions (flat-rate quota harnesses) -->

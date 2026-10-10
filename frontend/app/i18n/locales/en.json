@@ -64,7 +64,6 @@
     }
   },
   "common": {
-    "loading": "Loading…",
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
@@ -924,6 +923,9 @@
       "title": "This view could not be loaded",
       "body": "Its code failed to load. That usually means the app was updated while this tab was open, so the files this page is asking for are no longer on the server. Reload to pick up the current version.",
       "reload": "Reload"
+    },
+    "reported": {
+      "description": "It ran and reported a failure. Show details to see what it said."
     }
   },
   "personalSubscriptions": {
@@ -1976,8 +1978,6 @@
     "exportJson": "Export JSON",
     "exportHint": "Download an LLM-friendly JSON export of this run",
     "closeEsc": "Close (Esc)",
-    "loadingActivity": "Loading model activity…",
-    "loadingContext": "Loading provided context…",
     "noCalls": "No model calls recorded for this run.",
     "noContext": "No agent context stored for this run. It is captured per dispatch when the workspace has 'Store full agent context' enabled.",
     "contextError": "Could not load the provided context.",
@@ -2069,7 +2069,6 @@
       "details": "Details"
     },
     "webSearch": "Web search",
-    "loadingSearch": "Loading web searches…",
     "noSearch": "No web searches recorded for this run. Queries are captured when web search runs and the workspace has 'Store full agent context' enabled.",
     "search": {
       "available": "Available",
@@ -2108,7 +2107,6 @@
     "toolCalls": {
       "title": "Tool calls",
       "subtitle": "what the agents did, in the order they did it",
-      "loading": "Loading tool calls…",
       "error": "Could not load the tool calls.",
       "none": "No tool calls recorded for this run.",
       "noneMatching": "No tool calls match this filter.",
@@ -2129,7 +2127,6 @@
     "title": "Platform observability",
     "refresh": "Refresh",
     "close": "Close",
-    "loading": "Loading platform health…",
     "retry": "Retry",
     "window": {
       "oneHour": "Last hour",
@@ -2210,7 +2207,6 @@
   "reports": {
     "title": "Reports",
     "refresh": "Refresh",
-    "loading": "Loading reports…",
     "retry": "Retry",
     "error": "Reports could not be loaded.",
     "period": "{from} to {to}",
@@ -3082,7 +3078,6 @@
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
         "introBaseModel": "base model",
         "newPreset": "New preset",
-        "loadingCatalog": "Loading model catalog…",
         "default": "Default",
         "setDefaultTitle": "Set as workspace default",
         "editTitle": "Edit preset",
@@ -3091,7 +3086,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} overrides",
         "empty": "No presets yet. Create one to map models to your agents.",
-        "customRouteOrder": "custom route order"
+        "customRouteOrder": "custom route order",
+        "catalogFailed": "The model catalog did not load. Retry to see the presets."
       },
       "editor": {
         "useBaseModel": "Use base model",
@@ -3111,7 +3107,8 @@
         "deleteFailed": "Could not delete the preset",
         "nameRequiredTitle": "Name required",
         "nameRequiredBody": "Give the preset a name.",
-        "saveFailed": "Could not save the preset"
+        "saveFailed": "Could not save the preset",
+        "catalogFailed": "Could not load the model catalog"
       },
       "routes": {
         "direct": "The model's own provider API",
@@ -3266,7 +3263,6 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Override the workspace handler for this provision type on your own machine. Stored per user.",
         "removeOverride": "Remove override",
-        "loading": "Loading infrastructure settings…",
         "kubeNoun": "the Kubernetes handler",
         "kubeOverrideNoun": "the Kubernetes override",
         "customNoun": "this handler",
@@ -3448,7 +3444,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Choose which of this deployment's reusable operations this board offers. Hiding one removes it from the create-task picker here and refuses creating work under it; other boards are unaffected.",
-      "loading": "Loading operations…",
       "empty": "This deployment registers no reusable operations.",
       "offer": "Offer on this board",
       "saveFailed": "Could not change which operations this board offers"
@@ -4672,7 +4667,6 @@
     "connect": {
       "yourInstallations": "Your installations",
       "refresh": "Refresh",
-      "lookingForInstallations": "Looking for installations…",
       "noInstallations": "No installations found for the App yet. Install it below, or connect by ID.",
       "installationMeta": "{targetType} · installation {id}",
       "linked": "linked",
@@ -4699,14 +4693,12 @@
       "resync": "Resync",
       "backfill": "Backfill",
       "disconnect": "Disconnect",
-      "loading": "Loading…",
       "tabs": {
         "repos": "Repositories",
         "issues": "Issues"
       },
       "linkedToBoard": "Linked to this board",
       "manageRepos": "Manage repos",
-      "loadingRepos": "Loading repositories…",
       "private": "private",
       "saveSelection": "Save selection",
       "noLinkedRepos": "No repositories linked yet. Use Manage repos to pick which repositories this board tracks.",
@@ -4798,7 +4790,6 @@
     },
     "repoTree": {
       "root": "root",
-      "loading": "Loading…",
       "noSubdirectories": "No subdirectories here.",
       "empty": "Nothing here.",
       "select": "Select",
@@ -5321,12 +5312,10 @@
   "guidedReview": {
     "title": "Guided review",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "Loading the review…",
     "outOfDate": "Live updates failed, so this view may be out of date.",
     "openFromTask": "Explore with guided review",
     "picker": {
       "intro": "Pick a repository and a pull request. You get an overview of the change and can ask questions about it in separate threads.",
-      "loading": "Loading repositories…",
       "noRepos": "No repositories are linked to this workspace yet.",
       "repo": "Repository",
       "openPulls": "Open pull requests",
@@ -6088,7 +6077,6 @@
     "answerVerb": "Answer",
     "dismissVerb": "dismiss",
     "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
-    "loadingReview": "Loading the review…",
     "reviewing": "Reviewing the requirements…",
     "settled": "The requirements are settled. The document below is what every downstream agent step uses.",
     "exceeded": {
@@ -6241,7 +6229,6 @@
       "description": "Imperative verb 'dismiss' (wave off as irrelevant), used as an inline emphasized span in the intro sentence."
     },
     "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
-    "loadingReview": "Loading the review…",
     "triaging": "Triaging the bug report…",
     "converged": "The bug report is clarified. The report below is what every downstream agent step uses.",
     "capHeading": "Reached the {max}-iteration limit with findings still open.",
@@ -6321,7 +6308,6 @@
   "consensus": {
     "titlePrefix": "Consensus",
     "participantCount": "no participants | one participant | {count} participants",
-    "loading": "Loading consensus session…",
     "empty": "No consensus session has run for this step yet.",
     "failed": "Consensus failed: {error}",
     "unknownError": "unknown error",
@@ -6369,7 +6355,6 @@
     "introChoose": "Choose",
     "introDismiss": "dismiss",
     "empty": "No brainstorm yet. It runs automatically when this task's pipeline reaches the brainstorm step.",
-    "loading": "Loading the brainstorm…",
     "generating": "Generating options…",
     "settledBanner": "The {doc} is settled. The document below is what the next stage uses.",
     "exceeded": {
@@ -6450,7 +6435,6 @@
   },
   "spec": {
     "title": "Requirements",
-    "loading": "Loading the specification…",
     "error": "Could not load the specification. Try reopening this window.",
     "overview": "Overview",
     "noFeatureGroups": "No feature groups",
@@ -6658,8 +6642,7 @@
     },
     "shot": {
       "failed": "Failed",
-      "failedToLoad": "Failed to load",
-      "loading": "Loading…"
+      "failedToLoad": "Failed to load"
     },
     "screenshotAlt": "{view} (screenshot)",
     "screenshots": "Screenshots",
@@ -7381,7 +7364,6 @@
       "awaiting": "{total} candidates were generated and are waiting to be compared."
     },
     "asset": {
-      "loading": "Loading the file…",
       "loadFailed": "The stored file could not be loaded.",
       "retry": "Try again",
       "open": "Open",
