@@ -335,8 +335,9 @@ different repository on every call after it, reporting a live run as one that ne
 landed instead is one `workflow` field that is a location OR a function of a
 `GitHubActionsWorkflowScope`, deliberately narrowed to the INTERSECTION of what a brief and a
 handle carry, so the failure is unrepresentable rather than merely documented. A handle that names
-no work repository is refused rather than defaulted, exactly as the result reader refuses a handle
-with no branches.
+no work repository or no base branch is refused rather than defaulted, exactly as the result reader
+refuses a handle with no branches. The base branch is on the scope because it is the `ref` a caller
+shim is dispatched on.
 
 ### D7. Completion is poll-driven first; push-wake is an additive second slice
 

@@ -512,13 +512,15 @@ describe('a workflow resolved per dispatch', () => {
   })
 
   it('REFUSES a handle that names no base branch rather than assuming one', async () => {
-    const { fetchImpl } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
+    const { fetchImpl, calls } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
     await expect(
       githubActionsDelegatedExecutor(perRepo, deps(fetchImpl)).poll(
         handle({ repo: { owner: 'acme', name: 'widgets' }, branches: undefined }),
         CREDS,
       ),
     ).rejects.toThrow(/no base branch/)
+    // Refused before anything is addressed: no request reaches any repository.
+    expect(calls).toHaveLength(0)
   })
 
   it('REFUSES a handle that names no work repository rather than guessing one', async () => {
