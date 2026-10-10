@@ -305,13 +305,15 @@ the window. A toast is action feedback. Something the reader must act on later b
 
 **A list, panel or section with nothing to show renders `common/EmptyState.vue`**, with its copy as
 `title` / `description` and any button that fills the list in its default slot. `compact` is the
-inline size for an inspector section or a picker. It wraps Nuxt UI's `UEmpty` (the layout, type
-and tokens) and decides once what each `UEmpty` caller would otherwise pick: the `naked` variant,
-because an empty state sits inside a panel that already draws its border, and the compact size. An
-inline value placeholder ("None", a dash in a table cell) is not an empty state.
+inline size for an inspector section or a picker. It wraps Nuxt UI's `UEmpty` (the structure, the
+action row and the tokens) and decides once what each `UEmpty` caller would otherwise pick: the
+`naked` variant, because an empty state sits inside a panel that already draws its border; the
+spacing, because `UEmpty` pads `p-4 sm:p-6 lg:p-8` for a page body; and plain text for the title,
+because `UEmpty` renders it as an `<h2>`, which would put a heading into every picker. An inline
+value placeholder ("None", a dash in a table cell) is not an empty state.
 
-`scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `toast.add(` outside the two
-funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
+`scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `useToast(` and `toast.add(`
+outside the two funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
 change is rewriting, and fails once one of them is clean so the entry cannot outlive the reason.
 
 ### A panel that seeds state on open uses `onModalOpen`, never a bare `watch(open)`

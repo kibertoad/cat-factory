@@ -3083,7 +3083,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} overrides",
         "empty": "No presets yet. Create one to map models to your agents.",
-        "customRouteOrder": "custom route order"
+        "customRouteOrder": "custom route order",
+        "catalogFailed": "The model catalog did not load. Retry to see the presets."
       },
       "editor": {
         "useBaseModel": "Use base model",
@@ -3103,7 +3104,8 @@
         "deleteFailed": "Could not delete the preset",
         "nameRequiredTitle": "Name required",
         "nameRequiredBody": "Give the preset a name.",
-        "saveFailed": "Could not save the preset"
+        "saveFailed": "Could not save the preset",
+        "catalogFailed": "Could not load the model catalog"
       },
       "routes": {
         "direct": "The model's own provider API",

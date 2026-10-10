@@ -2924,7 +2924,8 @@
         "basePrefix": "Bazowy:",
         "overrideCount": "{count} nadpisanie | {count} nadpisania | {count} nadpisań",
         "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów.",
-        "customRouteOrder": "własna kolejność tras"
+        "customRouteOrder": "własna kolejność tras",
+        "catalogFailed": "Katalog modeli nie został wczytany. Ponów, aby zobaczyć ustawienia."
       },
       "editor": {
         "useBaseModel": "Użyj modelu bazowego",
@@ -2944,7 +2945,8 @@
         "deleteFailed": "Nie udało się usunąć ustawienia",
         "nameRequiredTitle": "Wymagana nazwa",
         "nameRequiredBody": "Nadaj ustawieniu nazwę.",
-        "saveFailed": "Nie udało się zapisać ustawienia"
+        "saveFailed": "Nie udało się zapisać ustawienia",
+        "catalogFailed": "Nie udało się wczytać katalogu modeli"
       },
       "confirmDelete": {
         "title": "Usunąć ten preset modelu?",

@@ -61,7 +61,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} override",
         "empty": "Ancora nessun preset. Creane uno per associare i modelli ai tuoi agenti.",
-        "customRouteOrder": "ordine rotte personalizzato"
+        "customRouteOrder": "ordine rotte personalizzato",
+        "catalogFailed": "Il catalogo dei modelli non è stato caricato. Riprova per vedere i preset."
       },
       "editor": {
         "useBaseModel": "Usa il modello di base",
@@ -81,7 +82,8 @@
         "deleteFailed": "Impossibile eliminare il preset",
         "nameRequiredTitle": "Nome obbligatorio",
         "nameRequiredBody": "Assegna un nome al preset.",
-        "saveFailed": "Impossibile salvare il preset"
+        "saveFailed": "Impossibile salvare il preset",
+        "catalogFailed": "Impossibile caricare il catalogo dei modelli"
       },
       "routes": {
         "direct": "L'API propria del fornitore del modello",

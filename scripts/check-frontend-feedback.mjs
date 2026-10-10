@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Bans the two hand-built feedback states in the SPA layer (issue #2252).
 //
-//   1. `toast.add(` outside the two toast funnels. A failed call is reported by
+//   1. `useToast(` and `toast.add(` outside the two toast funnels. A failed call is reported by
 //      `usePipelineErrorToast().present` (with its bespoke-conflict factory under
 //      `composables/pipelineErrorToast/`); every other toast comes from `useActionToast()`, whose
 //      tone fixes the colour, the icon and the duration. A direct `toast.add` picks those per
 //      site, which is how one "saved" toast came to be green with a check and the next grey with
-//      no icon.
+//      no icon. The HANDLE is banned, not only the call: `const { add } = useToast()` or a renamed
+//      handle never spells `toast.add(`. The call is still matched, for a handle threaded in from
+//      elsewhere (a store context's `ctx.toast`).
 //   2. `animate-spin` outside `components/common/Spinner.vue`. A Nuxt UI component with a
 //      `loading` prop takes `:loading`; a bare icon that shows work in progress is a `<Spinner>`.
 //      This also covers the `:ui="{ leadingIcon: 'animate-spin' }"` idiom, which spun a button's
@@ -46,10 +48,12 @@ export const PENDING = {
   [`${APP}utils/pipelineRender.ts`]: 'serves TaskPipelineMini.vue until the task-card rework',
 }
 
-// `(?<![\w.])` keeps `mytoast.add(` and a chained `x.toast.add(` apart from a bare `toast.add(`:
-// the second is a store context handle (`ctx.toast`), which is the same defect, so it is claimed
-// by the dotted branch. `useToast().add(` skips the variable altogether.
-const TOAST_ADD = /(?:(?<![\w$])|\.)toast\.add\(|useToast\(\)\.add\(/g
+// The handle, however it is then named or destructured. `(?<![\w$])` keeps a longer identifier
+// that merely ends in `useToast` out.
+const USE_TOAST = /(?<![\w$])useToast\(/g
+// A call through a handle named `toast` or `$toast`, bare or as a property (`ctx.toast.add(`). The
+// left boundary keeps `breadtoast.add(` out.
+const TOAST_ADD = /(?<![\w])\$?toast\.add\(/g
 const ANIMATE_SPIN = /(?<![\w-])animate-spin(?![\w-])/g
 
 const admits = (rel, list) =>
@@ -59,7 +63,10 @@ const admits = (rel, list) =>
  * so the companion test can drive it with fixtures. */
 export function findFeedbackOffences(rel, { code }) {
   const found = []
-  if (!admits(rel, TOAST_FUNNELS) && code.match(TOAST_ADD)) found.push('toast.add(')
+  if (!admits(rel, TOAST_FUNNELS)) {
+    if (code.match(USE_TOAST)) found.push('useToast(')
+    if (code.match(TOAST_ADD)) found.push('toast.add(')
+  }
   if (rel !== SPINNER && code.match(ANIMATE_SPIN)) found.push('animate-spin')
   return found
 }
@@ -81,7 +88,8 @@ function main() {
   if (offenders.length || stalePending.length) {
     console.error('Hand-built feedback states are banned in the SPA (issue #2252).')
     console.error(
-      'A failed call is a toast through `usePipelineErrorToast().present(error, titleKey)`.\n' +
+      '`useToast()` is called only by the two funnels. A failed call is a toast through\n' +
+        '`usePipelineErrorToast().present(error, titleKey)`.\n' +
         'Every other toast goes through `useActionToast()`: `success`, `info`, `warning` or\n' +
         '`error` with a title KEY. The tone decides colour, icon and duration.\n' +
         'A Nuxt UI component with a `loading` prop takes `:loading`, never a spun icon. A bare\n' +

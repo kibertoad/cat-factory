@@ -132,7 +132,10 @@ async function save() {
     actionToast.success('agentPrompt.toast.saved')
   } catch (error) {
     const conflict = isRevisionConflict(error)
-    present(error, conflict ? 'agentPrompt.toast.conflict' : 'agentPrompt.toast.saveFailed')
+    // A recognised refusal keeps its bespoke copy: the funnel's generic line for this reason says
+    // "reload it", but the editor has already reloaded by the time the toast shows.
+    if (conflict) actionToast.warning('agentPrompt.toast.conflict')
+    else present(error, 'agentPrompt.toast.saveFailed')
     // The server's view already replaced the store's on a conflict, so re-seed the textarea
     // from what actually landed rather than leaving the user editing a lost revision — and drop
     // the restore candidate with it, since it names a revision from the log we just replaced.

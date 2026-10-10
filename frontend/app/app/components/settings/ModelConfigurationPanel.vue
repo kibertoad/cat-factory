@@ -93,13 +93,25 @@ const hiddenByTier = computed(() =>
   filter.value.trim() ? 0 : configurableKinds.value.length - tieredKinds.value.length,
 )
 
+// Set when the catalog read rejects, so the preset list states the failure instead of holding a
+// skeleton that never resolves (`models.loaded` stays false after a failed read).
+const catalogFailed = ref(false)
+
+function loadCatalog() {
+  catalogFailed.value = false
+  models.ensureLoaded(workspace.workspaceId ?? undefined).catch((error) => {
+    catalogFailed.value = true
+    present(error, 'settings.modelConfiguration.toast.catalogFailed')
+  })
+}
+
 watch(
   open,
   (isOpen) => {
     if (isOpen) {
       editor.value = null
       filter.value = ''
-      void models.ensureLoaded(workspace.workspaceId ?? undefined)
+      loadCatalog()
       if (workspace.workspaceId) void creds.load(workspace.workspaceId)
     }
   },
@@ -368,7 +380,17 @@ async function save() {
                 </UButton>
               </div>
 
-              <div v-if="models.models.length === 0" class="space-y-3">
+              <EmptyState
+                v-if="catalogFailed"
+                icon="i-lucide-triangle-alert"
+                :title="t('settings.modelConfiguration.list.catalogFailed')"
+              >
+                <UButton color="neutral" variant="outline" size="sm" @click="loadCatalog">
+                  {{ t('common.retry') }}
+                </UButton>
+              </EmptyState>
+
+              <div v-else-if="!models.loaded" class="space-y-3">
                 <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
               </div>
 

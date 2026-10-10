@@ -2924,7 +2924,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} anulación | {count} anulaciones",
         "empty": "Aún no hay ajustes. Crea uno para asignar modelos a tus agentes.",
-        "customRouteOrder": "orden de rutas personalizado"
+        "customRouteOrder": "orden de rutas personalizado",
+        "catalogFailed": "El catálogo de modelos no se cargó. Reintenta para ver los ajustes."
       },
       "editor": {
         "useBaseModel": "Usar el modelo base",
@@ -2944,7 +2945,8 @@
         "deleteFailed": "No se pudo eliminar el ajuste",
         "nameRequiredTitle": "Nombre obligatorio",
         "nameRequiredBody": "Dale un nombre al ajuste.",
-        "saveFailed": "No se pudo guardar el ajuste"
+        "saveFailed": "No se pudo guardar el ajuste",
+        "catalogFailed": "No se pudo cargar el catálogo de modelos"
       },
       "confirmDelete": {
         "title": "¿Eliminar este preset de modelo?",

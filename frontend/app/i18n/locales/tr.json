@@ -2924,7 +2924,8 @@
         "basePrefix": "Temel:",
         "overrideCount": "{count} geçersiz kılma | {count} geçersiz kılma",
         "empty": "Henüz hazır ayar yok. Modelleri ajanlarınıza eşlemek için bir tane oluşturun.",
-        "customRouteOrder": "özel rota sırası"
+        "customRouteOrder": "özel rota sırası",
+        "catalogFailed": "Model kataloğu yüklenmedi. Hazır ayarları görmek için yeniden deneyin."
       },
       "editor": {
         "useBaseModel": "Temel modeli kullan",
@@ -2944,7 +2945,8 @@
         "deleteFailed": "Hazır ayar silinemedi",
         "nameRequiredTitle": "Ad gerekli",
         "nameRequiredBody": "Hazır ayara bir ad verin.",
-        "saveFailed": "Hazır ayar kaydedilemedi"
+        "saveFailed": "Hazır ayar kaydedilemedi",
+        "catalogFailed": "Model kataloğu yüklenemedi"
       },
       "confirmDelete": {
         "title": "Bu model ön ayarı silinsin mi?",

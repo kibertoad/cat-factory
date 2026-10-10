@@ -2924,7 +2924,8 @@
         "basePrefix": "Base :",
         "overrideCount": "{count} remplacement | {count} remplacements",
         "empty": "Aucun préréglage pour l'instant. Créez-en un pour associer des modèles à vos agents.",
-        "customRouteOrder": "ordre de routes personnalisé"
+        "customRouteOrder": "ordre de routes personnalisé",
+        "catalogFailed": "Le catalogue de modèles ne s'est pas chargé. Réessayez pour voir les préréglages."
       },
       "editor": {
         "useBaseModel": "Utiliser le modèle de base",
@@ -2944,7 +2945,8 @@
         "deleteFailed": "Impossible de supprimer le préréglage",
         "nameRequiredTitle": "Nom requis",
         "nameRequiredBody": "Donnez un nom au préréglage.",
-        "saveFailed": "Impossible d'enregistrer le préréglage"
+        "saveFailed": "Impossible d'enregistrer le préréglage",
+        "catalogFailed": "Impossible de charger le catalogue de modèles"
       },
       "confirmDelete": {
         "title": "Supprimer ce préréglage de modèle ?",

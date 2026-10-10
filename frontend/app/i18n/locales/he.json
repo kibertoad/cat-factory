@@ -2924,7 +2924,8 @@
         "basePrefix": "בסיס:",
         "overrideCount": "עקיפה אחת | שתי עקיפות | {count} עקיפות",
         "empty": "אין עדיין תצורות. צור אחת כדי למפות מודלים לסוכנים שלך.",
-        "customRouteOrder": "סדר מסלולים מותאם"
+        "customRouteOrder": "סדר מסלולים מותאם",
+        "catalogFailed": "קטלוג המודלים לא נטען. נסה שוב כדי לראות את התצורות."
       },
       "editor": {
         "useBaseModel": "השתמש במודל הבסיס",
@@ -2944,7 +2945,8 @@
         "deleteFailed": "לא ניתן היה למחוק את התצורה",
         "nameRequiredTitle": "נדרש שם",
         "nameRequiredBody": "תן לתצורה שם.",
-        "saveFailed": "לא ניתן היה לשמור את התצורה"
+        "saveFailed": "לא ניתן היה לשמור את התצורה",
+        "catalogFailed": "לא ניתן היה לטעון את קטלוג המודלים"
       },
       "confirmDelete": {
         "title": "למחוק את קדם־הגדרת המודל הזו?",

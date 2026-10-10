@@ -245,7 +245,8 @@ export function useContextLinking() {
    * closed and the cause stays readable long enough to act on. No-op when nothing failed.
    *
    * `opts.titleKey` names what WAS created, which differs per host ("Task added, but …" vs
-   * "Initiative created, but …"). It is a plural key, resolved against the failure count.
+   * "Initiative created, but …"). It is a plural key, resolved against the failure count;
+   * `toastTitleKeys.spec.ts` checks the literal each caller passes, which typed keys cannot see.
    */
   /**
    * A failure's line in the toast: TRANSLATED copy where the backend named a reason we have a

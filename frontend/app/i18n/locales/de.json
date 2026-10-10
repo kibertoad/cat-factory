@@ -61,7 +61,8 @@
         "basePrefix": "Basis:",
         "overrideCount": "{count} Override | {count} Overrides",
         "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen.",
-        "customRouteOrder": "eigene Routen-Reihenfolge"
+        "customRouteOrder": "eigene Routen-Reihenfolge",
+        "catalogFailed": "Der Modellkatalog wurde nicht geladen. Versuchen Sie es erneut, um die Presets zu sehen."
       },
       "editor": {
         "useBaseModel": "Basismodell verwenden",
@@ -81,7 +82,8 @@
         "deleteFailed": "Preset konnte nicht gelöscht werden",
         "nameRequiredTitle": "Name erforderlich",
         "nameRequiredBody": "Gib dem Preset einen Namen.",
-        "saveFailed": "Preset konnte nicht gespeichert werden"
+        "saveFailed": "Preset konnte nicht gespeichert werden",
+        "catalogFailed": "Modellkatalog konnte nicht geladen werden"
       },
       "routes": {
         "direct": "Die eigene Provider-API des Modells",

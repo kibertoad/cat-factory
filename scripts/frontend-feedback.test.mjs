@@ -22,7 +22,15 @@ describe('toast.add', () => {
     assert.deepEqual(find("toast.add({ title: t('x.saved'), color: 'success' })"), ['toast.add('])
     // A store threads the handle through a context object; the defect is the same.
     assert.deepEqual(find("  ctx.toast.add({ title: tr('x') })"), ['toast.add('])
-    assert.deepEqual(find('useToast().add({ title })'), ['toast.add('])
+    assert.deepEqual(find('this.$toast.add({ title })'), ['toast.add('])
+    assert.deepEqual(find('useToast().add({ title })'), ['useToast('])
+  })
+
+  it('flags the handle itself, so a renamed or destructured one cannot slip past', () => {
+    // Neither spells `toast.add(`, which is why the handle is banned and not only the call.
+    assert.deepEqual(find('const { add: notify } = useToast()'), ['useToast('])
+    assert.deepEqual(find('const t2 = useToast()'), ['useToast('])
+    assert.deepEqual(find('const toasts = myUseToast()'), [])
   })
 
   it('does not match a longer identifier that merely ends in `toast`', () => {
@@ -33,7 +41,7 @@ describe('toast.add', () => {
   it('admits the two funnels, the error funnel directory included', () => {
     for (const funnel of TOAST_FUNNELS) {
       const rel = funnel.endsWith('/') ? `${funnel}bespokeConflicts.ts` : funnel
-      assert.deepEqual(find('toast.add({ title })', rel), [], rel)
+      assert.deepEqual(find('const toast = useToast(); toast.add({ title })', rel), [], rel)
     }
     // A sibling whose name starts like a funnel's is not one.
     assert.deepEqual(

@@ -2924,7 +2924,8 @@
         "basePrefix": "ベース:",
         "overrideCount": "{count} 件の上書き | {count} 件の上書き",
         "empty": "プリセットはまだありません。1 つ作成してモデルをエージェントに割り当てましょう。",
-        "customRouteOrder": "ルート順をカスタム設定"
+        "customRouteOrder": "ルート順をカスタム設定",
+        "catalogFailed": "モデルカタログが読み込まれませんでした。再試行するとプリセットが表示されます。"
       },
       "editor": {
         "useBaseModel": "ベースモデルを使用",
@@ -2944,7 +2945,8 @@
         "deleteFailed": "プリセットを削除できませんでした",
         "nameRequiredTitle": "名前が必要です",
         "nameRequiredBody": "プリセットに名前を付けてください。",
-        "saveFailed": "プリセットを保存できませんでした"
+        "saveFailed": "プリセットを保存できませんでした",
+        "catalogFailed": "モデルカタログを読み込めませんでした"
       },
       "confirmDelete": {
         "title": "このモデルプリセットを削除しますか？",

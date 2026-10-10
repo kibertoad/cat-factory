@@ -22,7 +22,9 @@
  *
  * Titles are i18n KEYS, resolved here (the same contract as `present`), so a call site cannot hand
  * in untranslated prose as the headline. A `description` is already-resolved text, because it
- * often carries data (a repo name, a count line) built from several keys.
+ * often carries data (a repo name, a count line) built from several keys. A key handed in here is
+ * invisible to typed message keys and to `vue-i18n-extract`, which only read a key written literally inside a `t()` call, so
+ * `toastTitleKeys.spec.ts` resolves every literal key passed to either funnel against the catalog.
  */
 
 /** One button on the toast. A call-to-action is content, so the call site may add one. */
