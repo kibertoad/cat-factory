@@ -118,6 +118,43 @@ describe('mothership-mode agent-kind capability layer', () => {
     expect(view!.toolServers.servers[0]!.transport).toEqual(TRACKER_SERVER.transport)
   })
 
+  it('serves a bundled skill on several kinds ONCE, and hands every kind the whole body', async () => {
+    const app = mothership((registry) => {
+      registry.registerSkill(PLAYBOOK)
+      registry.assignSkills('coder', [PLAYBOOK.id])
+      registry.assignSkills('fixer', [PLAYBOOK.id])
+      registry.assignSkills('ci-fixer', [PLAYBOOK.id])
+    })
+    const wire = (await (
+      await app.request('/internal/agent-kinds', {
+        headers: { authorization: `Bearer ${await machineToken()}` },
+      })
+    ).json()) as { bundledSkills: unknown[]; kinds: { skills: { bundledRefs: unknown[] } }[] }
+    expect(wire.bundledSkills).toEqual([PLAYBOOK])
+    expect(wire.kinds.map((view) => view.skills.bundledRefs)).toEqual([[0], [0], [0]])
+    // The pre-reference field is GONE, so a node one build behind refuses this reply instead of
+    // reading the indexes as skill definitions.
+    expect(wire.kinds.every((view) => !('bundled' in view.skills))).toBe(true)
+
+    const views = await (await node(app)).capabilities()
+    expect(views.map((view) => view.skills.bundled)).toEqual([[PLAYBOOK], [PLAYBOOK], [PLAYBOOK]])
+  })
+
+  it('keeps two INLINE definitions sharing an id apart, rather than swapping one in', async () => {
+    // Nothing refuses two kinds declaring different inline bodies under one id, so the dedup is by
+    // content: keyed by id, one kind would silently receive the other's playbook.
+    const other = { ...PLAYBOOK, instructions: 'A different playbook.' }
+    const source = await node(
+      mothership((registry) => {
+        registry.assignSkills('coder', [PLAYBOOK])
+        registry.assignSkills('fixer', [other])
+      }),
+    )
+    const byKind = new Map((await source.capabilities()).map((v) => [v.kind, v.skills.bundled]))
+    expect(byKind.get('coder')).toEqual([PLAYBOOK])
+    expect(byKind.get('fixer')).toEqual([other])
+  })
+
   it('reports a deployment that assigns NONE as empty, which is the stock product', async () => {
     const source = await node(mothership(() => {}))
     await expect(source.capabilities()).resolves.toEqual([])
@@ -159,12 +196,22 @@ describe('mothership-mode agent-kind capability layer', () => {
   })
 
   it('THROWS on a well-formed 200 whose payload it cannot read', async () => {
+    const tools = { servers: [], unknown: [] }
+    const skills = (bundledRefs: unknown[]) => ({ bundledRefs, catalog: [], unknown: [] })
     for (const payload of [
       {},
-      { kinds: 'nope' },
-      { kinds: [{ skills: { bundled: [], catalog: [], unknown: [] } }] },
-      { kinds: [{ kind: 'coder', skills: {}, toolServers: { servers: [], unknown: [] } }] },
-      { kinds: [{ kind: 'coder', skills: { bundled: [], catalog: [], unknown: [] } }] },
+      { kinds: 'nope', bundledSkills: [] },
+      { kinds: [] },
+      { kinds: [{ skills: skills([]), toolServers: tools }], bundledSkills: [] },
+      { kinds: [{ kind: 'coder', skills: {}, toolServers: tools }], bundledSkills: [] },
+      { kinds: [{ kind: 'coder', skills: skills([]) }], bundledSkills: [] },
+      // A non-index reference, or one with nothing behind it: either would reach the harness as a
+      // skill with no body.
+      {
+        kinds: [{ kind: 'coder', skills: skills([PLAYBOOK]), toolServers: tools }],
+        bundledSkills: [],
+      },
+      { kinds: [{ kind: 'coder', skills: skills([0]), toolServers: tools }], bundledSkills: [] },
     ]) {
       await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
         code: 'unavailable',

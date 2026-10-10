@@ -12,6 +12,7 @@ import {
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
   makeToolServerDispatchProbe,
+  mintMachineToken,
   mintSession,
   seedFrameRepoLink,
 } from '@cat-factory/conformance'
@@ -210,6 +211,7 @@ const harness: ConformanceHarness = {
       ...app,
       authEnabled: Boolean(sessionSecret),
       session: (user) => mintSession(sessionSecret, user),
+      machineToken: () => mintMachineToken(sessionSecret),
       createWorkspaceInAccount: (accountId, ownerUserId, options) =>
         buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
           { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
