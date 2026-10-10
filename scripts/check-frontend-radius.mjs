@@ -29,9 +29,8 @@
 // CSS spellings of the same intent (`9999px`, `50%`, `0`).
 //
 // Rule 1 needs no notion of where a class list lives, because `rounded-[` and `rounded-(` are not
-// English: an earlier draft read the bare `rounded` token and had to tell a class list from prose,
-// which cost a quote-context scanner, a wrapped-attribute state machine and five rounds of holes.
-// Comments are still stripped, so a line ABOUT the rule is not read as an application of it.
+// English. Comments are still blanked (`lib/frontend-scan.mjs`), so a line ABOUT the rule is not
+// read as an application of it.
 //
 // Policy: ZERO offenders, no ratchet. A line that genuinely needs a fixed radius says why with a
 // `radius-literal-ok:` comment, on that line or the one before it; nothing in the tree needs one.
@@ -39,17 +38,8 @@
 // Usage:  node scripts/check-frontend-radius.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-// The layer AND the deployment template, the same two roots `check-frontend-palette.mjs` scans:
-// `deploy/frontend` is what a consumer copies, so a fixed radius there ships as the pattern to copy.
-const SCAN_ROOTS = [
-  join(repoRoot, 'frontend', 'app', 'app'),
-  join(repoRoot, 'deploy', 'frontend', 'app'),
-]
+import { pathToFileURL } from 'node:url'
+import { readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 // An arbitrary radius in either v4 syntax, behind any side or corner prefix. `(?<![\w-])` is a LEFT
 // boundary, so `group-rounded-[…]` does not match on a substring. Neither bracket form is a word,
@@ -83,27 +73,12 @@ const UI_RADIUS = /var\(\s*--ui-radius\b/
 // the header. `--ui-radius` does not match, its `--ui-` prefix sitting where `--radius` would start.
 const RADIUS_VAR = /var\(\s*--radius(?:-[A-Za-z0-9]+)?\s*[,)]/
 const LITERAL_OK = 'radius-literal-ok:'
-// A line that opens with a comment marker is prose about the rule, not an application of it. Two
-// characters look like markers and are NOT: in a `.css` file a leading `#` is an ID selector, and a
-// leading `*` is the UNIVERSAL selector, so `* p { border-radius: 4px }` is a rule to check and not
-// a JSDoc continuation. What tells them apart is what follows: a selector continues into a
-// combinator (whitespace included, which is the descendant combinator), a `{`, a `,` or a class /
-// id / attribute / pseudo, where a JSDoc continuation runs straight into prose.
-const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*(?!\s*[,{>+~*]|\s+[A-Za-z.#[:*]|[:.#[>+~*])|<!--)/
-// A trailing comment is prose too, and `COMMENT_LINE` only sees a line that OPENS with one. `//`
-// opens a comment only after whitespace or at the start of the line: in `https://...` it follows a
-// colon. A CLOSED block or HTML comment is blanked wherever it sits, so code after it still reads.
-const TRAILING_COMMENT = /(?:^|\s)\/\/.*$|\/\*.*?\*\/|<!--.*?-->/g
-
-/** Every non-scaling radius on a CODE line (deduplicated), or [] for a clean or exempted line. The
- * `radius-literal-ok:` waiver is honoured on the line itself OR on the line before it (the
- * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. Pure, so
- * the companion test can drive it with fixture strings. */
-export function findFixedRadii(line, prevLine = '') {
-  if (line.includes(LITERAL_OK) || prevLine.includes(LITERAL_OK)) return []
-
-  const code = stripComments(line)
-  if (COMMENT_LINE.test(code) || !code.trim()) return []
+/** Every non-scaling radius on one line from `codeLines` (deduplicated), or [] for a clean or
+ * exempted line. The match reads `code`, the line with its comments blanked; the
+ * `radius-literal-ok:` waiver is read from the raw line OR the raw line before it (the
+ * `eslint-disable-next-line` shape). Pure, so the companion test can drive it with fixtures. */
+export function findFixedRadii({ raw, code, prev }) {
+  if (raw.includes(LITERAL_OK) || prev.includes(LITERAL_OK)) return []
 
   const found = [...(code.match(ARBITRARY_UTILITY) ?? [])]
   for (const pattern of [DECLARATION, STYLE_PROPERTY]) {
@@ -130,40 +105,12 @@ function isFixedValue(value) {
   return ABSOLUTE.test(value.replaceAll(PILL_VALUE, ''))
 }
 
-/** A line with its comments blanked, so a radius a developer WROTE ABOUT is not read as one they
- * applied. Exported for the companion test; `main()` reaches it through `findFixedRadii`. */
-export function stripComments(line) {
-  return line.replaceAll(TRAILING_COMMENT, ' ')
-}
-
-function* sourceFiles(dirAbs) {
-  for (const entry of readdirSync(dirAbs)) {
-    if (entry === 'node_modules' || entry === '.nuxt' || entry === 'dist') continue
-    const abs = join(dirAbs, entry)
-    if (statSync(abs).isDirectory()) {
-      yield* sourceFiles(abs)
-    } else if (
-      abs.endsWith('.vue') ||
-      abs.endsWith('.ts') ||
-      abs.endsWith('.css') ||
-      abs.endsWith('.html')
-    ) {
-      // Beyond `.vue`: a class list can be built in a composable (`.ts`, as `ImageCompare.vue`'s
-      // canvas class is), applied with `@apply` (`.css`), and `spa-loading-template.html` is
-      // hand-written CSS that renders before the app does.
-      yield abs
-    }
-  }
-}
-
 function main() {
   const offenders = []
-  for (const file of SCAN_ROOTS.flatMap((root) => [...sourceFiles(root)])) {
-    const rel = relative(repoRoot, file).replaceAll('\\', '/')
-    const lines = readFileSync(file, 'utf8').split('\n')
-    lines.forEach((line, i) => {
-      const matches = findFixedRadii(line, lines[i - 1] ?? '')
-      if (matches.length) offenders.push({ file: rel, line: i + 1, matches })
+  for (const file of spaSourceFiles({ html: true })) {
+    readCodeLines(file).forEach((line, i) => {
+      const matches = findFixedRadii(line)
+      if (matches.length) offenders.push({ file: file.rel, line: i + 1, matches })
     })
   }
 
