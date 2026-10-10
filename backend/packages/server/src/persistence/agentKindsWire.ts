@@ -1,51 +1,72 @@
 import type { AgentKindCapabilityView, BundledSkillDefinition } from '@cat-factory/agents'
+import type { McpServerDefinition } from '@cat-factory/kernel'
 
 // The wire shape of `GET /internal/agent-kinds`, shared by the controller that encodes it and the
 // `HttpAgentKindSource` that decodes it, so the two halves cannot drift.
 //
-// A bundled skill rides BY REFERENCE: each unique definition is emitted once in `bundledSkills`,
-// and each kind's `skills.bundledRefs` lists indexes into it. Inlined per kind, one large playbook
-// assigned to several kinds serialised once per kind (the Nuxt UI capability is ~99 KB on three
-// kinds), and this read runs on every mothership-mode dispatch.
+// Every DEFINITION rides by reference: each distinct bundled skill and tool server is emitted once,
+// in `bundledSkills` / `toolServers`, and each kind lists indexes into them. Inlined per kind, one
+// large playbook assigned to several kinds serialised once per kind (the Nuxt UI capability is
+// ~99 KB on three kinds), and this read runs on every mothership-mode dispatch.
 //
 // Deduplicated by CONTENT, not by id: nothing stops two kinds declaring different INLINE
-// definitions under one id, and keying by id would silently hand one kind the other's playbook.
-// An index rather than an id for the same reason.
+// definitions under one id, and keying by id would silently hand one kind the other's playbook or
+// server. An index rather than an id for the same reason.
 //
-// The field is RENAMED (`bundledRefs`, not `bundled`) on purpose. A node one build behind its
-// mothership is normal, and an older node checks only that `skills.bundled` is an array: an array
-// of indexes would pass that check and reach the harness as skills with no body. Under the new name
-// the older node finds no `bundled` array and refuses the reply as unreadable, which is loud.
+// The per-kind fields are RENAMED (`bundledRefs`, `serverRefs`) on purpose. An older node checks
+// only that `skills.bundled` and `toolServers.servers` are arrays, so an array of indexes under the
+// old name would reach the harness as definitions with no body. Under the new names an older node
+// refuses the reply as unreadable, which is loud. A mothership and its nodes therefore run the
+// same build (`docs/initiatives/mothership-mode.md`).
 
-/** One kind's capability view with its bundled skills replaced by indexes into `bundledSkills`. */
-export interface AgentKindWireView extends Omit<AgentKindCapabilityView, 'skills'> {
+/** One kind's capability view with every definition replaced by an index into the reply's tables. */
+export interface AgentKindWireView {
+  kind: AgentKindCapabilityView['kind']
   skills: Omit<AgentKindCapabilityView['skills'], 'bundled'> & { bundledRefs: number[] }
+  toolServers: { serverRefs: number[]; unknown: string[] }
 }
 
 /** The `GET /internal/agent-kinds` reply body. */
 export interface AgentKindsWire {
   kinds: AgentKindWireView[]
   bundledSkills: BundledSkillDefinition[]
+  toolServers: McpServerDefinition[]
 }
 
-/** Encode a capability layer, emitting each distinct bundled skill once. */
+/** Encode a capability layer, emitting each distinct definition once. */
 export function encodeAgentKindLayer(views: readonly AgentKindCapabilityView[]): AgentKindsWire {
-  const bundledSkills: BundledSkillDefinition[] = []
-  const indexByContent = new Map<string, number>()
-  const indexOf = (definition: BundledSkillDefinition): number => {
+  const skills = definitionTable<BundledSkillDefinition>()
+  const servers = definitionTable<McpServerDefinition>()
+  const kinds = views.map(({ kind, skills: { bundled, catalog, unknown }, toolServers }) => ({
+    kind,
+    skills: { bundledRefs: bundled.map(skills.ref), catalog, unknown },
+    toolServers: { serverRefs: toolServers.servers.map(servers.ref), unknown: toolServers.unknown },
+  }))
+  return { kinds, bundledSkills: skills.entries, toolServers: servers.entries }
+}
+
+/**
+ * A table that hands out one index per distinct definition. The identity map answers the common
+ * case (the registry returns the same object for a registered id) without serialising the body;
+ * the content key only runs for an object it has not seen.
+ */
+function definitionTable<T extends object>() {
+  const entries: T[] = []
+  const byIdentity = new Map<T, number>()
+  const byContent = new Map<string, number>()
+  const ref = (definition: T): number => {
+    const known = byIdentity.get(definition)
+    if (known !== undefined) return known
     const content = JSON.stringify(definition)
-    let index = indexByContent.get(content)
+    let index = byContent.get(content)
     if (index === undefined) {
-      index = bundledSkills.push(definition) - 1
-      indexByContent.set(content, index)
+      index = entries.push(definition) - 1
+      byContent.set(content, index)
     }
+    byIdentity.set(definition, index)
     return index
   }
-  const kinds = views.map(({ skills: { bundled, ...rest }, ...view }) => ({
-    ...view,
-    skills: { ...rest, bundledRefs: bundled.map(indexOf) },
-  }))
-  return { kinds, bundledSkills }
+  return { entries, ref }
 }
 
 /**
@@ -56,56 +77,91 @@ export function encodeAgentKindLayer(views: readonly AgentKindCapabilityView[]):
 export function decodeAgentKindLayer(
   body: unknown,
 ): { views: AgentKindCapabilityView[] } | { unreadable: string } {
-  const { kinds, bundledSkills } = (body ?? {}) as { kinds?: unknown; bundledSkills?: unknown }
+  const { kinds, bundledSkills, toolServers } = (body ?? {}) as {
+    kinds?: unknown
+    bundledSkills?: unknown
+    toolServers?: unknown
+  }
   if (!Array.isArray(kinds)) return { unreadable: 'kinds' }
-  if (!Array.isArray(bundledSkills)) return { unreadable: 'bundledSkills' }
+  if (!Array.isArray(bundledSkills) || !bundledSkills.every(isBundledSkill)) {
+    return { unreadable: 'bundledSkills' }
+  }
+  if (!Array.isArray(toolServers) || !toolServers.every(isToolServer)) {
+    return { unreadable: 'toolServers' }
+  }
   // The ELEMENTS too, and shallowly enough to matter: an entry whose `kind` is not a string can be
   // matched against no dispatch, so a reply carrying one is a reply whose layer this node cannot
   // apply.
   if (!kinds.every(isWireView)) return { unreadable: 'kinds[]' }
-  // A reference past the end would resolve to `undefined` and reach the harness as a skill with no
-  // body, so it is refused here with the rest of the unreadable replies.
+  // A reference past the end would resolve to `undefined` and reach the harness as a definition
+  // with no body, so it is refused here with the rest of the unreadable replies.
   const views: AgentKindCapabilityView[] = []
-  for (const {
-    skills: { bundledRefs, catalog, unknown },
-    ...view
-  } of kinds) {
-    const bundled = bundledRefs.map((index) => bundledSkills[index] as unknown)
-    if (!bundled.every(isBundledSkill)) return { unreadable: 'kinds[].skills.bundledRefs' }
-    views.push({ ...view, skills: { bundled, catalog, unknown } })
+  for (const { kind, skills, toolServers: kindServers } of kinds) {
+    const bundled = dereference(skills.bundledRefs, bundledSkills)
+    if (!bundled) return { unreadable: 'kinds[].skills.bundledRefs' }
+    const servers = dereference(kindServers.serverRefs, toolServers)
+    if (!servers) return { unreadable: 'kinds[].toolServers.serverRefs' }
+    views.push({
+      kind,
+      skills: { bundled, catalog: skills.catalog, unknown: skills.unknown },
+      toolServers: { servers, unknown: kindServers.unknown },
+    })
   }
   return { views }
 }
 
-/** The shape one entry must have for a dispatch to be able to apply it. */
-function isWireView(entry: unknown): entry is AgentKindWireView {
-  if (!entry || typeof entry !== 'object') return false
-  const { kind, skills, toolServers } = entry as {
-    kind?: unknown
-    skills?: unknown
-    toolServers?: unknown
+/** Resolve indexes against a table, or null when one points past its end. */
+function dereference<T>(refs: readonly number[], table: readonly T[]): T[] | null {
+  const resolved: T[] = []
+  for (const index of refs) {
+    const entry = table[index]
+    if (entry === undefined) return null
+    resolved.push(entry)
   }
-  if (typeof kind !== 'string') return false
-  const skillHalves = skills as {
-    bundledRefs?: unknown
-    catalog?: unknown
-    unknown?: unknown
-  } | null
-  if (
-    !skillHalves ||
-    !Array.isArray(skillHalves.bundledRefs) ||
-    !skillHalves.bundledRefs.every(Number.isInteger) ||
-    !Array.isArray(skillHalves.catalog) ||
-    !Array.isArray(skillHalves.unknown)
-  ) {
-    return false
-  }
-  const tools = toolServers as { servers?: unknown; unknown?: unknown } | null
-  return Boolean(tools && Array.isArray(tools.servers) && Array.isArray(tools.unknown))
+  return resolved
 }
 
+/** The shape one entry must have for a dispatch to be able to apply it. */
+function isWireView(entry: unknown): entry is AgentKindWireView {
+  if (!isRecord(entry) || typeof entry.kind !== 'string') return false
+  const { skills, toolServers } = entry
+  return (
+    isRecord(skills) &&
+    isIndexList(skills.bundledRefs) &&
+    Array.isArray(skills.catalog) &&
+    Array.isArray(skills.unknown) &&
+    isRecord(toolServers) &&
+    isIndexList(toolServers.serverRefs) &&
+    Array.isArray(toolServers.unknown)
+  )
+}
+
+/**
+ * Every field the harness READS: the skill directory name, the frontmatter description, the body,
+ * and each resource's path and content. A missing one would be written to disk as `undefined`.
+ */
 function isBundledSkill(entry: unknown): entry is BundledSkillDefinition {
-  if (!entry || typeof entry !== 'object') return false
-  const { id, instructions } = entry as { id?: unknown; instructions?: unknown }
-  return typeof id === 'string' && typeof instructions === 'string'
+  if (!isRecord(entry)) return false
+  const { id, name, description, instructions, resources } = entry
+  return (
+    [id, name, description, instructions].every((field) => typeof field === 'string') &&
+    (resources === undefined ||
+      (Array.isArray(resources) &&
+        resources.every(
+          (r) => isRecord(r) && typeof r.relPath === 'string' && typeof r.content === 'string',
+        )))
+  )
+}
+
+/** A server the executor can wire: an id to name its tools under, and a transport to reach it. */
+function isToolServer(entry: unknown): entry is McpServerDefinition {
+  return isRecord(entry) && typeof entry.id === 'string' && isRecord(entry.transport)
+}
+
+function isIndexList(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(Number.isInteger)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }

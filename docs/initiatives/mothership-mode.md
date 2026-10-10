@@ -522,6 +522,18 @@
   is SERVABLE here (harness, credentials), which is the split ADR 0029 states. Resolving in both
   places would have meant two network reads per dispatch.
 
+  **Definitions ride by reference, and the reply has NO cross-build compatibility.** Each distinct
+  bundled skill and tool server is emitted once (`bundledSkills`, `toolServers`) and each kind
+  lists indexes into them (`bundledRefs`, `serverRefs`), deduplicated by content because two kinds
+  may declare different inline definitions under one id. The Nuxt UI capability alone is ~99 KB on
+  three kinds, and this read runs per dispatch. The per-kind fields were renamed so a node and a
+  mothership on opposite sides of that change REFUSE each other's reply rather than misread it, and
+  `resolveKindCapabilities` does not catch that refusal: **every container dispatch on a node whose
+  build disagrees with its mothership on this shape fails with `agent_kinds_unreachable` until the
+  node is updated.** This was chosen over serving both shapes (#2269): the shape is pre-1.0
+  internal state, so the operator step is to update nodes together with the mothership. Shape:
+  `packages/server/src/persistence/agentKindsWire.ts`.
+
   Transport mirrors its three siblings exactly: machine-token pin checked FIRST, no account scope
   (the layer is one deployment-wide set), its own endpoint rather than a persistence hole, reads
   this process's OWN registry so a satellite cannot answer for a satellite, and THROWS on every
@@ -529,7 +541,7 @@
   `packages/server/test/agentKinds.spec.ts` (the serve/merge/refusal properties incl. the
   server-side id resolution, since a registered id means nothing to the reader),
   `runtimes/local/src/mothership.test.ts` (the wire shape + wiring) and the shared cross-runtime
-  suite (mounted + machine-gated on BOTH facades).
+  suite (mounted + machine-gated on BOTH facades, plus the by-reference reply on every runtime).
 
 **Secrets delegation (the residual every earlier slice deferred to)**
 

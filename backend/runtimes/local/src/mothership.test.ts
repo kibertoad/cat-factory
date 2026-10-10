@@ -231,10 +231,11 @@ describe('composeMothership', () => {
             {
               kind: 'coder',
               skills: { bundledRefs: [], catalog: [{ skillId: 'src:s1:playbook' }], unknown: [] },
-              toolServers: { servers: [], unknown: [] },
+              toolServers: { serverRefs: [], unknown: [] },
             },
           ],
           bundledSkills: [],
+          toolServers: [],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       )

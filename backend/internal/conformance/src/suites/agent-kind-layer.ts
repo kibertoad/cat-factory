@@ -22,8 +22,9 @@ export function defineAgentKindLayerConformance(harness: ConformanceHarness): vo
       registry.assignSkills('coder', [PLAYBOOK.id])
       registry.assignSkills('pr-reviewer', [PLAYBOOK.id])
       const app = harness.makeApp({}, { agentKindRegistry: registry })
-      // A harness with no session secret has no machine audience to sign for.
-      if (!app.authEnabled) return
+      // Asserted, never an early return: every facade that wires this suite runs auth-enabled, and
+      // a per-test `if (!app.authEnabled) return` would let a mis-wired harness pass VACUOUSLY.
+      expect(app.authEnabled).toBe(true)
 
       const res = await app.call<{
         kinds: { kind: string; skills: { bundledRefs: number[] } }[]

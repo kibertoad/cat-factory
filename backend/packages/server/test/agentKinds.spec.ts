@@ -118,26 +118,42 @@ describe('mothership-mode agent-kind capability layer', () => {
     expect(view!.toolServers.servers[0]!.transport).toEqual(TRACKER_SERVER.transport)
   })
 
-  it('serves a bundled skill on several kinds ONCE, and hands every kind the whole body', async () => {
+  it('serves a definition on several kinds ONCE, and hands every kind the whole body', async () => {
     const app = mothership((registry) => {
       registry.registerSkill(PLAYBOOK)
       registry.assignSkills('coder', [PLAYBOOK.id])
       registry.assignSkills('fixer', [PLAYBOOK.id])
       registry.assignSkills('ci-fixer', [PLAYBOOK.id])
+      registry.registerToolServer(TRACKER_SERVER)
+      registry.assignToolServers('coder', [TRACKER_SERVER.id])
+      registry.assignToolServers('fixer', [TRACKER_SERVER.id])
     })
     const wire = (await (
       await app.request('/internal/agent-kinds', {
         headers: { authorization: `Bearer ${await machineToken()}` },
       })
-    ).json()) as { bundledSkills: unknown[]; kinds: { skills: { bundledRefs: unknown[] } }[] }
+    ).json()) as {
+      bundledSkills: unknown[]
+      toolServers: unknown[]
+      kinds: { kind: string; skills: object; toolServers: { serverRefs: number[] } }[]
+    }
     expect(wire.bundledSkills).toEqual([PLAYBOOK])
-    expect(wire.kinds.map((view) => view.skills.bundledRefs)).toEqual([[0], [0], [0]])
-    // The pre-reference field is GONE, so a node one build behind refuses this reply instead of
-    // reading the indexes as skill definitions.
-    expect(wire.kinds.every((view) => !('bundled' in view.skills))).toBe(true)
+    expect(wire.toolServers).toEqual([TRACKER_SERVER])
+    const refs = new Map(wire.kinds.map((view) => [view.kind, view]))
+    for (const kind of ['coder', 'fixer', 'ci-fixer']) {
+      expect(refs.get(kind)!.skills).toMatchObject({ bundledRefs: [0] })
+      // The pre-reference field is GONE, so a node one build behind refuses this reply instead of
+      // reading the indexes as skill definitions.
+      expect(refs.get(kind)!.skills).not.toHaveProperty('bundled')
+    }
+    expect(refs.get('coder')!.toolServers.serverRefs).toEqual([0])
+    expect(refs.get('ci-fixer')!.toolServers.serverRefs).toEqual([])
 
-    const views = await (await node(app)).capabilities()
-    expect(views.map((view) => view.skills.bundled)).toEqual([[PLAYBOOK], [PLAYBOOK], [PLAYBOOK]])
+    const views = new Map((await (await node(app)).capabilities()).map((v) => [v.kind, v]))
+    for (const kind of ['coder', 'fixer', 'ci-fixer']) {
+      expect(views.get(kind)!.skills.bundled).toEqual([PLAYBOOK])
+    }
+    expect(views.get('fixer')!.toolServers.servers).toEqual([TRACKER_SERVER])
   })
 
   it('keeps two INLINE definitions sharing an id apart, rather than swapping one in', async () => {
@@ -196,22 +212,39 @@ describe('mothership-mode agent-kind capability layer', () => {
   })
 
   it('THROWS on a well-formed 200 whose payload it cannot read', async () => {
-    const tools = { servers: [], unknown: [] }
-    const skills = (bundledRefs: unknown[]) => ({ bundledRefs, catalog: [], unknown: [] })
+    const tools = (serverRefs: unknown[] = []) => ({ serverRefs, unknown: [] })
+    const skills = (bundledRefs: unknown[] = []) => ({ bundledRefs, catalog: [], unknown: [] })
+    const coder = (over: object = {}) => ({
+      kind: 'coder',
+      skills: skills(),
+      toolServers: tools(),
+      ...over,
+    })
+    const reply = (over: object) => ({
+      kinds: [coder()],
+      bundledSkills: [],
+      toolServers: [],
+      ...over,
+    })
     for (const payload of [
       {},
-      { kinds: 'nope', bundledSkills: [] },
-      { kinds: [] },
-      { kinds: [{ skills: skills([]), toolServers: tools }], bundledSkills: [] },
-      { kinds: [{ kind: 'coder', skills: {}, toolServers: tools }], bundledSkills: [] },
-      { kinds: [{ kind: 'coder', skills: skills([]) }], bundledSkills: [] },
+      reply({ kinds: 'nope' }),
+      reply({ bundledSkills: undefined }),
+      reply({ toolServers: undefined }),
+      reply({ kinds: [{ skills: skills(), toolServers: tools() }] }),
+      reply({ kinds: [coder({ skills: {} })] }),
+      reply({ kinds: [coder({ toolServers: undefined })] }),
+      // The pre-reference shape: an older mothership inlined each definition per kind.
+      reply({ kinds: [coder({ skills: { bundled: [PLAYBOOK], catalog: [], unknown: [] } })] }),
       // A non-index reference, or one with nothing behind it: either would reach the harness as a
-      // skill with no body.
-      {
-        kinds: [{ kind: 'coder', skills: skills([PLAYBOOK]), toolServers: tools }],
-        bundledSkills: [],
-      },
-      { kinds: [{ kind: 'coder', skills: skills([0]), toolServers: tools }], bundledSkills: [] },
+      // definition with no body.
+      reply({ kinds: [coder({ skills: skills([PLAYBOOK]) })] }),
+      reply({ kinds: [coder({ skills: skills([0]) })] }),
+      reply({ kinds: [coder({ toolServers: tools([0]) })] }),
+      // A definition missing a field the harness writes to disk.
+      reply({ bundledSkills: [{ ...PLAYBOOK, name: undefined }] }),
+      reply({ bundledSkills: [{ ...PLAYBOOK, resources: [{ relPath: 'a.md' }] }] }),
+      reply({ toolServers: [{ id: TRACKER_SERVER.id }] }),
     ]) {
       await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
         code: 'unavailable',
