@@ -184,32 +184,15 @@ describe('redactSecrets', () => {
     // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
     // a millisecond's granularity is noise against samples an order of magnitude larger.
     const bodies = [prose, ...Object.values(shapes)].map((body, index) => ({ body, index }))
+    // A body the loop never times keeps Infinity, so its ratio below fails instead of passing.
     const fastest = bodies.map(() => Number.POSITIVE_INFINITY)
-    // A rescanning rule makes each round cost seconds (the PEM regression took ~19s per body),
-    // and more rounds only hold the worker for the same answer. So the loop stops early, but
-    // only on evidence a contention burst cannot produce: in TWO consecutive rounds, a SHAPE
-    // sample over 2s AND over 50x the prose sample of its own round. One stall covers one
-    // round, and a stall on the prose sample raises the bar instead of meeting it. The
-    // regressed shape's fastest sample is then far above 4x, so its ratio below fails.
-    const rescanSampleMs = 2000
-    const rescanRatio = 50
-    let rescannedRounds = 0
-    for (let round = 0; round < 7 && rescannedRounds < 2; round++) {
+    for (let round = 0; round < 7; round++) {
       const start = round % bodies.length
-      const samples = bodies.map(() => 0)
       for (const { body, index } of [...bodies.slice(start), ...bodies.slice(0, start)]) {
         const started = Date.now()
         redactSecrets(body)
-        samples[index] = Date.now() - started
+        fastest[index] = Math.min(fastest[index] ?? Number.POSITIVE_INFINITY, Date.now() - started)
       }
-      const [roundProse = 0, ...roundShapes] = samples
-      for (const [index, sample] of samples.entries()) {
-        fastest[index] = Math.min(fastest[index] ?? Number.POSITIVE_INFINITY, sample)
-      }
-      const rescanned = roundShapes.some(
-        (sample) => sample > rescanSampleMs && sample > rescanRatio * roundProse,
-      )
-      rescannedRounds = rescanned ? rescannedRounds + 1 : 0
     }
     const baseline = fastest[0] ?? 0
     // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
