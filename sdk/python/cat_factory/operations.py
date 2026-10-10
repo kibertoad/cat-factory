@@ -3107,10 +3107,13 @@ class KeysResource:
 
     def create(self, body: CreateHeadlessPublicApiKey, *, timeout: float | None = None) -> CreatedPublicApiKey:
         """Provision an API key
-        Mint a key for the calling key’s own workspace and return its raw secret EXACTLY
-        ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key.
-        `admin` cannot be minted here: a key provisioned over the API can never itself
-        provision, which keeps the chain one link long. Requires an `admin`-scope key.
+        Mint a key in the calling key’s account and return its raw secret EXACTLY ONCE, so
+        store it now: it is not recoverable. Omitting `workspaceIds` mints a key for the
+        workspace this request acts on; a list or `null` (every workspace) can never reach
+        further than the calling key, refused as `403` with `reason:
+        "workspace_reach_exceeded"`. Omitting `scope` mints a `write` key. `admin` cannot be
+        minted here: a key provisioned over the API can never itself provision, which keeps
+        the chain one link long. Requires an `admin`-scope key.
         `POST /api/v1/keys` (operation `createPublicKey`).
         """
         raw = self._transport.request(
@@ -3124,9 +3127,11 @@ class KeysResource:
 
     def list(self, *, timeout: float | None = None) -> PublicApiKeyList:
         """List the workspace's API keys
-        The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret
-        is never readable back. `createdByKeyId` names the key that provisioned a key
-        headlessly; `createdByUserId` names the person who minted one in the app.
+        The account’s live (non-revoked) keys that reach the workspace this request acts on,
+        account-wide ones included, metadata only; a secret is never readable back.
+        `workspaceIds` is each key’s reach (`null` for every workspace). `createdByKeyId`
+        names the key that provisioned a key headlessly; `createdByUserId` names the person
+        who minted one in the app.
         `GET /api/v1/keys` (operation `listPublicKeys`).
         """
         raw = self._transport.request(
@@ -3141,7 +3146,8 @@ class KeysResource:
         """Revoke an API key
         Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive
         its own revocation through the credentials it left behind. Idempotent, and it may
-        name the calling key. Requires an `admin`-scope key.
+        name the calling key. A key reaching workspaces the calling key does not is refused
+        with `reason: "workspace_reach_exceeded"`. Requires an `admin`-scope key.
         `DELETE /api/v1/keys/{keyId}` (operation `revokePublicKey`).
         """
         self._transport.request_no_content(

@@ -450,3 +450,18 @@ Additive: a new enum value and a new set of `details.reason` codes on the existi
 (`attached_pr_unresolvable`, `attached_pr_not_found`, `attached_pr_repo_mismatch`,
 `attached_pr_not_open`, `attached_pr_from_fork`, `attached_pr_base_mismatch`). The pipeline parks
 nowhere, so a plain `write` key can start it with an empty body.
+
+## 1.80.0
+
+Public-API keys belong to an account and may reach every workspace in it or a listed subset.
+`PublicApiKey` and `GET /api/v1/me` gain `workspaceIds` (`null` meaning every workspace), and both
+key-minting bodies accept an optional `workspaceIds`. A workspace-scoped call names its workspace
+in the new `x-cat-factory-workspace` request header.
+
+Additive. Every key that existed before reaches exactly the one workspace it was minted for, so it
+keeps working with no header, and an omitted `workspaceIds` on a mint still produces a key for the
+workspace the request acts on. `workspaceId` stays on both shapes and means the workspace the
+listing, mint or request acted on. What a consumer notices only once it holds a wider key: a call
+that names no workspace is refused with 422 `details.reason: workspace_required`, and a workspace
+outside the key's reach answers 404 `workspace_not_found`. A key can never mint or revoke a key
+reaching further than itself (403 `workspace_reach_exceeded`).

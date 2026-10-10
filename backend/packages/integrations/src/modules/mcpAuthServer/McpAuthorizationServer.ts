@@ -518,7 +518,8 @@ export class McpAuthorizationServer {
       return await this.deps.publicApiKeys.issue(
         {
           accountId: code.accountId,
-          workspaceId: code.workspaceId,
+          // An MCP connection is approved on one board, so its key reaches that board only.
+          workspaceIds: [code.workspaceId],
           createdByUserId: code.approvedByUserId,
           // The connected host, on its own side. Opaque to the platform like every other external
           // identity, and what makes a run this host starts attributable to it rather than to the

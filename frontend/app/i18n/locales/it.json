@@ -843,7 +843,9 @@
         "createdByKey": "la chiave API {id}",
         "revoke": "Revoca token",
         "boundToYou": "Il tuo abbonamento",
-        "boundToOther": "Abbonamento di {user}"
+        "boundToOther": "Abbonamento di {user}",
+        "reachAll": "Tutti gli spazi di lavoro",
+        "reachCount": "{count} spazi di lavoro"
       },
       "add": {
         "heading": "Crea un token",
@@ -857,7 +859,13 @@
         "identitySystem": "Questo spazio di lavoro (token di sistema)",
         "identitySelf": "Io (token personale)",
         "identitySystemHelp": "Le esecuzioni avviate con questo token appartengono allo spazio di lavoro e non sono attribuite a nessuna persona. Non può usare l'abbonamento personale Claude / Codex / GLM di nessuno: un'attività fissata su uno di quei modelli viene rifiutata anziché addebitata a chi non c'è. Usalo per la CI e le integrazioni condivise.",
-        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless."
+        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless.",
+        "reach": "Spazi di lavoro",
+        "reachHelp": "Su quali spazi di lavoro questo token può agire. Un token che ne raggiunge più di uno indica lo spazio di lavoro a ogni chiamata nell’header x-cat-factory-workspace.",
+        "reachThis": "Solo questo spazio di lavoro",
+        "reachAll": "Tutti gli spazi di lavoro dell’account",
+        "reachSelected": "Spazi di lavoro selezionati",
+        "reachPick": "Scegli gli spazi di lavoro"
       },
       "scopes": {
         "read": "Sola lettura",

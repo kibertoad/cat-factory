@@ -48,7 +48,7 @@ function build(
           ? {
               keyId: 'pak_1',
               accountId: 'acc_1',
-              workspaceId: 'ws_1',
+              workspaceIds: ['ws_1'],
               scope: 'admin' as const,
               label: 'acceptance',
               externalIdentity: null,

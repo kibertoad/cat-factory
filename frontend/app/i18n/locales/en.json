@@ -3884,7 +3884,9 @@
         "createdByKey": "API key {id}",
         "revoke": "Revoke token",
         "boundToYou": "Your subscription",
-        "boundToOther": "{user}'s subscription"
+        "boundToOther": "{user}'s subscription",
+        "reachAll": "All workspaces",
+        "reachCount": "{count} workspaces"
       },
       "add": {
         "heading": "Create a token",
@@ -3898,7 +3900,13 @@
         "identitySystem": "This workspace (system token)",
         "identitySelf": "Me (personal token)",
         "identitySystemHelp": "Runs started with this token belong to the workspace and are attributed to no person. It cannot use anyone’s personal Claude / Codex / GLM subscription, so a task pinned to one of those models is refused rather than charged to someone who is not there. Use this for CI and shared integrations.",
-        "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs."
+        "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs.",
+        "reach": "Workspaces",
+        "reachHelp": "Which workspaces this token can act on. A token reaching more than one names the workspace on each call in the x-cat-factory-workspace header.",
+        "reachThis": "This workspace only",
+        "reachAll": "Every workspace in the account",
+        "reachSelected": "Selected workspaces",
+        "reachPick": "Choose workspaces"
       },
       "scopes": {
         "read": "Read only",

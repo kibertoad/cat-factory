@@ -41,7 +41,8 @@ import org.jspecify.annotations.Nullable;
  * val pr: String? = task.pullRequestUrl                      // nullable, and the compiler knows it
  * }</pre>
  *
- * <p>Every call is scoped to the key's workspace, and each accessor ({@code tasks()},
+ * <p>A workspace-scoped call acts on the key's only workspace, or on {@code workspaceId} for a
+ * key reaching several, and each accessor ({@code tasks()},
  * {@code services()}, …) mirrors one tag of the published OpenAPI surface. The client is stateless
  * beyond its configuration, so one instance is safe to share across threads.
  *
@@ -132,6 +133,15 @@ public final class CatFactoryClient extends Resources {
         /** Add a header sent on every request. */
         public Builder header(String name, String value) {
             this.headers.put(name, value);
+            return this;
+        }
+
+        /**
+         * The workspace every workspace-scoped call acts on, sent as {@code
+         * x-cat-factory-workspace}. Needed only for a key that reaches more than one workspace.
+         */
+        public Builder workspaceId(String workspaceId) {
+            this.headers.put("x-cat-factory-workspace", workspaceId);
             return this;
         }
 

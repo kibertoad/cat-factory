@@ -1,6 +1,11 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { PublicApiKeyService, scopeSatisfies } from './PublicApiKeyService.js'
+import {
+  PublicApiKeyService,
+  keyReaches,
+  reachCovers,
+  scopeSatisfies,
+} from './PublicApiKeyService.js'
 
 // In-memory repository — the service's hashing/auth logic is what's under test, not persistence.
 class FakeRepo implements PublicApiKeyRepository {
@@ -13,10 +18,14 @@ class FakeRepo implements PublicApiKeyRepository {
     const r = this.rows.get(id)
     return Promise.resolve(r ? { ...r } : null)
   }
-  listByWorkspace(workspaceId: string) {
+  listByAccount(accountId: string) {
     return Promise.resolve(
-      [...this.rows.values()].filter((r) => r.workspaceId === workspaceId && r.revokedAt === null),
+      [...this.rows.values()].filter((r) => r.accountId === accountId && r.revokedAt === null),
     )
+  }
+  async countLiveByAccount(accountId: string) {
+    const live = await this.listByAccount(accountId)
+    return live.filter((r) => r.workspaceIds === null || r.workspaceIds.length > 0).length
   }
   markUsedCalls = 0
   markUsed(id: string, at: number) {
@@ -25,14 +34,14 @@ class FakeRepo implements PublicApiKeyRepository {
     if (r) r.lastUsedAt = at
     return Promise.resolve()
   }
-  revoke(workspaceId: string, id: string, at: number) {
+  revoke(accountId: string, id: string, at: number) {
     const r = this.rows.get(id)
-    if (r && r.workspaceId === workspaceId && r.revokedAt === null) r.revokedAt = at
+    if (r && r.accountId === accountId && r.revokedAt === null) r.revokedAt = at
     return Promise.resolve()
   }
-  revokeMintedBy(workspaceId: string, minterId: string, at: number) {
+  revokeMintedBy(accountId: string, minterId: string, at: number) {
     for (const r of this.rows.values()) {
-      if (r.createdByKeyId === minterId && r.workspaceId === workspaceId && r.revokedAt === null) {
+      if (r.createdByKeyId === minterId && r.accountId === accountId && r.revokedAt === null) {
         r.revokedAt = at
       }
     }
@@ -56,7 +65,7 @@ describe('PublicApiKeyService', () => {
   it('issues a key that authenticates back to its scope, and stores only a hash', async () => {
     const { service, repo } = makeService()
     const { record, secret } = await service.issue(
-      { accountId: 'acc_1', workspaceId: 'ws_1' },
+      { accountId: 'acc_1', workspaceIds: ['ws_1'] },
       'external system',
     )
     expect(secret).toMatch(/^cf_live_pak_[0-9a-f]+\.[0-9a-f]+$/)
@@ -75,7 +84,7 @@ describe('PublicApiKeyService', () => {
     expect(auth).toEqual({
       keyId: record.id,
       accountId: 'acc_1',
-      workspaceId: 'ws_1',
+      workspaceIds: ['ws_1'],
       scope: 'write',
       label: 'external system',
       externalIdentity: null,
@@ -88,7 +97,7 @@ describe('PublicApiKeyService', () => {
   it('carries the MINTER through authentication too, for a key bound to nobody', async () => {
     const { service } = makeService()
     const { secret } = await service.issue(
-      { accountId: 'acc_1', workspaceId: 'ws_1', createdByUserId: 'usr_7' },
+      { accountId: 'acc_1', workspaceIds: ['ws_1'], createdByUserId: 'usr_7' },
       'system token',
     )
     const auth = await service.authenticate(secret)
@@ -102,7 +111,7 @@ describe('PublicApiKeyService', () => {
   it('carries the bound user through authentication, so a run can pin it at admission', async () => {
     const { service } = makeService()
     const { secret } = await service.issue(
-      { accountId: 'acc_1', workspaceId: 'ws_1', actsAsUserId: 'usr_7' },
+      { accountId: 'acc_1', workspaceIds: ['ws_1'], actsAsUserId: 'usr_7' },
       'my own runs',
     )
     // The binding is what lets a headless start unlock the minter's personal subscription; it has
@@ -113,19 +122,19 @@ describe('PublicApiKeyService', () => {
   it('records the minting user (audit), defaulting to null when none is supplied', async () => {
     const { service } = makeService()
     const attributed = await service.issue(
-      { accountId: 'a', workspaceId: 'w', createdByUserId: 'usr_7' },
+      { accountId: 'a', workspaceIds: ['w'], createdByUserId: 'usr_7' },
       'k',
     )
     expect(attributed.record.createdByUserId).toBe('usr_7')
     // A mint with no session (dev-open) stores null rather than an empty string.
-    const anon = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k2')
+    const anon = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'k2')
     expect(anon.record.createdByUserId).toBeNull()
   })
 
   it('records the minting KEY for a headless mint, and null for a mint a person made', async () => {
     const { service } = makeService()
     const minted = await service.issue(
-      { accountId: 'a', workspaceId: 'w', createdByKeyId: 'pak_parent' },
+      { accountId: 'a', workspaceIds: ['w'], createdByKeyId: 'pak_parent' },
       'per-tenant',
     )
     expect(minted.record.createdByKeyId).toBe('pak_parent')
@@ -133,7 +142,7 @@ describe('PublicApiKeyService', () => {
     // no key. Neither is inferred from the other.
     expect(minted.record.createdByUserId).toBeNull()
     const byPerson = await service.issue(
-      { accountId: 'a', workspaceId: 'w', createdByUserId: 'usr_7' },
+      { accountId: 'a', workspaceIds: ['w'], createdByUserId: 'usr_7' },
       'in-app',
     )
     expect(byPerson.record.createdByKeyId).toBeNull()
@@ -141,14 +150,18 @@ describe('PublicApiKeyService', () => {
 
   it('revokes the keys a revoked key minted, so a leaked minter leaves nothing behind', async () => {
     const { service, repo } = makeService()
-    const minter = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'provisioner', 'admin')
+    const minter = await service.issue(
+      { accountId: 'a', workspaceIds: ['w'] },
+      'provisioner',
+      'admin',
+    )
     const child = await service.issue(
-      { accountId: 'a', workspaceId: 'w', createdByKeyId: minter.record.id },
+      { accountId: 'a', workspaceIds: ['w'], createdByKeyId: minter.record.id },
       'child',
     )
-    const unrelated = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'unrelated')
+    const unrelated = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'unrelated')
 
-    await service.revoke('w', minter.record.id)
+    await service.revoke('a', minter.record.id)
 
     expect(await service.authenticate(minter.secret)).toBeNull()
     // The whole point: the credential the operator could not see dies with the one they could.
@@ -158,23 +171,27 @@ describe('PublicApiKeyService', () => {
     expect(repo.rows.get(child.record.id)?.revokedAt).toBe(1000)
   })
 
-  it('does not cascade across workspaces', async () => {
+  it('does not cascade across accounts', async () => {
     const { service } = makeService()
-    const minter = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'provisioner', 'admin')
-    // A row claiming this minter in ANOTHER workspace cannot be reached by the cascade: the
-    // revoke is workspace-scoped on both statements, not only the first.
+    const minter = await service.issue(
+      { accountId: 'a', workspaceIds: ['w'] },
+      'provisioner',
+      'admin',
+    )
+    // A row claiming this minter in ANOTHER account cannot be reached by the cascade: the revoke
+    // is account-scoped on both statements, not only the first.
     const foreign = await service.issue(
-      { accountId: 'a', workspaceId: 'other', createdByKeyId: minter.record.id },
+      { accountId: 'other', workspaceIds: ['w2'], createdByKeyId: minter.record.id },
       'foreign',
     )
-    await service.revoke('w', minter.record.id)
+    await service.revoke('a', minter.record.id)
     expect(await service.authenticate(foreign.secret)).not.toBeNull()
   })
 
   it('persists the requested scope and authenticates back with it', async () => {
     const { service } = makeService()
-    const readKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'monitor', 'read')
-    const adminKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'ops', 'admin')
+    const readKey = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'monitor', 'read')
+    const adminKey = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'ops', 'admin')
     expect(readKey.record.scope).toBe('read')
     expect(adminKey.record.scope).toBe('admin')
     expect((await service.authenticate(readKey.secret))?.scope).toBe('read')
@@ -183,7 +200,7 @@ describe('PublicApiKeyService', () => {
 
   it('rejects a wrong secret, a malformed key, and an unknown id', async () => {
     const { service } = makeService()
-    const { record, secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    const { record, secret } = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'k')
     const goodSuffix = secret.split('.')[1]
 
     expect(await service.authenticate(undefined)).toBeNull()
@@ -194,24 +211,24 @@ describe('PublicApiKeyService', () => {
     expect(await service.authenticate(`cf_live_pak_unknown.${goodSuffix}`)).toBeNull() // unknown id
   })
 
-  it('stops authenticating once revoked, and revocation is workspace-scoped', async () => {
+  it('stops authenticating once revoked, and revocation is account-scoped', async () => {
     const { service } = makeService()
-    const { record, secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    const { record, secret } = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'k')
     expect(await service.authenticate(secret)).not.toBeNull()
 
-    // A revoke scoped to a different workspace is a no-op.
-    await service.revoke('other-ws', record.id)
+    // A revoke scoped to a different account is a no-op.
+    await service.revoke('other-acc', record.id)
     expect(await service.authenticate(secret)).not.toBeNull()
 
-    await service.revoke('w', record.id)
+    await service.revoke('a', record.id)
     expect(await service.authenticate(secret)).toBeNull()
     // A revoked key drops out of the management list.
-    expect(await service.list('w')).toHaveLength(0)
+    expect(await service.listReaching('a', 'w')).toHaveLength(0)
   })
 
   it('throttles the lastUsedAt write so a polling caller does not drive one UPDATE per call', async () => {
     const { service, repo, now } = makeService()
-    const { secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    const { secret } = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'k')
 
     // First auth stamps (was never used).
     expect(await service.authenticate(secret)).not.toBeNull()
@@ -232,10 +249,10 @@ describe('PublicApiKeyService', () => {
 
   it('isActive reflects existence + revocation (the cheap re-check for live streams)', async () => {
     const { service } = makeService()
-    const { record } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    const { record } = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'k')
     expect(await service.isActive(record.id)).toBe(true)
     expect(await service.isActive('pak_unknown')).toBe(false)
-    await service.revoke('w', record.id)
+    await service.revoke('a', record.id)
     expect(await service.isActive(record.id)).toBe(false)
   })
 })
@@ -253,5 +270,52 @@ describe('scopeSatisfies (the /api/v1 scope ladder)', () => {
     expect(scopeSatisfies('read', 'write')).toBe(false)
     expect(scopeSatisfies('read', 'admin')).toBe(false)
     expect(scopeSatisfies('write', 'admin')).toBe(false)
+  })
+
+  it('lists the keys that reach a workspace, unrestricted keys included', async () => {
+    const { service } = makeService()
+    const here = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'here')
+    const everywhere = await service.issue({ accountId: 'a', workspaceIds: null }, 'everywhere')
+    await service.issue({ accountId: 'a', workspaceIds: ['elsewhere'] }, 'elsewhere')
+    await service.issue({ accountId: 'other', workspaceIds: null }, 'other account')
+
+    const ids = (await service.listReaching('a', 'w')).map((k) => k.id).sort()
+    expect(ids).toEqual([here.record.id, everywhere.record.id].sort())
+  })
+
+  it('stores an unrestricted reach as null and a list deduplicated and sorted', async () => {
+    const { service } = makeService()
+    const all = await service.issue({ accountId: 'a', workspaceIds: null }, 'all')
+    const some = await service.issue({ accountId: 'a', workspaceIds: ['w2', 'w1', 'w2'] }, 'some')
+    expect((await service.authenticate(all.secret))?.workspaceIds).toBeNull()
+    expect((await service.authenticate(some.secret))?.workspaceIds).toEqual(['w1', 'w2'])
+  })
+
+  it('refuses an empty reach, and stops authenticating a key whose grants are all gone', async () => {
+    const { service, repo } = makeService()
+    await expect(service.issue({ accountId: 'a', workspaceIds: [] }, 'nowhere')).rejects.toThrow(
+      /at least one workspace/,
+    )
+    // What the workspace cascade leaves behind when a restricted key's only board is deleted.
+    const { record, secret } = await service.issue({ accountId: 'a', workspaceIds: ['w'] }, 'k')
+    repo.rows.set(record.id, { ...repo.rows.get(record.id)!, workspaceIds: [] })
+    expect(await service.authenticate(secret)).toBeNull()
+  })
+})
+
+describe('key reach', () => {
+  it('reaches a workspace when unrestricted or granted it', () => {
+    expect(keyReaches(null, 'w')).toBe(true)
+    expect(keyReaches(['w'], 'w')).toBe(true)
+    expect(keyReaches(['x'], 'w')).toBe(false)
+  })
+
+  it('covers a reach only when it includes all of it', () => {
+    expect(reachCovers(null, null)).toBe(true)
+    expect(reachCovers(null, ['w'])).toBe(true)
+    expect(reachCovers(['w', 'x'], ['w'])).toBe(true)
+    expect(reachCovers(['w'], ['w', 'x'])).toBe(false)
+    // A restricted key can never hand out or retire an unrestricted one.
+    expect(reachCovers(['w'], null)).toBe(false)
   })
 })

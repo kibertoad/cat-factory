@@ -843,7 +843,9 @@
         "createdByKey": "API-Schlüssel {id}",
         "revoke": "Token widerrufen",
         "boundToYou": "Ihr Abonnement",
-        "boundToOther": "Abonnement von {user}"
+        "boundToOther": "Abonnement von {user}",
+        "reachAll": "Alle Arbeitsbereiche",
+        "reachCount": "{count} Arbeitsbereiche"
       },
       "add": {
         "heading": "Token erstellen",
@@ -857,7 +859,13 @@
         "identitySystem": "Dieser Arbeitsbereich (System-Token)",
         "identitySelf": "Ich (persönliches Token)",
         "identitySystemHelp": "Mit diesem Token gestartete Läufe gehören dem Arbeitsbereich und werden keiner Person zugeordnet. Es kann kein persönliches Claude-/Codex-/GLM-Abonnement nutzen: Eine Aufgabe mit einem solchen Modell wird abgelehnt, statt jemandem in Abwesenheit berechnet zu werden. Für CI und gemeinsam genutzte Integrationen.",
-        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe."
+        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe.",
+        "reach": "Arbeitsbereiche",
+        "reachHelp": "Auf welchen Arbeitsbereichen dieses Token handeln darf. Ein Token für mehr als einen Arbeitsbereich nennt den Arbeitsbereich bei jedem Aufruf im Header x-cat-factory-workspace.",
+        "reachThis": "Nur dieser Arbeitsbereich",
+        "reachAll": "Alle Arbeitsbereiche des Kontos",
+        "reachSelected": "Ausgewählte Arbeitsbereiche",
+        "reachPick": "Arbeitsbereiche auswählen"
       },
       "scopes": {
         "read": "Nur Lesen",

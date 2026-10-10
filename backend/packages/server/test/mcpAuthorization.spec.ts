@@ -31,8 +31,11 @@ class MemoryKeyRepository implements PublicApiKeyRepository {
   async getById(id: string) {
     return this.rows.get(id) ?? null
   }
-  async listByWorkspace(workspaceId: string) {
-    return [...this.rows.values()].filter((row) => row.workspaceId === workspaceId)
+  async listByAccount(accountId: string) {
+    return [...this.rows.values()].filter((row) => row.accountId === accountId)
+  }
+  async countLiveByAccount(accountId: string) {
+    return (await this.listByAccount(accountId)).length
   }
   async markUsed() {}
   async revoke() {}
@@ -236,7 +239,7 @@ describe('MCP authorization (serving side)', () => {
     expect(issued.token_type).toBe('Bearer')
     // The token model in one assertion: what a host gets is a key on the approved board.
     expect(await publicApiKeys.authenticate(issued.access_token)).toMatchObject({
-      workspaceId: 'ws_1',
+      workspaceIds: ['ws_1'],
       scope: 'write',
     })
   })

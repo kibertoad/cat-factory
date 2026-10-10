@@ -56,6 +56,9 @@ type Options struct {
 	MaxRetries int
 	// Header is sent on every request.
 	Header http.Header
+	// WorkspaceID is the workspace every workspace-scoped call acts on, sent as
+	// X-Cat-Factory-Workspace. Needed only for a key that reaches more than one workspace.
+	WorkspaceID string
 	// PersonalPassword is the personal password of the user this key is BOUND to, if any: it
 	// unlocks that user's own model subscription for the runs this client drives. Usually supplied
 	// later with SetPersonalPassword, since a caller learns it is needed from a 428.
@@ -69,7 +72,8 @@ type Options struct {
 
 // Client is a cat-factory public-API client.
 //
-// Every call is scoped to the key's workspace, and each field mirrors one tag of the published
+// A workspace-scoped call acts on Options.WorkspaceID, or on the key's only workspace when it reaches
+// one, and each field mirrors one tag of the published
 // OpenAPI surface. A Client is stateless beyond its configuration and safe for concurrent use.
 type Client struct {
 	baseURL    string
@@ -170,6 +174,9 @@ func New(options Options) (*Client, error) {
 		agent = options.UserAgent + " "
 	}
 	header.Set("User-Agent", agent+"cat-factory-sdk-go/"+Version)
+	if options.WorkspaceID != "" {
+		header.Set("X-Cat-Factory-Workspace", options.WorkspaceID)
+	}
 
 	httpClient := options.HTTPClient
 	if httpClient == nil {

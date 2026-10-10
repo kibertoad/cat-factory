@@ -102,7 +102,7 @@ function harness(opts: { scope?: string; rows?: KaizenGrading[] } = {}) {
       authenticate: async (secret?: string) =>
         secret === 'good'
           ? {
-              workspaceId: 'ws_1',
+              workspaceIds: ['ws_1'],
               scope: opts.scope ?? 'write',
               keyId: 'pak_1',
               actsAsUserId: null,

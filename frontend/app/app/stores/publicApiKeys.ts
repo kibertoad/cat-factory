@@ -58,17 +58,31 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
    * `actsAsSelf` binds the key to the signed-in user's PERSONAL subscriptions, so a headless run
    * it starts can unlock them with the password sent on that call. Passed through rather than
    * defaulted here: the server writes the id off the session, so this is only ever a yes/no.
+   *
+   * `workspaceIds` is the key's reach: omitted for this workspace alone, `null` for every workspace
+   * in the account, or a list. Anything past this workspace needs an account admin.
    */
   async function create(
     label: string,
     scope: PublicApiScope,
     actsAsSelf = false,
+    workspaceIds?: string[] | null,
   ): Promise<CreatedPublicApiKey> {
     const ws = useWorkspaceStore()
-    const created = await api.createPublicApiKey(ws.requireId(), { label, scope, actsAsSelf })
+    const workspaceId = ws.requireId()
+    const created = await api.createPublicApiKey(workspaceId, {
+      label,
+      scope,
+      actsAsSelf,
+      ...(workspaceIds === undefined ? {} : { workspaceIds }),
+    })
     // Prepend: the backend lists newest-first, so the freshly minted key belongs at the
-    // top — matching the order a subsequent `load()` would produce.
-    keys.value = [created.key, ...keys.value]
+    // top — matching the order a subsequent `load()` would produce. A key picked to reach only
+    // other workspaces is not in this board's list, and revoking it from here would be refused as
+    // a no-op, so it is not shown.
+    const reaches =
+      created.key.workspaceIds === null || created.key.workspaceIds.includes(workspaceId)
+    if (reaches) keys.value = [created.key, ...keys.value]
     available.value = true
     return created
   }

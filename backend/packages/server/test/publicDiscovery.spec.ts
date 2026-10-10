@@ -16,7 +16,7 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
   'reader.secret': {
     keyId: 'pak_1',
     accountId: 'acc_1',
-    workspaceId: 'ws_1',
+    workspaceIds: ['ws_1'],
     scope: 'read',
     label: 'CI pipeline',
     externalIdentity: null,
@@ -29,7 +29,7 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
   'per-user.secret': {
     keyId: 'pak_2',
     accountId: 'acc_1',
-    workspaceId: 'ws_1',
+    workspaceIds: ['ws_1'],
     scope: 'read',
     label: 'os user',
     externalIdentity: 'os-user:42',
@@ -70,6 +70,7 @@ describe('GET /api/v1/me', () => {
       keyId: 'pak_1',
       accountId: 'acc_1',
       workspaceId: 'ws_1',
+      workspaceIds: ['ws_1'],
       scope: 'read',
       label: 'CI pipeline',
       externalIdentity: null,

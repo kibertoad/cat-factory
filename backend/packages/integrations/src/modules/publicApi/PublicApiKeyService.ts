@@ -4,7 +4,7 @@ import type {
   PublicApiKeyRecord,
   PublicApiKeyRepository,
 } from '@cat-factory/kernel'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
 
 // PublicApiKeyService: owns the INBOUND public-API keys external systems present to the
@@ -21,8 +21,8 @@ import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
 const RAW_KEY_PREFIX = 'cf_live_'
 /** Random bytes in the secret portion (256 bits). */
 const SECRET_BYTES = 32
-/** Upper bound on live keys per workspace, to bound accidental/abusive growth. */
-const MAX_KEYS_PER_WORKSPACE = 50
+/** Upper bound on live keys per account, to bound accidental/abusive growth. */
+export const MAX_PUBLIC_API_KEYS_PER_ACCOUNT = 200
 /**
  * Coarsen the `lastUsedAt` stamp: only re-write it when the prior stamp is older than this. A
  * polling client (e.g. `GET /jobs/:id` every second, or reconnecting SSE streams) would otherwise
@@ -43,11 +43,17 @@ export interface PublicApiKeyServiceDependencies {
   clock: Clock
 }
 
+/** The authenticated key itself, before a request has picked the workspace it acts on. */
+export type PublicApiKeyIdentity = Omit<PublicApiKeyAuth, 'workspaceId'>
+
 /** The resolved identity of an authenticated public-API call. */
 export interface PublicApiKeyAuth {
   keyId: string
   accountId: string
+  /** The one workspace this request acts on, resolved from the key's reach and the request. */
   workspaceId: string
+  /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
+  workspaceIds: string[] | null
   /**
    * What this key may do (read ⊂ write ⊂ decide ⊂ admin) — the public surface gates each
    * route on it.
@@ -97,6 +103,21 @@ const SCOPE_RANK: Record<PublicApiScope, number> = Object.fromEntries(
   PUBLIC_API_SCOPES.map((scope, rank) => [scope, rank]),
 ) as Record<PublicApiScope, number>
 
+/** Whether a key with this reach may act on `workspaceId`. */
+export function keyReaches(workspaceIds: string[] | null, workspaceId: string): boolean {
+  return workspaceIds === null || workspaceIds.includes(workspaceId)
+}
+
+/**
+ * Whether reach `outer` includes everything reach `inner` does: how a key minting or revoking
+ * another proves it is not handing out or taking away more than it holds itself.
+ */
+export function reachCovers(outer: string[] | null, inner: string[] | null): boolean {
+  if (outer === null) return true
+  if (inner === null) return false
+  return inner.every((id) => outer.includes(id))
+}
+
 /**
  * Whether a key that HOLDS `have` satisfies an endpoint that NEEDS `need`. The ladder is
  * inclusive — an `admin` key satisfies a `decide`, `write` or `read` requirement — so this is
@@ -119,50 +140,45 @@ export class PublicApiKeyService {
   constructor(private readonly deps: PublicApiKeyServiceDependencies) {}
 
   /**
-   * Mint a new key for a workspace, returning the record + the one-time raw secret. `scope`
+   * Mint a new key for an account, returning the record + the one-time raw secret. `scope`
    * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ write ⊂ admin).
    */
   async issue(
     owner: {
       accountId: string
-      workspaceId: string
+      /** The workspaces the key may act on, or `null` for every workspace in the account. */
+      workspaceIds: string[] | null
       createdByUserId?: string | null
-      /** Set only for a headless mint: the key that authenticated `POST /api/v1/keys`. */
       createdByKeyId?: string | null
-      /**
-       * Who the caller says this key acts for, on their own side. Opaque: stored, echoed and
-       * pinned onto the runs it starts, never interpreted (see {@link PublicApiKeyRecord}).
-       */
       externalIdentity?: string | null
-      /**
-       * Bind the key to a user's personal subscriptions. The CALLER is responsible for passing
-       * only the minting user's own id (`PublicApiKeyController` is the one site that may, and
-       * takes it from the session, never from the request body).
-       */
       actsAsUserId?: string | null
     },
     label: string,
     scope: PublicApiScope = 'write',
   ): Promise<IssuedPublicApiKey> {
-    const live = await this.deps.repository.listByWorkspace(owner.workspaceId)
-    if (live.length >= MAX_KEYS_PER_WORKSPACE) {
+    // The count leaves out a restricted key whose every workspace was deleted: it no longer
+    // authenticates, no panel lists it, and none can revoke it, so it must not hold a slot.
+    const live = await this.deps.repository.countLiveByAccount(owner.accountId)
+    if (live >= MAX_PUBLIC_API_KEYS_PER_ACCOUNT) {
       throw new ConflictError(
-        `This workspace already has the maximum of ${MAX_KEYS_PER_WORKSPACE} public-API keys; ` +
+        `This account already has the maximum of ${MAX_PUBLIC_API_KEYS_PER_ACCOUNT} public-API keys; ` +
           'revoke one before creating another',
       )
     }
-    // Defensive: reject a scope outside the known ladder rather than persisting a row the
-    // gate can't rank (the contract already validates the wire input, but `issue` is a public
-    // service method other callers could reach).
     if (!PUBLIC_API_SCOPES.includes(scope)) {
       throw new ConflictError(`Unknown public-API key scope: ${scope}`)
+    }
+    if (owner.workspaceIds !== null && owner.workspaceIds.length === 0) {
+      throw new ValidationError('A key must reach at least one workspace', {
+        reason: 'workspace_required',
+      })
     }
     const id = this.deps.idGenerator.next('pak')
     const secret = randomHex(SECRET_BYTES)
     const record: PublicApiKeyRecord = {
       id,
       accountId: owner.accountId,
-      workspaceId: owner.workspaceId,
+      workspaceIds: owner.workspaceIds === null ? null : [...new Set(owner.workspaceIds)].sort(),
       label,
       scope,
       secretHash: await this.hash(secret),
@@ -178,27 +194,29 @@ export class PublicApiKeyService {
     return { record, secret: `${RAW_KEY_PREFIX}${id}.${secret}` }
   }
 
-  /** All live keys for a workspace (metadata only, never a secret). */
-  async list(workspaceId: string): Promise<PublicApiKeyRecord[]> {
-    return this.deps.repository.listByWorkspace(workspaceId)
+  /** The account's live keys that can act on `workspaceId`, newest first. */
+  async listReaching(accountId: string, workspaceId: string): Promise<PublicApiKeyRecord[]> {
+    const keys = await this.deps.repository.listByAccount(accountId)
+    return keys.filter((key) => keyReaches(key.workspaceIds, workspaceId))
+  }
+
+  /** One live key of the account, or null when it is unknown, revoked or another account's. */
+  async getLive(accountId: string, id: string): Promise<PublicApiKeyRecord | null> {
+    const record = await this.deps.repository.getById(id)
+    return record && record.accountId === accountId && record.revokedAt === null ? record : null
   }
 
   /**
-   * Revoke a key AND every key it minted, scoped to its workspace. Idempotent.
-   *
-   * The cascade is what makes headless provisioning (`POST /api/v1/keys`) safe to offer: without
-   * it, revoking a leaked key that had minted others would revoke the credential the operator can
-   * SEE and leave behind the ones the attacker made, which is the compromise surviving its own
-   * cleanup. The chain is exactly one link long by construction (a minted key can never reach the
-   * `admin` rung minting requires), so this is one extra statement, never a walk.
+   * Revoke a key and, in the same call, every key it minted. The only revocation entry point, so
+   * the cascade cannot be forgotten.
    *
    * Ordered minter-first: the two writes are not one transaction, so a failure between them must
    * leave the credential someone came here to kill already dead.
    */
-  async revoke(workspaceId: string, id: string): Promise<void> {
+  async revoke(accountId: string, id: string): Promise<void> {
     const at = this.deps.clock.now()
-    await this.deps.repository.revoke(workspaceId, id, at)
-    await this.deps.repository.revokeMintedBy(workspaceId, id, at)
+    await this.deps.repository.revoke(accountId, id, at)
+    await this.deps.repository.revokeMintedBy(accountId, id, at)
   }
 
   /**
@@ -207,11 +225,14 @@ export class PublicApiKeyService {
    * secret mismatch. Fail-closed: never throws, never distinguishes the failure reason to the
    * caller (so a probe can't tell "unknown key" from "wrong secret").
    */
-  async authenticate(rawKey: string | undefined): Promise<PublicApiKeyAuth | null> {
+  async authenticate(rawKey: string | undefined): Promise<PublicApiKeyIdentity | null> {
     const parsed = parseRawKey(rawKey)
     if (!parsed) return null
     const record = await this.deps.repository.getById(parsed.keyId)
     if (!record || record.revokedAt !== null) return null
+    // A restricted key whose every workspace was deleted reaches nothing; refusing it here keeps
+    // it from authenticating into the account-level routes with no workspace left to its name.
+    if (record.workspaceIds !== null && record.workspaceIds.length === 0) return null
     const presented = await this.hash(parsed.secret)
     if (!timingSafeEqualHex(presented, record.secretHash)) return null
     // Stamp `lastUsedAt`, but throttled: skip the write when the existing stamp is recent enough,
@@ -223,7 +244,7 @@ export class PublicApiKeyService {
     return {
       keyId: record.id,
       accountId: record.accountId,
-      workspaceId: record.workspaceId,
+      workspaceIds: record.workspaceIds,
       scope: record.scope,
       label: record.label,
       externalIdentity: record.externalIdentity,

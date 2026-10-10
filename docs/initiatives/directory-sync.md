@@ -139,8 +139,11 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
       local CLI `linkRepo` now writes through the repository), `defineDirectoryFeedSuite`.
       The read repository is not in `CoreRepositories` yet because nothing consumes it: slice 3
       adds it there with mothership bucket `remote`.
-- [ ] **Slice 2: account-level API keys with a workspace subset.** Key storage and mint contract,
-      per-request workspace resolution in `authorize`, `/me` reports the subset, SPA key panel.
+- [x] **Slice 2: account-level API keys with a workspace subset** ([#2308](https://github.com/kibertoad/cat-factory/pull/2308);
+      website: [cat-factory-website#100](https://github.com/kibertoad/cat-factory-website/pull/100)).
+      `public_api_key_workspaces` grants plus `all_workspaces` (D1 0108, Drizzle), per-request
+      workspace resolution in `authorize`, `workspaceIds` on the key and `/me`, the reach picker in
+      the token panel, a workspace option on the four SDK clients, `definePublicKeyReachSuite`.
 - [ ] **Slice 3: public directory read API.** Hydration, snapshot and changes endpoints, retention
       pruning on both schedulers, `cursor_expired`, OpenAPI plus SDK regeneration, website page.
 - [ ] **Slice 4: `directory.*` webhooks.** Account-level endpoints, post-commit fan-out, delivery
@@ -155,6 +158,10 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
   per-account lock hands out numbers in one order and commits them in another, and a reader skips
   the late one forever. Any new appender takes the lock (Postgres) or rides the writer's batch (D1).
 - **Never prune an account's newest change row.** It is what `MAX(seq)` continues from.
+- **A restricted key's grants are trusted without an ownership read.** They are checked against the
+  account at mint, and a board is only ever linked to an account once (accountless to account),
+  never moved. If boards ever become movable between accounts, `resolveWorkspace` must read the
+  owner for restricted keys too, not only for unrestricted ones.
 - **A cascade deletes rows no repository method sees.** Workspace deletion removes members and
   repos through `WORKSPACE_SCOPED_TABLES`; its batch appends their changes before the deletes.
   A new cascade path touching these tables needs the same treatment.
