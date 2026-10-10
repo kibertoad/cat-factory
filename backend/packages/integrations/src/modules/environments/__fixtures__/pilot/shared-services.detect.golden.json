@@ -1,0 +1,35 @@
+{
+  "detected": true,
+  "name": "acme-shared-services",
+  "composeFiles": ["docker-compose.yml"],
+  "composeProfiles": ["backends", "peer"],
+  "managedNetworks": ["acme-net"],
+  "envFiles": [
+    {
+      "template": ".env.shared.example",
+      "target": ".env.shared"
+    }
+  ],
+  "notes": [
+    {
+      "field": "composeFiles",
+      "confidence": "high",
+      "message": "Detected a Docker Compose file at docker-compose.yml."
+    },
+    {
+      "field": "externalNetworks",
+      "confidence": "high",
+      "message": "This stack’s compose references external network(s) it must create + own: acme-net. Consumers attach to these."
+    },
+    {
+      "field": "composeProfiles",
+      "confidence": "low",
+      "message": "The compose file declares 2 profile(s): backends, peer. Enable the optional service groups this stack should run."
+    },
+    {
+      "field": "envFiles",
+      "confidence": "low",
+      "message": "Found 1 env/config template(s) to materialize before up: .env.shared.example → .env.shared."
+    }
+  ]
+}

@@ -7,6 +7,11 @@ import { beforeEach, vi } from 'vitest'
 // surface a toast, and any mutation that would is out of scope for these unit tests.
 vi.stubGlobal('useApi', () => ({}))
 vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
+// The personal-subscriptions store scopes its password cache by the configured API base + the
+// signed-in user id (ADR 0026 D7). Stub both auto-imports with inert defaults; specs that assert
+// the scoping override `useAuthStore` with a fixed user.
+vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBase: '' } }))
+vi.stubGlobal('useAuthStore', () => ({ user: null }))
 vi.stubGlobal('usePipelineErrorToast', () => ({ present: vi.fn() }))
 // Some stores resolve translations through the Nuxt app's global i18n instance (they run
 // outside a component `setup`, so `useI18n()` isn't available). Stub it with a passthrough
@@ -25,7 +30,34 @@ vi.stubGlobal('useI18n', () => ({
   d: (value: unknown) => String(value),
 }))
 
-// A fresh Pinia per test keeps store state isolated.
+// A deterministic in-memory `localStorage`. happy-dom would normally supply one, but on
+// Node >=24 a native experimental `localStorage` global (gated behind `--localstorage-file`)
+// shadows it and resolves to `undefined` unless the flag is set — so store code that reads
+// the bare `localStorage` global sees nothing and specs touching it crash. Stubbing a fresh
+// Map-backed Storage per test overrides that native getter and keeps behaviour identical
+// across Node versions.
+function createMemoryStorage(): Storage {
+  const map = new Map<string, string>()
+  return {
+    get length() {
+      return map.size
+    },
+    key: (index: number) => Array.from(map.keys())[index] ?? null,
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      map.set(key, String(value))
+    },
+    removeItem: (key: string) => {
+      map.delete(key)
+    },
+    clear: () => {
+      map.clear()
+    },
+  } as Storage
+}
+
+// A fresh Pinia + storage per test keeps store state isolated.
 beforeEach(() => {
   setActivePinia(createPinia())
+  vi.stubGlobal('localStorage', createMemoryStorage())
 })

@@ -1,0 +1,328 @@
+import type {
+  EnvironmentProbeReport,
+  EnvironmentTestRunRecord,
+  EnvironmentTestRunRepository,
+  ServiceProvisioning,
+} from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+
+// Cross-runtime parity for the ephemeral-environment self-test run store
+// (`environment_test_runs`, its own table on both facades — D1 on Cloudflare, Postgres via
+// Drizzle on Node). This suite drives the SAME insert → get → guarded stage/status patch →
+// running-list → stale-list assertions through whichever real repository a runtime hands
+// it, so a column mapped differently or a filter built differently fails a test instead of
+// shipping.
+//
+// The AGENT DRY RUN's three members ride the same assertions plus one case of their own, because
+// they are where the two stores differ most: `probe` is a JSON blob each facade serializes itself,
+// and `probeSurface` is the claim the durable driver's replay guard reads before dispatching a
+// container. A facade that dropped either would leave a dry run re-dispatching probers or
+// reporting a verdict with no operations behind it.
+
+const PROVISIONING: ServiceProvisioning = { type: 'kubernetes' }
+
+/**
+ * A dry-run report with every field populated, including the ones a naive round-trip loses: a
+ * nested optional (`target` / `failure` / `detail` on one operation but not another), a
+ * zero-valued count, and the cap marker. The report is stored as a JSON blob on both runtimes, so
+ * this case is what catches a facade that serialized it as `[object Object]`, dropped the optional
+ * members, or coerced `0` to null.
+ */
+const PROBE: EnvironmentProbeReport = {
+  surface: 'api',
+  verdict: 'partially_operable',
+  summary: 'Listed projects with the supplied token; creating one was refused.',
+  operations: [
+    { name: 'healthcheck', authenticated: false, outcome: 'succeeded' },
+    {
+      name: 'list projects',
+      target: 'GET /api/v1/projects',
+      authenticated: true,
+      outcome: 'succeeded',
+      detail: '200, 3 rows',
+    },
+    {
+      name: 'create a project',
+      target: 'POST /api/v1/projects',
+      authenticated: true,
+      outcome: 'failed',
+      failure: 'auth_rejected',
+      detail: '403 insufficient_scope',
+    },
+  ],
+  missingContext: ['no credential with write scope was supplied'],
+  blockers: [],
+  attempted: 3,
+  succeeded: 2,
+  authenticatedSucceeded: 1,
+  operationsOmitted: 2,
+  operationsUnreadable: 1,
+  model: 'workers-ai:qwen',
+}
+
+function record(
+  overrides: Partial<EnvironmentTestRunRecord> &
+    Pick<EnvironmentTestRunRecord, 'id' | 'workspaceId' | 'blockId'>,
+): EnvironmentTestRunRecord {
+  return {
+    mode: 'provision',
+    status: 'running',
+    stage: 'creating_branch',
+    initiatedBy: null,
+    provisioning: PROVISIONING,
+    branch: null,
+    environmentId: null,
+    envUrl: null,
+    error: null,
+    failedStage: null,
+    probeSurface: null,
+    probeDispatchedAt: null,
+    probeModel: null,
+    probeSubscriptionTokenId: null,
+    probeSubscriptionVendor: null,
+    probeProgress: null,
+    probe: null,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    ...overrides,
+  }
+}
+
+/**
+ * Assert a runtime's {@link EnvironmentTestRunRepository} behaviour is identical across
+ * facades. `makeRepo` returns a repo over the runtime's real store; ids are unique per case so
+ * the shared database stays isolated between cases.
+ */
+export function defineEnvironmentTestSuite(
+  name: string,
+  makeRepo: () => EnvironmentTestRunRepository,
+): void {
+  describe(`[${name}] environment-test run repository parity`, () => {
+    let seq = 0
+    const scope = () => {
+      seq += 1
+      const tag = `${name}-${seq}-${Math.floor(Math.random() * 1e9)}`
+      return { ws: `ws-${tag}`, block: `blk-${tag}`, id: `envtest-${tag}` }
+    }
+
+    it('inserts, reads back all fields, and patches stage/status in place', async () => {
+      const repo = makeRepo()
+      const { ws, block, id } = scope()
+      await repo.insert(
+        record({ id, workspaceId: ws, blockId: block, initiatedBy: 'usr-1', createdAt: 5 }),
+      )
+
+      const got = await repo.get(ws, id)
+      expect(got).toMatchObject({
+        id,
+        workspaceId: ws,
+        blockId: block,
+        status: 'running',
+        stage: 'creating_branch',
+        initiatedBy: 'usr-1',
+        provisioning: PROVISIONING,
+        branch: null,
+        environmentId: null,
+      })
+
+      // Advance through the stages, then settle succeeded — each patch survives the
+      // round-trip and reports that it was applied.
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          branch: 'cat-factory/env-test/x',
+          stage: 'provisioning',
+        }),
+      ).toBe(true)
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          stage: 'tearing_down',
+          environmentId: 'env-1',
+          envUrl: 'https://x.test',
+        }),
+      ).toBe(true)
+      expect(
+        await repo.updateIfRunning(ws, id, { stage: 'done', status: 'succeeded', updatedAt: 9 }),
+      ).toBe(true)
+      expect(await repo.get(ws, id)).toMatchObject({
+        status: 'succeeded',
+        stage: 'done',
+        branch: 'cat-factory/env-test/x',
+        environmentId: 'env-1',
+        envUrl: 'https://x.test',
+        updatedAt: 9,
+      })
+    })
+
+    it('records a failure with its failing stage', async () => {
+      const repo = makeRepo()
+      const { ws, block, id } = scope()
+      await repo.insert(record({ id, workspaceId: ws, blockId: block, stage: 'provisioning' }))
+      await repo.updateIfRunning(ws, id, {
+        status: 'failed',
+        error: 'boom',
+        failedStage: 'provisioning',
+      })
+      expect(await repo.get(ws, id)).toMatchObject({
+        status: 'failed',
+        error: 'boom',
+        failedStage: 'provisioning',
+      })
+    })
+
+    it('round-trips an agent dry run: its mode, its probe claim and its whole report', async () => {
+      const repo = makeRepo()
+      const { ws, block, id } = scope()
+      await repo.insert(
+        record({ id, workspaceId: ws, blockId: block, mode: 'agent-probe', stage: 'provisioning' }),
+      )
+      // The CLAIM is written on its own, before the prober is dispatched: the write the durable
+      // driver's replay guard depends on. It must survive as the surface it named, because every
+      // later poll and reclaim addresses a container by it, and it must come back with
+      // `probeDispatchedAt` still NULL, which is the whole difference between a claim with no
+      // container behind it and a job that is really running. A facade that defaulted that column
+      // to anything would turn a replay's re-dispatch into a poll of a job nobody started, which
+      // the backend answers as an eviction.
+      expect(await repo.updateIfRunning(ws, id, { stage: 'probing', probeSurface: 'ui' })).toBe(
+        true,
+      )
+      expect(await repo.get(ws, id)).toMatchObject({
+        mode: 'agent-probe',
+        stage: 'probing',
+        probeSurface: 'ui',
+        probeDispatchedAt: null,
+        probeModel: null,
+        probeSubscriptionTokenId: null,
+        probeProgress: null,
+        probe: null,
+      })
+      // The MARK, written after the container accepted the job, and with it the DISPATCH
+      // ATTRIBUTION in the same write: the model the container ran and the pooled token leased for
+      // it. Both are read back on every later poll and neither can be re-derived there. The model
+      // would be re-resolved against the frame as it is NOW, and the lease happened once, so a
+      // facade that dropped either stamps the settled report with a model nobody ran and attributes
+      // a subscription job's whole burn to nothing.
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          probeDispatchedAt: 3_000,
+          probeModel: 'anthropic:claude-opus-5',
+          probeSubscriptionTokenId: 'tok-pool-1',
+        }),
+      ).toBe(true)
+      // Then the live progress the longest stage of this run pushes to the SPA. A facade that
+      // dropped it leaves the card frozen.
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          probeProgress: { completed: 1, inProgress: 1, total: 4 },
+        }),
+      ).toBe(true)
+      expect(await repo.get(ws, id)).toMatchObject({
+        probeDispatchedAt: 3_000,
+        probeModel: 'anthropic:claude-opus-5',
+        probeSubscriptionTokenId: 'tok-pool-1',
+        probeProgress: { completed: 1, inProgress: 1, total: 4 },
+      })
+      // The report then lands as a whole, and comes back structurally equal rather than merely
+      // present: `toEqual` here is the assertion, since a facade that dropped an operation's
+      // optional `failure` or flattened the list would still satisfy a `toMatchObject` on the
+      // report's scalar fields.
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          stage: 'tearing_down',
+          probe: PROBE,
+          // Cleared with the same write that lands the report: a stale count beside a finished
+          // probe reads as one still working, and a facade that ignored the null would keep it.
+          probeProgress: null,
+          updatedAt: 4,
+        }),
+      ).toBe(true)
+      const settled = await repo.get(ws, id)
+      expect(settled?.probe).toEqual(PROBE)
+      expect(settled?.probeProgress).toBeNull()
+      // A dry run that reported bad news still SUCCEEDS as a lifecycle: the status is about the
+      // run, the verdict is about the service (see the contract's note on `status`).
+      expect(
+        await repo.updateIfRunning(ws, id, { stage: 'done', status: 'succeeded', updatedAt: 5 }),
+      ).toBe(true)
+      const done = await repo.get(ws, id)
+      expect(done).toMatchObject({ status: 'succeeded', stage: 'done', probeSurface: 'ui' })
+      expect(done?.probe?.verdict).toBe('partially_operable')
+    })
+
+    it('refuses to patch a terminal run (the stop ⇄ driver race guard)', async () => {
+      const repo = makeRepo()
+      const { ws, block, id } = scope()
+      await repo.insert(record({ id, workspaceId: ws, blockId: block, stage: 'provisioning' }))
+      await repo.updateIfRunning(ws, id, { status: 'failed', error: 'stopped', updatedAt: 2 })
+
+      // A late driver write must be rejected AND leave the terminal state untouched.
+      expect(
+        await repo.updateIfRunning(ws, id, { status: 'succeeded', stage: 'done', updatedAt: 3 }),
+      ).toBe(false)
+      expect(await repo.get(ws, id)).toMatchObject({
+        status: 'failed',
+        error: 'stopped',
+        updatedAt: 2,
+      })
+    })
+
+    it('lists only RUNNING runs for a workspace, newest-first', async () => {
+      const repo = makeRepo()
+      const { ws, block } = scope()
+      await repo.insert(record({ id: `${ws}-a`, workspaceId: ws, blockId: block, createdAt: 1 }))
+      await repo.insert(record({ id: `${ws}-b`, workspaceId: ws, blockId: block, createdAt: 3 }))
+      const done = `${ws}-c`
+      await repo.insert(
+        record({ id: done, workspaceId: ws, blockId: block, createdAt: 5, status: 'succeeded' }),
+      )
+
+      const running = await repo.listRunningByWorkspace(ws)
+      expect(running.map((r) => r.id)).toEqual([`${ws}-b`, `${ws}-a`])
+    })
+
+    it('scopes get + list + update by workspace', async () => {
+      const repo = makeRepo()
+      const a = scope()
+      const b = scope()
+      await repo.insert(record({ id: a.id, workspaceId: a.ws, blockId: a.block }))
+      expect(await repo.get(b.ws, a.id)).toBeNull()
+      expect(await repo.listRunningByWorkspace(b.ws)).toEqual([])
+      // A cross-workspace update must not write (the WHERE keeps the workspace predicate).
+      expect(await repo.updateIfRunning(b.ws, a.id, { status: 'failed', error: 'x' })).toBe(false)
+      expect(await repo.get(a.ws, a.id)).toMatchObject({ status: 'running', error: null })
+    })
+
+    it('lists stale RUNNING runs across workspaces, oldest first', async () => {
+      const repo = makeRepo()
+      const a = scope()
+      const b = scope()
+      const c = scope()
+      // Unique far-future lease stamps so this case never collides with other cases
+      // sharing the store (listStale is deliberately cross-workspace).
+      const base = 9_000_000_000_000 + seq * 1_000
+      await repo.insert(
+        record({ id: a.id, workspaceId: a.ws, blockId: a.block, updatedAt: base + 1 }),
+      )
+      await repo.insert(
+        record({ id: b.id, workspaceId: b.ws, blockId: b.block, updatedAt: base + 2 }),
+      )
+      // Terminal + fresh rows must both be excluded.
+      await repo.insert(
+        record({
+          id: c.id,
+          workspaceId: c.ws,
+          blockId: c.block,
+          status: 'failed',
+          updatedAt: base + 1,
+        }),
+      )
+      const stale = (await repo.listStale(base + 3)).filter((r) =>
+        [a.id, b.id, c.id].includes(r.id),
+      )
+      expect(stale.map((r) => r.id)).toEqual([a.id, b.id])
+      const fresh = (await repo.listStale(base + 1)).filter((r) =>
+        [a.id, b.id, c.id].includes(r.id),
+      )
+      expect(fresh).toEqual([])
+    })
+  })
+}

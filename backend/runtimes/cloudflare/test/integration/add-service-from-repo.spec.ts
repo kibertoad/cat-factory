@@ -2,7 +2,7 @@ import type { Block, GitHubRepo } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { githubDeps, makeApp, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 
 /** A client whose installation can access one repo (`acme/web`, id 101). */
 function clientWithRepo(installationId: number): FakeGitHubClient {
@@ -15,7 +15,6 @@ function clientWithRepo(installationId: number): FakeGitHubClient {
       name: 'web',
       defaultBranch: 'main',
       private: true,
-      blockId: null,
       syncedAt: 0,
     },
   ]
@@ -47,13 +46,19 @@ describe('add service from existing repo', () => {
     expect(res.body.status).toBe('ready')
     expect(res.body.title).toBe('web')
 
-    // The repo is now tracked and linked to the new frame.
+    // The repo is now tracked, and the frame's account-owned Service binds it to the repo
+    // (the sole repo↔frame linkage).
     const repos = await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)
-    const linked = repos.body.find((r) => r.githubId === 101)
-    expect(linked?.blockId).toBe(res.body.id)
+    expect(repos.body.find((r) => r.githubId === 101)).toBeTruthy()
+    const snap = await app.call<{
+      serviceCatalog?: { frameBlockId: string; repoGithubId: number | null }[]
+    }>('GET', `/workspaces/${ws}`)
+    expect(
+      snap.body.serviceCatalog?.find((s) => s.frameBlockId === res.body.id)?.repoGithubId,
+    ).toBe(101)
   })
 
-  it('rejects importing a repo that is already on the board', async () => {
+  it('re-importing a repo already on THIS board returns the existing frame (idempotent)', async () => {
     const installationId = uniqueInstallationId()
     const app = makeApp(
       new FakeAgentExecutor(),
@@ -68,10 +73,13 @@ describe('add service from existing repo', () => {
     })
     expect(first.status).toBe(201)
 
-    const again = await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, {
+    // A repo already backing a service is now SHARED by mounting, not rejected. Re-adding it on the
+    // board that already homes it is a no-op that returns the same frame (idempotent).
+    const again = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
       repoGithubId: 101,
     })
-    expect(again.status).toBe(422)
+    expect(again.status).toBe(201)
+    expect(again.body.id).toBe(first.body.id)
   })
 
   it('unlinks the repo when its service frame is deleted, so it can be re-added', async () => {
@@ -89,11 +97,15 @@ describe('add service from existing repo', () => {
     })
     expect(first.status).toBe(201)
 
-    // Delete the service frame — the repo link must be cleared, not left dangling.
+    // Delete the service frame — its Service (the repo link) must be reclaimed, not dangling.
     const del = await app.call('DELETE', `/workspaces/${ws}/blocks/${first.body.id}`)
     expect(del.status).toBe(204)
-    const repos = await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)
-    expect(repos.body.find((r) => r.githubId === 101)?.blockId).toBeNull()
+    // The account-owned service for THAT frame is gone (scope by frame id: the catalog is
+    // account-scoped, so a sibling workspace may legitimately still back repo 101).
+    const snap = await app.call<{
+      serviceCatalog?: { frameBlockId: string }[]
+    }>('GET', `/workspaces/${ws}`)
+    expect(snap.body.serviceCatalog?.some((s) => s.frameBlockId === first.body.id)).toBeFalsy()
 
     // The repo is addable again now that nothing claims it.
     const again = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
@@ -101,6 +113,35 @@ describe('add service from existing repo', () => {
     })
     expect(again.status).toBe(201)
     expect(again.body.id).not.toBe(first.body.id)
+  })
+
+  it("reclaims a board's services on workspace delete, so the repo re-adds on another board", async () => {
+    // Regression: deleting a whole board (workspace) used to leave its account-owned `services`
+    // rows behind. `services` is looked up by (installation_id, repo_github_id) with no workspace
+    // scope, so the dangling service kept the SAME repo from being re-added on any other board.
+    const installationId = uniqueInstallationId()
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
+    const a = (await app.createWorkspace()).workspace.id
+    await app.call('POST', `/workspaces/${a}/github/connect`, { installationId })
+    const first = await app.call<Block>('POST', `/workspaces/${a}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
+    expect(first.status).toBe(201)
+
+    // Delete the entire board.
+    const del = await app.call('DELETE', `/workspaces/${a}`)
+    expect(del.status).toBe(204)
+
+    // A brand-new board can add the same repo again — no dangling service from the old board.
+    const b = (await app.createWorkspace()).workspace.id
+    await app.call('POST', `/workspaces/${b}/github/connect`, { installationId })
+    const again = await app.call<Block>('POST', `/workspaces/${b}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
+    expect(again.status).toBe(201)
   })
 
   it('flags a linked repo as a monorepo via PATCH', async () => {
@@ -146,12 +187,11 @@ describe('add service from existing repo', () => {
     expect(first.status).toBe(201)
     expect(first.body.title).toBe('api')
 
-    // The repo is now flagged a monorepo and (being one) is NOT block-linked, so it can
-    // back further services.
+    // The repo is now flagged a monorepo, so it can back further services (each service is
+    // its own Service row pinned to a subdirectory).
     const repos = await app.call<GitHubRepo[]>('GET', `/workspaces/${ws}/github/repos`)
     const repo = repos.body.find((r) => r.githubId === 101)
     expect(repo?.isMonorepo).toBe(true)
-    expect(repo?.blockId).toBeNull()
 
     // A second subdirectory adds a second service from the same repo.
     const second = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {

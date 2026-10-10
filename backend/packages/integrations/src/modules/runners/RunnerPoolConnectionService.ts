@@ -1,4 +1,5 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, Logger } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import type {
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
@@ -12,6 +13,7 @@ import type {
   RunnerPoolConnection,
   RunnerPoolProvider,
   RunnerTransport,
+  SavedConnectionProbe,
   TestRunnerPoolConnectionInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
@@ -50,6 +52,8 @@ export interface RunnerPoolConnectionServiceDependencies {
   runnerPoolProvider?: RunnerPoolProvider
   /** The app-owned registry resolving a stored backend `kind` to its provider. */
   runnerBackendRegistry: RunnerBackendRegistry
+  /** Optional so the service stays unit-testable standalone; every facade wires the real one. */
+  logger?: Logger
 }
 
 /** A resolved runner backend: the live transport + its identity (for provisioning logs). */
@@ -60,7 +64,11 @@ export interface ResolvedRunnerBackend {
 }
 
 export class RunnerPoolConnectionService {
-  constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /** The per-call context a backend provider needs to build/test a transport. */
   private context(resolveSecret: (key: string) => string | undefined) {
@@ -117,6 +125,19 @@ export class RunnerPoolConnectionService {
       deletedAt: null,
     }
     await this.deps.runnerPoolConnectionRepository.upsert(record)
+    // Each gap the provider reports costs a recovery/cleanup path that is otherwise invisible
+    // until an incident (a release-less manifest leaks a runner on every cancelled run). Log it
+    // at REGISTRATION rather than per dispatch, where `resolve()` would re-emit the same line
+    // for every job. This is the deployment-operator's copy; the person who pasted the config
+    // sees the same gaps on their connection test, which is the surface they are looking at.
+    for (const warning of provider.warnings?.(config) ?? []) {
+      this.log.warn(`Runner backend registered with a gap: ${warning.message}`, {
+        workspaceId,
+        kind: config.kind,
+        providerId: meta.providerId,
+        warning: warning.code,
+      })
+    }
     return this.toConnection(record, Object.keys(input.secrets))
   }
 
@@ -144,9 +165,11 @@ export class RunnerPoolConnectionService {
    * the SPA can render the connect form before the first connect. The stored config/secrets
    * are folded in only when the requested kind matches the stored one.
    *
-   * A custom runner kind rides the generic manifest body and has no per-kind config form
-   * hooks (the `RunnerBackendProvider` interface has none), so — like the built-in manifest
-   * backend — it uses the shared flat manifest form, falling back to the raw manifest editor.
+   * A NATIVE backend (Kubernetes / EKS) exposes a `form` descriptor, so it returns a `native`
+   * descriptor of typed flat fields + the config skeleton the SPA overlays them onto — the SPA
+   * renders one generic form for every such backend and never learns which kinds exist. A
+   * manifest/custom kind rides the generic manifest body (no `form`), so — like the built-in
+   * manifest backend — it uses the shared flat manifest form, falling back to the raw editor.
    */
   async describeProvider(workspaceId: string, kind?: string): Promise<ProviderDescriptor> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
@@ -154,7 +177,33 @@ export class RunnerPoolConnectionService {
     // (e.g. not-yet-connected custom) kind must be a registered backend, else the stored or
     // default `manifest` kind.
     const resolvedKind = kind ?? record?.kind ?? 'manifest'
-    this.provider(resolvedKind)
+    const backend = this.provider(resolvedKind)
+
+    // NATIVE backend: a typed flat form. Overlay values onto the STORED config when connected
+    // (so advanced API-only fields survive a re-save), else the empty skeleton.
+    if (backend.form) {
+      const connected = !!record && resolvedKind === record.kind
+      const storedConfig = connected
+        ? (JSON.parse(record!.configJson) as RunnerBackendConfig)
+        : undefined
+      const fields = backend.form.fields()
+      const values = storedConfig ? backend.form.valuesFromConfig(storedConfig) : {}
+      const storedSecretKeys = connected ? Object.keys(await this.decryptSecrets(record!)) : []
+      return {
+        providerId: connected ? record!.providerId : resolvedKind,
+        label: connected ? record!.label : (backend.displayLabel ?? resolvedKind),
+        kind: 'native',
+        configFields: fields,
+        supportsTest: true,
+        missingRequired: missingRequiredConfigKeys(fields, [
+          ...Object.keys(values),
+          ...storedSecretKeys,
+        ]),
+        configTemplate: storedConfig ?? backend.form.skeleton(),
+        values,
+      }
+    }
+
     const useStored = !!record && resolvedKind === record.kind
     const config = useStored ? (JSON.parse(record!.configJson) as RunnerBackendConfig) : undefined
     // Both the built-in `manifest` backend AND a custom kind ride the generic
@@ -179,27 +228,38 @@ export class RunnerPoolConnectionService {
       configFields,
       supportsTest: true,
       missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
-      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(manifest ? { savedManifest: manifest } : {}),
       ...(manifest && provider?.describeManifestTemplate
         ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
         : {}),
     }
   }
 
-  /** Probe a candidate backend connection before saving (nothing is persisted). */
+  /**
+   * Probe a candidate backend connection before saving (nothing is persisted), and report the
+   * config's non-fatal gaps alongside the probe.
+   *
+   * The gaps ride the test rather than a surface of their own because this is the one moment
+   * the operator is looking at THIS config, and they are the same person who can fix it. They
+   * are independent of `ok`: a manifest with no `release` template connects perfectly well and
+   * still leaks a runner on every cancelled run.
+   */
   async testConnection(
     workspaceId: string,
     input: TestRunnerPoolConnectionInput,
   ): Promise<ConnectionTestResult> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     if (!input.config) return { ok: true, message: 'Nothing to test.' }
-    const provider = this.provider(input.config.kind)
-    provider.assertConfigSafe(input.config, this.safetyOptions())
+    const config = input.config
+    const provider = this.provider(config.kind)
+    provider.assertConfigSafe(config, this.safetyOptions())
     const secrets = input.secrets ?? {}
-    return provider.testConnection(
-      input.config,
+    const result = await provider.testConnection(
+      config,
       this.context((key) => secrets[key]),
     )
+    const warnings = provider.warnings?.(config) ?? []
+    return warnings.length ? { ...result, warnings } : result
   }
 
   /** The workspace's current connection (safe metadata), or null. */
@@ -249,6 +309,44 @@ export class RunnerPoolConnectionService {
       this.context((key) => bundle[key]),
     )
     return { transport, kind: record.kind, providerId: record.providerId }
+  }
+
+  /**
+   * Probe the workspace's SAVED backend, for the reachability watcher.
+   *
+   * The sibling {@link testConnection} answers "would this config work" for an operator staring at
+   * a form; this answers "does what we already stored still answer", which is the question a
+   * background sweep asks. So it resolves the stored record + its own secret bundle rather than
+   * taking candidate values, and it makes NO safety assertion: `assertConfigSafe` guards what an
+   * operator may SAVE, and re-running it here would report an already-persisted pool as an outage
+   * the moment a deployment tightened its URL policy. The config warnings are irrelevant to
+   * reachability, so unlike `testConnection` they are not folded in.
+   *
+   * Never `{ ok: false }` for anything but a provider that actually ANSWERED negatively: the three
+   * {@link SavedConnectionProbe} states keep "no backend registered" (a fact — no outage to report,
+   * and any recorded one must be forgotten) apart from "we could not ask" (its kind is no longer in
+   * the registry, or its stored config blob won't parse — leave the record alone) apart from a real
+   * verdict. A de-registered kind that read as `{ ok: false }` would show as permanently down.
+   */
+  async probeSavedConnection(workspaceId: string): Promise<SavedConnectionProbe> {
+    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    if (!record) return { state: 'absent' }
+    const provider = this.deps.runnerBackendRegistry.get(record.kind)
+    if (!provider) {
+      return { state: 'unprobeable', reason: `Runner backend kind '${record.kind}' is not wired.` }
+    }
+    const config = this.parseConfig(record)
+    if (!config) {
+      return { state: 'unprobeable', reason: 'The stored runner-pool config could not be parsed.' }
+    }
+    const bundle = await this.decryptSecrets(record)
+    return {
+      state: 'answered',
+      result: await provider.testConnection(
+        config,
+        this.context((key) => bundle[key]),
+      ),
+    }
   }
 
   /** Unregister the backend (tombstones the binding). */

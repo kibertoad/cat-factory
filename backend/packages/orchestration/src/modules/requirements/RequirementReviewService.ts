@@ -5,18 +5,30 @@ import type {
   RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
+  RequestRecommendationItem,
   ResolveRunRepoContext,
 } from '@cat-factory/kernel'
-import type { DocumentRepository, TaskRepository } from '@cat-factory/kernel'
+import type {
+  DocumentRepository,
+  LinkedDocumentRefresher,
+  TaskRepository,
+} from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import { assertFound, ValidationError } from '@cat-factory/kernel'
+import {
+  assertContextDocumentsReadable,
+  assertFound,
+  contextExcerptFor,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { generateText } from 'ai'
 import {
   catFactoryObservability,
+  composeBespokePrompt,
   providerWebSearchTools,
-  REVIEW_SYSTEM_PROMPT,
-  REWORK_SYSTEM_PROMPT,
-  WRITER_SYSTEM_PROMPT,
+  REQUIREMENTS_WRITER_AGENT_KIND,
+  REVIEW_PROMPT,
+  REWORK_PROMPT,
+  WRITER_PROMPT,
 } from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
@@ -32,15 +44,31 @@ import {
   buildRecommendationPrompt,
   buildReviewPrompt,
   buildReworkPrompt,
+  coerceChunkRecommendations,
   coerceSingleRecommendation,
   extractJson,
+  type WriterSuggestion,
   findSourceItem,
+  productIsIdentified,
 } from './requirements.logic.js'
+
+/**
+ * Max findings answered by ONE batched Requirement-Writer call. Batching cuts N per-finding
+ * calls down to ceil(N / size); the bound keeps a single response from truncating (one
+ * recommendation per finding needs room) and isolates a failed call to just its chunk.
+ */
+const RECOMMENDATION_CHUNK_SIZE = 4
 
 export interface RequirementReviewServiceDependencies extends IterativeReviewDeps {
   requirementReviewRepository: RequirementReviewRepository
   /** Linked PRD/RFC documents (optional; only when the documents integration is on). */
   documentRepository?: DocumentRepository
+  /**
+   * Re-confirm those documents against their sources before the round reads them, exactly as every
+   * agent dispatch does. Absent ⇒ no refresh and no freshness note, which is byte-for-byte the
+   * prior behaviour.
+   */
+  documentRefresher?: LinkedDocumentRefresher
   /** Linked tracker issues (optional; only when the task-source integration is on). */
   taskRepository?: TaskRepository
   /**
@@ -82,6 +110,7 @@ export class RequirementReviewService extends IterativeReviewService<
 > {
   protected readonly repository: ReviewRepository<RequirementReview>
   private readonly documentRepository?: DocumentRepository
+  private readonly documentRefresher?: LinkedDocumentRefresher
   private readonly taskRepository?: TaskRepository
   private readonly resolveRunRepoContext?: ResolveRunRepoContext
   private readonly resolveBlockFragments?: (
@@ -98,6 +127,7 @@ export class RequirementReviewService extends IterativeReviewService<
     super(deps)
     this.repository = deps.requirementReviewRepository
     this.documentRepository = deps.documentRepository
+    this.documentRefresher = deps.documentRefresher
     this.taskRepository = deps.taskRepository
     this.resolveRunRepoContext = deps.resolveRunRepoContext
     this.resolveBlockFragments = deps.resolveBlockFragments
@@ -109,8 +139,8 @@ export class RequirementReviewService extends IterativeReviewService<
   protected readonly reviewerLabel = 'requirements reviewer'
   protected readonly reviewAgentKind = 'requirements-review'
   protected readonly reworkAgentKind = 'requirements-rework'
-  protected readonly reviewSystemPrompt = REVIEW_SYSTEM_PROMPT
-  protected readonly reworkSystemPrompt = REWORK_SYSTEM_PROMPT
+  protected readonly reviewPrompt = REVIEW_PROMPT
+  protected readonly reworkPrompt = REWORK_PROMPT
   protected readonly reviewIdPrefix = 'rrv'
   protected readonly itemIdPrefix = 'rri'
   protected readonly revisedNoun = 'revised requirements'
@@ -160,73 +190,109 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   /**
-   * Prepare a recommendation batch SYNCHRONOUSLY: mark the targeted findings
-   * `recommend_requested` and append one `pending` placeholder recommendation per finding
-   * (snapshotting the source finding by title/detail). The slow Writer LLM does NOT run here —
-   * {@link fillPendingRecommendations} fills the placeholders later, in the durable driver, so
-   * the human is handed straight back to the board. Returns the review with the placeholders so
-   * the SPA shows the "generating…" state immediately. Idempotent per finding: a finding that
-   * already carries a `pending` placeholder is not duplicated.
+   * The auto-recommendation automation: for every OPEN finding the reviewer flagged
+   * `autoAnswerable` (answerable from universal best-practice / the provided context, no
+   * product owner needed), generate a grounded recommendation and AUTO-ACCEPT it as the
+   * finding's default answer — so the human is handed a pre-filled, editable/dismissable
+   * answer instead of a blank box. Findings that need a real business decision (not
+   * `autoAnswerable`) are left `open` for the human. Reuses the whole Requirement Writer
+   * path: prepare `auto` placeholders, then fill them (the fill step auto-accepts `auto`
+   * recommendations and suppresses the "recommendations to review" notification). A no-op
+   * when no finding qualifies. Runs inline in the durable driver (the requirements gate calls
+   * it right after a reviewer pass raises findings — see {@link ReviewGateController.evaluate}),
+   * so it may make the (slow) Writer LLM calls; that is the same place the reviewer LLM already
+   * runs. Degrades gracefully when the reviewer model can't be resolved (fill drops the
+   * placeholders and reopens the findings). Returns the resulting review.
    */
-  async prepareRecommendations(
+  async autoRecommend(
     workspaceId: string,
     reviewId: string,
-    itemIds: string[],
-    note?: string,
+    opts: { onProgress?: (review: RequirementReview) => Promise<void> } = {},
   ): Promise<RequirementReview> {
-    const targetIds = new Set(itemIds)
     const review = assertFound(
       await this.repository.get(workspaceId, reviewId),
       this.entityName,
       reviewId,
     )
-    const now = this.deps.clock.now()
-    const trimmedNote = note?.trim() || null
-    const recommendations = [...review.recommendations]
-    let changed = false
-    for (const item of review.items) {
-      if (!targetIds.has(item.id) || item.status === 'dismissed') continue
-      if (item.status !== 'recommend_requested') {
-        item.status = 'recommend_requested'
-        item.updatedAt = now
-        changed = true
-      }
-      // Don't queue a second placeholder for a finding the Writer is already working on. Keyed
-      // on the finding id so two findings that share an identical title+detail still each get
-      // their own placeholder.
-      const alreadyPending = recommendations.some(
-        (r) => r.status === 'pending' && r.sourceFinding.itemId === item.id,
-      )
-      if (alreadyPending) continue
-      recommendations.push({
-        id: this.deps.idGenerator.next('rec'),
-        sourceFinding: { title: item.title, detail: item.detail, itemId: item.id },
-        recommendedText: '',
-        status: 'pending',
-        note: trimmedNote,
-        groundedInFragment: null,
-        createdAt: now,
-        updatedAt: now,
-      })
-      changed = true
-    }
-    if (!changed) return review
-    const updated: RequirementReview = { ...review, recommendations, updatedAt: now }
-    await this.repository.upsert(workspaceId, updated)
-    return updated
+    const items = review.items
+      .filter((i) => i.autoAnswerable === true && i.status === 'open')
+      .map((i) => ({ itemId: i.id }))
+    if (items.length === 0) return review
+    await this.prepareRecommendations(workspaceId, reviewId, items, { auto: true })
+    await this.fillPendingRecommendations(workspaceId, reviewId, opts)
+    return assertFound(await this.repository.get(workspaceId, reviewId), this.entityName, reviewId)
   }
 
   /**
-   * Fill every `pending` recommendation on a review by running the Requirement Writer once per
-   * finding, so progress streams in as `ready / total`. Grounding shared across findings (the
-   * block's best-practice fragments + the in-repo `spec/`/`tech-spec/` excerpts) is gathered
-   * ONCE; only web search runs per finding. Each filled recommendation is persisted and
-   * `onProgress` is invoked with the fresh review, so an open window tracks the count live and
-   * the board's "Recommending…" badge clears the moment the last placeholder settles. A
-   * per-finding Writer failure drops that placeholder and reopens its finding (so the human can
-   * answer manually) rather than wedging the whole batch. Best-effort and re-entrant: a replay
-   * that re-runs it simply finds no `pending` placeholders and produces nothing. Returns the
-   * number of recommendations produced (for the completion notification).
+   * Prepare a recommendation batch SYNCHRONOUSLY: mark the targeted findings
+   * `recommend_requested` and append one `pending` placeholder recommendation per finding
+   * (snapshotting the source finding by title/detail). Each item may carry its own `note` — the
+   * per-finding guidance the human typed before choosing "recommend something" — which is
+   * stamped onto that finding's placeholder to steer the Writer. The slow Writer LLM does NOT
+   * run here — {@link fillPendingRecommendations} fills the placeholders later, in the durable
+   * driver, so the human is handed straight back to the board. Returns the review with the
+   * placeholders so the SPA shows the "generating…" state immediately. Idempotent per finding: a
+   * finding that already carries a `pending` placeholder is not duplicated.
+   */
+  async prepareRecommendations(
+    workspaceId: string,
+    reviewId: string,
+    items: RequestRecommendationItem[],
+    opts: { auto?: boolean } = {},
+  ): Promise<RequirementReview> {
+    const noteByItem = new Map(items.map((i) => [i.itemId, i.note?.trim() || null]))
+    // Rev-guarded: a second "recommend something" click, or a human answering a different
+    // finding in the same breath, would otherwise write its whole stale `items` +
+    // `recommendations` arrays over this one (race-audit 2.5). The idempotence check rides
+    // inside the mutation so it is re-evaluated against the winning snapshot on a retry.
+    return this.mutateReview(workspaceId, reviewId, (review, now) => {
+      const recommendations = review.recommendations
+      let changed = false
+      for (const item of review.items) {
+        if (!noteByItem.has(item.id) || item.status === 'dismissed') continue
+        if (item.status !== 'recommend_requested') {
+          item.status = 'recommend_requested'
+          item.updatedAt = now
+          changed = true
+        }
+        // Don't queue a second placeholder for a finding the Writer is already working on. Keyed
+        // on the finding id so two findings that share an identical title+detail still each get
+        // their own placeholder.
+        const alreadyPending = recommendations.some(
+          (r) => r.status === 'pending' && r.sourceFinding.itemId === item.id,
+        )
+        if (alreadyPending) continue
+        recommendations.push({
+          id: this.deps.idGenerator.next('rec'),
+          sourceFinding: { title: item.title, detail: item.detail, itemId: item.id },
+          recommendedText: '',
+          ...(opts.auto ? { auto: true } : {}),
+          status: 'pending',
+          note: noteByItem.get(item.id) ?? null,
+          groundedInFragment: null,
+          groundedIn: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        changed = true
+      }
+      return changed
+    })
+  }
+
+  /**
+   * Fill every `pending` recommendation on a review by running the Requirement Writer over
+   * CHUNKS of findings (up to {@link RECOMMENDATION_CHUNK_SIZE} per call), so a batch of N
+   * findings costs ceil(N / size) LLM calls instead of N. Grounding shared across findings (the
+   * block's best-practice fragments, the in-repo `spec/`/`tech-spec/` excerpts, and a single web
+   * search over the batch's titles) is gathered ONCE and reused across every chunk. Each chunk's
+   * results are persisted and `onProgress` is invoked with the fresh review, so an open window
+   * tracks the count live (`ready / total` advancing a chunk at a time) and the board's
+   * "Recommending…" badge clears the moment the last placeholder settles. A per-chunk Writer
+   * failure drops that chunk's placeholders and reopens their findings (so the human can answer
+   * manually) rather than wedging the whole batch. Best-effort and re-entrant: a replay that
+   * re-runs it simply finds no `pending` placeholders and produces nothing. Returns the number of
+   * recommendations produced (for the completion notification).
    */
   async fillPendingRecommendations(
     workspaceId: string,
@@ -272,65 +338,156 @@ export class RequirementReviewService extends IterativeReviewService<
       workspaceId,
       pending.map((p) => p.sourceFinding.title),
     )
+    // Finding-independent grounding, assembled once and reused across every per-chunk Writer call.
+    const grounding: RecommendationGrounding = {
+      fragments,
+      specExcerpts: sharedSpecExcerpts,
+      webResults: sharedWebResults,
+    }
+    // The workspace's own Writer prompt, when it edited one. Resolved once for the batch beside the
+    // rest of the shared inputs — every chunk of one batch must run under the same prompt.
+    const writerPromptOverride = (
+      await this.deps.resolveSystemPromptOverride?.(workspaceId, REQUIREMENTS_WRITER_AGENT_KIND)
+    )?.trim()
+
+    // Group the pending placeholders by their "do it differently" note so every finding in a
+    // batched prompt shares the one note the prompt carries (a fresh batch shares null; a
+    // re-request carries its own note), then answer each group in chunks of RECOMMENDATION_CHUNK_SIZE.
+    const groups = new Map<string, RequirementRecommendation[]>()
+    for (const ph of pending) {
+      const key = ph.note ?? ''
+      const arr = groups.get(key)
+      if (arr) arr.push(ph)
+      else groups.set(key, [ph])
+    }
 
     let produced = 0
-    for (const placeholder of pending) {
-      // Re-anchor the placeholder to a LIVE finding — prefer the snapshotted finding id, falling
-      // back to title/detail when ids churned across a re-review. Gone → nothing to recommend for.
-      const before = assertFound(
-        await this.repository.get(workspaceId, reviewId),
-        this.entityName,
-        reviewId,
-      )
-      const liveFinding = findSourceItem(before.items, placeholder.sourceFinding)
-      const suggestion = liveFinding
-        ? await this.runWriterForFinding(
-            workspaceId,
-            model,
-            ref,
-            context,
-            liveFinding,
-            placeholder.note ?? undefined,
-            fragments,
-            sharedSpecExcerpts,
-            sharedWebResults,
-          )
-        : null
-      // Re-read fresh each iteration: the per-finding Writer calls take seconds, during which the
-      // human may have answered/dismissed other findings or accepted an earlier recommendation.
-      const review = assertFound(
-        await this.repository.get(workspaceId, reviewId),
-        this.entityName,
-        reviewId,
-      )
-      const rec = review.recommendations.find((r) => r.id === placeholder.id)
-      if (!rec || rec.status !== 'pending') continue // accepted/rejected/churned away meanwhile
-      const now = this.deps.clock.now()
-      if (suggestion) {
-        const standard = suggestion.fromStandard
-          ? fragmentById.get(suggestion.fromStandard)
-          : undefined
-        rec.recommendedText = suggestion.recommendation
-        rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
-        rec.status = 'ready'
-        rec.updatedAt = now
-        produced += 1
-      } else {
-        // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
-        // and reopen its finding so the human can answer it by hand.
-        review.recommendations = review.recommendations.filter((r) => r.id !== placeholder.id)
-        const item = findSourceItem(review.items, placeholder.sourceFinding)
-        if (item && item.status === 'recommend_requested') {
-          item.status = 'open'
-          item.updatedAt = now
-        }
+    // Only human-requested recommendations (which land in `ready` for a manual accept/reject)
+    // summon the human back. AUTO recommendations are accepted the moment they're produced —
+    // they become the finding's default answer with no card to act on — so they must NOT raise
+    // the "recommendations to review" notification (the findings notification already fired).
+    let readyForReview = 0
+    for (const group of groups.values()) {
+      for (let i = 0; i < group.length; i += RECOMMENDATION_CHUNK_SIZE) {
+        const chunk = group.slice(i, i + RECOMMENDATION_CHUNK_SIZE)
+        // Re-anchor each placeholder to a LIVE finding against a fresh read: the Writer calls take
+        // seconds, during which the human may have answered/dismissed findings or item ids may have
+        // churned across a re-review. Prefer the snapshotted id, falling back to title/detail.
+        const before = assertFound(
+          await this.repository.get(workspaceId, reviewId),
+          this.entityName,
+          reviewId,
+        )
+        const targets = chunk
+          .filter((ph) => before.recommendations.find((r) => r.id === ph.id)?.status === 'pending')
+          .map((ph) => ({ ph, finding: findSourceItem(before.items, ph.sourceFinding) }))
+        if (targets.length === 0) continue // all accepted/rejected/churned away meanwhile
+        const liveFindings = targets
+          .map((t) => t.finding)
+          .filter((f): f is RequirementReviewItem => !!f)
+        // All placeholders in a chunk share one note (grouped above).
+        const note = chunk[0]?.note ?? undefined
+        const suggestions = liveFindings.length
+          ? await this.runWriterForChunk(
+              workspaceId,
+              {
+                model,
+                ref,
+                ...(writerPromptOverride ? { promptOverride: writerPromptOverride } : {}),
+              },
+              context,
+              liveFindings,
+              note,
+              grounding,
+            )
+          : new Map<string, WriterSuggestion>()
+        // Re-read fresh before applying — the human may have acted during the Writer call — and
+        // write under CAS, so an answer that lands between that read and this write survives
+        // instead of being overwritten by this chunk's whole-row snapshot (race-audit 2.5).
+        // The tallies are recomputed per attempt so a reload can't double-count them.
+        let chunkProduced = 0
+        let chunkReadyForReview = 0
+        const review = await this.mutateReview(workspaceId, reviewId, (fresh, now) => {
+          chunkProduced = 0
+          chunkReadyForReview = 0
+          for (const target of targets) {
+            const outcome = this.applyRecommendationToTarget(
+              target,
+              fresh,
+              suggestions,
+              fragmentById,
+              now,
+            )
+            if (outcome.produced) chunkProduced += 1
+            if (outcome.readyForReview) chunkReadyForReview += 1
+          }
+        })
+        produced += chunkProduced
+        readyForReview += chunkReadyForReview
+        await opts.onProgress?.(review)
       }
-      review.updatedAt = now
-      await this.repository.upsert(workspaceId, review)
-      await opts.onProgress?.(review)
     }
-    if (produced > 0) await this.notifyRecommendationsReady(workspaceId, block, produced)
+    if (readyForReview > 0)
+      await this.notifyRecommendationsReady(workspaceId, block, readyForReview)
     return { produced }
+  }
+
+  /**
+   * Apply one Writer suggestion to its live placeholder against a fresh read, mutating `review` in
+   * place. Extracted from the chunk-application loop so that loop stays within the max-depth ceiling
+   * (the auto-accept/answered branch nested three levels below the loop). Returns whether the target
+   * produced a recommendation and whether it became a `ready` card the human must review.
+   */
+  private applyRecommendationToTarget(
+    target: { ph: RequirementRecommendation; finding: RequirementReviewItem | undefined },
+    review: RequirementReview,
+    suggestions: Map<string, WriterSuggestion>,
+    fragmentById: Map<string, GroundingFragment>,
+    now: number,
+  ): { produced: boolean; readyForReview: boolean } {
+    const { ph, finding } = target
+    const rec = review.recommendations.find((r) => r.id === ph.id)
+    if (!rec || rec.status !== 'pending') return { produced: false, readyForReview: false }
+    const suggestion = finding ? suggestions.get(finding.id) : undefined
+    if (!suggestion) {
+      // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
+      // and reopen its finding so the human can answer it by hand.
+      review.recommendations = review.recommendations.filter((r) => r.id !== ph.id)
+      const item = findSourceItem(review.items, ph.sourceFinding)
+      if (item && item.status === 'recommend_requested') {
+        item.status = 'open'
+        item.updatedAt = now
+      }
+      return { produced: false, readyForReview: false }
+    }
+    const standard = suggestion.fromStandard ? fragmentById.get(suggestion.fromStandard) : undefined
+    rec.recommendedText = suggestion.recommendation
+    rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
+    // What the answer actually rests on. A resolved standard IS the provenance, whatever the model
+    // reported — the platform matched the id, so it knows better than the reply does; otherwise the
+    // Writer's own report stands, null included (see `recommendationSourceSchema`: unreported is
+    // not the same as unsupported).
+    rec.groundedIn = standard ? 'standard' : suggestion.groundedIn
+    // The Writer's own grade, kept even on a resolved standard: matching a fragment id settles where
+    // the answer CAME FROM, and says nothing about how completely that fragment answers this
+    // finding — which is the question an unwatched run's floor is asking.
+    rec.confidence = suggestion.confidence
+    rec.updatedAt = now
+    if (!rec.auto) {
+      rec.status = 'ready'
+      return { produced: true, readyForReview: true }
+    }
+    // Auto-recommendation: accept it immediately as the finding's default answer, so the human
+    // sees it pre-filled (editable / dismissable) rather than a card to act on. Mirrors
+    // `acceptRecommendation`, matching the finding against the fresh read.
+    rec.status = 'accepted'
+    const item = findSourceItem(review.items, ph.sourceFinding)
+    if (item) {
+      item.reply = suggestion.recommendation
+      item.status = 'answered'
+      item.updatedAt = now
+    }
+    return { produced: true, readyForReview: false }
   }
 
   /**
@@ -344,22 +501,27 @@ export class RequirementReviewService extends IterativeReviewService<
     reviewId: string,
     onProgress?: (review: RequirementReview) => Promise<void>,
   ): Promise<void> {
-    const review = await this.repository.get(workspaceId, reviewId)
-    if (!review) return
-    const pending = review.recommendations.filter((r) => r.status === 'pending')
-    if (pending.length === 0) return
-    const now = this.deps.clock.now()
-    review.recommendations = review.recommendations.filter((r) => r.status !== 'pending')
-    for (const placeholder of pending) {
-      const item = findSourceItem(review.items, placeholder.sourceFinding)
-      if (item && item.status === 'recommend_requested') {
-        item.status = 'open'
-        item.updatedAt = now
+    // `IfPresent`, because this is the DEGRADATION path: it runs when the Writer can't be
+    // resolved, and it must not itself throw. A review that vanished (a fresh review run replaced
+    // it) leaves nothing to clean up — and the absence is re-checked on every retry, so it can't
+    // surface as a `NotFoundError` from a window between a pre-check and the load either.
+    // Rev-guarded, and the pending set is re-derived per attempt: a human accepting one
+    // recommendation while this cleanup runs must not have their answer dropped.
+    let dropped = false
+    const review = await this.mutateReviewIfPresent(workspaceId, reviewId, (fresh, now) => {
+      const pending = fresh.recommendations.filter((r) => r.status === 'pending')
+      dropped = pending.length > 0
+      if (!dropped) return false
+      fresh.recommendations = fresh.recommendations.filter((r) => r.status !== 'pending')
+      for (const placeholder of pending) {
+        const item = findSourceItem(fresh.items, placeholder.sourceFinding)
+        if (item && item.status === 'recommend_requested') {
+          item.status = 'open'
+          item.updatedAt = now
+        }
       }
-    }
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    await onProgress?.(review)
+    })
+    if (dropped && review) await onProgress?.(review)
   }
 
   /**
@@ -379,6 +541,7 @@ export class RequirementReviewService extends IterativeReviewService<
       rec.status = 'pending'
       rec.recommendedText = ''
       rec.groundedInFragment = null
+      rec.groundedIn = null
       rec.note = note.trim() || null
       const item = findSourceItem(review.items, rec.sourceFinding)
       if (!item) {
@@ -432,43 +595,63 @@ export class RequirementReviewService extends IterativeReviewService<
     })
   }
 
-  /** Run the Writer for one live finding; returns null when it fails (the caller reopens the finding). */
-  private async runWriterForFinding(
+  /**
+   * Run the Writer once for a CHUNK of live findings; returns a map of finding id → suggestion
+   * (empty when the call fails or yields nothing — the caller then drops+reopens those findings).
+   * A single-finding chunk uses the tolerant single-item coercion (a lone-finding prompt often
+   * omits the echoed itemId); a multi-finding chunk routes each suggestion back to its finding by
+   * the echoed itemId, falling back to prompt order for any the ids didn't cover (so a response
+   * that drops the ids isn't discarded wholesale — see {@link coerceChunkRecommendations}).
+   */
+  private async runWriterForChunk(
     workspaceId: string,
-    model: ReturnType<ModelProvider['resolve']>,
-    ref: ModelRef,
+    resolved: {
+      model: ReturnType<ModelProvider['resolve']>
+      ref: ModelRef
+      promptOverride?: string
+    },
     context: RequirementsContext,
-    finding: RequirementReviewItem,
+    findings: RequirementReviewItem[],
     note: string | undefined,
-    fragments: GroundingFragment[],
-    sharedSpecExcerpts: string[],
-    sharedWebResults: GroundingWebResult[],
-  ): Promise<{ recommendation: string; fromStandard: string | null } | null> {
-    const grounding: RecommendationGrounding = {
-      fragments,
-      specExcerpts: sharedSpecExcerpts,
-      webResults: sharedWebResults,
-    }
+    grounding: RecommendationGrounding,
+  ): Promise<Map<string, WriterSuggestion>> {
+    const { model, ref, promptOverride } = resolved
     try {
       const result = await generateText({
         model,
-        system: WRITER_SYSTEM_PROMPT,
-        prompt: buildRecommendationPrompt(context, [finding], grounding, note),
+        system: composeBespokePrompt(WRITER_PROMPT, promptOverride),
+        prompt: buildRecommendationPrompt(context, findings, grounding, note),
         temperature: 0.2,
-        maxOutputTokens: 6000,
+        // Keep the SAME 6000-token budget per finding the single-finding path used, scaled by the
+        // chunk size, so a batched call is no more truncation-prone than N separate calls. The chunk
+        // is bounded by RECOMMENDATION_CHUNK_SIZE, so the total stays bounded (≤ 6000 * that size).
+        maxOutputTokens: 6000 * Math.min(findings.length, RECOMMENDATION_CHUNK_SIZE),
         // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
         // gateway-RAG `webResults` already folded into the prompt cover other providers.
-        ...(providerWebSearchTools(ref.provider)
+        //
+        // WITHHELD when the context does not identify the system under discussion. Search is the
+        // step that turns a guess into a citation: a model that has quietly settled on a product
+        // searches for THAT product, and comes back with real sources about software this work has
+        // nothing to do with — which reads to a human as diligence rather than as the invention it
+        // is. With no identified subject the Writer answers from general practice instead (its
+        // prompt says so), which is weaker and looks it.
+        ...(productIsIdentified(context) && providerWebSearchTools(ref.provider)
           ? { tools: providerWebSearchTools(ref.provider) }
           : {}),
         providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
       })
-      // Single-finding call: tolerate a missing/garbled echoed itemId rather than discarding a
-      // valid suggestion (which would force-reopen the finding as if the Writer had failed).
-      return coerceSingleRecommendation(extractJson(result.text), finding.id)
+      const parsed = extractJson(result.text)
+      const only = findings.length === 1 ? findings[0] : undefined
+      if (only) {
+        // Single-finding call: tolerate a missing/garbled echoed itemId rather than discarding a
+        // valid suggestion (which would force-reopen the finding as if the Writer had failed).
+        const single = coerceSingleRecommendation(parsed, only.id)
+        return single ? new Map([[only.id, single]]) : new Map()
+      }
+      return coerceChunkRecommendations(parsed, findings)
     } catch {
-      // Best-effort per finding — a failure drops just this placeholder (the caller reopens it).
-      return null
+      // Best-effort per chunk — a failure drops just this chunk's placeholders (caller reopens them).
+      return new Map()
     }
   }
 
@@ -478,19 +661,15 @@ export class RequirementReviewService extends IterativeReviewService<
     recId: string,
     mutate: (rec: RequirementRecommendation, review: RequirementReview, now: number) => void,
   ): Promise<RequirementReview> {
-    const review = assertFound(
-      await this.repository.get(workspaceId, reviewId),
-      this.entityName,
-      reviewId,
-    )
-    const rec = review.recommendations.find((r) => r.id === recId)
-    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
-    const now = this.deps.clock.now()
-    mutate(rec, review, now)
-    rec.updatedAt = now
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    return review
+    return this.mutateReview(workspaceId, reviewId, (review, now) => {
+      // Re-resolved per attempt: the Writer's fill pass drops a placeholder it couldn't answer,
+      // so a recommendation that vanished under a retry must fail rather than be re-applied to
+      // a stale copy of the array.
+      const rec = review.recommendations.find((r) => r.id === recId)
+      if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
+      mutate(rec, review, now)
+      rec.updatedAt = now
+    })
   }
 
   /**
@@ -548,7 +727,9 @@ export class RequirementReviewService extends IterativeReviewService<
       await this.deps.notificationService.raise(workspaceId, {
         type: 'requirement_review',
         blockId: block.id,
-        executionId: null,
+        // Carry the run's id so the F7 executionId-scoped waiting-card guard treats this as the
+        // park's richer card (see notifyFindings in IterativeReviewService).
+        executionId: block.executionId ?? null,
         title: `Requirements recommendations: ${block.title}`,
         body: `The requirement writer prepared ${count} recommendation${
           count === 1 ? '' : 's'
@@ -567,13 +748,48 @@ export class RequirementReviewService extends IterativeReviewService<
 
   /** Assemble the block's collected requirements + any linked docs/issues. */
   protected async gatherContext(workspaceId: string, block: Block): Promise<RequirementsContext> {
-    const docs = this.documentRepository
-      ? (await this.documentRepository.listByBlock(workspaceId, block.id)).map((d) => ({
-          title: d.title,
-          url: d.url,
-          excerpt: d.excerpt,
-        }))
+    // The requirements review is the FIRST step of the default pipelines, so it is the first
+    // reader of the block's attachments — and it applies the same rule the dispatch path does: an
+    // attached document with no readable content breaks the round instead of being reviewed as if
+    // it said nothing. Asking a product owner to sign off on requirements against a document the
+    // platform could not open is worse than refusing the round (the same call the inline
+    // interviewer makes about a read failure).
+    //
+    // It asserts over the EXCERPT PROJECTION rather than over `hasReadableContent`, because that is
+    // the only half of a document this reviewer renders: it runs inline, with no checkout to
+    // materialise a body into. A body that is pure markup — the empty fenced block an extractor
+    // emits for an embed it cannot render — is something a container agent at least opens, and
+    // collapses to nothing here, so testing the body and rendering the excerpt would leave exactly
+    // this hole open one field narrower.
+    //
+    // It reads through the dispatch-time REFRESHER for the same reason every dispatch does, and it
+    // matters more here than anywhere else: this is the step a human signs off on, so reviewing the
+    // import-time copy would record an approval against a revision nobody built while the coder two
+    // steps later receives the current one. It is also the readability assertion's own consistency:
+    // asserting over the stored projection while the dispatch path asserts over the refreshed one
+    // lets a page emptied since import pass HERE and refuse the run at the first dispatch, two
+    // verdicts about one document that can disagree. Best-effort by the refresher's contract, so an
+    // unreachable source costs the reviewer a stated warning and never the round.
+    const attached = this.documentRepository
+      ? await this.documentRepository.listByBlock(workspaceId, block.id)
       : []
+    const refreshed = this.documentRefresher
+      ? await this.documentRefresher.refresh(workspaceId, attached)
+      : attached.map((record) => ({ record, freshness: undefined }))
+    const projected = refreshed.map(({ record, freshness }) => ({
+      doc: record,
+      excerpt: contextExcerptFor(record),
+      freshness,
+    }))
+    assertContextDocumentsReadable(
+      projected.filter((p) => !p.excerpt).map((p) => ({ title: p.doc.title, url: p.doc.url })),
+    )
+    const docs = projected.map((p) => ({
+      title: p.doc.title,
+      url: p.doc.url,
+      excerpt: p.excerpt,
+      ...(p.freshness ? { freshness: p.freshness } : {}),
+    }))
     const tasks = this.taskRepository
       ? (await this.taskRepository.listByBlock(workspaceId, block.id)).map((t) => ({
           key: t.externalId,
@@ -584,17 +800,55 @@ export class RequirementReviewService extends IterativeReviewService<
         }))
       : []
     // When an upstream `requirements-brainstorm` dialogue settled a converged direction, that
-    // direction (which already shaped the rough idea into crisp requirements) is the subject the
-    // reviewer critiques — not the raw description it superseded.
-    const brainstormDirection = await this.resolveBrainstormDirection?.(workspaceId, block.id)
+    // direction (which already shaped the rough idea into crisp requirements) is the primary
+    // subject the reviewer critiques. It is carried in its OWN field rather than written over
+    // `description`: substituting it made the requester's own words unrecoverable on every later
+    // pass, so a dialogue that drifted off the request could never be caught against it.
+    const [brainstormDirection, service, specIntent] = await Promise.all([
+      this.resolveBrainstormDirection?.(workspaceId, block.id),
+      this.resolveOwnService(workspaceId, block),
+      this.readSpecIntent(workspaceId, block),
+    ])
     return {
-      block: {
-        title: block.title,
-        type: block.type,
-        description: brainstormDirection?.trim() || block.description,
-      },
+      block: { title: block.title, type: block.type, description: block.description },
+      service,
+      ...(specIntent ? { specIntent } : {}),
+      ...(brainstormDirection?.trim() ? { refinedDirection: brainstormDirection.trim() } : {}),
       docs,
       tasks,
     }
   }
+
+  /**
+   * The service's own statement of intent, from the committed `spec/overview.md` — the first
+   * paragraph only, since the reviewer needs to know WHAT the service is, not its full
+   * specification. Best-effort: unwired, unlinked or unreadable ⇒ undefined, and the product
+   * context then rests on the service frame's board title + description alone.
+   */
+  private async readSpecIntent(workspaceId: string, block: Block): Promise<string | undefined> {
+    try {
+      const ctx = await this.resolveRunRepoContext?.(workspaceId, block.id)
+      if (!ctx) return undefined
+      const file = await ctx.repo.getFile('spec/overview.md', ctx.baseBranch)
+      return firstProse(file?.content)
+    } catch {
+      // best-effort grounding — see `gatherSpecExcerpts`
+      return undefined
+    }
+  }
+}
+
+/**
+ * The first prose paragraph of a Markdown document, headings skipped, capped. Used to lift a
+ * service's intent out of its `spec/overview.md` without pulling the whole specification into
+ * every reviewer pass. Undefined when there is no prose to lift.
+ */
+function firstProse(content: string | undefined, maxChars = 800): string | undefined {
+  if (!content?.trim()) return undefined
+  for (const block of content.split(/\n\s*\n/)) {
+    const paragraph = block.trim()
+    if (!paragraph || paragraph.startsWith('#') || paragraph.startsWith('<!--')) continue
+    return paragraph.length > maxChars ? `${paragraph.slice(0, maxChars)}…` : paragraph
+  }
+  return undefined
 }

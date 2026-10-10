@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Sanitized fixture — a stand-in for the shared stack repo's own bring-up CLI
+# (`bin/shared-services setup`). The shared-stack detector does not read or flag it;
+# it is here only to keep the snapshot faithful. The reference bring-up (managed network,
+# up under the `backends` profile, users sync, Debezium registration) is captured
+# declaratively in ../reference/shared-stack.json.
+echo "acme-shared-services (fixture stub)"

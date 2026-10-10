@@ -1,4 +1,4 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import { type AgentFailureKind, RunContendedError } from '@cat-factory/kernel'
 
 // The outcome of advancing a single run by one step. A durable driver (the
 // Cloudflare Workflows instance) inspects this to decide what to do next: loop
@@ -13,7 +13,22 @@ export type AdvanceResult =
    * parked: the durable driver polls {@link ExecutionService.pollAgentJob} between
    * sleeps until the job finishes, then records its result and continues.
    */
-  | { kind: 'awaiting_job'; jobId: string; stepIndex: number }
+  | {
+      kind: 'awaiting_job'
+      jobId: string
+      stepIndex: number
+      /**
+       * The cadence THIS job is polled on, when it is not the deployment's ordinary one. Present
+       * only for a DELEGATED step, whose executor declares its own interval and window: an
+       * external run of an hour is ordinary where a harness job of an hour is a stall, so neither
+       * number can be a platform default. Both durable drivers honour it in place of
+       * `jobPollIntervalMs`/`jobMaxPolls`; absent ⇒ those stand, which is every container job.
+       *
+       * It rides the RESULT because the driver's park loop has no step, no registry and no
+       * workspace in scope: it has a bound `poll()` callback and whatever the last advance said.
+       */
+      poll?: { intervalMs: number; maxPolls: number }
+    }
   /**
    * A polling **gate** step (`ci` / `conflicts`) is gating the PR on its precheck.
    * The run is parked: the durable driver sleeps, then polls
@@ -24,18 +39,39 @@ export type AdvanceResult =
    */
   | { kind: 'awaiting_gate'; stepIndex: number }
   /**
+   * A `deployer` step has provisioned an environment the provider has not finished standing up,
+   * and the run is parked until it does. The durable driver sleeps, then polls
+   * {@link ExecutionService.pollAgentJob} — the deployer owns the wait, so the same entry point
+   * serves it, with no job in flight (the deploy container, when there was one, is finished and
+   * reclaimed). Polling stops the moment that poll returns anything else: a `ready` environment
+   * resumes the fan-out (`continue` / `awaiting_job` for the next frame), and an environment that
+   * failed or outlived its readiness ceiling fails the step.
+   *
+   * A distinct kind rather than `awaiting_job` because the two wait on different things and say
+   * so: nothing here is a job, and reporting one would put "job did not finish" on a run whose
+   * jobs all finished.
+   */
+  | { kind: 'awaiting_environment'; stepIndex: number }
+  /**
    * A step finished in a terminal failure; the driver records it via the single
    * `failRun` funnel and stops. `error` is the human-readable message. An inline
    * gate that already knows the precise classification sets `failureKind` (e.g. an
    * unparseable companion verdict → `'companion_rejected'`, a Tester gate that
    * exhausted its fixer budget → `'agent'`) and may attach extended `detail` (e.g.
    * the companion's raw reply); the driver records those instead of the generic
-   * `'job_failed'` container-failure framing. Defaults: `failureKind` →
-   * `'job_failed'`, `detail` → none. Inline gates MUST NOT call `failRun`
-   * themselves — returning this is the single path so the driver can't double-write
-   * and clobber the rich record.
+   * `'job_failed'` container-failure framing. `reason` is an optional machine-readable
+   * cause code (e.g. an environment failure's `deploy_runner_unwired`) the SPA maps to
+   * precise guidance. Defaults: `failureKind` → `'job_failed'`, `detail`/`reason` → none.
+   * Inline gates MUST NOT call `failRun` themselves — returning this is the single path so
+   * the driver can't double-write and clobber the rich record.
    */
-  | { kind: 'job_failed'; error: string; failureKind?: AgentFailureKind; detail?: string }
+  | {
+      kind: 'job_failed'
+      error: string
+      failureKind?: AgentFailureKind
+      detail?: string
+      reason?: string
+    }
   /**
    * A polled async job's container was evicted/crashed and the single automatic
    * recovery (a fresh-container re-dispatch of the same step) has been spent, so the
@@ -43,7 +79,17 @@ export type AdvanceResult =
    * (A first eviction is recovered silently inside {@link ExecutionService.pollAgentJob}
    * by re-dispatching and returning `continue`, so it never reaches the driver.)
    */
-  | { kind: 'job_evicted'; error: string }
+  | {
+      kind: 'job_evicted'
+      error: string
+      /**
+       * The transport's post-mortem of the dead container (exit state + its own log tail),
+       * recorded as the failure `detail`. Without it an eviction is an unfalsifiable dead end:
+       * the container is reclaimed as the run settles, so this is the only surviving record of
+       * WHY the harness process went away. Absent when the transport reported none.
+       */
+      detail?: string
+    }
   /** The final step completed; the run is finished. */
   | { kind: 'done' }
   /** The spend budget is exhausted; the run is paused until it frees up. */
@@ -59,4 +105,26 @@ export interface AdvanceOptions {
    * leave it false to preserve the "never wedge" behaviour.
    */
   rethrowAgentErrors?: boolean
+}
+
+/**
+ * Run a durable-driver entry point, turning a lost optimistic-concurrency race into a
+ * re-drive. A driver write ({@link RunStateMachine.casPersist}) throws {@link RunContendedError}
+ * when a concurrent human action moved the row or a `cancel`/`stopRun` removed/terminated it;
+ * we swallow that and return `{ kind: 'continue' }` so the durable loop re-enters
+ * `advanceInstance`, reloads FRESH state, and either re-applies the mechanical step on the
+ * winning snapshot or no-ops on a gone/terminal run. It never clobbers the winner or
+ * resurrects a cancelled run (race-audit 2.2 driver-half / 2.3). This MUST run inside each
+ * entry point (ahead of the drivers' generic `catch`→`failRun` and Cloudflare's `step.do`
+ * retry); every other error propagates so real failures still fail the run.
+ */
+export async function redriveOnContention(
+  run: () => Promise<AdvanceResult>,
+): Promise<AdvanceResult> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof RunContendedError) return { kind: 'continue' }
+    throw error
+  }
 }

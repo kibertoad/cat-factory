@@ -100,7 +100,6 @@ describe('GitHub projections (Postgres)', () => {
         name: 'demo',
         defaultBranch: 'main',
         private: false,
-        blockId: null,
         isMonorepo: false,
         syncedAt: 1000,
       },
@@ -213,7 +212,6 @@ describe('GitHub projections (Postgres)', () => {
       name: `r${githubId}`,
       defaultBranch: 'main',
       private: false,
-      blockId: null,
       isMonorepo: false,
       syncedAt: 1000,
     })
@@ -222,6 +220,38 @@ describe('GitHub projections (Postgres)', () => {
     await repoRepo.tombstoneMissing(ws, 77, [1, 2], 2000)
     const live = await repoRepo.list(ws)
     expect(live.map((r) => r.githubId).sort()).toEqual([1, 2])
+  })
+
+  it('listByInstallation batches the delegation-mint scoping read across workspaces (live rows only)', async () => {
+    const { body: snapA } = await call<WorkspaceSnapshot>('POST', '/workspaces', {})
+    const { body: snapB } = await call<WorkspaceSnapshot>('POST', '/workspaces', {})
+    const wsA = snapA.workspace.id
+    const wsB = snapB.workspace.id
+    const repoRepo = new DrizzleRepoProjectionRepository(db)
+    const base = (githubId: number, installationId: number, linkedVia?: 'app' | 'user_pat') => ({
+      githubId,
+      installationId,
+      owner: 'octo',
+      name: `r${githubId}`,
+      defaultBranch: 'main',
+      private: false,
+      isMonorepo: false,
+      ...(linkedVia ? { linkedVia } : {}),
+      syncedAt: 1000,
+    })
+    // Installation 88 links repos in TWO workspaces (11 shared by both), one of them via a
+    // member PAT; installation 99 is a different installation; repo 13 gets tombstoned.
+    await repoRepo.upsertMany(wsA, [base(11, 88), base(12, 88, 'user_pat'), base(13, 88)])
+    await repoRepo.upsertMany(wsB, [base(11, 88), base(21, 99)])
+    await repoRepo.tombstoneMissing(wsA, 88, [11, 12], 2000)
+
+    // One query across the installation's workspaces: live rows only, other installations
+    // excluded; the shared repo returns one row PER workspace (callers dedupe by githubId),
+    // and `linkedVia` survives so the caller can drop PAT-only rows.
+    const rows = await repoRepo.listByInstallation(88)
+    expect(rows.map((r) => r.githubId).sort()).toEqual([11, 11, 12])
+    expect(rows.find((r) => r.githubId === 12)?.linkedVia).toBe('user_pat')
+    expect(await repoRepo.listByInstallation(12345)).toEqual([])
   })
 
   it('multi-row upserts update in place (last duplicate wins) and list reads order/limit in SQL', async () => {
@@ -271,8 +301,10 @@ describe('GitHub projections (Postgres)', () => {
       accountLogin: 'octo',
       targetType: 'Organization' as const,
       appId: null,
+      provider: 'github' as const,
       cachedToken: null,
       tokenExpiresAt: null,
+      accessToken: null,
       createdAt: 1000,
       deletedAt: null,
     })
@@ -285,5 +317,35 @@ describe('GitHub projections (Postgres)', () => {
     expect(found.map((i) => i.installationId).sort()).toEqual([9001, 9002])
     expect(found.find((i) => i.installationId === 9002)?.deletedAt).toBe(2000)
     expect(await repo.listByInstallationIds([])).toEqual([])
+  })
+
+  // The Node half of the connection-host parity assertion (the Worker asserts the same thing in
+  // `github-connect.spec.ts` against its own composition root). `webUrl` is derived by the facade
+  // from the API base it booted with and stamped onto every connection the SPA reads, which
+  // renders each repo / pull request / issue link from it — so a facade that forgot to wire the
+  // resolver would silently strip those links on that runtime alone.
+  it('stamps the connection with the host the facade resolved', async () => {
+    const { body: snapshot } = await call<WorkspaceSnapshot>('POST', '/workspaces', {})
+    const ws = snapshot.workspace.id
+    await new DrizzleGitHubInstallationRepository(db).upsert({
+      installationId: 9101,
+      workspaceId: ws,
+      accountId: null,
+      accountLogin: 'octo',
+      targetType: 'Organization',
+      appId: 'app-default',
+      provider: 'github',
+      cachedToken: null,
+      tokenExpiresAt: null,
+      accessToken: null,
+      createdAt: 1000,
+      deletedAt: null,
+    })
+
+    const { body } = await call<{ connection: { webUrl: string | null } | null }>(
+      'GET',
+      `/workspaces/${ws}/github/connection`,
+    )
+    expect(body.connection?.webUrl).toBe('https://github.com')
   })
 })

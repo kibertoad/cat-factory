@@ -5,13 +5,18 @@
 // renders them without hard-coding any kind. Stored PER USER (runs you initiate use YOUR
 // access); the secret is write-only server-side and never shown again.
 import { computed, ref, watch } from 'vue'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -29,7 +34,7 @@ const status = computed(() => store.statusFor(kind.value))
 // all other fields map into `metadata`.
 const values = ref<Record<string, string>>({})
 const labelDraft = ref('')
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<ConnectionTestResult | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
@@ -72,15 +77,6 @@ function buildPayload(): { secret: string; metadata?: Record<string, string> } |
   return { secret, ...(Object.keys(metadata).length ? { metadata } : {}) }
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function test() {
   const payload = buildPayload()
   if (!payload) return
@@ -102,7 +98,13 @@ async function save() {
   try {
     await store.store(kind.value, { ...payload, label: labelDraft.value.trim() || undefined })
     values.value[secretField.value!.key] = ''
-    testResult.value = null
+    // Probe AFTER the save so what this credential can reach is stated at the moment it is
+    // stored, not only when someone happens to press Test first. A run you start authenticates
+    // with this token in preference to the deployment's own, and the platform cannot narrow it —
+    // so this is the one point at which an over-broad token is visible at all
+    // (backend/docs/security-model.md). Best-effort: the save already succeeded, so a probe
+    // failure must not read as one.
+    testResult.value = await store.test(kind.value, payload).catch(() => null)
     toast.add({
       title: t('settings.userSecrets.toast.saved', {
         label: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
@@ -111,7 +113,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.userSecrets.toast.saveFailed'), e)
+    present(e, 'settings.userSecrets.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -134,7 +136,7 @@ async function remove() {
     resetDraft()
     toast.add({ title: t('settings.userSecrets.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.userSecrets.toast.removeFailed'), e)
+    present(e, 'settings.userSecrets.toast.removeFailed')
   } finally {
     busy.value = false
   }
@@ -152,24 +154,24 @@ async function remove() {
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           <i18n-t keypath="settings.userSecrets.intro" tag="span" scope="global">
             <template #you>
               <strong>{{ t('settings.userSecrets.introYou') }}</strong>
             </template>
             <template #scope>
-              <span class="text-slate-300">{{ t('settings.userSecrets.introScope') }}</span>
+              <span class="text-toned">{{ t('settings.userSecrets.introScope') }}</span>
             </template>
           </i18n-t>
         </p>
 
         <div
           v-if="status"
-          class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+          class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
         >
           <div>
-            <span class="font-medium text-slate-200">{{ status.label }}</span>
-            <div class="text-[11px] text-emerald-400">
+            <span class="font-medium text-default">{{ status.label }}</span>
+            <div class="text-2xs text-app-success-400">
               {{ t('settings.userSecrets.connectedStored') }}
             </div>
           </div>
@@ -183,15 +185,12 @@ async function remove() {
           />
         </div>
 
-        <div
-          v-if="descriptor"
-          class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-        >
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="descriptor" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+          <SectionLabel as="p">
             {{
               status ? t('settings.userSecrets.replaceToken') : t('settings.userSecrets.addToken')
             }}
-          </p>
+          </SectionLabel>
 
           <UFormField :label="t('settings.userSecrets.labelField')">
             <UInput v-model="labelDraft" :placeholder="descriptor.label" />
@@ -207,9 +206,9 @@ async function remove() {
             "
             :help="field.help"
           >
-            <UInput
+            <SecretInput
               v-model="values[field.key]"
-              :type="field.secret ? 'password' : 'text'"
+              :secret="!!field.secret"
               class="font-mono"
               :placeholder="field.placeholder"
             />
@@ -227,13 +226,20 @@ async function remove() {
             >
               {{ t('settings.userSecrets.testConnection') }}
             </UButton>
-            <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
+            <span v-if="testResult && testResult.ok" class="text-xs text-app-success-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
-            <span v-else-if="testResult" class="text-xs text-rose-400">
+            <span v-else-if="testResult" class="text-xs text-app-error-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenRejected') }}
             </span>
           </div>
+
+          <!-- How far this token reaches. Independent of the pass/fail verdict: an over-broad
+               token is perfectly VALID, and that is exactly why it is otherwise invisible. -->
+          <ConnectionWarnings
+            :warnings="testResult?.warnings"
+            :title="t('settings.userSecrets.tokenReachTitle')"
+          />
 
           <div class="flex justify-end">
             <UButton

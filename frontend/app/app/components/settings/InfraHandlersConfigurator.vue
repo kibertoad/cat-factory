@@ -6,11 +6,13 @@
 //                      service-owned, configured on the service).
 //   - docker-compose → handled by the runtime's local Docker capability — informational, no
 //                      connection (a DinD-capable runner stands the service's compose stack up).
+//   - cloudflare     → the built-in per-PR Cloudflare Workers preview, driven over the VCS
+//                      deployments API. Its whole section lives in CloudflareHandlerSection.vue.
 //   - custom         → the custom-manifest-type catalog editor + a `remote-custom` HTTP handler
 //                      per custom type (matched to a service's pinned `manifestId`).
 // In LOCAL mode each handler additionally offers a per-USER override (this-machine only),
 // written to the `/me/environment-handlers` endpoints. Drives the infraConfig store.
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type {
   CustomManifestType,
   EnvironmentHandlerView,
@@ -25,12 +27,17 @@ type RemoteCustomConfig = Extract<InfraHandlerConfig, { engine: 'remote-custom' 
 import KubernetesEngineForm from '~/components/settings/KubernetesEngineForm.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEditor.vue'
+import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSection.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
+import { consumeKubernetesScrollAnchor } from '~/components/settings/InfraHandlersConfigurator.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const isLocal = computed(() => auth.localMode?.enabled === true)
@@ -91,6 +98,32 @@ watch(
   { immediate: true },
 )
 
+// Deep-link anchor: the `cat-factory k3s` hand-off opens this window with the ui store's scroll
+// target set to `kubernetes`, so bring that section into view once rather than dropping the
+// operator at the top of the tab to hunt for the form the CLI just described.
+//
+// Attempted from BOTH the watch and `onMounted`, and the anchor is cleared only on a real scroll:
+// the section is behind `v-if="infra.available === true"`, whose probe resolves after the deep link
+// fires, so a single attempt that finds nothing rendered would swallow the hand-off with neither
+// watched value ever changing again to re-drive it. The decision itself is in the logic module,
+// where it is tested.
+const kubeSection = ref<HTMLElement | null>(null)
+async function anchorKubernetesSection() {
+  await nextTick()
+  const outcome = consumeKubernetesScrollAnchor({
+    target: ui.infrastructureScrollTarget,
+    available: infra.available,
+    section: kubeSection.value,
+  })
+  if (outcome === 'scrolled') ui.clearInfrastructureScrollTarget()
+}
+watch([() => ui.infrastructureScrollTarget, () => infra.available], () => {
+  void anchorKubernetesSection()
+})
+onMounted(() => {
+  void anchorKubernetesSection()
+})
+
 const busy = ref(false)
 
 // Connection-probe state for the kube engine forms (workspace + per-user override kept
@@ -137,6 +170,28 @@ async function testSavedKube() {
   }
 }
 
+// Auto-probe a SAVED kube connection as soon as the window shows one, so the operator sees a
+// LIVE verdict instead of a bare "connection established" card that only means a config is
+// stored — the token can have silently expired (a `kubectl create token` token is short-lived)
+// or the cluster been recreated, which the static card would misleadingly present as healthy.
+// Keyed on the stored config so it re-probes after an edit, and resets when disconnected so a
+// reconnect re-probes; the probe reuses the server-side saved token (empty secrets).
+const autoTestedKubeKey = ref<string | null>(null)
+watch(
+  kubeHandler,
+  (h) => {
+    if (!h) {
+      autoTestedKubeKey.value = null
+      return
+    }
+    const key = JSON.stringify(h.config)
+    if (autoTestedKubeKey.value === key) return
+    autoTestedKubeKey.value = key
+    void testSavedKube()
+  },
+  { immediate: true },
+)
+
 async function testKubeOverride(payload: {
   config: KubeHandlerConfig
   secrets: Record<string, string>
@@ -168,7 +223,7 @@ async function saveKube(payload: { config: KubeHandlerConfig; secrets: Record<st
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -181,7 +236,7 @@ async function removeKube() {
     await infra.unregisterHandler('kubernetes')
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -205,7 +260,7 @@ async function saveKubeOverride(payload: {
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -219,7 +274,7 @@ async function removeKubeOverride() {
     await infra.removeUserHandler('kubernetes')
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -254,7 +309,7 @@ const customSavedManifest = computed<Record<string, unknown> | undefined>(() => 
 
 // The registry backend that builds the `remote-custom` handler's provider. The generic
 // built-in `manifest` (BYO HTTP API) is the default; a deployment that registered a native
-// custom env backend (e.g. Kargo) can be picked here so the handler is pinned to it instead of
+// custom env backend can be picked here so the handler is pinned to it instead of
 // silently resolving to the generic manifest provider. Only backends that serve the
 // `remote-custom` engine are offered (the snapshot advertises each backend's engines).
 const providerConnections = useProviderConnectionsStore()
@@ -320,14 +375,14 @@ async function saveCustom(payload: {
       provisionType: 'custom',
       manifestId: selectedCustomId.value,
       config,
-      // Pin the chosen registry backend so a native custom backend (e.g. Kargo) builds the
+      // Pin the chosen registry backend so a native custom backend builds the
       // provider — absent, the engine would resolve to the generic manifest provider.
       backendKind: selectedBackendKind.value,
       secrets: payload.secrets,
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -341,7 +396,7 @@ async function removeCustom() {
     await infra.unregisterHandler('custom', selectedCustomId.value)
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -357,14 +412,6 @@ function toastSaved() {
 function toastRemoved() {
   toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
 }
-function notifyError(e: unknown) {
-  toast.add({
-    title: t('settings.infrastructure.handler.saveFailed'),
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 </script>
 
 <template>
@@ -372,11 +419,15 @@ function notifyError(e: unknown) {
        === true). While it's still being probed (null) show a loading line instead of flashing
        the full form, and render nothing when the integration is off (false). -->
   <div v-if="infra.available === true" class="space-y-5">
-    <p class="text-xs text-slate-400">{{ t('settings.infrastructure.handler.intro') }}</p>
+    <p class="text-xs text-muted">{{ t('settings.infrastructure.handler.intro') }}</p>
 
     <!-- kubernetes -->
-    <section class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-      <h3 class="text-sm font-semibold text-slate-200">
+    <section
+      ref="kubeSection"
+      class="space-y-2 rounded-lg border border-muted bg-default/40 p-3"
+      data-testid="infra-kubernetes-section"
+    >
+      <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.kubernetes') }}
       </h3>
       <!-- Established-connection card: a prominent checkbox signals a connection is stored, and
@@ -384,7 +435,7 @@ function notifyError(e: unknown) {
            re-opening the form. Absent ⇒ the "not connected yet" hint. -->
       <div
         v-if="kubeHandler"
-        class="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5"
+        class="space-y-2 rounded-md border border-app-success-500/30 bg-app-success-500/5 p-2.5"
       >
         <div class="flex items-start justify-between gap-2">
           <UCheckbox
@@ -392,7 +443,7 @@ function notifyError(e: unknown) {
             disabled
             size="lg"
             :label="t('settings.infrastructure.handler.connectionEstablished')"
-            :ui="{ label: 'text-[13px] font-semibold text-emerald-300' }"
+            :ui="{ label: 'text-sm font-semibold text-app-success-300' }"
           />
           <UButton
             icon="i-lucide-trash-2"
@@ -404,11 +455,11 @@ function notifyError(e: unknown) {
             @click="removeKube"
           />
         </div>
-        <p class="pl-7 text-[11px] text-slate-300">
+        <p class="pl-7 text-2xs text-toned">
           {{ t('settings.infrastructure.handler.activeEngine') }}
-          <span class="text-slate-200">{{ kubeHandlerEngineLabel }}</span>
+          <span class="text-default">{{ kubeHandlerEngineLabel }}</span>
         </p>
-        <div class="flex items-center gap-2 pl-7">
+        <div class="space-y-1.5 pl-7">
           <UButton
             color="neutral"
             variant="soft"
@@ -419,21 +470,16 @@ function notifyError(e: unknown) {
           >
             {{ t('settings.providerConnection.test.button') }}
           </UButton>
-          <span v-if="kubeSavedTestResult?.ok" class="text-xs text-emerald-400">
-            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.ok') }}
-          </span>
-          <span v-else-if="kubeSavedTestResult" class="text-xs text-rose-400">
-            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.failed') }}
-          </span>
+          <ConnectionTestVerdict :result="kubeSavedTestResult" />
         </div>
       </div>
-      <p v-else class="flex items-center gap-1.5 text-[12px] text-slate-500">
+      <p v-else class="flex items-center gap-1.5 text-xs text-dimmed">
         <UIcon name="i-lucide-circle-dashed" class="h-3.5 w-3.5" />
         {{ t('settings.infrastructure.handler.notConnected') }}
       </p>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
+        <span class="text-2xs text-muted">{{
           t('settings.infrastructure.handler.engineLabel')
         }}</span>
         <div class="flex flex-wrap gap-1">
@@ -443,7 +489,11 @@ function notifyError(e: unknown) {
             :color="selectedKubeEngine === e ? 'primary' : 'neutral'"
             :variant="selectedKubeEngine === e ? 'soft' : 'ghost'"
             size="xs"
-            @click="selectedKubeEngine = e"
+            @click="
+              () => {
+                selectedKubeEngine = e
+              }
+            "
           >
             {{ t(KUBE_ENGINE_KEYS[e]) }}
           </UButton>
@@ -463,10 +513,11 @@ function notifyError(e: unknown) {
       />
 
       <!-- Local mode: a personal override for THIS machine, layered over the workspace handler. -->
-      <div v-if="userOverridesOn" class="border-t border-slate-800 pt-2">
-        <button
+      <div v-if="userOverridesOn" class="border-t border-default pt-2">
+        <SectionLabel
+          as="button"
           type="button"
-          class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
+          class="flex w-full items-center gap-1.5 text-start hover:text-default"
           @click="showKubeOverride = !showKubeOverride"
         >
           <UIcon
@@ -477,9 +528,9 @@ function notifyError(e: unknown) {
           <UBadge v-if="kubeUserHandler" color="primary" variant="subtle" size="sm">
             {{ t('settings.infrastructure.handler.overrideActive') }}
           </UBadge>
-        </button>
+        </SectionLabel>
         <div v-if="showKubeOverride" class="mt-2 space-y-2">
-          <p class="text-[11px] text-slate-500">
+          <p class="text-2xs text-dimmed">
             {{ t('settings.infrastructure.handler.personalOverrideHint') }}
           </p>
           <p v-if="kubeUserHandler" class="flex justify-end">
@@ -509,25 +560,31 @@ function notifyError(e: unknown) {
     </section>
 
     <!-- docker-compose: handled by the runtime's local Docker capability, no connection. -->
-    <section class="space-y-1 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-      <h3 class="text-sm font-semibold text-slate-200">
+    <section class="space-y-1 rounded-lg border border-muted bg-default/40 p-3">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.docker-compose') }}
       </h3>
-      <p class="text-[12px] text-slate-400">{{ t('settings.infrastructure.dockerComposeInfo') }}</p>
+      <p class="text-xs text-muted">
+        {{ t('settings.infrastructure.dockerComposeInfo') }}
+      </p>
     </section>
 
+    <!-- cloudflare: a self-contained section (see the component's own note on why it is not
+         another branch here). -->
+    <CloudflareHandlerSection />
+
     <!-- custom: the catalog editor + a remote-custom HTTP handler per custom type. -->
-    <section class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-      <h3 class="text-sm font-semibold text-slate-200">
+    <section class="space-y-3 rounded-lg border border-muted bg-default/40 p-3">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.custom') }}
       </h3>
 
       <CustomManifestTypeEditor />
 
-      <div v-if="infra.customTypes.length" class="space-y-2 border-t border-slate-800 pt-3">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div v-if="infra.customTypes.length" class="space-y-2 border-t border-default pt-3">
+        <SectionLabel as="p">
           {{ t('settings.infrastructure.handler.customHandlerTitle') }}
-        </p>
+        </SectionLabel>
         <UFormField :label="t('settings.infrastructure.handler.customTypeLabel')">
           <USelect v-model="selectedCustomId" :items="customTypeItems" />
         </UFormField>
@@ -540,11 +597,8 @@ function notifyError(e: unknown) {
         >
           <USelect v-model="selectedBackendKind" :items="customBackendOptions" />
         </UFormField>
-        <p
-          v-if="customHandler"
-          class="flex items-center justify-between gap-2 text-[12px] text-slate-300"
-        >
-          <span class="text-emerald-400">{{
+        <p v-if="customHandler" class="flex items-center justify-between gap-2 text-xs text-toned">
+          <span class="text-app-success-400">{{
             t('settings.infrastructure.handler.customConnected')
           }}</span>
           <UButton
@@ -572,7 +626,7 @@ function notifyError(e: unknown) {
       </div>
     </section>
   </div>
-  <p v-else-if="infra.available === null" class="text-xs text-slate-500">
+  <p v-else-if="infra.available === null" class="text-xs text-dimmed">
     {{ t('settings.infrastructure.handler.loading') }}
   </p>
 </template>

@@ -5,7 +5,7 @@ import type {
   GitHubIssueDetail,
 } from '@cat-factory/kernel'
 import { GitHubIssuesProvider } from '@cat-factory/integrations'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 
 // Pure unit test for the GitHub-issues task-source provider: it resolves the
 // installation that owns the issue's repo (by account login), reads the issue via
@@ -19,8 +19,10 @@ function installation(overrides: Partial<GitHubInstallation>): GitHubInstallatio
     accountLogin: 'octo',
     targetType: 'Organization',
     appId: 'app-default',
+    provider: 'github',
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: 0,
     deletedAt: null,
     ...overrides,
@@ -34,13 +36,13 @@ function installation(overrides: Partial<GitHubInstallation>): GitHubInstallatio
 function installationsRepo(active: GitHubInstallation[]): GitHubInstallationRepository {
   return {
     listActive: async () => active,
+    listActiveForAccount: async (accountId) => active.filter((i) => i.accountId === accountId),
     getByInstallationId: async () => null,
     listByInstallationIds: async () => [],
     getByWorkspace: async (workspaceId) =>
       active.find((i) => i.workspaceId === workspaceId) ?? null,
     listWorkspacesForInstallation: async () => [],
     upsert: async () => {},
-    updateCachedToken: async () => {},
     softDelete: async () => {},
   }
 }
@@ -123,7 +125,7 @@ describe('GitHubIssuesProvider', () => {
         url: 'https://github.com/octo/app/issues/7',
       },
     ]
-    const results = await provider.search({}, 'csv', 'ws_1')
+    const results = await provider.search({}, 'csv', 'ws_1', { owner: 'octo', repo: 'app' })
     expect(results).toEqual([
       {
         source: 'github',
@@ -134,8 +136,10 @@ describe('GitHubIssuesProvider', () => {
         excerpt: '',
       },
     ])
-    // Only ws_1's installation (100) was queried — never ws_2's (200).
-    expect(client.searchIssuesCalls).toEqual([{ installationId: 100, query: 'csv' }])
+    // Only ws_1's installation (100) was queried — never ws_2's (200) — and the query carries
+    // the repo scope, which is what actually confines the results: the installation token used
+    // to do that implicitly, but a PAT-authenticated client searches all of public GitHub.
+    expect(client.searchIssuesCalls).toEqual([{ installationId: 100, query: 'repo:octo/app csv' }])
   })
 
   it('returns no results when the workspace has no installation', async () => {
@@ -152,7 +156,20 @@ describe('GitHubIssuesProvider', () => {
         url: 'https://github.com/octo/app/issues/7',
       },
     ]
-    expect(await provider.search({}, 'csv', 'ws_unknown')).toEqual([])
+    expect(await provider.search({}, 'csv', 'ws_unknown', { owner: 'octo', repo: 'app' })).toEqual(
+      [],
+    )
+    expect(client.searchIssuesCalls).toEqual([])
+  })
+
+  it('refuses an unscoped search rather than querying whatever the credential can see', async () => {
+    const { provider, client } = providerWith(DETAIL, [
+      installation({ workspaceId: 'ws_1', installationId: 100 }),
+    ])
+
+    // Only reachable with the explicit repo-less `null`; omitting the argument no longer
+    // typechecks, which is where the guarantee actually lives.
+    await expect(provider.search({}, 'csv', 'ws_1', null)).rejects.toThrow(/scoped to a repository/)
     expect(client.searchIssuesCalls).toEqual([])
   })
 })

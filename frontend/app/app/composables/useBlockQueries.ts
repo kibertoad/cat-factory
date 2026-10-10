@@ -1,5 +1,6 @@
 import { computed, type Ref } from 'vue'
 import type { Block, BlockStatus } from '~/types/domain'
+import { frameContentSize, LANE_GEOMETRY } from '~/utils/laneGeometry'
 
 /**
  * Pure, read-only queries over a board's blocks. Extracted from the board store
@@ -59,11 +60,33 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return childrenOf(serviceId).filter((b) => b.level === 'module')
   }
 
+  /** Initiative containers inside a service (frame children, like modules). */
+  function initiativesOf(serviceId: string) {
+    return childrenOf(serviceId).filter((b) => b.level === 'initiative')
+  }
+
   /** Tasks anywhere under a container — directly, or nested inside its modules. */
   function allTasksUnder(containerId: string): Block[] {
     const direct = tasksOf(containerId)
     const nested = modulesOf(containerId).flatMap((m) => tasksOf(m.id))
     return [...direct, ...nested]
+  }
+
+  /**
+   * Every block nested under a container (transitive), excluding the container
+   * itself — the exact set a delete cascades over. Used to state the blast radius
+   * in the delete confirmation. Structural children only (via `parentId`), so a
+   * non-structural epic membership is not counted.
+   */
+  function descendantsOf(id: string): Block[] {
+    const out: Block[] = []
+    const stack = [...childrenOf(id)]
+    while (stack.length > 0) {
+      const b = stack.pop()!
+      out.push(b)
+      stack.push(...childrenOf(b.id))
+    }
+    return out
   }
 
   /** The top-level service a block ultimately belongs to. */
@@ -124,36 +147,51 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
    */
   function frameStatus(frameId: string): BlockStatus {
     const tasks = allTasksUnder(frameId)
-    if (tasks.length === 0) return 'planned'
-    if (tasks.some((t) => t.status === 'blocked')) return 'blocked'
-    if (tasks.some((t) => t.status === 'in_progress' || t.status === 'pr_ready'))
+    // Initiative containers are frame children too: a frame holding only an initiative
+    // is NOT empty, and an active (planning/executing → block `in_progress`) or blocked
+    // initiative drives the frame's activity dot just like a task does.
+    const inits = initiativesOf(frameId)
+    if (tasks.length === 0 && inits.length === 0) return 'planned'
+    if (tasks.some((t) => t.status === 'blocked') || inits.some((i) => i.status === 'blocked'))
+      return 'blocked'
+    if (
+      tasks.some((t) => t.status === 'in_progress' || t.status === 'pr_ready') ||
+      inits.some((i) => i.status === 'in_progress')
+    )
       return 'in_progress'
     return 'ready'
   }
 
   /**
-   * The natural extent of a container's inner 2D canvas — the smallest size that
-   * still fits all its children. This is the floor a resizable frame can never be
-   * dragged below (so tasks/modules are never clipped).
+   * The natural extent of a frame's inner canvas — the smallest size that fits its swimlanes
+   * and its initiative band. This is the floor a resizable frame can never be dragged below.
+   *
+   * Task positions are deliberately NOT consulted any more. Tasks are laid out in status
+   * lanes, so the frame's size is a function of the LANE GEOMETRY, not of where cards happen
+   * to sit, and each lane SCROLLS rather than growing without bound. That decoupling is what
+   * fixes the old behaviour where a service accumulating work grew a taller and taller frame
+   * until it dwarfed its neighbours, and it is also what keeps this function pure over blocks:
+   * a lane's population depends on run state, which this layer cannot see and must not need to.
+   *
+   * The arithmetic itself lives in `frameContentSize` so the placement helper, which sizes a
+   * frame that does not exist yet, reserves the same footprint this one will render at.
    */
   function contentSize(id: string): { w: number; h: number } {
     const b = getBlock(id)
-    const isModule = b?.level === 'module'
-    const TASK_W = 210
-    const TASK_H = 160
-    const headerH = isModule ? 30 : 0
-    let w = isModule ? 200 : 360
-    let inner = isModule ? 60 : 220
-    for (const t of tasksOf(id)) {
-      w = Math.max(w, t.position.x + TASK_W + 12)
-      inner = Math.max(inner, t.position.y + TASK_H + 12)
-    }
-    for (const m of modulesOf(id)) {
-      const s = containerSize(m.id)
-      w = Math.max(w, m.position.x + s.w + 12)
-      inner = Math.max(inner, m.position.y + s.h + 12)
-    }
-    return { w, h: inner + headerH }
+    // A module is no longer drawn as a box (its tasks appear in the frame's lanes, grouped by
+    // module name), so it has no canvas of its own. A minimal size keeps any incidental caller
+    // honest rather than returning zero, which would read as "measured, and empty".
+    if (b?.level === 'module') return { w: LANE_GEOMETRY.laneWidth, h: 0 }
+
+    const initiatives = initiativesOf(id)
+    return frameContentSize({
+      // The predicate `BlockNode` renders the lanes on: an empty service shows one "add the first
+      // task" panel instead, and reserving lane-sized space for it would leave the frame two and
+      // a half times taller than its own contents.
+      hasChildren:
+        allTasksUnder(id).length > 0 || modulesOf(id).length > 0 || initiatives.length > 0,
+      initiatives: initiatives.length,
+    })
   }
 
   /**
@@ -180,7 +218,9 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     childrenOf,
     tasksOf,
     modulesOf,
+    initiativesOf,
     allTasksUnder,
+    descendantsOf,
     serviceOf,
     unmetDeps,
     isRunnable,

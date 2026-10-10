@@ -1,0 +1,180 @@
+import { parseSimpleYaml, splitFrontmatter } from '../repoSourceSync/frontmatter.js'
+
+// ---------------------------------------------------------------------------
+// Pure parsing rules for repo-sourced foundational services
+// (backend/docs/adr/0031-foundational-services.md). A `directory` source treats every
+// immediate subdirectory of its `dirPath` as one service, described by a
+// `service.md` whose YAML frontmatter carries the identity and whose body is the
+// general description; the contract documents sit beside it. A `files` source has
+// no directory convention to read identity from, so the LINK supplies it and this
+// module only maps the linked paths to contract ids.
+//
+// No I/O, so every rule is unit-testable and both facades behave identically.
+// ---------------------------------------------------------------------------
+
+/** The manifest file naming a service inside a `directory`-mode source. */
+export const SERVICE_MANIFEST_FILE = 'service.md'
+
+/** The DESCRIPTIVE half of a `service.md` — everything that is not the service's identity. */
+export interface ParsedServiceOverview {
+  summary: string
+  capabilities: string[]
+  description: string
+}
+
+/** The parsed identity half of a `service.md`, with its overview. */
+export interface ParsedServiceManifest extends ParsedServiceOverview {
+  name: string
+}
+
+/**
+ * Parse the descriptive half of a `service.md` — no `name` required.
+ *
+ * This is what a `folder` source reads from an OPTIONAL `service.md` at the folder root: the
+ * link already names the service (there is no directory convention to take a name from), so a
+ * manifest there can only enrich, never identify. Requiring a name to read the description
+ * would silently drop the prose of a manifest whose frontmatter omits one, leaving the
+ * Architect's catalog with a service that has contracts and nothing saying what it is for.
+ */
+export function parseServiceOverview(content: string): ParsedServiceOverview {
+  return overviewOf(splitManifest(content))
+}
+
+/** A `service.md` split once into the two halves both parsers read. */
+interface SplitManifest {
+  meta: Record<string, unknown>
+  body: string
+}
+
+/**
+ * Split and parse a manifest ONCE. Both entry points below need the frontmatter and the body,
+ * and the name-checking one used to re-split the document to reach the overview.
+ */
+function splitManifest(content: string): SplitManifest {
+  const { frontmatter, body } = splitFrontmatter(content)
+  return { meta: parseSimpleYaml(frontmatter), body }
+}
+
+function overviewOf({ meta, body }: SplitManifest): ParsedServiceOverview {
+  return {
+    summary: str(meta.summary) || str(meta.description),
+    capabilities: strList(meta.capabilities),
+    description: body.trim(),
+  }
+}
+
+/**
+ * Parse a `service.md`. Returns null when it carries no `name` — an unnamed manifest
+ * cannot be presented to a design agent as a service to consume, and inventing a name
+ * from the directory would hand the Architect a service nobody described.
+ *
+ * The `id` is deliberately NOT read from frontmatter: it comes from the directory name, so
+ * a service's id is visible in the repo tree and a rename is a real (tombstoning) rename
+ * rather than two rows silently claiming the same id from different folders.
+ */
+export function parseServiceManifest(content: string): ParsedServiceManifest | null {
+  const split = splitManifest(content)
+  const name = str(split.meta.name)
+  if (!name) return null
+  const overview = overviewOf(split)
+  return { ...overview, name, summary: overview.summary || name }
+}
+
+function str(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function strList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean)
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+/**
+ * The service id a source directory yields: the directory name lower-kebabed. Same rule the
+ * skill library applies to its own directories, so a team that already ships one repo-sourced
+ * library does not learn a second slugging convention.
+ */
+export function slugFromDirName(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'service'
+  )
+}
+
+/**
+ * The contract id one contract FILE yields: its basename without extension, lower-kebabed.
+ * Stable across a body edit (so an updated spec keeps its id) and changing on a rename
+ * (so a renamed file replaces rather than duplicates, because the whole set is replaced).
+ */
+export function contractIdFromPath(path: string): string {
+  const base = path.split('/').pop() ?? path
+  return slugFromDirName(base.replace(/\.[^.]+$/, ''))
+}
+
+/**
+ * The contract id a file yields inside a `folder` source: its path RELATIVE to the scanned
+ * folder, minus the extension, lower-kebabed — so `v1/users.yaml` under `specs/` becomes
+ * `v1-users`.
+ *
+ * A recursive scan is exactly where {@link contractIdFromPath}'s basename rule breaks down:
+ * `v1/users.yaml` and `v2/users.yaml` are the two most ordinary files a versioned spec folder
+ * holds, and collapsing both to `users` would silently keep one and drop the other — handing a
+ * coder v1's endpoints as though they were the whole interface. Relative paths collide only
+ * when the files genuinely are the same file.
+ *
+ * For a file sitting directly in the folder root this degrades to exactly the basename rule, so
+ * a non-recursive `folder` source and a `files` source produce identical ids.
+ */
+export function contractIdFromRelativePath(path: string, root: string): string {
+  const prefix = root ? `${root}/` : ''
+  const relative = path.startsWith(prefix)
+    ? path.slice(prefix.length)
+    : (path.split('/').pop() ?? path)
+  return slugFromDirName(relative.replace(/\.[^.]+$/, ''))
+}
+
+/**
+ * A human title for a contract file, derived from its path. Used only when the document
+ * itself offers none (the TypeScript formats never do; an OpenAPI document's `info.title` is
+ * preferred by the caller).
+ */
+export function contractTitleFromPath(path: string): string {
+  return path.split('/').pop() ?? path
+}
+
+/**
+ * The deepest directory that contains every one of `paths` — where a `files`-mode source
+ * anchors its head-commit probe. One probe over the common ancestor detects a change to ANY
+ * of the linked files, which is what keeps a multi-file link at one cheap read per staleness
+ * check instead of one per file.
+ *
+ * Falls back to `''` (the repo root) when the paths share no directory, which is correct
+ * rather than merely safe: the probe then tracks the repo head, so it can only ever be too
+ * eager, never miss a change.
+ */
+export function commonDirectory(paths: string[]): string {
+  const segmented = paths.map((p) => p.split('/').slice(0, -1))
+  if (segmented.length === 0) return ''
+  const first = segmented[0] ?? []
+  const common: string[] = []
+  for (let i = 0; i < first.length; i++) {
+    const segment = first[i]
+    if (segmented.every((parts) => parts[i] === segment)) common.push(segment as string)
+    else break
+  }
+  return common.join('/')
+}
+
+/** Strip a leading `./` and any leading/trailing slashes from a repo-relative path. */
+export function normalizeFilePath(path: string): string {
+  return path.replace(/^\.\//, '').replace(/^\/+|\/+$/g, '')
+}

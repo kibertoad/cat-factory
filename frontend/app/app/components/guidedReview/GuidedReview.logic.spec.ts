@@ -1,0 +1,179 @@
+import { describe, expect, it } from 'vitest'
+import { GUIDED_REVIEW_POST_LEASE_MS } from '@cat-factory/contracts'
+import {
+  GUIDED_REVIEW_FAILURE_REASONS,
+  guidedReviewDroppedDraftReasonSchema,
+} from '@cat-factory/contracts'
+import en from '../../../i18n/locales/en.json'
+import {
+  NEW_THREAD_TAB,
+  draftEdit,
+  isEditableDraft,
+  postableSelection,
+  canAsk,
+  citationLabel,
+  draftAnchor,
+  droppedAnchor,
+  failureKey,
+  keptDrafts,
+  isStale,
+  reviewTaskTarget,
+  suggestedQuestionThread,
+  threadTabs,
+} from './GuidedReview.logic'
+
+describe('citationLabel', () => {
+  it('names a span, a line, or a whole file', () => {
+    expect(citationLabel({ path: 'a.ts', startLine: 3, endLine: 9 })).toBe('a.ts:3-9')
+    expect(citationLabel({ path: 'a.ts', startLine: 3, endLine: 3 })).toBe('a.ts:3')
+    expect(citationLabel({ path: 'a.ts', startLine: 3 })).toBe('a.ts:3')
+    expect(citationLabel({ path: 'a.ts' })).toBe('a.ts')
+  })
+})
+
+describe('canAsk', () => {
+  it('waits only on a live answer in this thread', () => {
+    expect(canAsk([{ role: 'user', status: 'complete' }])).toBe(true)
+    expect(canAsk([{ role: 'assistant', status: 'pending' }])).toBe(false)
+    expect(canAsk([{ role: 'assistant', status: 'running' }])).toBe(false)
+    expect(canAsk([{ role: 'assistant', status: 'failed' }])).toBe(true)
+  })
+})
+
+describe('threadTabs', () => {
+  const view = { threads: [{ id: 't1' }, { id: 't2' }] } as never
+  it('lists threads oldest first and adds the unsaved tab only while it is open', () => {
+    expect(threadTabs(view, false)).toEqual(['t1', 't2'])
+    expect(threadTabs(view, true)).toEqual(['t1', 't2', NEW_THREAD_TAB])
+    expect(threadTabs(undefined, true)).toEqual([NEW_THREAD_TAB])
+  })
+})
+
+describe('suggestedQuestionThread', () => {
+  it('asks the suggestion in a thread of its own', () => {
+    expect(suggestedQuestionThread('Is it bounded?')).toEqual({
+      question: { content: 'Is it bounded?' },
+    })
+  })
+})
+
+describe('reviewTaskTarget', () => {
+  const repo = { owner: 'acme', name: 'shop', provider: 'gitlab' as const }
+  it('prefers the stored number and falls back to the URL', () => {
+    expect(reviewTaskTarget({ prNumber: 7 }, repo)).toEqual({
+      owner: 'acme',
+      repo: 'shop',
+      prNumber: 7,
+      provider: 'gitlab',
+    })
+    expect(
+      reviewTaskTarget({ prUrl: 'https://gitlab.example/acme/shop/-/merge_requests/42' }, repo)
+        ?.prNumber,
+    ).toBe(42)
+    expect(reviewTaskTarget({ prUrl: 'https://github.com/acme/shop/pull/5' }, repo)?.prNumber).toBe(
+      5,
+    )
+  })
+
+  it('is null without a repository or a number', () => {
+    expect(reviewTaskTarget({ prNumber: 7 }, undefined)).toBeNull()
+    expect(reviewTaskTarget({ prUrl: 'https://example.com/nothing' }, repo)).toBeNull()
+  })
+
+  it('reads the URL the way the dispatch does', () => {
+    expect(reviewTaskTarget({ prUrl: 'acme/shop#88' }, repo)?.prNumber).toBe(88)
+    expect(
+      reviewTaskTarget({ prNumber: 0, prUrl: 'https://github.com/acme/shop/pull/5' }, repo)
+        ?.prNumber,
+    ).toBe(5)
+  })
+})
+
+describe('failure and draft labels', () => {
+  it('translates each failure reason under its own key', () => {
+    expect(failureKey('budget_exhausted')).toBe('guidedReview.failure.budget_exhausted')
+  })
+
+  it('ships copy for every failure and dropped-draft reason the contract can send', () => {
+    const catalog = en.guidedReview as unknown as Record<string, Record<string, string>>
+    for (const reason of GUIDED_REVIEW_FAILURE_REASONS) {
+      expect(catalog.failure![reason], reason).toBeTruthy()
+    }
+    for (const reason of guidedReviewDroppedDraftReasonSchema.options) {
+      expect(catalog.dropped![reason], reason).toBeTruthy()
+    }
+  })
+
+  it('names where a draft sits, or would have', () => {
+    expect(droppedAnchor({ path: 'a.ts', line: 9 })).toBe('a.ts:9')
+    expect(droppedAnchor({ path: '(none)', line: null })).toBe('(none)')
+    expect(draftAnchor({ path: 'a.ts', line: 9, startLine: null })).toBe('a.ts:9')
+    expect(draftAnchor({ path: 'a.ts', line: 9, startLine: 4 })).toBe('a.ts:4-9')
+  })
+
+  it('counts the drafts one message produced', () => {
+    expect(keptDrafts([{ messageId: 'm1' }, { messageId: 'm2' }, { messageId: 'm1' }], 'm1')).toBe(
+      2,
+    )
+  })
+})
+
+describe('isStale', () => {
+  it('is stale only when a newer head is known', () => {
+    expect(isStale('a', 'b')).toBe(true)
+    expect(isStale('a', 'a')).toBe(false)
+    expect(isStale('a', null)).toBe(false)
+  })
+})
+
+describe('draft editing and posting', () => {
+  it('treats proposed and failed drafts as still editable', () => {
+    expect(
+      ['proposed', 'failed', 'posting', 'posted', 'discarded'].map((status) =>
+        isEditableDraft({ status: status as never }),
+      ),
+    ).toEqual([true, true, false, false, false])
+  })
+
+  it('posts only the selected drafts that are still postable, in list order', () => {
+    const drafts = [
+      { id: 'a', status: 'proposed' as const, updatedAt: 0 },
+      { id: 'b', status: 'posted' as const, updatedAt: 0 },
+      { id: 'c', status: 'failed' as const, updatedAt: 0 },
+    ]
+    expect(postableSelection(drafts, new Set(['c', 'b', 'a']), 1)).toEqual(['a', 'c'])
+  })
+
+  it('offers a posting draft again only once its claim outlives the lease', () => {
+    const stranded = [{ id: 'p', status: 'posting' as const, updatedAt: 1_000 }]
+    const selected = new Set(['p'])
+    expect(postableSelection(stranded, selected, 1_000 + GUIDED_REVIEW_POST_LEASE_MS)).toEqual([])
+    expect(postableSelection(stranded, selected, 1_001 + GUIDED_REVIEW_POST_LEASE_MS)).toEqual([
+      'p',
+    ])
+  })
+
+  it('sends only what an edit changed, and nothing for an untouched form', () => {
+    const draft = { body: 'Bound the retries.', line: 3, startLine: null, side: 'RIGHT' as const }
+    expect(draftEdit(draft, { body: ' Bound the retries. ', line: 3, side: 'RIGHT' })).toEqual({})
+    expect(draftEdit(draft, { body: 'Cap at three.', line: 4, side: 'RIGHT' })).toEqual({
+      body: 'Cap at three.',
+      line: 4,
+    })
+  })
+
+  it('drops the start of a multi-line draft only when the edit moves it', () => {
+    const span = { body: 'Span.', line: 8, startLine: 5, side: 'RIGHT' as const }
+    expect(draftEdit(span, { body: 'Reworded.', line: 8, side: 'RIGHT' })).toEqual({
+      body: 'Reworded.',
+    })
+    expect(draftEdit(span, { body: 'Span.', line: 3, side: 'RIGHT' })).toEqual({
+      line: 3,
+      startLine: null,
+    })
+    expect(draftEdit(span, { body: 'Span.', line: 8, side: 'LEFT' })).toEqual({
+      startLine: null,
+      side: 'LEFT',
+    })
+  })
+})

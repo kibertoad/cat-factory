@@ -1,0 +1,392 @@
+import type { BlockEditAuthority } from '@cat-factory/contracts'
+import type {
+  BlockRepository,
+  BugCandidate,
+  BuiltinTaskSourceKind,
+  BugHuntAnalysisStatus,
+  BugHuntAssessor,
+  BugHuntCandidate,
+  BugHuntResult,
+  IssueIntakeQuery,
+  TaskConnectionStore,
+  TaskRepository,
+  TaskSourceKind,
+  TaskSourceProvider,
+  TaskSourceRegistry,
+  TrackerBoard,
+} from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  ValidationError,
+  assertFound,
+  parseBugHuntVerdicts,
+  rankBugCandidates,
+  redactSecrets,
+} from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
+import type { TaskImportService } from './TaskImportService.js'
+import type { TaskFromIssue, TaskLinkService } from './TaskLinkService.js'
+
+// BugHuntService: the read-and-rank half of the interactive bug hunt — the human-driven dual
+// of the recurring `bug-intake` step (`BugIntakeService`), and deliberately its structural
+// twin: resolve the source's credentials, push every predicate into ONE vendor query, dedupe
+// against the tasks projection with a single batched read, and hand back an outcome the
+// caller finishes with.
+//
+// Where the two differ is who decides. Intake picks the oldest matching issue and claims it
+// unattended; a hunt reads a whole board's worth of open, UNASSIGNED bugs, asks a model to
+// rate impact against implementation complexity, and returns the ranked list for a human to
+// choose from. Nothing is claimed, written or started until they confirm — `adopt` is the
+// only method here with a side effect.
+//
+// Everything is provider-neutral (the kernel `listBoards` / `listBugCandidates` ports plus the
+// shared import/link services) and stateless, so it runs identically on every runtime with no
+// persistence of its own.
+
+export interface BugHuntServiceDependencies {
+  taskSourceRegistry: TaskSourceRegistry
+  taskConnectionStore: TaskConnectionStore
+  taskRepository: TaskRepository
+  /**
+   * The board rows, read for ONE question: does the container a hunt names exist on this
+   * workspace at all. Narrowed to `get` because that is the whole of it — the same point-read
+   * {@link TaskLinkService.createTaskFromIssue} makes before it creates the adopted task.
+   */
+  blockRepository: Pick<BlockRepository, 'get'>
+  importService: TaskImportService
+  linkService: TaskLinkService
+  /**
+   * The ranking model. Absent (or disabled) ⇒ a hunt still returns the board's candidates,
+   * flagged `analysisStatus: 'unavailable'` — the read is useful on its own, and silently
+   * presenting an unranked list as a ranking would be the one genuinely misleading outcome.
+   */
+  assessor?: BugHuntAssessor
+  /**
+   * The workspace spend safeguard, as the narrow predicate the ranking needs (so this layer
+   * takes no dependency on `@cat-factory/spend`).
+   *
+   * A hunt is the platform's first BILLABLE model call that is not behind a run start, so the
+   * budget check `RunAdmission` performs for a run has no equivalent here unless it is made
+   * one: without it, a workspace that has exhausted its budget — and can therefore no longer
+   * start the very run a hunt exists to start — could still spend on ranking, repeatedly.
+   * Unwired ⇒ no guard, exactly as an unwired spend service means no guard on a run.
+   */
+  isOverBudget?: (workspaceId: string) => Promise<boolean>
+}
+
+/**
+ * How many candidates one hunt scans. Bounded because the whole set goes into a single
+ * ranking prompt: past this the prompt cost grows without making the shortlist better, since
+ * a human is only ever going to look at the top handful. A board with more matching bugs
+ * reports `truncated`, so the UI can say the scan was partial rather than implying the board
+ * was exhausted.
+ */
+export const BUG_HUNT_SCAN_LIMIT = 40
+
+/** The tracker default when the caller names no issue type — the same one intake uses. */
+const DEFAULT_ISSUE_TYPE = 'bug'
+
+/**
+ * A provider that can actually back a hunt. The capability is optional on
+ * {@link TaskSourceProvider} (a source may be importable and not huntable), so the guard that
+ * establishes it says so in its RETURN type rather than leaving every caller to re-narrow.
+ */
+export type HuntableProvider = TaskSourceProvider &
+  Required<Pick<TaskSourceProvider, 'listBugCandidates'>>
+
+/**
+ * One scan's inputs, with the board already RESOLVED.
+ *
+ * Deliberately not the wire type: `RunBugHuntInput.board` is nullable because a repo-backed
+ * source names none (its board is the service frame's linked repository, which only the HTTP
+ * layer can resolve it, by reading the block ancestry through `resolveRepoTarget`). By the time a
+ * scan reaches this service that question is settled, so the board is a plain string and there is
+ * no second place where "which board?" could be answered differently.
+ */
+export interface BugHuntScan {
+  /** The vendor-shaped board scope, mapped onto the provider's own query leg below. */
+  board: string
+  /**
+   * Where a candidate would be adopted, carried by the SCAN rather than only by `adopt` so a
+   * container that could never receive one is refused before the hunt spends anything.
+   */
+  containerId: string
+  /** Issue type to hunt; omitted → `bug`. Sources without a type notion ignore it. */
+  issueType?: string
+  /** Labels that must ALL be present. */
+  labels?: string[]
+  /** Substring that must appear in the issue title. */
+  titleFragment?: string
+}
+
+export class BugHuntService {
+  constructor(private readonly deps: BugHuntServiceDependencies) {}
+
+  /**
+   * The provider that can back a hunt for this source, or the refusal naming what this deployment
+   * lacks.
+   *
+   * Public because the HTTP layer has to refuse an unhuntable source BEFORE it asks which board a
+   * hunt is scoped to: for a repo-backed source that answer comes off the provider's own
+   * declaration, so an unregistered or unwired one has no answer at all, and answering anyway told
+   * the caller to "pick a board" on a surface that renders no board control. Pure (a registry
+   * lookup), and {@link hunt} calls it too, so a caller that skips it is refused all the same.
+   */
+  requireProvider(source: TaskSourceKind): HuntableProvider {
+    const provider = this.deps.taskSourceRegistry.get(source)
+    if (!provider?.listBugCandidates) {
+      throw new ValidationError(`The '${source}' source cannot back a bug hunt on this deployment.`)
+    }
+    return provider as HuntableProvider
+  }
+
+  /**
+   * List the boards a hunt can run against. A source whose provider can't enumerate boards
+   * throws rather than returning `[]`: an empty picker and "this tracker cannot list boards"
+   * look identical to a user, and only the second one tells them to type the board in.
+   */
+  async listBoards(workspaceId: string, source: TaskSourceKind): Promise<TrackerBoard[]> {
+    const provider = this.deps.taskSourceRegistry.get(source)
+    if (provider?.repoScope) {
+      // A repo-backed source has no board to OFFER: every issue of its belongs to one
+      // repository, and the one a hunt may read is the repository the service frame it runs for
+      // is linked to (`resolveRepoTarget`), never a choice made here. Refused ahead of the
+      // capability check below so the answer is the same whether or not such a provider can
+      // enumerate repositories at all: listing the connection's repos as boards would offer to
+      // scope a hunt at a repository nothing on this board is linked to.
+      throw new ValidationError(
+        `The '${source}' source scopes a hunt to a service's linked repository, so it has no boards to list.`,
+        { reason: 'board_from_service' satisfies TaskSourceReadReason },
+      )
+    }
+    if (!provider?.listBoards) {
+      // `reason` is what the SPA acts on: "this tracker cannot enumerate boards" is the ONE
+      // failure whose answer is "type the board in yourself", and it must be distinguishable
+      // from an unreachable tracker or an expired token — which would otherwise present as the
+      // same free-text field, followed by a hunt that fails for a reason nobody was told.
+      throw new ValidationError(`The '${source}' source cannot list boards on this deployment.`, {
+        reason: 'boards_unsupported' satisfies TaskSourceReadReason,
+      })
+    }
+    const credentials = await this.credentialsFor(workspaceId, source)
+    return provider.listBoards(credentials, workspaceId)
+  }
+
+  /**
+   * Run a hunt: read the board's open, unassigned bugs (excluding anything already linked to a
+   * block), rank them, and return them best-first.
+   *
+   * The READ throws — an unreachable tracker is a failure the user must see, not an empty
+   * board. The RANKING never does: an assessment that fails leaves the real candidates in
+   * place under `analysisStatus: 'failed'`, because the list is independently useful and a
+   * model outage should not cost the user the scan.
+   */
+  async hunt(
+    workspaceId: string,
+    source: TaskSourceKind,
+    input: BugHuntScan,
+    userId?: string,
+  ): Promise<BugHuntResult> {
+    const provider = this.requireProvider(source)
+    // The container is settled BEFORE the vendor read and the ranking call, not left to the
+    // adoption that follows: a hunt is the platform's first billable model call that is not
+    // behind a run start, so a scan nothing could ever be adopted out of must not spend one.
+    // The point-read is exactly the gate `createTaskFromIssue` applies before it creates the
+    // task, asked one step earlier; whether the container may HOLD a task stays with the create
+    // (`BoardService.addTask`), which is that rule's one authority.
+    assertFound(
+      await this.deps.blockRepository.get(workspaceId, input.containerId),
+      'Block',
+      input.containerId,
+    )
+    const credentials = await this.credentialsFor(workspaceId, source)
+
+    // Exclusion list: every issue from this source currently imported AND linked to a block is
+    // already being worked, so offering it as a fresh candidate would invite two runs on one
+    // bug. ONE batched projection read, filtered in memory — never a per-candidate lookup.
+    const projected = await this.deps.taskRepository.listByWorkspace(workspaceId)
+    const excludeExternalIds = projected
+      .filter((t) => t.linkedBlockId && t.source === source)
+      .map((t) => t.externalId)
+
+    const query: IssueIntakeQuery = {
+      board: boardScopeFor(source, input.board),
+      ...(input.titleFragment ? { titleFragment: input.titleFragment } : {}),
+      ...(input.labels?.length ? { labels: input.labels } : {}),
+      issueType: input.issueType || DEFAULT_ISSUE_TYPE,
+      unassignedOnly: true,
+      excludeExternalIds,
+      // Ask for ONE past the cap purely to learn whether the board holds more. Comparing the
+      // returned count against the cap instead cannot tell "exactly 40 bugs, all of them here"
+      // from "40 shown, more behind them", and would tell a user their board holds more than
+      // they can see whenever it holds exactly the cap.
+      limit: BUG_HUNT_SCAN_LIMIT + 1,
+    }
+    const found = await provider.listBugCandidates(credentials, query, workspaceId)
+    const truncated = found.length > BUG_HUNT_SCAN_LIMIT
+    const candidates = truncated ? found.slice(0, BUG_HUNT_SCAN_LIMIT) : found
+
+    const { ranked, analysisStatus, model } = await this.rank(workspaceId, candidates, userId)
+    return {
+      source,
+      board: input.board,
+      analysisStatus,
+      model,
+      candidates: ranked,
+      scanned: candidates.length,
+      truncated,
+    }
+  }
+
+  /**
+   * Adopt a confirmed candidate: import the issue into the projection and materialise it as a
+   * `bug` task inside `containerId`, with the issue linked for agent context.
+   *
+   * Stops there deliberately. Starting the run needs the execution engine (and the initiator's
+   * personal-credential gate), which is the HTTP layer's job — this service stays inside the
+   * integrations layer, exactly as `BugIntakeService` hands its pickup back to the engine.
+   *
+   * `editor` travels beside `createdBy` and is the same person: an adoption is a member-tier board
+   * write, and the run it leads to is an ATTRIBUTED start (`runInitiatorRole`). The two answers
+   * have to agree, or a tier sandboxed for its runs could still author the task those runs are
+   * governed by (ADR 0037).
+   */
+  async adopt(input: {
+    workspaceId: string
+    source: TaskSourceKind
+    externalId: string
+    containerId: string
+    editor: BlockEditAuthority
+    createdBy: string | null
+    pipelineId: string
+  }): Promise<TaskFromIssue> {
+    const { workspaceId, source, externalId, containerId, editor, createdBy, pipelineId } = input
+    await this.deps.importService.import(workspaceId, source, externalId)
+    return this.deps.linkService.createTaskFromIssue({
+      workspaceId,
+      containerId,
+      source,
+      externalId,
+      editor,
+      createdBy,
+      // A hunted issue is a bug by construction, and the pipeline the human confirmed is the
+      // one the task's Run controls should default to — so the created task carries both
+      // rather than landing as a generic `feature` the user has to re-classify.
+      shape: { taskType: 'bug', pipelineId },
+    })
+  }
+
+  /**
+   * Rank a candidate set, degrading to the unranked list with a stated reason. The model's
+   * verdicts are joined onto the provider's rows by `rankBugCandidates`, so a hallucinated
+   * issue is dropped and a skipped one surfaces as "not assessed" rather than as a zero.
+   */
+  private async rank(
+    workspaceId: string,
+    candidates: BugCandidate[],
+    userId?: string,
+  ): Promise<{
+    ranked: BugHuntCandidate[]
+    analysisStatus: BugHuntAnalysisStatus
+    model: string | null
+  }> {
+    const unranked = rankBugCandidates(candidates, new Map())
+    if (candidates.length === 0) {
+      return { ranked: unranked, analysisStatus: 'empty', model: null }
+    }
+    const assessor = this.deps.assessor
+    if (!assessor?.enabled) {
+      return { ranked: unranked, analysisStatus: 'unavailable', model: null }
+    }
+    try {
+      // Checked BEFORE the call, and reported as its OWN status rather than folded into
+      // `failed`: an exhausted budget is not a broken model, and the fix (raise the budget, or
+      // wait for the window to roll) is not the fix for a revoked key.
+      //
+      // Inside the try because it reads the spend ledger: a probe that cannot answer must not
+      // cost the user the scan they already paid a vendor call for. It then degrades to
+      // `failed` — accurate (the rating could not be completed) and fail-CLOSED (no model call
+      // is made), which is the only safe direction for a budget guard.
+      if (await this.deps.isOverBudget?.(workspaceId)) {
+        return { ranked: unranked, analysisStatus: 'over_budget', model: null }
+      }
+      // Bug bodies are written by anyone who can file a ticket and are about to be sent to a
+      // model provider, so they are scrubbed BEFORE they leave the deployment — the same
+      // boundary the agent-context snapshots apply, for the same reason.
+      const { verdicts, model } = await assessor.assess({
+        workspaceId,
+        candidates: candidates.map(scrubCandidate),
+        ...(userId ? { userId } : {}),
+      })
+      return {
+        ranked: rankBugCandidates(candidates, parseBugHuntVerdicts(verdicts)),
+        analysisStatus: 'ranked',
+        model,
+      }
+    } catch (error) {
+      // The one failure that is NOT the assessor's to swallow: `credential_required` says the
+      // asker must enter their personal password, which is a thing they can do and the client
+      // knows how to ask for. Reported as a 200 with `analysisStatus: 'failed'` it becomes the
+      // shape this whole change exists to end: the hunt silently ranks on the board's own order,
+      // and the only signal is the bill for the call that never happened.
+      if (error instanceof CredentialRequiredError) throw error
+      // Everything else is deliberately swallowed: `analysisStatus: 'failed'` is what the user
+      // acts on, and the scan they paid for is still in the response. The assessor logs the
+      // underlying cause. A budget probe that threw lands here too: nothing was spent, and the
+      // scan survives.
+      return { ranked: unranked, analysisStatus: 'failed', model: null }
+    }
+  }
+
+  /** Resolve a source's stored credentials, or an empty bag for a credentialless one (GitHub). */
+  private async credentialsFor(
+    workspaceId: string,
+    source: TaskSourceKind,
+  ): Promise<Record<string, string>> {
+    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    return connection?.credentials ?? {}
+  }
+}
+
+/**
+ * Which leg of the board scope each BUILT-IN source's provider reads. The vendors' board notions
+ * are structurally different (a Jira project key, a Linear team UUID, an `owner/repo` slug, a
+ * nesting GitLab project path), which is exactly why the wire carries ONE opaque string and the
+ * mapping happens here rather than in the SPA — a picker that had to know which field to fill
+ * would have to be forked per provider.
+ *
+ * A `Record` over the built-in vocabulary rather than an `if`-chain, because every field here is
+ * a plain string and so a fall-through is silent: when `gitlab` joined the built-ins, a chain
+ * ending in `return { boardId: board }` sent its project path to the opaque leg no built-in
+ * provider reads, which surfaces as "no matching issues" rather than as the mis-routing it is.
+ * A fifth built-in now fails to compile until it names its leg.
+ */
+const BUILTIN_BOARD_LEGS: Record<BuiltinTaskSourceKind, keyof IssueIntakeQuery['board']> = {
+  jira: 'jiraProjectKey',
+  linear: 'linearTeamId',
+  github: 'githubRepo',
+  gitlab: 'gitlabProject',
+}
+
+/**
+ * Put the caller's board id on the field the target provider reads.
+ *
+ * A DEPLOYMENT-REGISTERED source takes the opaque `boardId` leg, which only its own provider
+ * interprets. That default is keyed on the source NOT being a built-in, never on it being
+ * un-matched by the cases above.
+ */
+function boardScopeFor(source: TaskSourceKind, board: string): IssueIntakeQuery['board'] {
+  const leg = BUILTIN_BOARD_LEGS[source as BuiltinTaskSourceKind] as
+    | keyof IssueIntakeQuery['board']
+    | undefined
+  return leg ? { [leg]: board } : { boardId: board }
+}
+
+/** Scrub the free-text fields of a candidate before it is sent to a model provider. */
+function scrubCandidate(candidate: BugCandidate): BugCandidate {
+  return {
+    ...candidate,
+    title: redactSecrets(candidate.title) ?? '',
+    description: redactSecrets(candidate.description) ?? '',
+  }
+}

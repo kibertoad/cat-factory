@@ -1,3 +1,5 @@
+import { pagesProjectName } from './slug.js'
+
 // Static file templates for the scaffolded deployment. These mirror `deploy/local` and
 // `deploy/frontend` in this repo, but depend on the PUBLISHED libraries (not `workspace:*`) so
 // the generated project works standalone outside the monorepo.
@@ -13,13 +15,17 @@
 // scaffold's `pnpm install` unresolvable. (The two libraries version independently.)
 export const LOCAL_SERVER_VERSION = '^0.34.0'
 export const APP_VERSION = '^0.66.0'
-export const NUXT_VERSION = '^4.4.8'
-export const TYPES_NODE_VERSION = '^26.0.1'
-export const TYPESCRIPT_VERSION = '7.0.1-rc'
-export const WRANGLER_VERSION = '^4.105.0'
+const NUXT_VERSION = '^4.4.8'
+const TYPES_NODE_VERSION = '^26.0.1'
+const TYPESCRIPT_VERSION = '7.0.1-rc'
+const WRANGLER_VERSION = '^4.105.0'
 
-/** Default executor-harness image agent jobs run as per-run containers. */
-export const DEFAULT_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:latest'
+/**
+ * An illustrative (commented) `LOCAL_HARNESS_IMAGE` value. Only shown as an example — the CLI
+ * leaves the var UNSET by default so the backend runs the version it was released against; the
+ * `<version>` is a placeholder, never a real pin (and deliberately NOT a mutable `:latest` tag).
+ */
+export const HARNESS_IMAGE_EXAMPLE = 'ghcr.io/kibertoad/cat-factory-executor:<version>'
 
 /** The container runtimes the local facade understands (`LOCAL_CONTAINER_RUNTIME`). */
 export const CONTAINER_RUNTIMES = ['docker', 'podman', 'orbstack', 'colima', 'apple'] as const
@@ -86,17 +92,39 @@ startLocal().catch((err: unknown) => {
 })
 `
 
-export const dockerCompose = (dbUrl: string): string => {
+export interface DockerComposeInput {
+  /** The deployment's `DATABASE_URL`: the Postgres credentials/db/port are read back off it. */
+  databaseUrl: string
+  /**
+   * The deployment's Compose project name, ALREADY resolved by `composeProjectNameFor` (it is
+   * derived from the deployment directory, which the templates never see). Written verbatim.
+   */
+  composeProjectName: string
+}
+
+/**
+ * YAML-quote a value read out of the DATABASE_URL and escape it for Compose's OWN `${}`
+ * interpolation. Both halves are load-bearing: as a bare scalar a password holding `: ` breaks
+ * the parse and one starting with `[`/`{`/`*` becomes a flow collection or an alias, and a `$`
+ * in a quoted value is still read as a variable reference, so Compose would create the container
+ * with a password that no longer matches the DATABASE_URL the backend authenticates with.
+ */
+const composeValue = (value: string): string => JSON.stringify(value).replace(/\$/g, '$$$$')
+
+/** Quote a value that reaches a SHELL, inside the healthcheck's `CMD-SHELL` command. */
+const shellArg = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`
+
+export const dockerCompose = (input: DockerComposeInput): string => {
   // Derive the compose credentials/db from the DATABASE_URL so the two always agree.
   let user = 'cat'
   let password = 'cat'
   let db = 'catfactory'
   let port = '5432'
   try {
-    const u = new URL(dbUrl)
+    const u = new URL(input.databaseUrl)
     user = decodeURIComponent(u.username) || user
     password = decodeURIComponent(u.password) || password
-    db = u.pathname.replace(/^\//, '') || db
+    db = decodeURIComponent(u.pathname.replace(/^\//, '')) || db
     port = u.port || port
   } catch {
     // Keep the defaults if the URL doesn't parse.
@@ -105,19 +133,26 @@ export const dockerCompose = (dbUrl: string): string => {
 # (so it can drive the container runtime to spawn agent containers), so only Postgres lives here.
 #
 #   docker compose up -d postgres   # or: pnpm db:up
+#
+# The project name below keys this deployment's container, network and database volume. It is
+# declared rather than left to Compose's default (this file's own \`local/\` directory), which
+# every generated deployment shares: two of them would then claim one Postgres volume and the
+# second would serve the first one's data.
+name: ${input.composeProjectName}
+
 services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${user}
-      POSTGRES_PASSWORD: ${password}
-      POSTGRES_DB: ${db}
+      POSTGRES_USER: ${composeValue(user)}
+      POSTGRES_PASSWORD: ${composeValue(password)}
+      POSTGRES_DB: ${composeValue(db)}
     ports:
       - '${port}:5432'
     volumes:
       - cat-factory-pg:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${user} -d ${db}']
+      test: ['CMD-SHELL', ${composeValue(`pg_isready -U ${shellArg(user)} -d ${shellArg(db)}`)}]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -133,9 +168,40 @@ export interface LocalEnvExampleInput {
   containerRuntime?: ContainerRuntime
   databaseUrl?: string
   port?: number
+  /**
+   * An explicit harness-image pin. Normally UNSET (the CLI omits `--harness-image`), which
+   * documents the var as commented-out so the backend runs its matched version; a value here
+   * is written active because the developer deliberately chose to lock to it.
+   */
   harnessImage?: string
   executionMode?: ExecutionMode
   nativeHarnesses?: NativeHarness[]
+}
+
+/**
+ * Why `LOCAL_HARNESS_IMAGE` should normally stay UNSET, and when to pin it. Un-prefixed lines so
+ * both the static example (which adds `# `) and the populated `.env` (`buildLocalEnv`, whose
+ * renderer adds it) explain the var identically.
+ */
+export const HARNESS_IMAGE_GUIDANCE = [
+  'The executor-harness image agent jobs run as per-run containers. OPTIONAL — leave it',
+  'UNSET (recommended) to run the image version this @cat-factory/local-server build was',
+  'released and tested against, pulled fresh at boot so it never goes stale. Pin it here',
+  'ONLY to lock to a specific version — reproducing a bug on an older image, or testing a',
+  'hotfix on a newer one — accepting that image and backend versions are not guaranteed',
+  'compatible across that boundary. Avoid a mutable tag like `:latest`: it can pull an',
+  'image newer than this backend supports.',
+] as const
+
+/**
+ * The `LOCAL_HARNESS_IMAGE` block for the static `.env.example`. Unset (the default) documents the
+ * var commented-out with {@link HARNESS_IMAGE_GUIDANCE}; a pin is written active.
+ */
+export const harnessImageEnvLines = (harnessImage?: string): string[] => {
+  const guidance = HARNESS_IMAGE_GUIDANCE.map((line) => `# ${line}`)
+  return harnessImage
+    ? [...guidance, `LOCAL_HARNESS_IMAGE=${harnessImage}`]
+    : [...guidance, `# LOCAL_HARNESS_IMAGE=${HARNESS_IMAGE_EXAMPLE}`]
 }
 
 export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
@@ -144,7 +210,7 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
     containerRuntime = 'docker',
     databaseUrl = 'postgres://cat:cat@localhost:5432/catfactory',
     port = 8787,
-    harnessImage = DEFAULT_HARNESS_IMAGE,
+    harnessImage,
     executionMode = 'pool',
     nativeHarnesses,
   } = input
@@ -168,7 +234,7 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
           '# LOCAL_HARNESS_ENTRY=',
         ]
       : [
-          '# Execution mode: PREWARMED DOCKER POOL — per-run containers from LOCAL_HARNESS_IMAGE.',
+          '# Execution mode: PREWARMED DOCKER POOL — per-run containers from the harness image.',
           '# Warm-pool sizing lives in the UI (Integrations > "Local mode"); recommended: size 3,',
           '# pre-warm 1, idle 10m. To switch to native host agents instead, set:',
           '# LOCAL_NATIVE_AGENTS=claude-code,codex',
@@ -183,14 +249,32 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 AUTH_SESSION_SECRET=
 # Generate with: openssl rand -base64 32
 ENCRYPTION_KEY=
+# Shared HMAC secret between the backend and the executor-harness (>= 16 chars). Required to boot.
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+HARNESS_SHARED_SECRET=
 # A GitHub (classic, scopes: repo,workflow) or GitLab (scope: api,read_user) personal access token.
 ${tokenLines.join('\n')}
 # For a self-managed GitLab instance, also set GITLAB_API_BASE (e.g. https://gitlab.example.com/api/v4).
 # GITLAB_API_BASE=
-LOCAL_HARNESS_IMAGE=${harnessImage}
+${harnessImageEnvLines(harnessImage).join('\n')}
 # Container runtime that spawns agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.
 LOCAL_CONTAINER_RUNTIME=${containerRuntime}
 ${executionLines.join('\n')}
+# Kubernetes test environments — the DEPLOY RUNNER (optional, unused by default). A Kubernetes-backed
+# test environment (local k3s/k3d/kind, configured in the UI — or via \`cat-factory k3s\`) needs a
+# deploy runner to render + apply its manifests (kubectl/kustomize/helm) — without one, standing it
+# up fails with "no deploy runner wired". NO default MODE: pick one explicitly. Leave unset if you
+# don't use Kubernetes test environments.
+#   container — RECOMMENDED, works out of the box: the deploy-harness image runs one container per
+#               job on LOCAL_CONTAINER_RUNTIME. The image is resolved automatically to the version
+#               this backend supports, so no other variable is needed. Just uncomment the line below.
+#   native    — host process using your OWN kubectl/kustomize/helm (no Docker); requires
+#               LOCAL_DEPLOY_HARNESS_ENTRY (boot FAILS if it's set without the entry).
+# LOCAL_DEPLOY_RUNTIME=container
+# LOCAL_DEPLOY_HARNESS_ENTRY=          # required only when LOCAL_DEPLOY_RUNTIME=native
+# Escape hatch only — pin a custom/older deploy-harness image or a private-registry mirror. Leave
+# unset to use the backend-matched default (recommended).
+# LOCAL_DEPLOY_IMAGE=ghcr.io/kibertoad/cat-factory-deploy:<version>
 # At least one model provider (Cloudflare Workers AI over REST shown; or a direct vendor key):
 # CLOUDFLARE_ACCOUNT_ID=
 # CLOUDFLARE_API_TOKEN=
@@ -250,7 +334,10 @@ export const frontendWranglerToml = (projectName: string): string =>
 # The SPA's backend URL is baked in at BUILD time (NUXT_PUBLIC_API_BASE), NOT here — Pages
 # [vars] only reach Functions at runtime and this is a pure static SPA. Change \`name\` to your
 # own Pages project.
-name = "${projectName}-frontend"
+#
+# Pages project names take lowercase letters, digits and hyphens only, which is narrower than the
+# npm name the rest of the scaffold uses, so this one is normalized separately.
+name = "${pagesProjectName(projectName)}"
 pages_build_output_dir = ".output/public"
 compatibility_date = "2025-06-01"
 `

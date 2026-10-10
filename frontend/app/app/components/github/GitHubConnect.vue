@@ -6,9 +6,12 @@
 // successful connect the github store flips `connected`, which the host surfaces
 // react to. Shared by the GitHub panel and the bootstrap modal so the connect
 // flow lives in one place.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const installing = ref(false)
 const installationId = ref('')
@@ -20,21 +23,12 @@ onMounted(() => {
   void refreshInstallations()
 })
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function refreshInstallations() {
   try {
     await github.loadInstallations()
   } catch (e) {
     // A 503 (integration off) is handled by the host; surface anything else.
-    notifyError(t('github.connect.errors.listInstallations'), e)
+    present(e, 'github.connect.errors.listInstallations')
   }
 }
 
@@ -43,7 +37,7 @@ async function install() {
   try {
     window.location.href = await github.getInstallUrl()
   } catch (e) {
-    notifyError(t('github.connect.errors.startInstall'), e)
+    present(e, 'github.connect.errors.startInstall')
     installing.value = false
   }
 }
@@ -60,7 +54,7 @@ async function connect(id: number, onDone?: () => void) {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('github.connect.errors.connect'), e)
+    present(e, 'github.connect.errors.connect')
   } finally {
     connecting.value = false
     connectingId.value = null
@@ -81,9 +75,9 @@ async function connectManually() {
     <!-- discovered installations: pick one the App is already on -->
     <section class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span">
           {{ t('github.connect.yourInstallations') }}
-        </span>
+        </SectionLabel>
         <UButton
           size="xs"
           color="neutral"
@@ -98,7 +92,7 @@ async function connectManually() {
 
       <div
         v-if="github.loadingInstallations && !github.installations.length"
-        class="flex items-center gap-2 py-3 text-sm text-slate-400"
+        class="flex items-center gap-2 py-3 text-sm text-muted"
       >
         <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
         {{ t('github.connect.lookingForInstallations') }}
@@ -106,7 +100,7 @@ async function connectManually() {
 
       <p
         v-else-if="!github.installations.length"
-        class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
+        class="rounded-md border border-dashed border-default px-3 py-3 text-sm text-muted"
       >
         {{ t('github.connect.noInstallations') }}
       </p>
@@ -114,7 +108,7 @@ async function connectManually() {
       <div
         v-for="inst in github.installations"
         :key="inst.installationId"
-        class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+        class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
       >
         <div class="flex min-w-0 items-center gap-2">
           <UAvatar
@@ -123,10 +117,10 @@ async function connectManually() {
             size="2xs"
             :alt="inst.accountLogin"
           />
-          <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-slate-400" />
+          <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <div class="truncate text-sm text-slate-200">{{ inst.accountLogin }}</div>
-            <div class="text-[11px] text-slate-500">
+            <div class="truncate text-sm text-default">{{ inst.accountLogin }}</div>
+            <div class="text-2xs text-dimmed">
               {{
                 t('github.connect.installationMeta', {
                   targetType: inst.targetType,

@@ -1,16 +1,9 @@
 import { listModelsContract, listWorkspaceModelsContract } from '@cat-factory/contracts'
-import {
-  effectiveCatalogWith,
-  isModelUsableInline,
-  localSelectableModels,
-  openRouterSelectableModels,
-} from '@cat-factory/kernel'
-import { modelCostResolver, withDynamicPrices } from '@cat-factory/spend'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { resolveWorkspaceCapabilities } from '../../agents/providerCapabilities.js'
+import { resolveWorkspaceModelCatalog } from './workspaceCatalog.js'
 
 /**
  * Serves the model picker catalog. Selectability is derived from what is actually
@@ -31,37 +24,15 @@ export function modelController(): Hono<AppEnv> {
   })
 
   // Per-workspace catalog: selectability reflects this workspace's (+ its account's +
-  // the caller's) configured API keys and subscription tokens.
+  // the caller's) configured API keys and subscription tokens. The composition lives in
+  // `workspaceCatalog.ts` because `GET /api/v1/models` must answer the same question
+  // identically; see that file for why a second copy would drift.
   buildHonoRoute(app, listWorkspaceModelsContract, async (c) => {
-    const container = c.get('container')
-    const workspaceId = param(c, 'workspaceId')
-    const userId = c.get('user')?.id
-    const caps = await resolveWorkspaceCapabilities(container, workspaceId, userId)
-    // Surface the caller's own locally-run models (Ollama / LM Studio / …) alongside the
-    // built-in catalog. They're scoped to the user (a runner lives on their machine).
-    const local =
-      userId && container.localModelEndpoints
-        ? await container.localModelEndpoints.capabilitiesFor(userId)
-        : []
-    // Plus this workspace's enabled OpenRouter gateway models (the dynamic catalog), with
-    // their live per-model prices overlaid onto the spend table so costs/budgets are exact.
-    const openRouter = container.openRouterCatalog
-      ? await container.openRouterCatalog.capabilitiesFor(workspaceId)
-      : []
-    const costFor = modelCostResolver(withDynamicPrices(container.config.spend, openRouter))
-    // Annotate each option with inline-usability (can it drive the reviewers / brainstorm /
-    // estimator / Kaizen grader?). A subscription-only model this deployment can't run inline is
-    // `available` but not `inlineUsable`; the predicate is the deployment's inline-harness seam
-    // (set only in local mode's ambient CLI), so subscription models correctly stay usable there.
-    const runsInline = container.config.agents.inlineHarnessRef
-    const catalog = effectiveCatalogWith(
-      [...localSelectableModels(local), ...openRouterSelectableModels(openRouter)],
-      caps,
-      costFor,
-    ).map((option) => ({
-      ...option,
-      inlineUsable: isModelUsableInline(option.id, caps, runsInline),
-    }))
+    const catalog = await resolveWorkspaceModelCatalog(
+      c.get('container'),
+      param(c, 'workspaceId'),
+      c.get('user')?.id,
+    )
     return c.json(catalog, 200)
   })
 

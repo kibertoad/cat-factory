@@ -4,10 +4,12 @@ import type {
   EnvironmentProvider,
   GitHubInstallation,
   GitHubInstallationRepository,
+  RepoProjectionRepository,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { ContainerEnvConfigRepairer } from '../src/agents/ContainerEnvConfigRepairer.js'
+import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
 // The env-config REPAIR agent (PR #416 increment 2), reworked into the durable
@@ -24,9 +26,11 @@ const INSTALLATION: GitHubInstallation = {
   accountId: 'acc_1',
   accountLogin: 'kibertoad',
   targetType: 'User',
+  provider: 'github',
   appId: 'app-default',
   cachedToken: null,
   tokenExpiresAt: null,
+  accessToken: null,
   createdAt: 0,
   deletedAt: null,
 }
@@ -34,15 +38,22 @@ const INSTALLATION: GitHubInstallation = {
 function repairProvider(over: Partial<EnvironmentProvider> = {}): EnvironmentProvider {
   return {
     describeRepairAgent: () => ({
-      prompt: 'Make .kargo.yml valid: it needs a name and a jobs list.',
+      prompt: 'Make .acme-envs.yml valid: it needs a name and a jobs list.',
     }),
     ...over,
   } as unknown as EnvironmentProvider
 }
 
+/** The workspace's projected repos; `kibertoad/acme` is the one every REQUEST below targets. */
+const PROJECTED_REPOS = [
+  { githubId: 501, owner: 'kibertoad', name: 'acme' },
+  { githubId: 502, owner: 'kibertoad', name: 'other' },
+] as unknown as Awaited<ReturnType<RepoProjectionRepository['list']>>
+
 function makeRepairer(
   transport: RunnerTransport,
   provider: EnvironmentProvider = repairProvider(),
+  over: { projectedRepos?: typeof PROJECTED_REPOS; mint?: MintInstallationToken } = {},
 ): ContainerEnvConfigRepairer {
   const installationRepository = {
     getByWorkspace: vi.fn(async () => INSTALLATION),
@@ -53,7 +64,8 @@ function makeRepairer(
   return new ContainerEnvConfigRepairer({
     resolveTransport: async () => transport,
     installationRepository,
-    mintInstallationToken: vi.fn(async () => 'gh-token'),
+    repoRepository: { list: async () => over.projectedRepos ?? PROJECTED_REPOS },
+    mintInstallationToken: over.mint ?? (async () => 'gh-token'),
     sessionService,
     environmentProvider: provider,
     model: { provider: 'workers-ai', model: '@cf/test' },
@@ -67,7 +79,7 @@ const REQUEST: EnvConfigRepairRequest = {
   owner: 'kibertoad',
   repo: 'acme',
   gitRef: 'feature/x',
-  issues: [{ severity: 'error' as const, message: 'missing jobs', path: '.kargo.yml' }],
+  issues: [{ severity: 'error' as const, message: 'missing jobs', path: '.acme-envs.yml' }],
   inputs: { name: 'acme' },
 }
 
@@ -105,18 +117,21 @@ describe('ContainerEnvConfigRepairer', () => {
       'https://github.com/kibertoad/acme.git',
     )
     // The user prompt is the provider's repair prompt.
-    expect(spec.userPrompt).toContain('.kargo.yml')
+    expect(spec.userPrompt).toContain('.acme-envs.yml')
+    // A repair dispatches the same `agent` kind as an execution step, so it carries the same
+    // correlation ids — otherwise its container's log lines join to nothing. A repair has no
+    // separate execution row, so its job id IS its run id.
+    expect(spec.workspaceId).toBe('ws_1')
+    expect(spec.executionId).toBe('job_1')
   })
 
   it('pollRepair maps a running view to a progress update', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'running',
-          progress: { completed: 1, inProgress: 1, total: 3 },
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'running',
+        progress: { completed: 1, inProgress: 1, total: 3 },
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -136,13 +151,32 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.state).toBe('done')
   })
 
-  it('pollRepair maps a failed view to a classified failure update', async () => {
+  it('pollRepair no longer string-classifies eviction: the sentinel text alone defaults to `agent`', async () => {
+    // The poll-time eviction verdict rides the `evicted` field now (see the field test below); the
+    // "(container evicted or crashed)" text alone is NOT classified (error-message coverage I5).
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'container evicted or crashed',
+      })),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    expect(update.failureKind).toBe('agent')
+  })
+
+  it('pollRepair classifies eviction from the STRUCTURED field (no string sentinel needed)', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
       poll: vi.fn(
+        // A newer transport reports the verdict as a field; the error text carries no sentinel.
         async (): Promise<RunnerJobView> => ({
           state: 'failed',
-          error: 'container evicted or crashed',
+          error: 'the runner pod was reaped',
+          evicted: 'crash',
         }),
       ),
       release: vi.fn(),
@@ -151,15 +185,52 @@ describe('ContainerEnvConfigRepairer', () => {
     const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
     expect(update.state).toBe('failed')
     expect(update.failureKind).toBe('evicted')
-    expect(update.error).toMatch(/evicted/i)
+  })
+
+  it('pollRepair classifies a failed view from the STRUCTURED harness cause (watchdog → timeout)', async () => {
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(
+        // The harness reports its structured cause; the free-text error carries no watchdog phrase,
+        // so a naive string classifier would mislabel this `agent` instead of `timeout`.
+        async (): Promise<RunnerJobView> => ({
+          state: 'failed',
+          error: 'the run stopped',
+          failureCause: 'inactivity-timeout',
+        }),
+      ),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    expect(update.failureKind).toBe('timeout')
+  })
+
+  it('pollRepair defaults to `agent` when the harness reports no structured cause (watchdog text no longer classified)', async () => {
+    // The abort-phrase string fallback is gone (I5): only the structured `failureCause` classifies a
+    // timeout now, so a watchdog-worded error with no cause coarsens to `agent`, not `timeout`.
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'aborted: no agent activity for too long',
+      })),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    expect(update.failureKind).toBe('agent')
   })
 
   it('pollRepair treats a completed job with a structured error as a failure', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({ state: 'done', result: { error: 'push rejected' } }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'done',
+        result: { error: 'push rejected' },
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -167,6 +238,26 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.state).toBe('failed')
     expect(update.failureKind).toBe('agent')
     expect(update.error).toMatch(/push rejected/i)
+  })
+
+  it('pollRepair prefers the harness cause on a completed-with-error view (git push fault)', async () => {
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'done',
+        result: { error: 'push rejected' },
+        failureCause: 'git',
+      })),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    // `git` collapses to the coarse `agent` kind — the same value the old hardcoded default
+    // produced, because every cause a done-with-error view realistically carries maps to `agent`
+    // (a watchdog kill always yields a FAILED view). The case pins the path's coverage of the
+    // shared kernel mapper, not a value difference.
+    expect(update.failureKind).toBe('agent')
   })
 
   it('stopRepair releases the per-run container', async () => {
@@ -194,5 +285,48 @@ describe('ContainerEnvConfigRepairer', () => {
       /does not support agent-based config repair/i,
     )
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  // The repair container gets a real clone/push credential, so it is a dispatch under the same
+  // rule as the step executor: the token names the one repo the agent edits, not everything the
+  // installation covers (`backend/docs/security-model.md`, Layer 3).
+  it('scopes the repair token to the target repo, resolved off the workspace projection', async () => {
+    const scopes: (string[] | undefined)[] = []
+    const repairer = makeRepairer(
+      { dispatch: async () => undefined } as unknown as RunnerTransport,
+      repairProvider(),
+      {
+        mint: async (_id, ctx) => {
+          scopes.push(ctx?.repoIds)
+          return 'gh-token'
+        },
+      },
+    )
+
+    await repairer.startRepair(REQUEST)
+
+    // `kibertoad/acme`, not the sibling `kibertoad/other` the same installation also covers.
+    expect(scopes).toEqual([['501']])
+  })
+
+  it('passes an EMPTY scope when the projection has not caught up with the target repo', async () => {
+    const scopes: (string[] | undefined)[] = []
+    const repairer = makeRepairer(
+      { dispatch: async () => undefined } as unknown as RunnerTransport,
+      repairProvider(),
+      {
+        projectedRepos: [] as unknown as typeof PROJECTED_REPOS,
+        mint: async (_id, ctx) => {
+          scopes.push(ctx?.repoIds)
+          return 'gh-token'
+        },
+      },
+    )
+
+    // An empty array, NOT an absent one: the mint reads absent as "an engine call, wide by
+    // design" and empty as "a dispatch that could not resolve its repos", which it widens and
+    // reports. A stale projection row must not silently look like the former.
+    await repairer.startRepair(REQUEST)
+    expect(scopes).toEqual([[]])
   })
 })

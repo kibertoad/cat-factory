@@ -1,0 +1,752 @@
+// The Worker's AGENT-EXECUTOR wiring: which backend runs a job (`buildResolveTransport` — a
+// workspace's own self-hosted runner pool, else the per-run Cloudflare Container), the container
+// executor built on it, the composite that routes inline vs. sandbox kinds, and the optional
+// consensus wrap around the result.
+//
+// Split out of `container.ts` along the seam the Node facade already draws with
+// `container-executor-deps.ts`, so the composition root holds the spine and the per-concern
+// `select*Deps` selectors rather than the executor's own backend selection. Model resolution is
+// imported from `container-model-resolver.ts` rather than from the root, so the graph is acyclic.
+
+import {
+  runActivationScope,
+  type AgentContextRecorder,
+  type AgentExecutor,
+  type AppCaches,
+  type Clock,
+  type ExecutionEventPublisher,
+  type ProvisioningSubsystem,
+  type ResolveBinaryArtifactStore,
+  type RunnerPoolProvider,
+  type RunnerTransport,
+  type StoreAgentContextGate,
+  type SubscriptionVendor,
+  type ToolSecretResolver,
+  type WebSearchAvailability,
+  createStoreAgentContextGate,
+} from '@cat-factory/kernel'
+import {
+  AiAgentExecutor,
+  type AgentKindRegistry,
+  inlineWebSearchOptionsFromEnv,
+} from '@cat-factory/agents'
+import {
+  type RunnerBackendRegistry,
+  PersonalSubscriptionService,
+  ProviderSubscriptionService,
+  RunnerPoolConnectionService,
+  ProvisioningLogRecorder,
+  LoggingRunnerTransport,
+  RegistrySubscriptionQuotaProvider,
+  defaultSubscriptionQuotaRegistry,
+} from '@cat-factory/integrations'
+import { buildTraceSink } from './container-trace-sinks.js'
+import {
+  LlmObservabilityService,
+  ToolCallObservabilityService,
+  makeHarnessCallRecorder,
+  type RecordHarnessCalls,
+  makeToolCallRecorder,
+} from '@cat-factory/orchestration'
+import {
+  deploymentRepoOrigin,
+  ensureWorkBranchViaRest,
+  logger,
+  createDefaultWebSearchUpstream,
+  createWebSearchUpstream,
+  ENV_HELP,
+  configProblem,
+  resolveUrlSafetyPolicy,
+  noRunnerBackendAvailableError,
+  buildDispatchTokenMint,
+  type ContainerJobAccountingDeps,
+  type ContainerJobAuthDependencies,
+  type MintInstallationToken,
+  type WebSearchUpstream,
+  operationalMetrics,
+} from '@cat-factory/server'
+import { type AppConfig } from './config'
+import type { Env } from './env'
+import { requireTelemetryDb } from './env'
+import { ContainerAgentExecutor, type ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
+import type { AccountSettingsService } from '@cat-factory/integrations'
+import type {
+  ContainerRepoBootstrapperDependencies,
+  JobPackageRegistrySpec,
+} from '@cat-factory/server'
+import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
+import {
+  agentContainerNamespace,
+  deploymentContainerBindings,
+} from './containers/runContainerNamespace'
+import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistry'
+import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
+import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
+import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
+import { CompositeAgentExecutor } from '@cat-factory/server'
+import { ContainerSessionService } from './containers/ContainerSessionService'
+import { D1AgentToolCallRepository } from './repositories/D1AgentToolCallRepository'
+import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
+import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
+import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
+import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
+import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
+import { buildTestSecretsService } from './wireCredentialServices'
+import { CryptoIdGenerator } from './runtime'
+import type { D1Database } from '@cloudflare/workers-types'
+import {
+  buildModelProviderResolver,
+  buildResolveWorkspaceModelDefault,
+} from './container-model-resolver.js'
+import {
+  buildAppRegistry,
+  buildResolveRepoTarget,
+  buildResolveRepoTargets,
+  buildResolveRunInitiatorToken,
+} from './container-vcs-identity.js'
+
+/**
+ * The shared prerequisites both the composite executor selection and its container leg
+ * need — the Worker's infra handles (`env`/`config`/`db`/`clock`), the resolved runner
+ * transport, the agent-kind registry, and the optional subscription / observability seams.
+ * Bundled so the two builders take one dependency object rather than nine positional args.
+ */
+export interface WorkerExecutorDeps {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  /**
+   * The app cache bag, threaded so the executors' preset reads go through the same
+   * `modelPreset` slice the engine and the start guard use. Pass-through on the Worker's
+   * isolate-safe profile, so it changes nothing here today — wired anyway because the Node
+   * facade wires it and a slice only one facade knows about is how the two drift.
+   */
+  caches?: AppCaches
+  resolveTransport: ResolveRunnerTransport | null
+  agentKindRegistry: AgentKindRegistry
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  agentContextObservability?: AgentContextRecorder
+  /**
+   * The `llm_call_metrics` writer for calls that bypass the LLM proxy. Taken rather than built so
+   * the container arm and the delegated arm beside it file through ONE recorder.
+   */
+  recordHarnessCalls: RecordHarnessCalls
+  /**
+   * Resolve a workspace's private package registries onto a container job, so the checkout can
+   * install private dependencies. Passed in rather than built here: the builder is the
+   * composition root's, and the root imports THIS module — so taking it as a dependency is what
+   * keeps the graph one-way.
+   */
+  resolvePackageRegistries: ((workspaceId: string) => Promise<JobPackageRegistrySpec[]>) | undefined
+  /**
+   * The account's binary-artifact store, for the design pictures an inline dispatch attaches to
+   * its model call. Absent ⇒ an inline kind's prompt states that the pictures could not be
+   * delivered rather than pretending the task holds none.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The account-settings reader used ONLY to answer "does this run's account have web-search
+   * keys of its own". A DEDICATED instance with no `settingsCache`: the `accountSettings` slice
+   * is pass-through on the Worker's isolate-safe profile, so caching it here would be a no-op,
+   * and the primary instance (whose decrypted view drives the runtime resolvers) is the one that
+   * gets the shared slice. Undefined when account settings aren't wired.
+   */
+  webSearchAccountSettings: AccountSettingsService | undefined
+  /**
+   * Resolve the credentials a registered capability declared: a tool server's (MCP) and a
+   * generative binary integration's alike. The whole composed CHAIN, from the composition root's
+   * `buildToolSecretChain` (the per-workspace sealed store in front of the Worker's configured
+   * vars, or a deployment's own resolver, which replaces it).
+   *
+   * Passed in for the same reason `resolvePackageRegistries` is: it is the composition root's to
+   * decide, and a deployment holding PER-WORKSPACE credentials replaces it wholesale
+   * (`createWorker({ createToolSecretResolver })`). Until it existed, `ToolSecretResolver` was a
+   * port with exactly one reachable implementation, the one this module hard-coded.
+   *
+   * REQUIRED, and deliberately so: it once carried a bare deployment-environment default for a
+   * caller assembling this executor without that root, and the default failed OPEN. A dropped
+   * link in the facade plumbing (every neighbour here is optional) would have silently stopped
+   * consulting the per-workspace store and resolved every tenant off the deployment's own vars,
+   * which is the exact leak the store exists to prevent, with nothing thrown and nothing logged.
+   * A standalone caller composes one `buildToolSecretChain` call instead and gets the honest
+   * chain plus the description the credential checklist renders.
+   */
+  resolveToolSecrets: ToolSecretResolver
+  /**
+   * The DELEGATED arm, built by the composition root from the app-owned executor registry. Absent
+   * ⇒ the composite refuses a delegated kind loudly, which is the same disposition an unwired
+   * container gets and for the same reason: the fallback would be an inline LLM call over an
+   * implementer's prompt, producing confident prose and no branch.
+   */
+  delegated?: AgentExecutor
+}
+
+/**
+ * The three things a drained poll window reaches: the trajectory store, the double body gate,
+ * and the external trace sink.
+ *
+ * Shared by the container executor and the repo bootstrapper rather than built at each, because
+ * the gate is a DECISION about what a deployment may keep: two constructions of it are two
+ * places for a deployment switch to be read differently, and the one that drifts is the one
+ * nobody looks at. The trace sink is the same instance at every wiring site because
+ * `buildTraceSink` memoises per config; the two writers here are cheap and stateless, so this
+ * builder may be called per wiring site without either sink diverging.
+ */
+export function buildToolTrajectorySinks(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+}): {
+  recordToolCalls: NonNullable<ContainerRepoBootstrapperDependencies['recordToolCalls']>
+  toolBodyGate: StoreAgentContextGate
+  llmTraceSink: ContainerRepoBootstrapperDependencies['llmTraceSink']
+} {
+  const { env, config, db, clock } = args
+  // Persist the tool calls each poll drains as trajectory rows: what the agent DID, beside
+  // the per-call cost rows. Built from the same telemetry DB: a stateless writer whose capture
+  // gate needs the settings repository. Absent settings would open the body gate, and a tool
+  // call's arguments are as model-authored as a prompt is.
+  const recordToolCalls = makeToolCallRecorder(
+    new ToolCallObservabilityService({
+      agentToolCallRepository: new D1AgentToolCallRepository({ db: requireTelemetryDb(env) }),
+      clock,
+    }),
+    logger,
+  )
+  // The double gate on those calls' captured bodies, composed HERE (the facade is what knows the
+  // deployment switch) and applied once per drain, so the store and any external trace sink see
+  // the same decision. `false` short-circuits the settings read entirely.
+  const toolBodyGate: StoreAgentContextGate = config.observability.recordPrompts
+    ? createStoreAgentContextGate({ repository: new D1WorkspaceSettingsRepository({ db }) })
+    : () => Promise.resolve(false)
+  return { recordToolCalls, toolBodyGate, llmTraceSink: buildTraceSink(config) }
+}
+
+/**
+ * The credential channels EVERY container dispatch on this facade shares, as one composition: the
+ * proxy session signer and its base URL, the workspace's owning ACCOUNT (the scope the spend gate
+ * reads), the pooled subscription lease, and the run-initiator's personal lease.
+ *
+ * One builder for the same reason {@link buildToolTrajectorySinks} is one: there is more than one
+ * dispatcher here (the step executor and the AGENT DRY RUN's prober beside it), and the failure of
+ * a second composition is silent. It was `resolveAccountId` that proved it: the step path signed
+ * the account into its session token and the prober's own composition did not, so `isOverBudget`
+ * (which checks the ACCOUNT tier only when the token names an account) kept admitting dry-run
+ * spend for an account that had blown its monthly budget while refusing the same models for steps.
+ * An unsigned scope reads as a caller with no account, never as one that was forgotten.
+ *
+ * The two `has*` predicates ride along because they are the same question asked at ROUTING time
+ * ("does this workspace/user hold a subscription for the vendor?"), and a dispatcher that resolved
+ * the model with one answer and the credential with another would lease for a vendor its own
+ * routing did not pick. `recordSubscriptionUsage` is deliberately NOT here: it is what a SETTLED
+ * job reports back, not what a dispatch is opened with (see {@link buildWorkerJobAccountingDeps}).
+ *
+ * No `nativeAmbientAuth`: the ambient-CLI path is the LOCAL facade's, and a Worker has no host
+ * process with a developer's login on it.
+ */
+export function buildWorkerJobAuthDeps(args: {
+  /**
+   * The two secrets, passed as VALUES rather than off `Env`, and both required: every caller has
+   * already refused a deployment missing either (they are container prerequisites), so taking the
+   * whole environment here would push those `undefined` checks into a builder with no honest answer
+   * for them. Same shape as the Node family's `buildNodeJobAuthDeps`.
+   */
+  sessionSecret: string
+  publicUrl: string
+  db: D1Database
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+}): ContainerJobAuthDependencies & {
+  hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
+} {
+  const { db, subscriptions, personalSubscriptions } = args
+  return {
+    sessionService: new ContainerSessionService({ secret: args.sessionSecret }),
+    proxyBaseUrl: `${args.publicUrl.replace(/\/+$/, '')}/v1`,
+    resolveAccountId: (workspaceId: string) =>
+      new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          hasSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
+    ...(personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (
+            executionId: string,
+            userId: string,
+            vendor: SubscriptionVendor,
+          ) => personalSubscriptions.lease(runActivationScope(executionId), userId, vendor),
+          hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
+            personalSubscriptions.has(userId, vendor),
+        }
+      : {}),
+  }
+}
+
+/**
+ * Where a SETTLED container job's tokens are recorded: the per-call telemetry rows, the leased pool
+ * token's usage-aware rotation counters, and the modeled quota cycle.
+ *
+ * Shared for the same reason as the two builders above, and it binds hardest on the single-job
+ * flows: only a SUBSCRIPTION harness reports anything here, because a Pi job reaches its model
+ * through the LLM proxy, which is its single metering point and files those rows itself. So a
+ * dispatcher that can resolve a subscription model and files nothing meters that job NOWHERE: not
+ * in `llm_call_metrics`, not in the rotation, not in the quota cycle.
+ *
+ * The recorders themselves are stateless writers over the required telemetry DB; the settings
+ * repository behind the harness recorder is REQUIRED rather than hygiene, because a subscription
+ * harness's `stream-json` carries the FULL prompt and response and an absent repository makes the
+ * capture gate an open one.
+ */
+export function buildWorkerJobAccountingDeps(args: {
+  db: D1Database
+  clock: Clock
+  recordHarnessCalls: RecordHarnessCalls
+  subscriptions?: ProviderSubscriptionService
+}): ContainerJobAccountingDeps {
+  const { db, clock, recordHarnessCalls, subscriptions } = args
+  // Modeled quota-cycle provider (usage-and-quota-tracking, Part B): folds a finished
+  // subscription run's tokens into rolling windows. Built once here rather than inside the
+  // closure, which would construct one per settled job.
+  const quota = new RegistrySubscriptionQuotaProvider({
+    subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+    registry: defaultSubscriptionQuotaRegistry,
+  })
+  return {
+    recordHarnessCalls,
+    ...(subscriptions
+      ? {
+          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
+        }
+      : {}),
+    recordSubscriptionQuotaUsage: (target, usage) => quota.recordUsage(target, usage),
+  }
+}
+
+/**
+ * The writer of `llm_call_metrics` for calls that bypass the LLM proxy: a subscription harness's
+ * per-call telemetry, and the usage a delegated executor reports.
+ */
+export function buildWorkerHarnessCallRecorder(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+}): RecordHarnessCalls {
+  const { env, config, db, clock } = args
+  return makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+      idGenerator: new CryptoIdGenerator(),
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+      logger,
+    }),
+  )
+}
+
+/**
+ * Pick the agent that performs pipeline steps: real LLM work via the Vercel AI
+ * SDK, composed with a per-run sandbox for the repo-operating steps (`coder`,
+ * `mocker`, `playwright`, …). Container-based implementation is ALWAYS on — the
+ * sandbox is a hard requirement, so this throws at startup if it can't be built.
+ * Tests bypass this entirely by overriding `agentExecutor` with a fake.
+ *
+ * There is intentionally NO inline fallback for the sandbox kinds — a one-shot
+ * LLM call cannot clone/edit/commit/open a PR, so a degraded inline implementer is
+ * silently broken rather than usefully degraded. If the sandbox prerequisites are
+ * missing we fail the deploy loudly here rather than starting with a half-wired
+ * implementer that would only fault the moment a repo-operating step is dispatched.
+ */
+export function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
+  const { env, config, db, agentKindRegistry } = deps
+  const inline = new AiAgentExecutor({
+    modelProviderResolver: buildModelProviderResolver(env, db),
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+    // Inline (non-sandbox) kinds honour the workspace's per-kind defaults too, so
+    // the resolution precedence is uniform across every agent kind, not just the
+    // container kinds.
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
+    // Opt-in provider web search for the inline design/research kinds (no-op unless
+    // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
+    webSearch: inlineWebSearchOptionsFromEnv(env),
+    agentKindRegistry,
+    // The account's binary-artifact store, so an inline dispatch can attach the design pictures
+    // its container sibling gets on disk. Symmetric with the Node facade's wiring.
+    ...(deps.resolveBinaryArtifactStore
+      ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
+      : {}),
+    // The SAME recorder the container executor is given below, so an inline kind's provided
+    // context lands in `agent_context_snapshots` too. Wiring it there and not here is what left
+    // every companion and inline document kind absent from that table; the key is required (never
+    // spread conditionally) so a facade cannot repeat that omission and still compile.
+    agentContextRecorder: deps.agentContextObservability,
+    logger,
+  })
+
+  // The sandbox MUST build — a null here means a prerequisite (GitHub App private
+  // key, WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, or a runner backend: the
+  // EXEC_CONTAINER binding or a registered runner pool) is missing. We refuse to
+  // start with a half-configured implementer rather than quietly running the
+  // repo-operating steps as useless one-shot LLM calls.
+  const container = buildContainerExecutor(deps)
+  if (!container) {
+    throw configProblem({ key: 'CONTAINER_EXECUTOR', ...ENV_HELP.CONTAINER_EXECUTOR })
+  }
+
+  // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
+  // container.
+  return new CompositeAgentExecutor(
+    inline,
+    container,
+    agentKindRegistry,
+    deps.delegated ?? null,
+    logger,
+  )
+}
+
+/** Truthy env flag (`true`/`1`/`yes`). */
+function isTruthy(value: string | undefined): boolean {
+  return value === 'true' || value === '1' || value === 'yes'
+}
+
+/** What {@link maybeWrapConsensus} needs: the executor to wrap plus the infra it resolves through. */
+export interface ConsensusWrapDeps {
+  standard: AgentExecutor
+  env: Env
+  config: AppConfig
+  db: D1Database
+  eventPublisher: ExecutionEventPublisher | undefined
+  agentKindRegistry: AgentKindRegistry
+  /** The app cache bag, so the panel's preset reads share the engine's `modelPreset` slice. */
+  caches?: AppCaches
+}
+
+/**
+ * Wrap the standard executor with the optional consensus mechanism when
+ * `CONSENSUS_ENABLED` is set: register the consensus capability traits (so the builder
+ * offers "Enable Consensus" on eligible steps) and route consensus-enabled steps through
+ * a multi-model process, persisting + pushing the transcript. Off ⇒ returns `standard`
+ * unchanged (no traits, no wrapping), so behaviour is identical to before.
+ */
+export function maybeWrapConsensus(deps: ConsensusWrapDeps): AgentExecutor {
+  const { standard, env, config, db, eventPublisher, agentKindRegistry } = deps
+  if (!isTruthy(env.CONSENSUS_ENABLED)) return standard
+  registerConsensusTraits(agentKindRegistry)
+  return new ConsensusAgentExecutor({
+    standard,
+    modelProviderResolver: buildModelProviderResolver(env, db),
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
+    sessionRepository: new D1ConsensusSessionRepository({ db }),
+    ...(eventPublisher ? { eventPublisher } : {}),
+    agentKindRegistry,
+  })
+}
+
+/**
+ * Build the factory that picks a job's runner backend: a workspace's own
+ * self-hosted runner pool when one is registered (and runner pools are enabled),
+ * otherwise the per-run Cloudflare Container. Returns null when neither backend is
+ * available, so {@link buildContainerExecutor} falls back to inline work.
+ */
+export function buildResolveTransport(deps: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  provisioningLog: ProvisioningLogRecorder | undefined
+  // The app-owned runner-backend registry the service resolves a stored `kind` through.
+  runnerBackendRegistry: RunnerBackendRegistry
+  // The shared HTTP provider the built-in `manifest` backend reuses when supplied (its OAuth
+  // cache reused). NOT the custom-kind seam — a bespoke runner backend is registered by
+  // reference into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
+  injectedPoolProvider?: RunnerPoolProvider
+}): ResolveRunnerTransport | null {
+  const { env, config, db, clock, provisioningLog, runnerBackendRegistry, injectedPoolProvider } =
+    deps
+  // The Cloudflare backend folds in instance-level reaping: the registry records
+  // each dispatched container in the live inventory and clears it on release, so the
+  // cron reaper (index.ts) can kill anything that outlived its lifetime — covering
+  // run/blueprint/bootstrap through this one transport with no per-flow wiring.
+  // ONE resolver for both, so the transport starts a container and the reaper kills it through
+  // the same class. Two of them would drift the moment a variant is added on one side only,
+  // and the failure is silent: `idFromName` in the wrong namespace hands back a stub for a
+  // container that was never started, so the reap reports success over a still-running browser.
+  const containerNamespace = env.EXEC_CONTAINER
+    ? agentContainerNamespace({
+        exec: env.EXEC_CONTAINER,
+        ...(env.UI_CONTAINER ? { ui: env.UI_CONTAINER } : {}),
+        deployment: deploymentContainerBindings(env as unknown as Record<string, unknown>),
+      })
+    : null
+  const cloudflare = containerNamespace
+    ? new CloudflareContainerTransport(
+        containerNamespace,
+        new ContainerInstanceRegistry(
+          containerNamespace,
+          new D1LiveContainerRepository({ db }),
+          clock,
+        ),
+        env.HARNESS_SHARED_SECRET?.trim() || undefined,
+      )
+    : null
+
+  // The self-hosted backend path: a connection service that resolves each workspace's
+  // runner-backend config (manifest pool OR native Kubernetes) to a live transport via
+  // the runner-backend provider registry. The shared manifest HTTP provider (its OAuth
+  // cache reused) is threaded in for the `manifest` kind.
+  let runnerService: RunnerPoolConnectionService | undefined
+  if (config.runners.enabled) {
+    const urlPolicy = resolveUrlSafetyPolicy(config.runners)
+    runnerService = new RunnerPoolConnectionService({
+      runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
+      workspaceRepository: new D1WorkspaceRepository({ db }),
+      secretCipher: new WebCryptoSecretCipher({
+        masterKeyBase64: config.runners.encryptionKey!,
+        info: 'cat-factory:runners',
+      }),
+      clock,
+      logger,
+      runnerBackendRegistry,
+      ...(urlPolicy ? { urlPolicy } : {}),
+      runnerPoolProvider:
+        injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
+    })
+  }
+
+  if (!cloudflare && !runnerService) return null
+
+  // Wrap a resolved transport so every dispatch/release/poll-failure appends a
+  // provisioning-log event tagged with the right subsystem (a self-hosted pool vs a
+  // per-run Cloudflare container). No-op when the separate log store isn't wired.
+  // The dedup set is closure-owned so it outlives each (per-resolution) wrapper.
+  const loggedPollFailures = new Set<string>()
+  const log = (
+    inner: RunnerTransport,
+    subsystem: ProvisioningSubsystem,
+    workspaceId: string | undefined,
+    providerId?: string | null,
+  ): RunnerTransport =>
+    provisioningLog
+      ? new LoggingRunnerTransport({
+          inner,
+          recorder: provisioningLog,
+          workspaceId: workspaceId ?? '',
+          subsystem,
+          providerId,
+          loggedPollFailures,
+        })
+      : inner
+
+  return async (workspaceId) => {
+    if (runnerService && workspaceId) {
+      const resolved = await runnerService.resolve(workspaceId)
+      if (resolved) {
+        return log(resolved.transport, 'runner-pool', workspaceId, resolved.providerId)
+      }
+    }
+    if (cloudflare) return log(cloudflare, 'container', workspaceId)
+    // The shared factory throws a ConflictError carrying the machine reason (see its doc): a clean
+    // 409 synchronously, and classifyDispatchFailure lifts the reason onto the run's AgentFailure on
+    // the async dispatch path (SPA shows "Agent backend not configured", not "container failed to
+    // start"). The Cloudflare facade also offers "enable Cloudflare Containers" in the remedy.
+    throw noRunnerBackendAvailableError(workspaceId, { cloudflareContainers: true })
+  }
+}
+
+// The deployment-wide trusted web-search upstream for CONTAINER agents, built from this
+// facade's own `WEB_SEARCH_*` env — the fallback the search proxy uses when a run's account
+// configured none of its own (see `createDefaultWebSearchUpstream` in @cat-factory/server).
+// Public endpoints only on workerd (no loopback-SearXNG story); kept symmetric with the Node
+// facade so a stock Cloudflare deployment can also set a deployment-wide default.
+export function buildDefaultWebSearchUpstream(env: Env): WebSearchUpstream | undefined {
+  return createDefaultWebSearchUpstream({
+    braveApiKey: env.WEB_SEARCH_BRAVE_API_KEY,
+    searxngUrl: env.WEB_SEARCH_SEARXNG_URL,
+    searxngApiKey: env.WEB_SEARCH_SEARXNG_API_KEY,
+  })
+}
+
+/**
+ * Build the container-based implementation executor, or return null when its
+ * prerequisites are missing (a runner backend — Cloudflare Containers and/or a
+ * self-hosted pool — plus a configured GitHub App, the proxy's public URL and the
+ * signing secret) — the caller then falls back to inline work.
+ */
+function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null {
+  const {
+    env,
+    config,
+    db,
+    clock,
+    resolveTransport,
+    agentKindRegistry,
+    subscriptions,
+    personalSubscriptions,
+    agentContextObservability,
+    resolvePackageRegistries,
+    webSearchAccountSettings: webSearchSettings,
+  } = deps
+  if (
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return null
+  }
+
+  if (!resolveTransport) return null
+
+  const registry = buildAppRegistry(env, config, db, clock)
+  const resolveRepoTarget = buildResolveRepoTarget(db)
+  // The trajectory drain's sinks and body gate, built by the shared builder below, because the
+  // repo bootstrapper drains through the same three and two constructions is how one deployment
+  // ends up storing a bootstrap's tool-call bodies its executor would have withheld. The trace
+  // sink comes from the same call rather than a second `buildTraceSink`, so "built once" is what
+  // the code does and not only what its doc says.
+  const { recordToolCalls, toolBodyGate, llmTraceSink } = buildToolTrajectorySinks({
+    env,
+    config,
+    db,
+    clock,
+  })
+  // The dispatch's clone/push credential: the run initiator's per-user PAT when stored AND
+  // permitted (so the container's clone/push/PR is attributed to them), else a GitHub App token
+  // narrowed to the repos this one run resolved. Both decisions live in the SHARED
+  // `buildDispatchTokenMint` so this facade and Node cannot drift on either;
+  // `resolveRunInitiatorToken` is likewise the SAME builder the engine's GitHub client uses, so
+  // the workspace's `allowInitiatorPat` switch cannot bind one path and miss the other.
+  const resolveRunInitiatorToken = buildResolveRunInitiatorToken(env, db, clock)
+  const mintInstallationToken: MintInstallationToken = buildDispatchTokenMint({
+    mint: (installationId, opts) => registry.installationToken(installationId, opts),
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
+    logger,
+    operationalMetrics,
+  })
+
+  // Decrypt the service frame's sensitive test credentials onto the tester job body (out of band).
+  const testSecretsForDispatch = buildTestSecretsService(env, db, clock)
+  const resolveTestSecrets = testSecretsForDispatch
+    ? (workspaceId: string, blockId: string) =>
+        testSecretsForDispatch.resolveValuesForBlock(workspaceId, blockId)
+    : undefined
+  // Advertise Pi's `web_search` tool to a run only when a usable upstream exists — either the
+  // deployment-wide default (⇒ always on) or the run's account has its own keys (else the tool
+  // would just fail / return nothing). The per-account check runs off `webSearchAccountSettings`.
+  const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
+  const resolveWebSearchAvailability =
+    defaultWebSearchUpstream || webSearchSettings
+      ? async (workspaceId: string): Promise<WebSearchAvailability> => {
+          // Mirror the proxy's own resolution (`accountUpstream ?? defaultWebSearchUpstream`):
+          // the run's account keys WIN and the deployment default is only the fallback, so the
+          // surfaced provider matches the one that will actually serve the run's searches. Build
+          // the account upstream the SAME way the proxy does before falling back to the default.
+          if (webSearchSettings) {
+            const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+            if (accountId) {
+              const accountUpstream = createWebSearchUpstream(
+                (await webSearchSettings.resolve(accountId)).webSearch ?? {},
+              )
+              if (accountUpstream) return { available: true, provider: accountUpstream.provider }
+            }
+          }
+          if (defaultWebSearchUpstream)
+            return { available: true, provider: defaultWebSearchUpstream.provider }
+          return { available: false, provider: null }
+        }
+      : undefined
+
+  return new ContainerAgentExecutor({
+    resolveTransport,
+    // Counts the seam's operational faults (dispatch failures, container evictions) beside the
+    // per-job log lines. Wired on both facades — an absent collector would report zero of them.
+    operationalMetrics,
+    agentRouting: config.agents.routing,
+    resolveBlockModel: config.agents.resolveBlockModel,
+    // The workspace's per-agent-kind default model, consulted when a block pins none
+    // (block-pinned > workspace per-kind default > env routing > env default).
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
+    resolveRepoTarget,
+    // Where the container clones from. Derived from the deployment's own config rather than left
+    // to the `githubRepoOrigin` default, so a GitLab-only Worker hands its containers the GitLab
+    // host it gates and merges on instead of a github.com URL for a project that lives elsewhere.
+    resolveRepoOrigin: deploymentRepoOrigin(config),
+    // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
+    // change out across the task's own repo + each connected involved-service repo.
+    resolveRepoTargets: buildResolveRepoTargets(db),
+    mintInstallationToken,
+    // Ensure the shared per-task work branch up front so every agent (including the
+    // read-only architect) operates on the same branch — idempotent, best-effort. Writers
+    // create it from base; read-only agents only probe (`options.create`).
+    ensureWorkBranch: async (repo, branch, options) =>
+      ensureWorkBranchViaRest({
+        ...(config.github.apiBase ? { apiBase: config.github.apiBase } : {}),
+        token: await registry.installationToken(repo.installationId),
+        owner: repo.owner,
+        name: repo.name,
+        baseBranch: repo.baseBranch,
+        branch,
+        create: options.create,
+      }),
+    // Every credential channel a container dispatch can carry, from ONE composition shared with
+    // the single-job flows beside this executor (see `buildWorkerJobAuthDeps`).
+    ...buildWorkerJobAuthDeps({
+      sessionSecret: env.AUTH_SESSION_SECRET,
+      publicUrl: env.WORKER_PUBLIC_URL,
+      db,
+      ...(subscriptions ? { subscriptions } : {}),
+      ...(personalSubscriptions ? { personalSubscriptions } : {}),
+    }),
+    // What a SETTLED job's tokens are recorded against, from the same shared composition: the
+    // per-call telemetry rows, the leased pool token's rotation counters and the quota cycle.
+    ...buildWorkerJobAccountingDeps({
+      db,
+      clock,
+      recordHarnessCalls: deps.recordHarnessCalls,
+      ...(subscriptions ? { subscriptions } : {}),
+    }),
+    recordToolCalls,
+    toolBodyGate,
+    // Point container agents' web search at the backend search proxy (no provider key in
+    // the sandbox), but only for a run whose account has keys (see resolver above).
+    ...(resolveWebSearchAvailability ? { resolveWebSearchAvailability } : {}),
+    // Decrypt the workspace's private-registry entries onto the job body (rendered by
+    // the harness into ~/.npmrc), so private dependencies resolve on install.
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
+    // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
+    // band — injected as container env vars by the harness, never in the prompt/telemetry).
+    ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
+    // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
+    // integration) declared. The composition root composed the whole chain and passes it whole:
+    // there is no default here to fall back to, because the only one available (the configured
+    // vars alone) would drop the per-workspace store without saying so.
+    resolveToolSecrets: deps.resolveToolSecrets,
+    logger,
+    githubApiBase: config.github.apiBase,
+    // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
+    // grouped under the run trace — the same sink the LLM proxy fans generations to.
+    // (Langfuse nests them as children; the OTLP exporter groups them by shared trace id.)
+    llmTraceSink,
+    // Record the complete provided context per dispatch (best-effort, gated in the sink).
+    ...(agentContextObservability ? { agentContextObservability } : {}),
+    agentKindRegistry,
+  })
+}

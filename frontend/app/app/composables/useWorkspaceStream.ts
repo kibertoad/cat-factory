@@ -1,5 +1,11 @@
 import { ref, onScopeDispose } from 'vue'
 import type { WorkspaceEvent } from '~/types/domain'
+import { wsOriginFor } from '~/utils/apiOrigin'
+import {
+  applyWorkspaceEvent,
+  type WorkspaceEventTargets,
+} from '~/composables/workspaceStream/applyWorkspaceEvent'
+import { createCoarseRefresh } from '~/composables/workspaceStream/coarseRefresh'
 
 /**
  * Subscribes to the backend's per-workspace WebSocket event stream and keeps the
@@ -7,17 +13,18 @@ import type { WorkspaceEvent } from '~/types/domain'
  * once (e.g. on the board page) after the workspace is ready.
  *
  * `execution` events patch the run + its block directly; `bootstrap` events patch
- * a repo-bootstrap run + its service frame (live "bootstrapping…" progress); the
- * coarse `board` event (module materialised, run cancelled) triggers a debounced
- * full refresh. On every (re)connect we refresh once to reconcile anything missed
- * while disconnected, so the server stays the source of truth and a dropped socket
- * self-heals.
+ * a repo-bootstrap run + its service frame (live "bootstrapping…" progress); a
+ * `board` event patches the block it carries, or triggers a debounced full refresh when it
+ * carries none (a removal, a reparent, a service-frame change). On every (re)connect we refresh
+ * once to reconcile anything missed while disconnected, so the server stays the source of truth
+ * and a dropped socket self-heals. Routing lives in {@link applyWorkspaceEvent}.
  */
 export function useWorkspaceStream() {
   const workspace = useWorkspaceStore()
   const execution = useExecutionStore()
   const board = useBoardStore()
   const agentRuns = useAgentRunsStore()
+  const environmentTest = useEnvironmentTestStore()
   const notifications = useNotificationsStore()
   const observability = useObservabilityStore()
   const requirements = useRequirementsStore()
@@ -25,23 +32,66 @@ export function useWorkspaceStream() {
   const clarity = useClarityStore()
   const brainstorm = useBrainstormStore()
   const kaizen = useKaizenStore()
+  const initiatives = useInitiativesStore()
+  const docInterview = useDocInterviewStore()
+  const guidedReview = useGuidedReviewStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
   const connected = ref(false)
+  // Have we EVER been fully live (connected AND reconciled) for the current workspace? Drives the
+  // "reconnecting" vs "never connected" distinction in the banner. Set together with `connected`
+  // AFTER the on-open resync settles — NOT at `onopen` — so the initial resync window (socket open
+  // but not yet announced) can't be mistaken for a re-connection and flash the amber banner.
+  const everConnected = ref(false)
+  // The very first handshake keeps failing (proxy/firewall blocks WS while REST works, or the
+  // ticket mint throws) — the board loaded over REST but will never go live. Flagged after a
+  // few failed attempts so the banner can say "not receiving live updates" instead of nothing.
+  const connectionFailed = ref(false)
+  // Failed connect attempts before we ever go live gates the offline flag above.
+  const INITIAL_FAIL_ATTEMPTS = 3
 
   let socket: WebSocket | null = null
   let stopped = false
   let attempt = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let boardDebounce: ReturnType<typeof setTimeout> | null = null
 
-  // http→ws, https→wss (apiBase is an absolute origin, see nuxt.config.ts).
-  const wsBase = String(apiBase).replace(/^http/, 'ws')
+  // http→ws, https→wss. `apiBase` is an absolute origin on a split-origin deployment (see
+  // nuxt.config.ts) and EMPTY on a same-origin one (one proxy in front of the SPA + the API —
+  // the compose preview stack), where the socket origin comes from the page instead.
+  const wsBase = wsOriginFor(String(apiBase), import.meta.client ? window.location.origin : '')
 
-  function debouncedBoardRefresh() {
-    if (boardDebounce) clearTimeout(boardDebounce)
-    boardDebounce = setTimeout(() => void workspace.refresh(), 300)
+  // How a full resync is scheduled and driven (the retry chain, the capped debounce and its
+  // coverage check), extracted into a cohesive collaborator over bound callbacks so those rules are
+  // testable without a socket. This file keeps the socket lifecycle and the event routing.
+  const coarse = createCoarseRefresh({
+    stopped: () => stopped,
+    currentWorkspaceId: () => workspace.workspaceId,
+    refresh: () => workspace.refresh(),
+    refreshMark: () => workspace.refreshMark(),
+    hydratedSince: (mark) => workspace.hydratedSince(mark),
+  })
+
+  // The stores this stream feeds, bound once. Routing lives in `applyWorkspaceEvent` so the
+  // targeted-vs-coarse decision on a `board` event is unit-testable without a socket.
+  const targets: WorkspaceEventTargets = {
+    upsertExecution: (instance) => execution.upsert(instance),
+    upsertBlock: (block) => board.upsert(block),
+    upsertBootstrap: (job) => agentRuns.upsertBootstrap(job),
+    upsertEnvConfigRepair: (job) => agentRuns.upsertEnvConfigRepair(job),
+    upsertEnvironmentTest: (run) => environmentTest.upsert(run),
+    patchInfraSetup: (area, status, detail) => workspace.patchInfraSetup(area, status, detail),
+    upsertNotification: (n) => notifications.upsert(n),
+    appendLlmCall: (call) => observability.appendCall(call),
+    upsertRequirements: (r) => requirements.upsert(r),
+    upsertConsensus: (s) => consensus.upsert(s),
+    upsertClarity: (r) => clarity.upsert(r),
+    upsertBrainstorm: (s) => brainstorm.upsert(s),
+    upsertKaizen: (g) => kaizen.upsert(g),
+    upsertInitiative: (i) => initiatives.upsert(i),
+    upsertDocInterview: (s) => docInterview.upsert(s),
+    guidedReviewChanged: (change) => void guidedReview.applyChange(change),
+    refreshBoard: () => coarse.schedule(),
   }
 
   function onMessage(raw: string) {
@@ -51,59 +101,7 @@ export function useWorkspaceStream() {
     } catch {
       return
     }
-    if (event.type === 'execution') {
-      // Full instance drives the step-level UI; agentRuns derives its coarse
-      // failure/retry summary from the same store, so no extra call is needed.
-      execution.upsert(event.instance)
-      if (event.block) board.upsert(event.block)
-    } else if (event.type === 'board') {
-      debouncedBoardRefresh()
-    } else if (event.type === 'bootstrap') {
-      // Patch the run's live status/subtasks and its provisional/linked frame so
-      // the "bootstrapping…" card updates in place (then flips to a ready service
-      // or a failed badge) without a full refresh.
-      agentRuns.upsertBootstrap(event.job)
-      if (event.block) board.upsert(event.block)
-    } else if (event.type === 'env-config-repair') {
-      // A provider config-repair run advanced — patch its live status/subtasks/outcome so
-      // the infrastructure-providers window's "repairing…" indicator updates in place
-      // (then flips to ok / residual issues / a failure) without a refetch. No board block.
-      agentRuns.upsertEnvConfigRepair(event.job)
-    } else if (event.type === 'notification') {
-      // A PR needs a merge decision, a pipeline finished, or CI gave up — patch the
-      // inbox + per-block badge in place (resolved ones drop out of the inbox).
-      notifications.upsert(event.notification)
-    } else if (event.type === 'llmCall') {
-      // A container agent just made a model call — fold the compact summary into the
-      // observability store so an open "Model activity" panel updates live (and keeps
-      // updating even when the durable driver is evicted: the proxy emits these
-      // independently of the run's poll loop).
-      observability.appendCall(event.call)
-    } else if (event.type === 'requirements') {
-      // The async incorporate + re-review cycle changed a review's status — patch the cache
-      // so an open review window / inspector reflects it live ("incorporating…" → the next
-      // cycle / converged). The summons back, when needed, arrives as a `notification`.
-      requirements.upsert(event.review)
-    } else if (event.type === 'consensus') {
-      // A consensus session advanced (a round landed, the synthesis completed, or it
-      // failed) — patch the cache so an open Consensus Session window renders the
-      // multi-model process live, round by round.
-      consensus.upsert(event.session)
-    } else if (event.type === 'clarity') {
-      // The async incorporate + re-review cycle changed a clarity review's status — patch the
-      // cache so an open review window / inspector reflects it live ("incorporating…" → the
-      // next cycle / converged). The summons back, when needed, arrives as a `notification`.
-      clarity.upsert(event.review)
-    } else if (event.type === 'brainstorm') {
-      // The async incorporate + re-run cycle changed a brainstorm session's status — patch the
-      // cache so an open brainstorm window / inspector reflects it live.
-      brainstorm.upsert(event.session)
-    } else if (event.type === 'kaizen') {
-      // A post-run Kaizen grading was scheduled, started or completed — fold it into the
-      // run cache (so an open run window shows scheduled→running→complete live) and the
-      // Kaizen screen history. Never surfaced on the board.
-      kaizen.upsert(event.grading)
-    }
+    applyWorkspaceEvent(event, targets)
   }
 
   async function connect() {
@@ -133,6 +131,7 @@ export function useWorkspaceStream() {
 
     socket.onopen = () => {
       attempt = 0
+      connectionFailed.value = false
       // Resync on (re)connect BEFORE announcing `connected`: any event missed while
       // disconnected is reconciled first. The snapshot carries `bootstrapJobs` +
       // executions, so one refresh rehydrates agentRuns too — a missed terminal event
@@ -147,18 +146,22 @@ export function useWorkspaceStream() {
       // live "bootstrapping…" badge flickers out with no further board event to restore
       // it. Anything acting on a `connected` board (a user, or an e2e spec gating on
       // `data-connected`) then does so only after this reconcile, so a lagging resync
-      // can't drop the state that action produces. `connected` is still set on failure
-      // (we ARE connected; a transient refresh error must not wedge the indicator/tests).
-      void workspace
-        .refresh()
-        .catch(() => {})
-        .finally(() => {
-          // A workspace switch (or stop()) may have happened while the refresh was in
-          // flight — don't announce a connection for a socket we've since abandoned.
-          if (!stopped && socket && workspace.workspaceId === workspaceId) {
-            connected.value = true
-          }
-        })
+      // can't drop the state that action produces. The resync RETRIES on a transient
+      // failure (`coarse.withRetry`) so a reconnect no longer presents as fully live while
+      // silently missing everything from the outage; `connected` is still set even if every
+      // retry fails (we ARE connected; a refresh error must not wedge the indicator/tests).
+      // A guided review is not in the snapshot, so whatever this tab has loaded refetches itself.
+      void guidedReview.resync()
+      void coarse.withRetry(workspaceId).finally(() => {
+        // A workspace switch (or stop()) may have happened while the refresh was in
+        // flight — don't announce a connection for a socket we've since abandoned.
+        if (!stopped && socket && workspace.workspaceId === workspaceId) {
+          // Flip `everConnected` here (not at onopen): only now are we "fully live", so a later
+          // drop reads as a real re-connection while this initial resync window does not.
+          everConnected.value = true
+          connected.value = true
+        }
+      })
     }
     socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '')
     socket.onclose = () => {
@@ -171,6 +174,10 @@ export function useWorkspaceStream() {
   function scheduleReconnect() {
     if (stopped) return
     socket = null
+    // If we've never gone live and keep failing, flag the board as offline so the banner can
+    // surface a "not receiving live updates" state (a REST-only board otherwise looks fine but
+    // silently never updates). Reset the moment a socket opens (see `onopen`).
+    if (!everConnected.value && attempt + 1 >= INITIAL_FAIL_ATTEMPTS) connectionFailed.value = true
     const delay = Math.min(30_000, 500 * 2 ** attempt) // 0.5s → 30s cap
     attempt += 1
     reconnectTimer = setTimeout(connect, delay)
@@ -178,18 +185,23 @@ export function useWorkspaceStream() {
 
   function start() {
     stopped = false
+    // Reset the per-workspace connection lifecycle so a switch to a NEW workspace whose socket
+    // fails is flagged offline on its own merits, not masked by the previous workspace's history.
+    attempt = 0
+    everConnected.value = false
+    connectionFailed.value = false
     connect()
   }
 
   function stop() {
     stopped = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
-    if (boardDebounce) clearTimeout(boardDebounce)
+    coarse.cancel()
     socket?.close()
     socket = null
     connected.value = false
   }
 
   onScopeDispose(stop)
-  return { start, stop, connected }
+  return { start, stop, connected, everConnected, connectionFailed }
 }

@@ -1,4 +1,5 @@
 import type {
+  AccountSettingsService,
   ApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
@@ -7,6 +8,11 @@ import type {
 } from '@cat-factory/integrations'
 import {
   ALL_SUBSCRIPTION_VENDORS,
+  isAmbientNativeVendor,
+  type AppCaches,
+  type HarnessKind,
+  type ModelFamilyPolicy,
+  type ModelFlavor,
   type ProviderCapabilities,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -22,18 +28,69 @@ export interface CapabilityServices {
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareModelsEnabled?: boolean
   /**
+   * The deployment's Bedrock allow-list (`BEDROCK_MODELS`), VERBATIM and in declared order,
+   * and ONLY when the `bedrock` resolver is actually registered: a list with no
+   * `BEDROCK_REGION` behind it (or, on the Worker, no registered registry serving the
+   * provider) would offer routes that throw at dispatch. This is a
+   * deployment-level capability, not a per-workspace one: Bedrock is reached with the
+   * deployment's own AWS credentials, so there is no key to lease per scope.
+   */
+  bedrockModels?: Set<string>
+  /**
    * The deployment's base-URL resolver (the same one the model-provider resolver uses).
    * OpenAI-compatible providers (everything but `openai`/`anthropic`) cannot resolve
    * without a base URL — most carry a built-in default, but an operator-hosted gateway
-   * like LiteLLM has none until `LITELLM_BASE_URL` is set. When this resolver is wired, a
-   * configured key for such a provider is treated as selectable ONLY once its base URL
+   * (Bifrost, LiteLLM) has none until its own `${PROVIDER}_BASE_URL` is set. When this resolver is
+   * wired, a configured key for such a provider is treated as selectable ONLY once its base URL
    * resolves, so the catalog + start guard don't offer a model that fails at dispatch.
    */
   baseUrlFor?: (provider: string) => string | null | undefined
+  /**
+   * NATIVE LOCAL EXECUTION's allow-list of subscription harnesses (`AppConfig.nativeAmbientAuth`,
+   * from `LOCAL_NATIVE_AGENTS`; absent on every other facade).
+   *
+   * A vendor this serves runs on the developer's OWN installed CLI and its ambient login, so it
+   * has no credential to find: nothing is pooled, nothing is personal, and nothing is leased at
+   * dispatch. Without it here the deployment answered its own question two different ways — the
+   * personal-credential gate correctly dropped such a vendor from the set it demands an unlock
+   * for, while the catalog and the pipeline-start guard, reading only the two credential stores,
+   * still called the model unconfigured. The visible failure was a Claude-pinned run refused with
+   * "no configured provider" on a machine whose `claude` CLI was logged in and would have run it.
+   */
+  nativeAmbientAuth?: readonly HarnessKind[]
   /** Per-user locally-run model endpoints (resolved by the requesting/initiating user). */
   localModelEndpoints?: LocalModelEndpointService
   /** Per-workspace enabled OpenRouter models (the dynamic catalog subset). */
   openRouterCatalog?: OpenRouterCatalogService
+  /**
+   * The account-settings service, read to resolve the owning account's model-family policy.
+   * Wired only on facades that {@link modelPolicySupported support it}.
+   */
+  accountSettings?: AccountSettingsService
+  /** Resolve a workspace's owning account id (`undefined`/`null` ⇒ unscoped/legacy board). */
+  workspaceAccountOf?: (workspaceId: string) => Promise<string | null | undefined>
+  /**
+   * Whether this deployment enforces the account-wide model-family policy (Cloudflare /
+   * remote Node / mothership — never plain local mode). When false the policy is neither
+   * read nor applied here, mirroring the availability the SPA sees via `/auth/config`.
+   */
+  modelPolicySupported?: boolean
+  /**
+   * App caches — the account policy read goes through `caches.accountModelPolicy` (a
+   * slow-moving, admin-changed, per-account read on the `/models` + start-guard hot paths;
+   * invalidated by the account-settings write). Absent ⇒ the read runs live each time.
+   */
+  caches?: AppCaches
+  /**
+   * The route order the MODEL PRESET in force states, from the preset library
+   * (`resolvePresetProviderPreference`). Called with the preset the caller is resolving under —
+   * a block's selected one, or `undefined` for the workspace default preset. Absent (tests /
+   * unwired facades) ⇒ the deployment's default order.
+   */
+  resolvePresetProviderPreference?: (
+    workspaceId: string,
+    modelPresetId?: string,
+  ) => Promise<readonly ModelFlavor[] | undefined>
 }
 
 // Direct providers whose AI-SDK resolver works without an explicit base URL (the SDK
@@ -41,10 +98,49 @@ export interface CapabilityServices {
 // base URL (see `buildDirectResolver`), so it is unusable until that URL resolves.
 const BASE_URL_OPTIONAL = new Set(['openai', 'anthropic'])
 
+/**
+ * The account-wide model-family policy in force for a workspace, or undefined for no restriction.
+ * A `null`/legacy account and an `off` policy both mean the latter.
+ *
+ * Read THROUGH the per-account cache (slow-moving, admin-changed, on the `/models` + start-guard
+ * hot paths): the load reads only the non-secret config, and wraps the result so the common "no
+ * policy" case caches as a value rather than a re-loaded null.
+ *
+ * Its own function rather than a block inside {@link resolveWorkspaceCapabilities} because it is
+ * the only capability with three optional collaborators, a cache and a swallow — everything else
+ * there is one read per field.
+ */
+async function resolveAccountModelPolicy(
+  services: CapabilityServices,
+  workspaceId: string,
+): Promise<ModelFamilyPolicy | undefined> {
+  const accountSettings = services.accountSettings
+  if (!services.modelPolicySupported || !accountSettings || !services.workspaceAccountOf) {
+    return undefined
+  }
+  try {
+    const accountId = await services.workspaceAccountOf(workspaceId)
+    if (!accountId) return undefined
+    const load = async () => ({
+      policy: (await accountSettings.read(accountId)).config.modelPolicy ?? null,
+    })
+    const cached = services.caches?.accountModelPolicy
+    const { policy } = cached ? await cached.get(accountId, accountId, load) : await load()
+    return policy && policy.mode !== 'off' ? policy : undefined
+  } catch {
+    // Account settings aren't always readable — mothership mode delegates org state over an RPC
+    // whose allow-list doesn't yet include the account-settings read (the same limitation the
+    // binary-storage infra probe degrades on). Treat an unreadable policy as "no restriction"
+    // rather than failing run start / the model catalog.
+    return undefined
+  }
+}
+
 export async function resolveWorkspaceCapabilities(
   services: CapabilityServices,
   workspaceId: string,
   userId?: string | null,
+  modelPresetId?: string,
 ): Promise<ProviderCapabilities> {
   const configured = services.apiKeys
     ? await services.apiKeys.configuredProviders(workspaceId, { userId })
@@ -56,23 +152,52 @@ export async function resolveWorkspaceCapabilities(
     baseUrlFor ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p)) : configured,
   )
   const subscriptionVendors = new Set<SubscriptionVendor>()
+  // BOTH credential stores answered for the whole vocabulary in ONE read each, rather than a
+  // question per vendor. Each store carries the full answer in a single statement, and this path is
+  // taken by the catalog render AND every run start, so a per-vendor sweep was one round trip per
+  // member of a closed vocabulary on the hottest read the model layer has.
+  //
+  // Lazy rather than hoisted, so a deployment whose vendors are all served by an ambient host CLI
+  // still touches neither store, and an unbound resolution (no `userId`) still never touches the
+  // personal one. Memoised on the promise, so the concurrent callers of one resolution share the
+  // single in-flight read rather than racing two.
+  let pooledVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const pooledHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const pool = services.subscriptions
+    if (!pool) return false
+    pooledVendors ??= pool.liveVendors(workspaceId)
+    return (await pooledVendors).has(vendor)
+  }
+  let personalVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const personalHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const personal = services.personalSubscriptions
+    if (!userId || !personal) return false
+    personalVendors ??= personal.liveVendors(userId)
+    return (await personalVendors).has(vendor)
+  }
   for (const vendor of ALL_SUBSCRIPTION_VENDORS) {
-    const pooled = services.subscriptions
-      ? await services.subscriptions.hasToken(workspaceId, vendor)
-      : false
-    const personal =
-      !pooled && userId && services.personalSubscriptions
-        ? await services.personalSubscriptions.has(userId, vendor)
-        : false
-    if (pooled || personal) subscriptionVendors.add(vendor)
+    // Ambient FIRST, and it short-circuits both credential reads rather than joining them: a
+    // vendor the host CLI serves is usable for every initiator of this deployment, including one
+    // there is no user for at all, so neither store has anything to say about it. Decided by the
+    // SAME predicate the personal-credential gate and the container executor use, so the three
+    // halves of the ambient decision cannot drift.
+    if (isAmbientNativeVendor(services.nativeAmbientAuth, vendor)) {
+      subscriptionVendors.add(vendor)
+      continue
+    }
+    if ((await pooledHolds(vendor)) || (await personalHolds(vendor))) {
+      subscriptionVendors.add(vendor)
+    }
   }
   // Local runners are per-user: a model is usable when the resolving user has enabled it.
   // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular
-  // (a runner configured but with this model un-enabled must not pass).
+  // (a runner configured but with this model un-enabled must not pass). The id comes off the
+  // DECLARATION's own field: each enabled model is an object (the id plus what the user declared
+  // about it), and interpolating the object here would key every entry `[object Object]`.
   const localModels = new Set<string>()
   if (userId && services.localModelEndpoints) {
     for (const cap of await services.localModelEndpoints.capabilitiesFor(userId)) {
-      for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
+      for (const model of cap.models) localModels.add(`${cap.provider}:${model.id}`)
     }
   }
   // Dynamic OpenRouter catalog (per-workspace): the enabled slugs gate the dynamic
@@ -83,11 +208,25 @@ export async function resolveWorkspaceCapabilities(
       openRouterModels.add(m.id)
     }
   }
+  const modelPolicy = await resolveAccountModelPolicy(services, workspaceId)
+  // The route order the preset in force states. It rides the capability set (rather than a
+  // parameter each resolution site would have to remember) so the catalog the picker renders and
+  // the guard that admits the run walk the SAME order. A read failure is NOT swallowed: unlike the
+  // account policy above, which degrades to "no restriction", an unreadable preference has no safe
+  // default — every route stays reachable either way, so the honest thing is to let the caller see
+  // the failure rather than admit a compliance-motivated run on the wrong route.
+  const providerPreference = await services.resolvePresetProviderPreference?.(
+    workspaceId,
+    modelPresetId,
+  )
   return {
     directProviders,
     subscriptionVendors,
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
     localModels,
     openRouterModels,
+    ...(services.bedrockModels?.size ? { bedrockModels: services.bedrockModels } : {}),
+    ...(modelPolicy ? { modelPolicy } : {}),
+    ...(providerPreference?.length ? { providerPreference } : {}),
   }
 }

@@ -11,8 +11,10 @@
 // fully-qualified `owner/repo#12` id, and a workspace can hold many repos, so a bare
 // number is inherently ambiguous — it cannot be resolved high-confidence and would
 // either silently never match or pull in the wrong repo's issue. A same-repo issue
-// should be named as `owner/repo#12` (or by its URL) to be picked up. Pure +
-// source-agnostic so it stays trivially testable.
+// should be named as `owner/repo#12` (or by its URL) to be picked up. Pure (no LLM, no
+// network) so it stays trivially testable.
+
+import type { TaskRef } from '@cat-factory/kernel'
 
 export interface ExtractedReferences {
   /** Jira-style issue keys, e.g. `PROJ-123` (uppercased project + number). */
@@ -21,6 +23,14 @@ export interface ExtractedReferences {
   githubRefs: string[]
   /** Absolute http(s) URLs, for matching against an imported item's canonical URL. */
   urls: string[]
+  /**
+   * The keyed (non-URL) references tagged with the task source each resolves against — Jira
+   * keys under `jira`, GitHub refs under `github`. This is the single place a reference SHAPE
+   * is bound to a task source, so the engine batch-resolves them (`TaskRepository.listByRefs`)
+   * without re-hardcoding those source literals at the call site. Ordered jira-then-github,
+   * preserving `jiraKeys`/`githubRefs` order, so downstream dedupe stays deterministic.
+   */
+  taskRefs: TaskRef[]
 }
 
 // A Jira key is an uppercase project key (letter then letters/digits) + `-` + digits.
@@ -47,9 +57,13 @@ function trimUrl(url: string): string {
  * the unresolvable) happens in the engine, not here.
  */
 export function extractReferences(text: string): ExtractedReferences {
-  if (!text) return { jiraKeys: [], githubRefs: [], urls: [] }
+  if (!text) return { jiraKeys: [], githubRefs: [], urls: [], taskRefs: [] }
   const jiraKeys = unique(text.match(JIRA_KEY) ?? [])
   const githubRefs = unique(text.match(GITHUB_REF) ?? [])
   const urls = unique((text.match(URL) ?? []).map(trimUrl))
-  return { jiraKeys, githubRefs, urls }
+  const taskRefs: TaskRef[] = [
+    ...jiraKeys.map((externalId): TaskRef => ({ source: 'jira', externalId })),
+    ...githubRefs.map((externalId): TaskRef => ({ source: 'github', externalId })),
+  ]
+  return { jiraKeys, githubRefs, urls, taskRefs }
 }

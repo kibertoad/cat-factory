@@ -3,12 +3,10 @@ import type {
   GitHubInstallationRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
-  Service,
-  ServiceRepository,
 } from '@cat-factory/kernel'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { githubInstallations, runnerPoolConnections, services, workspaces } from '../db/schema.js'
+import { githubInstallations, runnerPoolConnections, workspaces } from '../db/schema.js'
 
 // Drizzle/Postgres adapters for the persistence the container-agent execution path
 // needs on the Node facade: a workspace's self-hosted runner-pool binding, its
@@ -89,8 +87,10 @@ function rowToInstallation(row: typeof githubInstallations.$inferSelect): GitHub
     accountLogin: row.account_login,
     targetType: row.target_type === 'Organization' ? 'Organization' : 'User',
     appId: row.app_id ?? null,
+    provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
     cachedToken: row.cached_token,
     tokenExpiresAt: row.token_expires_at,
+    accessToken: row.access_token ?? null,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }
@@ -183,6 +183,31 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
     return rows.map(rowToInstallation)
   }
 
+  async listActiveForAccount(accountId: string): Promise<GitHubInstallation[]> {
+    // One scoped query, not the global list filtered in JS: the account's direct bindings
+    // UNION the bindings of its own boards. Ordered so both runtimes pick the same row.
+    const rows = await this.db
+      .select()
+      .from(githubInstallations)
+      .where(
+        and(
+          isNull(githubInstallations.deleted_at),
+          or(
+            eq(githubInstallations.account_id, accountId),
+            inArray(
+              githubInstallations.workspace_id,
+              this.db
+                .select({ id: workspaces.id })
+                .from(workspaces)
+                .where(eq(workspaces.account_id, accountId)),
+            ),
+          ),
+        ),
+      )
+      .orderBy(githubInstallations.created_at, githubInstallations.installation_id)
+    return rows.map(rowToInstallation)
+  }
+
   async upsert(installation: GitHubInstallation): Promise<void> {
     const values = {
       installation_id: installation.installationId,
@@ -191,8 +216,10 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       account_login: installation.accountLogin,
       target_type: installation.targetType,
       app_id: installation.appId,
+      provider: installation.provider,
       cached_token: installation.cachedToken,
       token_expires_at: installation.tokenExpiresAt,
+      access_token: installation.accessToken,
       created_at: installation.createdAt,
       deleted_at: installation.deletedAt,
     }
@@ -202,44 +229,10 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       .onConflictDoUpdate({ target: githubInstallations.installation_id, set: values })
   }
 
-  async updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void> {
-    await this.db
-      .update(githubInstallations)
-      .set({ cached_token: token, token_expires_at: expiresAt })
-      .where(eq(githubInstallations.installation_id, installationId))
-  }
-
   async softDelete(installationId: number, at: number): Promise<void> {
     await this.db
       .update(githubInstallations)
       .set({ deleted_at: at })
       .where(eq(githubInstallations.installation_id, installationId))
-  }
-}
-
-/**
- * Minimal read adapter the shared `buildResolveRepoTarget` needs to resolve a frame's
- * service (and, for a monorepo, its pinned subdirectory). Only `getByFrameBlock` is
- * implemented — the full account-owned service store lives in `drizzle.ts`.
- */
-export class DrizzleServiceFrameRepository implements Pick<ServiceRepository, 'getByFrameBlock'> {
-  constructor(private readonly db: DrizzleDb) {}
-
-  async getByFrameBlock(frameBlockId: string): Promise<Service | null> {
-    const [row] = await this.db
-      .select()
-      .from(services)
-      .where(eq(services.frame_block_id, frameBlockId))
-    return row
-      ? {
-          id: row.id,
-          accountId: row.account_id,
-          frameBlockId: row.frame_block_id,
-          installationId: row.installation_id,
-          repoGithubId: row.repo_github_id,
-          directory: row.directory,
-          createdAt: row.created_at,
-        }
-      : null
   }
 }

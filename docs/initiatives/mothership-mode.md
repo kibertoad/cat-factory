@@ -1,340 +1,1207 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (board-load + run functional over the RPC; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (board-load + run functional over the RPC; real-time complete BOTH directions; telemetry local-first, synced up AND read back through: PR 5 COMPLETE; the repository surface is COMPLETE: every org method is allow-listed or permanently classified, and the drift guard has retired the `pending` state) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
 
-> ## ✅ MERGE GATE — MET (the functional repository surface has landed)
+> ## ✅ MERGE GATE: MET (the functional repository surface has landed)
 >
-> The [Phase 3 — Functional repository surface](#phase-3--functional-repository-surface-the-merge-gate)
+> The [Phase 3: Functional repository surface](#phase-3-functional-repository-surface-the-merge-gate)
 > merge gate is **satisfied**. A no-Postgres mothership-mode `buildLocalContainer` **loads a board**
-> and **drives a run to a persisted terminal state** over the real `/internal/persistence` RPC —
+> and **drives a run to a persisted terminal state** over the real `/internal/persistence` RPC:
 > asserted end-to-end by `backend/runtimes/local/test/mothership-integration.spec.ts` (a real
 > loopback Node mothership over Postgres + a no-Postgres local node) and by the cross-runtime
 > `[mothership]` conformance config. The board-load + run paths are allow-listed
 > (`REMOTE_PERSISTENCE_METHODS`) and every direct-db store on those paths is routed through the
-> `pickRepoSource` seam, so the earlier "first board load 500s" failure no longer applies.
+> `pickRepoSource` seam.
 >
 > **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
-> status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
-> (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry /
-> subscription-activation no-ops a run makes over the remote (telemetry is local-first, Phase 5;
-> activation is the local-sqlite bucket); the `fragments` / `slack` connect/provision surfaces; and
-> the durable SQLite work queue (PR 2 — the in-process runner is single-process / best-effort).
-> Login-based machine-token minting has **landed** (PR 3): the token is minted from a whitelisted
-> login and cached locally, so `LOCAL_MOTHERSHIP_TOKEN` is now only a headless/CI override.
-> The remaining `pending` org methods are the live per-repo checklist below.
+> status in light of them): the best-effort kaizen no-ops a run makes over the remote (telemetry
+> itself is now local-first; see PR 5 below). The document/task connection integration is no longer
+> among them: the document/task slice gave those rows a sealed envelope and admitted them to both
+> the persistence allow-list and the org-secret table (see below). Decrypting a remotely-sealed PROVISIONED environment's
+> access cipher is no longer among them: the secrets-delegation slice landed it (see below), along
+> with the provisioning writes, the release-health gate probe and the incident enrichment. (Subscription activation,
+> the prompt-fragment library, the Claude Skills library (catalog AND repo sync) and the Slack
+> settings surface are no longer among these: PR 3 gave
+> them, and the subscription-credential trio + local settings their real `local-sqlite` home; see the
+> [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings).)
+> The org repository surface is now COMPLETE: see "The remaining repository surface" below and the
+> per-repo checklist.
 
 ### Landed so far
 
-- **Phase 3 follow-up (Kaizen grading read surface)** — the Kaizen SCREEN
-  (`KaizenController` → `KaizenService.getOverview` / `listForExecution`) is now functional in
-  mothership mode: a mothership-mode SPA can display the grading history, the verified-combo
-  library, and a run's per-step grading status. Previously the run-path grade reads/writes
-  (`kaizenGradingRepository.getByStep`/`upsert`, `kaizenVerifiedComboRepository.getByKey`) were
-  remotely callable but the screen's list reads came back `unknown_method`. Newly allow-listed:
-  `kaizenGradingRepository.listByWorkspace` (the screen's bounded history) + `listByExecution` (the
-  run-window per-step status) and `kaizenVerifiedComboRepository.listByWorkspace` (the verified-combo
-  library) — each takes the workspaceId as arg0 (the existing `workspace` rule), read-only and
-  member-level (the Kaizen endpoints are not admin-gated), matching the other board-load read
-  surfaces. These are core repos (`createDrizzleRepositories`), so a mothership-mode node already
-  SOURCES them from the full-surface remote registry (`composeMothership`) — no `pickRepoSource`
-  routing change, just the allow-list. Still off the SPA path: the internal-only single-grade
-  `kaizenGradingRepository.get` (the service never calls it) and the background-sweep methods
-  (`listPending`/`claim`, kind-spanning cron reads); the combo `upsert` (the streak/verified write)
-  stays off too — kaizen GRADING itself is best-effort in mothership mode until the Phase 5
-  telemetry/local-first sync, but the screen that VIEWS prior grades now reads them over the RPC.
-  Server-only allow-list change, symmetric by construction (the dispatcher reflects over each
-  facade's registry). Round-trip + cross-account-scope unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
-- **Phase 3 follow-up (bootstrap / reference-architecture / env-config-repair management surface)** —
-  the repo-bootstrap flow and the env-config-repair retry/stop path are now fully remotely callable,
-  so a mothership-mode SPA can not just LIST bootstrap/repair runs but START a bootstrap, poll a
-  single job's board card, RETRY a failed run, and STOP a running one — completing the
-  `AgentRunController` retry/stop surface for those two run kinds (the EXECUTION-run branch landed
-  earlier) and making the bootstrap modal + reference-architecture library functional. Previously
-  only the board-load reads (`bootstrapJobRepository.listByWorkspace`/`listByServices`,
-  `envConfigRepairJobRepository.listByWorkspace`) were remotely callable; the single-job reads and
-  the write methods came back `unknown_method`. Newly allow-listed: `bootstrapJobRepository`
-  `get`/`update` (workspaceId arg0 → `workspace` rule) + `insert` (record-based → `workspaceField`
-  rule on the job's `workspaceId` field); the whole `referenceArchitectureRepository`
-  (`get`/`listByWorkspace`/`update`/`softDelete` via `workspace`, `insert` via `workspaceField`);
-  and `envConfigRepairJobRepository` `get`/`update` (`workspace`) + `insert` (`workspaceField`).
-  Each is member-level (none of these endpoints is admin-gated) and workspace-scoped, matching the
-  block/pipeline mutation policy. The `insert` records' sibling ids (`blockId`,
-  `referenceArchitectureId`) are NOT re-validated over the RPC (the `workspaceField` rule binds only
-  the top-level `workspaceId`): the row is stored under — and later read by — the bound workspace, and
-  a foreign `referenceArchitectureId` is harmless because the retry run re-resolves it via the
-  workspace-scoped `referenceArchitectureRepository.get`, which 404s a cross-workspace id. These are
-  the non-core repos the Node/local facade routes through the `pickRepoSource` seam (already sourced
-  from the full-surface remote registry when `db` is undefined), so this is an allow-list change only,
-  symmetric by construction (the dispatcher reflects over each facade's registry). Round-trip +
-  cross-account-scope + missing-workspaceId fail-closed unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
-  `bootstrapJob` — bar the serviceId-keyed `listByService` + the `blockServiceId` helper —
-  `referenceArchitecture`, and `envConfigRepairJob` repos are now remote).
-- **Phase 3 follow-up (shared-service mount management surface)** — the org-catalog / shared-service
-  mounting flow (`ServiceMountService` / `ServiceMountController` — mount / unmount / re-layout a
-  shared account service onto a workspace board) is now fully remotely callable, so a mothership-mode
-  SPA can not just DISPLAY the catalog but MOUNT from it. Previously the catalog-badge reads
-  (`workspaceMountRepository.listByWorkspace` / `countByServiceIds`) were exposed, but the
-  single-service read the mount flow performs and the mount write/update/remove methods came back
-  `unknown_method`. Newly allow-listed: `serviceRepository.get(serviceId)` — bound by a **new
-  `service` scope kind** (a single serviceId → owning account, the single-id form of `serviceList`,
-  reusing the controller's existing service→account resolver, so no controller change; the
-  dispatched `get` is routed through the same per-request `listByIds` memo the scope check reads, so
-  a mount precheck resolves the service in ONE query) — and `workspaceMountRepository`
-  `get`/`update`/`remove` (arg0 = workspaceId → the `workspace` rule) + the record-based
-  `upsert(mount)` (bound by a **new `serviceMount` scope kind**). Each is member-level (the mount
-  endpoints are not admin-gated) and workspace-scoped. **Cross-org sharing stays enforced AT THE RPC
-  LAYER, not only in the bypassed service layer:** the `serviceMount` rule binds `upsert` on the
-  mount's `workspaceId` FIELD (out-of-scope workspace → refused) AND requires the mounted `serviceId`
-  to be owned by the SAME account as that workspace, so a raw `upsert` can never plant a cross-org
-  mount — including for a machine token that spans several accounts (a user in multiple orgs, where a
-  workspace-only bind would let one org's service be mounted onto another org's board). The local
-  node's `mount()` also reads `serviceRepository.get` first (the `service` rule 404s a foreign
-  service, so `assertFound` throws), and board composition (`listByServices`) stays account-scoped as
-  a second line of defence. The real-time fan-out reads
-  (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
-  (`removeByServices` / `serviceRepository.deleteMany` / `listByFrameBlocks`) stay off the SPA path —
-  mothership-internal / a later board-frame-deletion slice. **Known gap (a later slice):** without
-  the fan-out reads, mounting/unmounting a shared service does not live-update OTHER boards mounting
-  the same service in mothership mode (the acting user's own board is driven directly). These are
-  core repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
-  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
-  allow-list plus the two new scope kinds. Server-only, symmetric by construction (the dispatcher
-  reflects over each facade's registry). Round-trip + cross-account-scope tests for every new method
-  (incl. the `service` kind's out-of-scope / unknown-id / non-string fail-closed edges and the
-  `serviceMount` rule's cross-org / multi-account-token denials) are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
-- **Phase 3 follow-up (advanced review / structured-dialogue session surface)** — the clarity-review
-  (bug-report triage), brainstorm (structured dialogue) and consensus (multi-strategy orchestration)
-  session repositories are now fully allow-listed, so a mothership-mode SPA can not just READ the
-  board-load view of a review but PERSIST/REPLACE one as its window iterates (run → re-read →
-  upsert/delete). Previously only the board-load reads (`clarityReviewRepository.getByBlock`,
-  `brainstormSessionRepository.getByBlockStage`) were remotely callable; the write/delete methods came
-  back `unknown_method`. Newly allow-listed, mirroring the requirements-review surface: `clarityReview`
-  `get`/`upsert`/`deleteByBlock`, `brainstormSession` `get`/`upsert`/`deleteByBlockStage`,
-  `consensusSession` `get`/`getByStep`/`getByBlock`/`upsert` (a new repo entry), and
-  `requirementReview.deleteByBlock` (the pre-review-run drop that completes that repo). Every method
-  takes the workspaceId as arg0 — the `upsert(workspaceId, review)` signature carries it positionally,
-  so the existing `workspace` rule binds it (not `workspaceField`) — and each is member-level (none of
-  the review endpoints is admin-gated), matching the requirement-review policy. These are core repos
-  (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the full-surface
-  remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the allow-list.
-  Server-only, symmetric by construction (the dispatcher reflects over each facade's registry).
-  Round-trip + cross-account-scope unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
-  clarity-review / brainstorm / consensus / requirement-review session surface is now remote).
-- **Phase 3 follow-up (post-release-health / observability settings write surface)** — the
-  three settings repositories the post-release-health flow's panels manage are now allow-listed,
-  so a mothership-mode SPA can PERSIST (not just display) an observability connection, a per-block
-  monitor/SLO mapping, and an incident-enrichment connection. Previously none of these was remotely
-  callable, so every call came back `unknown_method`. Newly allow-listed:
-  `observabilityConnectionRepository` `get`/`upsert`/`delete`, `releaseHealthConfigRepository`
-  `getByBlock`/`listByWorkspace`/`upsert`/`delete`, and `incidentEnrichmentConnectionRepository`
-  `get`/`upsert`/`delete`. The reads/deletes take the workspaceId as arg0 (the existing `workspace`
-  rule); the record-based `upsert(record)` needed a **new `workspaceField` scope rule** — the
-  scope key is a `workspaceId` FIELD of the record, not a positional arg. Binding on
-  `record.workspaceId` is exactly right: the write targets that workspace, so the record can only be
-  persisted into an in-scope one; a missing/non-string field or an out-of-scope workspace is refused
-  as 404. Each is member-level (the controllers mount under `/workspaces/:workspaceId`, none is
-  admin-gated) and workspace-scoped, matching the other settings panels' policy. These are core
-  repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
-  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
-  allow-list. Server-only, symmetric by construction (the dispatcher reflects over each facade's
-  registry). Round-trip + cross-account-scope + missing-field unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (the whole
-  observability / incident-enrichment / release-health-config surface is now remote). **Explicitly
-  NOT in this slice:** decrypting a sealed connection cipher at gate-probe time (the later
-  secrets-delegation slice) and `accountSettingsRepository` (account-scoped, a separate decision).
-  So the settings PANELS are functional end-to-end (persist + read back the redacted summary),
-  but a saved observability connection does NOT yet drive a post-release-health gate probe in
-  mothership mode — that waits on the secrets-delegation slice. Note the connection `get` returns
-  the full record (the sealed `credentials` blob) over the machine API, matching the
-  `environmentRegistryRepository.get` precedent (the RPC client is the trusted, account-scoped
-  local node; the blob is sealed). The `workspaceField` rule binds only the record's top-level
-  `workspaceId`; `releaseHealthConfigRepository`'s `blockId` is not re-validated over the RPC (the
-  service layer, bypassed here, owns block-existence), so a config can only ever land in the
-  caller's own in-scope workspace.
-- **Phase 3 follow-up (failed-run retry / stop control surface)** — the board's run controls
-  (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`, `AgentRunController`) enter through the
-  unified `agent_runs` table's `agentRunRepository.getRef(workspaceId, id)`, which resolves a run's
-  KIND before dispatching to the matching service. That read was the last thing keeping the
-  EXECUTION-run retry/stop path returning `unknown_method` in mothership mode, so it is now
-  allow-listed (workspace-scoped on arg0, reusing the existing `workspace` rule). Every downstream
-  read+write the execution retry/stop services make — `executionRepository.get`/`deleteByBlock`/
-  `upsert`/`markFailed`, `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage
-  prechecks — was already exposed on the run/start path, so `getRef` is the only new entry. The
-  bootstrap + env-config-repair retry BRANCHES read their own repos (`bootstrapJobRepository.get`,
-  `referenceArchitectureRepository.get`, …) and stayed `pending` at the time (_now landed — see the
-  bootstrap / reference-architecture / env-config-repair management surface entry above_); the sweeper-only
-  `agentRunRepository.listStale`/`liveRunIds` stay mothership-internal. **Wiring fix (both facades):**
-  `agentRunRepository` is the ONE repo surfaced on the container OUTSIDE `CoreDependencies`, so the
-  reflected `repositories` registry (built from `dependencies`) didn't carry it — a remote `getRef`
-  came back `... is not wired`. `buildNodeContainer` and the Cloudflare `buildContainer` now fold it
-  into the registry explicitly (the integration test below is what surfaced this). Otherwise a
-  server-only allow-list change, symmetric by construction (the dispatcher reflects over each facade's
-  registry). Round-trip +
-  cross-account-scope + off-allow-list (`listStale`) unit tests in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves `getRef` out of `pending`; and the
-  fake-mothership integration test (`runtimes/local/test/mothership-integration.spec.ts`) asserts the
-  retry endpoint resolves an execution run's kind over the real RPC (then the engine refuses the
-  non-failed run with 409 `run_not_retryable`) and 404s an unknown run id (`getRef`'s `null` round-trip).
-- **Phase 3 follow-up (settings / preset / schedule management write surface)** — the workspace-scoped
-  WRITES a mothership-mode SPA drives to SAVE settings are now allow-listed, so the settings panels
-  are functional (not read-only) in mothership mode. Previously only the board-load READS of these
-  repos were remotely callable, leaving the settings/preset/schedule editors able to display but not
-  persist. Newly allow-listed (every method takes the workspaceId as arg0, reusing the existing
-  `workspace` scope rule — no new scope machinery): `workspaceSettingsRepository.upsert`,
-  `trackerSettingsRepository.put`, `serviceFragmentDefaultsRepository.set`, `mergePresetRepository`
-  `get`/`remove`, `modelPresetRepository` `get`/`remove` (completing both preset libraries' CRUD),
-  and the recurring-schedule management surface `pipelineScheduleRepository` `get`/`upsert`/`remove`/
-  `insertRun`/`updateRun`/`listRuns` (the local node's `RecurringPipelineService` CRUD + `runNow`,
-  which fires in-process so its `fire()` writes are on the path). Each is member-level (none is
-  admin-gated) and workspace-scoped, matching the block/pipeline mutation policy already exposed. The
-  sweeper-only `pipelineScheduleRepository` `listDue`/`pruneRunsBefore` and the serviceId-keyed
-  `listByService` stay off the SPA path. Round-trip + cross-account-scope tests for every new method
-  are in `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
-  merge-preset / model-preset / workspace-settings / tracker-settings / service-fragment-defaults
-  repos are now fully remote). Server-only allow-list change, symmetric by construction (the
-  dispatcher reflects over each facade's registry).
-- **PR 3 (login-based machine-token minting)** — the required static `LOCAL_MOTHERSHIP_TOKEN` is
-  replaced by a token minted from a whitelisted login and cached locally; the env var is now only a
-  headless/CI override. A mothership (either facade, via `registerCoreControllers`) serves
-  `POST /auth/machine-token`, which verifies the caller's SESSION (audience-pinned `session`),
-  derives the account scope from `accountService.listForUser` (a `requestedAccountIds` hint may only
-  NARROW it, never widen), and mints via the single production `mintMachineToken`
-  (`@cat-factory/server` — the hand-rolled test copy is gone). The local facade adds a `node:sqlite`
-  machine-token cache (`sqlite/machineTokenStore.ts`) and a local-only
-  `POST /local/mothership/connect` proxy (the `mothershipConnect` seam): the SPA signs the user into
-  the mothership (OAuth), captures the returned session from the redirect fragment, and hands it to
-  its OWN node (same origin — no CORS); the node forwards it to the mint endpoint, caches the OPAQUE
-  machine token (it is signed with the MOTHERSHIP's secret, so the node never verifies it), mints a
-  LOCAL session for the same user, and returns it so the SPA is signed in locally. `composeMothership`
-  resolves the token PER RPC via a provider (env override → unexpired cached token → none), so a
-  token-less node boots INERT (rather than throwing) and the SPA can drive the login.
-  `AUTH_MACHINE_TOKEN_TTL_MS` (default 30d) bounds the token; an expired cached token is treated as
-  absent (re-login on expiry — no silent refresh this slice). Tests: the mint helper + endpoint
-  scope/allowlist (`packages/server/test/machineToken*.spec.ts`), the sqlite token store
-  (`sqlite/machineTokenStore.test.ts`), the connector + `composeMothership` precedence
-  (`mothership.test.ts`), and the fake-mothership integration (`mothership-integration.spec.ts` now
-  mints via the endpoint AND drives the full `/local/mothership/connect` login flow end-to-end).
-  **Deferred:** device-code / headless CLI login, token rotation/revocation (nodeId denylist, PR 6),
-  silent refresh, and auto-allow-listing the loopback OAuth redirect on the mothership.
-- **PR 2 (durable SQLite work queue)** — the best-effort in-memory `InProcessWorkRunner` (PR 1) is
-  replaced by the durable `SqliteWorkRunner`, backed by a file-based `node:sqlite` work queue
-  (`runtimes/local/src/sqlite/workQueue.ts`, default `~/.cat-factory/work-queue.sqlite`, override
-  `LOCAL_MOTHERSHIP_WORK_DB`). The queue persists the intent "this run needs driving", so a crash or
-  restart re-drives what was in flight — the durability pg-boss gives the Node facade, now without
-  Postgres. It mirrors pg-boss's `exclusive` advance queue: one row per run (PRIMARY KEY = the
-  `singletonKey` dedup); a `startRun`/`signalDecision` (re)queues + kicks a drain loop that claims
-  drivable runs up to `concurrency` and drives each via the SAME `driveExecution` advance/poll loop;
-  a signal mid-drive coalesces via the row's `rerun` flag; a re-armed unbounded gate is deferred for
-  the gate poll interval then re-polled; and crash recovery comes from a boot-time orphan reset
-  (`active`→`queued`) plus a periodic recovery poll that reclaims lease-expired rows. Lease/sweeper/
-  retry/concurrency knobs reuse the same `executionRuntime()` derivation the pg-boss queue+sweeper
-  use. This is a **local-sqlite bucket** differentiator (no cross-runtime symmetry obligation). It is
-  exercised by the merge-gate integration test (`mothership-integration.spec.ts` drives a run to a
-  persisted terminal state through it) and unit-tested in `sqlite/workQueue.test.ts` (dedup, claim
-  ordering, lease/orphan reclaim, rerun coalescing, defer, poison eviction) + `mothership.test.ts`
-  (the runner's completion, coalescing, error-defer, and crash-recovery-on-bind paths).
-- **Repository conformance (cross-runtime `[mothership]` config + static drift guard)** — the
-  shared conformance suite now runs against a THIRD configuration: a no-Postgres mothership-mode
-  node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership
-  (`backend/runtimes/local/test/mothership/harness.ts`). The **execution group** is green over the
-  real `/internal/persistence` path, so an un-proxied / mis-scoped / non-serializing run-path
-  repository method fails an EXISTING assertion (no test written twice). The run-path allow-list
-  was widened to match (merge-preset `getDefault`, service `getByFrameBlock`, notification /
-  requirement-review `get`, requirement-review `upsert`, kaizen `getByStep`/`upsert`, the kaizen
-  LLM-metric summary, env-config-repair + kaizen-combo reads). A static guard
-  (`backend/runtimes/node/test/mothership-allowlist.spec.ts`) reflects EVERY Drizzle repository
-  method and fails unless each is allow-listed or explicitly classified
-  (`pending`/`local`/`telemetry`/`admin`/`sweeper`/`onboarding`/`helper`) — so adding a repo/method
-  without proxying it (or recording why not) goes red regardless of behavioural coverage. The
-  `pending` reasons in that guard ARE the remaining Phase-3 surface-completion backlog. The
-  `test-db` CI lane is sharded (vitest `--shard`) so the extra config doesn't grow wall-clock.
-  Remaining: extend the `[mothership]` behavioural config to the core/agents/integration/misc
-  groups (they need mode-skips for HTTP workspace/account creation + user-dependent onboarding
-  flows), and proxy the `pending` methods slice by slice.
-- **PR 0** — this tracker.
-- **PR 1 (spine)** — the persistence-RPC core in `@cat-factory/server`: the `machine` token
-  audience, the wire envelope + method allow-list + scope table + dispatcher
-  (`src/persistence/rpc.ts`), the `Proxy`-backed `createRemoteRepositoryRegistry`
-  (`src/persistence/remoteRepositories.ts`), the `POST /internal/persistence` controller, and
-  a unit test covering the full round-trip (reads, undefined/null, rev write-back, DomainError
-  re-throw, allow-list, cross-account scope). BOTH facades attach their repository registry
-  (`ServerContainer.repositories`) so either can be a mothership, guarded by a cross-runtime
-  conformance assertion.
-- **PR 1 (remaining)** — the local-facade _consumer_ side: the `node:sqlite` credential store +
-  local cipher, the `LOCAL_MOTHERSHIP_URL` switch composing remote + local repos in
-  `buildLocalContainer`, the no-Postgres `startLocal` boot path with an in-process work runner,
-  and the `config.mothership` SPA flag. The six pilot repos below are remotely _callable_ now;
-  this slice makes a local node _consume_ them.
-  - **Landed (1a):** the local `node:sqlite` credential store
-    (`runtimes/local/src/sqlite/credentialStore.ts`) — `createLocalCredentialStore(path)` plus
-    `SqliteProviderApiKeyRepository` + `SqliteLocalModelEndpointRepository`, the two
-    `local-sqlite` bucket ports, mirroring the Drizzle/D1 repos column-for-column (usage-window
-    rotation, atomic lease-least-used, createdAt-preserving endpoint upsert) and unit-tested
-    against an in-memory db. It stores only the already-sealed cipher envelopes, so the local
-    key wiring (the existing `ENCRYPTION_KEY`-keyed `WebCryptoSecretCipher`, which never carries
-    the mothership's key) belongs to the composition step.
-  - **Landed (1b):** the `LOCAL_MOTHERSHIP_URL` switch is live. `createRemoteRepositoryRegistry`
-    (`@cat-factory/server`) is a drift-proof full-surface remote `CoreRepositories` (a `Proxy`
-    lazily forwarding any repo to one RPC); `composeMothership` (`runtimes/local/src/mothership.ts`)
-    pairs it with the local credential store, and `buildLocalContainer` threads both into
-    `buildNodeContainer` with `db: undefined`, injecting the two credential repos. The
-    **`db: undefined` audit was pulled forward** (it was nominally PR 3): `buildNodeContainer` now
-    takes an optional `db`, the per-user Postgres services (subscriptions / user-secrets /
-    OpenRouter catalog) turn off without one, the API-key pool + local-model endpoints accept an
-    injected repository. NOTE: the Drizzle constructors only stash the handle (no build-time work),
-    so BUILDING the container over `db: undefined` is safe — but CALLING the direct-db repos
-    (notifications / bootstrap / projections / subscription-activation / …) on a board load or run
-    still throws, because they are not yet routed to the remote surface. That, plus the narrow
-    allow-list, is why mothership mode was NOT yet functional at 1b (see the merge gate + Phase 3).
-    _(Superseded: Phase-3 slices 3–4 routed those direct-db stores via `pickRepoSource` and widened
-    the allow-list, so the board-load + run paths now work — the gate is MET; see the banner.)_ The
-    **no-Postgres `startLocal` boot** is a dedicated path (`startLocalMothership`) — no
-    `DATABASE_URL`/`migrate`/pg-boss; it serves the same Hono app + WebSocket transport and drives
-    runs with the new in-process `WorkRunner` (serialized per execution, the pg-boss analogue). The
-    `config.localMode.mothership` flag is surfaced to the SPA. A static `LOCAL_MOTHERSHIP_TOKEN` is
-    used for now (login minting is PR 3). Tests: the remote-registry round-trip + allow-list
-    (`packages/server/test/persistenceRpc.spec.ts`), and `composeMothership` / `InProcessWorkRunner`
-    / the no-Postgres `buildLocalContainer` build (`runtimes/local/src/mothership.test.ts`).
-  - **Review fixes folded into 1b (PR #514):** the credential SQLite handle is now released on
-    shutdown via a new `ServerContainer.onShutdown` seam (the boot path calls it); the runner-pool
-    connection repo resolves remotely in mothership mode (a clean gated `unknown_method`, not an
-    undefined-db `TypeError`); the superseded `createRemoteRepositories` (pilot-6 typed set) was
-    removed in favour of the single `createRemoteRepositoryRegistry` (the round-trip test now runs
-    against the registry production uses); `makeRepoProxy` guards `then`/symbol probes so an
-    accidental `await` of a repo proxy can't forward a bogus RPC; the in-process runner no longer
-    double-arms a re-drive when a gate re-arm and a signal coincide; the boot serve/realtime tail is
-    a shared `serveAppWithRealtime` helper (no drift with `start()`); and the overstated
-    "loads a board / persists executions" claims were corrected to match the gated reality.
-  - **Deferred from 1b (carried forward):** the full cross-runtime `defineConformanceSuite`
-    binding for the local-sqlite store still wants a **fake mothership server** so the suite can
-    build a real mothership-mode `buildLocalContainer` over a working RPC backend — folded into
-    Phase 2 alongside the durable SQLite work queue (the in-process runner is single-process /
-    best-effort, with no durable queue or stale-run sweeper yet). The credential store keeps its
-    isolated unit test (`sqlite/credentialStore.test.ts`) and is now proven _wired into the
-    container_ by the no-Postgres build test. At 1b the allow-list exposed only the six core
-    domain repos remotely — the spine, NOT a working board/run; making it actually functional was
-    [Phase 3](#phase-3--functional-repository-surface-the-merge-gate), the merge gate, now **MET**.
+> Concise ledger: one line per merged slice. The full rationale for each lives in its PR
+> description + git history; the live per-repo status is the [checklist table](#per-repository-bucket-checklist).
+> Every slice is a server-only allow-list change (symmetric by construction: the dispatcher
+> reflects over each facade's registry), with round-trip + cross-account-scope tests in
+> `packages/server/test/persistenceRpc.spec.ts` and the static drift guard
+> (`runtimes/node/test/mothership-allowlist.spec.ts`) classifying each method, unless noted
+> otherwise.
+
+**Spine & durability (PR 0–2)**
+
+- **PR 0**: this tracker.
+- **PR 1 (spine)**: the persistence-RPC core in `@cat-factory/server`: `machine` token audience,
+  wire envelope + method allow-list + scope table + dispatcher (`src/persistence/rpc.ts`), the
+  `Proxy`-backed `createRemoteRepositoryRegistry`, the `POST /internal/persistence` controller, and
+  the full round-trip test (reads, undefined/null, rev write-back, DomainError re-throw, allow-list,
+  scope). Both facades attach `ServerContainer.repositories`, so either can be a mothership (guarded
+  by a conformance assertion).
+- **PR 1 (consumer side)**: the local `node:sqlite` credential store (`providerApiKey` +
+  `localModelEndpoint`, sealed-envelope only), the `LOCAL_MOTHERSHIP_URL` switch composing
+  `composeMothership` (remote registry + local store) into `buildNodeContainer` with `db: undefined`,
+  the no-Postgres `startLocalMothership` boot (no `DATABASE_URL`/`migrate`/pg-boss; same Hono app +
+  WebSocket transport), and the `config.localMode.mothership` SPA flag. The `db: undefined` audit was
+  pulled forward here (per-user Postgres services turn off without a `db`). Review fixes (PR #514):
+  `ServerContainer.onShutdown` seam, remote runner-pool repo resolution, single
+  `createRemoteRepositoryRegistry`, proxy `then`/symbol guards, shared `serveAppWithRealtime` helper.
+- **PR 2 (durable SQLite work queue)**: `SqliteWorkRunner` replaces the in-memory `InProcessWorkRunner`,
+  backed by a file-based `node:sqlite` queue (`~/.cat-factory/work-queue.sqlite`, override
+  `LOCAL_MOTHERSHIP_WORK_DB`): pg-boss's durability without Postgres (one row per run, rerun-coalescing,
+  boot-time orphan reset + lease-expiry recovery poll). A **local-sqlite bucket** differentiator (no
+  symmetry obligation). Tested in `sqlite/workQueue.test.ts` + `mothership.test.ts`.
+- **PR 2 (real-time UPSTREAM publish)**: the OUTBOUND half of "real-time both directions". A new
+  machine-authed `POST /internal/events/publish` (`eventsRelayController`, `@cat-factory/server`) +
+  the `MachineEventRelay` seam on `ServerContainer`, mounted + attached symmetrically on BOTH facades
+  (`LocalMachineEventRelay` over the Node hub/propagator; `DurableObjectMachineEventRelay` over the
+  per-workspace `WorkspaceEventsHub` DO). The laptop publishes each engine event upstream through a
+  `MothershipWebSocketPropagator` (a `WebSocketPropagator` adapter reusing the existing cross-node
+  seam, layered over the local hub) so hosted teammates on the shared board see the local node's
+  activity live. Account-scoped + default-deny like the persistence RPC (out-of-scope workspace →
+  404). Tested in `packages/server/test/eventsRelay.spec.ts`, `runtimes/node/test/machineEventRelay.spec.ts`,
+  the Cloudflare `events-stream.spec.ts` (relay delivery + `buildContainer` wiring-parity assertion),
+  and `runtimes/local/src/mothership.test.ts`. The relay-wiring parity is asserted per-facade (Node
+  `mothership.test.ts`, Cloudflare `events-stream.spec.ts`); folding an end-to-end relay assertion into
+  the shared cross-runtime suite still rides with the mothership conformance-server binding (that
+  harness has no realtime sink today). The INBOUND (subscribe) leg has since landed: see below.
+- **Repository conformance**: the shared conformance suite runs a THIRD `[mothership]` config (a
+  no-Postgres node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership), so
+  an un-proxied / mis-scoped / non-serializing run-path method fails an EXISTING assertion. The static
+  drift guard reflects EVERY Drizzle method and fails unless it is allow-listed or classified
+  (`local`/`telemetry`/`admin`/`sweeper`/`preauth`/`onboarding`/`helper`). It used to carry a
+  `pending` reason too, which was the Phase-3 backlog; that backlog is now empty and the word is
+  gone, so a new method must be proxied or permanently classified in the PR that adds it. `test-db` CI lane sharded so the extra config doesn't grow wall-clock.
+
+**Phase 3: functional surface (the merge gate, MET)**
+
+- **Slice 1–2 (board-load reads)**: workspace-scoped + mixed board-load reads (`workspace` rule),
+  plus cross-service / entity-id-keyed board-composition reads via two new scope kinds: `serviceList`
+  (arg0 = `serviceIds[]`, every id must resolve in-scope) and `block` (arg0 = blockId → workspace →
+  account). Reads only.
+- **Slice 3 (`db: undefined` routing)**: the org/durable stores `buildNodeContainer` built directly
+  from `options.db` now route through the `pickRepoSource(remoteRepos, name, build)` seam (remote
+  registry when `db` is undefined, else Drizzle): projections, installation, runner-pool, bootstrap,
+  reference-architecture, env-config-repair, notifications, task, subscription-activation; the separate
+  `DrizzleServiceFrameRepository` is gone. Routing is orthogonal to the allow-list (an un-listed method
+  returns a clean `unknown_method`, never a `TypeError`).
+- **Slice 4 (functional integration test: gate exit criteria)**:
+  `mothership-integration.spec.ts` boots a real loopback Node mothership + a no-Postgres local node and
+  asserts a board loads and a run drives to a persisted terminal state over the RPC. Surfaced that
+  `AgentContextBuilder` reads a block's docs/tasks + provisioned env on every dispatch, so those
+  sub-helper repos (`document`/`task`/`environmentRegistry`/`environmentConnection`) were routed
+  remotely and their workspace-scoped reads + lazy-seed / notification writes allow-listed.
+
+**Phase 3 follow-ups (surface-completion slices: each widens `REMOTE_PERSISTENCE_METHODS`)**
+
+- **Settings / preset / schedule writes**: the settings panels can now PERSIST, not just display:
+  `workspaceSettings.upsert`, `trackerSettings.put`, `serviceFragmentDefaults.set`, both preset
+  libraries' `get`/`remove`, and the recurring-schedule mgmt surface
+  (`pipelineSchedule.get`/`upsert`/`remove`/`insertRun`/`updateRun`/`listRuns`). Sweeper-only
+  `listDue`/`pruneRunsBefore` + `listByService` stay off.
+- **Failed-run retry / stop control**: `agentRunRepository.getRef` (resolves a run's kind before
+  dispatch) completes the EXECUTION-run retry/stop path. **Wiring fix (both facades):** `agentRunRepository`
+  lives outside `CoreDependencies`, so `buildNodeContainer` + the Cloudflare `buildContainer` now fold
+  it into the reflected registry explicitly. Sweeper-only `listStale`/`liveRunIds` stay off.
+- **Post-release-health / observability settings writes**: `observabilityConnection`,
+  `releaseHealthConfig`, `incidentEnrichmentConnection` repos (reads/deletes via `workspace`, the
+  record-based `upsert` via a new `workspaceField` rule binding `record.workspaceId`). Connection `get`
+  returns the sealed `credentials` blob (the `environmentRegistry.get` precedent). Gate-probe decryption
+  stays off (secrets-delegation slice); `accountSettingsRepository` is a separate decision.
+- **Advanced review / structured-dialogue sessions**: clarity-review, brainstorm and consensus
+  session repos gain write/delete (mirroring the requirements-review surface):
+  `clarityReview`/`brainstormSession`/`consensusSession` `get`/`upsert`/`delete*`, plus
+  `requirementReview.deleteByBlock`.
+- **Shared-service mount management**: `serviceRepository.get` (new `service` scope kind: single
+  serviceId → owning account, routed through the request's `listByIds` memo) + `workspaceMountRepository`
+  `get`/`update`/`remove` + record-based `upsert` (new `serviceMount` scope kind). Cross-org sharing is
+  enforced AT THE RPC LAYER: `serviceMount` binds the mount's `workspaceId` field AND requires the
+  mounted `serviceId` to be owned by the same account (defeats a multi-account token planting a
+  cross-org mount). Fan-out / batch-cleanup reads stay off. **Known gap:** mount/unmount does not
+  live-update OTHER boards mounting the same service (needs the fan-out reads: a later slice).
+- **Bootstrap / reference-architecture / env-config-repair management**: the full run-mgmt surface
+  (start / poll a single job / retry / stop): `bootstrapJob` `get`/`update`/`insert`,
+  the whole `referenceArchitecture` repo, `envConfigRepairJob` `get`/`update`/`insert` (record-based
+  `insert`s via `workspaceField`). Completes the `AgentRunController` retry/stop surface for those kinds.
+- **Kaizen grading reads**: the Kaizen SCREEN reads: `kaizenGrading.listByWorkspace`/`listByExecution`
+  - `kaizenVerifiedCombo.listByWorkspace`. The combo `upsert` + background-sweep methods stay off
+    (grading itself is best-effort until Phase 5).
+- **VCS / GitHub projection reads**: the SPA's VCS board panels: `repoProjection.list`,
+  `branchProjection.listByRepo`, `pullRequestProjection.listByWorkspace`,
+  `issueProjection.listByWorkspace`, plus `githubInstallation.getByWorkspace` (also the run-path
+  `resolveRepoTarget` read). Projection WRITE surface (`upsertMany`, `linkBlock`, sync cursors,
+  `repoProjection.get`) stays off: the mothership owns GitHub sync; opening repo-writes without it
+  would let create-branch/open-PR half-succeed. A later GitHub sync + repo-write slice.
+- **Runner-backend connection + visual-gate artifacts + service board-composition read**: three
+  more repository surfaces widened in one slice (each a server-only allow-list change, symmetric by
+  construction): (1) the whole `runnerPoolConnectionRepository`
+  (`getByWorkspace`/`softDelete` via `workspace`, record-based `upsert` via `workspaceField`); the
+  self-hosted runner-backend connection settings panel, its credentials a SEALED `secretsCipher`
+  blob (the observability/environment-connection precedent); (2) the visual-confirmation gate's
+  `binaryArtifactMetadataStore` metadata surface (`insert` via `workspaceField`;
+  `get`/`listByExecution`/`countByExecution`/`listByBlock`/`delete` via `workspace`, joined later by
+  the design-render pair `listByDocument`/`deleteByDocument` on the same rule, so an import running
+  on a node retains a design source's frames and replaces the previous revision's rather than
+  silently keeping neither); the blob
+  BYTES stay per-account local, only the metadata is proxied, and the retention sweep
+  (`listOlderThan`/`deleteOlderThan`) stays mothership-internal. This one is NOT a pure allow-list
+  change: `binaryArtifactMetadataStore` isn't in `CoreDependencies` (it's composed into
+  `resolveBinaryArtifactStore`), so it's folded into BOTH facades' reflected `repositories` registry
+  explicitly. (3) `serviceRepository.listByFrameBlocks` (the batched board-composition /
+  frame-deletion read) via a new use of the `blockList` scope: its first round-trip coverage. The
+  remaining service CRUD + `getByRepo` stay the later GitHub-sync / board-write slice.
+- **Ephemeral-environment connection management**: the environment provider-connection + per-type
+  infra-handler settings panels + the custom-manifest-type catalog: the whole
+  `environmentConnectionRepository` and `customManifestTypeRepository` (reads via `workspace`,
+  record-based `upsert` via `workspaceField`). Safe because the connection carries handler secrets as a
+  SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key, no plaintext
+  crosses the machine API); custom-manifest-type rows carry no secrets. The document/task
+  connection repos decrypted INSIDE the repo and were left off; the document/task slice below is
+  what changed that. Provisioning WRITES + access-cipher
+  decryption stay off (secrets-delegation slice).
+- **GitHub token delegation + environment self-test run surface**: the first GitHub-in-mothership
+  slice, in two halves. (1) **GitHub installation-token delegation**: the mothership serves a new
+  machine-authed `POST /internal/github/installation-token` (shared `githubDelegationController`,
+  mounted on BOTH facades like the persistence RPC; the facade seam is
+  `ServerContainer.githubTokenDelegation`, wired from each facade's GitHub App registry). Auth
+  first (the `machine` audience pin: asserted by a shared conformance test), then a per-node
+  fixed-window rate limit (keyed by the token's signed `nodeId`; per process/isolate: an abuse
+  brake on GitHub's mint API, not a distributed quota), then the call is account-scoped
+  server-side off the installation's own account binding (`getByInstallationId` → live row +
+  `accountId` in the token scope; an installation is bound to exactly ONE account, so this is a
+  single point read), else 404 (no existence leak). The minted token is **repo-scoped, not
+  installation-wide**: the mint passes GitHub `repository_ids` narrowed to the live App-linked
+  rows of the `github_repos` projection for that installation (the batched
+  `repoProjectionRepository.listByInstallation` read, mirrored D1 ⇄ Drizzle; `user_pat`-linked
+  rows excluded, not App-reachable; no linked repos ⇒ the same uniform 404). A caller may narrow
+  FURTHER by naming `repositoryIds` (a container dispatch asks for only the repos its run
+  resolved) and the request is INTERSECTED with that linked set, so asking narrows and can never
+  widen; nothing left in scope is the same 404, and a malformed ask falls back to the full linked
+  set rather than a partial one. A scoped mint
+  bypasses the mothership's unscoped in-memory engine token cache in BOTH directions (no
+  over-grant from a cached unscoped token, no poisoning of the engine path), and every mint /
+  denial / failure is audit-logged with the node + user ids (the client-facing 500 stays opaque).
+  The laptop consumes it through `DelegatedAppTokenSource` (an `AppTokenSource`; short
+  in-process memo, `forceRefresh` pass-through): `composeMothership` builds it on the SAME machine
+  token as the persistence RPC, and `buildLocalContainer`, when NO `GITHUB_PAT` is set, wires it
+  as BOTH the executor's push/clone-token mint and a full `FetchGitHubClient` (gates, merge,
+  repo-link, `resolveRunRepoContext`/RepoFiles). The executor forwards its dispatch scope through
+  that seam, so a mothership-mode container gets the same per-run narrowing a hosted deployment
+  mints; the client's memo is keyed by installation + SORTED scope, because an installation-keyed
+  entry would serve one run another run's scope. So a mothership-mode node runs on the org's
+  GitHub App installation with no PAT and no App key on the machine: only short-lived (~1h),
+  repo-scoped installation tokens. An explicit PAT still wins.
+  (2) **`environmentTestRunRepository` goes remote** (`get`/`update`/`listRunningByWorkspace` via
+  `workspace`, record-based `insert` via `workspaceField`): the ephemeral-environment self-test's
+  run store; previously all-`pending` precisely because the self-test needs
+  `resolveRunRepoContext` (GitHub), which (1) now serves. A FULL mothership-mode self-test still
+  rides the later secrets-delegation slice (the provisioning writes
+  `environmentRegistryRepository.insert`/`update` stay off), failing cleanly at the provisioning
+  stage with cleanup until it lands.
+- **The account-wide run-credential floor**: `accountSettingsRepository.getConfigByAccount` goes
+  **remote** (`account` scope), and the shape of that decision is the reusable part. The floor
+  (`allowInitiatorPat`, see `backend/docs/security-model.md`) is read on the RUN path, so leaving it
+  un-routed would not have blanked a panel: a mothership node would have silently stopped enforcing
+  an account admin's refusal, which is the worst kind of parity gap. But the obvious carrier,
+  `getByAccount`, is deliberately mothership-INTERNAL: it returns the sealed secret blob, and the
+  machine token scopes ACCOUNTS rather than ROLES while the RPC bypasses the service layer's
+  `requireAdmin`, so proxying it would let any account member pull the account's secrets.
+  The resolution was to NARROW THE READ rather than widen the surface: a new port method selecting
+  the non-secret `config` column alone, which is exactly the "or routes them through the service"
+  escape the original classification anticipated. **Prefer that move to either horn** when a run-path
+  read is trapped behind a secret-bearing sibling: a method that carries no secret needs no role
+  dimension to be safe. `upsert` (an admin write) and `listAll` (the unscoped sweeper) stay off, and
+  a test pins that `getByAccount` is still refused.
+- **Prompt-fragment library + account onboarding reads**: four more repository surfaces widened in
+  one slice (each a server-only allow-list change, symmetric by construction). (1) The tenant-scoped
+  **prompt-fragment library** (`promptFragmentRepository` list/get/upsert/softDelete +
+  `fragmentSourceRepository` list/link) the SPA's `FragmentLibraryController` curates: introduces
+  two new scope rules, `owner` (an `(ownerKind, ownerId)` positional PAIR) + `ownerField` (the same
+  as record fields on `upsert`), resolving a `workspace` owner to its account and taking an `account`
+  owner as the accountId directly, so a token scoped to one account can never read/write another
+  tenant's fragments. Both tiers are member-level (account-tier routes guard on `requireMember`, NOT
+  `requireAdmin`), rows carry no secrets, and the library module assembles from
+  `promptFragmentRepository` alone (unlike the document/task integration modules, which require a
+  decrypt-inside connection repo and so stay off). Node routes the two fragment repos through the
+  `if (remoteRepos)` seam ONLY when the library is configured (else setting `promptFragmentRepository`
+  would spuriously turn the module on and force fragment resolution on every run). The `sourceId`-keyed
+  sync methods stayed off here on the premise that a mothership node has no GitHub client; token
+  delegation retired it and the library-sync slice below opened them. (2) The two member-level
+  **account onboarding reads** the SPA's
+  members/email-settings panels drive: `invitationRepository.listByAccount` (pending invites) and
+  `emailConnectionRepository.getByAccount` (the email connection, its provider key a SEALED
+  `apiKeyCipher` blob; the repo never decrypts), both via the `account` rule. The account-lifecycle
+  WRITES stay off: invite `create`/`setStatus` (admin-gated), the pre-auth `findByTokenHash`/`get`
+  accept-invite lookups, and email `upsert`/`softDelete` (connect/disconnect, admin-gated).
+- **Slack integration management surface**: the Slack settings panels (`SlackController` →
+  `SlackConnectionService` / `SlackSettingsService` / `SlackMemberMappingService`: connect / disconnect
+  the per-account Slack workspace, edit the per-workspace notification routing, maintain the per-account
+  GitHub-user → Slack-member mapping) now PERSIST over the mothership. Introduces a new scope rule
+  **`accountField`** (the account-owned mirror of `workspaceField`, binding on an `upsert(record)`'s
+  `accountId` FIELD) used by `slackConnectionRepository.upsert`. Allow-listed:
+  `slackConnectionRepository` `getByAccount`/`upsert`/`softDelete` (the bot token rides a SEALED
+  `tokenCipher`, so only ciphertext crosses the machine API; the observability/runner-connection
+  precedent), `slackSettingsRepository` `getByWorkspace`/`upsert` and `slackMemberMappingRepository`
+  `getByAccount`/`upsert` (no secrets). The Node facade routes the three Slack repos through the
+  `sourced`/`pickRepoSource` seam inside `selectNodeSlackDeps` (so both the management services AND the
+  `SlackNotificationChannel` read the remote-backed repos, not the db-less Drizzle instances).
+  **Still off:** `slackConnectionRepository.getByTeam`: the GLOBAL teamId → connection lookup the
+  inbound OAuth callback / event webhook use on the mothership (never the laptop), unscopable by
+  account, so mothership-internal. **Residual (later secrets-delegation slice):** mothership-SIDE Slack
+  DELIVERY of a notification raised by a HOSTED teammate (the mothership decrypting a laptop-sealed
+  token) mirrors the observability gate-probe residual; local-node delivery (the run's own node holds
+  the key) is unaffected.
+- **Member-display reads**: the account members panel now renders real names/emails/avatars in
+  mothership mode: `userRepository.get` + `userRepository.listByIds` (the roster enrichment behind
+  `AccountService.members`) are allow-listed. Introduces a new scope rule pair **`user`/`userList`**
+  bound by CO-MEMBERSHIP: a userId is not an account/workspace, so it is admitted iff the user is a
+  member of one of the token's in-scope accounts, resolved server-side from the account rosters via a
+  new `resolveAccountMemberIds` dispatch resolver (bounded by the token's account scope, not the
+  requested user list, no N+1). Safe because the reads carry only the presentational `UserRecord`
+  (id/name/email/avatarUrl/createdAt); the password `secret` lives on `UserIdentityRecord`, reachable
+  only via `getIdentity`/`listIdentities`, which: with `update` (profile write) and
+  `findByIdentity`/`findByEmail`: stay OFF (the account-lifecycle / login surface). Round-trip +
+  co-membership-scope + secret-read-refusal tests in `persistenceRpc.spec.ts`; the drift guard moves
+  `get`/`listByIds` out of `pending`.
+- **Repo-sourced Claude Skills library (ADR 0024) (catalog AND sync**) the first content library
+  whose repo-SYNC goes remote too, not just its management reads. Two things forced the widening
+  beyond the fragment-library shape:
+  - **A skill catalog read is a RUN-path read.** `skillResolver` is a HARD dependency for a `skill`
+    step (and for ADR 0029's declared `{ catalogSkillId }` capabilities), so an un-routed
+    `accountSkillRepository` did not blank a panel; it failed the dispatch. Worse, it failed
+    PARTIALLY: a skill with no sibling resources resolved from the catalog alone, while one with
+    resources threw out of `SkillRunResolver.resolveResources`, so the feature looked wired.
+  - **"A mothership node has no GitHub client" is no longer true.** That premise is what parked the
+    fragment / foundational-service sync surfaces at `pending`; token delegation
+    (`DelegatedAppTokenSource`) since gave the node one, so its `SkillSourceService` assembles and
+    its link / sync / unlink routes are LIVE: reachable and broken, which is worse than either
+    serving them or hiding them.
+
+  Introduces the **`skillSource`** scope rule: the sync methods carry a source id and nothing else,
+  so nothing positional binds them. It resolves the source's owning account server-side through a
+  new `resolveSkillSourceAccountId` dispatch resolver (memoised beside the block/service resolvers,
+  and the dispatched `skillSourceRepository.get` is routed through the SAME memo so the scope check
+  is not a second read). The sibling libraries have since adopted it in its owner-PAIR form,
+  `librarySource` (see the library-sync slice below).
+  Allow-listed: `accountSkillRepository` `listByAccount`/`get` (the `account` rule),
+  `upsert` (`accountField`), `softDelete` (`account`), `listBySource`/`softDeleteBySource`
+  (`skillSource`); `skillSourceRepository` `listByAccount` (`account`),
+  `upsert` (**`accountFieldUpsert`**), `get`/`updateSyncState`/`softDelete` (`skillSource`). Rows
+  carry no secrets: a `SKILL.md` body plus a `{ path, sha, size }` manifest; the resource BODIES
+  are fetched from the repo at dispatch and never stored.
+
+  Also introduces **`accountFieldUpsert`**, the upsert form of `accountField` for a record-keyed
+  write whose CONFLICT KEY is the record's `id` rather than its `accountId`. `accountField` is safe
+  only under the precondition its own doc entry states: the row is stored under, and later read
+  by, the bound `accountId`. An `ON CONFLICT (id) DO UPDATE` that does not re-`SET account_id`
+  breaks it: the write lands on whichever row already holds that id, under ITS account. Binding
+  only the declared field would let a token scoped to account A name account B's source id, declare
+  its own account to pass the check, and repoint B's link at a repo A controls, whose `SKILL.md`
+  bodies are agent INSTRUCTIONS that B's next sync folds into their catalog. The rule therefore
+  binds the STORED row's account as well; an absent row is a CREATE and passes on the declared half
+  alone. Its sibling `accountSkillRepository.upsert` keeps plain `accountField` because that write
+  conflicts on `(account_id, skill_id)`, so the bound account is part of the key.
+
+  > **Open gap this rule did NOT close** (CLOSED by the library-sync slice below).
+  > `fragmentSourceRepository.upsert` (`ownerField`) has the same id-keyed conflict shape and the
+  > same exposure. Closing it needed the `ownerField` analogue: a source → owner-PAIR resolver
+  > (`(ownerKind, ownerId)`, not a bare accountId): plus its own round-trip tests, so it was tracked
+  > here rather than folded into the skills slice. It is now `ownerFieldUpsert`, and it is what a new
+  > id-keyed library upsert must use: do not copy `ownerField`/`accountField` onto one.
+
+  **Also new: `githubInstallationRepository.listActiveForAccount`** (`account` rule), a real port
+  addition rather than an allow-list line. The account-tier installation lookup every repo-sourced
+  library resolves its GitHub credential through went via the cron `listActive()` plus a JS filter:
+  a read of every tenant's installations to answer a single-account question, which no
+  account-scoped token can ever be allowed to serve and which no rule can bind (the method takes no
+  arguments). The scoped form pushes "bound to the account directly OR to one of its own boards"
+  into SQL on both runtimes, ordered `(createdAt, installationId)` so the two pick the same row;
+  `createTierInstallationResolvers.forAccount` now makes one query where it made two.
+
+  **Still off:** `skillSourceRepository.listByRepo`: the GLOBAL `(repoOwner, repoName)` → sources
+  reverse lookup behind the push-webhook fan-out, spanning every account by construction and running
+  on the mothership that receives the webhook. Classified `sweeper`, like
+  `slackConnectionRepository.getByTeam`. **Config expectation:** both ends must have
+  `fragmentLibrary.enabled`: the mothership folds the skill repos into its reflected registry only
+  when its own library is configured, exactly as it does for fragments, so a node with the library on
+  against a mothership with it off gets a clean `... is not wired`.
+
+- **Owner-pair library SYNC + the parked-review writeback markers**: thirteen methods across three
+  surfaces, and the shape worth copying is that all three were already REACHABLE on a node and
+  broken, rather than simply absent.
+  - **Both owner-pair content libraries' repo-SYNC surfaces go remote** (prompt fragments,
+    foundational services), on the premise the skills slice already retired: a mothership-mode node
+    HAS a GitHub client, so its `FragmentSourceService` / `FoundationalServiceSourceService` assemble
+    and their link / sync / unlink routes were live and failing. Allow-listed:
+    `promptFragmentRepository` `listBySource`/`softDeleteBySource`, `fragmentSourceRepository`
+    `get`/`updateSyncState`/`softDelete`, `foundationalServiceRepository`
+    `listBySource`/`softDeleteBySource`, `foundationalServiceSourceRepository`
+    `get`/`updateSyncState`/`softDelete`.
+
+    `promptFragmentRepository.softDeleteBySource` is NEW to the port, added with this slice on both
+    runtimes plus a `defineFragmentLibrarySuite` parity assertion: unlink retired a source's set with
+    a per-fragment `softDelete` loop, which going remote turns into one HTTPS round trip per
+    fragment. Both sibling repo-sourced libraries already retired by source.
+
+    Introduces **`librarySource`**, `skillSource` generalised from an accountId to an
+    `(ownerKind, ownerId)` PAIR (a fragment source can be owned by a workspace as well as an
+    account), resolving through one new `resolveLibrarySourceOwner` dispatch resolver keyed by a
+    closed `LibrarySourceEntity`. **The discriminator is load-bearing, not bookkeeping**: without it
+    a resolver would have to try both source tables, so one library's ids would bind the other's
+    methods. One resolver rather than one per table, for the reason the sealed-source table gives:
+    a second near-identical option is how a new library lands with a rule and no resolver.
+
+  - **`ownerFieldUpsert` closes the gap the skills slice named**, applied to BOTH source repos'
+    `upsert`. Each conflicts on the `id` alone and never re-`SET`s its owner columns, so plain
+    `ownerField` bound only the DECLARED owner: an in-scope caller naming a foreign source id could
+    repoint another tenant's link at a repo it controls, whose Markdown bodies the victim's next sync
+    folds into their prompts as standards. Same rule, same argument and same create-passes-on-the-
+    declared-half behaviour as `accountFieldUpsert`.
+
+    **"No such row" is an ADMISSION here, so it may never be the answer to a question that was not
+    asked.** `resolveLibrarySourceOwner` therefore answers `found` / `absent` / `unreadable` rather
+    than a nullable owner, and only `absent` earns the create. A nullable owner made a table this
+    deployment cannot read (a facade wiring a source repo's `upsert` without its `get`, or a library
+    added to `LibrarySourceEntity` with no resolver row) indistinguishable from a free id, which
+    silently drops the stored half and hands back the very repoint the rule exists to close. Its
+    `accountFieldUpsert` twin gets the same guarantee from a `switch` over the entity with a `never`
+    default; the entity → source-table map in `PersistenceController` is keyed by the UNION for the
+    same reason, so a new library fails to compile until it names its table.
+
+  - **`reviewQuestionPostRepository` `claim`/`settle`/`get`** (the `workspaceField` rule, since the
+    marker key carries its own `workspaceId`). This one is the quietest failure the initiative has
+    recorded: the ENGINE writes the marker, `claim` answered `unknown_method`, and the caller's
+    DELIBERATE fallback reads a store failure as "someone else holds the claim". So every parked
+    review on a local run silently skipped its ticket comment: the reporter is never asked the
+    question, the run parks waiting for an answer to something nobody was told about, and the only
+    trace is one `warn`. Its inbound sibling (`trackerCommentIngestRepository`) stays off
+    permanently: a delivery reaches the deployment holding the public URL, so a laptop has nothing
+    to claim.
+  - **Two Node ROUTING gaps found while scoping it, and they matter more than the allow-list lines.**
+    `foundationalServiceRepository` / `apiContractRepository` /
+    `foundationalServiceSourceRepository` and `fragmentBriefRepository` were built directly over the
+    absent `db` and never re-pointed by `applyMothershipRemoteRepos`, so the allow-list had named
+    them remote while only the Cloudflare facade could reach them. **An un-ROUTED repo is worse than
+    an un-allow-listed one**: it is a `TypeError` on the run path (an architect dispatch resolves the
+    merged catalog; an implementer dispatch resolves a generated brief) rather than a clean
+    `unknown_method` naming what is not callable.
+
+    So the slice adds the guard that makes this class structural rather than reviewer-caught:
+    `mothership-repo-source.spec.ts` asserts a RELATION over two derived sets, that every repository
+    a content-library sub-helper BUILDS and the allow-list NAMES as remote is re-pointed. Both sides
+    come from the code under test (the helper's own returned keys, the allow-list's own table), so a
+    new library repo joins the assertion by existing. It also pins the deliberate asymmetry: the
+    two gated libraries are routed only when already present (setting the repo alone would switch
+    their module ON), while the ungated foundational-services catalog is routed unconditionally.
+
+  - **`serviceRepository.insert` was left off HERE with a real reason rather than a bare `pending`,
+    and the next slice landed it** (see "The remaining repository surface" below: the
+    `serviceInsert` rule binds the frame block, admitting one that does not exist yet). The
+    analysis this entry recorded is what that rule was built from: It cannot ride an
+    allow-list line, because no existing rule binds it soundly. `accountField` (the record's own
+    `accountId`) leaves `frameBlockId` unbound, and `getByFrameBlock` resolves by frame block id
+    ALONE (the unique index is `(account_id, frame_block_id)`, so two accounts may hold a service for
+    one frame id and the walk answers with an arbitrary one, as `mountProjection.frameMount` already
+    works around), so a caller could plant a service on another org's frame block and redirect its
+    runs' `resolveRepoTarget` at a repo it controls. Binding the frame block instead is unavailable:
+    `registerServiceForFrame` inserts the service BEFORE the block row exists, so the resolver would
+    find nothing and refuse every legitimate frame creation. Opening it needs an account-scoped
+    `getByFrameBlock` or a port carrying the frame's workspace: its own slice, with the frame-DELETE
+    cascade (`serviceRepository.deleteMany` + `workspaceMountRepository.removeByServices`, both
+    `serviceList`-bindable and safe) riding along, since both belong to service CRUD.
+
+**The remaining repository surface (the backlog is now EMPTY)**
+
+- **Every org/durable repository method is now allow-listed or PERMANENTLY classified**, and the
+  drift guard has retired `pending` from its reason vocabulary. That is the part worth keeping: as
+  long as the word existed, "a new method picks its bucket in the same PR" had a landing pad, and
+  the rule AGENTS.md states was enforceable only by a reviewer noticing. A method that belongs on
+  the machine API now fails the guard until it is actually proxied.
+  - **The VCS sync + repo-write surface** (the slice five earlier entries deferred to). The premise
+    that parked it was "the mothership owns GitHub sync, since the App and the webhooks live
+    there", and the specific fear was that opening `repoProjectionRepository.get` alone would let a
+    repo-write endpoint perform the real GitHub write and then fail on the un-remoted `upsertMany`
+    refresh. That is an argument for opening the two TOGETHER, which is what happened: token
+    delegation gave a node a real GitHub client, so create-branch / open-PR / merge / comment
+    already ran there and only their projection refresh was still failing. Allow-listed: the whole
+    installation surface's id-keyed READS, the repo
+    projection's `get`/`upsertMany`/`tombstoneMissing`/`setMonorepo`/`linkedWorkspaces` and the
+    incremental-sync cursors, and reads + `upsertMany` on all five entity projections. Still off:
+    `listStale` (the reconcile cron, cross-tenant) and `listByInstallation` (the delegation mint's
+    own repo-scoping read, unscoped across an installation's workspaces).
+
+    The allow-list outgrew its file, so the VCS block moved to `rpc-allowlist-vcs.ts` and the
+    content libraries to `rpc-allowlist-libraries.ts`; the merged table is what every reader sees.
+
+  - **The installation CONNECT/DISCONNECT writes stay mothership-internal, and the reasons compose.**
+    They were briefly allow-listed behind a record rule binding the connector workspace, the declared
+    account and the stored row. The rule was the wrong instrument: `upsert`/`softDelete` are
+    `integrations.manage` in the service layer, a machine token scopes ACCOUNTS not roles, and a plain
+    member of an account holds one, so no amount of row binding substitutes for the role check the RPC
+    bypasses. It also bound nothing a node could use: App connect probes the installation through an
+    app-JWT call `DelegatedAppTokenSource` refuses by design (the App key never leaves the mothership),
+    and the GitLab PAT connect seals its token with the LOCAL `SecretCipher`, so a node-sealed row is
+    one the mothership cannot open. The id-keyed READS stay (the annotation read, the setup-redirect
+    recovery, the sync fan-out), each bound by the installation's own account: a PAT binding stores
+    none, so the resolver falls back to the connector workspace's, without which every per-workspace
+    GitLab connection would be unreadable from the node that made it.
+  - **Service CRUD, which a mothership-mode node needed to create a service frame AT ALL.** The
+    previous entry recorded why it could not ride an allow-list line, and the new `serviceInsert`
+    rule is the resolution: bind the declared `accountId` AND the `frameBlockId` the row claims,
+    where an EXISTING frame block must resolve to the same account and an absent one is the
+    ordinary case (`registerServiceForFrame` writes the service BEFORE the block row, and block ids
+    are server-minted, so a caller cannot reserve one another tenant will be given). The equality,
+    not merely in-scope-ness, is what stops a multi-account token crossing orgs. `serviceUpdate`
+    binds the stored service AND any account a patch would re-home it into, because a service's
+    account decides whose catalog offers it for mounting. The mount cascade
+    (`listByServiceIds`/`removeByServices`) moved WITH it: opening the delete without the cascade
+    would leave every other board in the org mounting a service that no longer exists.
+  - **The small remainder**: the Kaizen streak `upsert` (best-effort, which is exactly why leaving
+    it off was invisible: a node's runs verified combos nobody recorded) and single-grade `get`,
+    `testSecretsRepository.listByWorkspace`, the two workspace-roster reads, and
+    `userRepository.update` (the profile edit, bound by `selfUser` rather than the looser
+    co-membership rule the display reads use: a write bound by co-membership would let a node
+    rename any teammate in its account).
+  - **The pre-auth surface is now PERMANENT, not pending.** The password-reset flow, the
+    accept-invite lookups and the identity reads answer "who is this credential" BEFORE any token
+    exists, at the URL the deployment publishes, and a machine token is itself minted BY a
+    completed login. The guard calls that `preauth`; there is nothing to complete.
+  - **Six dead port methods were DELETED rather than proxied**: the single-service `listByService`
+    on blocks / executions / schedules / bootstrap jobs / mounts (board composition has gone
+    through the batched `listByServices` for as long as the allow-list has existed),
+    `serviceRepository.getByRepo`, `githubInstallationRepository.updateCachedToken` (nothing has
+    written that column since the App token cache moved in-process) and the unused
+    `DrizzleServiceFrameRepository`. The guard's own note said exposing a method no caller invokes
+    would be dead surface; deleting it is the version of that which also shrinks the table.
+  - **Both facades reflect the five entity projections unconditionally**, like the repo +
+    installation repos before them: they land in `dependencies` only when the GitHub MODULE is
+    wired, so a mothership hosting no App of its own would otherwise answer a node's own sync with
+    `... is not wired`.
+
+**Code-registered ORG state: the agent-kind CAPABILITY layer**
+
+- **`GET /internal/agent-kinds`**: the fourth application of the code-registered-org-state rule,
+  and the first that serves a SLICE of its registry rather than all of it.
+
+  **The kind CATALOG stays node-local, and that is a decision rather than a gap.** An agent kind is
+  half data and half CODE: its prompts may be functions, its `preOps`/`postOps` are backend
+  TypeScript and its structured output is a parser. Serving the descriptor while the executable
+  half stayed local would produce the MIXED bundle the task-type entry below rules out, and the
+  failure it would prevent is already loud: a step naming a kind this build lacks is refused at
+  admission.
+
+  **Its CAPABILITY layer is the half whose failure is silent, and that is what crosses.** A
+  deployment attaches its house playbook or its issue-tracker MCP server to a BUILT-IN kind through
+  `assignSkills` / `assignToolServers`, and both are pure data (a `SKILL.md` payload; a transport
+  plus the NAME of a credential). A node one build behind then dispatches `coder` without the org's
+  playbook and nothing anywhere reports it: the agent does the work its own way, which reads
+  exactly like an agent that considered the standard and moved on.
+
+  **So this source MERGES where its three siblings forbid a merge**, and the distinction is worth
+  keeping straight. They replace a set the node ALSO registers, so a merge would let a stale local
+  copy win by id over the authoritative one. Here the two halves are different things: a kind's own
+  declarations belong to the code implementing it and must stay with that code, while the
+  assignments are the deployment's layer on top. The union is the same one `skillsFor` /
+  `toolServersFor` already perform in-process, with the deployment's half read from the process
+  that owns it, deduplicated by id with the LOCAL definition winning.
+
+  **One read per dispatch, feeding both halves.** The engine resolves the merged capabilities once
+  (`resolveKindCapabilities`), applies the skills itself, and carries the tool-server DECLARATIONS
+  to the executor on `AgentRunContext.orgToolServers` — because the executor still owns whether each
+  is SERVABLE here (harness, credentials), which is the split ADR 0029 states. Resolving in both
+  places would have meant two network reads per dispatch.
+
+  Transport mirrors its three siblings exactly: machine-token pin checked FIRST, no account scope
+  (the layer is one deployment-wide set), its own endpoint rather than a persistence hole, reads
+  this process's OWN registry so a satellite cannot answer for a satellite, and THROWS on every
+  unreadable outcome including an older mothership's 404. Tested in
+  `packages/server/test/agentKinds.spec.ts` (the serve/merge/refusal properties incl. the
+  server-side id resolution, since a registered id means nothing to the reader),
+  `runtimes/local/src/mothership.test.ts` (the wire shape + wiring) and the shared cross-runtime
+  suite (mounted + machine-gated on BOTH facades).
+
+**Secrets delegation (the residual every earlier slice deferred to)**
+
+- **`POST /internal/secrets/unseal` + `POST /internal/secrets/seal`**: the mothership opens (and
+  seals) an ORG-owned credential a laptop holds no key for. Product decision 3's key split is what
+  made every sealed-blob repository safe to allow-list, and it is also what left those blobs
+  unreadable ON the node: a row a hosted teammate (or the mothership's own engine) wrote is sealed
+  under the mothership's key, so a mothership-mode node could save an infra connection and never
+  provision with it, save a Datadog connection and never probe with it. Four earlier slices parked
+  a surface here rather than ship it broken.
+  - **The wire names the ROW, never the ciphertext**, and that is the whole security argument. A
+    node posts a source from a CLOSED table (`SEALED_SECRET_SOURCES`) plus the row's identifiers;
+    the mothership re-reads the authoritative row from its OWN registry, binds the workspace to an
+    account exactly as the persistence RPC's `workspace` rule does, and decrypts under its own key.
+    So it is not a decryption oracle: a compromised node token can only ask for a value it could
+    already have read had it held the key, in an account it can already reach. An envelope-taking
+    endpoint would have opened ciphertext obtained anywhere at all. Same choice, same reason, as
+    the notification relay's identifiers-only body.
+  - **The SEAL half is not optional, and leaving it out would have been the quiet failure.** A
+    mothership-mode node PROVISIONS environments, so it produces org secrets as well as consuming
+    them. Sealed under the local key, such a row is unopenable by the mothership's own teardown and
+    by every hosted teammate, and nothing says so until a reclaim fails. Sealing takes no row read
+    (encryption depends on the key, not on stored state), so it binds on the workspace alone, and
+    it grants nothing further: a caller in scope can already write arbitrary bytes into that field
+    through the allow-listed `upsert`.
+  - **When a delegate is wired, EVERY call routes to it.** `createOrgSecretCipher` (kernel) is the
+    one seam; with no delegate (every hosted deployment, and local mode over its own Postgres) it
+    is a byte-for-byte pass-through to the facade's cipher. The rejected alternative was to try the
+    local key first and fall back on a `key-mismatch`, which reads as a cheap optimisation and is
+    the same silent split one write later: the fallback opens legacy rows and the SEAL still lands
+    under the wrong key. One route, decided by whether a delegate exists.
+  - **Every failure REJECTS; there is no degraded answer.** A client that returned an empty
+    credential where it could not reach the mothership would have a service provision against an
+    empty bundle or report a monitor as unconfigured. Same rule the telemetry sweep learned:
+    `MachineSecretDelegationUnavailableError` exists so a token-less node is a rejection rather
+    than a zero. On the server, an absent row and a row holding no sealed value are the SAME
+    uniform 404 (no existence leak), while a failed row read and a DRIFTED mothership key are 500s,
+    because those are the mothership's own fault and must not read as "nothing here".
+  - **Sources (five at the time, each bound to one read, one field and one HKDF tag)**:
+    `environment_access`, `environment_provision_fields`, `environment_connection`,
+    `observability_connection`, `incident_enrichment_connection`. The document/task slice below
+    added the sixth and seventh. The `Record<OrgSecretSource, …>` keeps the table exhaustive,
+    so a source added to the kernel vocabulary fails to compile until it is bound. Adding one
+    admits one more org credential to a laptop, so the bar is that a run needs the PLAINTEXT on the
+    node, not merely the row.
+  - **`environmentRegistryRepository.insert`/`update`/`softDelete` go remote** in the same slice,
+    and could not have gone earlier: the provisioning WRITE is exactly what would have stored a
+    laptop-sealed row. With the seal delegated, a mothership-mode node provisions, polls and tears
+    down for real, and the ephemeral-environment self-test runs end to end (its store went remote in
+    the GitHub delegation slice precisely against this day). `softDelete` is the TOMBSTONE half of
+    that same write and is inseparable from it: `supersedePriorEnvironment` runs it before every
+    re-provision (unguarded, so a deployer re-run fails outright without it) and it is how every
+    reclaim ends. Opening the insert alone would let a node stand infrastructure up and never record
+    it as reclaimed, which is the one failure the seal direction was opened to prevent.
+  - Consumers wire through `CoreDependencies.secretDelegate` (top-level, like the logger: it is not
+    one integration's concern) and the `NodeContainerOptions.secretDelegate` seam:
+    `EnvironmentProvisioningService`, `EnvironmentTeardownService`, `EnvironmentConnectionService`,
+    `RegistryReleaseHealthProvider` and `WorkspaceIncidentEnrichmentProvider` each compose it with
+    their own cipher. **Provisioning and teardown are one unit, not two consumers.** Teardown opens
+    the very `provisionFieldsCipher` that provisioning sealed, so a node holding a delegate for one
+    and not the other stands infrastructure up under the mothership's key and then cannot open the
+    fields its own reclaim needs, failing before `provider.teardown` on every mothership-sealed row.
+  - **A mothership-mode node may not itself ANSWER `/internal/secrets/*`**, and the gate is the
+    `secretCipherFor` capability, wired only where a facade holds its OWN main database. Its
+    `ENCRYPTION_KEY` seals the node's own agent/model credentials under the LOCAL key, so answering
+    a delegated `seal` there would store a row the org can never read: the same silent split, one
+    write later. The `repositories` registry cannot stand in for that check, because a
+    mothership-mode node populates it too, with the RPC-backed remote repos.
+  - Tested in `packages/server/test/secretsDelegation.spec.ts` (auth pin, scope binding, the
+    open-the-stored-row-not-the-body property, the closed table incl. prototype members, the
+    declared key arity, 404-vs-500 dispositions, 503 edges, and the client's throw-never-degrade
+    contract), `packages/kernel/src/ports/secret-delegation.test.ts` (the pass-through and
+    always-delegate compositions, and that the envelope never reaches the delegate),
+    `runtimes/local/src/mothership.test.ts` (the wire shape both directions, the token-less throw,
+    an END-TO-END guard where a no-Postgres container resolves an environment handle whose access
+    cipher only the mothership can open, and both halves of the answer-side gate above), and the
+    shared cross-runtime suite (`core-workspaces.ts` asserts both routes are mounted +
+    machine-gated on BOTH facades).
+  - **Deliberately still off.** (1) The mothership-SIDE Slack residual: a connection a LAPTOP sealed. That is the seal
+    direction pointed at a source this slice does not carry, so it is a table entry plus
+    `SlackConnectionService` threading, not a new mechanism. (2) The remaining sealed-blob
+    consumers a mothership-mode node does not currently drive (`testSecrets`,
+    `capabilityCredential`, `mcpOAuthGrant`, `packageRegistryConnection`, `runnerPoolConnection`).
+    Each is a table entry and a service threading away, on the same pattern; they wait for a
+    reported need rather than widening the plaintext surface speculatively.
+  - Threat-model consequence (a stolen machine token now reads those sources' plaintext for the
+    accounts it is scoped to, bounded by the table and revocable at the roster) is stated in
+    [`backend/docs/security-model.md`](../../backend/docs/security-model.md).
+
+**Document / task source integration (the last decrypt-inside surface)**
+
+- **The whole documents + tasks surface goes remote**, closing the residual every earlier slice
+  deferred to and the one the secrets-delegation slice explicitly could not close. Two halves, and
+  the first is why the second was impossible before it.
+  - **The connection row now carries its credential bag SEALED.** `DocumentConnectionRecord` /
+    `TaskConnectionRecord` split into a stored `Sealed*Record` (`credentialsCipher`) that the
+    repository persists and an OPEN record the services read, with the seam between them a new
+    kernel port pair, `DocumentConnectionStore` / `TaskConnectionStore`, implemented once by
+    `createSealedConnectionStore` (`@cat-factory/integrations`) over an `OrgSecretCipher`. So the
+    four repositories (D1 ⇄ Drizzle × documents ⇄ tasks) stopped decrypting and became ordinary
+    sealed-blob stores, exactly like the environment / observability / Slack / runner-pool
+    connections that crossed the RPC long before them.
+
+    **This was the actual blocker, and it was never about the credential being more sensitive.** A
+    repository that decrypts can only be CALLED by a key-holder, so proxying its read would have put
+    a plaintext Figma or Jira token on the wire; and it exposes no sealed FIELD, so
+    `/internal/secrets/unseal` had nothing to name either. Both doors were shut by the same fact,
+    which is why "give those repos a sealed-blob read first" was the standing prerequisite.
+
+  - **Two new `ORG_SECRET_SOURCES`**, `document_source_connection` and `task_source_connection`,
+    bound to `getByWorkspace` with **key arity 1** (the source kind) under the
+    `cat-factory:documents` / `cat-factory:tasks` HKDF tags. Both clear the table's bar — the node
+    needs the PLAINTEXT, not merely the row: the dispatch-time freshness refresh authenticates
+    against the source on the run path, an import is the node's own outbound call, and the `tracker`
+    step files a real ticket from wherever the run runs.
+  - **Key arity is declared in KERNEL (`ORG_SECRET_KEY_ARITY`) and enforced by the type system.**
+    It used to live only in the server's `SEALED_SECRET_SOURCES`, which is the one part of a binding
+    the CALLER has to get right and the one table the caller cannot see: `@cat-factory/integrations`
+    does not depend on `@cat-factory/server`. Stated only there it was prose a call site could
+    disagree with silently — and a local cipher IGNORES the ref entirely, so a store that sent no
+    key passed every hosted test and answered 422 on every open on the only deployment shape that
+    delegates. Now `DelegatedSecretRef` is a union over the vocabulary (a literal is checked against
+    its own source's arity) and `orgSecretRef(source, workspaceId, ...key)` is the door for a
+    generic caller, with the server READING the same numbers rather than restating them.
+  - **The allow-list widens to the whole of both integrations**: the connection repos
+    (`getByWorkspace`/`listByWorkspace`/`softDelete` via `workspace`, `upsert` via `workspaceField`),
+    `taskSourceSettingsRepository`, the document import/link writes plus the WS1 role-link surface,
+    and the task import/link writes including `claimBlockLink`. The batched forms move WITH their
+    point siblings rather than behind them: `linkBlockMany`/`detachBlocks` are the same write as
+    `linkBlock` (a task created with a list of documents, and the cascade that undoes it), and a
+    `claimBlockLink` whose `upsert` cannot land claims nothing. `documentRepository` and
+    `taskRepository` are now fully remote; both connection repos keep only their `rowToRecord`
+    helper classified.
+  - **The store's surface is split by how much a caller needs OPENED, not by how much it reads**,
+    and that is the part worth copying. `listSummaries` opens nothing (a settings panel renders
+    labels, and opening a bag per connected source would turn one page load into a burst of unseal
+    round trips and fail the whole list on the first unopenable row); `listBySources` takes the
+    sources the caller is about to authenticate as, so a corpus refresh never opens a shelf entry
+    its documents say nothing about. **`connect` and `disconnect` read the SUMMARY on purpose**:
+    replacing or removing a connection is precisely the remedy for a bag that has gone bad, so
+    neither may be the call that needs the key.
+  - **A bag that cannot be opened now THROWS.** The repositories this replaced answered a failed
+    decrypt with an empty bag "so the import path fails closed", which is indistinguishable from a
+    connection saved with no credentials: every caller re-derived the difference from whatever the
+    vendor said next, as a 401. Throwing is what lets `LinkedDocumentRefreshService` keep reporting
+    `credentials_unreadable` separately from `source_unreachable`. That gap's log line went back to
+    `warn` in the same change: it was `info` only because a mothership-mode node failed it
+    permanently and by design, and a warning that repeats forever is how a channel gets tuned out.
+    It throws a `ConnectionCredentialsUnreadableError` (a 503 carrying
+    `reason: 'connection_credentials_unreadable'`) rather than a bare `Error`, so the surfaces that
+    genuinely cannot proceed refuse with translated copy instead of a 500.
+  - **A BATCHED open answers per source; only a POINT read throws.** The sources in one
+    `listBySources` are independent facts about independent vendors, so one rejection speaking for
+    all of them was the same bug twice: a run's whole document corpus reported
+    `credentials_unreadable` because one shelf entry drifted, and a block's every ticket losing its
+    reply channel because one tracker's envelope did. Both read to an operator as the HEALTHY
+    sources being broken, which is the misattribution this work exists to remove rather than
+    relocate. `SealedConnectionOpenResult` (kernel) is the shape; a corpus-wide verdict is now
+    reachable only when the stored-row QUERY itself failed, where nothing about any source was
+    learned.
+  - **A surface that REPAIRS this state may not be the surface that needs the key.** `connect`
+    reads the old bag for one reason (`preservedPlatformCredentials` carries the platform-owned
+    webhook secret across a vendor rotation, and it lives inside the bag), and refusing on that read
+    left a workspace with no way out of an unopenable row at all. So the read degrades: the secret
+    is lost, loudly, and `getWebhookState` reports it. What keeps that from being a silent loss on a
+    TRANSIENT fault is that sealing rides the same delegation as opening — a node that cannot reach
+    its key service fails the `upsert` too, so nothing is overwritten. `diagnose` reports the fault
+    as a verdict, and the read-only webhook panel states it as `credentialsReadable: false`.
+    `clearWebhookSecret` is the one that still refuses, because clearing REWRITES the bag minus a
+    key and proceeding blind would replace the vendor credentials with an empty object.
+  - **Node sources every repo both helpers build** (`selectNodeDocumentsDeps` /
+    `selectNodeTasksDeps`) through `pickRepoSource` and composes the store over the result, so the
+    facade's own tracker/writeback credential closures read the same remote-backed rows the module
+    does. `applyMothershipRemoteRepos` still owns `documentRepository`/`taskRepository` alone,
+    because those are read on every dispatch whether or not a workspace ever connected a source,
+    while the helpers only run when their integration is configured.
+  - **Compatibility break (internal), flagged per the pre-1.0 rule:** the legacy PLAINTEXT
+    `credentials` column fallback is gone. A row written before these tables were encrypted at all
+    is no longer read as JSON and re-encrypted on next write; it now fails to open and the workspace
+    re-connects the source. Keeping it would have meant `/internal/secrets/unseal` answering for a
+    field that is sometimes not an envelope, which is a 500 on the mothership's own row.
+  - Tested in `shared/sealedConnectionStore.test.ts` (seal/open, the batch-open and
+    opens-nothing properties, the throw-don't-empty dispositions, and that `softDelete` needs no
+    key), `packages/server/test/persistenceRpcSurfaces.spec.ts` (round trip + cross-account refusal
+    for every new method, and the `workspaceField` fail-closed cases), and
+    `packages/server/test/secretsDelegation.spec.ts` (both new sources open the right row under the
+    right HKDF domain, the key arity is enforced, and an out-of-scope workspace stays a uniform
+    404).
+
+**Code-registered ORG state: the foundational-services `builtin` tier**
+
+- **`GET /internal/foundational-services`** (+ the batched `POST .../contracts`): the catalog tier a
+  deployment registers in CODE (ADR 0031). It is the one class of state this initiative's four
+  buckets did not cover, because it is not a repository method at all, and the gap it left was the
+  quiet kind. A mothership deployment is TWO processes, so the estate had to be registered on both
+  entry points and the copies matched only while both ran the same build: with a node one build
+  behind being the normal state of running one. Nothing detected the skew, and a run whose catalog
+  is missing a service simply does not consider it, which reads exactly like an Architect judging
+  it irrelevant.
+
+  So the estate is treated as the org state it is: the node reads the tier from the mothership
+  through the kernel `FoundationalBuiltinSource` port and does NOT consult its own registry (a boot
+  warning names any ids it is therefore ignoring). Same machine-token audience pin as the
+  persistence RPC, same base URL and same per-request token, but its OWN `/internal/*` endpoint
+  rather than a hole in the persistence proxy, per ADR 0009: there are no rows, and every method in
+  `REMOTE_PERSISTENCE_METHODS` binds to an account through a scope rule this read has no argument
+  to offer one from. There is nothing account-shaped to scope: the tier is one deployment-wide set
+  every workspace of every account already resolves in full.
+
+  **A failed read throws rather than answering with an empty tier** (including the 404 from a
+  mothership OLDER than the node) because an empty catalog reaching an Architect is precisely the
+  failure the feature exists to prevent. The throw is then STATED in the injected context file
+  rather than swallowed into an omitted one: the injection seam is best-effort (an outage must not
+  fail the run), and a best-effort path that returns nothing hands the agent the same empty-estate
+  reading the throw was meant to rule out.
+
+  **The general rule this sets:** state a deployment registers in CODE and a RUN resolves is org
+  state in mothership mode too. It rides its own `/internal/*` read, never a second registration on
+  the node, whose build is by construction the one that can be stale.
+
+**Code-registered ORG state: the best-practice PROMPT-FRAGMENT pool**
+
+- **`GET /internal/prompt-fragments`**: the THIRD application of the rule, and the one whose
+  failure is quietest. A deployment's standards (and the per-task-type default SETS that select
+  them) were two module globals in `@cat-factory/prompt-fragments`, so they crossed nothing at all;
+  they are now the app-owned `PromptFragmentRegistry`, and a node reads the MOTHERSHIP's over this
+  endpoint. Transport mirrors its two siblings exactly (machine-token pin, no account scope, its own
+  endpoint rather than a persistence hole, reads this process's OWN registry so a satellite cannot
+  answer for a satellite, throws on every unreadable outcome including an older mothership's 404).
+
+  **BOTH projections ride one response.** The pool and the default sets are independent
+  registrations (a default set may legitimately name an account/workspace-tier id that exists only
+  as a row, so the sets cannot be derived from the pool), but they are small, read on the same
+  cadence, and needing two round-trips to answer one question is how two halves drift. The response
+  is memoised for the process lifetime after the first SUCCESS, never after a failure: the pool is
+  code on the mothership, so it changes only on redeploy, and memoising a rejection would pin the
+  node to a permanent throw after one blip.
+
+  **The symptom this prevents is the reason it is worth an endpoint.** A run whose pool is short by
+  one standard produces work judged against guidance the org did write down, and the reviewer's
+  adherence report reads perfectly well either way; nothing anywhere says a standard was missing.
+  That is why the read throws rather than answering empty, and why `FragmentLibraryService` lets the
+  throw propagate: this is the tier every other tier merges ONTO, so a short catalog is not a
+  degraded answer, it is a wrong one.
+
+  **Its interaction with node-local task types is deliberate.** A `CustomTaskType` stays node-local
+  (see below) while the pool its `defaultFragmentIds` name is now remote, so a node one build ahead
+  can name an id the mothership's pool does not carry. That combination is now VISIBLE rather than
+  silent: the run records the ids it dropped (`FragmentLibraryService`), which is the same report
+  that surfaces a typo. Before this, both cases were invisible on every run forever.
+
+**Code-registered ORG state: the generative binary integrations**
+
+- **`GET /internal/binary-generators`** (+ the batched `POST .../contracts`): the second
+  application of the rule above, and the one that shows it was a rule rather than a one-off. The
+  `BinaryGeneratorRegistry` shipped registry-only and a downstream deployment hit the drift on its
+  first integration. Everything about the transport mirrors the tier above (machine-token pin, no
+  account scope, its own endpoint rather than a persistence hole, reads this process's OWN registry
+  so a satellite cannot answer for a satellite, throws on every unreadable outcome including an
+  older mothership's 404).
+
+  **Two things are genuinely different, and both are about the failure being LOUD rather than
+  quiet.** First, the symptom: the pipeline builder's picker is fed from the workspace snapshot the
+  MOTHERSHIP serves, so a mothership-only registration has a human select an id from the product's
+  own picker and then watch every run of that step refused by the node with `unknown_generator`;
+  a message naming a configuration that is correct. Second, the disposition: this set gates
+  ADMISSION, not just enrichment, so an unreachable source cannot be softened to an empty one (that
+  IS the false `unknown_generator`) and cannot be admitted through either (a paid run with no brief
+  and no credential). It is re-thrown as `binary_generators_unreachable`: 503-shaped, retryable,
+  and deliberately not the configuration reason. The best-effort READERS (the dispatch brief, the
+  declaration read-back) keep their own dispositions, because each already defines its own absence.
+
+  **The picker had to move with it.** The snapshot projection reads the same source and carries
+  `binaryGeneratorsUnavailable`, because routing only the engine would have relocated the drift to
+  the surface that OFFERS the id: a node that stopped double-registering would show an empty picker
+  while its runs resolved fine, and an empty picker is a claim about the deployment's BUILD.
+
+  **Version floor:** a node on the new `local-server` needs a mothership new enough to answer the
+  route. An older one answers 404, which surfaces as an outage rather than as an empty set.
+
+**Notification delivery delegation (PR 4, first half)**
+
+- **`POST /internal/notifications/deliver`**: the mothership now DELIVERS a notification a
+  mothership-mode node raised, through the ORG's external transports (Slack today). Previously such
+  a notification persisted remotely (the allow-listed `notificationRepository`) and rendered in the
+  inbox, but never reached Slack: the bot token is sealed with the MOTHERSHIP's key, which by
+  product decision 3 never reaches a laptop, so a `merge_review` / `ci_failed` /
+  `release_regression` raised by a local run silently stopped at the board. The shared
+  `notificationRelayController` (`@cat-factory/server`) is mounted on BOTH facades like the
+  persistence RPC, behind the same machine-token audience pin (checked FIRST, so availability isn't
+  probeable) and the same account-scope binding (workspace → account → uniform 404, no existence
+  leak). The facade seam is `ServerContainer.machineNotificationDelivery`, wired from each
+  facade's **EXTERNAL** channels only (Node: `buildNodeRealtimeDeps`' new
+  `externalNotificationChannel`; Cloudflare: the new exported `buildExternalNotificationChannel`);
+  the IN-APP frame for a laptop-raised notification already reaches the mothership's browsers over
+  the real-time upstream relay, so routing it here too would double-push it. No external channel
+  (Slack off) ⇒ 503.
+  **The wire carries IDENTIFIERS ONLY** (`{ workspaceId, notificationId }`): the mothership
+  re-reads the row from its OWN workspace-scoped store and delivers THAT, so a compromised node
+  token can at most ask for a re-delivery of a row that already exists in an account it can already
+  reach; it can never inject forged text into the org's Slack, and a notification of another
+  workspace can't be addressed through an in-scope one.
+  The laptop consumes it through `RemoteNotificationChannel` over `HttpMachineNotificationClient`
+  (same base URL + per-request machine token as the persistence RPC, so it follows the same
+  connect/expiry lifecycle; a token-less node skips the round-trip entirely). `composeMothership`
+  builds it and `buildLocalContainer` threads it into `buildNodeContainer`'s new
+  `notificationChannels` seam, so it composes alongside the local in-app push with no engine
+  change. Self-swallowing per the port's best-effort contract (with an `onError` log), so an
+  unreachable mothership never breaks the state transition that raised the notification.
+  Tested in `packages/server/test/notificationsRelay.spec.ts` (auth pin, scope, the
+  stored-content-not-body-content property, cross-workspace refusal, 503/422/500 edges, and the
+  client+channel round-trip), `runtimes/node/test/machineNotificationDelivery.spec.ts` (the
+  in-app-stays-out-of-the-seam split at its source), `runtimes/local/src/mothership.test.ts`
+  (client wire shape + the `buildLocalContainer` threading), and the shared cross-runtime suite
+  (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on BOTH facades).
+  **Still open in PR 4:** email delegation (`RemoteEmailSender` → `POST /internal/email/send`) is
+  deliberately NOT built (see the "Cross-cutting delegation" note on why it has no reachable
+  consumer today) and mothership-SIDE delivery of a notification a HOSTED teammate raised whose
+  Slack connection was sealed by a LAPTOP (the secrets-delegation residual, unchanged).
+
+**Real-time INBOUND subscribe: PR 2 COMPLETE**
+
+- **`GET /internal/events/subscribe/:workspaceId`** closes the loop the upstream publish opened, so
+  real-time is finally bidirectional: org activity raised on the mothership (a hosted teammate) or
+  relayed up by a peer laptop now reaches THIS laptop's SPA. Before it, a mothership-mode board was
+  write-only in real time: it animated for work the laptop drove and stayed frozen for everyone
+  else's, with only a manual refresh to reconcile.
+  - **The mothership SERVE side is NOT a new fan-out.** The tracker previously deferred this leg on
+    the grounds that a long-lived subscriber registry is genuinely runtime-shaped (in-process on
+    Node vs DO-held on Cloudflare). That premise turned out to be avoidable: the handshake is handed
+    to the SAME per-workspace realtime transport the browser stream already uses
+    (`gateways.realtime.upgrade`; the `WorkspaceEventsHub` DO / the `NodeRealtimeHub`), so a
+    subscribed node is just another socket in the workspace's room. No registry to invent, no
+    per-runtime divergence, and events reach laptops and browsers through ONE path. The Durable
+    Object needed no change at all.
+  - **Auth is the shared `authorizeMachineSubscribe`** (`@cat-factory/server`), in the same order as
+    every other `/internal/*` surface: machine-audience pin FIRST (so availability isn't probeable),
+    then the capability probe (503), then the workspace → account scope binding (uniform 404, no
+    existence leak). It lives beside `wsTicket.ts` and for the same reason: Cloudflare authorises
+    in the shared controller, Node in its HTTP-server `upgrade` listener (`@hono/node-server` can't
+    upgrade from a Hono `Response`), and one implementation keeps the two identical. Deliberately
+    role-blind, which is sound because the subscription is READ-ONLY and workspace-scoped: it
+    carries exactly the frames any member of the account already receives.
+  - **The laptop side is DEMAND-DRIVEN**: `MothershipEventSubscriber` holds one upstream socket per
+    workspace with at least one local subscriber, opened off a new `RealtimeRoomWatcher` seam on
+    `NodeRealtimeHub` (first-socket / last-socket transitions). An idle laptop holds none, and the
+    node never needs to enumerate the org's workspaces. It is NOT expressed as a
+    `WebSocketPropagator` adapter: that port's `start(deliver)` receives no workspace list, so
+    forcing it through would mean subscribing to nothing or inventing that enumeration.
+  - **Two invariants keep it from looping or double-delivering.** Inbound events are broadcast to
+    the BARE hub, never back through the layered propagator (which would re-publish them upstream):
+    the same rule `LayeredEventPropagator.start` follows for Redis. And the node's stable `?cid=` is
+    now stamped as the outbound publish's `originConnectionId`, REPLACING the originating tab's id:
+    the tab id means nothing on the mothership (which holds no laptop-local socket) and was already
+    honoured locally, while the node id is precisely the one socket that must not receive its own
+    event back.
+  - A dropped subscription reconnects with jittered capped backoff, and a token-less node simply
+    doesn't connect until the SPA login completes (then the pending retry picks the token up, no
+    restart). A refused handshake is REPORTED (rate-limited), because the retry loop is unbounded
+    by design and an invisible one is indistinguishable from a healthy node.
+  - **Liveness is CLIENT-driven, and has to be, because the two mothership runtimes disagree.** A
+    Node mothership pings at the protocol level and reaps a socket that stops answering, so a drop
+    surfaces as a `close` the subscriber retries. A Cloudflare mothership does not: the
+    `WorkspaceEventsHub` uses the hibernation API, which sends no pings, so a half-open socket
+    never fires `close` and the workspace would go dark FOREVER while the node still believed it
+    was subscribed. So the subscriber runs its own heartbeat and treats any inbound frame as proof
+    of life: its app-level `"ping"` is auto-answered at the Cloudflare edge (the DO's existing
+    `setWebSocketAutoResponse` pair, no DO wake), while Node's own protocol ping arrives as a
+    `ping` event. Neither hub reads subscriber frames, so the text ping is inert where unneeded.
+    Silence past the idle deadline drops the socket and reconnects.
+  - Tested in `packages/server/test/eventsRelay.spec.ts` (the gate + the gateway hand-off),
+    `runtimes/node/test/machineEventSubscribe.spec.ts` (the Node upgrade listener authorising
+    identically, an accepted node landing in the same hub room with its `?cid=` honoured over a
+    real handshake, and the hub's room seam), `runtimes/local/src/mothershipSubscriber.test.ts`
+    (the demand-driven lifecycle, verbatim delivery, backoff, the idle deadline, failure
+    reporting), `runtimes/local/src/mothership.test.ts` (the wiring + the echo-suppression
+    contract), and the shared cross-runtime suite (`core-workspaces.ts` asserts the endpoint is
+    mounted + machine-gated on BOTH facades).
+
+**Real-time fan-out read (a defect the inbound leg surfaced)**
+
+- **`workspaceMountRepository.listWorkspaceIdsMountingBlock` is now allow-listed**, and it was
+  never optional. `FanOutEventPublisher` calls it on EVERY engine event publish to expand the
+  changed block to the set of boards mounting its service, and a mothership-mode node wires the same
+  decorator; with the method off the allow-list the call came back `unknown_method`, the remote proxy
+  threw, and the rejection propagated out of `RunStateMachine`'s unguarded emit. The earlier
+  mount-management slice classified this method as a "later slice" fan-out read, which was true of
+  its mount/unmount role and wrong about its hot-path one. It takes the plain `workspace` rule
+  (arg0 is the origin workspaceId) and returns workspace IDS only.
+- **`blockRepository.countActiveInternal`** joins it, completing the headless public-API surface
+  whose paginated reads (`listServiceTasks`, `executionRepository.listInternal`) were already remote:
+  without the cap read a mothership-mode node refused every public-API run start.
+
+**Telemetry local-first (PR 5, first half)**
+
+- **The telemetry bucket now has a laptop home**, so a mothership-mode run finally produces the
+  observability it is supposed to. Before this, the five telemetry repositories resolved to the
+  remote registry, where none of their methods is (or should be) allow-listed: every write came back
+  `unknown_method` (swallowed by the best-effort recorders) and every read came back empty. The
+  developer's observability panel, per-step token rollups, web-search log and provisioning "View
+  logs" surfaces were all blank, and nothing anywhere failed. The new
+  `sqlite/telemetryStore.ts` (`telemetry.sqlite`, override `LOCAL_MOTHERSHIP_TELEMETRY_DB`) mirrors
+  the D1 telemetry/provisioning SQL for `llmCallMetric` / `agentContextSnapshot` /
+  `agentSearchQuery` / `provisioningLog` / `subscriptionQuotaCycle`, including the properties the
+  engine leans on: `record` is first-write-wins on a duplicate id (so the harness-call recorder's
+  deterministic id stays idempotent across the live drain, the terminal list and a driver replay,
+  without corrupting a stored prompt delta), `latestChainTip` skips `message_count = 0` subagent
+  calls, and the quota upsert accumulates-or-re-anchors in one statement. It also serves the remote
+  debugging surface's BOUNDED reads (`listPage` / `get` / `listIndex` / `countByExecution`, with the
+  body slicing, `?contains=` search and match offsets done in SQL exactly as on D1), so
+  `/api/v1/debug/*` works on a mothership-mode node without any of those pages crossing the machine
+  RPC: routing a page over a long run is precisely the bulk read this bucket exists to forbid.
+- **The composition seam is the registry, not the consumers.** `createRemoteRepositoryRegistry`
+  gained a `localFirst` map: any repository named there is served locally for the WHOLE registry, so
+  the recorders, the observability endpoints, the board's per-step rollups and the retention sweep
+  all resolve the local store with no per-consumer wiring. Membership is declared ONCE, server-side,
+  as `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (beside the allow-list: they are complements), and the
+  local composition is TYPED by it, so a telemetry repository added later cannot be half-wired: it
+  fails to compile rather than silently resolving a remote proxy. The drift guard additionally
+  asserts the two tables stay disjoint and that every method of a local-first repository is
+  classified `telemetry`/`sweeper`.
+- **`llmCallMetricRepository.summarizeByExecution` is REMOVED from the allow-list** rather than left
+  beside the local store. It was a run-path stopgap resolving against the MOTHERSHIP's telemetry
+  store, which holds none of a laptop's calls, so it could only ever report zeros for the run that
+  produced them.
+- **`tokenUsageRepository.record` goes the OTHER way: it is now allow-listed.** The spend ledger has
+  this bucket's write profile but is the org's budget SAFEGUARD, and its three rollups
+  (`totalsSinceForWorkspace`/`ForAccount`/`ForUser`) have long been read REMOTELY by the spend gate;
+  so a laptop-local ledger would leave every local run invisible to the budget it must answer to,
+  and the gate would under-enforce until a batch sync caught up. It rides a NEW scope rule,
+  **`usageRecord`**: bind on the row's `workspaceId` field like `workspaceField`, AND pin the two
+  DENORMALIZED rollup keys; `accountId` must be null or exactly the workspace's own owning account,
+  `userId` null or the token's user. Without that second half, a node legitimately scoped to one
+  account could write rows into its OWN workspace stamped with another account's id and exhaust that
+  account's budget (pausing its runs) without ever addressing a workspace it isn't entitled to.
+- **The prune is local too, and had to be.** Nothing else bounds the store: the mothership's cron
+  owns ITS tables, and the Node facade's retention sweeper runs from `start()`, which a
+  mothership-mode boot never calls, so `llm_call_metrics` (full per-call prompt + response bodies)
+  would grow forever on the developer's disk. `telemetryRetention.ts` prunes on the SAME
+  `RetentionConfig` windows the other two runtimes use, started by `buildLocalContainer` so it shares
+  the store's open → prune → close lifecycle. Its stop is AWAITED before the store closes, because
+  the immediate first pass is asynchronous and would otherwise die on "database is not open".
+- Tested in `sqlite/telemetryStore.test.ts` (D1-parity per repository), `telemetryRetention.test.ts`
+  (windows per table, disabled-window handling), `mothership.test.ts` (the bucket round-trips through
+  the composed registry with ZERO RPC calls, while the org half still goes to the mothership),
+  `packages/server/test/persistenceRpc.spec.ts` (the `usageRecord` rule: in-scope write, null
+  account/user, cross-account workspace, the two cross-stamping refusals, and `summarizeByExecution`
+  no longer callable), and the `[mothership]` conformance config, whose SUT now composes the same
+  in-memory telemetry store production composes.
+  **Telemetry sync UP (PR 5, second half)**
+
+- **`POST /internal/telemetry/ingest`** carries a finished run's locally captured telemetry to the
+  mothership, closing the gap the capture half left: a run a laptop drove was observable ONLY on
+  that laptop, and only until its short retention window came round. A hosted teammate opening the
+  same run saw an empty observability panel, zero token rollups and no web-search log: with
+  nothing anywhere reporting a problem, because the rows genuinely existed, just not there. The
+  shared `telemetryIngestController` (`@cat-factory/server`) is mounted on BOTH facades like the
+  persistence RPC, behind the same machine-token audience pin (checked FIRST, so availability
+  isn't probeable) and the same workspace → account scope binding (uniform 404, no existence
+  leak). It needs no new facade seam: the append lands on the mothership's OWN
+  `container.repositories`, which every mothership already attaches.
+  - **It is a DEDICATED endpoint, not allow-listed persistence-RPC methods.** The whole reason
+    telemetry is local-first is that its writes must not be per-row RPCs, so re-admitting them one
+    at a time would undo the bucket (ADR 0009). The drift guard classifies the new `recordMany`
+    methods `telemetry` for that reason.
+  - **The batch's SCOPE is STAMPED onto every row.** Whatever `workspaceId`/`executionId` the rows
+    themselves carry is discarded and replaced with the scope-bound pair from the envelope, so a
+    node can neither file telemetry into a workspace it cannot already reach nor smuggle a foreign
+    run's rows through an in-scope one. The row ids are the only thing about a row the node
+    chooses.
+  - **The append is idempotent by row id**, which is what makes the upload retryable: a chunk
+    whose ack was lost is simply re-offered. A repeat is IGNORED, never overwritten: overwriting
+    would invalidate a metric's stored prompt DELTA, meaningful only against the chain tip that
+    preceded its FIRST write. That is a new kernel port method on each of the three run-scoped
+    sinks (`recordMany`, mirrored D1 ⇄ Drizzle ⇄ the local `node:sqlite` store, with conformance
+    parity assertions), because looping the single-row `record` over a batch is the banned N+1
+    write. Note the deliberate asymmetry: the single-row `record` keeps each sink's existing
+    duplicate behaviour; only the BATCH append is idempotent, because only it is retried.
+  - **A batch over the caps is REFUSED (413), never truncated.** The node reads a 2xx as "this
+    range is stored" and advances its high-water mark past it, so a silently shortened batch would
+    lose rows with nothing left to notice. Same reason an out-of-contract row rejects the WHOLE
+    batch (422) rather than dropping itself.
+  - **On the laptop, "finished" is QUIESCENCE, not a run-status read** (`telemetryIngest.ts`, a
+    5-minute sweep). The node holds no execution index of its own (runs live on the mothership)
+    so asking "which runs ended" would mean a remote read per candidate, the N+1 this bucket
+    exists to avoid. A run that has produced no telemetry for 10 minutes is done as far as its
+    telemetry is concerned, and a RESUMED run simply becomes a candidate again on its next quiet
+    period. Candidate selection is ONE grouped query across the three sinks, anti-joined against a
+    local `telemetry_ingest_state` high-water table (pruned on the same retention window, and
+    always AFTER the rows it describes, since a mark is stamped at or after its newest row).
+  - **The drain pages forwards on the `(createdAt, id)` keyset** so the mothership rebuilds the
+    run's prompt-delta chain in capture order, with per-sink page sizes equal to the mothership's
+    own per-request caps (a larger page would be refused whole and the drain would never advance).
+    The reader lives on the local store as a local-facade differentiator, NOT as kernel port
+    methods: only the laptop side of the sync reads this way.
+  - **A failed upload leaves the run's mark ALONE** and one run's failure never parks the pass:
+    the next sweep retries it from the beginning, which is safe precisely because the append is
+    idempotent. Marking optimistically would lose a run's telemetry permanently and silently.
+  - Tested in `packages/server/test/telemetryIngest.spec.ts` (auth pin, scope binding, the
+    scope-stamping property, caps/byte backstop, whole-batch rejection, 503/500 edges, and the
+    client round-trip), `runtimes/local/src/telemetryIngest.test.ts` (quiescence selection,
+    forward paging across a shared millisecond, the retry-on-failure and resumed-run paths),
+    `runtimes/local/src/sqlite/telemetryStore.test.ts` (the ingest reader + `recordMany`),
+    `runtimes/local/src/mothership.test.ts` (the client wire shape), the three telemetry
+    conformance suites (`recordMany` parity on D1 + Drizzle), and the shared cross-runtime suite
+    (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on BOTH facades).
+    **Deliberately out of scope for the sync UP:** `provisioningLogRepository`, whose `executionId` is NULLABLE because
+    an environment outlives the run that provisioned it, so "a finished run's rows" does not
+    identify them; `subscriptionQuotaCycleRepository`, whose both scopes key on laptop-held
+    credentials; and an LLM call that resolved NO run (`execution_id IS NULL`: an inline call whose
+    scope named only the workspace), which the run-keyed sync has nothing to key an upload on. That
+    last one is a real if narrow LOSS rather than a deferral: those rows stay local and the
+    retention prune eventually takes them. It is tolerable because such a call is un-run-scoped by
+    definition, no run surface would have shown it, and because the SPEND it represents is
+    already remote in `tokenUsageRepository`, which the budget gate reads. Closing it needs a
+    second, workspace-keyed candidate query, and is worth doing only if those rows turn out to
+    matter to a deployment-wide view.
+
+**Telemetry READ-THROUGH (PR 5, third half: PR 5 COMPLETE)**
+
+- **`POST /internal/telemetry/read`** closes the loop the ingest opened, and it turns out the gap
+  was wider than the tracker had it. The framing was "a run whose LOCAL rows were pruned"; the
+  bigger case is a run that was **never local at all**. A mothership-mode SPA shows the whole
+  org's board, so most runs a developer opens were driven by a hosted teammate or another
+  laptop, and every one of them rendered an empty observability panel, a zero token rollup and
+  no web-search log, with nothing anywhere reporting a problem. That is the precise shape this
+  initiative treats as the worst kind of gap: absent and zero rendering identically.
+  - **It is the ingest's dual, and a DEDICATED endpoint for one more reason than the ingest had.**
+    ADR 0009 already says a cross-cutting concern gets its own `/internal/*` surface. On top of
+    that, the drift guard asserts a `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` repository appears in
+    NO `REMOTE_PERSISTENCE_METHODS` entry, and it must, because the persistence registry resolves
+    a repository WHOLE: naming a telemetry repo there to get its reads would route its hot-path
+    WRITES over the network, which is the entire thing the bucket exists to prevent. A separate
+    table, reached only by the read-through decorator, keeps that invariant intact.
+  - **The table is CLOSED and each entry is BOUNDED** (`TELEMETRY_READ_METHODS`), obeying the
+    debug API's rule that a response's size is computable BEFORE the request. `listByExecution`
+    is deliberately absent from it on all three sinks: it takes no cursor, so a node asking a long
+    run for "everything" is the un-resumable bulk read this bucket forbids. The node answers those
+    methods by DRAINING the paged reads instead. An over-cap or unstated limit is REFUSED (413),
+    never clamped: a node that asked for 500 rows and silently got 100 would take its next cursor
+    from a page it believes was complete and lose everything between.
+  - **The workspace is STAMPED, not passed.** Every method in the table takes `workspaceId` first;
+    the controller prepends the SCOPE-BOUND id and the request's `args` carry everything after it,
+    so a node cannot read a workspace it did not address even by naming one positionally. Same
+    machine-audience pin (checked FIRST), same uniform 404, same 503-on-a-non-mothership as every
+    other `/internal/*` surface. Own-property table lookup, like the persistence allow-list.
+  - **Two new kernel port methods, `listRunPage`** on `llmCallMetricRepository` and
+    `agentContextSnapshotRepository` (mirrored D1 ⇄ Drizzle ⇄ the local `node:sqlite` store, with
+    conformance parity assertions): the bounded, keyset-paginated, WHOLE-BODY page of one run's
+    rows. Neither existing read could serve it: `listPage` returns SLICES plus their lengths (a
+    different type, by contract), and `listByExecution` has no cursor. `agentSearchQueryRepository`
+    needed none: its `listPage` already returns whole rows on the same keyset, because a search
+    row carries no unbounded body.
+  - **On the laptop the rule is LOCAL WINS WHERE IT IS WHOLE, not merely where it is non-empty**
+    (`telemetryReadThrough.ts`,
+    composed into the SAME `localFirst` map that declares the bucket, so every consumer (the
+    recorders, the observability endpoints, the board rollups, `/api/v1/debug/*`) gets it with no
+    per-consumer wiring). The local store is both the fresher copy (it holds the run in flight,
+    before any ingest) and the cheaper one, so a run this node is driving stops paying for round
+    trips the moment it records its first call. Capture is NOT decorated at all: `record` /
+    `recordMany` / `latestChainTip` / `deleteOlderThan` go straight to the local store; the chain
+    tip especially, or the node would store a prompt delta against a tip it cannot reproduce.
+  - **An EMPTINESS test is not the same as completeness, and the difference is a third blank-run
+    case the first cut missed.** The prune deletes by `created_at`, so a run straddling the cutoff
+    keeps its newer rows and loses its older ones: the store then ANSWERS (nothing looks missing)
+    with a strict SUBSET. A short list is bad; the rollup is worse, because `summarizeByExecution`
+    returns a token total that is simply too low and a number carries no hint that it is short.
+    That is this initiative's own "absent must not render as zero" rule one level in: PARTIAL must
+    not render as WHOLE. A subset is undetectable after the fact, so the PRUNE records it as it
+    happens (`sqlite/telemetryCoverage.ts`, `telemetry_pruned_runs`), and that record, not the
+    presence of rows, is what makes a local answer authoritative. Lists stitch (local's suffix,
+    then the mothership for everything strictly older, on the same cursor); counts and the rollup
+    come wholly from the mothership, because a partial local aggregate and a complete remote one
+    cannot be merged: nothing in either says which rows they share, so summing double-counts and
+    taking the larger is a guess. The marker is swept EXACTLY (dropped once the run has no local
+    rows left, at which point the emptiness gate covers it) rather than on a window, which would
+    expire it while it was still load-bearing. The stitch rests on the prune removing a PREFIX, so
+    a future local delete taking rows from the middle would have to be reflected here.
+  - **An over-large page is ROUTINE, and the drain halves rather than failing.** A page inside its
+    ROW cap can still serialize past the byte backstop (three whole snapshots at the capture
+    ceiling are ~12 MiB, a hundred whole calls ~150 MiB) so no fixed page size can be safe for a
+    sink's worst case. The mothership still refuses rather than shortening (a truncated page is one
+    the node treats as complete) but does so under its OWN code, and the drain re-asks smaller on
+    the same cursor, losing nothing because the cursor only advances over rows actually received.
+    That terminates because `MAX_TELEMETRY_READ_CHARS` is DERIVED from the two capture ceilings
+    rather than picked, so a one-row page can never be refused for size: the constant shipped as
+    8,000,000, narrower than a single maximal snapshot worst-case escaped (8,388,608), which would
+    have failed a large run's panel permanently. A page a CALLER sized propagates the refusal
+    instead: silently returning fewer rows than asked is read as the end of the run.
+  - **Each read carries its own round-trip budget** (`timeoutMs` on the table) rather than one
+    global default, because they are not equally patient: `attachStepMetrics` folds
+    `summarizeByExecution` onto every step settlement and AWAITS it on the emit path, so an
+    unreachable mothership costs that emit 5s, not the 30s a megabyte-scale snapshot page is
+    rightly allowed. The residual cost is real and accepted: a run this node drives that has
+    recorded no calls yet re-asks on each settlement, since nothing at the repository layer can
+    tell a young run of its own from one another node drove.
+  - **A failed fallback THROWS; it never degrades to the empty answer it was called to replace.**
+    The whole defect is that "no rows here" and "no rows anywhere" render identically, so a
+    swallowed failure reinstates it with an extra step. This is safe on the one hot-path caller
+    because `RunStateMachine.attachStepMetrics` already treats a metrics read as best-effort and
+    swallows: a mothership outage costs a board counter, never the run.
+  - **It composes with keyset paging rather than fighting it**, which is what makes a
+    partially-pruned run read continuously: a debug client gets local rows while local has them and
+    falls through on the first page local cannot fill, with the SAME cursor; exact, because the
+    ingest preserves each row's id and `createdAt`. A FULL page is always its own answer (the
+    caller will come back and hit the seam on a later one); a SHORT page is the end of the data
+    only when the coverage record says the run is whole. A drain that stops at its cap is LOGGED
+    with the run it stopped on, since a list that quietly ends partway reads as the whole run.
+  - **The wire arguments are shape-checked before dispatch**, so a query naming no run is a 422
+    rather than a 500 raised inside a repository's SQL (`execution_id = undefined` reads as a store
+    outage when it is the caller that is wrong), and arity is part of the shape because the args
+    are SPREAD into the call. A body slice budget is REQUIRED where the table declares a ceiling,
+    for the same reason an unstated `limit` is refused ("the whole bodies" computes no size) and
+    the read-through fills in the declared ceiling for a caller that named no window.
+  - **The two sinks the ingest deliberately skips are deliberately NOT decorated**: there is
+    nothing upstream to read through to, and wrapping them would buy a guaranteed-empty round trip
+    per read.
+  - Tested in `packages/server/test/telemetryRead.spec.ts` (auth pin, scope binding, the
+    workspace-stamping property, the closed table incl. prototype members, the refuse-don't-clamp
+    bounds, the byte backstop, 503/500 edges, and the client's throw-never-empty contract),
+    `runtimes/local/src/telemetryReadThrough.test.ts` (local-hit costs no round trip, the drain and
+    its cursor across a shared millisecond, the partial-prune stitch, the throw, and that capture
+    is undecorated), `runtimes/local/src/sqlite/telemetryStore.test.ts` +
+    `runtimes/local/src/mothership.test.ts` (the local `listRunPage` SQL and the composed wiring),
+    the two telemetry conformance suites (`listRunPage` parity on D1 + Drizzle), and the shared
+    cross-runtime suite (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on
+    BOTH facades). The partial-prune rule is pinned end to end through the REAL prune
+    (`deleteOlderThan` marks, the stitch and the mothership-sourced rollup follow) plus the
+    marker's own lifecycle in `telemetryRetention.test.ts`; the derived backstop is pinned as an
+    inequality against both capture ceilings, so raising one fails a test rather than a panel.
+
+**Login (PR 3)**
+
+- **Login-based machine-token minting**: the static `LOCAL_MOTHERSHIP_TOKEN` is replaced by a token
+  minted from a whitelisted login and cached in local SQLite (env var now a headless/CI override).
+  The mothership serves `POST /auth/machine-token` (session-authed, account scope from
+  `accountService.listForUser`, a `requestedAccountIds` hint may only NARROW). The local facade adds a
+  `node:sqlite` machine-token cache + a local-only `POST /local/mothership/connect` proxy: the SPA signs
+  into the mothership (OAuth), hands the session to its own node, which mints + caches the opaque machine
+  token and returns a local session. `composeMothership` resolves the token per-RPC (env → cached →
+  none), so a token-less node boots INERT. `AUTH_MACHINE_TOKEN_TTL_MS` (default 30d); expired = re-login.
+  **Deferred:** device-code / headless CLI login, token rotation/revocation (PR 6), silent refresh.
+
+**Local credential + settings buckets (PR 3)**
+
+- **Subscription credentials + local settings move onto the laptop**: the four remaining
+  `local-sqlite` bucket rows now have a `node:sqlite` home, so the subscription features + the
+  local-settings panel work in mothership mode (previously the services were OFF for lack of a db).
+  `credentialStore.ts` gains three sealed-credential repos:
+  `SqliteProviderSubscriptionTokenRepository` (per-workspace pooled Claude Code / Codex / GLM
+  tokens), `SqlitePersonalSubscriptionRepository` (per-user individual-usage creds, the outer
+  double-encryption blob), and `SqliteSubscriptionActivationRepository` (their short-lived per-run,
+  system-key-only copies), and a new `localSettingsStore.ts` holds the local-mode operational
+  settings singleton (`SqliteLocalSettingsRepository`; kept out of the credential store so that
+  store's "only credentials" invariant holds). All mirror their `D1*` SQL (D1 is SQLite) and stay
+  LOCAL for the same reason the API-key pool does: the tokens are leased + decrypted by the LOCAL
+  container executor, so they must never traverse the machine API. Wired via new `NodeContainerOptions`
+  credential-override seams (`providerSubscriptionTokenRepository` /
+  `personalSubscriptionRepository` / `subscriptionActivationRepository`, mirroring the existing
+  `providerApiKeyRepository` seam) that let `buildNode{Subscription,PersonalSubscription}Service`
+  build even without a `db`; `subscriptionActivationRepository` is threaded ONCE and reused by BOTH
+  its consumers (the personal-subscription service's mint + the engine core's clear-on-completion).
+  `localSettingsService` is built in `buildLocalContainer` from the local-sqlite repo when there's no
+  `db`. Removes the last mothership-mode "service OFF (no db)" gaps for these features. See the
+  [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings) below.
 
 ## Goal & rationale
 
 Local mode (`backend/runtimes/local`, `@cat-factory/local-server`) today runs the **whole**
 product on a developer's machine: the Node facade's Drizzle/**Postgres** persistence + pg-boss,
 with only the runner transport (per-run local containers) and GitHub-via-PAT swapped in. A
-developer's work is therefore **siloed in their local Postgres** — no collaboration on shared org
+developer's work is therefore **siloed in their local Postgres**, no collaboration on shared org
 projects, and durability hangs on a database on the laptop.
 
 **Mothership mode** keeps local mode's fast differentiators (local container agent provisioning,
@@ -348,12 +1215,17 @@ mothership providing durability, email sending, and notification delivery.
 
 1. **Mothership target: both Node + Cloudflare.** The new `/internal/*` machine API is served from
    the shared `@cat-factory/server`, so both facades work as a mothership (symmetry + conformance).
+   What still behaves DIFFERENTLY when the mothership is a Worker + D1 rather than Node + Postgres:
+   the run-sweeper hijack, D1's 2 MB row cap against the 4 MiB agent-context snapshot, the
+   untested Worker-side registry, the per-isolate mint brake: is investigated in
+   [`mothership-cloudflare-host-gaps.md`](./mothership-cloudflare-host-gaps.md). Nothing there is
+   fixed yet; read it before picking up a slice that touches run recovery or the telemetry sync.
 2. **No PostgreSQL at all in mothership mode.** `DATABASE_URL`, `migrate()`, and pg-boss are not
    used or expected. The only local database is a file-based **`node:sqlite`** store.
 3. **Secrets split.** Agent/model credentials are stored **locally** in the `node:sqlite` store,
-   encrypted with a **local** key — the mothership's `ENCRYPTION_KEY` never reaches the laptop.
+   encrypted with a **local** key: the mothership's `ENCRYPTION_KEY` never reaches the laptop.
    Everything else goes through the mothership. The UI labels what is stored locally.
-4. **Seamless login-based onboarding.** The machine token is minted by the mothership after a
+4. **Login-based onboarding.** The machine token is minted by the mothership after a
    GitHub/GitLab OAuth login, gated by whitelisting (allowed account, org membership, or email
    domain) + automated onboarding; the token is cached in the local SQLite. No manual paste.
 5. **Telemetry/logs are local-first.** High-volume observability is written local, batch-ingested
@@ -368,25 +1240,25 @@ The **generic persistence-RPC** spine is the template every later slice follows:
    (`src/modules/persistence/`), mounted by **both** facades, machine-authed:
    `POST /internal/persistence` body `{ repo, method, args }` → `{ result }`. Reflects over the
    real repository registry on the mothership. Per call it enforces: (a) `machine` token-audience
-   pin (`auth/signing.ts`), (b) **scope binding** — extract the workspace/account arg, resolve its
+   pin (`auth/signing.ts`), (b) **scope binding**; extract the workspace/account arg, resolve its
    owning account via `workspaceService.accountOf` exactly like `http/authGate.ts`, reject **404**
    if outside the token scope, (c) a **per-repo method allow-list** (global/sweeper methods
-   `deleteOlderThan` / `listStale` / bare `delete` are excluded — they stay mothership-internal).
+   `deleteOlderThan` / `listStale` / bare `delete` are excluded; they stay mothership-internal).
    The allow-list also excludes **admin-gated mutations** (`accountRepository.rename`/
    `updateSettings`, `membershipRepository.upsert`/`remove`): the machine token scopes whole
    accounts, not a role within them, and the RPC bypasses the service-layer `requireAdmin` check,
    so exposing those raw repo writes would let any in-scope member self-promote to admin. They
    come back only once a later slice adds a role dimension to the scope (or routes them through
    the service). The pilot exposes the account/membership **reads** a board load needs.
-2. **Local client** `createRemoteRepositories(rpcClient): CoreRepositories` (`src/persistence/`):
-   each entry is a `Proxy` forwarding `(repo, method, args)` to one RPC, decoded with the existing
+2. **Local client** `createRemoteRepositoryRegistry(rpcClient): CoreRepositories` (`src/persistence/`):
+   a `Proxy` lazily forwarding `(repo, method, args)` to one RPC, decoded with the existing
    shared mappers (`src/persistence/mappers.ts`, `decode.ts`).
-3. **Composite repositories in the local facade**: `buildLocalContainer` composes
-   `createRemoteRepositories` (org repos) + the local `node:sqlite` repos (credentials/settings) +
+3. **Composite repositories in the local facade**: `composeMothership` / `buildLocalContainer`
+   compose the remote registry (org repos) + the local `node:sqlite` repos (credentials/settings) +
    the telemetry composite into ONE `CoreRepositories`, passed to `buildNodeContainer` with
    `db: undefined`.
 4. **Conformance**: a round-trip suite asserts the remote-backed `CoreRepositories` behaves
-   identically to the direct Drizzle/D1 repo on BOTH runtimes — including the `undefined`/`null`/
+   identically to the direct Drizzle/D1 repo on BOTH runtimes; including the `undefined`/`null`/
    `rev` edges and scope/allow-list rejection.
 
 ### Serialization gotchas the pilot must nail (carried to every slice)
@@ -396,10 +1268,80 @@ The **generic persistence-RPC** spine is the template every later slice follows:
   `undefined`; use a **tagged RPC envelope**, not bare JSON.
 - **`rev` write-back.** `compareAndSwap`/`upsert` mutate `execution.rev` **in place** on the
   caller's object. The RPC must **return the new rev** and the Proxy must write it back onto the
-  passed-in instance before resolving — the optimistic-concurrency contract the engine relies on.
+  passed-in instance before resolving: the optimistic-concurrency contract the engine relies on.
 - **`DomainError` re-throw.** `ConflictError`/`assertFound` etc. must be re-thrown client-side from
   an error code in the envelope, so CAS-retry / 404 control flow is preserved.
-- **`Clock` / `IdGenerator` stay local** — never serialized.
+- **`DataIntegrityError` re-throw, WITH its fault.** The one other throw that may not be flattened
+  into the opaque `internal` 500, and the reason is that the node's ENGINE branches on it: a run row
+  the mothership cannot decode is DISPOSED of rather than re-driven forever, and only for the
+  `malformed` fault. Relayed as a plain `Error`, `isDataIntegrityError` answers false and the
+  disposal silently does nothing on the one deployment shape whose operator has no database in
+  front of them. The fault rides `details.fault`, and a value the reading node does not know falls
+  back to the SAFE half of the vocabulary, so it declines to destroy a run over a difference in
+  builds. Anything else still becomes an opaque 500 with its message suppressed.
+- **`Clock` / `IdGenerator` stay local**, never serialized.
+
+### The local-sqlite bucket pattern (credentials + settings)
+
+The mirror of the remote spine for the OTHER bucket: state that must NOT go to the mothership
+because it is a per-user/per-deployment credential or a local-runner knob. This is the reference
+for adding a new `local-sqlite` repo (and the template a future agent should copy rather than
+re-derive). It is a **local-facade-only differentiator**, no symmetry obligation (see Conventions).
+
+- **Where it lives.** `backend/runtimes/local/src/sqlite/`. The credential store
+  (`credentialStore.ts`, file `credentials.sqlite`) holds every SEALED credential repo:
+  `providerApiKey`, `localModelEndpoint`, and (PR 3) the subscription trio
+  `providerSubscriptionToken` / `personalSubscription` / `subscriptionActivation`. The local-mode
+  operational settings singleton has its OWN store (`localSettingsStore.ts`, file
+  `local-settings.sqlite`) so the credential store's "ONLY credentials" invariant holds: it is
+  non-secret config, not a credential. Both open through the shared `db.ts` `openSqliteDb` (WAL +
+  busy-timeout). The machine-token cache (`machineTokenStore.ts`) and the durable work queue
+  (`workQueue.ts`) are two more local stores; the local-first TELEMETRY store
+  (`telemetryStore.ts`, file `telemetry.sqlite`) is the fourth: see the telemetry bucket below,
+  which is a DIFFERENT model from this pattern.
+- **Implementing a repo.** `node:sqlite`'s `DatabaseSync` is SYNCHRONOUS + single-process, so a
+  select-then-write is inherently atomic (no `FOR UPDATE` analogue needed) and the port's async
+  methods just execute synchronously. **Mirror the `D1*` repository's SQL**: D1 IS SQLite, so the
+  `D1ProviderSubscriptionTokenRepository` / `D1PersonalSubscriptionRepository` (in
+  `backend/runtimes/cloudflare/.../repositories/`) are the closest reference, adapted to the
+  `.prepare().run(...)/.get(...)/.all(...)` API (`Number(res.changes)` for a delete count). Add the
+  table to the store's `SCHEMA` const. The repo is **crypto-agnostic**: it stores only the opaque
+  `*Cipher` blob the SERVICE hands it.
+- **The sealing model.** The cipher is applied ABOVE the store, in the service (e.g.
+  `ProviderSubscriptionService` seals with a `WebCryptoSecretCipher` keyed by the LOCAL
+  `ENCRYPTION_KEY` that `applyLocalDefaults` guarantees). Personal subscriptions are
+  DOUBLE-encrypted (`system.encrypt(personal.seal(token, password))`): the inner password layer
+  (`WebCryptoPersonalSecretCipher`) is also above the store, so the password never touches disk.
+  The mothership's `ENCRYPTION_KEY` NEVER reaches the laptop (product decision 3): these creds are
+  leased + decrypted by the LOCAL container executor, which is exactly why they can't be remoted.
+- **The wiring seam.** `NodeContainerOptions` carries a per-repo credential OVERRIDE
+  (`providerApiKeyRepository`, and PR 3's `providerSubscriptionTokenRepository` /
+  `personalSubscriptionRepository` / `subscriptionActivationRepository`). Each `buildNode*Service`
+  takes a `repositoryOverride?` and builds even without a `db` (`override ?? (db ? new Drizzle… :
+  undefined)`; off only when neither is present), so the feature turns ON in mothership mode. When
+  ONE repo has TWO consumers (e.g. `subscriptionActivationRepository` feeds both the
+  personal-subscription service's mint AND the engine core's clear-on-completion), thread the ONE
+  injected instance into both so they agree. `buildLocalContainer` reads the repos off
+  `mothership.credentialStore.*` and passes them in the `...(mothership ? {…} : {})` block.
+  `localSettingsService` (local-facade-built, not a `NodeContainerOptions` seam) is constructed from
+  the Drizzle repo when `options.db` is present, else `mothership.localSettingsStore.localSettingsRepository`.
+- **composeMothership** opens each store, exposes it on `MothershipComposition`, and closes it in
+  `close()` (called from `onShutdown`). Each store's file path is `localDbPath(env.LOCAL_MOTHERSHIP_*_DB,
+  '<name>.sqlite')`: an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
+  **Tests that build a mothership container MUST set every `LOCAL_MOTHERSHIP_*_DB` to `:memory:`**
+  (incl. `LOCAL_MOTHERSHIP_SETTINGS_DB` and `LOCAL_MOTHERSHIP_TELEMETRY_DB`) or they write real
+  files under `~/.cat-factory`.
+- **Drift guard.** `runtimes/node/test/mothership-allowlist.spec.ts` reflects the DRIZZLE repos only,
+  so a local-sqlite repo needs NO allow-list entry; a repo that also has a Drizzle impl is classified
+  `local` in that guard's `NON_REMOTE` map (the subscription trio already is), and a local-ONLY repo
+  (e.g. `localSettings`) isn't reflected at all. The `node:sqlite` classes are covered by unit tests
+  (`credentialStore.test.ts` / `localSettingsStore.test.ts`) asserting parity with the D1/Drizzle SQL.
+- **NOT this pattern:** the telemetry repos are `telemetry`-bucket, not `local-sqlite`: they are
+  local-FIRST + short-TTL-pruned + (once the second half of PR 5 lands) batch-synced-up, a different
+  model from a plain laptop-only store. They live in their own `telemetry.sqlite` store, are named
+  once in `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (which TYPES the composition), and reach their
+  consumers by being layered over the remote registry rather than through a `NodeContainerOptions`
+  seam: see `sqlite/telemetryStore.ts` + `telemetryRetention.ts`.
 
 ## Per-repository bucket checklist
 
@@ -407,227 +1349,318 @@ Every persistence port, and where it lives in mothership mode. `remote` = mother
 `local-sqlite` = local `node:sqlite` store; `telemetry` = local-first + batched up; `excluded` =
 never remotely invocable (mothership-internal cron).
 
-| Port                                                        | Bucket                                              | Status  | PR                              |
-| ----------------------------------------------------------- | --------------------------------------------------- | ------- | ------------------------------- |
-| `workspaceRepository`                                       | remote                                              | ✅ done | PR 1                            |
-| `blockRepository`                                           | remote                                              | ✅ done | PR 1                            |
-| `executionRepository` (CAS/rev)                             | remote                                              | ✅ done | PR 1                            |
-| `accountRepository`                                         | remote                                              | ✅ done | PR 1                            |
-| `membershipRepository`                                      | remote                                              | ✅ done | PR 1                            |
-| `pipelineRepository`                                        | remote                                              | ✅ done | PR 1                            |
-| `userRepository`                                            | remote                                              | ⬜ todo | PR 3                            |
-| `invitationRepository`                                      | remote                                              | ⬜ todo | PR 3                            |
-| `passwordResetTokenRepository`                              | remote                                              | ⬜ todo | PR 3                            |
-| `emailConnectionRepository`                                 | remote (delivery delegated)                         | ⬜ todo | PR 4                            |
-| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)           | ✅ done | PR 3 (retry/stop surface)       |
-| `modelPresetRepository`                                     | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `serviceFragmentDefaultsRepository`                         | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)              | ◑ part  | PR 3 (settings writes)          |
-| `trackerSettingsRepository`                                 | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)      | ◑ part  | PR 3 (mount management)         |
-| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)          | ◑ part  | PR 3 (mount management)         |
-| `requirementReviewRepository`                               | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `kaizenGradingRepository`                                   | remote (run-path + screen reads; `get`/sweep off)   | ◑ part  | PR 3 (kaizen read surface)      |
-| `kaizenVerifiedComboRepository`                             | remote (`getByKey`/`listByWorkspace`; `upsert` off) | ◑ part  | PR 3 (kaizen read surface)      |
-| `consensusSessionRepository`                                | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `clarityReviewRepository`                                   | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `brainstormSessionRepository`                               | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `mergePresetRepository`                                     | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `workspaceSettingsRepository`                               | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `observabilityConnectionRepository`                         | remote                                              | ✅ done | PR 3 (release-health settings)  |
-| `incidentEnrichmentConnectionRepository`                    | remote                                              | ✅ done | PR 3 (release-health settings)  |
-| `accountSettingsRepository`                                 | remote                                              | ⬜ todo | PR 3                            |
-| `releaseHealthConfigRepository`                             | remote                                              | ✅ done | PR 3 (release-health settings)  |
-| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership)    | ⬜ todo | PR 3                            |
-| `githubInstallationRepository`                              | remote                                              | ⬜ todo | PR 3                            |
-| `runnerPoolConnectionRepository`                            | remote                                              | ⬜ todo | PR 3                            |
-| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote                                              | ⬜ todo | PR 3                            |
-| `providerApiKeyRepository`                                  | local-sqlite                                        | ✅ done | PR 1 (store)                    |
-| `localModelEndpointRepository`                              | local-sqlite                                        | ✅ done | PR 1 (store)                    |
-| `providerSubscriptionTokenRepository`                       | local-sqlite                                        | ⬜ todo | PR 3                            |
-| `personalSubscriptionRepository`                            | local-sqlite                                        | ⬜ todo | PR 3                            |
-| `subscriptionActivationRepository`                          | local-sqlite                                        | ⬜ todo | PR 3                            |
-| `localSettingsRepository`                                   | local-sqlite                                        | ⬜ todo | PR 3                            |
-| durable execution work queue                                | local-sqlite (replaces pg-boss)                     | ✅ done | PR 1 (in-proc) → PR 2 (durable) |
-| cached mothership machine token                             | local-sqlite                                        | ✅ done | PR 3                            |
-| `llmCallMetricRepository`                                   | telemetry                                           | ⬜ todo | PR 5                            |
-| `agentContextSnapshotRepository`                            | telemetry                                           | ⬜ todo | PR 5                            |
-| `tokenUsageRepository`                                      | telemetry                                           | ⬜ todo | PR 5                            |
-| `provisioningLogRepository`                                 | telemetry                                           | ⬜ todo | PR 5                            |
+> **This table is reconciled against the ground truth**: the server-side allow-list
+> (`REMOTE_PERSISTENCE_METHODS` in `backend/packages/server/src/persistence/rpc.ts`) and the
+> coverage-independent drift guard (`backend/runtimes/node/test/mothership-allowlist.spec.ts`,
+> which classifies EVERY Drizzle repository method as `remote` / `local` / `telemetry` / `admin` /
+> `sweeper` / `onboarding` / `preauth` / `inbound` / `helper`). When in doubt, trust those two files over this
+> table. Every org method is now either allow-listed or PERMANENTLY classified: the guard has no
+> `pending` state left, so a new repository method must pick its bucket in the PR that adds it.
+
+**Org / durable (remote: the mothership RPC):**
+
+| Port                                     | Status  | Remote surface / what's still off                                                                                   |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
+| `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                                          |
+| `blockRepository`                        | ✅ done | board/run reads+writes (incl. the `getByExecution` reverse link) + public-API `countActiveInternal`                 |
+| `executionRepository` (CAS/rev)          | ✅ done | run surface; `listStale` sweeper                                                                                    |
+| `pipelineRepository`                     | ✅ done | full CRUD + `insertIfAbsent` (run-path catalog adoption)                                                            |
+| `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                                   |
+| `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                                                 |
+| `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                                                           |
+| `riskPolicyRepository` (merge presets)   | ✅ done | full library CRUD                                                                                                   |
+| `modelPresetRepository`                  | ✅ done | full library CRUD                                                                                                   |
+| `sharedStackRepository`                  | ✅ done | full library CRUD                                                                                                   |
+| `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                                            |
+| `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                                             |
+| `taskTypeSuppressionRepository`          | ✅ done | list/suppress/restore (board load + creation refusal)                                                               |
+| `trackerSettingsRepository`              | ✅ done | get/put                                                                                                             |
+| `pipelineScheduleRepository`             | ✅ done | schedule mgmt + runNow; sweeper reads internal                                                                      |
+| `serviceRepository`                      | ✅ done | reads + CRUD (`serviceInsert` binds the frame block; `serviceUpdate` the re-home account)                           |
+| `workspaceMountRepository`               | ✅ done | mount mgmt + the per-publish fan-out read + the frame-deletion cascade                                              |
+| `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                                            |
+| `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                                                       |
+| `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                                                |
+| `clarityReviewRepository`                | ✅ done | full get/upsert/deleteByBlock                                                                                       |
+| `brainstormSessionRepository`            | ✅ done | full get/upsert/deleteByBlockStage                                                                                  |
+| `consensusSessionRepository`             | ✅ done | full get/upsert                                                                                                     |
+| `initiativeRepository`                   | ✅ done | CRUD + rev-CAS; `listExecuting` sweeper                                                                             |
+| `kaizenGradingRepository`                | ✅ done | run-path + screen + detail reads; the sweep's claim pair internal                                                   |
+| `kaizenVerifiedComboRepository`          | ✅ done | whole repo, streak write included                                                                                   |
+| `agentRunRepository`                     | ✅ done | `getRef` (retry/stop entry); sweeper reads internal                                                                 |
+| `bootstrapJobRepository`                 | ✅ done | start/poll/retry/stop mgmt                                                                                          |
+| `referenceArchitectureRepository`        | ✅ done | full library CRUD + retry re-resolve                                                                                |
+| `envConfigRepairJobRepository`           | ✅ done | full run-mgmt (list/get/insert/update)                                                                              |
+| `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                                                 |
+| `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                                                  |
+| `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                                                      |
+| `environmentRegistryRepository`          | ✅ done | reads + provision writes (`insert`/`update`); access cipher opened via `/internal/secrets/*`; `listExpired` sweeper |
+| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed) + the gate probe (opened via `/internal/secrets/unseal`)                                     |
+| `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                                               |
+| `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                                              |
+| `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                                              |
+| `testSecretsRepository`                  | ✅ done | inspector CRUD + run-path read + workspace list (sealed)                                                            |
+| `runnerPoolConnectionRepository`         | ✅ done | connect/rotate/disconnect (sealed `secretsCipher`)                                                                  |
+| `binaryArtifactMetadataStore` (metadata) | ✅ done | metadata CRUD; bytes → per-account blob backend; retention sweeper                                                  |
+| `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal                                       |
+| `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                                                  |
+| `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                                                |
+| `promptFragmentRepository`               | ✅ done | owner-scoped library mgmt + the source-keyed sync pair (`librarySource`)                                            |
+| `fragmentSourceRepository`               | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `upsert` binds the stored row (`ownerFieldUpsert`)                   |
+| `fragmentBriefRepository`                | ✅ done | owner-scoped generated briefs, read + written on the run path                                                       |
+| `foundationalServiceRepository`          | ✅ done | owner-scoped catalog CRUD (run path) + the source-keyed sync pair                                                   |
+| `apiContractRepository`                  | ✅ done | owner-scoped contract manifest + per-service replace/delete                                                         |
+| `foundationalServiceSourceRepository`    | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `listStale`/`listByRepo` internal                                    |
+| `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                                 |
+| `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                                          |
+| `documentRepository`                     | ✅ done | whole repo: run-path context reads + import/link writes + the WS1 role-link surface                                 |
+| `documentConnectionRepository`           | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)                         |
+| `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`                               |
+| `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)                         |
+| `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                                                |
+| `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                                         |
+| `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                                     |
+| `githubInstallationRepository`           | ✅ done | run-path + id-keyed reads; `upsert`/`softDelete` admin (`integrations.manage`), cron `listActive` internal          |
+| `repoProjectionRepository`               | ✅ done | reads + sync/repo-write writes + cursors; `listStale`/`listByInstallation` internal                                 |
+| `branchProjectionRepository`             | ✅ done | read + sync ingest                                                                                                  |
+| `pullRequestProjectionRepository`        | ✅ done | both reads + sync ingest                                                                                            |
+| `issueProjectionRepository`              | ✅ done | both reads + sync ingest                                                                                            |
+| `commitProjectionRepository`             | ✅ done | per-repo read + sync ingest; retention prune sweeper                                                                |
+| `checkRunProjectionRepository`           | ✅ done | the `ci` gate's head-SHA read + sync ingest                                                                         |
+| `userRepository`                         | ✅ done | member-display reads + the `selfUser` profile edit; identity/auth reads are pre-auth (permanent)                    |
+| `invitationRepository`                   | ✅ done | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth (both permanent)                   |
+| `emailConnectionRepository`              | ✅ done | `getByAccount` read (sealed); connect/disconnect admin (permanent)                                                  |
+| `passwordResetTokenRepository`           | n/a     | pre-auth flow: served where the login URL is published, never a node (permanent)                                    |
+
+**Dispatch-time document freshness now RUNS on a mothership node, and the shape of the fix is the
+reusable part.** The linked-context refresh (`LinkedDocumentRefreshService`) probes each linked
+document's source and re-imports what moved, so it needs the workspace's document-source CONNECTION.
+That row is sealed with the mothership's `ENCRYPTION_KEY`, which never reaches a laptop, and for a
+long time it could not be served over the persistence RPC either: the repository decrypted INSIDE, so
+a proxied read would have put a plaintext token on the wire and `/internal/secrets/unseal` had no
+sealed FIELD to name. Both doors were shut by the same fact. Giving the row an envelope opened both
+at once, which is why the prerequisite was always stated as "a sealed-blob read FIRST, and only then
+a source-table entry".
+
+`credentials_unreadable` survives as a distinct gap, and is now worth more than it was: it no longer
+means "this deployment structurally cannot read the credentials" on every dispatch of every run, so
+its remaining causes (a corrupt envelope, a drifted key, an unreachable mothership) are real faults
+with real remedies. It stays separate from `source_unreachable` for the original reason: the
+materialised context file must not tell an agent Figma is down when it is not, and an operator must
+not be sent hunting an incident that does not exist.
+
+**Excluded (never remotely invocable: admin-gated, so the token-scopes-accounts-not-roles rule keeps them off):**
+
+| Port                        | Reason                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `accountSettingsRepository` | admin (read + write both `requireAdmin`; sealed but role-scoped), NOT a remote TODO |
+
+**Local (`node:sqlite`: per-user/per-deployment credentials + settings, never the mothership):**
+
+| Port                                  | Status  | PR                                |
+| ------------------------------------- | ------- | --------------------------------- |
+| `providerApiKeyRepository`            | ✅ done | PR 1 (store)                      |
+| `localModelEndpointRepository`        | ✅ done | PR 1 (store)                      |
+| `providerModelCatalogRepository`      | ✅ done | local bucket                      |
+| `providerSubscriptionTokenRepository` | ✅ done | PR 3 (local subscription bucket)  |
+| `personalSubscriptionRepository`      | ✅ done | PR 3 (local subscription bucket)  |
+| `subscriptionActivationRepository`    | ✅ done | PR 3 (local subscription bucket)  |
+| `userSecretRepository`                | ✅ done | local bucket                      |
+| `userRepoAccessRepository`            | ✅ done | local bucket (per-user redaction) |
+| `environmentUserHandlerRepository`    | ✅ done | local bucket (per-user handlers)  |
+| `localSettingsRepository`             | ✅ done | PR 3 (local subscription bucket)  |
+| durable execution work queue          | ✅ done | PR 1 (in-proc) → PR 2 (durable)   |
+| cached mothership machine token       | ✅ done | PR 3                              |
+
+**Telemetry (local-first `node:sqlite`: PR 5; capture, sync UP and read-through all landed):**
+
+| Port                               | Status  | Notes                                                                             |
+| ---------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `llmCallMetricRepository`          | ✅ done | local + synced up + read through (`summarizeByExecution` stopgap de-allow-listed) |
+| `agentContextSnapshotRepository`   | ✅ done | local + synced up + read through                                                  |
+| `agentSearchQueryRepository`       | ✅ done | local + synced up + read through                                                  |
+| `subscriptionQuotaCycleRepository` | ✅ done | whole repo local (both scopes key on laptop-held credentials)                     |
+| `provisioningLogRepository`        | ✅ done | whole repo local (the node provisions the infra these rows describe)              |
+
+Batch-ingesting a FINISHED run's rows up to the mothership (so hosted teammates can read them, and
+they survive the local prune) has LANDED for the three run-scoped sinks, via
+`POST /internal/telemetry/ingest`, and reading them back down for a run this node holds no rows for
+has LANDED via `POST /internal/telemetry/read`: see "Cross-cutting delegation".
+`provisioningLogRepository` (nullable `executionId`: an environment outlives the run that
+provisioned it), `subscriptionQuotaCycleRepository` (both scopes key on laptop-held credentials) and
+an LLM call that resolved no run at all (`execution_id IS NULL`) are deliberately in NEITHER
+direction: nothing keys their upload, so there is nothing upstream to read through to, and the
+read-through pointedly does not decorate them rather than buying a guaranteed-empty round trip.
+
+Two properties of the sweep are load-bearing and easy to undo by accident, because both failure
+modes look like success:
+
+- **Only a resolved `ingest` may advance a run's high-water mark**, so anything that did not upload
+  must THROW. A client that returns a zeroed result when the node holds no machine token reads to
+  the sweep as "this run had no rows", marks it, and hands the rows to the prune:
+  `MachineTokenUnavailableError` exists to make that case a rejection.
+- **Batches are budgeted by BYTES as well as row count.** The mothership refuses on either, so a
+  page built to the row cap alone can sit permanently over the body cap: 413 forever, the same
+  doomed page every sweep. A row too big to post even alone is skipped and REPORTED, never retried
+  into a stall.
+
+`tokenUsageRepository` is deliberately NOT in this bucket:
+
+| Port                   | Status  | Notes                                                                   |
+| ---------------------- | ------- | ----------------------------------------------------------------------- |
+| `tokenUsageRepository` | ✅ done | budget SAFEGUARD, fully remote: rollup reads + `record` (`usageRecord`) |
 
 ## Cross-cutting delegation (not per-call repo proxies)
 
-- **Real-time both directions.** `RpcEventPublisher` (`@cat-factory/server`) POSTs each engine event
-  to `POST /internal/events/publish` so hosted teammates see the local node's activity; an
-  `UpstreamEventSubscriber` opens `GET /internal/events/subscribe?scope=…` and re-publishes into the
-  local `NodeRealtimeHub` so the local SPA sees org activity. SPA wire protocol unchanged.
-- **Notifications.** Row persists via the remote `notificationRepository`; in-app delivery rides the
-  event fan-out; **Slack** stays mothership-side via a `RemoteNotificationChannel` →
-  `POST /internal/notifications/deliver`.
-- **Email.** `RemoteEmailSender` → `POST /internal/email/send`; the mothership decrypts the account
-  key and sends. Email/Slack keys never reach the laptop.
-- **Telemetry ingest.** Bulk `POST /internal/telemetry/ingest` (append-only, excluded from the
-  generic allow-list); finished-runs batch sweeper + short local-TTL pruner + read-through.
+- **GitHub installation tokens** ✅ landed. `POST /internal/github/installation-token` (machine-authed,
+  rate-limited per node, scoped by the installation's account binding) mints the mothership App's
+  short-lived installation tokens for the laptop, **repo-scoped** via `repository_ids` to the live
+  App-linked `github_repos` projection for the installation, INTERSECTED with whatever narrower set
+  the caller asked for (a container dispatch asks for its run's repos);
+  `DelegatedAppTokenSource` consumes them as the push-token mint + the `FetchGitHubClient` token
+  source when no `GITHUB_PAT` is set. The App private key never leaves the mothership, and a
+  delegated token never grants more than the mothership projects. The projection WRITES a node's
+  own client earns (sync ingest, `setMonorepo`, the cursors) are no longer mothership-owned: see
+  "The remaining repository surface" above. What stays there is the webhook INTAKE and the
+  reconcile cron, which reach whichever deployment holds the public URL.
+
+  > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time
+  > in BOTH directions, notification DELIVERY delegation, SECRET delegation and telemetry INGEST
+  > (below) are all IMPLEMENTED. The one remaining bullet that is DESIGN ONLY is PR 4's email half,
+  > no `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The
+  > live `/internal/*` routes today are `POST /internal/persistence`,
+  > `POST /internal/github/installation-token`, `POST /internal/secrets/unseal`,
+  > `POST /internal/secrets/seal`, `POST /internal/events/publish`,
+  > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`,
+  > `POST /internal/telemetry/ingest`, `POST /internal/telemetry/read`,
+  > `GET /internal/foundational-services`, `POST /internal/foundational-services/contracts`,
+  > `GET /internal/binary-generators`, `POST /internal/binary-generators/contracts`,
+  > `GET /internal/prompt-fragments` (+ its document-bodies POST) and
+  > `GET /internal/agent-kinds`.
+
+- **Real-time: BOTH directions ✅ landed.** The OUTBOUND leg is
+  built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a
+  `MothershipWebSocketPropagator` (`@cat-factory/local-server`) POSTs each engine event to the new
+  machine-authed `POST /internal/events/publish`, layered over the local hub so every event fans to
+  the laptop's own SPA AND the mothership. The mothership injects it into its OWN real-time fan-out
+  via the `MachineEventRelay` seam (`@cat-factory/server`), implemented symmetrically on both facades:
+  `LocalMachineEventRelay` (the Node hub / propagator) and `DurableObjectMachineEventRelay` (the
+  per-workspace `WorkspaceEventsHub` Durable Object), so hosted teammates see the local node's
+  activity live. Account-scoped + default-deny exactly like the persistence RPC.
+  The INBOUND leg landed on exactly the design sketched here and NOT on the per-runtime subscriber
+  registry once feared: `GET /internal/events/subscribe/:workspaceId` hands the machine-authed
+  handshake to the SAME per-workspace realtime `upgrade` seam (`gateways.realtime.upgrade`), so a
+  subscribed node is just another socket in the workspace's room on either runtime, and the origin
+  node's echo is suppressed by threading its stable subscribe `?cid=` through the outbound publish as
+  `originConnectionId`. On the laptop, `MothershipEventSubscriber` holds one stream per workspace with
+  a local subscriber (driven by the hub's new room-transition seam) and re-broadcasts into the bare
+  hub. SPA wire protocol unchanged in both directions. See "Landed so far" for the full shape.
+- **Notifications ✅ landed.** Row persists via the remote `notificationRepository`; IN-APP delivery
+  rides the real-time upstream relay (the laptop's own in-app channel publishes through the layered
+  propagator, so the frame reaches the mothership's browsers); **EXTERNAL** (Slack) delivery is
+  mothership-side via `RemoteNotificationChannel` → `POST /internal/notifications/deliver`
+  (machine-authed, account-scoped, identifiers-only so the mothership delivers its OWN row). Each
+  facade wires the seam with its external channels only, so the two `/internal/*` surfaces never
+  double-push the same notification. See "Landed so far" for the full shape.
+  **Residual (later secrets-delegation slice):** delivery of a notification whose Slack connection
+  was sealed by a LAPTOP under the LOCAL key: the mothership can't decrypt it, mirroring the
+  observability gate-probe residual.
+- **Secrets ✅ landed.** `POST /internal/secrets/{unseal,seal}`: the mothership opens an
+  ORG-owned sealed credential a laptop holds no key for, and seals one the laptop produces, so a
+  mothership-mode node provisions environments and probes release-health monitors for real. The
+  wire names the ROW (never the ciphertext), the source table is CLOSED, and the mothership's
+  `ENCRYPTION_KEY` still never moves. See "Landed so far" for the full shape, including what is
+  deliberately still off.
+- **Email (PR 4: deliberately NOT built; no reachable consumer today).** The design stands
+  ( `RemoteEmailSender` → `POST /internal/email/send`, mothership decrypts the account key and sends,
+  keys never reach the laptop) but nothing on a mothership-mode node can currently reach the
+  `EmailSender` port: its only consumers are `InvitationService` (whose `invitationRepository.create`
+  / `setStatus` are admin-gated and therefore excluded from the RPC allow-list) and
+  `PasswordResetService` (a pre-auth flow the mothership serves itself). Building the endpoint now
+  would ship an untriggerable path. Revisit when a later slice adds the role dimension to the token
+  scope (unblocking the invite surface) or an email NOTIFICATION channel lands: at which point it
+  is a direct copy of the notification-delivery shape above.
+- **Telemetry ingest ✅ landed (PR 5, second half).** The local-first CAPTURE half (store + local
+  TTL pruner) and now the sync UP: the bulk `POST /internal/telemetry/ingest` (append-only,
+  deliberately its OWN endpoint rather than allow-listed RPC methods; per-row remote writes are
+  exactly what the bucket forbids) plus the node's quiescence-driven batch sweep. Batches are
+  account-scoped like the persistence RPC, and the mothership STAMPS the batch's workspace + run
+  onto every row it stores, so a node can only ever file telemetry for a run in a workspace it can
+  already reach. The append is idempotent by row id (the ports' `recordMany`), which is what makes
+  a lost-ack chunk safely retryable and what lets a failed upload leave the run's high-water mark
+  alone. See "Landed so far" for the full shape.
+- **Telemetry read-through ✅ landed (PR 5, third half).** The ingest's dual:
+  `POST /internal/telemetry/read`, a CLOSED table of per-method-bounded, run-scoped reads (never a
+  bulk one; `listByExecution` is absent from it on all three sinks, and the node drains the paged
+  reads instead), plus the laptop-side decorator that falls through only when the LOCAL store
+  answers with nothing. It covers more than the pruned-run case the plan named: in mothership mode
+  the SPA shows the whole org's board, so most runs a developer opens were never local at all. A
+  failed fallback THROWS rather than answering empty, because an empty telemetry panel is exactly
+  the false zero the feature exists to remove. Its own endpoint rather than allow-listed RPC
+  methods for ADR 0009's reason AND a sharper one: the persistence registry resolves a repository
+  WHOLE, so admitting a telemetry repo's reads there would route its hot-path writes over the
+  network. See "Landed so far" for the full shape.
 
 ## Phased delivery
 
-- **PR 0 — this tracker doc.** No code.
-- **PR 1 — vertical slice (the SPINE).** `machine` audience; `registerPersistenceController`
-  (scope + allow-list); `PersistenceRpcClient` + `createRemoteRepositoryRegistry` (the full-surface
-  remote registry); local `node:sqlite` store + local cipher with `providerApiKey` +
-  `localModelEndpoint`; `LOCAL_MOTHERSHIP_URL` switch + no-Postgres `startLocal` boot with an
-  **in-process** work runner; static `LOCAL_MOTHERSHIP_TOKEN` for now; `config.mothership` flag to
-  the SPA. Conformance: rev/undefined/scope round-trip (server spine) + the no-Postgres composition
-  build. The board-load + run end-to-end surface that makes it functional landed under Phase 3 (the
-  merge gate, now **MET** — see the banner at the top).
-- **PR 2 — real-time both directions + durable SQLite work queue** (+ the deferred local-sqlite
-  conformance binding via a fake mothership server). **Durable SQLite work queue: ✅ landed** (see
-  "Landed so far"). Remaining in PR 2: real-time both directions (`RpcEventPublisher` +
-  `UpstreamEventSubscriber`) and the local-sqlite conformance binding.
+- **PR 0: this tracker doc.** ✅ landed.
+- **PR 1: vertical slice (the SPINE).** ✅ landed: the persistence-RPC spine + local consumer side.
+  See "Landed so far". The board-load + run end-to-end surface that makes it functional landed under
+  Phase 3 (the merge gate, **MET**).
+- **PR 2: real-time both directions + durable SQLite work queue.** ✅ **landed.** Durable SQLite
+  work queue, real-time UPSTREAM (outbound) and real-time INBOUND (subscribe) are all in: see
+  "Landed so far". **Remaining (carried to PR 6):** the local-sqlite conformance binding via a fake
+  mothership server, which is a test-harness gap rather than a product one (the inbound leg is
+  covered per-facade plus by the shared mounted-and-machine-gated assertion).
 
-### Phase 3 — Functional repository surface (THE MERGE GATE)
+### Phase 3: Functional repository surface (THE MERGE GATE)
 
-This is the phase that makes mothership mode actually work, and the one PR #514 must wait for.
-It also carries login-based machine-token minting and the formal `db: undefined` audit. It is
-larger than one hop — split it across several PRs, but **none of the mothership boot ships until
-the board-load + run paths below are green**. The work is in three parts:
+✅ **MET.** The phase that makes mothership mode actually work. Split across several PRs (slices 1–4 +
+the follow-up surface-completion slices in "Landed so far"). **Exit criteria: MET:** a mothership-mode
+`buildLocalContainer` loads a board and drives a run to a persisted terminal state against a real RPC
+backend, asserted by `mothership-integration.spec.ts` (green). The three parts of the work were:
 
-> **Landed (Phase 3 slice 1):** part 2's workspace-scoped + mixed (workspaceId + entity-id) board-load
-> reads are now allow-listed in `REMOTE_PERSISTENCE_METHODS`, each reusing the existing `workspace`
-> scope rule (resolve the owning account, reject out-of-scope as 404). Reads only — no new mutation
-> is exposed. Part 3 needed no registry change: the dispatcher already reflects over the full
-> `CoreDependencies` object, so allow-listing a method is enough to expose it. Round-trip +
-> cross-account-scope tests for every newly-listed method are in `packages/server/test/persistenceRpc.spec.ts`.
->
-> **Landed (Phase 3 slice 2):** part 2's **cross-service** + **entity-id-keyed** board-composition
-> reads are now allow-listed, via two NEW scope kinds that resolve the entity's owning account
-> server-side before the check: `serviceList` (arg0 = `serviceIds[]`; resolve each service's
-> account, EVERY id must be in scope, a missing/out-of-scope id fails closed, empty list is a no-op)
-> and `block` (arg0 = blockId; resolve block → home workspace → account). Newly callable:
-> `serviceRepository.listByIds`/`listByAccount` (the latter on the existing `account` rule, so the
-> `null` unscoped listing is refused), `blockRepository.findById`/`listByServices`,
-> `executionRepository.listByServices`, `bootstrapJobRepository.listByServices`,
-> `pipelineScheduleRepository.listByServices`, `workspaceMountRepository.countByServiceIds`. The two
-> resolvers are wired in `PersistenceController` (block → `blockRepository.findById` + `accountOf`;
-> service → `serviceRepository.listByIds`) and the dispatcher fails closed if a kind's resolver is
-> absent. Round-trip + cross-account-scope + unknown-id + empty-list tests are in `persistenceRpc.spec.ts`.
-> Note: `subscriptionActivationRepository.deleteByExecution` is NOT exposed remotely — per the
-> per-repo bucket checklist it is the **local-sqlite** bucket (the token is re-sealed with the system
-> key for the run; how that key is available in mothership mode is an open design question for the
-> credential/activation slice), so it stays off the remote allow-list.
->
-> **Landed (Phase 3 slice 3):** part 1's `db: undefined` audit for the board-load + run path. The
-> org/durable stores `buildNodeContainer` constructed directly from `options.db` now route through a
-> single `pickRepoSource(remoteRepos, name, build)` seam (exported from `runtimes/node/src/container.ts`):
-> when `db` is undefined, `options.repos` is the full-surface remote `Proxy` (`composeMothership`) and
-> the repo comes from THERE; else the Drizzle repo is built over `db` as before. Routed:
-> `githubInstallationRepository`, `repoProjectionRepository` + the five GitHub projections
-> (branch/PR/issue/commit/check), `runnerPoolConnectionRepository`, `bootstrapJobRepository`,
-> `referenceArchitectureRepository`, `envConfigRepairJobRepository`, `notificationRepository`,
-> `taskRepository` (issue writeback), and `subscriptionActivationRepository`; the separate
-> `DrizzleServiceFrameRepository` construction is gone — `buildResolveRepoTarget` now reuses
-> `repos.serviceRepository` (remote in mothership mode, Drizzle otherwise). Routing is orthogonal to
-> the allow-list: an un-allow-listed remote method returns a clean `unknown_method`, never a
-> `db`-undefined `TypeError`. Tests: `pickRepoSource` routing in `runtimes/node/test/mothership-repo-source.spec.ts`
->
-> - the existing no-Postgres build test (which now exercises the remote-sourced repos and still makes
->   no build-time network call).
->
-> **Landed (Phase 3 slice 4):** the **fake-mothership functional integration test** — the gate's exit
-> criteria — and the agent-context run-path repo surface it surfaced.
-> `runtimes/local/test/mothership-integration.spec.ts` boots a stock Node mothership
-> (`buildNodeContainer` over real Postgres) on a 127.0.0.1 loopback and a no-Postgres mothership-mode
-> `buildLocalContainer` whose `CoreRepositories` are the RPC-backed remote registry pointing at it,
-> then asserts a board **loads** over the remote RPC and a run **drives to a persisted terminal state**
-> (`done`) over it — the execution read back straight from the mothership's Postgres. It corrected a
-> wrong assumption from slice 3: `AgentContextBuilder` resolves a block's linked docs/tasks AND its
-> provisioned environment on EVERY agent dispatch, so those feature-flagged sub-helper repos ARE on the
-> board-load + run path, not off it. Fixes: `buildNodeContainer` now routes `documentRepository` /
-> `taskRepository` / `environmentRegistryRepository` / `environmentConnectionRepository` from the remote
-> registry when `db` is undefined (the sub-helpers built them directly over the absent `db`; their
-> connect/provision surfaces stay db-direct, off the path); and `REMOTE_PERSISTENCE_METHODS` gained the
-> workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get,getByUrl}`,
-> `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`,
-> `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
-> `mergePresetRepository.upsert` / `modelPresetRepository.upsert`, and the completion notification raise
->
-> - inbox transitions `notificationRepository.{findOpenByBlock,upsertOpenForBlock,upsert}` (round-trip +
->   cross-account-scope unit tests for each in `persistenceRpc.spec.ts`). The `*.getByUrl` reads back a
->   URL named in a block's description and `notificationRepository.upsert` backs block-less raises + the
->   inbox act/dismiss/escalate transitions — both on the same run/post-run path as the methods beside
->   them, so the integration test now patches the run's task with a URL + Jira/GitHub refs and enables
->   the environment integration on the local node, so `*.get`/`getByUrl` and
->   `environmentRegistryRepository.getByBlock` are exercised over the RPC end-to-end (not unit-only).
->
-> **Residual after slice 4** (none on the basic board-load + run path): decrypting a remotely-sealed
-> PROVISIONED environment's access cipher needs the mothership's key (only the non-secret block→env
-> mapping read is on the path here; full decryption is the later secrets-delegation slice); the
-> kaizen-grading, LLM-metric and subscription-activation calls a run also makes currently degrade as
-> best-effort no-ops over the remote (telemetry is Phase 5 local-first; activation is the local-sqlite
-> bucket); and the `fragments` / `slack` connect/provision surfaces are follow-ups.
+1. **Route every direct-db store through the remote surface when `db` is undefined**: via the
+   `pickRepoSource(remoteRepos, name, build)` seam (slice 3, extended in slice 4 for the
+   `AgentContextBuilder` sub-helper repos, then documents/tasks/environments/fragments/**slack**).
+   STILL TODO: the sub-helper surfaces genuinely off the board-load + run path. The document/task
+   CONNECTION repos are no longer among them: their rows now carry a sealed envelope, so both
+   helpers source every repo they build through `pickRepoSource` and compose the credential STORE
+   over it. Environment PROVISION writes are no longer among them either: the secrets-delegation slice
+   landed them alongside the seal/unseal endpoints they needed. (Telemetry repos are local-first: PR 5 gave them their own
+   `node:sqlite` store, layered over the remote registry, instead of the best-effort no-ops they
+   used to degrade to.)
+2. **Widen `REMOTE_PERSISTENCE_METHODS`** to the board-load + run methods, each with a correct scope
+   rule (`workspace` / `workspaceField` / `account` / `accountField` / `block` / `blockList` /
+   `serviceList` / `service` / `serviceMount` / `usageRecord` / `owner` / `ownerField` /
+   `visibility` / `selfUser` / `user` / `userList`). The
+   boundary is security-sensitive: a machine token scopes ACCOUNTS not roles, so admin-gated mutations
+   and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices; the
+   drift guard is what forces each new method to pick a bucket.
+3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
+   round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 
-1. ✅ **Route every direct-db store through the remote surface when `db` is undefined — DONE
-   (slice 3) for the board-load + run path.** The stores `buildNodeContainer` constructed directly
-   from `options.db` now route through the `pickRepoSource(remoteRepos, name, build)` seam (sourced
-   from the remote registry when `db` is undefined, else the Drizzle repo): `notificationRepository`,
-   `bootstrapJobRepository`, `envConfigRepairJobRepository`, `subscriptionActivationRepository`,
-   `runnerPoolConnectionRepository`, `githubInstallationRepository`, the GitHub projection repos
-   (repo/branch/PR/issue/commit/check), `taskRepository`, `referenceArchitectureRepository`; the
-   separate `DrizzleServiceFrameRepository` is gone (`buildResolveRepoTarget` reuses
-   `repos.serviceRepository`). **Slice 4 then routed the feature-flagged sub-helper repos that turned
-   out to be ON the run path** — `documentRepository` / `taskRepository` / `environmentRegistryRepository`
-   / `environmentConnectionRepository` (the `AgentContextBuilder` per-step reads). STILL TODO: the
-   remaining sub-helper surfaces that are genuinely off the basic board-load + run path —
-   `fragments` / `slack` connect/provision — a follow-up sub-slice. (Telemetry repos —
-   `tokenUsage`/`llmCallMetric`/`agentContextSnapshot`/`provisioningLog` — are the local-first
-   telemetry bucket, Phase 5, NOT remote; they degrade as best-effort no-ops over the remote for now.)
+Residual items (the best-effort kaizen no-ops) are NOT on the basic board-load + run path. The
+document/task connection integration is no longer one: see the document/task slice below. Provisioned-env secret
+decryption is no longer among them: the secrets-delegation slice closed it. (Subscription activation and the Slack settings surface are no longer
+residuals: PR 3 landed them; see "Landed so far".)
 
-2. **Widen the server allow-list (`REMOTE_PERSISTENCE_METHODS`) to the methods a board load + a run
-   exercise, each with a correct scope rule.** The boundary is security-sensitive: a machine token
-   is scoped to ACCOUNTS, not roles, so admin-gated mutations and global sweeper reads stay excluded.
-   The concrete map (from a call-graph trace of `GET /workspaces/:id` and the execution lifecycle):
-   - ✅ **Workspace-scoped (arg0 = workspaceId; reuse the existing `workspace` rule) — DONE (slice 1):**
-     `workspaceMountRepository.listByWorkspace`, `workspaceSettingsRepository.get`,
-     `mergePresetRepository.list`, `modelPresetRepository.list`, `serviceFragmentDefaultsRepository.get`,
-     `pipelineScheduleRepository.list`, `trackerSettingsRepository.get`, `notificationRepository.listOpen`,
-     `bootstrapJobRepository.listByWorkspace`, `tokenUsageRepository.totalsSinceForWorkspace`,
-     plus the run-path writes `blockRepository.update`, `executionRepository.upsert/getByBlock/deleteByBlock`
-     (the latter were already in the pilot set).
-   - ✅ **Mixed (workspaceId + entity id) — keep the workspace arg as the scope key — DONE (slice 1):**
-     `requirementReviewRepository.getByBlock`, `clarityReviewRepository.getByBlock`,
-     `brainstormSessionRepository.getByBlockStage` (+ `pipelineScheduleRepository.getByBlock`).
-   - ✅ **Entity-id-keyed (NO workspaceId arg) — NEW `block` scope kind resolves the entity's
-     workspace/account server-side before the check — DONE (slice 2) for `blockRepository.findById`.**
-     `subscriptionActivationRepository.deleteByExecution(executionId)` is NOT done: it is the
-     **local-sqlite** bucket (see the per-repo checklist), so it is off the remote surface, not a
-     remote allow-list entry.
-   - ✅ **Cross-service reads (arg0 = serviceIds[] / accountId) — NEW `serviceList` scope kind
-     resolves each service's owning account; `listByAccount` reuses the `account` rule — DONE
-     (slice 2):** `serviceRepository.listByIds`, `serviceRepository.listByAccount`,
-     `blockRepository.listByServices`, `executionRepository.listByServices`,
-     `bootstrapJobRepository.listByServices`, `pipelineScheduleRepository.listByServices`,
-     `workspaceMountRepository.countByServiceIds`.
-
-3. ✅ **Expose those repos in the mothership-side `PersistenceRegistry`** (the dispatcher reflects
-   over it) and add round-trip + cross-account-scope tests for every newly-allow-listed method, plus
-   an integration test that actually serves `GET /workspaces/:id` and drives a run in mothership mode
-   over a fake mothership — **DONE (slice 4).** `runtimes/local/test/mothership-integration.spec.ts`
-   serves both sides for real (a loopback Node mothership over Postgres + a no-Postgres local node)
-   and asserts the board-load + run-to-terminal. Standing it up also forced the agent-context run-path
-   repos (`documentRepository` / `taskRepository` / `environmentRegistryRepository`) to route remotely
-   - their workspace-scoped reads + the lazy-seed / notification writes onto the allow-list (see the
-     slice-4 note above; unit round-trip + scope tests in `persistenceRpc.spec.ts`).
-
-Exit criteria for the gate: a mothership-mode `buildLocalContainer` loads a board and drives a run
-to a persisted terminal state against a real RPC backend, asserted by that integration test. ✅ **MET
-(slice 4)** — `mothership-integration.spec.ts` is green. The residual items listed in the slice-4 note
-(provisioned-env secret decryption; the best-effort kaizen/telemetry/activation no-ops; `fragments` /
-`slack` connect surfaces) are NOT on the basic board-load + run path; a maintainer decides whether to
-lift the ⛔ gate / mark PR #514 ready in light of them.
-
-- **PR 4 — notifications + email + Slack delegation.**
-- **PR 5 — telemetry/logs local-first sync.**
-- **PR 6 — UI labeling + hardening** (whitelisting admin, token rotation, rate-limiting, security
+- **PR 4: notifications + email + Slack delegation.** Notification/Slack DELIVERY delegation **✅
+  landed** (`POST /internal/notifications/deliver` + `RemoteNotificationChannel`: see "Landed so
+  far"). Email delegation is deliberately deferred until it has a reachable consumer (see
+  "Cross-cutting delegation"). **Remaining:** mothership-side delivery of a laptop-sealed Slack
+  connection. The secrets-delegation slice has since built the mechanism this needed
+  (`/internal/secrets/{unseal,seal}`); closing it is now a `slack_connection` entry in
+  `SEALED_SECRET_SOURCES` plus threading the delegate into `SlackConnectionService`.
+- **PR 5: telemetry/logs local-first sync.** ✅ **landed, all three halves.** The local-first
+  CAPTURE half (the `node:sqlite` telemetry store, the registry composition seam, the spend-ledger
+  split, the local prune), the batch sync UP (`POST /internal/telemetry/ingest`, the ports'
+  `recordMany`, the node's quiescence-driven sweep) and the READ-THROUGH back down
+  (`POST /internal/telemetry/read`, the ports' `listRunPage`, the local-wins decorator): see
+  "Landed so far". The residual losses are stated there and are deliberate: an inline LLM call
+  that resolved no run never syncs up, and the provisioning log + quota cycles are laptop-only by
+  construction.
+- **PR 6: UI labeling + hardening** (whitelisting admin, token rotation, rate-limiting, security
   review).
 
 Each PR adds a changeset and updates this checklist.
@@ -637,21 +1670,54 @@ Each PR adds a changeset and updates this checklist.
 - **Keep the runtimes symmetric.** The `/internal/*` endpoints and their conformance assertions land
   on **both** Node + Cloudflare in the SAME change. The local `node:sqlite` store is a
   local-facade-only differentiator (like the container transport) and carries **no** symmetry
-  obligation — only the mothership-served endpoints do.
+  obligation: only the mothership-served endpoints do.
 - **The mothership `ENCRYPTION_KEY` must never reach the laptop.** Local secrets use a separate local
-  key (the one `applyLocalDefaults` already guarantees). A security check asserts this.
-- **Raw-repo RPC is powerful — default-deny.** Method allow-list per repo; global/sweeper methods
+  key (the one `applyLocalDefaults` already guarantees). A security check asserts this. A connection
+  repo is only remotely exposable if it returns its credential **sealed**. A repo that decrypts
+  INSIDE is not a repo to leave off, it is a repo to FIX: the document/task connections were the
+  last two, and giving their rows an envelope admitted them to both the allow-list and the
+  org-secret table in one change. Since the
+  secrets-delegation slice a laptop can USE such a credential without holding the key: it names the
+  ROW over `/internal/secrets/unseal` and the mothership opens it. The key still does not move, and
+  that endpoint's CLOSED source table, not the persistence allow-list, is what bounds the plaintext
+  surface. Widen it deliberately, never as a routing detail.
+- **Raw-repo RPC is powerful: default-deny.** Method allow-list per repo; global/sweeper methods
   AND admin-gated mutations excluded (the RPC bypasses the service-layer `requireAdmin`, and the
   token scopes accounts not roles); every call account-scoped to the token; the scope switch
   fails closed on any unknown rule kind; the table is looked up by own-property only so an
   attacker-supplied `__proto__`/`constructor` can't reach a non-spec member. Treat the
   `/internal/persistence` surface as the highest-risk new code.
 - **`db: undefined` audit.** `buildNodeContainer` constructs many repos directly from `options.db`
-  (projections, blob backends, notifications, bootstrap, subscription-activation, …) rather than from
-  `options.repos`. PR 1 made `db` optional and turned the per-user Postgres services off without one,
-  but the direct-db repos still throw when CALLED on a board load / run — each must route through the
-  composed remote repos in mothership mode. This is the single largest correctness risk and is the
-  core of the [Phase 3 merge gate](#phase-3--functional-repository-surface-the-merge-gate): the
-  mothership boot does not ship until it is done.
+  rather than from `options.repos`; each on the board-load / run path must route through the composed
+  remote repos in mothership mode via `pickRepoSource`. This was the single largest correctness risk
+  and the core of the Phase 3 merge gate (now MET).
 - **Pre-1.0 = no back-compat.** No shims for the old siloed-Postgres local mode; mothership mode is a
   parallel boot path selected by `LOCAL_MOTHERSHIP_URL`.
+- **Task types stay NODE-LOCAL, and that is a decision, not a gap.** A `CustomTaskType` gets no
+  `/internal/*` read of its own, unlike the foundational-services `builtin` tier, the
+  `BinaryGeneratorSource` and the `PromptFragmentSource` beside it. The descriptor is inseparable
+  from code registered in the SAME org package: its `defaultPipelineId` names a pipeline in that
+  package, that pipeline names custom KINDS and VARIANTS (functions, which cannot cross a wire), its
+  `defaultFragmentIds` name fragments in the same pool, and its `formPanel` names a component in the
+  deployment's own SPA layer. Serving the descriptor from the mothership while the executable half
+  stayed local would produce a MIXED bundle (a v2 descriptor naming a pipeline the node's v1 package
+  lacks), which boot validation structurally cannot see. The unit of distribution is the org package, exactly as for agent kinds.
+  Consequences, named rather than hidden: a node a build behind offers last build's operations (the
+  lag its agent kinds already have), a stock node in an org deployment offers none, and a run of such
+  a task fails loudly at the existing seams (unknown kind at admission). The dispatch-time parameter
+  fold is built for that drift: it is VALUE-authoritative, so a stale or absent registration costs
+  labels, never data. The per-workspace SUPPRESSION of an operation is the opposite call and is
+  `remote`, because it is pure data with no co-registered code: the catalog is code and the hide-list
+  is a row. Full argument: [ADR 0042](../../backend/docs/adr/0042-reusable-operations.md);
+  behaviour: [`backend/docs/reusable-operations.md`](../../backend/docs/reusable-operations.md).
+- **The PIPELINE registry stays node-local too, and for a DIFFERENT reason than task types.** It is
+  not inseparability (a pipeline definition is data): it is that the failure is already LOUD.
+  A definition only the mothership has is offered by the board and then refused at `adoptForRun`,
+  which finds no stored row and no catalog entry and returns null; a definition only the node has is
+  adopted INTO a workspace row through the REMOTE repository, so it lands on the mothership. Neither
+  is the silent omission the three sources above exist to prevent. The other half is cost:
+  `seedPipelines` / `retiredPipelines` are synchronous and read on every board list, so a source
+  would put an awaited network hop on a hot path to remove a divergence that already fails safely.
+  Boot warns and names the locally-registered ids. If a future change makes the skew silent (a run
+  resolving a definition with no row and no refusal), this becomes a `PipelineSource`; the reasoning
+  is restated at the warn site in `runtimes/local/src/server.ts` so it is re-read there.

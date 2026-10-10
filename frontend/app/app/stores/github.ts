@@ -1,19 +1,27 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
-  CreateBranchInput,
   GitHubAvailableRepo,
   GitHubBranch,
   GitHubConnection,
   GitHubInstallationOption,
   GitHubIssue,
+  GitHubPatCheck,
   GitHubPullRequest,
   GitHubRepo,
-  MergePullRequestInput,
-  OpenPullRequestInput,
-  ResyncRequest,
+  RepoTreeEntry,
+  VcsConnectOption,
+  VcsProvider,
 } from '~/types/domain'
+import { branchWebUrl, issueWebUrl, pullWebUrl, repoWebUrl } from '~/utils/vcs'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useServicesStore } from '~/stores/services'
+import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
+import { createGitHubConnectionActions } from '~/stores/github/connection'
+import { createGitHubProbe } from '~/stores/github/probe'
+import { createGitHubRepoActions } from '~/stores/github/repoActions'
+import { createVcsConnectActions, createVcsProviderViews } from '~/stores/github/vcsConnect'
 
 /**
  * GitHub integration state: the workspace's App installation, the projected
@@ -30,8 +38,17 @@ export const useGitHubStore = defineStore('github', () => {
 
   /** null = unknown (not probed yet), true/false = integration on/off. */
   const available = ref<boolean | null>(null)
-  /** The workspace's App installation, or null when not yet connected. */
+  /** The workspace's VCS connection (App installation or PAT), or null when not connected. */
   const connection = ref<GitHubConnection | null>(null)
+  /** The connect surfaces this deployment serves; resolved by the probe alongside `connection`. */
+  const connectOptions = ref<VcsConnectOption[]>([])
+  /**
+   * What the personal access token this workspace's runs would use can actually do, resolved by
+   * the probe. `null` = not answered (unprobed, or the read failed); the check's own
+   * `not_applicable` state is what "there is no PAT here" looks like. The two are kept apart
+   * because only the second is a fact.
+   */
+  const patCheck = ref<GitHubPatCheck | null>(null)
   /** Discovered App installations for the connect picker; loaded on demand. */
   const installations = ref<GitHubInstallationOption[]>([])
   const loadingInstallations = ref(false)
@@ -40,7 +57,14 @@ export const useGitHubStore = defineStore('github', () => {
   const availableRepos = ref<GitHubAvailableRepo[]>([])
   const loadingAvailable = ref(false)
   const savingRepos = ref(false)
-  const pulls = ref<GitHubPullRequest[]>([])
+  const {
+    items: pulls,
+    upsert: upsertPull,
+    get: getPull,
+  } = useUpsertList<GitHubPullRequest>({
+    key: (p) => pullKey(p.repoGithubId, p.number),
+    prepend: true,
+  })
   const issues = ref<GitHubIssue[]>([])
   /** Branches loaded lazily per repo (by GitHub numeric id). */
   const branches = ref<Record<number, GitHubBranch[]>>({})
@@ -62,9 +86,14 @@ export const useGitHubStore = defineStore('github', () => {
     return repos.value.find((r) => r.githubId === repoGithubId)
   }
 
-  /** The repo linked to a board block (its backing service repo), if any. */
+  /**
+   * The repo backing a board service frame, if any — resolved through the account-owned
+   * Service bound to the frame (the sole repo↔frame linkage; the projection carries no
+   * repo→block column).
+   */
   function repoForBlock(blockId: string): GitHubRepo | undefined {
-    return repos.value.find((r) => r.blockId === blockId)
+    const service = useServicesStore().serviceByFrameBlock[blockId]
+    return service?.repoGithubId != null ? repoFor(service.repoGithubId) : undefined
   }
 
   function pullsForRepo(repoGithubId: number): GitHubPullRequest[] {
@@ -75,32 +104,32 @@ export const useGitHubStore = defineStore('github', () => {
     return issues.value.filter((i) => i.repoGithubId === repoGithubId)
   }
 
-  /** Build the github.com URL for a repo / PR / issue from the projection row. */
+  // Web links for a repo / pull request / issue / branch, built from the connection's own host
+  // (`webUrl`) and the repo row's provider. Every one of these used to be a hand-built
+  // `https://github.com/…`, which is only right for a github.com deployment: a self-managed
+  // GitLab or GitHub Enterprise workspace was linked to whatever the public instance serves at
+  // that path. Null when the deployment could not name its host, so the caller withholds the
+  // link rather than pointing at an instance the repo does not live on.
   function repoUrl(repoGithubId: number): string | null {
     const r = repoFor(repoGithubId)
-    return r ? `https://github.com/${r.owner}/${r.name}` : null
+    return r ? repoWebUrl(connection.value?.webUrl, r) : null
+  }
+  /** The provider a projected row belongs to; a row predating the discriminator is GitHub. */
+  function providerOfRepo(repoGithubId: number): VcsProvider {
+    return repoFor(repoGithubId)?.provider ?? 'github'
   }
   function pullUrl(pr: GitHubPullRequest): string | null {
-    const base = repoUrl(pr.repoGithubId)
-    return base ? `${base}/pull/${pr.number}` : null
+    return pullWebUrl(providerOfRepo(pr.repoGithubId), repoUrl(pr.repoGithubId), pr.number)
   }
   function issueUrl(issue: GitHubIssue): string | null {
-    const base = repoUrl(issue.repoGithubId)
-    return base ? `${base}/issues/${issue.number}` : null
+    return issueWebUrl(
+      providerOfRepo(issue.repoGithubId),
+      repoUrl(issue.repoGithubId),
+      issue.number,
+    )
   }
-
-  /** Probe the integration: resolves `available` and the current connection. */
-  async function probe() {
-    if (!workspace.workspaceId) return
-    try {
-      const { connection: conn } = await api.getGitHubConnection(workspace.requireId())
-      available.value = true
-      connection.value = conn
-    } catch {
-      // 503 (integration disabled) or any error → hide the UI entry points.
-      available.value = false
-      connection.value = null
-    }
+  function branchUrl(repoGithubId: number, branch: string): string | null {
+    return branchWebUrl(providerOfRepo(repoGithubId), repoUrl(repoGithubId), branch)
   }
 
   /** Load the cached repos, pull requests and issues for the workspace. */
@@ -121,6 +150,39 @@ export const useGitHubStore = defineStore('github', () => {
     }
   }
 
+  /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
+  const repoFiles = ref<Record<number, RepoTreeEntry[]>>({})
+
+  // The installation lifecycle + the per-repo reads/writes, split into cohesive factories
+  // sharing the state above (a size-only extraction mirroring `stores/board/` — behaviour is
+  // identical to the former in-closure functions).
+  const context: GitHubStoreContext = {
+    api,
+    workspace,
+    available,
+    connection,
+    connectOptions,
+    installations,
+    loadingInstallations,
+    repos,
+    availableRepos,
+    loadingAvailable,
+    savingRepos,
+    pulls,
+    upsertPull,
+    getPull,
+    issues,
+    branches,
+    repoFiles,
+    syncing,
+    connected,
+    load,
+  }
+  // The board-load probe (integration availability + the bound connection + the connect options +
+  // the credential check). Built from the context rather than inline, so this setup stays within
+  // the function-size ratchet the credential check pushed it past.
+  const { probe, ensureProbed } = createGitHubProbe(context, patCheck)
+
   /**
    * Ensure the projection (repos/PRs/issues) is loaded at least once — for views
    * that need it without opening the GitHub panel (e.g. the inspector's repo link).
@@ -131,142 +193,12 @@ export const useGitHubStore = defineStore('github', () => {
     if (connected.value && repos.value.length === 0) await load()
   }
 
-  /**
-   * Load the repos the installation can access, with this workspace's link state.
-   * With a `q` the backend filters `owner/name` server-side (the add-service picker
-   * searches instead of prefetching a huge installation); without one it browses all
-   * (the repo-link panel). A blank/short `q` clears the list rather than fetching.
-   */
-  async function loadAvailableRepos(q?: string) {
-    if (!connected.value) return
-    if (q !== undefined && q.trim() === '') {
-      availableRepos.value = []
-      return
-    }
-    loadingAvailable.value = true
-    try {
-      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId(), q)
-    } finally {
-      loadingAvailable.value = false
-    }
-  }
-
-  /** Set the exact set of repos this workspace links, then refresh projections. */
-  async function setLinkedRepos(repoGithubIds: number[]) {
-    savingRepos.value = true
-    try {
-      repos.value = await api.setGitHubLinkedRepos(workspace.requireId(), repoGithubIds)
-      // Reflect the new link state in the picker and refresh PRs/issues.
-      const linked = new Set(repoGithubIds)
-      availableRepos.value = availableRepos.value.map((r) => ({
-        ...r,
-        linked: linked.has(r.githubId),
-      }))
-      await load()
-    } finally {
-      savingRepos.value = false
-    }
-  }
-
-  /** Lazily load (and cache) the branches for a single repo. */
-  async function loadBranches(repoGithubId: number): Promise<GitHubBranch[]> {
-    const list = await api.listGitHubBranches(workspace.requireId(), repoGithubId)
-    branches.value = { ...branches.value, [repoGithubId]: list }
-    return list
-  }
-
-  /** List one level of a (monorepo) repo's tree, for the service-directory picker. */
-  function loadRepoTree(repoGithubId: number, path = '') {
-    return api.listGitHubRepoTree(workspace.requireId(), repoGithubId, path)
-  }
-
-  /** The URL a workspace owner visits to install the App against this workspace. */
-  function getInstallUrl(): Promise<string> {
-    return api.getGitHubInstallUrl(workspace.requireId()).then((r) => r.url)
-  }
-
-  /** Discover the App's installations so the user can connect one without typing an id. */
-  async function loadInstallations() {
-    loadingInstallations.value = true
-    try {
-      const { installations: list } = await api.listGitHubInstallations(workspace.requireId())
-      installations.value = list
-    } finally {
-      loadingInstallations.value = false
-    }
-  }
-
-  /** Programmatic bind by installation id (the browser flow uses the redirect). */
-  async function connect(installationId: number) {
-    connection.value = await api.connectGitHub(workspace.requireId(), installationId)
-    available.value = true
-    await load()
-  }
-
-  async function disconnect() {
-    await api.disconnectGitHub(workspace.requireId())
-    connection.value = null
-    repos.value = []
-    availableRepos.value = []
-    pulls.value = []
-    issues.value = []
-    branches.value = {}
-  }
-
-  /** Trigger a resync, then refresh projections (no-op for queued/backfill). */
-  async function resync(body: ResyncRequest = {}) {
-    syncing.value = true
-    try {
-      const res = await api.resyncGitHub(workspace.requireId(), body)
-      await load()
-      return res
-    } finally {
-      syncing.value = false
-    }
-  }
-
-  // ---- repo writes ----------------------------------------------------------
-
-  /**
-   * Create a repository under the connected account (privileged App tier). Only
-   * meaningful when `canCreateRepos`; the backend 409s otherwise. Returns the
-   * created repo so the caller can confirm/link it.
-   */
-  function createRepo(input: Parameters<typeof api.createGitHubRepo>[1]) {
-    return api.createGitHubRepo(workspace.requireId(), input)
-  }
-
-  async function createBranch(repoGithubId: number, input: CreateBranchInput) {
-    const branch = await api.createGitHubBranch(workspace.requireId(), repoGithubId, input)
-    const next = branches.value[repoGithubId] ?? []
-    branches.value = { ...branches.value, [repoGithubId]: [branch, ...next] }
-    return branch
-  }
-
-  async function openPullRequest(repoGithubId: number, input: OpenPullRequestInput) {
-    const pr = await api.openGitHubPullRequest(workspace.requireId(), repoGithubId, input)
-    const i = pulls.value.findIndex(
-      (p) => p.repoGithubId === pr.repoGithubId && p.number === pr.number,
-    )
-    if (i >= 0) pulls.value[i] = pr
-    else pulls.value.unshift(pr)
-    return pr
-  }
-
-  async function mergePullRequest(
-    repoGithubId: number,
-    number: number,
-    input: MergePullRequestInput = {},
-  ) {
-    await api.mergeGitHubPullRequest(workspace.requireId(), repoGithubId, number, input)
-    // Optimistically reflect the merge until the next sync confirms it.
-    const i = pulls.value.findIndex((p) => p.repoGithubId === repoGithubId && p.number === number)
-    if (i >= 0) pulls.value[i] = { ...pulls.value[i]!, state: 'closed', merged: true }
-  }
-
-  function comment(repoGithubId: number, number: number, body: string) {
-    return api.commentGitHubIssue(workspace.requireId(), repoGithubId, number, body)
-  }
+  const connectionActions = createGitHubConnectionActions(context)
+  const repoActions = createGitHubRepoActions(context)
+  const vcsConnectActions = createVcsConnectActions(context)
+  // The derived "which provider" questions, beside the connect actions that populate what they
+  // read (see `createVcsProviderViews` for why `provider` and `surfaceProvider` differ).
+  const providerViews = createVcsProviderViews(context)
 
   /**
    * Drop the per-workspace projection + connection state (called on workspace switch)
@@ -276,17 +208,22 @@ export const useGitHubStore = defineStore('github', () => {
   function reset() {
     available.value = null
     connection.value = null
+    connectOptions.value = []
+    patCheck.value = null
     installations.value = []
     repos.value = []
     availableRepos.value = []
     pulls.value = []
     issues.value = []
     branches.value = {}
+    repoFiles.value = {}
   }
 
   return {
     available,
     connection,
+    connectOptions,
+    patCheck,
     installations,
     loadingInstallations,
     repos,
@@ -299,6 +236,7 @@ export const useGitHubStore = defineStore('github', () => {
     loading,
     syncing,
     connected,
+    ...providerViews,
     canCreateRepos,
     missingWorkflowsPermission,
     repoFor,
@@ -308,23 +246,15 @@ export const useGitHubStore = defineStore('github', () => {
     repoUrl,
     pullUrl,
     issueUrl,
+    branchUrl,
     probe,
+    ensureProbed,
     load,
     ensureLoaded,
-    loadAvailableRepos,
-    setLinkedRepos,
-    loadRepoTree,
-    loadBranches,
-    getInstallUrl,
-    loadInstallations,
-    connect,
-    disconnect,
-    resync,
-    createRepo,
-    createBranch,
-    openPullRequest,
-    mergePullRequest,
-    comment,
+    repoFiles,
+    ...connectionActions,
+    ...repoActions,
+    ...vcsConnectActions,
     reset,
   }
 })

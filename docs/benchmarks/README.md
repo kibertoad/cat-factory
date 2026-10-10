@@ -3,7 +3,7 @@
 Committed results of the cat-factory **benchmark harness**
 (`backend/internal/benchmark-harness`, CLI `cat-bench`). Each run measures how
 different **models** and **prompt versions** affect the quality of three agent
-tasks — **requirement review**, **implementation**, and **code review** — graded
+tasks (**requirement review**, **implementation**, and **code review**), graded
 by the Claude **benchmark-arbiter** skill.
 
 ## Layout
@@ -25,7 +25,7 @@ version** (`id@vN`) that produced each result, so an outcome is always traceable
 
 ## Prompt versioning
 
-Cat-factory prompts are numbered for change management — each is identified as
+Cat-factory prompts are numbered for change management: each is identified as
 `id@vN` (e.g. `build@v1`, `review@v1`, `requirement-review@v1`). The current
 versions live in
 `backend/packages/agents/src/agents/prompt-versions.ts`.
@@ -50,6 +50,6 @@ git add docs/benchmarks/my-run && git commit             # commit the run
 ```
 
 The two Claude skills are deliberately separate: **`benchmark`** orchestrates
-(run → grade → merge), while **`benchmark-arbiter`** only grades — so grading
+(run → grade → merge), while **`benchmark-arbiter`** only grades, so grading
 stays impartial and you can re-grade without re-running, or re-run without
 re-grading.

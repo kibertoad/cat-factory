@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import {
+  attachExternalNetworks,
   classifyComposePs,
   collectUnsupportedComposeRefs,
   composeConfigToManifest,
+  composeFileDir,
+  composeProbeFailure,
   ensureServicePublishes,
+  escapesCheckout,
+  extractComposeProfiles,
+  extractExternalNetworks,
+  hasBuildDirective,
   neutralizeHostPorts,
   parseComposeEnvConfig,
   parseComposePsRows,
@@ -14,7 +21,21 @@ import {
   resolveProjectName,
   sanitizeProjectName,
   toEphemeralPortEntry,
+  // stack-recipe helpers
+  composeExecArgs,
+  matchesHttpExpectation,
+  prepareRecipeComposeFiles,
+  composeSourceEscapeIssues,
+  recipeCheckoutPathIssues,
+  recipeProfilesEnv,
+  recipeStepTimeoutMs,
+  resolveRecipeComposeFiles,
+  rewrittenRecipeComposePath,
+  waitFileExecArgs,
+  DEFAULT_RECIPE_STEP_TIMEOUT_MS,
+  DEFAULT_RECIPE_WAIT_TIMEOUT_MS,
 } from './compose-environment.logic.js'
+import type { StackRecipe } from '@cat-factory/kernel'
 
 const manifestWith = (providerConfig: Record<string, unknown>) => ({
   providerId: 'compose',
@@ -180,6 +201,206 @@ describe('collectUnsupportedComposeRefs', () => {
     const doc = parse('services:\n  web:\n    image: nginx\n    volumes:\n      - cache:/cache\n')
     expect(collectUnsupportedComposeRefs(doc)).toEqual([])
   })
+
+  describe('build mode ({ build: true })', () => {
+    it('allows build:, in-checkout relative binds, and relative env_files (the checkout resolves them)', () => {
+      const doc = parse(
+        [
+          'services:',
+          '  web:',
+          '    build: .',
+          '    volumes:',
+          '      - ./src:/app', // in-checkout relative bind — allowed in build mode
+          '      - db-data:/var/lib/data', // named volume — allowed
+          '    env_file:',
+          '      - ./.env', // relative env_file — allowed in build mode
+          'volumes:',
+          '  db-data: {}',
+        ].join('\n'),
+      )
+      expect(collectUnsupportedComposeRefs(doc, { build: true })).toEqual([])
+    })
+
+    it('still refuses privileged and a host-escaping bind mount', () => {
+      const doc = parse(
+        [
+          'services:',
+          '  web:',
+          '    build: .',
+          '    volumes:',
+          '      - /etc:/host-etc', // absolute host path — escapes the checkout
+          '      - ../secrets:/s', // ../ escapes above the checkout root
+          '  sidecar:',
+          '    image: busybox',
+          '    privileged: true',
+        ].join('\n'),
+      )
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('/host-etc') || i.includes("'/etc'"))).toBe(true)
+      expect(issues.some((i) => i.includes('../secrets'))).toBe(true)
+      expect(issues.some((i) => i.includes('privileged'))).toBe(true)
+      // build: is NOT flagged in build mode.
+      expect(issues.some((i) => i.includes('uses build:'))).toBe(false)
+    })
+
+    it('refuses a host-escaping env_file (not just bind mounts)', () => {
+      const doc = parse(
+        [
+          'services:',
+          '  web:',
+          '    build: .',
+          '    env_file:',
+          '      - ../../../../etc/secret.env', // ../ escapes the checkout
+          '      - /etc/host.env', // absolute host path
+          '      - ./.env', // in-checkout relative — allowed
+        ].join('\n'),
+      )
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('../../../../etc/secret.env'))).toBe(true)
+      expect(issues.some((i) => i.includes('/etc/host.env'))).toBe(true)
+      // The in-checkout env_file is NOT flagged.
+      expect(issues.some((i) => i.includes("'./.env'"))).toBe(false)
+    })
+
+    it('refuses a build context that escapes the checkout', () => {
+      const doc = parse('services:\n  web:\n    build:\n      context: /\n')
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('context outside the checkout'))).toBe(true)
+    })
+
+    it('refuses a separator-buried ../ bind source (not mis-read as a named volume)', () => {
+      const doc = parse(
+        'services:\n  web:\n    build: .\n    volumes:\n      - sub/../../../etc:/host\n',
+      )
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('sub/../../../etc'))).toBe(true)
+    })
+
+    it('refuses a bind source with an unresolved ${VAR} interpolation', () => {
+      const doc = parse('services:\n  web:\n    build: .\n    volumes:\n      - ${HOME}/x:/x\n')
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('${HOME}/x'))).toBe(true)
+    })
+
+    it('refuses a host-escaping secret file: source', () => {
+      const doc = parse(
+        [
+          'services:',
+          '  web:',
+          '    build: .',
+          '    secrets:',
+          '      - leak',
+          'secrets:',
+          '  leak:',
+          '    file: /etc/host-secret',
+        ].join('\n'),
+      )
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('/etc/host-secret'))).toBe(true)
+    })
+  })
+
+  it('refuses include: in both modes (merged files bypass the guard)', () => {
+    const doc = parse('include:\n  - ./ci/base.yml\nservices:\n  web:\n    image: nginx\n')
+    expect(collectUnsupportedComposeRefs(doc).some((i) => i.includes('include:'))).toBe(true)
+    expect(
+      collectUnsupportedComposeRefs(doc, { build: true }).some((i) => i.includes('include:')),
+    ).toBe(true)
+  })
+
+  it('refuses cross-file extends.file (merged from disk, bypasses the guard)', () => {
+    const doc = parse(
+      'services:\n  web:\n    image: nginx\n    extends:\n      file: ./base.yml\n      service: base\n',
+    )
+    expect(
+      collectUnsupportedComposeRefs(doc, { build: true }).some((i) => i.includes('extends.file')),
+    ).toBe(true)
+  })
+
+  it('refuses a top-level config file: source in image mode (no repo on disk)', () => {
+    const doc = parse(
+      'services:\n  web:\n    image: nginx\n    configs:\n      - app\nconfigs:\n  app:\n    file: ./app.conf\n',
+    )
+    expect(collectUnsupportedComposeRefs(doc).some((i) => i.includes('app.conf'))).toBe(true)
+  })
+})
+
+describe('hasBuildDirective', () => {
+  it('detects a short- and long-form build, ignores an image-only service', () => {
+    expect(hasBuildDirective({ build: '.' })).toBe(true)
+    expect(hasBuildDirective({ build: { context: './app' } })).toBe(true)
+    expect(hasBuildDirective({ image: 'nginx' })).toBe(false)
+    expect(hasBuildDirective(null)).toBe(false)
+    expect(hasBuildDirective('nope')).toBe(false)
+  })
+})
+
+describe('escapesCheckout', () => {
+  it('flags absolute, home, drive, and ../-escaping sources; allows in-checkout relatives', () => {
+    expect(escapesCheckout('/etc')).toBe(true)
+    expect(escapesCheckout('~/x')).toBe(true)
+    expect(escapesCheckout('C:/x')).toBe(true)
+    expect(escapesCheckout('../secrets')).toBe(true)
+    expect(escapesCheckout('a/../../b')).toBe(true) // pops above root
+    expect(escapesCheckout('\\\\server\\share')).toBe(true) // UNC / backslash-absolute
+    expect(escapesCheckout('${HOME}/x')).toBe(true) // unresolved var expands at runtime
+    expect(escapesCheckout('$PWD/../x')).toBe(true)
+    expect(escapesCheckout('./src')).toBe(false)
+    expect(escapesCheckout('src')).toBe(false)
+    expect(escapesCheckout('a/b/c')).toBe(false)
+    expect(escapesCheckout('a/../b')).toBe(false) // stays at/below root
+  })
+})
+
+describe('composeFileDir', () => {
+  it('returns the POSIX directory portion, empty for a root-level file', () => {
+    expect(composeFileDir('docker-compose.yml')).toBe('')
+    expect(composeFileDir('./docker-compose.yml')).toBe('')
+    expect(composeFileDir('deploy/docker-compose.yml')).toBe('deploy')
+    expect(composeFileDir('a/b/compose.yaml')).toBe('a/b')
+    expect(composeFileDir('deploy\\compose.yaml')).toBe('deploy')
+  })
+})
+
+describe('composeProbeFailure', () => {
+  it('leads with the remedy and flattens the captured output onto one line', () => {
+    // The verdict renders as a paragraph that collapses newlines, so a multi-line stderr spliced
+    // mid-sentence ran together and glued its own trailing period onto the next clause.
+    const message = composeProbeFailure(
+      'Start Docker.',
+      'permission denied while trying to connect.\nIs the docker daemon running?\n',
+    )
+    expect(message).toBe(
+      'Start Docker. Docker reported: permission denied while trying to connect. Is the docker daemon running?',
+    )
+    expect(message).not.toContain('\n')
+  })
+
+  it('is the remedy alone when the command said nothing, with no dangling label', () => {
+    expect(composeProbeFailure('Start Docker.', '   \n\n')).toBe('Start Docker.')
+  })
+
+  it('names who is speaking, because a throw is not docker reporting anything', () => {
+    expect(
+      composeProbeFailure('Install Docker.', 'spawn docker ENOENT', 'The invocation failed with'),
+    ).toBe('Install Docker. The invocation failed with: spawn docker ENOENT')
+  })
+})
+
+describe('parseComposeEnvConfig — build mode', () => {
+  it('coerces the build flag + buildTimeoutMinutes from their string forms', () => {
+    const config = parseComposeEnvConfig(
+      manifestWith({ service: 'web', port: '8080', build: 'true', buildTimeoutMinutes: '20' }),
+    )
+    expect(config.build).toBe(true)
+    expect(config.buildTimeoutMs).toBe(20 * 60_000)
+  })
+
+  it('defaults build to false and leaves buildTimeoutMs undefined', () => {
+    const config = parseComposeEnvConfig(manifestWith({ service: 'web', port: '8080' }))
+    expect(config.build).toBe(false)
+    expect(config.buildTimeoutMs).toBeUndefined()
+  })
 })
 
 describe('prepareComposeProject', () => {
@@ -270,5 +491,522 @@ describe('renderEnvMap', () => {
     expect(renderEnvMap({ IMAGE: 'app:{{branch}}' }, { branch: 'main' })).toEqual({
       IMAGE: 'app:main',
     })
+  })
+})
+
+describe('extractExternalNetworks', () => {
+  it('resolves external networks from `external: true` and `external: { name }`, deduped', () => {
+    const doc = parse(
+      'networks:\n' +
+        '  a:\n    external: true\n' +
+        '  b:\n    external:\n      name: shared-bus\n' +
+        '  c:\n    external: true\n    name: shared-bus\n', // dup of b's resolved name
+    )
+    expect(extractExternalNetworks(doc)).toEqual(['a', 'shared-bus'])
+  })
+
+  it('ignores project-owned networks (`external: false` or absent)', () => {
+    const doc = parse('networks:\n  a:\n    external: false\n  b:\n    driver: bridge\n  c:\n')
+    expect(extractExternalNetworks(doc)).toEqual([])
+  })
+
+  it('does NOT treat a malformed array `external:` value as an external network', () => {
+    // `typeof [] === 'object'` — the guard must reject arrays, not fabricate a network named `a`.
+    const doc = parse('networks:\n  a:\n    external: []\n')
+    expect(extractExternalNetworks(doc)).toEqual([])
+  })
+})
+
+describe('extractComposeProfiles', () => {
+  it('unions + sorts every service profile label, handling a single-string profiles value', () => {
+    const doc = parse(
+      'services:\n' +
+        '  app:\n    profiles: [full]\n' +
+        '  peer:\n    profiles: [peer, backends]\n' +
+        '  solo:\n    profiles: extra\n', // single string, not a list
+    )
+    expect(extractComposeProfiles(doc)).toEqual(['backends', 'extra', 'full', 'peer'])
+  })
+})
+
+describe('attachExternalNetworks', () => {
+  it('declares each network external + joins every service, keeping default connectivity', () => {
+    const doc = parse('services:\n  web:\n    image: nginx\n  worker:\n    image: worker\n')
+    expect(attachExternalNetworks([doc], ['acme-net'])).toEqual([])
+    expect(doc.networks).toEqual({ 'acme-net': { external: true } })
+    // A service on no explicit network was on `default`; keep it and add the external one.
+    expect(doc.services.web.networks).toEqual(['default', 'acme-net'])
+    expect(doc.services.worker.networks).toEqual(['default', 'acme-net'])
+  })
+
+  it('unions into an array networks value without adding default (respects explicit scoping)', () => {
+    const doc = parse('services:\n  web:\n    image: nginx\n    networks: [frontend]\n')
+    attachExternalNetworks([doc], ['acme-net'])
+    expect(doc.services.web.networks).toEqual(['frontend', 'acme-net'])
+  })
+
+  it('adds keys to a long-form map networks value', () => {
+    const doc = parse(
+      'services:\n  web:\n    image: nginx\n    networks:\n      frontend:\n        aliases: [w]\n',
+    )
+    attachExternalNetworks([doc], ['acme-net'])
+    expect(doc.services.web.networks).toEqual({ frontend: { aliases: ['w'] }, 'acme-net': null })
+  })
+
+  it('skips a network the doc already declares external (leaves the author’s wiring alone)', () => {
+    const doc = parse(
+      'services:\n  web:\n    image: nginx\n    networks: [shared]\n' +
+        'networks:\n  shared:\n    external: true\n    name: acme-net\n',
+    )
+    attachExternalNetworks([doc], ['acme-net'])
+    // acme-net already resolves via the `shared` alias → untouched, no default re-added.
+    expect(doc.services.web.networks).toEqual(['shared'])
+    expect(doc.networks).toEqual({ shared: { external: true, name: 'acme-net' } })
+  })
+
+  it('does not attach to a service pinned to network_mode (compose forbids combining them)', () => {
+    const doc = parse('services:\n  web:\n    image: nginx\n    network_mode: host\n')
+    attachExternalNetworks([doc], ['acme-net'])
+    expect(doc.services.web.networks).toBeUndefined()
+    expect(doc.services.web.network_mode).toBe('host')
+    // Still declared top-level for any other service to reference.
+    expect(doc.networks).toEqual({ 'acme-net': { external: true } })
+  })
+
+  it('is a no-op for an empty network list', () => {
+    const doc = parse('services:\n  web:\n    image: nginx\n')
+    attachExternalNetworks([doc], [])
+    expect(doc.networks).toBeUndefined()
+    expect(doc.services.web.networks).toBeUndefined()
+  })
+
+  it('decides across MERGED layers: no default re-add, and skips a cross-layer network_mode', () => {
+    // `web` is scoped off `default` in the base and only env-tweaked in the override; `gw` is pinned
+    // to network_mode in the base and only env-tweaked in the override. A per-layer rewrite would
+    // re-add `default` to the override's `web` and add `networks` to the override's `gw` (which then
+    // merges into a forbidden network_mode + networks). The merged-stack pass avoids both.
+    const base = parse(
+      'services:\n  web:\n    image: nginx\n    networks: [frontend]\n' +
+        '  gw:\n    image: gw\n    network_mode: host\n',
+    )
+    const override = parse(
+      'services:\n  web:\n    environment:\n      - A=b\n  gw:\n    environment:\n      - C=d\n',
+    )
+    expect(attachExternalNetworks([base, override], ['acme-net'])).toEqual([])
+    // web: unioned beside its base scoping, NO default; the override layer is left alone.
+    expect(base.services.web.networks).toEqual(['frontend', 'acme-net'])
+    expect(override.services.web.networks).toBeUndefined()
+    // gw: network_mode in the base ⇒ never joins networks in any layer.
+    expect(base.services.gw.networks).toBeUndefined()
+    expect(base.services.gw.network_mode).toBe('host')
+    expect(override.services.gw.networks).toBeUndefined()
+    // Declared once, on the base layer.
+    expect(base.networks).toEqual({ 'acme-net': { external: true } })
+    expect(override.networks).toBeUndefined()
+  })
+
+  it('returns a blocking issue for a project-owned network of the same name (never clobbers it)', () => {
+    const doc = parse(
+      'services:\n  web:\n    image: nginx\n    networks: [acme-net]\n' +
+        'networks:\n  acme-net:\n    driver: bridge\n',
+    )
+    const issues = attachExternalNetworks([doc], ['acme-net'])
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toContain('acme-net')
+    expect(issues[0]).toContain('project-owned')
+    // The author's project-owned definition is left intact — NOT overwritten with { external: true }.
+    expect(doc.networks).toEqual({ 'acme-net': { driver: 'bridge' } })
+    expect(doc.services.web.networks).toEqual(['acme-net'])
+  })
+})
+
+describe('parseComposeEnvConfig — recipe', () => {
+  it('reads a persisted recipe off providerConfig (structural, not re-validated)', () => {
+    const recipe = { composeFiles: ['docker/dev.yml'], composeProfiles: ['backends'] }
+    const config = parseComposeEnvConfig(manifestWith({ service: 'web', port: '8080', recipe }))
+    expect(config.recipe).toEqual(recipe)
+  })
+  it('treats a non-object recipe as absent', () => {
+    const config = parseComposeEnvConfig(
+      manifestWith({ service: 'web', port: '8080', recipe: 'nope' }),
+    )
+    expect(config.recipe).toBeUndefined()
+  })
+  it('reads the host-command opt-in from its string form', () => {
+    expect(
+      parseComposeEnvConfig(
+        manifestWith({ service: 'web', port: '8080', allowHostCommands: 'true' }),
+      ).allowHostCommands,
+    ).toBe(true)
+    expect(
+      parseComposeEnvConfig(manifestWith({ service: 'web', port: '8080' })).allowHostCommands,
+    ).toBe(false)
+  })
+})
+
+describe('resolveRecipeComposeFiles', () => {
+  it('uses recipe.composeFiles in order when present, else falls back to composePath', () => {
+    expect(
+      resolveRecipeComposeFiles(
+        { composeFiles: ['docker/dev.yml', 'docker/dev.wsl.override.yml'] },
+        'x.yml',
+      ),
+    ).toEqual(['docker/dev.yml', 'docker/dev.wsl.override.yml'])
+    expect(resolveRecipeComposeFiles({}, 'docker-compose.yml')).toEqual(['docker-compose.yml'])
+    expect(resolveRecipeComposeFiles({ composeFiles: [] }, 'docker-compose.yml')).toEqual([
+      'docker-compose.yml',
+    ])
+  })
+})
+
+describe('rewrittenRecipeComposePath', () => {
+  it('prefixes the basename in the file’s own dir so it never clobbers the original', () => {
+    expect(rewrittenRecipeComposePath('docker/dev.yml')).toBe('docker/cat-factory.dev.yml')
+    expect(rewrittenRecipeComposePath('docker/dev.wsl.override.yml')).toBe(
+      'docker/cat-factory.dev.wsl.override.yml',
+    )
+    expect(rewrittenRecipeComposePath('docker-compose.yml')).toBe('cat-factory.docker-compose.yml')
+  })
+})
+
+describe('prepareRecipeComposeFiles', () => {
+  it('neutralizes host ports across layers + guarantees the probed service publishes', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text: 'services:\n  web:\n    image: nginx\n    ports:\n      - "8080:8080"\n  db:\n    image: postgres\n    ports:\n      - "5432:5432"\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  web:\n    environment:\n      - FOO=bar\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1 },
+    )
+    expect(prepared.issues).toEqual([])
+    expect(prepared.files.map((f) => f.path)).toEqual([
+      'docker/cat-factory.dev.yml',
+      'docker/cat-factory.dev.override.yml',
+    ])
+    const base = parse(prepared.files[0]!.content)
+    // Host ports stripped to ephemeral on every service; the probed service still publishes 8080.
+    expect(base.services.web.ports).toEqual(['8080'])
+    expect(base.services.db.ports).toEqual(['5432'])
+  })
+
+  it('flags a stack where no layer defines the probed service', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [{ path: 'docker-compose.yml', text: 'services:\n  api:\n    image: nginx\n' }],
+      'web',
+      8080,
+      { baseDepth: 0 },
+    )
+    expect(prepared.issues.some((i) => i.includes("no service named 'web'"))).toBe(true)
+  })
+
+  it('refuses a checkout-escaping bind mount (host-filesystem escape), prefixed by file', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text: 'services:\n  web:\n    image: nginx\n    volumes:\n      - ../../etc:/host\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1 },
+    )
+    expect(
+      prepared.issues.some((i) => i.startsWith('docker/dev.yml:') && i.includes('escape')),
+    ).toBe(true)
+  })
+
+  it('attaches the project to a shared stack network the compose does not declare', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [{ path: 'docker-compose.yml', text: 'services:\n  web:\n    image: nginx\n' }],
+      'web',
+      8080,
+      { baseDepth: 0, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues).toEqual([])
+    const doc = parse(prepared.files[0]!.content)
+    expect(doc.networks).toEqual({ 'acme-net': { external: true } })
+    expect(doc.services.web.networks).toEqual(['default', 'acme-net'])
+  })
+
+  it('leaves an override layer alone when the base already declares the external network', () => {
+    // The base wires acme-net (external) + scopes `web` to it (no default); the override just tweaks
+    // env. Because acme-net is external in the MERGED stack, NEITHER layer re-attaches it — so the
+    // override never re-adds `default` to a service the base intentionally scoped.
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text:
+            'services:\n  web:\n    image: nginx\n    networks: [acme-net]\n' +
+            'networks:\n  acme-net:\n    external: true\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  web:\n    environment:\n      - FOO=bar\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues).toEqual([])
+    const base = parse(prepared.files[0]!.content)
+    const override = parse(prepared.files[1]!.content)
+    expect(base.services.web.networks).toEqual(['acme-net'])
+    // The override service was NOT given a networks key (no default re-added, no re-declaration).
+    expect(override.services.web.networks).toBeUndefined()
+    expect(override.networks).toBeUndefined()
+  })
+
+  it('attaches a NEW network across layers without re-adding default to a scoped service', () => {
+    // acme-net is NOT declared external anywhere (a shared-stack managed net), so it IS attached. The
+    // base scopes `web` off `default`; the override only tweaks env. The attach must land beside the
+    // base's scoping and leave the override alone, so the merged `web` never rejoins `default`.
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text: 'services:\n  web:\n    image: nginx\n    networks: [frontend]\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  web:\n    environment:\n      - FOO=bar\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues).toEqual([])
+    const base = parse(prepared.files[0]!.content)
+    const override = parse(prepared.files[1]!.content)
+    expect(base.services.web.networks).toEqual(['frontend', 'acme-net'])
+    expect(override.services.web.networks).toBeUndefined()
+    expect(base.networks).toEqual({ 'acme-net': { external: true } })
+  })
+
+  it('does not combine network_mode + networks when they are split across layers', () => {
+    // `gw` is pinned to network_mode in the base and only env-tweaked in the override. Attaching a new
+    // network per-layer would add `networks` to the override's `gw`, merging into a config compose
+    // rejects (network_mode + networks). The merged-stack decision skips `gw` in every layer.
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text:
+            'services:\n  web:\n    image: nginx\n' +
+            '  gw:\n    image: gw\n    network_mode: host\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  gw:\n    environment:\n      - X=1\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues).toEqual([])
+    const base = parse(prepared.files[0]!.content)
+    const override = parse(prepared.files[1]!.content)
+    expect(base.services.gw.network_mode).toBe('host')
+    expect(base.services.gw.networks).toBeUndefined()
+    expect(override.services.gw.networks).toBeUndefined()
+    // The probed service still attaches normally.
+    expect(base.services.web.networks).toEqual(['default', 'acme-net'])
+  })
+
+  it('fails with a blocking issue when an attach network collides with a project-owned one', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker-compose.yml',
+          text:
+            'services:\n  web:\n    image: nginx\n    networks: [acme-net]\n' +
+            'networks:\n  acme-net:\n    driver: bridge\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 0, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues.some((i) => i.includes('acme-net') && i.includes('project-owned'))).toBe(
+      true,
+    )
+  })
+})
+
+describe('recipeCheckoutPathIssues', () => {
+  it('flags every checkout-escaping recipe path but allows in-checkout relatives', () => {
+    const recipe: StackRecipe = {
+      envFiles: [
+        { template: '.env.dev.local-dist', target: '.env.dev.local' }, // ok
+        { template: '/etc/passwd', target: '.env' }, // escape (absolute)
+      ],
+      setupSteps: [
+        { kind: 'copy-file', name: 'ok copy', from: 'a/.split.dist', to: 'a/.split.yaml' },
+        {
+          kind: 'compose-exec',
+          name: 'seed',
+          service: 'db',
+          command: ['sh'],
+          stdinFile: '../../secret.sql',
+        },
+        { kind: 'host-command', name: 'host', command: ['echo'], workdir: 'sub' },
+        { kind: 'wait-file', name: 'wait ct', path: '/app/manifest.json', service: 'web' }, // container-absolute: skipped
+      ],
+    }
+    const issues = recipeCheckoutPathIssues(recipe)
+    expect(issues.some((i) => i.includes('/etc/passwd'))).toBe(true)
+    expect(issues.some((i) => i.includes('secret.sql'))).toBe(true)
+    // The in-checkout relatives + the container-target wait-file raise nothing.
+    expect(issues.some((i) => i.includes('.env.dev.local-dist'))).toBe(false)
+    expect(issues.some((i) => i.includes('manifest.json'))).toBe(false)
+  })
+  it('flags a checkout-escaping composeFiles layer (written back + feeds --project-directory)', () => {
+    const issues = recipeCheckoutPathIssues({
+      composeFiles: ['docker/dev.yml', '../../evil/dev.yml'],
+    })
+    expect(issues.some((i) => i.includes('../../evil/dev.yml'))).toBe(true)
+    expect(issues.some((i) => i.includes('docker/dev.yml'))).toBe(false)
+  })
+  it('ignores teardownStep paths (teardown execution is deferred)', () => {
+    const issues = recipeCheckoutPathIssues({
+      teardownSteps: [{ kind: 'copy-file', name: 'td', from: '/etc/passwd', to: '.env' }],
+    })
+    expect(issues).toEqual([])
+  })
+})
+
+describe('composeSourceEscapeIssues', () => {
+  it('judges each layer on the path it will be MATERIALIZED at', () => {
+    // A generated path is escape-free by construction however hostile the source path is — it is
+    // reduced to a sanitized filename stem under the project dir — so only a layer that NAMES its
+    // own landing spot can escape.
+    expect(
+      composeSourceEscapeIssues([
+        'docker/dev.yml',
+        { kind: 'inline', content: 's' },
+        { kind: 'repo', repo: 'acme/infra', path: '../../../etc/passwd' },
+      ]),
+    ).toEqual([])
+
+    const escaping = composeSourceEscapeIssues([
+      { kind: 'inline', content: 's', path: '../../evil.yml' },
+    ])
+    expect(escaping).toHaveLength(1)
+    expect(escaping[0]).toContain('escapes the checkout')
+  })
+
+  it('is independent of layer ORDER — the verdict never depends on which layer wins the anchor', () => {
+    // Judged at the strictest anchor (project dir ''), so reordering a list can't turn an escaping
+    // layer into an allowed one by giving it a deeper directory to climb out of.
+    const inline = { kind: 'inline', content: 's', path: '../out.yml' } as const
+    expect(composeSourceEscapeIssues([inline, 'a/b/c/dev.yml'])).toHaveLength(1)
+    expect(composeSourceEscapeIssues(['a/b/c/dev.yml', inline])).toHaveLength(1)
+  })
+})
+
+describe('recipeProfilesEnv', () => {
+  it('comma-joins profiles into COMPOSE_PROFILES, or {} when none', () => {
+    expect(recipeProfilesEnv({ composeProfiles: ['backends', 'peer'] })).toEqual({
+      COMPOSE_PROFILES: 'backends,peer',
+    })
+    expect(recipeProfilesEnv({})).toEqual({})
+  })
+})
+
+describe('recipeStepTimeoutMs', () => {
+  it('prefers the step’s own timeout, else a per-kind default', () => {
+    expect(
+      recipeStepTimeoutMs({
+        kind: 'compose-exec',
+        name: 's',
+        service: 'a',
+        command: ['x'],
+        timeoutMs: 1000,
+      }),
+    ).toBe(1000)
+    expect(
+      recipeStepTimeoutMs({ kind: 'compose-exec', name: 's', service: 'a', command: ['x'] }),
+    ).toBe(DEFAULT_RECIPE_STEP_TIMEOUT_MS)
+    expect(recipeStepTimeoutMs({ kind: 'wait-http', name: 'w', url: 'http://x' })).toBe(
+      DEFAULT_RECIPE_WAIT_TIMEOUT_MS,
+    )
+    // An explicit `0` is honored, not treated as unset (`??`, not truthiness).
+    expect(
+      recipeStepTimeoutMs({
+        kind: 'compose-exec',
+        name: 's',
+        service: 'a',
+        command: ['x'],
+        timeoutMs: 0,
+      }),
+    ).toBe(0)
+  })
+})
+
+describe('composeExecArgs / waitFileExecArgs', () => {
+  it('builds a non-interactive exec with optional user + workdir', () => {
+    expect(
+      composeExecArgs(['-p', 'proj'], {
+        service: 'app',
+        command: ['bin/console', 'migrate'],
+        user: 'www',
+        workdir: '/app',
+      }),
+    ).toEqual([
+      '-p',
+      'proj',
+      'exec',
+      '-T',
+      '--user',
+      'www',
+      '--workdir',
+      '/app',
+      'app',
+      'bin/console',
+      'migrate',
+    ])
+    expect(composeExecArgs(['-p', 'proj'], { service: 'app', command: ['ls'] })).toEqual([
+      '-p',
+      'proj',
+      'exec',
+      '-T',
+      'app',
+      'ls',
+    ])
+  })
+  it('builds a `test -f` probe for a container wait-file', () => {
+    expect(waitFileExecArgs(['-p', 'proj'], 'ui', '/app/manifest.json')).toEqual([
+      '-p',
+      'proj',
+      'exec',
+      '-T',
+      'ui',
+      'test',
+      '-f',
+      '/app/manifest.json',
+    ])
+  })
+})
+
+describe('matchesHttpExpectation', () => {
+  it('accepts any 2xx by default, an exact expected status, and a required body substring', () => {
+    expect(matchesHttpExpectation(200, '', {})).toBe(true)
+    expect(matchesHttpExpectation(500, '', {})).toBe(false)
+    expect(matchesHttpExpectation(204, '', { expectStatus: 204 })).toBe(true)
+    expect(matchesHttpExpectation(200, '', { expectStatus: 204 })).toBe(false)
+    expect(matchesHttpExpectation(200, 'all good', { expectBodyContains: 'good' })).toBe(true)
+    expect(matchesHttpExpectation(200, 'nope', { expectBodyContains: 'good' })).toBe(false)
   })
 })

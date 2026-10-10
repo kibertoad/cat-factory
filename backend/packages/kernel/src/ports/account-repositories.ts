@@ -22,12 +22,20 @@ export interface AccountRecord {
    * override it per-frame). Absent ⇒ the built-in {@link DEFAULT_CLOUD_PROVIDER}.
    */
   defaultCloudProvider?: CloudProvider
+  /**
+   * The account-tier monthly spend budget (base pricing currency). Absent/null ⇒ no
+   * account-level limit; the effective account budget then falls back to the operator
+   * env cap if set, else unlimited. See the tiered-budgets initiative.
+   */
+  spendMonthlyLimit?: number | null
 }
 
 /** Mutable account settings a member-owner can change (see {@link AccountRepository.updateSettings}). */
 export interface AccountSettingsPatch {
   /** `null` clears the override (back to the built-in default); `undefined` leaves it. */
   defaultCloudProvider?: CloudProvider | null
+  /** Account-tier monthly budget; `null` clears the limit, `undefined` leaves it. */
+  spendMonthlyLimit?: number | null
 }
 
 export interface Membership {
@@ -47,6 +55,17 @@ export interface AccountRepository {
    */
   listByIds(ids: string[]): Promise<AccountRecord[]>
   create(account: AccountRecord): Promise<void>
+  /**
+   * Atomically get-or-create the given user's personal account, returning the surviving
+   * row. Idempotent under concurrency: the partial unique index on personal accounts
+   * (one per owner, `WHERE type = 'personal'`) is the arbiter, so concurrent first-sign-in
+   * callers all resolve to the SAME account instead of racing to a duplicate-key error
+   * (the check-then-`create` 500 on a fresh DB this replaces). The passed record is inserted
+   * only when none exists yet; an existing personal account is returned untouched (its name
+   * and settings are preserved). `account.ownerUserId` must be set (it always is for a
+   * personal account).
+   */
+  ensurePersonal(account: AccountRecord): Promise<AccountRecord>
   rename(id: string, name: string): Promise<void>
   /** Apply a settings patch (today: the default cloud provider). A no-op for an empty patch. */
   updateSettings(id: string, patch: AccountSettingsPatch): Promise<void>

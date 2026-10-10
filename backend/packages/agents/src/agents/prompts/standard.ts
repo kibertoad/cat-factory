@@ -4,10 +4,37 @@
 // compiler is not pulled into the bundle.
 import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
-import type { AgentRunContext } from '@cat-factory/kernel'
-import { CONTEXT_BUDGET, estimateTokens, renderTaskContext } from '@cat-factory/kernel'
+import type { AgentRunContext, DesignImageUnavailableReason } from '@cat-factory/kernel'
+import {
+  AGENT_CONTEXT_DIR,
+  BINARY_GENERATED_PATH,
+  CONTEXT_BUDGET,
+  estimateTokens,
+  freshnessHeaderLines,
+  originSuffix,
+  renderTaskContext,
+} from '@cat-factory/kernel'
+// The ONE deriver of an environment URL's host/port/scheme, in contracts because the platform has
+// to DIAL exactly what this prompt tells the agent to dial: a second parser here is how the route
+// proof and the Tester's coordinates come to disagree about the same string.
+import { deriveEnvironmentCoordinates, isTesterKind } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
-import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
+import { renderOpenFindings } from './review-rounds.js'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+// The platform's statements about a live environment it did not stand up: shared verbatim with
+// the environment dry run, which exists to predict what a tester will be handed.
+import {
+  DEFAULT_CREDENTIAL_GAP_GUIDANCE,
+  IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
+  environmentAccessLines,
+  testCredentialLines,
+  testingContextLines,
+  type TestingContextBrief,
+} from './environment-under-test.js'
+// "Is this kind's deliverable its reply, or a pushed commit?": the declaration that decides where
+// it can record a credential gap at all.
+import { deliverableIsReply } from '../kinds/container-surface.js'
+import type { AgentKindRegistry } from '../kinds/registry.js'
 import * as templateSpecs from './standard-templates.generated.js'
 
 const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
@@ -20,15 +47,14 @@ const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
 //
 // Integration with the best-practice fragment system is by composition, not
 // duplication: the phase system prompt is the BASE that `composeSystemPrompt`
-// appends the user's selected fragment bodies onto, and each phase prompt
-// explicitly tells the agent to treat those appended standards as hard
-// requirements. So "what the agent should do" lives here and "which extra
-// standards apply" stays in @cat-factory/prompt-fragments.
+// appends the user's selected fragment bodies onto, and the FOLD carries the
+// imperative that they are hard requirements (`STANDARDS_SECTION_OPENER`), so a phase that
+// resolved no standards ends without a pointer to a section nobody injected. So
+// "what the agent should do" lives here and "which extra standards apply" stays in
+// @cat-factory/prompt-fragments.
 
 /** The four standard phases of building out a solution. */
 export type StandardPhase = 'design' | 'build' | 'review' | 'test'
-
-export const STANDARD_PHASES: readonly StandardPhase[] = ['design', 'build', 'review', 'test']
 
 /**
  * Maps the built-in agent kinds to the standard phase they perform. Other agent
@@ -51,8 +77,9 @@ export function phaseForKind(kind: AgentKind): StandardPhase | undefined {
 }
 
 // --- System prompts -------------------------------------------------------
-// Static role + approach guidance per phase. Each closes by deferring to the
-// best-practice standards that `composeSystemPrompt` appends below it.
+// Static role + approach guidance per phase. Any best-practice standards the block
+// selected are folded in below by `composeSystemPrompt`, which introduces its own
+// section rather than being announced from here.
 
 // The build phase runs in a container on a real checkout and ships its code through
 // a pull request — but the PUSH and the PR are the platform's job, not the agent's
@@ -79,8 +106,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- End with a short, ordered list of concrete implementation steps.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   build: [
     'You are a senior engineer owning the BUILD of a building block.',
@@ -92,11 +117,11 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Handle errors and edge cases explicitly; validate input at the boundary.',
     '- Keep the implementation cohesive and minimal — no speculative abstraction.',
     '- Note any follow-ups or assumptions you had to make.',
+    '- If the task context pins a CHOSEN IMPLEMENTATION APPROACH, implement that approach faithfully — do not silently switch to an alternative; if it proves unworkable, surface a follow-up rather than drifting into a rejected alternative.',
     '- If the task context flags it as TECHNICAL (a refactor / non-functional / internal change), the task definition and any incorporated requirements are the PRIMARY source of truth: implement to them, and treat the committed `spec/` only as a regression-spotting reference (do not invent behaviour to match a spec the task did not ask to change). Otherwise the specification leads as usual.',
+    '- The committed `spec/` splits its requirements by IMPLEMENTATION STATE, and the two halves mean opposite things. Requirements under an "established" heading are STANDING behaviour the service already honours: keep them working, and treat breaking one as a regression. Requirements under an "aspirational (not yet built)" heading are agreed but NOT yet true: do NOT assume the code already does them, do NOT read their absence as a bug to fix, and do NOT implement one unless THIS task asks for it. Building an aspirational requirement nobody asked you for is scope you were not given.',
     '',
     BUILD_DELIVERY_GATE,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   review: [
     'You are a meticulous code reviewer owning the REVIEW of a building block.',
@@ -110,8 +135,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- If the work is sound, say so explicitly rather than inventing problems.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   test: [
     'You are a pragmatic test engineer owning the TESTING of a building block.',
@@ -125,8 +148,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Flag anything that is hard to test and how the design could change to fix that.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
 }
 
@@ -165,7 +186,16 @@ interface UserPromptView {
   pipelineName: string
   block: { title: string; type: string; description: string }
   decisions: { question: string; chosen: string }[]
-  priorOutputs: { agentKind: string; output: string }[]
+  /**
+   * `openFindingsText` is the unanswered review findings against that output, ALREADY RENDERED.
+   *
+   * Rendered here rather than in the template because the rules that shape it (worst severity
+   * first, how a point names its anchor, the trim that states itself) are the same rules the
+   * bespoke-kind path applies through {@link renderOpenFindings}, and Handlebars would need its
+   * own copy of every one of them. A second copy is how the two prompt paths come to grade the
+   * same finding differently. The template places the string; it does not decide anything about it.
+   */
+  priorOutputs: { agentKind: string; output: string; openFindingsText?: string }[]
 }
 
 function toView(context: AgentRunContext): UserPromptView {
@@ -181,45 +211,65 @@ function toView(context: AgentRunContext): UserPromptView {
       description: context.block.description,
     },
     decisions,
-    priorOutputs: context.priorOutputs,
+    priorOutputs: context.priorOutputs.map((prior) => {
+      const findings = renderOpenFindings(prior.agentKind, prior.openFindings ?? []).join('\n')
+      return {
+        agentKind: prior.agentKind,
+        output: prior.output,
+        // Absent rather than empty when the reviewer left nothing standing: the template
+        // interpolates it straight after the output, and an empty string is what "renders to
+        // nothing" has to be, while a missing KEY is what "there was no review" has to be.
+        ...(findings ? { openFindingsText: findings } : {}),
+      }
+    }),
   }
-}
-
-/** The reachable coordinates of a provisioned environment, parsed from its URL. */
-interface EnvironmentCoordinates {
-  host: string
-  /** Port — explicit from the URL, else the scheme default (443/80), else null. */
-  port: number | null
-  /** URL scheme without the trailing colon (e.g. `https`). */
-  scheme: string
 }
 
 /**
- * Derive standardized coordinates from an environment URL, or null when there is no URL or
- * it does not parse. Having one deriver means the Tester prompt gets a consistent
- * host/port/scheme breakdown regardless of which provider stood the environment up — no
- * per-provider change required. When the URL omits an explicit port, fall back to the
- * scheme default (`https`→443, `http`→80) so the Tester always has a concrete port.
+ * What the platform already established about REACHING this environment, as prompt lines.
+ *
+ * The one thing a tester could never work out for itself, and the reason it reported the wrong
+ * layer: a connection failure covers a name that resolves nowhere, a route that does not carry and
+ * a port with nothing listening, and from inside a container those are one undifferentiated
+ * symptom. Saying which of them the platform already ruled out turns "the environment is down"
+ * from the salient hypothesis into a claim the agent has evidence against.
+ *
+ * The address is stated even where the container was given the mapping, which is deliberate: an
+ * agent that can see the address can dial it directly (`curl --resolve`) when its own runtime could
+ * not install a hosts entry, and a mapping it does not know about is a mapping it cannot reason
+ * about when something else goes wrong.
+ *
+ * Silent for the ordinary case (the name carried), because a line that appears on every prompt is
+ * a line nobody reads on the one prompt where it matters.
  */
-function deriveEnvironmentCoordinates(
-  url: string | null | undefined,
-): EnvironmentCoordinates | null {
-  if (!url) return null
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return null
+export function reachabilityLines(
+  reachability: NonNullable<AgentRunContext['environment']>['reachability'],
+): string[] {
+  if (!reachability) return []
+  if (reachability.state === 'inconclusive') {
+    // The platform LOOKED and could not tell, which is a different thing from having no prober
+    // (that case reaches here as no note at all) and the one worth a line: an agent told only
+    // "connection failed" reaches for "the environment is down", and this is the sentence that
+    // makes that a hypothesis rather than the conclusion.
+    return [
+      '- Reachability: the platform TRIED to reach this environment and could not establish ' +
+        `anything either way (${reachability.reason ?? 'unknown cause'}` +
+        `${reachability.detail ? `: ${reachability.detail}` : ''}). Treat a connection failure ` +
+        'as unexplained rather than as evidence the environment is down.',
+    ]
   }
-  const scheme = parsed.protocol.replace(/:$/, '')
-  const port = parsed.port
-    ? Number(parsed.port)
-    : scheme === 'https'
-      ? 443
-      : scheme === 'http'
-        ? 80
-        : null
-  return { host: parsed.hostname, port, scheme }
+  if (reachability.state === 'not_reached') {
+    return [
+      `- Reachability: the platform could NOT reach this environment (${reachability.reason ?? 'unknown cause'}).`,
+    ]
+  }
+  if (!reachability.address) return []
+  return [
+    `- Reachability: the platform reached this environment at ${reachability.address}, NOT by ` +
+      'resolving its hostname (which resolves nowhere from here). Your container is normally ' +
+      'given that mapping; if a request still fails to resolve, dial the address directly and ' +
+      'keep the Host header as the URL above (the ingress routes on it).',
+  ]
 }
 
 /**
@@ -234,7 +284,7 @@ function deriveEnvironmentCoordinates(
  * they go straight into the prompt rather than a fictional "out of band" path (the empty
  * version of which is exactly what left earlier Testers unable to reach the environment).
  */
-export function environmentSection(context: AgentRunContext): string {
+export function environmentSection(context: AgentRunContext, registry: AgentKindRegistry): string {
   const env = context.environment
   if (!env) return ''
   const coords = deriveEnvironmentCoordinates(env.url)
@@ -245,18 +295,234 @@ export function environmentSection(context: AgentRunContext): string {
     )
   }
   lines.push(`- Status: ${env.status}`)
-  const access = env.access
-  if (access && access.scheme !== 'none') {
-    if (access.scheme === 'bearer' && access.token) {
-      lines.push(`- Auth: Bearer token \`${access.token}\` (send as \`Authorization: Bearer …\`)`)
-    } else if (access.scheme === 'basic' && access.username !== undefined) {
-      lines.push(
-        `- Auth: HTTP Basic — username \`${access.username}\`, password \`${access.password ?? ''}\``,
-      )
-    } else if (access.scheme === 'custom_header' && access.headerName) {
-      lines.push(`- Auth: header \`${access.headerName}: ${access.headerValue ?? ''}\``)
-    }
+  lines.push(...reachabilityLines(env.reachability))
+  // The SAME renderer the dry run's prober uses, so the two cannot disagree about what the
+  // provider stated. It renders the two states this section used to drop, and both are states an
+  // agent otherwise mis-attributes: an environment declared OPEN reads as one whose credential
+  // never arrived, and a scheme declared with nothing usable behind it reads as a broken service.
+  //
+  // The GAP GUIDANCE is per kind, because this section is not a tester's: it rides every prompt a
+  // live environment reaches. A gap has to be recorded somewhere the kind actually writes, and
+  // `deliverableIsReply` is the declaration that answers which. An implementer told to "record it
+  // as a failure" reads an instruction to stop and file a report instead of building.
+  lines.push(
+    ...environmentAccessLines(
+      env.access,
+      deliverableIsReply(context.agentKind, registry)
+        ? DEFAULT_CREDENTIAL_GAP_GUIDANCE
+        : IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
+    ),
+  )
+  return lines.join('\n')
+}
+
+/**
+ * Render the "involved services" section from the run context — the connected services directly
+ * involved in this task beyond its own (the connections initiative), each with the connection
+ * `description` prose explaining the relationship and (when live this run) the URL of its ephemeral
+ * environment. Empty string when the task names no (still-valid) involved services. Lets a
+ * cross-service test / change reason about the peer and reach its real environment.
+ */
+/**
+ * Render the service the work BELONGS to — the enclosing service frame's title and description.
+ *
+ * Unlike every other section here this one renders when the value is ABSENT too, and that is the
+ * point. A block's own title and description are the only subject an agent gets, and a short one
+ * ("implement webhooks") names no system; with the owning service silently omitted, that reads
+ * exactly like a task whose product is obvious from context, so a model fills the gap itself and
+ * states the invention as confidently as a fact. Naming the absence turns "I must work out what
+ * this is about" into "the platform did not tell me", which is a thing an agent can report instead
+ * of paper over (see the `NO_ASSUMED_PRODUCT` directive, which this section is the input to).
+ *
+ * Empty for a FRAME-level run, where the block under work IS the service and its own title already
+ * answers the question, and for a context that never populated the field.
+ */
+export function ownServiceSection(context: AgentRunContext): string {
+  const own = context.ownService
+  if (!own) return ''
+  if (!own.stated) {
+    if (own.reason === 'block-is-the-service') return ''
+    return (
+      '\n\nThe system this work belongs to: NOT STATED — this work is not under a service on the ' +
+      'board, so no owning system, product or domain was resolved for it. Work only from the ' +
+      'title and description above; do not infer a product, vendor or domain they do not name.'
+    )
   }
+  const lines = ['', `The system this work belongs to: ${own.title}`]
+  if (own.description?.trim()) lines.push(own.description.trim())
+  return `\n${lines.join('\n')}`
+}
+
+export function involvedServicesSection(context: AgentRunContext): string {
+  const involved = context.involvedServices
+  if (!involved?.length) return ''
+  const lines = ['', 'Involved connected services:']
+  for (const service of involved) {
+    const parts = [`- ${service.title}`]
+    if (service.description) parts.push(`— ${service.description}`)
+    if (service.envUrl) parts.push(`(live environment: ${service.envUrl})`)
+    parts.push(...peerReachabilityParts(service.envReachability))
+    lines.push(parts.join(' '))
+  }
+  return lines.join('\n')
+}
+
+/**
+ * What the platform established about reaching ONE peer's environment, as a parenthetical.
+ *
+ * Every state gets a clause, including the two that carry no address, and that is the whole point:
+ * a peer's environment fails in exactly the same way the run's own does and reads as exactly the
+ * same "the environment is down". Stating only the carrying address left a peer the platform could
+ * not reach rendering as a plain healthy URL, so a cross-service tester spent its step on
+ * connection failures and reported the peer as down. Silent only for the ordinary case, where the
+ * peer's own name carried.
+ */
+function peerReachabilityParts(
+  reachability: NonNullable<AgentRunContext['involvedServices']>[number]['envReachability'],
+): string[] {
+  if (!reachability) return []
+  if (reachability.state === 'not_reached') {
+    return [
+      `(the platform could NOT reach this peer: ${reachability.reason ?? 'unknown cause'}. A ` +
+        `connection failure against it is expected and is NOT evidence about your own service)`,
+    ]
+  }
+  if (reachability.state === 'inconclusive') {
+    return [
+      `(the platform could not establish whether this peer is reachable: ` +
+        `${reachability.reason ?? 'unknown cause'}. Treat a connection failure against it as ` +
+        `unexplained)`,
+    ]
+  }
+  return reachability.address ? [`(reachable at ${reachability.address}, not by hostname)`] : []
+}
+
+/**
+ * Render the SENSITIVE test-credentials section: the keys + descriptions of the secrets the
+ * platform injected into the container ENVIRONMENT out of band. Only the non-secret KEY +
+ * DESCRIPTION appear here; the VALUE reaches the container as an environment variable (`$KEY`),
+ * never the prompt, so the agent is told what is available and how to use it without the secret
+ * ever being written into the prompt or telemetry.
+ *
+ * Rendered from the same {@link TestCredentialBrief} state, through the same renderer, as the
+ * environment DRY RUN's credentials section. That is what makes a dry run predictive: it reports
+ * whether an agent handed this environment could authenticate, and it can only predict the
+ * tester's answer if the tester is told the same thing. It also means the three states are STATED
+ * rather than collapsed: an unreadable store used to reach a tester as an absent section, which
+ * reads as "this service has none configured" and sends someone to re-enter secrets that are
+ * already there.
+ *
+ * Empty string only for a kind that is handed no credentials at all (every non-tester run), so
+ * those prompts stay byte-identical.
+ */
+export function testSecretsSection(context: AgentRunContext): string {
+  const brief = context.testSecrets
+  if (!brief) return ''
+  const lines = ['', 'Sensitive test credentials for this service:']
+  return [...lines, ...testCredentialLines(brief)].join('\n')
+}
+
+/**
+ * Render the service's own TESTING CONTEXT: the prose its team wrote on the board about how this
+ * service is tested, injected verbatim.
+ *
+ * Gated on the KIND rather than on the value, unlike its neighbours: the context rides
+ * `context.service` (service-frame configuration, resolved for every dispatch), so the decision
+ * about who is told it belongs here. Only the testers are, which is what keeps every other prompt
+ * byte-identical, and the environment dry run's prober is told the same text through the same
+ * renderer so its verdict predicts theirs.
+ *
+ * The EMPTY case is rendered too, for the reason {@link testingContextLines} states: an agent that
+ * was never told the field exists cannot report that nobody filled it in. Which is why the
+ * NO-SERVICE case may not borrow that wording, and why the heading moves with it: work that sits
+ * under no service frame has nobody who could have left the field blank, and told otherwise a
+ * tester files the platform's own gap as some service's negligence.
+ */
+export function testingContextSection(context: AgentRunContext): string {
+  if (!isTesterKind(context.agentKind)) return ''
+  const brief = testingContextBrief(context)
+  const heading =
+    brief.service === 'resolved' ? 'Testing context for this service:' : 'Testing context:'
+  return ['', heading, ...testingContextLines(brief)].join('\n')
+}
+
+/**
+ * Which of the renderer's states this run is in, read off `ownService`: the DISCRIMINATED result
+ * the engine derives from the same ancestry walk that resolves `service`, and the only field that
+ * tells "no frame was found" from "the frame recorded nothing".
+ *
+ * `block-is-the-service` counts as RESOLVED: a frame-level run's own block IS the service, so the
+ * prose, and its absence, belong to it. An `ownService` missing altogether counts as resolved too,
+ * matching what that field's contract says about a caller which never populates it: the engine
+ * always does, so the only contexts affected are hand-built ones, and there the blank-field
+ * wording is what this section rendered before the third branch existed.
+ */
+function testingContextBrief(context: AgentRunContext): TestingContextBrief {
+  const own = context.ownService
+  if (own && !own.stated && own.reason === 'not-under-a-service') return { service: 'unresolved' }
+  return { service: 'resolved', context: context.service?.testingContext }
+}
+
+/**
+ * Render the initiative-PRESET steering section — the `## Initiative preset: <label>` header plus
+ * the preset's per-agent-kind `promptAddition` (already resolved for the running kind by the
+ * engine's context builder). This is the standing, preset-level methodology an org attaches to a
+ * kind; on an initiative-SPAWNED run (coder / tester / a custom kind) it is the vehicle that
+ * carries that methodology into the child's prompt (D1) — item-level specifics ride the block
+ * `description` instead. Empty string when the run carries no preset addition (every
+ * non-initiative run, and initiative runs whose preset contributes no addition for this kind), so
+ * the prompt stays byte-for-byte unchanged. The preset's `phaseTemplate` is deliberately NOT
+ * rendered here — it is the planner's "required plan shape", folded only into the planner prompt.
+ * Shared by the standard-phase prompt, the generic custom-kind prompt, and the planning prompts so
+ * the section text has a single source of truth.
+ */
+export function initiativePresetSection(context: AgentRunContext): string {
+  const preset = context.initiative?.preset
+  const addition = preset?.promptAddition?.trim()
+  if (!preset || !addition) return ''
+  return ['', `## Initiative preset: ${preset.label}`, '', addition].join('\n')
+}
+
+/**
+ * Render the custom task type's collected PARAMETERS: the per-case brief a reusable operation was
+ * invoked with ("expose CRUD for entity Order", "auth: service-to-service"). The engine resolves
+ * the projection once per dispatch ({@link AgentRunContext.customTaskType}); this only formats it,
+ * so the container, inline and consensus paths render one thing.
+ *
+ * APPENDED after the block-context template rather than prepended: the requester's own title and
+ * description stay the primary statement of what is wanted, and the parameters qualify it. Empty
+ * string on every run that collected none (each built-in type, and a custom type with no fields),
+ * so every existing prompt is byte-for-byte unchanged.
+ *
+ * A field whose descriptor is gone renders under its raw key. The projection is
+ * value-authoritative, and this must not second-guess it by hiding what it could not label.
+ *
+ * A MULTI-LINE value (a `textarea` field: the example operation's "anything else the design must
+ * honour") continues as an indented block under its label rather than inline, or its second line
+ * leaves the bullet list and its last one runs into the closing guidance below, reading as part of
+ * the platform's own instruction rather than as something the requester typed.
+ */
+export function customTaskTypeSection(context: AgentRunContext): string {
+  const custom = context.customTaskType
+  if (!custom?.fields.length) return ''
+  const lines = ['', `## Task parameters (${custom.label})`, '']
+  for (const field of custom.fields) {
+    const label = field.label ?? field.key
+    // Split on either ending: a browser posts a textarea's newlines as CRLF, and a stray `\r` left
+    // mid-prompt is a character the model has to read past on every turn.
+    const valueLines = field.value.split(/\r?\n/)
+    if (valueLines.length === 1) {
+      lines.push(`- ${label}: ${valueLines[0]}`)
+      continue
+    }
+    lines.push(`- ${label}:`)
+    for (const line of valueLines) lines.push(`  ${line}`)
+  }
+  lines.push(
+    '',
+    'These are the values this task was created with. Treat them as the specifics of what to ' +
+      'deliver; they qualify the title and description above rather than replacing them.',
+  )
   return lines.join('\n')
 }
 
@@ -266,8 +532,133 @@ export function environmentSection(context: AgentRunContext): string {
  * container agent can read what it needs on demand rather than carrying every body in
  * its prompt. Kept in sync with the harness's own constant (executor-harness has no
  * dependency on this package).
+ *
+ * Re-exported from kernel rather than spelled again here: kernel RENDERS paths under this
+ * directory into the prompts it composes (the binary-generator brief), so a second literal at
+ * this layer would be a copy the harness contract suite pins while kernel's own goes unchecked.
  */
-export const CONTEXT_DIR = '.cat-context'
+export const CONTEXT_DIR = AGENT_CONTEXT_DIR
+
+/**
+ * Subdirectory of {@link CONTEXT_DIR} holding the REFERENCE DESIGN images a run was handed: the
+ * frames the task's linked designs retained plus the images a person uploaded against it.
+ *
+ * Named here because the tester prompt points the agent at it, and written by the harness, which
+ * depends on no workspace package. So, like {@link CONTEXT_DIR}, the constant exists twice and
+ * the two copies are pinned byte-for-byte by the harness's contract conformity suite. A drift
+ * would leave the agent looking in an empty directory beside a full one, which reads to it
+ * exactly like a task with no designs linked.
+ */
+export const REFERENCE_SCREENSHOT_DIR = `${CONTEXT_DIR}/reference-screenshots`
+
+/**
+ * Subdirectory of {@link CONTEXT_DIR} holding the design pictures a BUILDING kind was handed: the
+ * same artifacts {@link REFERENCE_SCREENSHOT_DIR} carries for a capture, delivered for the agent to
+ * LOOK at rather than to compare captures against.
+ *
+ * A separate directory rather than a shared one, because the two deliveries are capped differently
+ * and answer different questions: a tester reading the builder's six pictures would take them for
+ * the complete list of views to capture, and a builder reading the tester's twenty-four would spend
+ * its context on screens it was never asked to touch.
+ *
+ * Written by the harness, which depends on no workspace package, so (like {@link CONTEXT_DIR}) the
+ * constant exists twice and the copies are pinned byte-for-byte by the harness contract suite.
+ */
+export const DESIGN_RENDER_DIR = `${CONTEXT_DIR}/design-renders`
+
+/**
+ * Subdirectory of {@link CONTEXT_DIR} where a HARNESS-SERVED binary generator's output is staged
+ * for the agent to pick up and store.
+ *
+ * It exists because the alternative is worse in two distinct ways. Codex writes its `image_gen`
+ * output under `$CODEX_HOME` and exposes no path for it to the model, so an agent told to "upload
+ * what you generated" has nothing to act on; and `$CODEX_HOME` is where the run's decrypted
+ * subscription credential lives, so sending the agent to look there would point a
+ * prompt-injectable process at it. The harness redirects the tool's output here instead, and this
+ * is the ONE path the brief names.
+ *
+ * Under {@link CONTEXT_DIR}, so it inherits the git exclude that keeps a not-yet-uploaded artifact
+ * out of the `git add -A` a coding run ends with. Written by the harness, which depends on no
+ * workspace package, so (like {@link CONTEXT_DIR}) the constant exists twice and the copies are
+ * pinned byte-for-byte by the harness contract suite.
+ *
+ * The WHOLE path comes from kernel's own vocabulary rather than being reassembled here, because
+ * the brief the agent reads is rendered in kernel and this constant is what the contract suite
+ * pins: reassembling it would leave three copies of one path with only two of them checked, and a
+ * rename would ship green with the brief naming a directory nothing writes.
+ */
+export const GENERATED_BINARY_DIR = BINARY_GENERATED_PATH
+
+/**
+ * The design pictures this dispatch holds, and what became of them.
+ *
+ * Rendered from BOTH halves of the answer, which is why it is one section rather than a list the
+ * delivery path appends to: the engine resolved a set, and the dispatch either put it in front of
+ * the model or could not. Every outcome is stated, because on the agent's side an absent picture
+ * and a screen the design does not have are the same thing, and the difference decides whether it
+ * should ask for the design or get on with the description it has.
+ *
+ * Empty (so byte-identical to the prior prompt) for every run whose task links no design.
+ */
+export function designImagesSection(context: AgentRunContext): string {
+  const set = context.designImages
+  const delivery = context.designImageDelivery
+  if (!set?.files.length || !delivery) return ''
+  const views = set.files.map((file) =>
+    delivery.attached && delivery.channel === 'files'
+      ? `- \`${DESIGN_RENDER_DIR}/${file.fileName}\`: ${file.view}`
+      : `- ${file.view}`,
+  )
+  const lead = delivery.attached
+    ? delivery.channel === 'files'
+      ? [
+          `The design for this task is also available AS PICTURES, one file per view under`,
+          `\`${DESIGN_RENDER_DIR}/\`. Open them and build what they show: they are the design`,
+          'itself, where the text description is a rendering of it.',
+        ]
+      : [
+          'The design for this task is also attached to this message AS PICTURES, one per view, in',
+          'the order listed below. Look at them and work from what they show: they are the design',
+          'itself, where the text description is a rendering of it.',
+        ]
+    : [
+        'This task has design pictures the platform could NOT put in front of you:',
+        `${DESIGN_IMAGE_REFUSALS[delivery.reason]}.`,
+        'Work from the textual design description above. Do not ask for the images and do not try',
+        'to fetch them; nothing in this run can deliver them to you.',
+      ]
+  // Stated WITHOUT a cause, the same way the set itself records one: by the time this renders, a
+  // view can be here because a ceiling dropped it or because its bytes never arrived, and those are
+  // the same instruction to an agent (work from the text). Naming a cause meant naming the ceiling,
+  // which read it off the DELIVERED count, so a run that lost two pictures in transfer reported
+  // the survivors as its limit and blamed the loss on a cap that had not fired.
+  const omitted = set.omitted.length
+    ? [
+        '',
+        `Not included, and nothing in this run can add them: ${set.omitted.join(', ')}.`,
+        'The textual design description above still covers those views.',
+      ]
+    : []
+  return `\n\n## Design pictures\n${lead.join('\n')}\n\n${views.join('\n')}${omitted.join('\n')}`
+}
+
+/**
+ * The agent-facing sentence for each way a delivery can fail. An exhaustive `Record`, so a new
+ * member of the kernel vocabulary fails to compile until it has wording: the whole reason the
+ * reasons are distinct is that they read differently to whoever hits them.
+ *
+ * Each states the CAUSE without naming a remedy, because the reader is the agent and none of the
+ * fixes are its to make: a run told "ask an operator to configure this" spends turns on it.
+ */
+const DESIGN_IMAGE_REFUSALS: Record<DesignImageUnavailableReason, string> = {
+  harness_no_image_input: 'the agent CLI running this step cannot read an image',
+  model_no_image_input: 'the model running this step does not accept image input',
+  unknown_model_image_input:
+    'the platform does not know whether the model running this step accepts image input',
+  inline_harness_text_only: 'this step reaches its model through a text-only channel',
+  consensus_panel: 'this step is running as a multi-model panel, which carries text only',
+  transfer_failed: 'they could not be retrieved from storage',
+}
 
 /**
  * Render the linked extra-context section — documents (requirements / RFCs /
@@ -286,6 +677,29 @@ export function linkedContextSection(
   opts: { materialized?: boolean } = {},
 ): string {
   const { contextDocs, contextTasks } = context.block
+  return renderLinkedContext(contextDocs, contextTasks, opts)
+}
+
+/**
+ * How many unseated documents the inline omission notice NAMES before falling back to a count.
+ * The notice reports a budget overrun, so it must not be able to cause one.
+ */
+const UNSEATED_NAMED_LIMIT = 5
+
+/**
+ * The rendering half of {@link linkedContextSection}, taking the resolved docs/issues
+ * directly instead of an {@link AgentRunContext}. Exists because the initiative-planning
+ * INTERVIEWER is an inline service that never passes through the context builder (it
+ * assembles its own prompt from the block + entity), yet must see the same attached
+ * requirements the analyst and planner do — otherwise it interrogates the stakeholder
+ * about facts the attached PRD already settles. Keeping one renderer means the two paths
+ * cannot drift in wording or in the {@link CONTEXT_BUDGET} caps.
+ */
+export function renderLinkedContext(
+  contextDocs: AgentRunContext['block']['contextDocs'],
+  contextTasks: AgentRunContext['block']['contextTasks'],
+  opts: { materialized?: boolean } = {},
+): string {
   if (!contextDocs?.length && !contextTasks?.length) return ''
 
   // Container kinds run with a checkout: list the linked items cheaply and point the
@@ -293,16 +707,27 @@ export function linkedContextSection(
   // needs instead of paying for every body in the prompt.
   if (opts.materialized) {
     const items: string[] = []
-    for (const doc of contextDocs ?? []) items.push(`- ${doc.title} — ${doc.summary} (${doc.url})`)
+    for (const doc of contextDocs ?? [])
+      items.push(`- ${doc.title} — ${doc.summary}${originSuffix(doc.url)}`)
     for (const task of contextTasks ?? [])
       items.push(`- [${task.key}] ${task.title} (${task.status}) — ${task.summary} (${task.url})`)
     const capped = items.slice(0, CONTEXT_BUDGET.maxItems)
+    // The index is capped, the DIRECTORY is not: every item was materialised (the materialiser
+    // refuses an over-budget corpus rather than writing part of it). Say how many are unlisted, or
+    // an agent reads the list as the complete set and never opens the files past it.
+    const unlisted = items.length - capped.length
     return `\n${[
       '',
       'Linked context (requirements / RFCs / PRDs / tracker issues). The full text of each',
       `is in the \`${CONTEXT_DIR}/\` directory of your checkout — open a file when it is`,
       'relevant. Do not try to reach external systems; everything available is already on disk.',
       ...capped,
+      ...(unlisted > 0
+        ? [
+            `…and ${unlisted} more not listed here: every linked item is on disk, so list`,
+            `\`${CONTEXT_DIR}/\` to see the rest.`,
+          ]
+        : []),
     ].join('\n')}`
   }
 
@@ -312,12 +737,47 @@ export function linkedContextSection(
   let spent = 0
   if (contextDocs?.length) {
     lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
+    // An inline caller has no `.cat-context/` to fall back on, so a document the budget can't seat
+    // is genuinely absent from this prompt. A clamped body already marks its own cut; the ones that
+    // got no room at all are named below (up to {@link UNSEATED_NAMED_LIMIT}), because an
+    // unmentioned omission reads as "this task has no other requirements" — which is how an inline
+    // reviewer confidently approves against a spec it never received.
+    const unseated: typeof contextDocs = []
     for (const doc of contextDocs) {
       const remaining = CONTEXT_BUDGET.inlineBodyTokens - spent
-      if (remaining <= 0) break
+      if (remaining <= 0) {
+        unseated.push(doc)
+        continue
+      }
+      // The SAME freshness note the materialised `.cat-context/` file carries, because an inline
+      // kind has no such file and would otherwise receive an unconfirmed body indistinguishable
+      // from a checked one, which is how a judge confidently scores against a design revision the
+      // platform could not reach. Empty (so byte-identical) when there is nothing to state, and
+      // charged to the budget like any other text, so the notice can never cause the overrun the
+      // clamp exists to prevent.
+      const freshness = freshnessHeaderLines(doc.freshness).trimEnd()
       const slice = clampToTokens(doc.body || doc.excerpt, remaining)
-      spent += estimateTokens(slice)
-      lines.push(`### ${doc.title} (${doc.url})`, slice)
+      spent += estimateTokens(slice) + estimateTokens(freshness)
+      lines.push(
+        `### ${doc.title}${originSuffix(doc.url)}`,
+        ...(freshness ? [freshness] : []),
+        slice,
+      )
+    }
+    if (unseated.length) {
+      // The notice is BOUNDED, or it becomes the overrun it exists to report: a task with thirty
+      // attachments would append thirty titles and URLs to a prompt that just ran out of budget.
+      // Naming a handful and counting the rest is what the materialized index above does too.
+      const named = unseated.slice(0, UNSEATED_NAMED_LIMIT)
+      const rest = unseated.length - named.length
+      lines.push(
+        '',
+        `${unseated.length} further linked document${unseated.length === 1 ? '' : 's'} did not fit ` +
+          `this prompt's context budget and ${unseated.length === 1 ? 'is' : 'are'} NOT included ` +
+          `above: ${named.map((d) => `${d.title}${originSuffix(d.url)}`).join(', ')}` +
+          `${rest > 0 ? `, and ${rest} more` : ''}. Treat what you were given as incomplete, and ` +
+          `say so in your output if the missing text would change your conclusion.`,
+      )
     }
   }
   if (contextTasks?.length) {
@@ -342,7 +802,7 @@ function clampToTokens(text: string, maxTokens: number): string {
  * architect/reviewer phases have no matching system rule, so they keep their normal,
  * spec-led behaviour.
  */
-export function technicalContextSection(context: AgentRunContext): string {
+function technicalContextSection(context: AgentRunContext): string {
   if (!context.block.technical) return ''
   return [
     '',
@@ -353,19 +813,75 @@ export function technicalContextSection(context: AgentRunContext): string {
   ].join('\n')
 }
 
-/** Render the built-out user prompt for a standard phase from the run context. */
+/**
+ * Render the CHOSEN IMPLEMENTATION APPROACH section when the fork-decision phase resolved to
+ * a human choice (see {@link AgentRunContext.implementationChoice}), or an empty string
+ * otherwise. It pins the chosen approach as a binding directive and names the rejected
+ * alternatives so the Coder does not drift back into them. Only the build user prompt appends
+ * it — the matching static rule lives in the BUILD system prompt. Empty (so byte-identical) on
+ * every run where no fork was chosen (skipped / single path / not configured).
+ */
+function implementationChoiceSection(context: AgentRunContext): string {
+  const choice = context.implementationChoice
+  if (!choice) return ''
+  const lines = [
+    '',
+    'CHOSEN IMPLEMENTATION APPROACH (binding — a human picked this before you started):',
+    `Title: ${choice.title}`,
+    '',
+    choice.approach,
+  ]
+  if (choice.note && choice.note.trim().length > 0) {
+    lines.push('', `Steering note from the human: ${choice.note.trim()}`)
+  }
+  if (choice.alternativesConsidered.length > 0) {
+    lines.push(
+      '',
+      `Alternatives considered and rejected: ${choice.alternativesConsidered.join('; ')}.`,
+      'Implement the chosen approach faithfully. Do NOT drift into a rejected alternative; if',
+      'the chosen approach proves unworkable, surface a follow-up rather than silently switching.',
+    )
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Render the built-out user prompt for a standard phase from the run context.
+ *
+ * The REGISTRY is a parameter for one section's sake: `environmentSection` states how to record a
+ * credential gap, and where a kind can record one at all is a fact about its declared surface (see
+ * {@link environmentSection}). Passed rather than re-derived from the phase, so this path and the
+ * generic block-context prompt cannot answer the same question differently.
+ */
 export function renderStandardUserPrompt(
   phase: StandardPhase,
   context: AgentRunContext,
+  registry: AgentKindRegistry,
   opts: { materialized?: boolean } = {},
 ): string {
   const rendered =
     USER_TEMPLATES[phase](toView(context)) +
+    // Preset steering FIRST — it frames the agent's role for this initiative before the task
+    // specifics. Empty (so byte-identical) on every non-initiative run.
+    initiativePresetSection(context) +
+    // What system this work belongs to, BEFORE the linked context and the environment: it frames
+    // everything that follows, and it is the section that states its own absence.
+    ownServiceSection(context) +
+    // The operation's per-case parameters, right after the block context they qualify and before
+    // the linked context. Empty (so byte-identical) on every run of a built-in task type.
+    customTaskTypeSection(context) +
     linkedContextSection(context, opts) +
-    environmentSection(context) +
+    // The design PICTURES, right after the linked context whose textual design description they
+    // are the other half of. States its own absence-with-a-cause, so it is never conditional here.
+    designImagesSection(context) +
+    environmentSection(context, registry) +
+    involvedServicesSection(context) +
     // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
     // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
-    (phase === 'build' ? technicalContextSection(context) : '')
+    (phase === 'build' ? technicalContextSection(context) : '') +
+    // Only the implementer (build) acts on a chosen implementation fork; its system prompt
+    // carries the matching rule. Empty on every non-fork run.
+    (phase === 'build' ? implementationChoiceSection(context) : '')
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

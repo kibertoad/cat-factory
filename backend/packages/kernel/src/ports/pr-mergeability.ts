@@ -1,8 +1,13 @@
-// Port for "can this block's PR be merged into its base, or does it conflict?".
+// Port for "can this block's PR(s) be merged into their base, or do they conflict?".
 // The execution engine's `conflicts` gate calls this — and ONLY this — to decide
 // whether to dispatch the conflict-resolver before the merge step. Modelled as a
 // port so core stays free of GitHub specifics; the worker implements it against
-// the PR's lazily-computed `mergeable`/`mergeable_state`, and tests supply a fake.
+// each PR's lazily-computed `mergeable`/`mergeable_state`, and tests supply a fake.
+//
+// Multi-repo (service-connections phase 4): a cross-service task opens ONE PR per
+// changed repo. The report carries a per-PR entry (own-service first) so the gate
+// can detect a conflict on ANY of them and dispatch a single-repo conflict-resolver
+// at the first conflicted repo.
 
 /**
  * The normalised mergeability of a PR:
@@ -13,19 +18,41 @@
  */
 export type MergeabilityVerdict = 'mergeable' | 'conflicted' | 'unknown'
 
-export interface MergeabilityReport {
-  /** The PR head commit these refer to; null when no open PR/branch is resolved. */
+/** The mergeability of ONE of a block's pull requests (own-service or a peer-service repo). */
+export interface RepoMergeability {
+  /** The repo (owner/name) this PR is in. */
+  repo: string
+  /**
+   * ONE involved-service frame this repo hosts, absent for the own-service PR and for a peer
+   * pull request whose attribution was not recorded.
+   *
+   * Singular on purpose, and not an under-reporting of a monorepo peer's several frames: a git
+   * conflict is per-REPO, so the id is only ever a hint. What ADDRESSES the conflicted checkout
+   * is {@link RepoMergeability.repo}, which the conflicts gate copies onto `conflictTarget` and
+   * `resolveConflictResolverPeer` resolves back to that repo's whole checkout.
+   */
+  frameId?: string
+  /** The PR head commit; null when no open PR/branch is resolved. */
   headSha: string | null
   /** The mergeability verdict; see {@link MergeabilityVerdict}. */
   verdict: MergeabilityVerdict
 }
 
+export interface MergeabilityReport {
+  /**
+   * Per-PR mergeability across ALL of the block's pull requests — own-service PR
+   * first, then any peer-service PRs. Empty when the block has no resolvable PR (the
+   * engine treats that as "nothing to gate"). A single-repo block has one entry.
+   */
+  repos: RepoMergeability[]
+}
+
 export interface PullRequestMergeabilityProvider {
   /**
-   * Resolve the block's open PR and report whether it merges cleanly into its base.
-   * Returns `headSha: null` (verdict `unknown`) when no PR/branch is resolved — the
-   * engine treats that as "nothing to gate" and advances. Returns `unknown` with a
-   * head sha while GitHub is still computing mergeability, so the gate re-polls.
+   * Resolve every PR the block opened (own-service + peers) and report whether each
+   * merges cleanly into its base. Returns `{ repos: [] }` when no PR/branch is
+   * resolved — the engine treats that as "nothing to gate" and advances. A `RepoMergeability`
+   * with verdict `unknown` (GitHub still computing) keeps the gate polling.
    */
   getMergeability(workspaceId: string, blockId: string): Promise<MergeabilityReport>
 }

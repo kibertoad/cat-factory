@@ -1,7 +1,8 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   addVendorCredentialSchema,
+  updateVendorCredentialSchema,
   vendorCredentialListSchema,
   vendorCredentialSchema,
 } from '../vendor-credentials.js'
@@ -34,9 +35,17 @@ export const addVendorCredentialContract = defineApiContract({
   responsesByStatusCode: { 201: vendorCredentialSchema, ...errorResponses },
 })
 
+export const updateVendorCredentialContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: credentialIdParams,
+  pathResolver: ({ id }) => `/vendor-credentials/${id}`,
+  requestBodySchema: updateVendorCredentialSchema,
+  responsesByStatusCode: { 200: vendorCredentialSchema, ...errorResponses },
+})
+
 export const removeVendorCredentialContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: credentialIdParams,
   pathResolver: ({ id }) => `/vendor-credentials/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

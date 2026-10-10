@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import type {
+  Block,
+  ExecutionInstance,
+  PipelineStep,
+  ReviewQuestionPost,
+  ReviewQuestionSubject,
+} from '@cat-factory/kernel'
+import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 import {
   ReviewGateController,
   type ReviewGateControllerDeps,
@@ -27,6 +33,7 @@ function review(over: Partial<FakeReview> = {}): FakeReview {
     model: 'fake:model',
     iteration: 1,
     maxIterations: 6,
+    rev: 0,
     createdAt: 0,
     updatedAt: 0,
     ...over,
@@ -73,6 +80,7 @@ function fakeKind() {
     prepareRecommendations: vi.fn(async () => current),
     markRecommendationPending: vi.fn(async () => current),
     fillRecommendations: vi.fn(async () => current),
+    autoRecommend: vi.fn(async () => {}),
     emit: vi.fn(async () => {}),
   } satisfies ReviewKind<FakeReview> & Record<string, unknown>
   return {
@@ -86,17 +94,69 @@ function fakeKind() {
 function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
   // The spine primitives now come from the cohesive RunStateMachine + StepGraph
   // collaborators (debagged), so the fakes group under those two objects.
+  const executionRepository = {
+    get: vi.fn(async (_ws: string, _id: string): Promise<ExecutionInstance | null> => null),
+    // The block's LIVE run, read by the off-path (HTTP-driven) entry points to resolve which of
+    // the workspace's two default risk policies governs the review's iteration budget. Null here
+    // degrades to the interactive scope, which is what an inspector call on a task with no live
+    // run means; the gate path never reaches this, it passes the run it already holds.
+    getByBlock: vi.fn(
+      async (_ws: string, _blockId: string): Promise<ExecutionInstance | null> => null,
+    ),
+    upsert: vi.fn(async () => {}),
+  }
   const stateMachine = {
     parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
       s.state = 'waiting_decision'
       return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
     }),
-    advancePastResolvedGate: vi.fn(async () => {}),
+    // The OCC seams (race-audit 2.2 controller-half): `casPersist` is the driver-path
+    // conditional write; `mutateInstance` loads fresh → runs the pure mutation → returns it (a
+    // faithful stand-in for the load/CAS-retry), so the human-action handlers can be asserted.
+    casPersist: vi.fn(async () => {}),
+    mutateInstance: vi.fn(
+      async (
+        ws: string,
+        execId: string,
+        mutate: (i: ExecutionInstance) => void | Promise<void>,
+      ) => {
+        const inst = await executionRepository.get(ws, execId)
+        if (!inst) throw new NotFoundError('Execution', execId)
+        await mutate(inst)
+        return inst
+      },
+    ),
+    // The pure/side-effect gate-advance split `resumeRun` now uses instead of the deleted
+    // combined `advancePastResolvedGate`.
+    advanceRunPastGate: vi.fn((_i: ExecutionInstance, _idx: number) => false),
+    settleAdvancedGate: vi.fn(async () => {}),
     raiseDecisionRequired: vi.fn(async () => {}),
+    // The shared settle helpers the controllers now delegate their terminal transition to.
+    // Faked FAITHFULLY (delegating to the sibling fakes) rather than as bare `vi.fn()`s, so the
+    // assertions below still observe the real sequence: a final step finalizes the block and
+    // reclaims the container, a non-final step advances the cursor and starts the next step.
+    finishHumanGateStep: vi.fn((s: PipelineStep, o: { clearPendingInterview?: boolean } = {}) => {
+      stepGraph.finishStep(s)
+      s.progress = 1
+      s.subtasks = undefined
+      s.approval = null
+      if (o.clearPendingInterview) s.pendingInterview = null
+    }),
+    settleStepAndAdvance: vi.fn(async (ws: string, i: ExecutionInstance, isFinalStep: boolean) => {
+      if (isFinalStep) {
+        i.status = 'done'
+        await stateMachine.finalizeBlock()
+        await stateMachine.stopRunContainer()
+        return { kind: 'done' } as const
+      }
+      i.currentStep += 1
+      const next = i.steps[i.currentStep]
+      if (next) stepGraph.startStep(next)
+      return { kind: 'continue' } as const
+    }),
     updateBlockProgress: vi.fn(async () => {}),
     finalizeBlock: vi.fn(async () => {}),
     stopRunContainer: vi.fn(async () => {}),
-    persistInstance: vi.fn(async () => {}),
     emitInstance: vi.fn(async () => {}),
   }
   const stepGraph = {
@@ -107,9 +167,9 @@ function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
   }
   const deps = {
     blockRepository: { get: vi.fn(async () => BLOCK) },
-    executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) },
+    executionRepository,
     workRunner: { signalDecision: vi.fn(async () => {}) },
-    resolveMergePreset: vi.fn(async () => PRESET),
+    resolveRiskPolicy: vi.fn(async () => PRESET),
     dispatchIterationCap: vi.fn(async () => {}),
     stateMachine,
     stepGraph,
@@ -170,6 +230,67 @@ describe('ReviewGateController.evaluate', () => {
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
     expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
     expect(deps.stateMachine.raiseDecisionRequired).not.toHaveBeenCalled()
+  })
+
+  it('pre-answers auto-answerable findings before parking a fresh ready review (default on)', async () => {
+    k.set(review({ status: 'ready' }))
+    const s = step()
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+  })
+
+  it('skips auto-recommendation when the step opts out via stepOptions.autoRecommend === false', async () => {
+    k.set(review({ status: 'ready' }))
+    const s = step({ stepOptions: { autoRecommend: false } } as Partial<PipelineStep>)
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
+    // Opting out of the automation must not change the gate outcome — the run still parks.
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
+  })
+
+  it('does NOT auto-recommend when the fresh review hit the cap (exceeded)', async () => {
+    // On `exceeded` the human is picking how to proceed, not answering findings.
+    k.set(review({ status: 'exceeded' }))
+    const s = step()
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
+  })
+
+  it('swallows an auto-recommendation failure (best-effort) and still parks the run', async () => {
+    k.set(review({ status: 'ready' }))
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('writer down'))
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+  })
+
+  it('re-entry: a re-review that surfaces fresh findings also auto-recommends', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
+    const s = step({ pendingIncorporation: { feedback: 'do X' } })
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
+  })
+
+  it('re-entry: a re-review that opts out via stepOptions does NOT auto-recommend', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
+    const s = step({
+      pendingIncorporation: { feedback: 'do X' },
+      stepOptions: { autoRecommend: false },
+    } as Partial<PipelineStep>)
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
   })
 
   it('raises a decision-required notification when a fresh review hits the cap', async () => {
@@ -263,7 +384,7 @@ describe('ReviewGateController public surface', () => {
   it('review resolves the preset and delegates to the kind', async () => {
     k.set(review({ status: 'ready' }))
     const out = await ctrl.review(k.kind, 'ws', 'blk_1')
-    expect(deps.resolveMergePreset).toHaveBeenCalled()
+    expect(deps.resolveRiskPolicy).toHaveBeenCalled()
     expect(k.kind.review).toHaveBeenCalledWith('ws', BLOCK, PRESET)
     expect(out.status).toBe('ready')
   })
@@ -322,14 +443,50 @@ describe('ReviewGateController public surface', () => {
     })
     deps.executionRepository.get = vi.fn(async () => instance([parkedStep]))
     await ctrl.reReview(k.kind, 'ws', 'blk_1')
-    expect(deps.stateMachine.advancePastResolvedGate).toHaveBeenCalled()
+    expect(deps.stateMachine.settleAdvancedGate).toHaveBeenCalled()
   })
 
   it('reReview that still has findings does NOT resume', async () => {
     k.set(review({ status: 'merged' }))
     ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
     await ctrl.reReview(k.kind, 'ws', 'blk_1')
-    expect(deps.stateMachine.advancePastResolvedGate).not.toHaveBeenCalled()
+    expect(deps.stateMachine.settleAdvancedGate).not.toHaveBeenCalled()
+  })
+
+  it('reReview pre-answers auto-answerable findings when it surfaces fresh ones', async () => {
+    // The off-path re-review is a new iteration round: it must auto-recommend just like the
+    // pipeline-driven cycle, so auto-recommendation happens on EVERY round that raises questions.
+    k.set(review({ status: 'merged' }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
+    await ctrl.reReview(k.kind, 'ws', 'blk_1')
+    expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
+  })
+
+  it('reReview returns the FRESH persisted review after auto-recommendation, not the pre-auto snapshot', async () => {
+    // Auto-recommendation mutates + persists the review (answering findings) AFTER reReview's
+    // return value was captured, and pushes it over the live stream. The off-path response MUST
+    // reflect that fresh state — otherwise the SPA's unguarded store() on the response clobbers
+    // the auto-answered findings the stream already delivered, and they vanish from the window.
+    k.set(review({ status: 'merged' }))
+    const stale = review({ status: 'ready', iteration: 2 }) // reReview's return (findings open)
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(stale)
+    const fresh = review({ status: 'ready', iteration: 2, updatedAt: 99 }) // what auto-recommend persisted
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      k.set(fresh) // the automation persisted a newer review; getForBlock now returns it
+    })
+    const result = await ctrl.reReview(k.kind, 'ws', 'blk_1')
+    expect(result).toBe(fresh)
+    expect(result).not.toBe(stale)
+  })
+
+  it('reReview does NOT auto-recommend when it converges (incorporated)', async () => {
+    k.set(review({ status: 'merged' }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(
+      review({ status: 'incorporated' }),
+    )
+    deps.executionRepository.get = vi.fn(async () => null)
+    await ctrl.reReview(k.kind, 'ws', 'blk_1')
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
   })
 
   it('proceed settles the review and resumes the parked run', async () => {
@@ -341,7 +498,7 @@ describe('ReviewGateController public surface', () => {
     deps.executionRepository.get = vi.fn(async () => instance([parkedStep]))
     const out = await ctrl.proceed(k.kind, 'ws', 'blk_1')
     expect(k.kind.markIncorporated).toHaveBeenCalled()
-    expect(deps.stateMachine.advancePastResolvedGate).toHaveBeenCalled()
+    expect(deps.stateMachine.settleAdvancedGate).toHaveBeenCalled()
     expect(out.status).toBe('incorporated')
   })
 
@@ -364,18 +521,17 @@ describe('ReviewGateController public surface', () => {
     })
     const inst = instance([parkedStep], { status: 'blocked' })
     deps.executionRepository.get = vi.fn(async () => inst)
-    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1', 'rri_2'], 'prefer X')
+    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', [
+      { itemId: 'rri_1', note: 'prefer X' },
+      { itemId: 'rri_2' },
+    ])
     // Placeholders are created synchronously; the slow Writer is offloaded, not run inline.
-    expect(k.kind.prepareRecommendations).toHaveBeenCalledWith(
-      'ws',
-      'rrv_1',
-      ['rri_1', 'rri_2'],
-      'prefer X',
-    )
-    expect(parkedStep.pendingRecommendation).toEqual({
-      itemIds: ['rri_1', 'rri_2'],
-      note: 'prefer X',
-    })
+    expect(k.kind.prepareRecommendations).toHaveBeenCalledWith('ws', 'rrv_1', [
+      { itemId: 'rri_1', note: 'prefer X' },
+      { itemId: 'rri_2' },
+    ])
+    // The step re-entry marker carries only the finding ids (notes ride the placeholders).
+    expect(parkedStep.pendingRecommendation).toEqual({ itemIds: ['rri_1', 'rri_2'] })
     expect(inst.status).toBe('running') // re-armed before signalling
     expect(deps.workRunner.signalDecision).toHaveBeenCalledWith(
       'ws',
@@ -389,7 +545,7 @@ describe('ReviewGateController public surface', () => {
   it('requestRecommendations runs the Writer inline when no run is parked', async () => {
     k.set(review({ status: 'ready' }))
     deps.executionRepository.get = vi.fn(async () => null)
-    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1'])
+    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', [{ itemId: 'rri_1' }])
     expect(k.kind.prepareRecommendations).toHaveBeenCalled()
     expect(k.kind.fillRecommendations).toHaveBeenCalledWith('ws', 'blk_1')
     expect(deps.workRunner.signalDecision).not.toHaveBeenCalled()
@@ -404,7 +560,7 @@ describe('ReviewGateController public surface', () => {
     }
     await expect(
       ctrl.requestRecommendations(noWriter as unknown as ReviewKind<FakeReview>, 'ws', 'blk_1', [
-        'x',
+        { itemId: 'x' },
       ]),
     ).rejects.toBeInstanceOf(ConflictError)
   })
@@ -431,5 +587,409 @@ describe('ReviewGateController public surface', () => {
       'appr_8',
       'recommend',
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The headless question echo (slice 2a of backend/docs/adr/0047-headless-clarification-loop.md).
+//
+// The decision itself is pinned by `reviewQuestionWriteback.logic.test.ts`; what is asserted
+// here is the WIRING, which no pure test can reach: that a headless park actually reaches the
+// provider, that a UI-started park provably does not, and that the park is committed BEFORE the
+// outbound call — so a tracker that is slow, rate-limiting or down can never delay or undo the
+// park that makes the run answerable in the first place.
+// ---------------------------------------------------------------------------
+
+describe('ReviewGateController — headless question writeback', () => {
+  const OPEN_ITEM = { id: 'itm_1', status: 'open', title: 'Which currencies?', detail: 'Unstated.' }
+
+  function headlessSetup(over: { intakeOrigin?: string } = {}) {
+    const calls: { order: string[] } = { order: [] }
+    // The three parameters are spelled out so `vi.fn` infers them: a bare `async () => …` infers
+    // ZERO, which makes `mock.calls[0][2]` an index into an empty tuple.
+    const postReviewQuestions = vi.fn(
+      async (_ws: string, _block: Block, _post: ReviewQuestionPost) => {
+        calls.order.push('post')
+        return { posted: 1, skipped: 0, failed: 0 }
+      },
+    )
+    const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const deps = fakeDeps({
+      issueWriteback: { postReviewQuestions } as never,
+      logger: logger as never,
+    })
+    deps.stateMachine.parkStepOnDecision = vi.fn(async (_ws, _i, s: PipelineStep) => {
+      calls.order.push('park')
+      s.state = 'waiting_decision'
+      return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
+    })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    ;(k.kind as { questionsOnPark?: ReviewQuestionSubject }).questionsOnPark = 'requirements'
+    k.set(review({ items: [OPEN_ITEM] as never }))
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })], {
+      intakeOrigin: (over.intakeOrigin ?? 'public-api') as never,
+    })
+    return { ctrl, k, s, inst, deps, postReviewQuestions, logger, calls }
+  }
+
+  it('echoes a headless park to the tracker, carrying the run + the open findings', async () => {
+    const t = headlessSetup()
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)
+    const [ws, block, post] = t.postReviewQuestions.mock.calls[0]! as unknown as [
+      string,
+      Block,
+      { runId: string; reviewId: string; findings: { id: string }[] },
+    ]
+    expect(ws).toBe('ws')
+    expect(block.id).toBe('blk_1')
+    expect(post.runId).toBe('exec_1')
+    expect(post.reviewId).toBe('rrv_1')
+    expect(post.findings.map((f) => f.id)).toEqual(['itm_1'])
+  })
+
+  it('commits the park BEFORE the outbound post — a wedged tracker must not hold it up', async () => {
+    const t = headlessSetup()
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.calls.order).toEqual(['park', 'post'])
+  })
+
+  it('still parks — with the SAME result — when the tracker post throws', async () => {
+    const t = headlessSetup()
+    t.postReviewQuestions.mockRejectedValueOnce(new Error('tracker down'))
+    const result = await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(t.s.state).toBe('waiting_decision')
+    // Best-effort is not the same as silent: an operator can see the tracker failed.
+    expect(t.logger.warn).toHaveBeenCalled()
+  })
+
+  it('logs when only SOME linked issues took the comment', async () => {
+    const t = headlessSetup()
+    t.postReviewQuestions.mockResolvedValueOnce({ posted: 1, skipped: 0, failed: 1 })
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.logger.warn).toHaveBeenCalled()
+  })
+
+  it('echoes a ticket-dispatched park too: a webhook run has no overseer in the app', async () => {
+    const t = headlessSetup({ intakeOrigin: 'tracker' })
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)
+  })
+
+  it('posts NOTHING for a UI-started run — the SPA path is untouched', async () => {
+    const t = headlessSetup({ intakeOrigin: 'ui' })
+    const result = await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+
+  it('posts nothing for a kind with no subject (a brainstorm has no linked issue to ask on)', async () => {
+    const t = headlessSetup()
+    ;(t.k.kind as { questionsOnPark?: ReviewQuestionSubject }).questionsOnPark = undefined
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+
+  it('echoes a CLARITY park for a UI-started run, where the requirements subject would not', async () => {
+    // The one place the two subjects differ on this side: bug triage asks the REPORTER for what
+    // they left out, which is intake semantics rather than a headless fallback.
+    const t = headlessSetup({ intakeOrigin: 'ui' })
+    ;(t.k.kind as { questionsOnPark?: ReviewQuestionSubject }).questionsOnPark = 'clarity'
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)
+    expect(t.postReviewQuestions.mock.calls[0]![2]).toMatchObject({ subject: 'clarity' })
+  })
+
+  it('asks only what is still open after the auto-recommendation pass answered findings', async () => {
+    // `review` is taken before `autoRecommend` runs, so the echo re-reads. Without that it would
+    // ask a question the automation has already answered.
+    const t = headlessSetup()
+    ;(t.k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      t.k.set(review({ items: [{ ...OPEN_ITEM, status: 'answered' }] as never }))
+    })
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReviewGateController — the QUESTIONS an unattended run answers for itself', () => {
+  // ADR 0053 let an unattended policy answer a park the AUTOMATION raised by giving up, and left a
+  // review still ASKING questions parking under either posture. This is the narrowing that came
+  // after it, and what these pin is the boundary rather than the mechanism: TWO independent
+  // judgements must agree (the reviewer's group, then the Writer's grade) before anything is folded
+  // in with nobody reading it, and any disagreement parks exactly as before.
+  const UNATTENDED: ReviewPreset = {
+    maxRequirementIterations: 3,
+    maxRequirementConcernAllowed: 'none',
+    autonomy: 'unattended',
+    minAutoAnswerConfidence: 0.8,
+  }
+
+  /** A finding, plus the auto recommendation that answered it, at a given grade. */
+  function graded(id: string, confidence: number | null, autoAnswerable = true) {
+    return {
+      // The `reply` matters: `hasNotesToIncorporate` short-circuits a fold with nothing in it, so a
+      // fixture whose findings are `answered` with no text would settle the review without ever
+      // reaching the incorporation this describes.
+      item: {
+        id,
+        status: 'answered',
+        reply: `answer for ${id}`,
+        title: id,
+        detail: 'd',
+        autoAnswerable,
+      },
+      rec: {
+        auto: true,
+        status: 'accepted',
+        sourceFinding: { title: id, detail: 'd', itemId: id },
+        confidence,
+      },
+    }
+  }
+
+  function setup(preset: ReviewPreset = UNATTENDED) {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => preset) })
+    return { deps, ctrl: new ReviewGateController(deps), k: fakeKind() }
+  }
+
+  it('folds in and advances when every finding is graded at or above the floor', async () => {
+    const { deps, ctrl, k } = setup()
+    const a = graded('itm_1', 0.9)
+    const b = graded('itm_2', 0.95)
+    k.set(
+      review({
+        status: 'ready',
+        items: [a.item, b.item],
+        recommendations: [a.rec, b.rec],
+      } as never),
+    )
+    // The fold settles the review, which is what the incorporation cycle does when the answers
+    // converge; the gate then advances rather than parking.
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      const settled = review({ status: 'incorporated' })
+      k.set(settled)
+      return settled
+    })
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'continue' })
+    expect(k.kind.incorporate).toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    // ON THE RECORD: without the stamp, a run that advanced on machine-written answers is
+    // indistinguishable from one a product owner signed off.
+    expect(s.autoAnsweredByPolicy).toBe(true)
+    expect(s.reviewCapSettledByPolicy).toBeUndefined()
+  })
+
+  it('parks on a finding graded BELOW the floor, and folds nothing in', async () => {
+    const { ctrl, k } = setup()
+    const ok = graded('itm_1', 0.9)
+    const weak = graded('itm_2', 0.5)
+    k.set(
+      review({
+        status: 'ready',
+        items: [ok.item, weak.item],
+        recommendations: [ok.rec, weak.rec],
+      } as never),
+    )
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBeUndefined()
+  })
+
+  it('parks on a finding the REVIEWER said needs a product owner, however graded the rest are', async () => {
+    // The group the reviewer assigned is the outer gate: no confidence number reaches past it.
+    const { ctrl, k } = setup()
+    const graded1 = graded('itm_1', 1)
+    k.set(
+      review({
+        status: 'ready',
+        items: [graded1.item, { id: 'itm_2', status: 'open', title: 'pricing', detail: 'which?' }],
+        recommendations: [graded1.rec],
+      } as never),
+    )
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+  })
+
+  it('parks under an ATTENDED policy even when every answer is confident', async () => {
+    // The whole feature is a property of the POSTURE, so the in-app default is byte-for-byte the
+    // previous behaviour: the human is handed a pre-filled review and still decides to incorporate.
+    const { ctrl, k } = setup({ maxRequirementIterations: 6, maxRequirementConcernAllowed: 'none' })
+    const a = graded('itm_1', 1)
+    k.set(review({ status: 'ready', items: [a.item], recommendations: [a.rec] } as never))
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBeUndefined()
+  })
+
+  it('stops looping when a re-review raises a finding a person has to answer', async () => {
+    // The loop exists because a re-review can surface a fresh batch of practice-level findings, and
+    // it must still stop the moment one of them is not. One fold, then a park.
+    const { ctrl, k } = setup()
+    const a = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [a.item], recommendations: [a.rec] } as never))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      const next = review({
+        status: 'ready',
+        items: [{ id: 'itm_9', status: 'open', title: 'scope', detail: 'unclear' }],
+        iteration: 2,
+      } as never)
+      k.set(next)
+      return next
+    })
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(1)
+    expect(s.autoAnsweredByPolicy).toBe(true)
+  })
+
+  it('does not run at all when the step opted out of auto-recommendation', async () => {
+    // The floor compares against a Writer suggestion, so a step that produces none has nothing to
+    // settle from; folding on the item statuses alone would take an answer nobody wrote.
+    const { ctrl, k } = setup()
+    const a = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [a.item], recommendations: [a.rec] } as never))
+    const s = step({ stepOptions: { autoRecommend: false } } as Partial<PipelineStep>)
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReviewGateController — settling a SECOND batch of practice-level findings', () => {
+  const UNATTENDED: ReviewPreset = {
+    maxRequirementIterations: 3,
+    maxRequirementConcernAllowed: 'none',
+    autonomy: 'unattended',
+    minAutoAnswerConfidence: 0.8,
+  }
+
+  function graded(id: string, confidence: number) {
+    return {
+      item: { id, status: 'answered', reply: `answer for ${id}`, title: id, detail: 'd' },
+      rec: {
+        auto: true,
+        status: 'accepted',
+        sourceFinding: { title: id, detail: 'd', itemId: id },
+        confidence,
+      },
+    }
+  }
+
+  // The loop's whole reason to exist is a re-review that surfaces a FRESH batch of practice-level
+  // findings, and the order of operations is what nearly killed it: `reReview` returns its snapshot,
+  // and only then does the Writer's auto-recommendation pass grade the new findings on the row. A
+  // cycle that re-checked the pre-grading snapshot saw every fresh finding as ungraded, cleared no
+  // floor, and parked the run on exactly the batch it had just proved it could settle.
+  it('re-reads after the auto-recommendation pass, so cycle 2 sees the grades', async () => {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => UNATTENDED) })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    const first = graded('itm_1', 0.9)
+    const second = graded('itm_2', 0.9)
+    k.set(review({ status: 'ready', items: [first.item], recommendations: [first.rec] } as never))
+
+    let passes = 0
+    // The reviewer's own snapshot: the fresh finding is still OPEN and carries no suggestion, which
+    // is the only state it can be in before the Writer has run against it.
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      passes += 1
+      const next =
+        passes === 1
+          ? review({
+              status: 'ready',
+              items: [{ id: 'itm_2', status: 'open', title: 'itm_2', detail: 'd' }],
+              iteration: 2,
+            } as never)
+          : review({ status: 'incorporated', iteration: 3 } as never)
+      k.set(next)
+      return next
+    })
+    // The Writer's pass: it answers every open finding the reviewer marked answerable and grades
+    // each answer, rewriting the persisted row the reviewer's snapshot was taken from.
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      if (passes !== 1) return
+      k.set(
+        review({
+          status: 'ready',
+          items: [second.item],
+          recommendations: [second.rec],
+          iteration: 2,
+        } as never),
+      )
+    })
+
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'continue' })
+    // TWO folds: the second is the batch that used to park the run.
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(2)
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBe(true)
+  })
+
+  // The re-read must not turn a genuine park into a fold: when the Writer leaves the fresh batch
+  // ungraded (a garbled reply, an outage), the reloaded row still shows no grade and the run parks.
+  it('still parks when the auto-recommendation pass grades nothing', async () => {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => UNATTENDED) })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    const first = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [first.item], recommendations: [first.rec] } as never))
+    let reviewed = false
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      reviewed = true
+      const next = review({
+        status: 'ready',
+        items: [{ id: 'itm_2', status: 'open', title: 'itm_2', detail: 'd' }],
+        iteration: 2,
+      } as never)
+      k.set(next)
+      return next
+    })
+    // An UNGRADED suggestion clears no floor above zero, so a garbled Writer reply parks the run.
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      if (!reviewed) return
+      k.set(
+        review({
+          status: 'ready',
+          items: [{ id: 'itm_2', status: 'answered', reply: 'a', title: 'itm_2', detail: 'd' }],
+          recommendations: [
+            {
+              auto: true,
+              status: 'accepted',
+              sourceFinding: { title: 'itm_2', detail: 'd', itemId: 'itm_2' },
+              confidence: null,
+            },
+          ],
+          iteration: 2,
+        } as never),
+      )
+    })
+
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(1)
   })
 })

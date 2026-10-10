@@ -139,6 +139,117 @@ export const REQUIREMENTS_FIXTURES: SandboxFixtureDefinition[] = [
       'CSV/formula injection is the trick item; the row-volume and authorization items are the must-finds.',
   },
   {
+    // The one fixture that IDENTIFIES its product (a `service` context). `buildReviewPrompt` drops
+    // its "do not pick a system" note when the product is stated, so this is the only fixture that
+    // exercises the identified path, and a reviewer that still hedges about which system this is
+    // has ignored what it was given.
+    id: 'req-bulk-invite-moderate',
+    agentKind: 'requirements-review',
+    kind: 'requirements',
+    name: 'Bulk teammate invites (moderate)',
+    difficulty: 'moderate',
+    summary:
+      'An "invite the whole team at once" spec whose abuse and collision cases are unstated.',
+    payload: {
+      block: {
+        title: 'Invite teammates in bulk',
+        type: 'api',
+        description:
+          'Let an admin paste a list of email addresses and invite them all to the workspace at ' +
+          'once. Each person gets an email with a link to join. Today they have to be invited one ' +
+          'at a time, which is painful when onboarding a new team.',
+      },
+      docs: [],
+      tasks: [],
+      service: {
+        stated: true,
+        frameId: 'frame-workspaces',
+        title: 'Workspaces',
+        description: 'Workspace membership, roles and invitations.',
+      },
+    },
+    expectations: [
+      exp('who-and-what-role', 'Who may bulk-invite, and what role does an invitee land on?', {
+        impact: 5,
+        trickiness: 2,
+        detail:
+          'The spec says "an admin" without saying whether an invitee can be given a role, let ' +
+          'alone an admin role, which is a privilege-escalation question dressed as onboarding.',
+        matchHints: ['role', 'permission', 'who can', 'admin', 'privilege', 'member'],
+      }),
+      exp(
+        'existing-and-pending',
+        'What happens to an address that is already a member, already invited, or was previously removed?',
+        {
+          impact: 4,
+          trickiness: 2,
+          matchHints: [
+            'already a member',
+            'already invited',
+            'duplicate',
+            'pending',
+            'previously removed',
+            'existing',
+          ],
+        },
+      ),
+      exp(
+        'partial-failure',
+        'If some addresses are invalid, is the whole batch rejected or are the good ones invited?',
+        {
+          impact: 4,
+          trickiness: 3,
+          detail:
+            'A bulk operation has to state its all-or-nothing rule, and the answer is a product ' +
+            'decision (what the admin sees) before it is a technical one.',
+          matchHints: [
+            'partial',
+            'all or nothing',
+            'some fail',
+            'invalid address',
+            'reject the whole',
+            'per-address',
+          ],
+        },
+      ),
+      exp(
+        'spam-relay',
+        'A bulk invite sends attacker-chosen email from our domain with attacker-chosen recipients: what caps the batch size and rate?',
+        {
+          impact: 4,
+          trickiness: 5,
+          detail:
+            'The standout catch. Nobody reads "invite the whole team" as "a mail-sending endpoint ' +
+            'aimed at arbitrary strangers", but that is what it is, and the reputational damage lands ' +
+            'on our sending domain. It stays a PRODUCT question when phrased as a limit, not a ' +
+            'throttling design.',
+          matchHints: [
+            'spam',
+            'abuse',
+            'how many',
+            'batch size',
+            'rate limit',
+            'reputation',
+            'arbitrary recipients',
+            'unsolicited',
+          ],
+        },
+      ),
+      exp(
+        'invite-expiry',
+        'How long is an invite link valid, can it be re-sent or revoked, and is it single-use?',
+        {
+          impact: 3,
+          trickiness: 2,
+          matchHints: ['expir*', 'expiry', 'revoke', 'resend', 're-send', 'single use', 'reusable'],
+        },
+      ),
+    ],
+    notes:
+      'The spam-relay framing is the trick item and the one most reviewers miss entirely; the ' +
+      'role question is the high-impact must-find because it is a permissions decision in disguise.',
+  },
+  {
     id: 'req-billing-proration-complex',
     agentKind: 'requirements-review',
     kind: 'requirements',
@@ -171,7 +282,7 @@ export const REQUIREMENTS_FIXTURES: SandboxFixtureDefinition[] = [
             'Rounding/credit accumulation across repeated mid-cycle changes is where real billing bugs and revenue leakage hide; the standout catch.',
           matchHints: [
             'proration',
-            'prorate',
+            'prorat*',
             'rounding',
             'round',
             'partial cent',
@@ -212,7 +323,7 @@ export const REQUIREMENTS_FIXTURES: SandboxFixtureDefinition[] = [
         {
           impact: 4,
           trickiness: 2,
-          matchHints: ['credit', 'refund', 'exceeds', 'expire'],
+          matchHints: ['credit', 'refund', 'exceed*', 'expir*'],
         },
       ),
       exp(

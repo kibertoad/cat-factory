@@ -157,9 +157,10 @@ describe('bootstrap repo', () => {
     // run settles the frame back to a ready service.
     await app.drive(workspaceId)
 
-    // The repo is linked to the frame, and the frame becomes a ready service.
-    expect(bootstrapper.links).toHaveLength(1)
-    expect(bootstrapper.links[0]!.blockId).toBe(job.body.blockId)
+    // The bootstrapped repo is projected (the caller binds the frame's Service to it), and
+    // the frame becomes a ready service.
+    expect(bootstrapper.projected).toHaveLength(1)
+    expect(bootstrapper.projected[0]!.workspaceId).toBe(workspaceId)
     const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
     const ready = after.body.blocks.find((b: Block) => b.id === job.body.blockId)
     expect(ready!.status).toBe('ready')

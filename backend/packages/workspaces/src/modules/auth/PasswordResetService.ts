@@ -3,6 +3,7 @@ import type {
   Clock,
   EmailSender,
   IdGenerator,
+  Logger,
   PasswordHasher,
   PasswordResetTokenRecord,
   PasswordResetTokenRepository,
@@ -24,12 +25,6 @@ import type {
 
 const RESET_TTL_MS = 60 * 60 * 1000
 
-/** Minimal structural logger (satisfied by the facade's pino logger) — kept local so
- * this base-layer package doesn't depend on the server layer. */
-export interface ResetLogger {
-  info(obj: Record<string, unknown>, msg?: string): void
-}
-
 export interface PasswordResetServiceDependencies {
   passwordResetTokenRepository: PasswordResetTokenRepository
   userRepository: UserRepository
@@ -44,7 +39,7 @@ export interface PasswordResetServiceDependencies {
   resolveSystemEmailSender?: () => Promise<EmailSender | null>
   /** Public base URL the reset link points at (the SPA origin). */
   appBaseUrl?: string
-  logger?: ResetLogger
+  logger?: Logger
 }
 
 /** SHA-256 hex digest — Web Crypto, runs on both runtimes. */
@@ -106,24 +101,24 @@ export class PasswordResetService {
           html: resetEmailHtml(resetUrl),
         })
       } catch (err) {
-        this.deps.logger?.info(
-          { userId: identity.userId, err: String(err) },
-          'Password reset email failed to send',
-        )
+        this.deps.logger?.info('Password reset email failed to send', {
+          userId: identity.userId,
+          err: String(err),
+        })
       }
     } else if (resetUrl) {
       // No system sender configured: surface the link in the logs so local/dev can test.
       // It is NEVER returned to the unauthenticated caller.
       this.deps.logger?.info(
-        { resetUrl, userId: identity.userId },
         'Password reset requested but no email sender configured; link logged for dev',
+        { resetUrl, userId: identity.userId },
       )
     } else {
       // A token was minted but there is no app base URL to build a link from, so the user
       // can never receive it. Flag the misconfiguration rather than failing silently.
       this.deps.logger?.info(
-        { userId: identity.userId },
         'Password reset requested but appBaseUrl is not configured; no reset link could be built',
+        { userId: identity.userId },
       )
     }
   }

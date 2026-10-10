@@ -1,0 +1,98 @@
+<script setup lang="ts">
+// The container agent's effort self-assessment, surfaced in run details: how hard the work was
+// (1..10), what reduced its effectiveness, and the key obstacles it hit. Populated by the harness
+// from the agent's sentinel file and recorded on the step (`step.effortReport`). Rendered only when
+// present, so a run on an older harness image (or an agent that wrote none) shows nothing.
+//
+// Two callers, one renderer: the generic step-detail panel drops it in as a `card` (its own
+// heading + border, sitting among the other detail sections), and `ResultWindowShell`'s
+// collapsible footer embeds it `flat` — the disclosure row is already the heading there, so a
+// second one plus a nested border would just be chrome inside chrome.
+import type { AgentEffortReport } from '~/types/execution'
+import { effortBand } from '~/utils/effort'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
+const props = withDefaults(
+  defineProps<{ report: AgentEffortReport; variant?: 'card' | 'flat' }>(),
+  { variant: 'card' },
+)
+const { t } = useI18n()
+
+// Clamp for the bar width; the schema already bounds 1..10 but be defensive against a stray value.
+const difficultyPct = computed(() =>
+  Math.min(100, Math.max(0, (props.report.difficulty / 10) * 100)),
+)
+// Colour the difficulty by band: easy (emerald) → moderate (amber) → hard (rose).
+const BAR_CLASS = {
+  easy: 'bg-app-success-400',
+  moderate: 'bg-app-warning-400',
+  hard: 'bg-app-error-400',
+} as const
+const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficulty)])
+</script>
+
+<template>
+  <section
+    data-testid="step-effort-report"
+    :class="
+      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
+    "
+  >
+    <SectionLabel v-if="variant === 'card'" class="mb-2 flex items-center gap-1.5">
+      <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
+      <span>{{ t('panels.stepDetail.effort.heading') }}</span>
+    </SectionLabel>
+
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-toned" :title="t('panels.stepDetail.effort.difficultyHint')">
+        {{ t('panels.stepDetail.effort.difficulty') }}
+      </span>
+      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-accented/60">
+        <div
+          class="h-full rounded-full"
+          :class="difficultyClass"
+          :style="{ width: `${difficultyPct}%` }"
+        />
+      </div>
+      <span
+        data-testid="step-effort-difficulty"
+        class="text-xs font-medium text-default"
+        :title="t('panels.stepDetail.effort.difficultyHint')"
+      >
+        {{ t('panels.stepDetail.effort.outOfTen', { value: report.difficulty }) }}
+      </span>
+    </div>
+
+    <p v-if="report.summary" class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-toned">
+      {{ report.summary }}
+    </p>
+
+    <div v-if="report.reducedEffectiveness" class="mt-3">
+      <SectionLabel as="p">
+        {{ t('panels.stepDetail.effort.reduced') }}
+      </SectionLabel>
+      <p class="mt-0.5 whitespace-pre-wrap text-xs text-toned">
+        {{ report.reducedEffectiveness }}
+      </p>
+    </div>
+
+    <div v-if="report.obstacles?.length" class="mt-3">
+      <SectionLabel as="p">
+        {{ t('panels.stepDetail.effort.obstacles') }}
+      </SectionLabel>
+      <ul class="mt-0.5 space-y-1">
+        <li
+          v-for="(obstacle, i) in report.obstacles"
+          :key="i"
+          class="flex items-start gap-1.5 text-xs text-toned"
+        >
+          <UIcon
+            name="i-lucide-alert-triangle"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400/80"
+          />
+          <span>{{ obstacle }}</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+</template>

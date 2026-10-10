@@ -1,0 +1,7 @@
+# These are sanitized detection FIXTURES, not real dotenv files. The repo-root
+# .gitignore excludes `.env.*` (keeping only `.env.example`), which would silently
+# drop the env-template fixtures below — re-include them here so they stay tracked.
+# (Verified with `git check-ignore`; a nested negation overrides the parent pattern.)
+!.env.shared.example
+!*.env.*-dist
+!*.dist

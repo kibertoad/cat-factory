@@ -47,6 +47,94 @@ describe('jira logic', () => {
     expect(md).toContain('- burstable')
   })
 
+  it('renders the leaf nodes that carry their text in `attrs`, mid-sentence', () => {
+    // A mention, an emoji, a status lozenge and a smart link have no children, so walking for
+    // content renders them as nothing at all: a name, a state or a URL vanishing out of the middle
+    // of a sentence with nothing to show it was ever there. That is a silent loss on the import
+    // path and, since a tracker reply is read through this same function, a loss of the very
+    // reference a human's answer was about.
+    const md = jiraLogic.adfToMarkdown({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Ask ' },
+            { type: 'mention', attrs: { id: 'acc-1', text: '@Ada' } },
+            { type: 'text', text: ' about ' },
+            { type: 'inlineCard', attrs: { url: 'https://acme.atlassian.net/browse/PROJ-9' } },
+            { type: 'text', text: ', currently ' },
+            { type: 'status', attrs: { text: 'BLOCKED' } },
+            { type: 'emoji', attrs: { shortName: ':warning:' } },
+          ],
+        },
+      ],
+    })
+    expect(md).toBe(
+      'Ask @Ada about https://acme.atlassian.net/browse/PROJ-9, currently BLOCKED:warning:',
+    )
+  })
+
+  it('reads a smart link that carries its target as embedded JSON-LD rather than a bare url', () => {
+    // Jira serialises a card one of two ways depending on whether it has resolved the target
+    // yet, and reading only `attrs.url` renders the unresolved half as nothing: the same silent
+    // mid-sentence loss the atoms are listed to prevent, on the shape a freshly pasted link has.
+    expect(
+      jiraLogic.adfToMarkdown({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'See ' },
+              { type: 'inlineCard', attrs: { data: { url: 'https://acme.dev/runbook' } } },
+            ],
+          },
+        ],
+      }),
+    ).toBe('See https://acme.dev/runbook')
+  })
+
+  it('renders an atom whose attrs carry nothing usable as empty, not as its children', () => {
+    // `atomicText` answers null for "not an atom" and '' for "an atom with nothing to show", and
+    // the difference decides whether the walk goes on to the node's content. Every atom is
+    // childless today, so collapsing the two is invisible until one is not.
+    expect(
+      jiraLogic.adfToMarkdown({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'Assigned to ' },
+              { type: 'mention', attrs: { id: 'acc-1' } },
+              { type: 'text', text: 'nobody' },
+            ],
+          },
+        ],
+      }),
+    ).toBe('Assigned to nobody')
+  })
+
+  it('stops on a pathological document and SAYS that it stopped', () => {
+    // A comment body arrives from an inbound webhook, so the JSON is whatever the delivery
+    // carried rather than something Jira's editor produced: a recursive walk over it is an
+    // unbounded stack and, on the Worker, an unbounded request budget. The cap is far above a
+    // real document, and it states itself, because a reader who cannot see the cut concludes the
+    // rest was considered and found empty.
+    let deep: Record<string, unknown> = { type: 'text', text: 'bottom' }
+    for (let i = 0; i < 500; i++) deep = { type: 'paragraph', content: [deep] }
+    const md = jiraLogic.adfToMarkdown({ type: 'doc', content: [deep] })
+    expect(md).toContain(jiraLogic.ADF_TRUNCATION_NOTE)
+    expect(md).not.toContain('bottom')
+
+    // A document within budget is untouched: the note is evidence of a cut, never decoration.
+    let nested: Record<string, unknown> = { type: 'text', text: 'bottom' }
+    for (let i = 0; i < 20; i++) nested = { type: 'blockquote', content: [nested] }
+    const shallow = jiraLogic.adfToMarkdown({ type: 'doc', content: [nested] })
+    expect(shallow).toBe('bottom')
+  })
+
   it('handles a null or plain-string description defensively', () => {
     expect(jiraLogic.adfToMarkdown(null)).toBe('')
     expect(jiraLogic.adfToMarkdown(undefined)).toBe('')

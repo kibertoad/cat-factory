@@ -15,6 +15,7 @@ function session(
 ): BrainstormSession {
   return {
     status: 'ready',
+    rev: 0,
     items: [
       {
         id: 'i1',
@@ -108,9 +109,22 @@ export function defineBrainstormSuite(
         'ARCH',
       )
 
-      // Deleting one stage leaves the other intact.
-      await repo.deleteByBlockStage(ws, block, 'requirements')
-      expect(await repo.getByBlockStage(ws, block, 'requirements')).toBeNull()
+      // The atomic per-stage replace swaps the requirements session for a fresh one and leaves
+      // the architecture session untouched — the stage scoping the whole table depends on.
+      await repo.replaceForBlockStage(
+        ws,
+        session({
+          id: `${ws}-req2`,
+          blockId: block,
+          stage: 'requirements',
+          convergedDirection: 'REQ2',
+        }),
+      )
+      const live = await repo.getByBlockStage(ws, block, 'requirements')
+      expect(live!.id).toBe(`${ws}-req2`)
+      expect(live!.convergedDirection).toBe('REQ2')
+      // The replaced predecessor is gone, so the block holds exactly one live session per stage.
+      expect(await repo.get(ws, `${ws}-req`)).toBeNull()
       expect((await repo.getByBlockStage(ws, block, 'architecture'))!.convergedDirection).toBe(
         'ARCH',
       )

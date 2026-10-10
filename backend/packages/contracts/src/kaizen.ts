@@ -26,6 +26,24 @@ import * as v from 'valibot'
 export const kaizenGradingStatusSchema = v.picklist(['scheduled', 'running', 'complete', 'failed'])
 export type KaizenGradingStatus = v.InferOutput<typeof kaizenGradingStatusSchema>
 
+/**
+ * The states in which the grader is DONE with a grading, whatever it concluded.
+ *
+ * One definition because three layers ask the same question and must agree: the acknowledge route
+ * refuses anything else, and both facades' conditional UPDATE carries the same predicate so the
+ * refusal cannot be raced. `failed` is in it deliberately: a grading that could not run names a
+ * deployment problem somebody has to act on, which is precisely a thing to acknowledge.
+ */
+export const KAIZEN_SETTLED_STATUSES = [
+  'complete',
+  'failed',
+] as const satisfies readonly KaizenGradingStatus[]
+
+/** Whether a grading has settled, so it can be acknowledged. */
+export function isSettledKaizenStatus(status: KaizenGradingStatus): boolean {
+  return (KAIZEN_SETTLED_STATUSES as readonly KaizenGradingStatus[]).includes(status)
+}
+
 /** A single Kaizen grading of one completed agent step. */
 export const kaizenGradingSchema = v.object({
   id: v.string(),
@@ -54,6 +72,27 @@ export const kaizenGradingSchema = v.object({
   graderModel: v.nullable(v.string()),
   /** Error message when `failed`, else null. */
   error: v.nullable(v.string()),
+  /**
+   * Epoch ms somebody recorded that this grading has been triaged, or null while it is still
+   * outstanding. Acknowledgement is a state of the ENTRY, not of the grading: it is written by
+   * a human (or the integration standing in for one) after reading the recommendations, and the
+   * grading sweep never touches it, so a re-graded row keeps whatever was acknowledged about it.
+   *
+   * Its whole purpose is to make "what has nobody looked at yet" answerable, which a
+   * recommendations list alone cannot be: `GET /api/v1/kaizen/entries?acknowledged=false` is the
+   * work queue, and without a persisted acknowledgement every poll re-reports the same backlog.
+   */
+  acknowledgedAt: v.nullable(v.number()),
+  /**
+   * WHO acknowledged it: a user id (`usr_*`) when the acting key was minted onto a person,
+   * otherwise the public-API key (`pak_*`) that recorded it. Null while unacknowledged.
+   *
+   * One field rather than two, because the question a follow-up asks is "who do I go back to",
+   * and a key that acts as nobody IS the answerable party for its own acknowledgements.
+   */
+  acknowledgedBy: v.nullable(v.string()),
+  /** What the acknowledger wanted the next reader to know (a ticket id, a decision), or null. */
+  acknowledgementNote: v.nullable(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

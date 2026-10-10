@@ -1,6 +1,13 @@
-import type { TaskComment, TaskRecord, TaskRepository, TaskSourceKind } from '@cat-factory/kernel'
+import type {
+  TaskComment,
+  TaskRecord,
+  TaskRef,
+  TaskRepository,
+  TaskSourceKind,
+} from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface TaskRow {
   workspace_id: string
@@ -117,6 +124,35 @@ export class D1TaskRepository implements TaskRepository {
     return row ? rowToRecord(row) : null
   }
 
+  async listByRefs(workspaceId: string, refs: readonly TaskRef[]): Promise<TaskRecord[]> {
+    if (refs.length === 0) return []
+    // Group the external ids by source so each source is ONE chunked `IN` read (never a
+    // point-read per ref). A workspace's description names refs across at most a handful
+    // of sources, so this is a small, bounded number of statements.
+    const idsBySource = new Map<TaskSourceKind, string[]>()
+    for (const ref of refs) {
+      const ids = idsBySource.get(ref.source)
+      if (ids) ids.push(ref.externalId)
+      else idsBySource.set(ref.source, [ref.externalId])
+    }
+    const out: TaskRecord[] = []
+    for (const [source, externalIds] of idsBySource) {
+      // Chunk the IN list to stay under D1's bound-parameter limit (the two leading params
+      // — workspace_id + source — are within chunkForIn's headroom).
+      for (const chunk of chunkForIn(externalIds)) {
+        const placeholders = chunk.map(() => '?').join(', ')
+        const { results } = await this.db
+          .prepare(
+            `SELECT * FROM tasks WHERE workspace_id = ? AND source = ? AND external_id IN (${placeholders}) AND deleted_at IS NULL`,
+          )
+          .bind(workspaceId, source, ...chunk)
+          .all<TaskRow>()
+        for (const row of results ?? []) out.push(rowToRecord(row))
+      }
+    }
+    return out
+  }
+
   async listByWorkspace(workspaceId: string): Promise<TaskRecord[]> {
     const { results } = await this.db
       .prepare(
@@ -138,7 +174,11 @@ export class D1TaskRepository implements TaskRepository {
   }
 
   async getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null> {
-    const [a, b] = urlMatchCandidates(url)
+    // A needle that normalises to nothing is not a URL, and must never be matched (see
+    // `urlMatchCandidates`).
+    const candidates = urlMatchCandidates(url)
+    if (!candidates) return null
+    const [a, b] = candidates
     const row = await this.db
       .prepare(
         'SELECT * FROM tasks WHERE workspace_id = ? AND url IN (?, ?) AND deleted_at IS NULL ORDER BY synced_at DESC LIMIT 1',
@@ -160,5 +200,46 @@ export class D1TaskRepository implements TaskRepository {
       )
       .bind(blockId, workspaceId, source, externalId)
       .run()
+  }
+
+  async claimBlockLink(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    blockId: string,
+  ): Promise<boolean> {
+    // `linked_block_id IS NULL OR = ?` is the claim: SQLite evaluates it while holding the row's
+    // write lock, so of two concurrent filings of one ticket exactly one updates a row. The
+    // `= ?` arm makes a re-claim by the holder idempotent rather than a refusal against itself.
+    const result = await this.db
+      .prepare(
+        'UPDATE tasks SET linked_block_id = ? WHERE workspace_id = ? AND source = ? AND external_id = ?' +
+          ' AND (linked_block_id IS NULL OR linked_block_id = ?)',
+      )
+      .bind(blockId, workspaceId, source, externalId, blockId)
+      .run()
+    return (result.meta?.changes ?? 0) > 0
+  }
+
+  async unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE tasks SET linked_block_id = NULL WHERE workspace_id = ? AND linked_block_id = ?',
+      )
+      .bind(workspaceId, blockId)
+      .run()
+  }
+
+  async unlinkAllFromBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    for (const chunk of chunkForIn([...blockIds])) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `UPDATE tasks SET linked_block_id = NULL WHERE workspace_id = ? AND linked_block_id IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .run()
+    }
   }
 }

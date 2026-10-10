@@ -1,4 +1,5 @@
 import type { ReleaseSignalState } from '@cat-factory/kernel'
+import { VENDOR_DOCS } from '../../docs.js'
 
 // Pure helpers for the Datadog post-release-health integration: site validation
 // (anti-SSRF — only real Datadog hosts), base-URL construction, and mapping Datadog's
@@ -6,6 +7,21 @@ import type { ReleaseSignalState } from '@cat-factory/kernel'
 
 /** The domain tag used to seal observability credentials at rest (HKDF info). */
 export const OBSERVABILITY_CIPHER_INFO = 'cat-factory:observability'
+
+/**
+ * UI-first remedy for a Datadog auth rejection (401/403): the API + Application keys are entered
+ * in the cat-factory UI, so the primary fix names that click path — the env vars don't exist for
+ * this connection. Returns the remedy sentence for an auth status, else `undefined` (a 5xx or a
+ * mapping error is not a credential problem). Appended to the error detail at the throw site so a
+ * rejected key surfaces "re-enter your keys" instead of a bare `HTTP 403`.
+ */
+export function datadogAuthRemedy(status: number): string | undefined {
+  if (status !== 401 && status !== 403) return undefined
+  return (
+    `your Datadog API and Application keys were rejected — re-enter them in Integrations → ` +
+    `Observability connection (mint or rotate them at ${VENDOR_DOCS.datadogApiKeys})`
+  )
+}
 
 /** Datadog site host suffixes we allow a connection to point at (anti-SSRF). */
 const ALLOWED_SITE_SUFFIXES = [
@@ -42,6 +58,30 @@ export function datadogApiBase(site: string): string {
 }
 
 /**
+ * Normalise a Datadog state string for comparison. The same vocabulary is spelled differently
+ * depending on where it is read (`Alert Recovery` on a group, `alert_recovery` on the monitor's
+ * `overall_state`), so a caller comparing raw strings matches one spelling and misses the other.
+ */
+function normalizeState(value: string | undefined): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+}
+
+/**
+ * Whether a Datadog state string means the thing it describes is CURRENTLY alerting.
+ *
+ * Shared by the monitor mapping below and by the per-group attribution read: a group's
+ * `last_triggered_ts` survives the group recovering, so only a group still in an alerting state
+ * says anything about the alert the gate is looking at.
+ */
+export function isAlertingState(value: string | undefined): boolean {
+  const state = normalizeState(value)
+  return state === 'alert' || state === 'alert_recovery'
+}
+
+/**
  * Map Datadog's monitor `overall_state` string onto a release signal state.
  *
  * `attribution` lets the post-release-health gate ignore an alert that PREDATES the
@@ -49,26 +89,27 @@ export function datadogApiBase(site: string): string {
  * flaky / never-recovered incident) is not attributable to this release, so it is
  * downgraded to `warn` (which does NOT regress the gate) rather than escalating an
  * on-call investigation that blames an innocent PR. When the transition timestamp is
- * unknown (Datadog didn't report `overall_state_modified`) we keep the alert — better
- * to investigate than to silently miss a real regression.
+ * unknown (no currently-alerting group carried one) we keep the alert: better to
+ * investigate than to silently miss a real regression.
  */
 export function mapMonitorState(
   overallState: string | undefined,
   attribution?: { stateModifiedMs?: number; since: number },
 ): ReleaseSignalState {
-  switch ((overallState ?? '').toLowerCase()) {
-    case 'alert':
-    case 'alert_recovery':
-      // A pre-existing alert (state last changed before the release marker) is not this
-      // release's regression — don't escalate on it.
-      if (
-        attribution &&
-        attribution.stateModifiedMs !== undefined &&
-        attribution.stateModifiedMs < attribution.since
-      ) {
-        return 'warn'
-      }
-      return 'alert'
+  const state = normalizeState(overallState)
+  if (isAlertingState(state)) {
+    // A pre-existing alert (last triggered before the release marker) is not this release's
+    // regression, so don't escalate on it.
+    if (
+      attribution &&
+      attribution.stateModifiedMs !== undefined &&
+      attribution.stateModifiedMs < attribution.since
+    ) {
+      return 'warn'
+    }
+    return 'alert'
+  }
+  switch (state) {
     case 'warn':
     case 'warn_recovery':
       return 'warn'

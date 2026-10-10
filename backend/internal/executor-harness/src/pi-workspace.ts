@@ -1,18 +1,20 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RepoSpec } from './job.js'
+import type { RepoSpec, ImageManifestSpec } from './job.js'
+import { deliverJobImages } from './job-images.js'
+import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
+import { readEffortReport } from './effort.js'
+import { piImageAgentDir, withPiAgentDir } from './pi-agent-dir.js'
+import { writePiMcpConfig } from './pi-mcp.js'
 import { log } from './logger.js'
 import {
   type ContextFileInfo,
   type PiRunOutcome,
-  type PiRunStats,
-  type ProgressGuardLimits,
-  type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
-  mergeGuardLimits,
-  progressGuardLimitsFromEnv,
+  materializeSkillResources,
+  phasedProxyBaseUrl,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -20,6 +22,18 @@ import {
   writePiModelsConfig,
   writeWebToolsConfig,
 } from './pi.js'
+import type { PiRunStats, RunDiagnostics } from './pi-reduction.js'
+import {
+  type ProgressGuardLimits,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
+} from './progress-guard.js'
+import {
+  composeWorkspaceProbes,
+  createWorkspaceProbe,
+  readHeadOrEmpty,
+  type WorkspaceProbe,
+} from './workspace-probe.js'
 import type { RunOptions } from './runner.js'
 import { type SubscriptionHarness, runSubscriptionHarness } from './agent-runner.js'
 
@@ -145,7 +159,18 @@ export async function acquireRepoCheckout<T>(
 export interface AgentRunSpec {
   /** The prepared working directory (cloned/scaffolded by the caller). */
   dir: string
-  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
+  /**
+   * The git checkouts this pass may change, for the no-progress guard's working-tree bound.
+   * Absent ⇒ `[dir]`, which is right whenever the agent's cwd is (or is inside) the one repo.
+   *
+   * A MULTI-REPO run is the exception the default cannot serve: its cwd is a workspace ROOT
+   * holding sibling checkouts and is no repository itself, so probing it asks git a question with
+   * no answer, every probe throws, and the bound goes permanently unenforced. Such a caller names
+   * its writable legs here instead. A read-only reference checkout is deliberately NOT named: the
+   * run is forbidden to write to it, so a change there is not this run making progress.
+   */
+  repoDirs?: readonly string[]
+  /** Composed role + best-practice fragments; written to the AGENTS.md context of the pass's Pi config dir. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
   userPrompt: string
@@ -168,6 +193,12 @@ export interface AgentRunSpec {
   ambientAuth?: boolean
   /** Pi proxy base URL (Pi harness only). */
   proxyBaseUrl?: string
+  /**
+   * The backend serves the phase-tagged completions route, so this pass may tag the URL it
+   * points Pi at with the phase it is running under (see {@link HarnessAuthFields.proxyPhasePath}
+   * and `phasedProxyBaseUrl`). Absent ⇒ the plain path.
+   */
+  proxyPhasePath?: boolean
   /** Pi proxy session token (Pi harness only). */
   sessionToken?: string
   /**
@@ -202,6 +233,43 @@ export interface AgentRunSpec {
    */
   contextFiles?: ContextFileInfo[]
   /**
+   * The task's reference design images. Downloaded into `.cat-context/reference-screenshots/`
+   * before the run and named in the agent's prompt, so a capturing agent can compare against them
+   * and use their view names. Absent ⇒ nothing is downloaded and nothing is said.
+   */
+  referenceScreenshots?: ImageManifestSpec
+  /**
+   * The PICTURES of the task's designs. Downloaded into `.cat-context/design-renders/` before the
+   * run; the agent's prompt (composed by the backend) already names each file and its view, so the
+   * only thing said here is a CORRECTION when one of them did not land. Absent ⇒ nothing is
+   * downloaded and nothing is said.
+   */
+  designImages?: ImageManifestSpec
+  /**
+   * The skills to make available for this run — a `skill` step's picked skill and/or the playbooks
+   * the running agent kind declares. Installed HARNESS-AWARE: the claude-code runner writes them
+   * natively into the config dir's `skills/`; for Pi/codex the resource files are materialised
+   * under `.cat-context/skill/<name>/` (their prompt already carries the folded-in instructions).
+   * Absent ⇒ no skills.
+   */
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the agent CLI: Pi's `mcp.json` (see `writePiMcpConfig`), or
+   * the subscription CLI's own config. The BACKEND decides which servers a harness can serve (it
+   * drops an unservable one and tells the agent so), which is why this path simply materialises
+   * whatever it is given rather than re-deciding. Absent ⇒ the CLI's built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
+  /**
+   * Enable the codex CLI's built-in `image_gen` tool and stage its output into the checkout.
+   *
+   * Forwarded rather than decided here, exactly like {@link mcpServers}: the BACKEND is the half
+   * that resolved a harness-served binary generator for this step and knows the run is meant to
+   * generate. A run that simply asks nicely gets nothing, which is the point — the tool bills the
+   * leased plan at several times an ordinary turn.
+   */
+  generateImages?: boolean
+  /**
    * Enable proxy-backed web search: point the rpiv-web-tools SearXNG provider at the
    * backend's search proxy (`${proxyBaseUrl}/web-search`) with the session token as
    * the bearer — so the search runs server-side under the deployment's key and no
@@ -209,10 +277,125 @@ export interface AgentRunSpec {
    * is present directly in the container env (the self-hosted runner-pool path).
    */
   webSearchProxy?: boolean
+  /**
+   * Multi-repo run (service-connections phase 3): the cwd (`dir`) is the WORKSPACE ROOT with
+   * every involved repo checked out as a sibling under it. Suppresses the single-repo monorepo
+   * note in AGENTS.md and adds the multi-repo mechanics note instead. Absent ⇒ single-repo.
+   */
+  multiRepo?: boolean
 }
 
 /**
- * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
+ * Whether the run's checkout actually ships a `blueprints/` folder — what gates the blueprint
+ * orientation note in AGENTS.md (an external repo has none, so the note would be ~10 lines of
+ * dead guidance pointing at files that don't exist, re-sent on every turn).
+ *
+ * A MULTI-REPO run's `dir` is the workspace ROOT with each repo checked out as a sibling under
+ * it, so the root itself never holds `blueprints/`: the legs are checked too, and the note is
+ * included when ANY leg ships one (it orients the agent to the concept, and the agent finds the
+ * per-repo folder from there). Best-effort throughout — any stat/readdir failure simply omits
+ * the note rather than failing the dispatch.
+ */
+export async function checkoutHasBlueprints(dir: string, multiRepo: boolean): Promise<boolean> {
+  const isBlueprintDir = (path: string): Promise<boolean> =>
+    stat(join(path, 'blueprints'))
+      .then((s) => s.isDirectory())
+      .catch(() => false)
+  if (await isBlueprintDir(dir)) return true
+  if (!multiRepo) return false
+  const legs = await readdir(dir, { withFileTypes: true }).catch(() => [])
+  const checks = await Promise.all(
+    legs.filter((e) => e.isDirectory()).map((e) => isBlueprintDir(join(dir, e.name))),
+  )
+  return checks.some(Boolean)
+}
+
+/**
+ * Run one pass on a SUBSCRIPTION harness (Claude Code / Codex): the leased-credential path, which
+ * shares only the checkout preparation with the Pi one.
+ *
+ * Split out of {@link runAgentInWorkspace} for its cyclomatic budget. It is also the honest seam:
+ * everything here is a decision about what the vendor's own CLI is handed, while everything left
+ * behind is about the proxy-backed Pi run.
+ */
+async function runSubscriptionInWorkspace(
+  harness: 'claude-code' | 'codex',
+  spec: AgentRunSpec,
+  opts: RunOptions,
+  prepared: {
+    contextFiles: ContextFileInfo[]
+    imageGuidance: string
+    workspaceProbe: WorkspaceProbe
+  },
+): Promise<PiRunOutcome> {
+  const { contextFiles, imageGuidance, workspaceProbe } = prepared
+  // Ambient (native) mode authenticates with the developer's own CLI login, so no
+  // leased token is required; otherwise the leased subscription token is mandatory.
+  if (!spec.ambientAuth && !spec.subscriptionToken) {
+    throw new Error(`The ${harness} harness requires a subscription token`)
+  }
+  const subOutcome = await runSubscriptionHarness(harness, {
+    cwd: spec.dir,
+    model: spec.model,
+    systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${imageGuidance}`,
+    userPrompt: spec.userPrompt,
+    ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
+    subscriptionBaseUrl: spec.subscriptionBaseUrl,
+    ...(spec.ambientAuth ? { ambientAuth: true } : {}),
+    ...(spec.skills?.length ? { skills: spec.skills } : {}),
+    ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
+    // Codex's own image tool. Passed for both subscription harnesses because the option lives on
+    // the shared run options; `runClaudeCode` ignores it, since claude-code has no such tool and
+    // (unlike an MCP server) there is nothing to report as unservable — the backend never
+    // resolves a codex-served generator onto a claude-code step, because admission refuses it.
+    ...(spec.generateImages ? { generateImages: true } : {}),
+    // `spec.webSearchProxy` is deliberately NOT forwarded. It states whether OUR PROXY serves web
+    // research for this run's account, which is what Pi's tools ride and what they would fail
+    // without; neither subscription CLI touches that proxy. Claude Code's `WebSearch`/`WebFetch`
+    // are served by the vendor the leased subscription already pays and are declared
+    // unconditionally (see `CLAUDE_TOOL_SET`), and Codex's surface is per-tool config rather than
+    // a list. Passing the proxy's availability here would withhold working tools on the strength
+    // of an unrelated deployment's wiring.
+    ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
+    signal: opts.signal,
+    // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
+    // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
+    // no-edit allowance, so a claude-code run that stops making progress is killed early
+    // instead of burning the full wall-clock budget. The claude runner consumes it; codex
+    // ignores it for now (its stream isn't wired to the guard).
+    guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+    expectsEdits: spec.expectsEdits ?? true,
+    // What the guard's no-edit bound actually decides on (see `buildWorkspaceProbe`).
+    workspaceProbe,
+    onActivity: opts.onActivity,
+    onProgress: opts.onProgress,
+    // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
+    // and a proxied one produce the same evidence rather than one of them producing none.
+    onSpan: opts.onSpan,
+    // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
+    // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
+    // each can beat the window it opens.
+    beginToolWindow: opts.beginToolWindow,
+    // Per-slice review capture, so a parallel review's finished slices are persisted as they
+    // land rather than only in the terminal output. Only the subscription runners fan work out
+    // across subagents, so this is the only path that can produce it.
+    onSliceReviews: opts.onSliceReviews,
+    // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
+    // harnesses even though only claude-code's stream carries the report today: the hook is a
+    // pass-through, and a codex run that never calls it leaves the backend's record honestly
+    // absent rather than claiming every server it wired failed to start.
+    onToolServers: opts.onToolServers,
+    // Stream this run's per-call telemetry to the job's live drain. The subscription
+    // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
+    // proxy as they happen), so this is the only path that needs the hook.
+    onCallMetric: opts.onCallMetric,
+    ...(opts.log ? { log: opts.log } : {}),
+  })
+  return withEffortReport(spec.dir, subOutcome)
+}
+
+/**
+ * Write Pi's agent context (`<agentDir>/AGENTS.md`, a per-pass directory) + provider config,
  * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
  * lives outside the checkout so it never lands in a commit; the shared middle of
  * every container agent.
@@ -226,28 +409,53 @@ export async function runAgentInWorkspace(
   // harness paths; kept out of the agent's commits via a local git exclude entry.
   const contextFiles = spec.contextFiles ?? []
   await materializeContextFiles(spec.dir, contextFiles)
+  // The task's reference designs, fetched into `.cat-context/reference-screenshots/` for the kinds
+  // that capture views. Delivered here (beside the linked context, before either harness path
+  // branches) so the Pi and subscription runs are handed the SAME directory and the SAME view
+  // names; a per-path copy is how one of them would end up silently without it.
+  //
+  // This runs once per PASS, not once per job: a coding flow re-enters its workspace for every
+  // repair round. That is safe because the delivery is idempotent over the checkout (a file
+  // already on disk is counted, never re-fetched), so a later round costs a stat per reference and
+  // cannot report a view an earlier round successfully delivered as absent. A view that MISSED is
+  // retried, which is the behaviour worth having: the next round is a fresh chance at a blob
+  // backend that was briefly down.
+  const imageGuidance = await deliverJobImages(spec, {
+    ...(opts.signal ? { signal: opts.signal } : {}),
+    log: opts.log ?? log,
+  })
+  // Skills: claude-code installs them natively into its ISOLATED config dir, so it reads from
+  // there. Everything else reads the checkout, so materialise each skill's resources under
+  // `.cat-context/skill/<name>/` (their instructions are folded into the prompt by the backend) —
+  // Pi, codex, and AMBIENT claude-code, which has no isolated config dir to install into (the
+  // runner refuses to write a skill into the developer's own `~/.claude`; see `runClaudeCode`).
+  // Resource-free skills are a no-op here.
+  if (spec.skills?.length && !installsSkillNatively(spec)) {
+    await materializeSkillResources(spec.dir, spec.skills)
+  }
 
-  // Subscription harnesses (Claude Code / Codex) authenticate with the leased
-  // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
-  // system prompt is passed straight to the CLI; everything around this (clone,
-  // push, watchdogs) is unchanged.
+  // The no-progress guard's no-edit bound asks "has this run changed the repository", and the
+  // tool names it can see are only a proxy for that: an agent writing every file through `bash`
+  // reads as making no edits at all, and the guard killed exactly such a run after it had built,
+  // tested and verified a whole service. The working tree is the honest answer, so wire the probe
+  // that reads it. Built HERE because this is the shared middle of both harness paths and the one
+  // place that knows the checkout: the guard itself stays pure and takes it injected.
+  //
+  // The baseline is HEAD as this PASS begins, not the clone's — a repair round is a fresh agent
+  // that must show its OWN progress, and judging it against the clone would let the previous
+  // round's commits satisfy its bound. A checkout with no commit yet (a scaffold-from-scratch
+  // bootstrap) has no HEAD to read; the probe then rides on the dirty-tree half alone, which is
+  // the half that matters there anyway.
+  const workspaceProbe = await buildWorkspaceProbe(spec, opts.signal)
+
+  // Subscription harnesses (Claude Code / Codex) authenticate with the leased token and talk
+  // direct to the vendor: no proxy config, no AGENTS.md. The system prompt is passed straight to
+  // the CLI; everything around this (clone, push, watchdogs) is unchanged.
   if (spec.harness === 'claude-code' || spec.harness === 'codex') {
-    // Ambient (native) mode authenticates with the developer's own CLI login, so no
-    // leased token is required; otherwise the leased subscription token is mandatory.
-    if (!spec.ambientAuth && !spec.subscriptionToken) {
-      throw new Error(`The ${spec.harness} harness requires a subscription token`)
-    }
-    return runSubscriptionHarness(spec.harness, {
-      cwd: spec.dir,
-      model: spec.model,
-      systemPrompt: subscriptionSystemPrompt(spec.systemPrompt, contextFiles),
-      userPrompt: spec.userPrompt,
-      ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
-      subscriptionBaseUrl: spec.subscriptionBaseUrl,
-      ...(spec.ambientAuth ? { ambientAuth: true } : {}),
-      signal: opts.signal,
-      onActivity: opts.onActivity,
-      onProgress: opts.onProgress,
+    return await runSubscriptionInWorkspace(spec.harness, spec, opts, {
+      contextFiles,
+      imageGuidance,
+      workspaceProbe,
     })
   }
   if (!spec.proxyBaseUrl || !spec.sessionToken) {
@@ -255,6 +463,43 @@ export async function runAgentInWorkspace(
   }
   const proxyBaseUrl = spec.proxyBaseUrl
   const sessionToken = spec.sessionToken
+  // Every file this pass hands Pi (the composed AGENTS.md, the provider config, the tool-server
+  // config) goes into a config directory made for the pass and removed after it, seeded with the
+  // extensions the image installed. See `createPiAgentDir` for why it is not the home directory.
+  const piOutcome = await withPiAgentDir({ seedFrom: piImageAgentDir() }, (agentDir) =>
+    runPiPass(spec, opts, {
+      agentDir,
+      proxyBaseUrl,
+      sessionToken,
+      contextFiles,
+      imageGuidance,
+      workspaceProbe,
+    }),
+  )
+  return withEffortReport(spec.dir, piOutcome)
+}
+
+/**
+ * One Pi pass inside its own config directory: stage the run's files there and run Pi. Split
+ * from {@link runAgentInWorkspace} so the directory's lifetime (created, then removed whatever the
+ * pass did) is one call in the caller rather than a `finally` around forty lines.
+ */
+async function runPiPass(
+  spec: AgentRunSpec,
+  opts: RunOptions,
+  pass: {
+    agentDir: string
+    proxyBaseUrl: string
+    sessionToken: string
+    contextFiles: NonNullable<AgentRunSpec['contextFiles']>
+    imageGuidance: string | undefined
+    workspaceProbe: WorkspaceProbe
+  },
+): Promise<PiRunOutcome> {
+  const { agentDir, proxyBaseUrl, sessionToken, contextFiles, imageGuidance, workspaceProbe } = pass
+  // Tool servers (MCP): Pi's `mcp.json`, credentials in the file and never in Pi's env; see
+  // `writePiMcpConfig`.
+  await writePiMcpConfig(agentDir, spec.mcpServers)
   // Opt-in web search/fetch (rpiv-web-tools). Two ways it turns on, both no-ops by
   // default:
   //  - proxy-backed (the Cloudflare/managed path): the backend set `webSearchProxy`,
@@ -264,21 +509,38 @@ export async function runAgentInWorkspace(
   //    container env, which `webSearchConfigFromEnv` autodetects.
   // The proxy vars are handed to Pi's child via `extraEnv` (not the harness's own
   // process.env), so detection runs against the same merged view the extension sees.
-  const extraEnv: Record<string, string> = spec.webSearchProxy
-    ? webSearchProxyEnv(proxyBaseUrl, sessionToken)
-    : {}
+  const extraEnv: Record<string, string> = {
+    ...(spec.webSearchProxy ? webSearchProxyEnv(proxyBaseUrl, sessionToken) : {}),
+    // Per-job env (tester secrets, a private-registry npmrc pointer) — see `RunOptions.agentEnv`.
+    ...opts.agentEnv,
+  }
   const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)
+  const hasBlueprints = await checkoutHasBlueprints(spec.dir, spec.multiRepo === true)
   await writeAgentsContext(spec.systemPrompt, {
+    agentDir,
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
+    hasBlueprints,
+    ...(imageGuidance ? { referenceGuidance: imageGuidance } : {}),
+    ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
-  await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
-  const { signal, onActivity, onProgress, onSpan } = opts
+  // Pi's calls are metered server-side by the LLM proxy, which sees only an HTTP request — so
+  // the phase this pass runs under is carried on the URL it is pointed at. Resolved per pass
+  // (this whole function re-runs for every repair round), which is what makes a repair round's
+  // spend distinguishable from the first pass's. Only when the BACKEND said it serves that
+  // route, since a runner pool or `LOCAL_HARNESS_IMAGE` can pair this image with an older one.
+  await writePiModelsConfig({
+    agentDir,
+    model: spec.model,
+    proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.(), spec.proxyPhasePath),
+  })
+  const { signal, onActivity, onProgress, onSpan, beginToolWindow } = opts
   return runPi({
     cwd: spec.dir,
+    agentDir,
     model: spec.model,
     userPrompt: spec.userPrompt,
     sessionToken,
@@ -286,12 +548,76 @@ export async function runAgentInWorkspace(
     onActivity,
     onProgress,
     onSpan,
+    beginToolWindow,
     expectsEdits: spec.expectsEdits ?? true,
     // Start from the env/built-in defaults and apply only the per-knob overrides the
     // backend set for this kind (loosen-only), so an unspecified knob keeps its default.
     guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+    // What the guard's no-edit bound actually decides on (see `buildWorkspaceProbe`).
+    workspaceProbe,
     extraEnv,
   })
+}
+
+/**
+ * The workspace probe for one agent pass: each of the pass's working trees, baselined against its
+ * own HEAD as this pass begins.
+ *
+ * Reading HEAD is the one part that can fail benignly: a scaffold-from-scratch checkout has no
+ * commit yet, so `rev-parse HEAD` errors. That is no reason to leave the bound blind, since the
+ * dirty-tree half is exactly what answers a from-scratch build — so the pass baselines against
+ * the empty sha (`readHeadOrEmpty`, which the probe itself reads HEAD through for the same
+ * reason), and any commit the agent makes reads as HEAD having moved off it.
+ *
+ * A directory that is no git repository at all makes every probe THROW, which the driver treats
+ * as inconclusive: the bound re-arms and the run is neither killed nor left to the streak bounds
+ * alone. Deliberate, and the same disposition a transient git failure gets.
+ *
+ * WHICH trees is `spec.repoDirs`, defaulted HERE rather than at the call site so the rule that a
+ * pass with no declared checkouts is judged on its own directory lives with the builder that acts
+ * on it. Several of them compose into one probe over the whole workspace (see
+ * {@link composeWorkspaceProbes}); an empty list would silently disarm the bound, so it falls back
+ * to `dir` too.
+ */
+async function buildWorkspaceProbe(
+  spec: Pick<AgentRunSpec, 'dir' | 'repoDirs'>,
+  signal: AbortSignal | undefined,
+): Promise<WorkspaceProbe> {
+  const dirs = spec.repoDirs?.length ? spec.repoDirs : [spec.dir]
+  const probes = await Promise.all(
+    dirs.map(async (dir) =>
+      createWorkspaceProbe({
+        dir,
+        baseSha: await readHeadOrEmpty(dir, signal),
+        ...(signal ? { signal } : {}),
+      }),
+    ),
+  )
+  return composeWorkspaceProbes(probes)
+}
+
+/**
+ * Whether the claude-code runner will install this run's skills natively (into the CLI's config
+ * dir) rather than the caller materialising them into the checkout. True ONLY for a
+ * leased-credential claude-code run, which gets a throwaway per-run config home. An AMBIENT run
+ * uses the developer's own `~/.claude`, which the runner will not write a skill into — it would
+ * outlive the run in their personal setup, and two concurrent jobs carrying same-named skills
+ * would overwrite each other's.
+ */
+export function installsSkillNatively(
+  spec: Pick<AgentRunSpec, 'harness' | 'ambientAuth'>,
+): boolean {
+  return spec.harness === 'claude-code' && !spec.ambientAuth
+}
+
+/**
+ * Lift the agent's effort self-assessment off its sentinel file in `dir` and fold it onto the
+ * run outcome. Shared by both harness paths so EVERY container agent's effort report is captured
+ * in one place. Never throws (a bad/absent report just yields no `effortReport`).
+ */
+async function withEffortReport(dir: string, outcome: PiRunOutcome): Promise<PiRunOutcome> {
+  const effortReport = await readEffortReport(dir)
+  return effortReport ? { ...outcome, effortReport } : outcome
 }
 
 /**

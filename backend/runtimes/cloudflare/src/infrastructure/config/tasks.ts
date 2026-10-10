@@ -1,4 +1,4 @@
-import type { TasksConfig } from '@cat-factory/server'
+import { ENV_HELP, type TasksConfig, configProblem } from '@cat-factory/server'
 import type { Env } from '../env'
 
 export type { TasksConfig }
@@ -13,11 +13,7 @@ export function loadTasksConfig(env: Env): TasksConfig {
   // it is missing (mirrors the document-source integration).
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
-    throw new Error(
-      'ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
-        'per-workspace source credentials at rest. Set it to a base64-encoded key of at ' +
-        'least 32 bytes.',
-    )
+    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
   }
   return {
     enabled: true,

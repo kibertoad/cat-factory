@@ -7,7 +7,8 @@
 //  - 'direct' (default): you reach the vendor directly (OpenAI/Anthropic/Qwen/DeepSeek/
 //    Moonshot).
 //  - 'proxy': an intermediary gateway that fronts many vendors behind one key
-//    (OpenRouter, LiteLLM). These are NOT direct vendors, so they get their own section.
+//    (OpenRouter, Bifrost, LiteLLM). These are NOT direct vendors, so they get their own
+//    section.
 //
 // Two scopes:
 //  - Default (no `accountId`): manage WORKSPACE keys (shared by the team) and YOUR own
@@ -15,7 +16,10 @@
 //  - With `accountId`: manage ACCOUNT-wide keys (shared by every workspace in the
 //    account); admin-only, enforced server-side. Surfaced from account/team settings.
 import { computed, ref, watch } from 'vue'
+import { providerCachesPrompts } from '@cat-factory/contracts'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
+import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct' | 'proxy' }>(), {
   category: 'direct',
@@ -27,10 +31,14 @@ const keys = useApiKeysStore()
 const models = useModelsStore()
 const auth = useAuthStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
+
+/** Which store the form writes to: the shared workspace keys or the user's own. */
+const scope = ref<'workspace' | 'user'>('workspace')
 
 // "My keys" (user scope) are stored per-user, so they need a signed-in user. Block just
 // that scope when there's none (a deployment without sign-in); workspace/account keys are
@@ -42,18 +50,29 @@ interface ProviderMeta {
   label: string
   url: string
   steps: string[]
-  /**
-   * Whether this provider caches the re-sent prompt prefix. Connecting a key here
-   * upgrades its models to the caching `direct` flavour, so a long agentic run stops
-   * re-billing its whole growing prompt every turn. Mirrors the backend
-   * `providerCachePolicy`; the gateways are pass-through (no caching we rely on yet).
-   */
-  caches?: boolean
+}
+
+/**
+ * Whether connecting a key here upgrades its models to the caching flavour, so a long agentic
+ * run stops re-billing its whole growing prompt every turn.
+ *
+ * READ from the shared rule rather than kept as a flag beside each entry. A hand-kept copy was
+ * already stale: the backend answers per (provider, MODEL) for a gateway, so it now reports
+ * caching for several OpenRouter routes while a boolean here still said the gateways cache
+ * nothing. A per-provider question is the one this page can ask, and asking the same function
+ * the picker and the call paths ask is what keeps the three answers from diverging again.
+ *
+ * A GATEWAY therefore answers false here, honestly: whether an OpenRouter key caches depends on
+ * which model the run picks, which is a per-model badge in the picker rather than a promise this
+ * page can make about a key.
+ */
+function cachesPrompts(provider: ApiKeyProvider): boolean {
+  return providerCachesPrompts(provider)
 }
 
 // Provider metadata. Labels + step instructions resolve through i18n (reactive to the
 // locale), so each `t(...)` uses a literal key (kept tier-1 typed-key checkable); only the
-// `value`/`url`/`caches` differentiators stay inline.
+// `value`/`url` differentiators stay inline.
 /** Direct vendors: the key reaches that one vendor's own endpoint. */
 const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
   {
@@ -64,7 +83,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.openai.step1'),
       t('providers.apiKeys.providers.openai.step2'),
     ],
-    caches: true,
   },
   {
     value: 'anthropic',
@@ -74,7 +92,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.anthropic.step1'),
       t('providers.apiKeys.providers.anthropic.step2'),
     ],
-    caches: true,
   },
   {
     value: 'qwen',
@@ -84,7 +101,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.qwen.step1'),
       t('providers.apiKeys.providers.qwen.step2'),
     ],
-    caches: true,
   },
   {
     value: 'deepseek',
@@ -94,7 +110,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.deepseek.step1'),
       t('providers.apiKeys.providers.deepseek.step2'),
     ],
-    caches: true,
   },
   {
     value: 'moonshot',
@@ -104,6 +119,12 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.moonshot.step1'),
       t('providers.apiKeys.providers.moonshot.step2'),
     ],
+  },
+  {
+    value: 'xai',
+    label: t('providers.apiKeys.providers.xai.label'),
+    url: 'https://console.x.ai/',
+    steps: [t('providers.apiKeys.providers.xai.step1'), t('providers.apiKeys.providers.xai.step2')],
   },
 ])
 
@@ -116,6 +137,15 @@ const PROXY_PROVIDERS = computed<ProviderMeta[]>(() => [
     steps: [
       t('providers.apiKeys.providers.openrouter.step1'),
       t('providers.apiKeys.providers.openrouter.step2'),
+    ],
+  },
+  {
+    value: 'bifrost',
+    label: t('providers.apiKeys.providers.bifrost.label'),
+    url: 'https://docs.getbifrost.ai/features/governance',
+    steps: [
+      t('providers.apiKeys.providers.bifrost.step1'),
+      t('providers.apiKeys.providers.bifrost.step2'),
     ],
   },
   {
@@ -135,7 +165,6 @@ const PROVIDERS = computed(() =>
 )
 const ALL_PROVIDERS = computed(() => [...DIRECT_PROVIDERS.value, ...PROXY_PROVIDERS.value])
 
-const scope = ref<'workspace' | 'user'>('workspace')
 const provider = ref<ApiKeyProvider>(props.category === 'proxy' ? 'openrouter' : 'openai')
 const label = ref('')
 const key = ref('')
@@ -199,13 +228,22 @@ async function add() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('providers.apiKeys.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.apiKeys.toast.connectFailed')
   } finally {
     busy.value = false
+  }
+}
+
+/** Route an update to the scope the key lives in (account / workspace / user). */
+async function updateKey(k: ApiKey, patch: { enabled?: boolean; isDefault?: boolean }) {
+  try {
+    if (k.scope === 'account') await keys.updateAccountKey(k.id, patch)
+    else if (k.scope === 'workspace') await keys.updateWorkspaceKey(k.id, patch)
+    else await keys.updateUserKey(k.id, patch)
+    // Enabling/disabling changes provider selectability in the picker — refresh it.
+    if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
+  } catch (e) {
+    present(e, 'providers.apiKeys.toast.updateFailed')
   }
 }
 
@@ -219,11 +257,7 @@ async function remove(k: ApiKey) {
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toastDone('remove', noun)
   } catch (e) {
-    toast.add({
-      title: t('providers.apiKeys.toast.removeFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.apiKeys.toast.removeFailed')
   }
 }
 </script>
@@ -231,26 +265,26 @@ async function remove(k: ApiKey) {
 <template>
   <div class="space-y-4">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4">
         {{
           category === 'proxy'
             ? t('providers.apiKeys.proxyHeading')
             : t('providers.apiKeys.directHeading')
         }}
-      </h4>
+      </SectionLabel>
       <template v-if="category === 'proxy'">
-        <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+        <p v-if="isAccount" class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.proxyAccountIntro') }}
         </p>
-        <p v-else class="mt-1 text-sm text-slate-400">
+        <p v-else class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.proxyIntro') }}
         </p>
       </template>
       <template v-else>
-        <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+        <p v-if="isAccount" class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.directAccountIntro') }}
         </p>
-        <p v-else class="mt-1 text-sm text-slate-400">
+        <p v-else class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.directIntro') }}
         </p>
       </template>
@@ -291,7 +325,7 @@ async function remove(k: ApiKey) {
 
     <!-- where to get the key -->
     <ol
-      class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
+      class="list-decimal space-y-1.5 rounded-lg border border-muted bg-default/60 p-4 ps-8 text-sm text-toned"
     >
       <li v-for="(step, i) in selected.steps" :key="i">{{ step }}</li>
       <li>
@@ -299,7 +333,7 @@ async function remove(k: ApiKey) {
           :href="selected.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-primary-400 underline"
+          class="text-primary underline"
         >
           {{ t('providers.apiKeys.openKeys', { provider: selected.label }) }}
         </a>
@@ -308,7 +342,10 @@ async function remove(k: ApiKey) {
 
     <!-- caching capability: connecting a direct key that caches upgrades its models to
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
-    <p v-if="selected.caches" class="flex items-center gap-1.5 text-[12px] text-emerald-400/90">
+    <p
+      v-if="cachesPrompts(selected.value)"
+      class="flex items-center gap-1.5 text-xs text-app-success-400/90"
+    >
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
       {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}
     </p>
@@ -323,12 +360,11 @@ async function remove(k: ApiKey) {
         />
       </UFormField>
       <UFormField :label="t('providers.apiKeys.keyField')">
-        <UTextarea
+        <SecretInput
           v-model="key"
-          :rows="2"
           :disabled="needsSignIn"
           :placeholder="t('providers.apiKeys.keyPlaceholder')"
-          class="font-mono"
+          class="w-full font-mono"
         />
       </UFormField>
       <div class="flex justify-end">
@@ -345,18 +381,22 @@ async function remove(k: ApiKey) {
 
     <!-- connected keys for the selected scope -->
     <div v-if="connected.length" class="space-y-2">
-      <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h5">
         {{ t('providers.apiKeys.connected', { count: connected.length }) }}
-      </h5>
+      </SectionLabel>
       <div
         v-for="k in connected"
         :key="k.id"
-        class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+        class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
+        :class="{ 'opacity-55': !k.enabled }"
       >
         <div>
-          <span class="font-medium text-slate-200">{{ k.label }}</span>
-          <span class="ms-2 text-xs text-slate-500">{{ providerLabel(k.provider) }}</span>
-          <div class="text-[11px] tabular-nums text-slate-500">
+          <span class="font-medium text-default">{{ k.label }}</span>
+          <span class="ms-2 text-xs text-dimmed">{{ providerLabel(k.provider) }}</span>
+          <UBadge v-if="!k.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
+            {{ t('providers.apiKeys.disabledBadge') }}
+          </UBadge>
+          <div class="text-2xs tabular-nums text-dimmed">
             {{
               t(
                 'providers.apiKeys.usage',
@@ -366,13 +406,32 @@ async function remove(k: ApiKey) {
             }}
           </div>
         </div>
-        <UButton
-          icon="i-lucide-trash-2"
-          color="error"
-          variant="ghost"
-          size="xs"
-          @click="remove(k)"
-        />
+        <div class="flex items-center gap-2">
+          <UButton
+            :icon="k.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
+            :color="k.isDefault ? 'primary' : 'neutral'"
+            :variant="k.isDefault ? 'subtle' : 'ghost'"
+            size="xs"
+            @click="updateKey(k, { isDefault: !k.isDefault })"
+          >
+            {{
+              k.isDefault ? t('providers.apiKeys.defaultBadge') : t('providers.apiKeys.pinDefault')
+            }}
+          </UButton>
+          <USwitch
+            :model-value="k.enabled"
+            size="sm"
+            :aria-label="t('providers.apiKeys.enableToggle')"
+            @update:model-value="(v: boolean) => updateKey(k, { enabled: v })"
+          />
+          <UButton
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            size="xs"
+            @click="remove(k)"
+          />
+        </div>
       </div>
     </div>
   </div>

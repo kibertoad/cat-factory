@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, KubernetesEnvironmentConfig } from '@cat-factory/kernel'
-import { frontendOriginsForService } from '@cat-factory/contracts'
-import { classifyDeploymentReadiness } from './kubernetes.logic.js'
+import type { Block, KubernetesEnvironmentConfig, KubernetesUrlSource } from '@cat-factory/kernel'
+import { describeWildcardDnsShift, frontendOriginsForService } from '@cat-factory/contracts'
+import { reduceRolloutProgress } from './kubernetes.logic.js'
 import {
   deriveUrl,
+  describeUnreachableIngressHost,
   extractLoadBalancerAddress,
   isManifestFile,
   parseManifests,
@@ -11,6 +12,9 @@ import {
   resolveNamespace,
   resourceUrl,
   templateVars,
+  classifyIngressAdmission,
+  readIngressAdmissionFacts,
+  readIngressClassCatalog,
 } from './kubernetes-environment.logic.js'
 
 const baseConfig: KubernetesEnvironmentConfig = {
@@ -58,14 +62,26 @@ describe('resolveNamespace', () => {
     expect(ns).toBe('cf-env-42')
   })
 
-  it('falls back to the PR number when no template is set', () => {
-    expect(resolveNamespace(baseConfig, { pullNumber: '7' })).toBe('cf-env-7')
+  it('falls back to the PR number when no template is set, ending on a letter', () => {
+    expect(resolveNamespace(baseConfig, { pullNumber: '7' })).toBe('cf-env-pr7')
   })
 
   it('qualifies the default with the repo so same-PR-number repos do not collide', () => {
-    // Two repos in one workspace can both open PR #7; a bare cf-env-7 would collide.
-    expect(resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })).toBe('cf-env-web-7')
-    expect(resolveNamespace(baseConfig, { repoName: 'api', pullNumber: '7' })).toBe('cf-env-api-7')
+    // Two repos in one workspace can both open PR #7; a bare cf-env-pr7 would collide.
+    expect(resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })).toBe(
+      'cf-env-web-pr7',
+    )
+    expect(resolveNamespace(baseConfig, { repoName: 'api', pullNumber: '7' })).toBe(
+      'cf-env-api-pr7',
+    )
+  })
+
+  it('composes with a wildcard-DNS host instead of shifting it, which is why the pr is there', () => {
+    // The platform's OWN default was half of the pairing that published an address on another
+    // network: `cf-env-web-7` in front of the loopback host its docs recommend answers 7.127.0.0.
+    // A default that only stopped being wrong once an operator overrode it is not a default.
+    const host = `${resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })}.127.0.0.1.nip.io`
+    expect(describeWildcardDnsShift(host)).toBeNull()
   })
 
   it('falls back to the globally-unique block id when there is no repo context', () => {
@@ -151,6 +167,24 @@ describe('deriveUrl', () => {
     ).toBe('https://feat.preview.example.com')
   })
 
+  it('appends a configured ingress-template port, which the host template cannot carry', () => {
+    // The rendered host template is also the Ingress `spec.rules[].host` the manifests declare, and
+    // Kubernetes rejects a `host` with a port, so a cluster whose controller is published on a
+    // non-default host port needs the port as its own field for the URL to be right.
+    expect(
+      deriveUrl(
+        {
+          source: 'ingressTemplate',
+          hostTemplate: '{{branch}}.127.0.0.1.nip.io',
+          port: 18080,
+          scheme: 'http',
+        },
+        { branch: 'feat' },
+        null,
+      ),
+    ).toBe('http://feat.127.0.0.1.nip.io:18080')
+  })
+
   it('returns null for a status source until the live address is known', () => {
     expect(deriveUrl({ source: 'serviceStatus', serviceName: 'web' }, {}, null)).toBeNull()
   })
@@ -184,20 +218,78 @@ describe('isManifestFile', () => {
   })
 })
 
-describe('classifyDeploymentReadiness', () => {
-  it('is ready when availableReplicas meets the desired count', () => {
+describe('reduceRolloutProgress', () => {
+  const rolling = (name: string) => ({
+    metadata: { name },
+    spec: { replicas: 2 },
+    status: { availableReplicas: 1 },
+  })
+  const landed = (name: string) => ({
+    metadata: { name },
+    spec: { replicas: 2 },
+    status: { availableReplicas: 2 },
+  })
+
+  it('reads each Deployment as landed, rolling out, or given up on', () => {
+    // The per-Deployment classification, asserted through the reduction that owns it rather than
+    // through the classifier directly: the aggregation and the prose belong to this function, and
+    // a caller that reached past it for the raw verdict is what left a failed rollout unnamed.
+    expect(reduceRolloutProgress([landed('web')]).status).toBe('ready')
+    expect(reduceRolloutProgress([rolling('api')]).status).toBe('provisioning')
+    // Intentionally scaled to nothing: there is no replica to wait for.
     expect(
-      classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 2 } }),
+      reduceRolloutProgress([
+        { metadata: { name: 'cron' }, spec: { replicas: 0 }, status: { availableReplicas: 0 } },
+      ]).status,
     ).toBe('ready')
+    // A Deployment the controller has not written a status onto yet is still coming, not failed.
+    expect(reduceRolloutProgress([{ metadata: { name: 'api' } }]).status).toBe('provisioning')
   })
-  it('is pending while rolling out', () => {
-    expect(
-      classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 1 } }),
-    ).toBe('pending')
+
+  it('says WHICH workloads a provisioning verdict is waiting on', () => {
+    // The verdict alone is what the readiness ceiling had to work with, and "provisioning" for
+    // twenty minutes names nothing an operator can act on. One workload stuck out of five sends
+    // them to that workload; all five sends them to the namespace, the quota, or the node.
+    const progress = reduceRolloutProgress([landed('web'), rolling('api'), rolling('worker')])
+    expect(progress.status).toBe('provisioning')
+    expect(progress.note).toBe("2 of 3 Deployments are still rolling out: 'api', 'worker'")
   })
-  it('is gone on a terminal ProgressDeadlineExceeded', () => {
-    expect(
-      classifyDeploymentReadiness({
+
+  it('reads the whole namespace as the scope when nothing has landed', () => {
+    expect(reduceRolloutProgress([rolling('api')]).note).toBe(
+      "the namespace's only Deployment is still rolling out: 'api'",
+    )
+    expect(reduceRolloutProgress([rolling('api'), rolling('worker')]).note).toBe(
+      "all 2 Deployments are still rolling out: 'api', 'worker'",
+    )
+  })
+
+  it('says a capped list is capped, rather than trailing off', () => {
+    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(rolling)
+    const note = reduceRolloutProgress(many).note!
+    expect(note).toContain('all 7 Deployments')
+    expect(note).toContain('and 2 more')
+  })
+
+  it('names a workload the payload did not name, rather than an empty quote', () => {
+    expect(reduceRolloutProgress([{ spec: { replicas: 1 }, status: {} }]).note).toContain(
+      "'(unnamed)'",
+    )
+  })
+
+  it('carries no note on a verdict that is not a wait', () => {
+    // A note is for the state that has something outstanding, and `ready` has nothing left to say.
+    expect(reduceRolloutProgress([])).toEqual({ status: 'ready' })
+    expect(reduceRolloutProgress([landed('web')])).toEqual({ status: 'ready' })
+  })
+
+  it('names the workload a failed rollout gave up on, in the error channel', () => {
+    // The fault half of the same argument as the note: this reduction is the only reader holding
+    // the failed Deployment's identity, and its caller records `lastError` with a generic
+    // 'Provisioning failed' fallback. Dropped here, the name is unrecoverable downstream.
+    const verdict = reduceRolloutProgress([
+      {
+        metadata: { name: 'api' },
         spec: { replicas: 1 },
         status: {
           availableReplicas: 0,
@@ -205,7 +297,307 @@ describe('classifyDeploymentReadiness', () => {
             { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
           ],
         },
-      }),
-    ).toBe('gone')
+      },
+    ])
+    expect(verdict.status).toBe('failed')
+    expect(verdict.note).toBeUndefined()
+    expect(verdict.error).toContain("'api'")
+    expect(verdict.error).toContain('progress deadline')
+  })
+})
+
+describe('describeUnreachableIngressHost', () => {
+  const ingress = (hostTemplate: string): KubernetesUrlSource => ({
+    source: 'ingressTemplate',
+    hostTemplate,
+    scheme: 'http',
+  })
+
+  it('refuses the composition that cost a run its tester step', () => {
+    // `cf-acc-5` is the per-PR namespace for pull request 5 in front of the loopback host the k3s
+    // doc recommends. It resolves to 5.127.0.0, which is not this cluster.
+    const refusal = describeUnreachableIngressHost(ingress('{{namespace}}.127.0.0.1.nip.io'), {
+      namespace: 'cf-acc-5',
+    })
+    expect(refusal).toContain('5.127.0.0')
+    expect(refusal).toContain('127.0.0.1')
+  })
+
+  it('sends the fix at the connection and says the manifests are not at fault', () => {
+    // The disposition matters more than the wording: this failure classifies as
+    // `config_incomplete` so no fixer is dispatched at a checkout that is already correct.
+    const refusal = describeUnreachableIngressHost(ingress('{{namespace}}.127.0.0.1.nip.io'), {
+      namespace: 'cf-acc-5',
+    })
+    expect(refusal).toContain('environment connection')
+    expect(refusal).toContain('manifests, which are correct')
+  })
+
+  it('refuses a rendered host a URL would truncate rather than grading the truncation', () => {
+    // The template the guided k3s setup used to write. `{{branch}}` is `cat-factory/<taskId>`, so
+    // the URL becomes `http://cat-factory/task_….127.0.0.1.nip.io`, whose AUTHORITY is the bare
+    // `cat-factory` — an unremarkable-looking name with no wildcard suffix and nothing to report.
+    // Graded as the rendered string, what actually happened is visible.
+    const refusal = describeUnreachableIngressHost(ingress('{{branch}}.127.0.0.1.nip.io'), {
+      branch: 'cat-factory/task_19312e8862264172b1fa1051',
+    })
+    expect(refusal).toContain('not a hostname')
+    expect(refusal).toContain('cat-factory/task_19312e8862264172b1fa1051.127.0.0.1.nip.io')
+    expect(refusal).toContain('{{branch}}.127.0.0.1.nip.io')
+  })
+
+  it.each(['{{namespace}} .example.com', '{{namespace}}_1.example.com'])(
+    'refuses %s, which renders no name a resolver is ever asked for',
+    (template) => {
+      expect(describeUnreachableIngressHost(ingress(template), { namespace: 'app' })).toContain(
+        'not a hostname',
+      )
+    },
+  )
+
+  it('leaves a placeholder that rendered EMPTY to the rule that owns missing values', () => {
+    // `.preview.example.com` is unreachable, but the cause is a hole nothing filled, and
+    // answering it here would hand back hostname-character advice for a missing-variable fault.
+    expect(describeUnreachableIngressHost(ingress('{{branch}}.preview.example.com'), {})).toBeNull()
+  })
+
+  it.each([
+    // The same cluster, addressed by a namespace whose last label ends in a letter.
+    { template: '{{namespace}}.127.0.0.1.nip.io', vars: { namespace: 'cf-env-catalog-api-pr5' } },
+    // An ordinary hostname, whatever digits it carries.
+    { template: '{{namespace}}.preview.example.com', vars: { namespace: 'env-5' } },
+    // Upper case resolves perfectly well; the apiserver owns what an Ingress host may look like.
+    { template: '{{namespace}}.Example.COM', vars: { namespace: 'App' } },
+  ])('passes $template', ({ template, vars }) => {
+    expect(describeUnreachableIngressHost(ingress(template), vars)).toBeNull()
+  })
+
+  it('says nothing for a status-backed source, which has rendered nothing yet', () => {
+    // Its live host is graded where every provider's published URL is, on the way to being
+    // recorded. Answering here would be answering about a value that does not exist.
+    expect(
+      describeUnreachableIngressHost({ source: 'ingressStatus', scheme: 'http' }, {}),
+    ).toBeNull()
+  })
+
+  it('says nothing when the template renders empty, which is a hole this rule does not own', () => {
+    expect(describeUnreachableIngressHost(ingress('{{namespace}}'), {})).toBeNull()
+  })
+})
+
+describe('ingress admission', () => {
+  const traefik = {
+    read: true as const,
+    names: ['traefik'],
+    defaultName: 'traefik',
+  }
+
+  const ingress = (spec: Record<string, unknown>, status?: Record<string, unknown>) => ({
+    metadata: { name: 'catalog-api' },
+    spec,
+    ...(status ? { status } : {}),
+  })
+
+  describe('readIngressAdmissionFacts', () => {
+    it('reads the class off spec.ingressClassName', () => {
+      expect(readIngressAdmissionFacts(ingress({ ingressClassName: 'nginx' }))).toEqual({
+        requestedClass: 'nginx',
+        hasAddress: false,
+      })
+    })
+
+    it('falls back to the deprecated annotation, so an Ingress using it is not graded classless', () => {
+      // Controllers still honour `kubernetes.io/ingress.class`. Reading only the spec field would
+      // call this Ingress classless and then refuse it on a cluster with no default class, which
+      // is a working deployment turned red.
+      const obj = {
+        metadata: { name: 'x', annotations: { 'kubernetes.io/ingress.class': 'traefik' } },
+        spec: {},
+      }
+      expect(readIngressAdmissionFacts(obj).requestedClass).toBe('traefik')
+    })
+
+    it('prefers the spec field over the annotation and ignores a blank one', () => {
+      const obj = {
+        metadata: { name: 'x', annotations: { 'kubernetes.io/ingress.class': 'nginx' } },
+        spec: { ingressClassName: '  traefik ' },
+      }
+      expect(readIngressAdmissionFacts(obj).requestedClass).toBe('traefik')
+      expect(
+        readIngressAdmissionFacts(ingress({ ingressClassName: '   ' })).requestedClass,
+      ).toBeNull()
+    })
+
+    it('reports an address once a controller has written one back', () => {
+      const admitted = ingress(
+        { ingressClassName: 'traefik' },
+        {
+          loadBalancer: { ingress: [{ ip: '172.20.0.2' }] },
+        },
+      )
+      expect(readIngressAdmissionFacts(admitted).hasAddress).toBe(true)
+    })
+  })
+
+  describe('readIngressClassCatalog', () => {
+    it('reads the names and which one is default', () => {
+      const payload = {
+        items: [
+          {
+            metadata: {
+              name: 'traefik',
+              annotations: { 'ingressclass.kubernetes.io/is-default-class': 'true' },
+            },
+          },
+          { metadata: { name: 'nginx' } },
+        ],
+      }
+      expect(readIngressClassCatalog(payload)).toEqual({
+        read: true,
+        names: ['traefik', 'nginx'],
+        defaultName: 'traefik',
+      })
+    })
+
+    it('reads an EMPTY list as a read cluster with no classes, not as unreadable', () => {
+      // The distinction decides everything downstream: this is the k3d-with-traefik-disabled
+      // cluster, and it is a real, actionable finding.
+      expect(readIngressClassCatalog({ items: [] })).toEqual({
+        read: true,
+        names: [],
+        defaultName: null,
+      })
+    })
+
+    it('reads a non-list payload as UNREADABLE, never as an empty cluster', () => {
+      // A 403 on the cluster-scoped resource arrives here as a null body. Grading that as "no
+      // ingress controller" would fail every environment on a perfectly working cluster.
+      for (const payload of [null, undefined, {}, { items: 'nope' }]) {
+        expect(readIngressClassCatalog(payload).read).toBe(false)
+      }
+    })
+  })
+
+  describe('classifyIngressAdmission', () => {
+    it('is ADMITTED once any Ingress carries an address', () => {
+      const facts = [{ requestedClass: 'traefik', hasAddress: true }]
+      expect(classifyIngressAdmission(facts, traefik)).toEqual({ status: 'admitted' })
+    })
+
+    it('short-circuits on an address even when the catalog could not be read', () => {
+      // An address is proof a controller claimed it, which is strictly stronger than anything the
+      // catalog could say. Asking for the catalog first would strand this on `unknown`.
+      const facts = [{ requestedClass: 'whatever', hasAddress: true }]
+      expect(classifyIngressAdmission(facts, { read: false, detail: 'forbidden' })).toEqual({
+        status: 'admitted',
+      })
+    })
+
+    it('refuses a class the cluster does not have, and names both sides', () => {
+      // THE motivating failure: an agent wrote `ingressClassName: nginx` onto a Traefik k3d
+      // cluster. Healthy pod, accepted object, URL published, nothing routing it.
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, traefik)
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain("'nginx'")
+      expect(verdict.problem).toContain("'traefik'")
+    })
+
+    it('refuses a cluster that publishes no IngressClass at all', () => {
+      const facts = [{ requestedClass: null, hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: [],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('no ingress controller')
+    })
+
+    it('refuses a classless Ingress on a cluster that marks no default', () => {
+      const facts = [{ requestedClass: null, hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: ['nginx'],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('is-default-class')
+    })
+
+    it('is PENDING when the requested class exists but nothing is marked default', () => {
+      // ingress-nginx installed on its own: the controller publishes and claims 'nginx', and
+      // nobody annotated it default because no Ingress here is classless. Refusing this failed a
+      // working deployment, and said the Ingress named no class while it plainly named one. The
+      // default class governs classless Ingresses only, so it may not be read as a cluster-wide
+      // requirement.
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      expect(
+        classifyIngressAdmission(facts, { read: true, names: ['nginx'], defaultName: null }),
+      ).toEqual({
+        status: 'pending',
+        // The detail is asserted, not merely tolerated: this branch and the no-Ingress one both
+        // answer `pending` and mean different waits, and the note is what a person watching the
+        // wait is shown.
+        detail: expect.stringContaining('no controller has written'),
+      })
+    })
+
+    it('still refuses the CLASSLESS Ingress in a chain whose sibling names a real class', () => {
+      // The precondition is per-chain, not per-Ingress: one Ingress being satisfiable says nothing
+      // about the one beside it that asked for nothing and has no default to claim it.
+      const facts = [
+        { requestedClass: 'nginx', hasAddress: false },
+        { requestedClass: null, hasAddress: false },
+      ]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: ['nginx'],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('is-default-class')
+    })
+
+    it('is PENDING, never a refusal, when the class resolves but no address has arrived', () => {
+      // The safety property. A controller writing `status.loadBalancer` back is a choice, not a
+      // guarantee, so an absent address may never be evidence of a broken route: it only
+      // withholds `ready` until the provision's own deadline reports a timeout.
+      const facts = [{ requestedClass: 'traefik', hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, traefik)
+      expect(verdict.status).toBe('pending')
+      // And it SAYS which pending it is: this one means an ingress controller has not got to the
+      // Ingress yet, which is a different wait from the namespace declaring no Ingress at all,
+      // and the note is what a person watching a readiness wait is shown.
+      expect(verdict.status === 'pending' && verdict.detail).toContain('no controller has written')
+    })
+
+    it('is PENDING for a classless Ingress the default class will claim', () => {
+      const facts = [{ requestedClass: null, hasAddress: false }]
+      expect(classifyIngressAdmission(facts, traefik)).toEqual({
+        status: 'pending',
+        detail: expect.stringContaining('no controller has written'),
+      })
+    })
+
+    it('is PENDING when the namespace declares no Ingress, since a Gateway may serve the host', () => {
+      // An `ingressTemplate` URL says where the URL comes FROM, not what routes it. Refusing here
+      // would fail a Gateway/HTTPRoute deployment on an assumption about how it was built.
+      const verdict = classifyIngressAdmission([], traefik)
+      expect(verdict.status).toBe('pending')
+      expect(verdict.status === 'pending' && verdict.detail).toContain('declares no Ingress')
+    })
+
+    it('is UNKNOWN when the catalog could not be read, so the check stands down', () => {
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      expect(classifyIngressAdmission(facts, { read: false, detail: 'forbidden' })).toEqual({
+        status: 'unknown',
+        detail: 'forbidden',
+      })
+    })
   })
 })

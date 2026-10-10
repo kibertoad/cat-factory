@@ -12,25 +12,27 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
+    "test:run": "vitest run",
     "bench": "node --experimental-strip-types src/cli.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.89",
-    "@ai-sdk/openai": "^3.0.77",
-    "@ai-sdk/openai-compatible": "^2.0.54",
+    "@ai-sdk/anthropic": "^4.0.75",
+    "@ai-sdk/openai": "^4.0.87",
+    "@ai-sdk/openai-compatible": "^3.0.65",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/executor-harness": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "ai": "^6.0.214",
-    "valibot": "^1.4.2",
-    "workers-ai-provider": "^3.2.1"
+    "ai": "^7.0.131",
+    "valibot": "^1.5.0",
+    "workers-ai-provider": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "@cat-factory/sandbox": "workspace:*",
+    "@types/node": "^26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   }
 }

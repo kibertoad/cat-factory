@@ -1,19 +1,82 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
+/* The shared rendered-markdown reader presentation (see prose.css). */
+@import './prose.css';
+
+/* The app's own mode-adaptive colour tokens (`app-*`), layered on Nuxt UI's. */
+@import './tokens.css';
+
+/* The app's own type steps below `text-xs` (`text-2xs`, `text-3xs`). */
+@import './type.css';
+
+/* Bind the last two radius steps Nuxt UI leaves alone onto `--ui-radius`, so EVERY `rounded-*`
+ * utility follows a theme document's `radius` (issue #2251).
+ *
+ * Nuxt UI rebuilds seven of Tailwind's steps on `--ui-radius` (`--radius-sm` is it, `--radius-lg`
+ * is twice it, and so on), which is why a hand-written box on a named step already lines up with
+ * the Nuxt UI component beside it. Two spellings sat outside that: the bare `rounded` alias, whose
+ * `--radius` Tailwind declares `@theme default inline reference` and so inlines as a literal
+ * 0.25rem, and `rounded-4xl`, whose `--radius-4xl` keeps Tailwind's own 2rem. Both are `default`,
+ * so declaring them here wins, and `inline` is what lets `rounded` compile to `var(--ui-radius)`
+ * rather than to a value frozen at build time.
+ *
+ * Neither number moves on the default theme: `--ui-radius` is 0.25rem, and 8x it is the 2rem
+ * `--radius-4xl` already held. Declaring them here also EMITS both as ordinary custom properties,
+ * where Tailwind's `reference` kept `--radius` out of the stylesheet entirely. */
+@theme inline {
+  --radius: var(--ui-radius);
+  --radius-4xl: calc(var(--ui-radius) * 8);
+}
+
+/* The two toaster rules below are scoped by the `app-toaster` marker class that
+ * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
+ * That attribute is Nuxt UI's name for the scroll region of ELEVEN components
+ * (Select, SelectMenu, InputMenu, CommandPalette, DropdownMenu, ContextMenu,
+ * NavigationMenu, ScrollArea, Carousel, ChatMessages and the toaster), and all of
+ * the menu ones carry `position: relative`, so a bare `bottom:` here lifts every
+ * dropdown's item list 1rem out of the top of its own popover. Keep any new toaster
+ * rule on the marker class. */
 
 /* Toast text should be selectable. Reka UI sets `user-select: none` inline on
  * the toast root (to support swipe-to-dismiss); since `user-select` is
  * inherited, declaring it directly on the text slots overrides that. */
-[data-slot='viewport'] [data-slot='title'],
-[data-slot='viewport'] [data-slot='description'] {
+.app-toaster [data-slot='title'],
+.app-toaster [data-slot='description'] {
   user-select: text;
 }
 
-/* ---- Agent Architecture Board: shared visual language ---------------------- */
-
-:root {
-  --board-bg: #0b1020;
+/* Keep the bottom-anchored toaster clear of the home indicator / rounded corner
+ * on phones. The toaster viewport is bottom-anchored (Nuxt UI positions it at
+ * `bottom-4`), so we add the safe-area inset to that OFFSET rather than to the
+ * padding: each toast is `position: absolute; bottom: 0` inside the viewport, so
+ * padding-bottom does not lift it (an abs child anchored to `bottom-0` tracks the
+ * padding-box edge and ignores the padding). `env(safe-area-inset-bottom)` is 0
+ * until the viewport meta carries `viewport-fit=cover` (see nuxt.config.ts), so
+ * this collapses to the stock `1rem` on desktop. Assumes the default bottom
+ * placement (the app does not configure a top-anchored toaster). */
+.app-toaster {
+  bottom: calc(1rem + env(safe-area-inset-bottom));
 }
+
+/* Input font floor (P-3): iOS Safari auto-zooms the viewport whenever a focused
+ * field renders below 16px, which yanks the layout around on every tap into an
+ * input. Floor every editable control at 16px on coarse-pointer (touch) devices.
+ * This is the app-wide, fix-once guard: it reaches Nuxt UI's rendered
+ * `<input>`/`<textarea>` AND every hand-rolled raw field, and — unlike a
+ * component-default override — cannot be defeated by a per-instance `size="sm"`.
+ * `max(16px, 1em)` floors at 16px while leaving any deliberately larger field
+ * (1em resolves against the surrounding font size) untouched. Fine-pointer
+ * (desktop) keeps the denser typography. Checkbox/radio/range/color have no
+ * text baseline and never trigger the zoom, so they're excluded. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* ---- Agent Architecture Board: shared visual language ---------------------- */
 
 html,
 body,
@@ -26,9 +89,9 @@ body {
   overflow: hidden;
 }
 
-/* Vue Flow surface tuned to a dark "design board" look */
+/* The Vue Flow surface is the board canvas: one step below the page background in both modes. */
 .vue-flow__background {
-  background-color: var(--board-bg);
+  background-color: var(--app-bg-canvas);
 }
 
 /* Touch: let the pane own one-finger pan + pinch-zoom rather than the browser
@@ -41,14 +104,15 @@ body {
   touch-action: none;
 }
 
-/* Status-pulse used by blocked / decision-needed blocks */
+/* Status-pulse used by blocked / decision-needed blocks: the warning alias, so a theme that
+ * recolours `warning` recolours the halo. `color-mix` is how a custom property gets an alpha. */
 @keyframes board-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-warning) 55%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+    box-shadow: 0 0 0 10px transparent;
   }
 }
 
@@ -56,14 +120,14 @@ body {
   animation: board-pulse 1.4s ease-in-out infinite;
 }
 
-/* Green pulse used when a block reaches the "PR ready" state */
+/* Success pulse used when a block reaches the "PR ready" state */
 @keyframes board-pulse-green {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-success) 60%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 12px transparent;
   }
 }
 
@@ -79,7 +143,7 @@ body {
 
 /* A selected edge: highlight it so the user knows what Delete/Backspace removes */
 .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: #f43f5e !important;
+  stroke: var(--ui-error) !important;
   stroke-width: 2.5 !important;
 }
 
@@ -91,6 +155,21 @@ body {
 @keyframes board-dash {
   to {
     stroke-dashoffset: -20;
+  }
+}
+
+/* Respect prefers-reduced-motion: the decorative, infinite attention pulses (the
+ * blocked / decision-needed halo, the PR-ready halo) and the marching-ants edge
+ * animation convey nothing the static state doesn't already, so we disable them for
+ * users who ask for less motion. Loading spinners are deliberately left alone — a
+ * spinner's motion IS its meaning ("work in progress"). */
+@media (prefers-reduced-motion: reduce) {
+  .board-pulse,
+  .board-pulse-green {
+    animation: none;
+  }
+  .vue-flow__edge.is-live .vue-flow__edge-path {
+    animation: none;
   }
 }
 

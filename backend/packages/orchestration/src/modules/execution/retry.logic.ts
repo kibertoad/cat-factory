@@ -1,4 +1,44 @@
-import type { AgentFailure, PipelineStep } from '@cat-factory/kernel'
+import type {
+  AgentFailure,
+  ExecutionInstance,
+  PipelineStep,
+  PriorStepOutput,
+} from '@cat-factory/kernel'
+import type { PipelineShape } from '../pipelines/pipelineShape.js'
+import { restartRalphState } from './ralph.logic.js'
+
+/**
+ * The {@link PipelineShape} a retry/restart re-drives: the stored run's steps ARE the enabled,
+ * ordered chain that will run again, so every admission question is asked of exactly what
+ * re-executes rather than of the current pipeline definition (which may have been edited out of
+ * band since the run started). Disabled steps were already filtered out at start, so every stored
+ * step is enabled.
+ *
+ * Pure, and exported, because TWO layers ask it of the same steps: the engine's own runnability
+ * guard, and the public API's parking rule on `POST /api/v1/tasks/:taskId/retry` (a `write` key
+ * must not re-drive a run into a park it cannot answer). A second hand-built literal at the second
+ * call site is how one of them comes to read a field the other has learned to read.
+ */
+export function runnableShapeOf(steps: readonly PipelineStep[]): PipelineShape {
+  return {
+    agentKinds: steps.map((s) => s.agentKind),
+    // The per-step form of the pipeline's `gates[i]`, copied onto the run step at start. Read by
+    // the gating validation to refuse a step carrying both a human gate and an estimate gate, and
+    // by the park enumeration as the approval-gate surface, so a retry re-checks both against
+    // exactly what re-executes.
+    gates: steps.map((s) => s.requiresApproval === true),
+    gating: steps.map((s) => s.gating ?? null),
+    // The QC companion's live step-state carries the same `gating` config the pipeline set, so
+    // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
+    testerQuality: steps.map((s) => s.testerQuality ?? null),
+    // The per-step options bag (a `skill` step's `skillId`, a step's picked agent-kind variant,
+    // a binary step's candidate comparison) is copied onto the run step at start, so the
+    // skill-step, variant and candidate-park checks re-run on retry against what re-executes,
+    // which is how a retry after the deployment withdrew a variant is refused rather than quietly
+    // running the shipped prompt.
+    stepOptions: steps.map((s) => s.stepOptions ?? null),
+  }
+}
 
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed
@@ -53,6 +93,56 @@ export function carryForwardFailures(prev: {
   return next.length > MAX_FAILURE_HISTORY ? next.slice(-MAX_FAILURE_HISTORY) : next
 }
 
+/** How many prior successful outputs a run keeps (mirrors {@link MAX_FAILURE_HISTORY}). */
+export const MAX_OUTPUT_HISTORY = 20
+
+/**
+ * Per-entry character cap on a recorded prior output. An agent's prose output can be many
+ * KB and a single restart can discard several at once, so — unlike a failure `detail` — the
+ * output is clipped (with a `truncated` flag) to keep the run's `detail` JSON, which is
+ * re-serialized on every step-progress write, from bloating for the rest of the run's life.
+ */
+export const MAX_HISTORY_OUTPUT_CHARS = 8_000
+
+/**
+ * Accumulate a run's SUCCESSFUL-output trail across a restart — the positive complement of
+ * {@link carryForwardFailures}. A restart resets `resetFromIndex` and every later step,
+ * dropping their `output`; the ones that had already SUCCEEDED (state `done` with a non-empty
+ * output) are appended here, attributed to their `stepIndex`, so the step-detail execution
+ * history keeps the successful outputs the restart superseded rather than losing them. Each
+ * output is clipped to {@link MAX_HISTORY_OUTPUT_CHARS} and the trail to the
+ * {@link MAX_OUTPUT_HISTORY} most recent, so the `detail` JSON stays bounded. A plain retry
+ * resumes at the first UNFINISHED step, so it resets no completed step and records nothing —
+ * it simply carries the existing trail forward.
+ *
+ * Pure + deterministic so it can be unit-tested without the service's ports; the caller
+ * supplies `now` (its clock) as the fallback timestamp for a step missing `finishedAt`.
+ */
+export function carryForwardOutputs(
+  prev: { steps: PipelineStep[]; outputHistory?: PriorStepOutput[] },
+  resetFromIndex: number,
+  now: number,
+): PriorStepOutput[] {
+  const history = prev.outputHistory ?? []
+  const discarded: PriorStepOutput[] = []
+  for (let i = Math.max(resetFromIndex, 0); i < prev.steps.length; i++) {
+    const step = prev.steps[i]!
+    const output = step.output
+    // Only a step that actually produced a successful output is worth preserving — the
+    // reset ones that failed/never ran are covered by the failure trail (or are just empty).
+    if (step.state !== 'done' || !output || !output.trim()) continue
+    const truncated = output.length > MAX_HISTORY_OUTPUT_CHARS
+    discarded.push({
+      stepIndex: i,
+      occurredAt: step.finishedAt ?? now,
+      output: truncated ? output.slice(0, MAX_HISTORY_OUTPUT_CHARS) : output,
+      ...(truncated ? { truncated: true } : {}),
+    })
+  }
+  const next = [...history, ...discarded]
+  return next.length > MAX_OUTPUT_HISTORY ? next.slice(-MAX_OUTPUT_HISTORY) : next
+}
+
 /**
  * Plan a user-driven "restart from this step": re-run from the explicitly chosen
  * `fromIndex` regardless of how far the run had progressed (even a fully `done`
@@ -105,8 +195,17 @@ function planFromStep(
  * fresh timing (`startStep` re-stamps `startedAt`). The structural fields the
  * pipeline defined — `agentKind` and `requiresApproval` — are preserved so the
  * approval gate still fires after the re-run.
+ *
+ * A `ralph` step's loop state is RE-SEEDED rather than dropped. Everything else here is
+ * re-derived at dispatch or lazily on the way back (`step.test` is seeded when the tester's
+ * report arrives), but a ralph loop's completion command is needed BEFORE the dispatch: it is
+ * what puts the `validation` block on the job body. Rebuilding this object without it left the
+ * retried step with no ralph state at all, so the harness ran a plain coding pass, returned no
+ * verdict, and the loop interceptor never fired — the step completed as an ungated one-shot
+ * coder. {@link restartRalphState} keeps the frozen config and zeroes the counters.
  */
 function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineStep {
+  const ralph = restartRalphState(step.ralph)
   return {
     agentKind: step.agentKind,
     state,
@@ -123,5 +222,72 @@ function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineSt
     startedAt: undefined,
     finishedAt: undefined,
     pausedAt: undefined,
+    ...(ralph ? { ralph } : {}),
+  }
+}
+
+/**
+ * Build the replacement `ExecutionInstance` a retry or a restart installs for a block: a FRESH run
+ * id over the re-planned steps, carrying forward everything that describes the WORK rather than
+ * the attempt — the initiator, the authority the run was admitted under (its pinned role and
+ * mode), how the run entered the system, and the prior-attempt failure + successful-output
+ * trails.
+ *
+ * Both callers had this identically inline, which is precisely how a field comes to be carried
+ * forward on one path and silently dropped on the other (a retried headless run reverting to `ui`
+ * intake would, in slice 2, stop its clarification questions ever reaching the ticket). Keeping it
+ * here — beside the step-planning it pairs with — makes "what survives a re-drive" one decision in
+ * one place.
+ */
+export function buildResumedInstance(input: {
+  /** The run being replaced (its identity + everything carried forward). */
+  previous: ExecutionInstance
+  /** The freshly-minted run id. */
+  id: string
+  /** The re-planned steps + cursor (from {@link planResumedSteps} / {@link planRestartFromStep}). */
+  plan: { steps: PipelineStep[]; currentStep: number }
+  /** Initiator override (a retry may be driven by a different user); falls back to the previous. */
+  initiatedBy?: string | null
+  /** `now`, for attributing the carried-forward successful outputs. */
+  now: number
+}): ExecutionInstance {
+  const { previous, id, plan, initiatedBy, now } = input
+  return {
+    id,
+    blockId: previous.blockId,
+    pipelineId: previous.pipelineId,
+    pipelineName: previous.pipelineName,
+    steps: plan.steps,
+    currentStep: plan.currentStep,
+    status: 'running',
+    initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+    // A retry/restart re-drives the SAME work, so how it originally entered the system is a
+    // property of the work, not of this attempt — a headless run stays headless whether its failed
+    // attempt is retried through the public API or the SPA.
+    ...(previous.intakeOrigin != null ? { intakeOrigin: previous.intakeOrigin } : {}),
+    // The merge policy the run was ADMITTED under travels with it, for the same reason and with
+    // more at stake. A re-drive is the same work under the same authority: the role is what the
+    // operator granted when they let this run start, and re-resolving it here is impossible
+    // anyway (a retry can be driven by a different user, or by a sweeper with no user at all).
+    //
+    // Dropping either is a live escape hatch rather than a degraded feature. `restartFromStep`
+    // has no `failed` precondition, so start-a-dry-run then restart-from-step-0 would mint a
+    // LIVE run over the same work — the sandbox exactly one restart deep, through the ordinary
+    // affordance. A dry run stays a dry run; only a fresh start can settle a new mode.
+    ...(previous.initiatedByRole != null ? { initiatedByRole: previous.initiatedByRole } : {}),
+    // Who the run was started FOR travels with it too, and is NOT re-taken from whoever drives
+    // the re-drive: a retry is the same work for the same requester, so re-pinning it would
+    // hand a run to the operator who pressed retry (or, from a sweeper, to nobody at all).
+    ...(previous.initiatedByExternalIdentity != null
+      ? { initiatedByExternalIdentity: previous.initiatedByExternalIdentity }
+      : {}),
+    ...(previous.mode != null ? { mode: previous.mode } : {}),
+    // Preserve the error trail: the failure this attempt clears is appended to the history so it
+    // stays viewable after the top banner disappears on restart.
+    failureHistory: carryForwardFailures(previous),
+    // A retry resumes at the first UNFINISHED step and so discards no completed output (this just
+    // carries any prior restart's trail forward); a restart resets the chosen step and every later
+    // one, so the SUCCESSFUL outputs it discards are recorded here, attributed by step index.
+    outputHistory: carryForwardOutputs(previous, plan.currentStep, now),
   }
 }

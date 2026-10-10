@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/agents",
-  "version": "0.27.0",
+  "version": "0.171.2",
   "description": "Agent catalog, routing, prompts and fragment library for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -29,22 +29,26 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:run": "vitest run",
-    "precompile:templates": "node scripts/precompile-prompts.mjs"
+    "precompile:templates": "node scripts/precompile-prompts.mjs",
+    "generate:nuxt-ui-skill": "node ../../../scripts/generate-nuxt-ui-skill.mjs"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.89",
-    "@ai-sdk/openai": "^3.0.77",
-    "@ai-sdk/openai-compatible": "^2.0.54",
-    "@ai-sdk/provider": "^3.0.12",
+    "@ai-sdk/anthropic": "^4.0.75",
+    "@ai-sdk/openai": "^4.0.87",
+    "@ai-sdk/openai-compatible": "^3.0.65",
+    "@ai-sdk/provider": "^4.0.24",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
-    "ai": "^6.0.214",
-    "handlebars": "^4.7.9",
-    "valibot": "^1.4.2"
+    "@openrouter/ai-sdk-provider": "^3.1.0",
+    "ai": "^7.0.131",
+    "handlebars": "^4.7.10",
+    "p-map": "^7.0.8",
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "@cat-factory/caching": "workspace:*",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   }
 }

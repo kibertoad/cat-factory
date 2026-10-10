@@ -1,0 +1,873 @@
+<script setup lang="ts">
+// PR deep-review window — the dedicated surface for the read-only `pr-reviewer`'s sliced,
+// prioritized findings, opened via the universal result-view host. It reads the live review
+// state straight off the run's `pr-reviewer` step (`step.prReview`, kept fresh by the
+// execution stream) and lets a human multi-SELECT which findings matter, grouped by slice and
+// sorted by severity, then resolve the review one of three ways: `Fix` (feed the selected
+// findings to a Fixer that commits fixes onto the PR branch), `Post` (publish them as inline PR
+// review comments), or `Finish` (just record the curated selection). Fix/Post act on the
+// selection, so they require at least one selected finding.
+//
+// While the review is still RUNNING it also offers `Resume`, which re-dispatches a review that
+// appears stuck for only the slices that never reported (see `canResume` for why it is always
+// offered rather than gated on an activity heuristic).
+import { computed, ref, watch } from 'vue'
+import { useResultView } from '~/composables/useResultView'
+import { useExecutionStore } from '~/stores/execution'
+import { useBoardStore } from '~/stores/board'
+import { usePrReviewStore } from '~/stores/prReview'
+import type {
+  PrReviewFinding,
+  PrReviewResolution,
+  PrReviewSeverity,
+  PrReviewStepState,
+  StepSubtaskItem,
+  StepSubtasks,
+} from '~/types/execution'
+import { subtaskIconClass } from '~/utils/pipelineRender'
+import { activeChunkLabels, chunkReviewPercent, hasNoSlicePlan } from '~/utils/prReviewProgress'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
+const execution = useExecutionStore()
+const board = useBoardStore()
+const prReview = usePrReviewStore()
+const access = useWorkspaceAccess()
+
+const { t } = useI18n()
+
+const { open, blockId, instanceId, stepIndex, close } = useResultView('pr-review', {
+  onOpen: ({ instanceId }) => {
+    if (instanceId) void prReview.load(instanceId)
+  },
+})
+
+const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+const instance = computed(() =>
+  instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
+)
+const step = computed(() => {
+  if (instance.value === null || stepIndex.value === null) return null
+  return instance.value.steps[stepIndex.value] ?? null
+})
+const state = computed<PrReviewStepState | null>(() => step.value?.prReview ?? null)
+const status = computed(() => state.value?.status ?? null)
+const awaiting = computed(() => status.value === 'awaiting_selection')
+// A finding is being re-examined by the Challenge Investigator (the whole review is `challenging`
+// while it runs). The findings stay visible — the challenged one shows a spinner — but the
+// selection controls + per-finding actions are disabled until the verdict lands and it re-parks.
+const challenging = computed(() => status.value === 'challenging')
+// The reviewer's live todo list while it works, streamed onto the step. Its entries are the
+// cohesive slices/chunks the agent grouped the diff into (plus a final "aggregate" step). The
+// derivation of the `reviewing`-phase sub-states from it lives in `~/utils/prReviewProgress`
+// (pure + unit-tested); see that module for the has-a-plan signal.
+const subtasks = computed<StepSubtasks | null>(() => step.value?.subtasks ?? null)
+
+/**
+ * Planning sub-phase: no per-slice todo plan has been reported yet. This is NEUTRAL — the
+ * reviewer may still be grouping the diff, OR it may be reviewing via parallel subagents that
+ * never write a parent todo plan (ADR 0026 D2.2). Either way we must NOT claim a specific
+ * "slicing" phase; we show a neutral "reviewing…" state and switch to the per-slice list the
+ * moment a plan exists.
+ */
+const planning = computed(() => status.value === 'reviewing' && hasNoSlicePlan(subtasks.value))
+
+/** Chunk-review completion, clamped 0..100 for the progress bar. */
+const chunkPercent = computed(() => chunkReviewPercent(subtasks.value))
+
+/** The chunks the reviewer is actively working through right now (their labels), for the callout. */
+const activeChunks = computed<string[]>(() => activeChunkLabels(subtasks.value))
+
+/** Icon per todo-item status (matches the pipeline timeline's live subtask breakdown). */
+const ITEM_ICON: Record<StepSubtaskItem['status'], string> = {
+  completed: 'i-lucide-check-circle-2',
+  in_progress: 'i-lucide-loader-circle',
+  pending: 'i-lucide-circle',
+}
+
+// Per-chunk status label + chip styling. The key map is an exhaustive Record over the subtask
+// status union, so adding a status without a label fails the typecheck (the sanctioned dynamic
+// enum→key pattern — tier 1 can't see a runtime-built key).
+const CHUNK_STATUS_KEY: Record<StepSubtaskItem['status'], string> = {
+  completed: 'prReview.reviewing.chunkStatus.completed',
+  in_progress: 'prReview.reviewing.chunkStatus.in_progress',
+  pending: 'prReview.reviewing.chunkStatus.pending',
+}
+const CHUNK_STATUS_CLASS: Record<StepSubtaskItem['status'], string> = {
+  completed: 'bg-app-success-500/15 text-app-success-300',
+  in_progress: 'bg-primary/15 text-primary',
+  pending: 'bg-accented/60 text-muted',
+}
+function chunkStatusLabel(status: StepSubtaskItem['status']): string {
+  return t(CHUNK_STATUS_KEY[status])
+}
+// A resolution is executing (the Fixer is committing, or comments are being posted) — show a
+// working state between the human's choice and the run advancing/the stream echoing `done`.
+const working = computed(() => status.value === 'fixing' || status.value === 'posting')
+const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
+
+// The outcome of the last `post` attempt (null until one runs). A partial/failed post re-parks
+// the review at `awaiting_selection` carrying this, so the human sees what posted / what failed
+// and can retry ONLY the posting rather than re-running the whole review.
+const postReport = computed(() => state.value?.postReport ?? null)
+const postedIds = computed(() => new Set(state.value?.postedFindingIds ?? []))
+
+/** Severity → chip classes (styling, not copy). */
+const SEVERITY_CLASS: Record<PrReviewSeverity, string> = {
+  blocker: 'bg-app-error-500/15 text-app-error-300 ring-app-error-500/30',
+  high: 'bg-app-hue-orange/15 text-app-hue-orange ring-app-hue-orange/30',
+  medium: 'bg-app-warning-500/15 text-app-warning-300 ring-app-warning-500/30',
+  low: 'bg-app-info-500/15 text-app-info-300 ring-app-info-500/30',
+  nit: 'bg-app-500/15 text-toned ring-app-500/30',
+}
+
+/** Findings grouped under their slice (in the review's slice order), plus an "Other" bucket. */
+const groups = computed(() => {
+  const slices = state.value?.slices ?? []
+  const byId = new Map<string, PrReviewFinding[]>()
+  const unsliced: PrReviewFinding[] = []
+  for (const f of findings.value) {
+    if (f.sliceId && slices.some((s) => s.id === f.sliceId)) {
+      const arr = byId.get(f.sliceId) ?? []
+      arr.push(f)
+      byId.set(f.sliceId, arr)
+    } else {
+      unsliced.push(f)
+    }
+  }
+  const out = slices
+    .map((s) => ({ id: s.id, title: s.title, rationale: s.rationale, items: byId.get(s.id) ?? [] }))
+    .filter((g) => g.items.length > 0)
+  if (unsliced.length > 0) {
+    out.push({ id: '__unsliced', title: t('prReview.unsliced'), rationale: '', items: unsliced })
+  }
+  return out
+})
+
+/** A finding the Challenge Investigator RETRACTED — it can no longer be acted on (auto-deselected). */
+function isRetracted(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'retracted'
+}
+/** A finding currently being re-examined by the Challenge Investigator. */
+function isInvestigating(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'investigating'
+}
+/** A finding the investigator UPHELD + strengthened after a challenge (its body actually changed). */
+function isAmended(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'amended'
+}
+/** A finding the investigator UPHELD as written after a challenge (kept, no revision). */
+function isUpheld(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'upheld'
+}
+/** A finding whose challenge investigation FAILED — the finding is kept as-is; re-challenge allowed. */
+function isChallengeFailed(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'failed'
+}
+
+// The human's selection — a set of finding ids. Defaults to every finding (the human deselects
+// the noise), so "Finish" without touching anything keeps all. Re-seeded ONLY when the set of
+// finding IDS actually changes — NOT on every execution-stream re-emit (which hands us a fresh
+// `findings` array reference on each reconnect/resync). Keying on the id set keeps the human's
+// in-progress curation from being silently reset by an unrelated live update.
+const findingIdKey = computed(() => findings.value.map((f) => f.id).join('\n'))
+const selected = ref<Set<string>>(new Set())
+watch(
+  findingIdKey,
+  () => {
+    selected.value = new Set(findings.value.filter((f) => !isRetracted(f)).map((f) => f.id))
+  },
+  { immediate: true },
+)
+
+// The effective selection: checked AND not retracted. A retracted finding is never acted on even
+// if its box was checked before the investigator dropped it (it's disabled + unchecked visually).
+const activeSelectedIds = computed(() =>
+  findings.value.filter((f) => selected.value.has(f.id) && !isRetracted(f)).map((f) => f.id),
+)
+
+function toggle(id: string): void {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function selectAll(): void {
+  selected.value = new Set(findings.value.filter((f) => !isRetracted(f)).map((f) => f.id))
+}
+function clearAll(): void {
+  selected.value = new Set()
+}
+
+const canResolve = computed(() => awaiting.value && !prReview.resolving)
+// Fix / Post act on the selection, so they need at least one selected finding; Finish always
+// works (it just records the — possibly empty — curated selection and completes the review).
+const hasSelection = computed(() => activeSelectedIds.value.length > 0)
+
+async function onResolve(action: PrReviewResolution): Promise<void> {
+  const id = instanceId.value
+  if (!id || !canResolve.value) return
+  if ((action === 'fix' || action === 'post') && !hasSelection.value) return
+  await prReview.resolve(id, activeSelectedIds.value, action).catch(() => {})
+}
+
+/**
+ * RESUME a review that appears stuck. Offered throughout the `reviewing` phase — including the
+ * neutral "planning" sub-state, since a wedge is just as possible before a plan is reported as
+ * after — because the whole complaint this answers is that a stuck review had no visible
+ * affordance at all. Deliberately NOT hidden behind a staleness heuristic: `lastActivityAt` freezes
+ * on a long silent turn (a single completion emits no tool call and grows no subagent transcript),
+ * so the platform cannot tell a wedged review from a quiet-but-working one, and hiding the control
+ * until it thinks it can would put it out of reach in exactly the case that motivated it.
+ */
+const canResume = computed(
+  () => status.value === 'reviewing' && !prReview.resuming && access.canExecuteRuns.value,
+)
+
+async function onResume(): Promise<void> {
+  const id = instanceId.value
+  if (!id || !canResume.value) return
+  await prReview.resume(id).catch(() => {})
+}
+
+// Per-finding CHALLENGE: the open finding's id (its inline concern box is showing) + the drafted
+// concern text. Dispatching moves the whole review to `challenging` until the verdict lands.
+const challengeForId = ref<string | null>(null)
+const challengeText = ref('')
+function openChallenge(id: string): void {
+  challengeForId.value = id
+  challengeText.value = ''
+}
+function cancelChallenge(): void {
+  challengeForId.value = null
+  challengeText.value = ''
+}
+async function submitChallenge(id: string): Promise<void> {
+  const inst = instanceId.value
+  if (!inst || !canResolve.value) return
+  const question = challengeText.value.trim()
+  // Close the box only once the turn is actually recorded (UX-83): clearing first made a failed
+  // dispatch cost the typed concern, and left the guard below with nothing to protect.
+  await prReview
+    .challenge(inst, id, question || undefined)
+    .then(() => {
+      challengeForId.value = null
+      challengeText.value = ''
+    })
+    // The store records the message; the inline error strip renders it.
+    .catch(() => {})
+}
+async function onDismiss(id: string): Promise<void> {
+  const inst = instanceId.value
+  if (!inst || !canResolve.value) return
+  if (challengeForId.value === id) cancelChallenge()
+  await prReview.dismiss(inst, id).catch(() => {})
+}
+
+/**
+ * Confirm before discarding a drafted challenge (UX-79). The concern box is open against exactly
+ * one finding, its text is held here until Send, and this window closes on Escape and on a backdrop
+ * click. Auto-sending it instead would spend a reviewer turn on the user's behalf.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => working.value,
+  snapshot: () => challengeText.value.trim(),
+})
+</script>
+
+<template>
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-clipboard-check"
+    icon-class="bg-primary/15 text-primary"
+    :title="block ? t('prReview.titleWithBlock', { title: block.title }) : t('prReview.title')"
+    :subtitle="t('prReview.subtitle')"
+    width="full"
+    testid="pr-review-window"
+    @close="requestClose"
+  >
+    <template v-if="state?.prUrl" #header-extras>
+      <a
+        :href="state.prUrl"
+        target="_blank"
+        rel="noopener"
+        class="rounded-md px-2 py-1 text-2xs text-primary hover:bg-elevated"
+      >
+        {{ t('prReview.openPr') }}
+      </a>
+    </template>
+
+    <div class="flex min-h-0 flex-1">
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <!-- Reviewing: the read-only reviewer is still working. Two sub-states, told apart by
+           whether a per-slice todo plan exists — a NEUTRAL "planning" state (no plan reported yet;
+           may be grouping OR reviewing via subagents that write no parent plan) vs the per-slice
+           list. The copy never asserts a specific "slicing" phase from an empty todo list. -->
+        <div
+          v-if="status === 'reviewing'"
+          data-testid="pr-review-reviewing"
+          class="flex h-full flex-col"
+        >
+          <!-- PLANNING: no per-slice plan yet — a neutral "reviewing…" state, not a "slicing" claim. -->
+          <div
+            v-if="planning"
+            data-testid="pr-review-planning"
+            class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-muted"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+            <p class="text-sm text-default">{{ t('prReview.reviewing.planning.title') }}</p>
+            <p class="max-w-sm text-2xs text-dimmed">
+              {{ t('prReview.reviewing.planning.hint') }}
+            </p>
+          </div>
+
+          <!-- REVIEWING: a per-slice plan exists — show every slice with its status + which are active now. -->
+          <div v-else data-testid="pr-review-reviewing-chunks" class="py-2">
+            <div class="mb-1 flex items-center gap-2 text-sm text-default">
+              <UIcon
+                name="i-lucide-loader-circle"
+                class="h-4 w-4 shrink-0 animate-spin text-primary"
+              />
+              <span>{{ t('prReview.reviewing.reviewingChunks.title') }}</span>
+            </div>
+            <p class="mb-3 text-2xs text-dimmed">
+              {{ t('prReview.reviewing.reviewingChunks.hint') }}
+            </p>
+
+            <div class="flex items-center justify-between text-2xs text-muted">
+              <span data-testid="pr-review-chunk-count">
+                {{
+                  t('prReview.reviewing.chunks', {
+                    completed: subtasks!.completed,
+                    total: subtasks!.total,
+                  })
+                }}
+              </span>
+              <span v-if="subtasks!.inProgress > 0" class="text-primary">
+                {{ t('prReview.reviewing.inProgress', { count: subtasks!.inProgress }) }}
+              </span>
+            </div>
+            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-accented/60">
+              <div
+                class="h-full rounded-full bg-primary transition-all duration-500"
+                :style="{ width: `${chunkPercent}%` }"
+              />
+            </div>
+
+            <!-- The chunk(s) being actively reviewed right now, called out on their own. Kept
+                 MOUNTED for the whole reviewing phase: the reviewer runs a bounded window of
+                 slice subagents, so between two waves nothing is in flight for a moment, and
+                 dropping the callout there made the window look like it had lost a list. -->
+            <div
+              data-testid="pr-review-active-chunks"
+              class="mt-3 rounded-lg border px-2.5 py-2"
+              :class="
+                activeChunks.length
+                  ? 'border-primary/30 bg-primary/5'
+                  : 'border-default bg-default/40'
+              "
+            >
+              <p
+                class="mb-1 text-3xs font-semibold uppercase tracking-wide"
+                :class="activeChunks.length ? 'text-primary' : 'text-dimmed'"
+              >
+                {{ t('prReview.reviewing.activeHeading') }}
+              </p>
+              <ul v-if="activeChunks.length" class="space-y-1">
+                <li
+                  v-for="(label, i) in activeChunks"
+                  :key="i"
+                  class="flex items-start gap-1.5 text-xs text-app-100"
+                >
+                  <UIcon
+                    name="i-lucide-loader-circle"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary"
+                  />
+                  <span class="min-w-0">{{ label }}</span>
+                </li>
+              </ul>
+              <p v-else data-testid="pr-review-active-idle" class="text-xs text-muted">
+                {{ t('prReview.reviewing.activeIdle') }}
+              </p>
+            </div>
+
+            <!-- Every chunk with its explicit status (Reviewed / Reviewing… / Queued). -->
+            <template v-if="subtasks!.items?.length">
+              <SectionLabel as="p" class="mb-1.5 mt-3">
+                {{ t('prReview.reviewing.chunksHeading') }}
+              </SectionLabel>
+              <ul class="space-y-1.5" data-testid="pr-review-chunks">
+                <li
+                  v-for="(item, i) in subtasks!.items"
+                  :key="i"
+                  data-testid="pr-review-chunk"
+                  class="flex items-center gap-1.5 text-xs"
+                  :class="
+                    item.status === 'completed'
+                      ? 'text-dimmed'
+                      : item.status === 'in_progress'
+                        ? 'text-app-100'
+                        : 'text-muted'
+                  "
+                >
+                  <UIcon
+                    :name="ITEM_ICON[item.status]"
+                    class="h-3.5 w-3.5 shrink-0"
+                    :class="subtaskIconClass(item.status, false)"
+                  />
+                  <span
+                    class="min-w-0 flex-1 truncate"
+                    :class="item.status === 'completed' ? 'line-through' : ''"
+                  >
+                    {{ item.label }}
+                  </span>
+                  <span
+                    data-testid="pr-review-chunk-status"
+                    class="shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-medium uppercase"
+                    :class="CHUNK_STATUS_CLASS[item.status]"
+                  >
+                    {{ chunkStatusLabel(item.status) }}
+                  </span>
+                </li>
+              </ul>
+            </template>
+          </div>
+
+          <!-- Nudge a review that looks stuck. Present in BOTH reviewing sub-states, and never
+               gated on a staleness guess: the heartbeat freezes on a long silent turn, so nothing
+               here can tell wedged from quiet-but-working (see `canResume`). Re-reviews only the
+               slices that never reported; the finished ones are re-aggregated from their captured
+               reports. -->
+          <div class="mt-4 border-t border-default pt-3">
+            <p
+              v-if="prReview.error"
+              data-testid="pr-review-resume-error"
+              class="mb-2 rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
+            >
+              {{ prReview.error }}
+            </p>
+            <div class="flex items-start justify-between gap-3">
+              <p class="min-w-0 text-2xs text-dimmed">{{ t('prReview.resume.hint') }}</p>
+              <UButton
+                data-testid="pr-review-resume"
+                size="xs"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-rotate-ccw"
+                :loading="prReview.resuming"
+                :disabled="!canResume"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                @click="onResume"
+              >
+                {{ t('prReview.resume.action') }}
+              </UButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->
+        <div
+          v-else-if="working"
+          data-testid="pr-review-working"
+          class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+          <p class="text-sm">
+            {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
+          </p>
+          <p class="max-w-sm text-2xs text-dimmed">
+            {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
+          </p>
+        </div>
+
+        <template v-else>
+          <p
+            v-if="prReview.error"
+            class="mb-3 rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
+          >
+            {{ prReview.error }}
+          </p>
+
+          <!-- The outcome of the most recent `post` attempt: how many of how many comments landed,
+             which failed + why, and how many findings were folded into the summary because their
+             line isn't in the PR diff. Surfaced so a partial/failed post is legible + retryable. -->
+          <div
+            v-if="postReport"
+            data-testid="pr-review-post-report"
+            class="mb-3 rounded-lg border px-3 py-2 text-xs"
+            :class="
+              postReport.failures.length > 0 || postReport.bodyPosted === false
+                ? 'border-app-warning-500/40 bg-app-warning-500/10 text-app-warning-200'
+                : 'border-app-success-500/40 bg-app-success-500/10 text-app-success-200'
+            "
+          >
+            <div class="mb-1 flex items-center gap-1.5 font-medium">
+              <UIcon
+                :name="
+                  postReport.failures.length > 0 || postReport.bodyPosted === false
+                    ? 'i-lucide-alert-triangle'
+                    : 'i-lucide-check-circle-2'
+                "
+                class="h-4 w-4 shrink-0"
+              />
+              <span>{{ t('prReview.postReport.heading') }}</span>
+            </div>
+            <p data-testid="pr-review-post-count">
+              {{
+                t('prReview.postReport.posted', {
+                  posted: postReport.posted,
+                  attempted: postReport.attempted,
+                })
+              }}
+            </p>
+            <p v-if="postReport.folded > 0" class="mt-0.5 opacity-90">
+              {{ t('prReview.postReport.folded', { count: postReport.folded }) }}
+            </p>
+            <template v-if="postReport.failures.length > 0">
+              <p class="mt-1.5 font-medium">{{ t('prReview.postReport.failuresHeading') }}</p>
+              <ul class="mt-0.5 space-y-0.5" data-testid="pr-review-post-failures">
+                <li v-for="f in postReport.failures" :key="f.findingId" class="flex gap-1.5">
+                  <code class="shrink-0 text-app-warning-100"
+                    >{{ f.path }}<template v-if="f.line != null">:{{ f.line }}</template></code
+                  >
+                  <span class="opacity-90">— {{ f.reason }}</span>
+                </li>
+              </ul>
+            </template>
+            <p v-if="postReport.bodyPosted === false && postReport.bodyError" class="mt-1.5">
+              {{ t('prReview.postReport.bodyError', { error: postReport.bodyError }) }}
+            </p>
+          </div>
+
+          <!-- The reviewer's overall assessment. Prose, so it takes the reading measure (see the
+               shell's `width` prop) — this window is `full`-width. -->
+          <div
+            v-if="state?.summary"
+            class="mb-3 max-w-3xl rounded-md bg-elevated/50 px-3 py-2 text-xs text-toned"
+          >
+            <span class="mb-1 block text-dimmed">{{ t('prReview.summaryLabel') }}</span>
+            <MarkdownProse :text="state.summary" />
+          </div>
+
+          <!-- Best-practice adherence: per standard folded into the reviewer's prompt, a 1..10
+               rating of how well the PR adheres + the issues that standard surfaced. -->
+          <StepFragmentAdherence
+            v-if="step?.fragmentAdherence?.length"
+            :items="step.fragmentAdherence"
+            class="mb-3"
+          />
+
+          <!-- A clean PR / resolved review with no findings. -->
+          <div
+            v-if="findings.length === 0"
+            class="rounded-xl border border-default bg-default/60 px-4 py-6 text-center text-sm text-toned"
+          >
+            {{ t('prReview.noFindings') }}
+          </div>
+
+          <template v-else>
+            <!-- A challenge is in flight: the Challenge Investigator is re-examining a finding. -->
+            <div
+              v-if="challenging"
+              data-testid="pr-review-challenging"
+              class="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary"
+            >
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+              <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
+            </div>
+
+            <!-- Selection toolbar -->
+            <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-2xs text-muted">
+              <span data-testid="pr-review-selected-count">
+                {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
+              </span>
+              <button class="text-primary hover:underline" @click="selectAll">
+                {{ t('prReview.selectAll') }}
+              </button>
+              <button class="text-primary hover:underline" @click="clearAll">
+                {{ t('prReview.clear') }}
+              </button>
+            </div>
+
+            <!-- Findings grouped by slice -->
+            <section v-for="g in groups" :key="g.id" class="mb-4">
+              <SectionLabel as="h3" class="mb-1.5">
+                {{ g.title }}
+              </SectionLabel>
+              <p v-if="g.rationale" class="mb-1.5 max-w-3xl text-2xs text-dimmed">
+                {{ g.rationale }}
+              </p>
+              <article
+                v-for="f in g.items"
+                :key="f.id"
+                data-testid="pr-review-finding"
+                class="mb-1.5 rounded-xl border px-3 py-2 transition"
+                :class="[
+                  awaiting && selected.has(f.id) && !isRetracted(f)
+                    ? 'border-primary/60 bg-primary/5'
+                    : 'border-default bg-default/60',
+                  isRetracted(f) ? 'opacity-60' : '',
+                ]"
+              >
+                <div class="flex items-start gap-2">
+                  <input
+                    v-if="awaiting || challenging"
+                    type="checkbox"
+                    class="mt-1 accent-primary"
+                    data-testid="pr-review-finding-toggle"
+                    :checked="selected.has(f.id) && !isRetracted(f)"
+                    :disabled="!awaiting || isRetracted(f)"
+                    @change="toggle(f.id)"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span
+                        class="rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase ring-1"
+                        :class="SEVERITY_CLASS[f.severity]"
+                      >
+                        {{ t(`prReview.severity.${f.severity}`) }}
+                      </span>
+                      <span class="rounded-sm bg-elevated px-1.5 py-0.5 text-3xs text-toned">
+                        {{ t(`prReview.category.${f.category}`) }}
+                      </span>
+                      <span
+                        v-if="postedIds.has(f.id)"
+                        data-testid="pr-review-finding-posted"
+                        class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
+                      >
+                        {{ t('prReview.postReport.postedBadge') }}
+                      </span>
+                      <!-- Challenge outcome badges -->
+                      <span
+                        v-if="isRetracted(f)"
+                        data-testid="pr-review-finding-retracted"
+                        class="rounded-sm bg-app-error-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-error-300 ring-1 ring-app-error-500/30"
+                      >
+                        {{ t('prReview.challenge.retractedBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isAmended(f)"
+                        data-testid="pr-review-finding-amended"
+                        class="rounded-sm bg-app-info-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-info-300 ring-1 ring-app-info-500/30"
+                      >
+                        {{ t('prReview.challenge.strengthenedBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isUpheld(f)"
+                        data-testid="pr-review-finding-upheld"
+                        class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
+                      >
+                        {{ t('prReview.challenge.upheldBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isChallengeFailed(f)"
+                        data-testid="pr-review-finding-challenge-failed"
+                        class="rounded-sm bg-app-warning-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-warning-300 ring-1 ring-app-warning-500/30"
+                      >
+                        {{ t('prReview.challenge.failedBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isInvestigating(f)"
+                        data-testid="pr-review-finding-investigating"
+                        class="flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-primary ring-1 ring-primary/30"
+                      >
+                        <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+                        {{ t('prReview.challenge.investigatingBadge') }}
+                      </span>
+                      <h4
+                        class="min-w-0 flex-1 text-sm font-medium text-app-100"
+                        :class="isRetracted(f) ? 'line-through' : ''"
+                      >
+                        {{ f.title }}
+                      </h4>
+                    </div>
+                    <p class="mt-0.5 text-2xs text-dimmed">
+                      {{ f.path
+                      }}<template v-if="f.line != null">
+                        · {{ t('prReview.line', { line: f.line }) }}</template
+                      >
+                    </p>
+                    <!-- The reviewer's prose — what the finding is, what to do about it, and the
+                         investigator's verdict below. Each takes the reading measure even though
+                         the card around it takes the span (see the shell's `width` prop: the unit
+                         is the paragraph, not the section). This window went from the NARROWEST
+                         bucket to `full`, so these are the three paragraphs the width would
+                         otherwise have stretched furthest; the path/line row, the badges and the
+                         per-finding actions are what it is actually for. -->
+                    <MarkdownProse
+                      v-if="f.detail"
+                      :text="f.detail"
+                      class="mt-1 max-w-3xl text-xs text-toned"
+                      :class="isRetracted(f) ? 'line-through' : ''"
+                    />
+                    <!-- The suggested fix is a VALUE a human copies (a patch line, a command, a
+                         path), not prose, so it stays preformatted: markdown would emphasise the
+                         `__dunder__` in an identifier, curl the quotes in a command, and drop the
+                         indentation of anything longer than a line. Same reason the CI gate's
+                         failure summary is left alone. -->
+                    <p
+                      v-if="f.suggestedFix"
+                      class="mt-1 max-w-3xl whitespace-pre-wrap rounded-md bg-elevated/50 px-2 py-1 text-2xs text-toned"
+                    >
+                      <span class="text-dimmed">{{ t('prReview.suggestedFix') }}</span>
+                      {{ f.suggestedFix }}
+                    </p>
+
+                    <!-- The investigator's justification (why the finding holds up / was retracted),
+                       or the reason the challenge investigation failed. -->
+                    <div
+                      v-if="f.challenge?.justification"
+                      data-testid="pr-review-finding-justification"
+                      class="mt-1.5 max-w-3xl rounded-md px-2 py-1 text-2xs"
+                      :class="
+                        isRetracted(f)
+                          ? 'bg-app-error-500/10 text-app-error-200'
+                          : isChallengeFailed(f)
+                            ? 'bg-app-warning-500/10 text-app-warning-200'
+                            : 'bg-app-info-500/10 text-app-info-200'
+                      "
+                    >
+                      <!-- A label that used to prefix its value inline now heads the block the
+                           rendered prose became, so it needs to READ as a heading line rather than
+                           as a stray word above a paragraph. -->
+                      <span class="mb-1 block font-medium">{{
+                        isChallengeFailed(f)
+                          ? t('prReview.challenge.failedLabel')
+                          : t('prReview.challenge.verdictLabel')
+                      }}</span>
+                      <MarkdownProse :text="f.challenge.justification" />
+                    </div>
+
+                    <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
+                    <div
+                      v-if="awaiting && !isInvestigating(f)"
+                      class="mt-1.5 flex items-center gap-3 text-2xs"
+                    >
+                      <button
+                        v-if="!isRetracted(f)"
+                        data-testid="pr-review-finding-challenge"
+                        class="flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+                        :disabled="!canResolve || !access.canExecuteRuns.value"
+                        @click="openChallenge(f.id)"
+                      >
+                        <UIcon name="i-lucide-gavel" class="h-3.5 w-3.5" />
+                        {{
+                          f.challenge
+                            ? t('prReview.challenge.reChallenge')
+                            : t('prReview.challenge.action')
+                        }}
+                      </button>
+                      <button
+                        data-testid="pr-review-finding-dismiss"
+                        class="flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
+                        :disabled="!canResolve || !access.canExecuteRuns.value"
+                        @click="onDismiss(f.id)"
+                      >
+                        <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
+                        {{ t('prReview.challenge.dismiss') }}
+                      </button>
+                    </div>
+
+                    <!-- The inline challenge box: an OPTIONAL specific concern for the investigator. -->
+                    <div
+                      v-if="challengeForId === f.id"
+                      data-testid="pr-review-challenge-box"
+                      class="mt-2 rounded-md border border-primary/40 bg-default/80 p-2"
+                    >
+                      <textarea
+                        v-model="challengeText"
+                        data-testid="pr-review-challenge-input"
+                        rows="2"
+                        :placeholder="t('prReview.challenge.placeholder')"
+                        class="w-full resize-y rounded-sm border border-muted bg-app-950/60 px-2 py-1 text-xs text-default outline-none focus:border-primary"
+                      />
+                      <p class="mt-1 text-3xs text-dimmed">
+                        {{ t('prReview.challenge.hint') }}
+                      </p>
+                      <div class="mt-1.5 flex justify-end gap-2">
+                        <button
+                          class="rounded-sm px-2 py-1 text-2xs text-muted hover:text-default"
+                          @click="cancelChallenge"
+                        >
+                          {{ t('common.cancel') }}
+                        </button>
+                        <button
+                          data-testid="pr-review-challenge-submit"
+                          class="rounded-sm bg-primary/80 px-2 py-1 text-2xs font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
+                          :disabled="!canResolve"
+                          @click="submitChallenge(f.id)"
+                        >
+                          {{ t('prReview.challenge.submit') }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </section>
+          </template>
+        </template>
+      </div>
+
+      <!-- Run details: the same timing / model / run id + LLM model-activity rollup (calls,
+           tokens) every step-backed result window carries, so the reviewer's run reads the
+           same "which run is this / how did the model do" facts as the generic step detail. -->
+      <aside
+        v-if="step"
+        data-testid="pr-review-run-meta"
+        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-default bg-default/50 px-4 py-4 lg:flex"
+      >
+        <StepRunMeta
+          :step="step"
+          :instance-id="instanceId ?? undefined"
+          :step-number="stepIndex === null ? undefined : stepIndex + 1"
+          :total-steps="instance?.steps.length"
+          :run-failed="instance?.status === 'failed'"
+          :failure-at="instance?.failure?.occurredAt"
+        />
+      </aside>
+    </div>
+
+    <!-- Footer -->
+    <footer
+      v-if="awaiting"
+      class="flex items-center justify-end gap-2 border-t border-default px-5 py-3"
+    >
+      <UButton
+        color="neutral"
+        variant="ghost"
+        :disabled="!canResolve || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="pr-review-finish"
+        @click="onResolve('finish')"
+      >
+        {{ t('prReview.finish') }}
+      </UButton>
+      <UButton
+        color="neutral"
+        variant="soft"
+        :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="pr-review-post"
+        @click="onResolve('post')"
+      >
+        {{ postReport ? t('prReview.postReport.retry') : t('prReview.post') }}
+      </UButton>
+      <UButton
+        color="primary"
+        :loading="prReview.resolving"
+        :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="pr-review-fix"
+        @click="onResolve('fix')"
+      >
+        {{ t('prReview.fix') }}
+      </UButton>
+    </footer>
+  </ResultWindowShell>
+</template>

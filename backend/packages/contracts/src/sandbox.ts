@@ -18,8 +18,13 @@ import * as v from 'valibot'
 // read live from `@cat-factory/agents`. Only candidate versions are stored.
 // ---------------------------------------------------------------------------
 
-/** Whether a prompt version is a read-only shipped baseline or a stored, editable candidate. */
-export const sandboxPromptOriginSchema = v.picklist(['baseline', 'candidate'])
+/**
+ * Where a prompt version came from. `baseline` is the read-only shipped prompt, `candidate` a
+ * stored editable lineage, and `workspace` a read-only projection of the workspace's OWN agent
+ * prompt (edited in the pipeline builder) so an experiment can measure a candidate against the
+ * text that is actually running rather than only against what the product ships.
+ */
+export const sandboxPromptOriginSchema = v.picklist(['baseline', 'candidate', 'workspace'])
 export type SandboxPromptOrigin = v.InferOutput<typeof sandboxPromptOriginSchema>
 
 const labelSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40))
@@ -54,8 +59,48 @@ export const sandboxPromptVersionSchema = v.object({
   createdBy: v.nullable(v.string()),
   /** Soft-archive marker; archived versions are hidden from the default listing. */
   archivedAt: v.nullable(v.number()),
+  /**
+   * Set on the `workspace` row whose revision is the one currently RUNNING for that kind. Computed
+   * from the head of the workspace's revision log, not from the highest row here: a "back to the
+   * built-in" revision is the head and is never projected, so on a reverted kind no row is live and
+   * reading the highest number would point at a prompt that stopped running.
+   */
+  live: v.optional(v.boolean()),
 })
 export type SandboxPromptVersion = v.InferOutput<typeof sandboxPromptVersionSchema>
+
+// ---- The testable-agent-kind catalog --------------------------------------
+
+/** How PRODUCTION dispatches an agent kind: one inline LLM call, or a container with a checkout. */
+export const sandboxAgentBucketSchema = v.picklist(['inline', 'container'])
+export type SandboxAgentBucket = v.InferOutput<typeof sandboxAgentBucketSchema>
+
+/**
+ * How the SANDBOX runs a cell for a kind. Deliberately a different fact from
+ * {@link sandboxAgentBucketSchema}: the run-driver is inline-only, so a container kind whose
+ * reviewed artifact can be handed over as text is still testable (the code `reviewer` reads a diff),
+ * while one whose deliverable IS a pushed commit (the `coder`) is not.
+ */
+export const sandboxRunModeSchema = v.picklist(['inline', 'unsupported'])
+export type SandboxRunMode = v.InferOutput<typeof sandboxRunModeSchema>
+
+/**
+ * Why the Sandbox cannot run a kind, as a bounded CODE rather than prose.
+ *
+ * A code because the SPA has to render this to a person in their own language: prose composed in
+ * the catalog reaches the browser untranslatable, and the backend does not localize (it emits a
+ * machine-readable reason the SPA maps to a key). It is also what keeps the two readers' wording
+ * independent while the DECISION stays in one place: the operator hitting the API gets a sentence
+ * naming the route, the person in the builder gets translated copy under the field.
+ *
+ * `container-run-required`: the kind's deliverable is a pushed commit, so grading it needs a real
+ * container run against a seed repository the deployment owns. An inline cell can only grade text.
+ */
+export const sandboxUnsupportedReasonSchema = v.picklist(['container-run-required'])
+export type SandboxUnsupportedReason = v.InferOutput<typeof sandboxUnsupportedReasonSchema>
+
+/** Every unsupported reason, as a value, for a caller that must react to each one (the SPA's map). */
+export const SANDBOX_UNSUPPORTED_REASONS = sandboxUnsupportedReasonSchema.options
 
 // ---- Fixtures -------------------------------------------------------------
 
@@ -69,10 +114,19 @@ export const sandboxFixtureKindSchema = v.picklist([
   'clarity',
   'architecture',
   'code-review',
+  'estimation',
+  'answer-recommendation',
   'repo-feature',
   'repo-bug',
 ])
 export type SandboxFixtureKind = v.InferOutput<typeof sandboxFixtureKindSchema>
+
+/**
+ * Every fixture kind, as a value, for a caller that must react to each one (the SPA's label map,
+ * the coverage tests). The picklist's own option list, so adding a member extends it with no
+ * second edit and nothing can list a kind the schema would reject.
+ */
+export const SANDBOX_FIXTURE_KINDS = sandboxFixtureKindSchema.options
 
 /** A pinned starting point in the dedicated fixture repo for a container-agent fixture. */
 export const sandboxRepoRefSchema = v.object({
@@ -127,8 +181,14 @@ export const sandboxExpectationSchema = v.object({
   /** How bad it is to miss (1..5); drives the miss penalty. */
   impact: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)),
   /**
-   * Phrases the deterministic scorer matches (token-sequence) to decide whether the
-   * candidate caught this item. Empty ⇒ the scorer falls back to matching `summary`.
+   * Phrases the deterministic scorer matches (a contiguous run of word tokens, compared by
+   * EQUALITY) to decide whether the candidate caught this item. Empty ⇒ the scorer falls back to
+   * matching `summary`.
+   *
+   * A trailing `*` makes the hint's LAST token match by prefix (`idempoten*` catches "idempotent"
+   * and "idempotency"). Write it wherever a word form varies: without the marker a bare stem
+   * matches nothing at all, and a dead hint scores "missed" for every answer while reading as a
+   * perfectly sensible fixture.
    */
   matchHints: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
 })

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ConsensusSession } from '~/types/consensus'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useSingleFlight } from '~/composables/useSingleFlight'
 
 /**
  * Consensus session state. A consensus-enabled step runs a multi-model process (panel /
@@ -18,6 +19,8 @@ export const useConsensusStore = defineStore('consensus', () => {
   const sessions = ref<Record<string, ConsensusSession | null>>({})
   /** Block ids whose session is currently being fetched. */
   const loading = ref<Set<string>>(new Set())
+  /** One in-flight fetch per block: the window and its opener both load on open. */
+  const loads = useSingleFlight<string, void>()
 
   function sessionFor(blockId: string): ConsensusSession | null {
     return sessions.value[blockId] ?? null
@@ -27,8 +30,13 @@ export const useConsensusStore = defineStore('consensus', () => {
     return loading.value.has(blockId)
   }
 
+  /**
+   * Write one block's session into the cache, IN PLACE: per-key, never a whole-record clone.
+   * `sessions` is a deep reactive ref, so replacing the record retriggered every consumer keyed on
+   * an UNCHANGED block; assigning the key retriggers only the block that actually changed.
+   */
   function store(session: ConsensusSession) {
-    sessions.value = { ...sessions.value, [session.blockId]: session }
+    sessions.value[session.blockId] = session
   }
 
   /** Patch the cache from a live `consensus` stream event (newest wins per block). */
@@ -40,13 +48,27 @@ export const useConsensusStore = defineStore('consensus', () => {
   }
 
   /** Load the latest session for a block (window open / reload). Best-effort. */
-  async function load(blockId: string): Promise<void> {
+  function load(blockId: string): Promise<void> {
+    return loads.run(blockId, () => fetchSession(blockId))
+  }
+
+  async function fetchSession(blockId: string): Promise<void> {
     const wsId = workspace.workspaceId
     if (!wsId) return
     loading.value = new Set(loading.value).add(blockId)
     try {
       const { session } = await api.getConsensusSession(wsId, blockId)
-      sessions.value = { ...sessions.value, [blockId]: session }
+      // Reconcile rather than blind-replace: a `load` resolving AFTER a fresher live
+      // `consensus` push (or after a newer concurrent load) must not regress the transcript —
+      // the out-of-order-overwrite hazard the AGENTS.md live-push rules warn about. Keep
+      // whichever session is newer by `updatedAt` (any id), and never overwrite an existing
+      // (possibly live-pushed) session with a raced "none".
+      const existing = sessions.value[blockId]
+      if (session) {
+        if (!existing || session.updatedAt >= existing.updatedAt) store(session)
+      } else if (existing === undefined) {
+        sessions.value[blockId] = null
+      }
     } catch {
       // Consensus off / no session — leave the cache as-is; the window shows its empty state.
     } finally {

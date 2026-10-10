@@ -30,7 +30,7 @@ export interface DeployImageSpec {
 }
 
 /** One resolved entry inside an injected Secret / generated `.env`. */
-export interface DeploySecretEntrySpec {
+interface DeploySecretEntrySpec {
   key: string
   value: string
 }
@@ -41,7 +41,7 @@ export type DeploySecretInjectionSpec =
   | { mode: 'generatorEnvFile'; envFilePath: string; entries: DeploySecretEntrySpec[] }
 
 /** A resolved `--set path=value` for a helm release. */
-export interface DeployHelmSetSpec {
+interface DeployHelmSetSpec {
   path: string
   value: string
 }
@@ -66,8 +66,15 @@ export type DeployUrlSourceSpec =
   | { source: 'gatewayStatus'; gatewayName?: string; scheme?: 'http' | 'https' }
   | { source: 'httpRouteStatus'; httpRouteName?: string; scheme?: 'http' | 'https' }
 
-/** The full deploy-job body (mirrors the harness's `DeployJob`). */
-export interface DeployJobSpec {
+/**
+ * The full deploy-job body (mirrors the harness's `DeployJob`).
+ *
+ * A type alias rather than an `interface` on purpose: the runner-pool port carries a job body
+ * as `Record<string, unknown>` (any job kind's JSON), and only an alias picks up the implicit
+ * index signature that makes it assignable there. As an interface the dispatch site had to
+ * assert through `unknown`, which would have hidden a genuinely non-serializable field.
+ */
+export type DeployJobSpec = {
   jobId: string
   cluster: {
     apiServerUrl: string
@@ -226,6 +233,26 @@ export interface BuildDeployJobParams {
 }
 
 /**
+ * Whether the namespace the backend derives is the one the deploy actually lands in.
+ *
+ * True for a raw source (nothing can retarget it) and for a kustomize source with a
+ * `namespaceTemplate`, which the harness pins with `kustomize edit set namespace`. False for the
+ * remaining case, a kustomize overlay declaring its OWN namespace: the harness discovers that
+ * name by building the overlay INSIDE the container, so before dispatch the backend genuinely
+ * does not know where the workloads will go.
+ *
+ * This is the mirror of the harness's `resolveTargetNamespace` early return, and it is exported
+ * because a caller that writes into the namespace BEFORE dispatch (the registry-credential
+ * wiring) has to ask the same question. Writing on a false answer creates an empty namespace
+ * nothing tears down, and puts the credential somewhere no pod reads, while the log reports a
+ * success.
+ */
+export function deployTargetsBackendNamespace(config: KubernetesProvisionConfig): boolean {
+  const renderer = config.manifestSource.renderer ?? 'raw'
+  return renderer !== 'kustomize' || !!config.namespaceTemplate
+}
+
+/**
  * Build the deploy-job body the backend dispatches to the deploy harness, with every template
  * rendered and every secret resolved. `setNamespace` pins the backend-derived namespace (via
  * `kustomize edit set namespace`) only for a `kustomize` source WITH a configured
@@ -247,7 +274,7 @@ export function buildDeployJobSpec(params: BuildDeployJobParams): DeployJobSpec 
   const images = resolveImageOverrides(config.images, vars)
   const secretInjections = resolveSecretInjections(config.secretInjections, vars, resolveSecret)
   const helmReleases = resolveHelmReleases(config.helmReleases, vars, resolveSecret)
-  const setNamespace = renderer === 'kustomize' && !!config.namespaceTemplate
+  const setNamespace = renderer === 'kustomize' && deployTargetsBackendNamespace(config)
   const spec: DeployJobSpec = {
     jobId,
     cluster: {
@@ -315,6 +342,16 @@ export function mapDeployOutcome(
       access: null,
       fields: { ...vars },
       error: view.error ?? 'Deploy job did not return an environment outcome',
+      // Deliberately UNCLASSIFIED, and that is a decision rather than an omission. What the deploy
+      // container hands back is the free-form output of `kubectl`/`kustomize`/`helm`, not an
+      // apiserver `Status`, so there is no `reason` to read and nothing to run `classifyApplyFailure`
+      // over. Matching phrases in that text would look like coverage and be the exact hazard the
+      // classification exists to remove: a manifest whose `{{image}}` was never substituted fails
+      // this path with a validation error indistinguishable from one whose manifests are genuinely
+      // wrong, and reading the first as `manifest_invalid` dispatches a fixer whose only available
+      // move is to hard-code the image. Classifying this path needs a structured cause from the
+      // deploy harness itself (tracked in `docs/initiatives/deployment-failure-remediation.md`),
+      // and until it has one, unclassified is the honest answer: never repo-fixable.
     }
   }
   const status: EnvironmentStatus = outcome.status === 'ready' ? 'ready' : 'provisioning'

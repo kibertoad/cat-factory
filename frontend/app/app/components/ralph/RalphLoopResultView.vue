@@ -1,0 +1,283 @@
+<script setup lang="ts">
+// Ralph loop window — the dedicated surface for a `ralph` step, opened via the universal
+// result-view host. It surfaces the persistent retry-until-done loop the backend persists on
+// `step.ralph`: the programmatic completion command, the iteration count vs the budget, the
+// most recent validation exit code + output, and the per-iteration history. Synchronous — it
+// reads straight off the execution step (no fetch on open).
+import { computed } from 'vue'
+import { agentKindMeta } from '~/utils/catalog'
+import type { RalphStepState } from '~/types/execution'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import CopyButton from '~/components/common/CopyButton.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
+const board = useBoardStore()
+const execution = useExecutionStore()
+const { t, d } = useI18n()
+
+// `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking) via the shared
+// overlay behaviour.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('ralph-loop')
+const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+const prUrl = computed(() => block.value?.pullRequest?.url ?? null)
+
+const instance = computed(() =>
+  instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
+)
+const step = computed(() => {
+  if (instance.value === null || stepIndex.value === null) return null
+  return instance.value.steps[stepIndex.value] ?? null
+})
+const ralph = computed<RalphStepState | null>(() => step.value?.ralph ?? null)
+const meta = computed(() => agentKindMeta('ralph'))
+const headerTitle = computed(
+  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
+)
+
+// Iterations, newest-first for the timeline.
+const attempts = computed(() => [...(ralph.value?.attemptLog ?? [])].reverse())
+// How many earlier iterations the backend's log cap dropped (0 when the history is complete).
+const droppedAttempts = computed(() => ralph.value?.droppedAttempts ?? 0)
+
+/**
+ * The display status, rolled up from the persisted loop state + the run status:
+ *  - `passed`  — the step finished (the validation command exited 0);
+ *  - `stalled` — the run failed here BEFORE the budget ran out, because consecutive iterations
+ *                stopped changing the branch;
+ *  - `gave-up` — the run failed here with the iteration budget spent;
+ *  - `running` — an iteration is in flight;
+ *  - `failing` — the last validation failed and another iteration is about to run.
+ *
+ * The stall is derived from "ended short of the budget" rather than from the streak count, so
+ * the view never has to keep a copy of the engine's no-progress limit in step with it. Telling
+ * the two apart matters: a loop that stopped at 3 of 20 reads as an unexplained give-up
+ * otherwise, and the fix for a stall (change the task or the command) is not the fix for a
+ * spent budget (give it more room).
+ */
+type RalphDisplayStatus = 'passed' | 'stalled' | 'gave-up' | 'running' | 'failing'
+const status = computed<RalphDisplayStatus>(() => {
+  const s = step.value
+  if (!s) return 'running'
+  if (s.state === 'done') return 'passed'
+  if (instance.value?.status === 'failed') {
+    const r = ralph.value
+    return r && r.attempts > 0 && r.attempts < r.maxIterations ? 'stalled' : 'gave-up'
+  }
+  if (s.container?.status === 'starting' || s.container?.status === 'up') return 'running'
+  return 'failing'
+})
+
+const STATUS_META = computed<
+  Record<
+    RalphDisplayStatus,
+    {
+      label: string
+      badge: 'success' | 'warning' | 'error' | 'neutral'
+      icon: string
+      text: string
+    }
+  >
+>(() => ({
+  passed: {
+    label: t('ralph.status.passed'),
+    badge: 'success',
+    icon: 'i-lucide-circle-check',
+    text: 'text-app-success-300',
+  },
+  stalled: {
+    label: t('ralph.status.stalled'),
+    badge: 'error',
+    icon: 'i-lucide-circle-slash',
+    text: 'text-app-error-300',
+  },
+  'gave-up': {
+    label: t('ralph.status.gaveUp'),
+    badge: 'error',
+    icon: 'i-lucide-circle-x',
+    text: 'text-app-error-300',
+  },
+  running: {
+    label: t('ralph.status.running'),
+    badge: 'warning',
+    icon: 'i-lucide-loader',
+    text: 'text-app-warning-300',
+  },
+  failing: {
+    label: t('ralph.status.failing'),
+    badge: 'error',
+    icon: 'i-lucide-circle-x',
+    text: 'text-app-error-300',
+  },
+}))
+</script>
+
+<template>
+  <ResultWindowShell
+    :open="open"
+    :icon="meta.icon"
+    icon-class="bg-app-secondary-500/15 text-app-secondary-300"
+    :title="headerTitle"
+    :subtitle="t('ralph.subtitle')"
+    :step-ref="{ instanceId, stepIndex }"
+    width="3xl"
+    testid="ralph-loop-window"
+    @close="close"
+  >
+    <template #header-extras>
+      <UBadge
+        :color="STATUS_META[status].badge"
+        variant="subtle"
+        size="sm"
+        data-testid="ralph-status"
+      >
+        {{ STATUS_META[status].label }}
+      </UBadge>
+    </template>
+    <div class="flex min-h-0 flex-1">
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <div
+          v-if="!ralph"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
+        >
+          <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
+          <p class="text-sm">{{ t('ralph.noActivity') }}</p>
+        </div>
+
+        <template v-else>
+          <!-- The completion criterion. -->
+          <SectionLabel as="h3" class="mb-1.5">
+            {{ t('ralph.validationCommand') }}
+          </SectionLabel>
+          <div class="relative rounded-md border border-default bg-app-950/60 px-3 py-2">
+            <CopyButton :text="ralph.validationCommand" class="absolute end-1 top-1" />
+            <code class="block whitespace-pre-wrap pe-8 font-mono text-xs text-default">{{
+              ralph.validationCommand
+            }}</code>
+          </div>
+
+          <!-- The most recent validation output. -->
+          <template v-if="ralph.lastValidationTail">
+            <SectionLabel as="h3" class="mb-1.5 mt-4">
+              {{ t('ralph.lastOutput', { exit: ralph.lastExitCode ?? '?' }) }}
+            </SectionLabel>
+            <div class="relative rounded-md border border-default bg-app-950/60 px-3 py-2">
+              <CopyButton :text="ralph.lastValidationTail" class="absolute end-1 top-1" />
+              <pre class="whitespace-pre-wrap pe-8 font-mono text-2xs leading-relaxed text-muted">{{
+                ralph.lastValidationTail
+              }}</pre>
+            </div>
+          </template>
+
+          <a
+            v-if="prUrl"
+            :href="prUrl"
+            target="_blank"
+            rel="noopener"
+            class="mt-3 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
+          >
+            {{ t('ralph.viewPr') }}
+            <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+          </a>
+
+          <!-- Why a loop that stopped short of its budget stopped: without this the count in
+               the sidebar (e.g. "3 of 20") reads as an unexplained abandonment. -->
+          <p
+            v-if="status === 'stalled'"
+            class="mt-3 rounded-md border border-app-error-900/60 bg-app-error-950/30 px-3 py-2 text-xs leading-relaxed text-app-error-200"
+            data-testid="ralph-stalled-note"
+          >
+            {{ t('ralph.stalledNote') }}
+          </p>
+
+          <!-- Iteration history: what each pass produced and whether its validation passed. -->
+          <section v-if="attempts.length" class="mt-5">
+            <SectionLabel as="h3" class="mb-2">
+              {{ t('ralph.iterationsHeading') }}
+            </SectionLabel>
+            <!-- The log is capped (it rides the run's detail blob); say so rather than letting a
+                 long loop's partial history read as if those iterations never ran. -->
+            <p
+              v-if="droppedAttempts"
+              class="mb-2 text-2xs text-dimmed"
+              data-testid="ralph-iterations-truncated"
+            >
+              {{ t('ralph.iterationsTruncated', { count: droppedAttempts }, droppedAttempts) }}
+            </p>
+            <ol class="space-y-2">
+              <li
+                v-for="a in attempts"
+                :key="a.attempt"
+                class="rounded-md border border-default bg-app-950/40 px-3 py-2"
+                data-testid="ralph-iteration"
+              >
+                <div class="flex items-center gap-2">
+                  <UIcon
+                    :name="a.validationPassed ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
+                    class="h-3.5 w-3.5"
+                    :class="a.validationPassed ? 'text-app-success-400' : 'text-app-error-400'"
+                  />
+                  <span class="text-xs font-medium text-default">
+                    {{ t('ralph.iteration', { number: a.attempt }) }}
+                  </span>
+                  <span class="text-2xs text-dimmed">
+                    {{
+                      a.validationPassed
+                        ? t('ralph.iterationPassed')
+                        : t('ralph.iterationFailed', { exit: a.exitCode ?? '?' })
+                    }}
+                  </span>
+                  <span class="ms-auto text-3xs text-app-600">{{ d(new Date(a.at), 'long') }}</span>
+                </div>
+                <p
+                  v-if="a.summary"
+                  class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted"
+                >
+                  {{ a.summary }}
+                </p>
+              </li>
+            </ol>
+          </section>
+        </template>
+      </div>
+
+      <aside
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
+      >
+        <div v-if="ralph">
+          <SectionLabel as="h4" class="mb-2">
+            {{ t('ralph.sidebar.state') }}
+          </SectionLabel>
+          <div class="flex items-center gap-2 text-sm">
+            <UIcon
+              :name="STATUS_META[status].icon"
+              class="h-4 w-4"
+              :class="STATUS_META[status].text"
+            />
+            <span :class="STATUS_META[status].text">{{ STATUS_META[status].label }}</span>
+          </div>
+        </div>
+        <div v-if="ralph">
+          <SectionLabel as="h4" class="mb-1">
+            {{ t('ralph.sidebar.iterations') }}
+          </SectionLabel>
+          <p class="text-xs text-toned" data-testid="ralph-iteration-count">
+            {{ t('ralph.sidebar.count', { attempts: ralph.attempts, max: ralph.maxIterations }) }}
+          </p>
+        </div>
+        <StepRunMeta
+          v-if="step"
+          :step="step"
+          :instance-id="instanceId ?? undefined"
+          :step-number="stepIndex === null ? undefined : stepIndex + 1"
+          :total-steps="instance?.steps.length"
+          :run-failed="instance?.status === 'failed'"
+          :failure-at="instance?.failure?.occurredAt"
+        />
+        <p class="mt-auto text-3xs leading-relaxed text-app-600">
+          {{ t('ralph.sidebar.footer') }}
+        </p>
+      </aside>
+    </div>
+  </ResultWindowShell>
+</template>

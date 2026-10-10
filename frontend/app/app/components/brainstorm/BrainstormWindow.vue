@@ -8,6 +8,7 @@
 // options or hits the iteration cap. The converged direction — not the original description — is
 // what the downstream stage (the requirements review / the architect) consumes.
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   BrainstormItem,
@@ -18,27 +19,25 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/brainstorm'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
-const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 const drafts = ref<Record<string, string>>({})
 const redoComment = ref('')
 const showRedo = ref(false)
 
 const { open, blockId, stage, close } = useResultView('brainstorm', {
-  // `onOpen` fires synchronously from `useResultView`'s immediate watch, BEFORE the `stage`
-  // const below is initialised — so read the stage straight off the store here (referencing
-  // `stage.value` would hit its temporal dead zone and throw on every open).
-  onOpen: (id) => {
+  onOpen: ({ blockId, stage }) => {
     drafts.value = {}
     redoComment.value = ''
     showRedo.value = false
-    const openStage = ui.resultView?.stage
-    if (openStage) void brainstorm.load(id, openStage)
+    if (stage) void brainstorm.load(blockId, stage)
   },
 })
 const activeStage = computed<BrainstormStage>(() => stage.value ?? 'requirements')
@@ -146,15 +145,6 @@ const STATUS_LABELS: Record<ReviewItemStatus, string> = {
   recommend_requested: 'brainstorm.itemStatus.recommend_requested',
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function submitReply(item: BrainstormItem) {
   if (!session.value) return
   const text = (drafts.value[item.id] ?? '').trim()
@@ -163,16 +153,34 @@ async function submitReply(item: BrainstormItem) {
     await brainstorm.reply(session.value, item.id, text)
     drafts.value = { ...drafts.value, [item.id]: '' }
   } catch (e) {
-    notifyError(t('brainstorm.toast.saveChoiceError'), e)
+    present(e, 'brainstorm.toast.saveChoiceError')
   }
 }
+
+/**
+ * Confirm before discarding typed replies (UX-79). Each draft answers one of the brainstorm's open
+ * questions and the redo comment steers a re-run; both are held here until their own button is
+ * pressed, on a window Escape and a backdrop click both close. Sending them on close is not the
+ * fix: a reply RESOLVES an item and the redo comment starts another agent pass.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => acting.value || reworking.value,
+  snapshot: () => ({
+    replies: Object.values(drafts.value)
+      .map((text) => text.trim())
+      .filter(Boolean),
+    redo: redoComment.value.trim(),
+  }),
+})
 
 async function setStatus(item: BrainstormItem, itemStatus: BrainstormItemStatus) {
   if (!session.value) return
   try {
     await brainstorm.setItemStatus(session.value, item.id, itemStatus)
   } catch (e) {
-    notifyError(t('brainstorm.toast.updateOptionError'), e)
+    present(e, 'brainstorm.toast.updateOptionError')
   }
 }
 
@@ -181,7 +189,7 @@ async function incorporate(feedback?: string) {
   try {
     await brainstorm.incorporate(session.value, feedback)
   } catch (e) {
-    notifyError(t('brainstorm.toast.incorporateError'), e)
+    present(e, 'brainstorm.toast.incorporateError')
     return
   }
   redoComment.value = ''
@@ -209,7 +217,7 @@ async function reReview() {
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError(t('brainstorm.toast.reReviewError'), e)
+    present(e, 'brainstorm.toast.reReviewError')
   }
 }
 
@@ -220,7 +228,7 @@ async function proceed() {
     await brainstorm.proceed(blockId.value, activeStage.value)
     toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError(t('brainstorm.toast.proceedError'), e)
+    present(e, 'brainstorm.toast.proceedError')
   } finally {
     acting.value = false
   }
@@ -240,7 +248,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       toast.add({ title: t('brainstorm.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError(t('brainstorm.toast.resolveError'), e)
+    present(e, 'brainstorm.toast.resolveError')
   } finally {
     acting.value = false
   }
@@ -248,412 +256,377 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <!-- header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15">
-            <UIcon
-              :name="isArchitecture ? 'i-lucide-drafting-compass' : 'i-lucide-lightbulb'"
-              class="h-5 w-5 text-amber-300"
-            />
-          </div>
-          <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
-              {{
-                isArchitecture
-                  ? t('brainstorm.title.architecture')
-                  : t('brainstorm.title.requirements')
-              }}
-            </h1>
-            <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
-          </div>
-          <div class="ms-auto flex items-center gap-1.5">
-            <UBadge v-if="session" color="neutral" variant="subtle" size="sm">
-              {{ t('brainstorm.iteration', { current: iteration, max: maxIterations }) }}
-            </UBadge>
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
-          </div>
-        </header>
+  <ResultWindowShell
+    :open="open"
+    :icon="isArchitecture ? 'i-lucide-drafting-compass' : 'i-lucide-lightbulb'"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
+    :title="
+      isArchitecture ? t('brainstorm.title.architecture') : t('brainstorm.title.requirements')
+    "
+    :subtitle="block?.title"
+    variant="centered"
+    width="full"
+    @close="requestClose"
+  >
+    <template v-if="session" #header-extras>
+      <UBadge color="neutral" variant="subtle" size="sm">
+        {{ t('brainstorm.iteration', { current: iteration, max: maxIterations }) }}
+      </UBadge>
+    </template>
 
-        <div class="flex min-h-0 flex-1">
-          <!-- main column -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            <p class="mb-4 text-sm text-slate-400">
-              <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
-                <template #subject>{{ subjectNoun }}</template>
-                <template #doc>{{ docNoun }}</template>
-                <template #choose>
-                  <span class="text-slate-300">{{ t('brainstorm.introChoose') }}</span>
-                </template>
-                <template #dismiss>
-                  <span class="text-slate-300">{{ t('brainstorm.introDismiss') }}</span>
-                </template>
-              </i18n-t>
-            </p>
+    <div class="flex min-h-0 flex-1">
+      <!-- main column -->
+      <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+        <p class="mb-4 text-sm text-muted">
+          <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
+            <template #subject>{{ subjectNoun }}</template>
+            <template #doc>{{ docNoun }}</template>
+            <template #choose>
+              <span class="text-toned">{{ t('brainstorm.introChoose') }}</span>
+            </template>
+            <template #dismiss>
+              <span class="text-toned">{{ t('brainstorm.introDismiss') }}</span>
+            </template>
+          </i18n-t>
+        </p>
 
-            <!-- empty state -->
+        <!-- empty state -->
+        <div
+          v-if="!session && !busy && !loading"
+          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
+        >
+          {{ t('brainstorm.empty') }}
+        </div>
+
+        <!-- working state (initial fetch on open, or an agent pass running) -->
+        <div
+          v-else-if="(busy || loading) && !session"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+          {{ loading && !busy ? t('brainstorm.loading') : t('brainstorm.generating') }}
+        </div>
+
+        <template v-else-if="session">
+          <!-- converged -->
+          <div
+            v-if="incorporated"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
+          >
+            <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
+            {{ t('brainstorm.settledBanner', { doc: docNoun }) }}
+          </div>
+
+          <!-- iteration cap hit -->
+          <IterationCapPrompt
+            v-else-if="exceeded"
+            class="mb-4"
+            :heading="t('brainstorm.exceeded.heading', { max: maxIterations })"
+            :detail="t('brainstorm.exceeded.detail')"
+            :loading="acting"
+            @resolve="resolveExceeded"
+          />
+
+          <!-- working: the async cycle is running in the driver -->
+          <div
+            v-else-if="working"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 p-4 text-sm text-app-warning-200"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <span v-if="incorporating">
+              {{ t('brainstorm.working.incorporating', { doc: docNoun }) }}
+            </span>
+            <span v-else>
+              {{ t('brainstorm.working.reReviewing') }}
+            </span>
+          </div>
+
+          <!-- options to react to -->
+          <div v-if="session.items.length" class="flex flex-col gap-3">
             <div
-              v-if="!session && !busy && !loading"
-              class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
+              v-for="item in sortedItems"
+              :key="item.id"
+              class="rounded-lg border border-default bg-default/60 p-3"
+              :class="{ 'opacity-60': item.status === 'dismissed' }"
             >
-              {{ t('brainstorm.empty') }}
-            </div>
+              <div class="flex items-start gap-2">
+                <UIcon
+                  :name="CATEGORY_ICON[item.category]"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-muted"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-sm font-medium text-highlighted">{{ item.title }}</span>
+                    <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
+                      {{ t(SEVERITY_LABELS[item.severity]) }}
+                    </UBadge>
+                    <UBadge size="xs" variant="outline" color="neutral">
+                      {{ t(CATEGORY_LABELS[item.category]) }}
+                    </UBadge>
+                    <UBadge
+                      size="xs"
+                      variant="soft"
+                      :color="STATUS_COLOR[item.status]"
+                      class="ms-auto"
+                    >
+                      {{ t(STATUS_LABELS[item.status]) }}
+                    </UBadge>
+                  </div>
+                  <!-- The proposal itself is prose, so it takes the measure even though the card
+                       around it takes the span (see the shell's `width` prop: the unit is the
+                       paragraph, not the section). The badge row above and the choose/dismiss
+                       control below are what the full width is actually for. -->
+                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
+                    {{ item.detail }}
+                  </p>
 
-            <!-- working state (initial fetch on open, or an agent pass running) -->
-            <div
-              v-else-if="(busy || loading) && !session"
-              class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ loading && !busy ? t('brainstorm.loading') : t('brainstorm.generating') }}
-            </div>
+                  <!-- recorded choice -->
+                  <div
+                    v-if="item.reply"
+                    class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
+                  >
+                    <SectionLabel as="span">
+                      {{ t('brainstorm.yourChoice') }}
+                    </SectionLabel>
+                    <p class="whitespace-pre-line">{{ item.reply }}</p>
+                  </div>
 
-            <template v-else-if="session">
-              <!-- converged -->
-              <div
-                v-if="incorporated"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
-              >
-                <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                {{ t('brainstorm.settledBanner', { doc: docNoun }) }}
-              </div>
-
-              <!-- iteration cap hit -->
-              <IterationCapPrompt
-                v-else-if="exceeded"
-                class="mb-4"
-                :heading="t('brainstorm.exceeded.heading', { max: maxIterations })"
-                :detail="t('brainstorm.exceeded.detail')"
-                :loading="acting"
-                @resolve="resolveExceeded"
-              />
-
-              <!-- working: the async cycle is running in the driver -->
-              <div
-                v-else-if="working"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-200"
-              >
-                <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
-                <span v-if="incorporating">
-                  {{ t('brainstorm.working.incorporating', { doc: docNoun }) }}
-                </span>
-                <span v-else>
-                  {{ t('brainstorm.working.reReviewing') }}
-                </span>
-              </div>
-
-              <!-- options to react to -->
-              <div v-if="session.items.length" class="flex flex-col gap-3">
-                <div
-                  v-for="item in sortedItems"
-                  :key="item.id"
-                  class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-                  :class="{ 'opacity-60': item.status === 'dismissed' }"
-                >
-                  <div class="flex items-start gap-2">
-                    <UIcon
-                      :name="CATEGORY_ICON[item.category]"
-                      class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                  <!-- react: choose (relevant) or dismiss (irrelevant) -->
+                  <template v-if="item.status === 'open' || item.status === 'answered'">
+                    <UTextarea
+                      v-model="drafts[item.id]"
+                      :rows="2"
+                      autoresize
+                      size="sm"
+                      class="mt-2 w-full"
+                      :placeholder="
+                        item.reply
+                          ? t('brainstorm.replyPlaceholder.refine')
+                          : t('brainstorm.replyPlaceholder.choose')
+                      "
+                      :disabled="frozen"
                     />
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <span class="text-sm font-medium text-white">{{ item.title }}</span>
-                        <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
-                          {{ t(SEVERITY_LABELS[item.severity]) }}
-                        </UBadge>
-                        <UBadge size="xs" variant="outline" color="neutral">
-                          {{ t(CATEGORY_LABELS[item.category]) }}
-                        </UBadge>
-                        <UBadge
-                          size="xs"
-                          variant="soft"
-                          :color="STATUS_COLOR[item.status]"
-                          class="ms-auto"
-                        >
-                          {{ t(STATUS_LABELS[item.status]) }}
-                        </UBadge>
-                      </div>
-                      <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
-                        {{ item.detail }}
-                      </p>
-
-                      <!-- recorded choice -->
-                      <div
-                        v-if="item.reply"
-                        class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <UButton
+                        color="primary"
+                        variant="soft"
+                        size="xs"
+                        icon="i-lucide-corner-down-left"
+                        :disabled="
+                          !(drafts[item.id] ?? '').trim() || frozen || !access.canExecuteRuns.value
+                        "
+                        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                        @click="submitReply(item)"
                       >
-                        <span class="text-[10px] uppercase tracking-wide text-slate-500">
-                          {{ t('brainstorm.yourChoice') }}
-                        </span>
-                        <p class="whitespace-pre-line">{{ item.reply }}</p>
-                      </div>
-
-                      <!-- react: choose (relevant) or dismiss (irrelevant) -->
-                      <template v-if="item.status === 'open' || item.status === 'answered'">
-                        <UTextarea
-                          v-model="drafts[item.id]"
-                          :rows="2"
-                          autoresize
-                          size="sm"
-                          class="mt-2 w-full"
-                          :placeholder="
-                            item.reply
-                              ? t('brainstorm.replyPlaceholder.refine')
-                              : t('brainstorm.replyPlaceholder.choose')
-                          "
-                          :disabled="frozen"
-                        />
-                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                          <UButton
-                            color="primary"
-                            variant="soft"
-                            size="xs"
-                            icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim() || frozen"
-                            @click="submitReply(item)"
-                          >
-                            {{ t('brainstorm.saveChoice') }}
-                          </UButton>
-                          <UButton
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                            icon="i-lucide-x"
-                            :disabled="frozen"
-                            @click="setStatus(item, 'dismissed')"
-                          >
-                            {{ t('brainstorm.dismiss') }}
-                          </UButton>
-                        </div>
-                      </template>
-
-                      <!-- reopen a dismissed option -->
-                      <div v-else-if="item.status === 'dismissed'" class="mt-2">
-                        <UButton
-                          color="neutral"
-                          variant="ghost"
-                          size="xs"
-                          icon="i-lucide-rotate-ccw"
-                          :disabled="frozen"
-                          @click="setStatus(item, 'open')"
-                        >
-                          {{ t('brainstorm.reopen') }}
-                        </UButton>
-                      </div>
+                        {{ t('brainstorm.saveChoice') }}
+                      </UButton>
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        size="xs"
+                        icon="i-lucide-x"
+                        :disabled="frozen || !access.canExecuteRuns.value"
+                        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                        @click="setStatus(item, 'dismissed')"
+                      >
+                        {{ t('brainstorm.dismiss') }}
+                      </UButton>
                     </div>
+                  </template>
+
+                  <!-- reopen a dismissed option -->
+                  <div v-else-if="item.status === 'dismissed'" class="mt-2">
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-lucide-rotate-ccw"
+                      :disabled="frozen || !access.canExecuteRuns.value"
+                      :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                      @click="setStatus(item, 'open')"
+                    >
+                      {{ t('brainstorm.reopen') }}
+                    </UButton>
                   </div>
                 </div>
               </div>
-
-              <!-- converged document: the standard-format direction -->
-              <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
-                <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
-                  <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">
-                    {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}
-                  </span>
-                </div>
-                <div v-for="s in outline.sections" :key="s.id" class="mb-2">
-                  <button
-                    v-if="s.title"
-                    class="group flex w-full items-center gap-2 text-start"
-                    @click="toggle(s.id)"
-                  >
-                    <UIcon
-                      name="i-lucide-chevron-right"
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
-                      :class="collapsed[s.id] ? '' : 'rotate-90'"
-                    />
-                    <span
-                      class="font-semibold text-white"
-                      :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
-                      v-html="s.titleHtml"
-                    />
-                  </button>
-                  <div
-                    v-show="!s.title || !collapsed[s.id]"
-                    class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
-                    v-html="s.bodyHtml"
-                  />
-                </div>
-              </section>
-            </template>
+            </div>
           </div>
 
-          <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
-            <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="session" class="space-y-2 text-xs text-slate-400">
-                <div class="flex items-center justify-between">
-                  <span>{{ t('brainstorm.rail.options') }}</span>
-                  <span class="text-slate-300">{{ session.items.length }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('brainstorm.rail.open') }}</span>
-                  <span class="text-slate-300">{{ openCount }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('brainstorm.rail.chosen') }}</span>
-                  <span class="text-slate-300">{{ answeredCount }}</span>
-                </div>
-                <div v-if="session.model" class="flex items-center justify-between">
-                  <span>{{ t('brainstorm.rail.model') }}</span>
-                  <span class="truncate ps-2 text-slate-500">{{ session.model }}</span>
-                </div>
-              </div>
-
-              <!-- action: ready (choose → incorporate / proceed) -->
-              <div
-                v-if="session && status === 'ready'"
-                class="space-y-2 border-t border-slate-800 pt-4"
-              >
-                <UButton
-                  v-if="canProceed"
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-arrow-right"
-                  :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
-                  :loading="acting"
-                  @click="proceed"
-                >
-                  {{ t('brainstorm.proceedNothing') }}
-                </UButton>
-                <UButton
-                  v-else
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-sparkles"
-                  :loading="reworking"
-                  :disabled="!canIncorporate"
-                  @click="incorporate()"
-                >
-                  {{ t('brainstorm.incorporateChoices') }}
-                </UButton>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  <template v-if="canProceed">
-                    {{ t('brainstorm.hint.allDismissed') }}
-                  </template>
-                  <template v-else-if="canIncorporate">
-                    {{ t('brainstorm.hint.incorporate', { doc: docNoun }) }}
-                  </template>
-                  <template v-else> {{ t('brainstorm.hint.chooseAll') }} </template>
-                </p>
-              </div>
-
-              <!-- action: merged (inspect → re-run / redo) -->
-              <div v-if="session && merged" class="space-y-2 border-t border-slate-800 pt-4">
-                <UButton
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-sparkles"
-                  :loading="busy"
-                  @click="reReview"
-                >
-                  {{ busy ? t('brainstorm.reRunning') : t('brainstorm.reRun') }}
-                </UButton>
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-pencil"
-                  @click="showRedo = !showRedo"
-                >
-                  {{ t('brainstorm.redoIncorporation') }}
-                </UButton>
-                <div v-if="showRedo" class="space-y-2">
-                  <UTextarea
-                    v-model="redoComment"
-                    :rows="3"
-                    autoresize
-                    size="sm"
-                    class="w-full"
-                    :placeholder="t('brainstorm.redoPlaceholder')"
-                  />
-                  <UButton
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    block
-                    icon="i-lucide-wand-sparkles"
-                    :loading="reworking"
-                    :disabled="!redoComment.trim()"
-                    @click="incorporate(redoComment.trim())"
-                  >
-                    {{ t('brainstorm.redoWithDirection') }}
-                  </UButton>
-                </div>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  {{ t('brainstorm.mergedHint') }}
-                </p>
-              </div>
-
-              <div
-                v-if="session && incorporated"
-                class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
-              >
-                {{ t('brainstorm.incorporatedFooter') }}
-              </div>
+          <!-- converged document: the standard-format direction -->
+          <section v-if="outline" class="mt-6 border-t border-default pt-5">
+            <div class="mb-3 flex items-center gap-1.5 text-2xs text-app-success-400">
+              <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
+              <span class="font-semibold uppercase tracking-wide">
+                {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}
+              </span>
             </div>
-          </aside>
-        </div>
+            <!-- The same reading measure the options' own prose takes above (see the shell's
+                 `width` prop): the window is `full`-width now, and this is continuous prose that
+                 would otherwise run to 200-character lines. -->
+            <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
+              <button
+                v-if="s.title"
+                class="group flex w-full items-center gap-2 text-start"
+                @click="toggle(s.id)"
+              >
+                <UIcon
+                  name="i-lucide-chevron-right"
+                  class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform"
+                  :class="collapsed[s.id] ? '' : 'rotate-90'"
+                />
+                <span
+                  class="font-semibold text-highlighted"
+                  :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
+                  v-html="s.titleHtml"
+                />
+              </button>
+              <div
+                v-show="!s.title || !collapsed[s.id]"
+                class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
+                v-html="s.bodyHtml"
+              />
+            </div>
+          </section>
+        </template>
       </div>
+
+      <!-- right action rail -->
+      <aside class="hidden w-72 shrink-0 flex-col border-s border-default lg:flex">
+        <div class="flex flex-col gap-4 px-4 py-5">
+          <div v-if="session" class="space-y-2 text-xs text-muted">
+            <div class="flex items-center justify-between">
+              <span>{{ t('brainstorm.rail.options') }}</span>
+              <span class="text-toned">{{ session.items.length }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('brainstorm.rail.open') }}</span>
+              <span class="text-toned">{{ openCount }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('brainstorm.rail.chosen') }}</span>
+              <span class="text-toned">{{ answeredCount }}</span>
+            </div>
+            <div v-if="session.model" class="flex items-center justify-between">
+              <span>{{ t('brainstorm.rail.model') }}</span>
+              <span class="truncate ps-2 text-dimmed">{{ session.model }}</span>
+            </div>
+          </div>
+
+          <!-- action: ready (choose → incorporate / proceed) -->
+          <div v-if="session && status === 'ready'" class="space-y-2 border-t border-default pt-4">
+            <UButton
+              v-if="canProceed"
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-arrow-right"
+              :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
+              :loading="acting"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="proceed"
+            >
+              {{ t('brainstorm.proceedNothing') }}
+            </UButton>
+            <UButton
+              v-else
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-wand-sparkles"
+              :loading="reworking"
+              :disabled="!canIncorporate || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="incorporate()"
+            >
+              {{ t('brainstorm.incorporateChoices') }}
+            </UButton>
+            <p class="text-2xs leading-relaxed text-dimmed">
+              <template v-if="canProceed">
+                {{ t('brainstorm.hint.allDismissed') }}
+              </template>
+              <template v-else-if="canIncorporate">
+                {{ t('brainstorm.hint.incorporate', { doc: docNoun }) }}
+              </template>
+              <template v-else> {{ t('brainstorm.hint.chooseAll') }} </template>
+            </p>
+          </div>
+
+          <!-- action: merged (inspect → re-run / redo) -->
+          <div v-if="session && merged" class="space-y-2 border-t border-default pt-4">
+            <UButton
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-sparkles"
+              :loading="busy"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="reReview"
+            >
+              {{ busy ? t('brainstorm.reRunning') : t('brainstorm.reRun') }}
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              block
+              icon="i-lucide-pencil"
+              @click="
+                () => {
+                  showRedo = !showRedo
+                }
+              "
+            >
+              {{ t('brainstorm.redoIncorporation') }}
+            </UButton>
+            <div v-if="showRedo" class="space-y-2">
+              <UTextarea
+                v-model="redoComment"
+                :rows="3"
+                autoresize
+                size="sm"
+                class="w-full"
+                :placeholder="t('brainstorm.redoPlaceholder')"
+              />
+              <UButton
+                color="primary"
+                variant="soft"
+                size="xs"
+                block
+                icon="i-lucide-wand-sparkles"
+                :loading="reworking"
+                :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                @click="incorporate(redoComment.trim())"
+              >
+                {{ t('brainstorm.redoWithDirection') }}
+              </UButton>
+            </div>
+            <p class="text-2xs leading-relaxed text-dimmed">
+              {{ t('brainstorm.mergedHint') }}
+            </p>
+          </div>
+
+          <div
+            v-if="session && incorporated"
+            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
+          >
+            {{ t('brainstorm.incorporatedFooter') }}
+          </div>
+        </div>
+      </aside>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>
 
 <style scoped>
 .pl-5\.5 {
   padding-left: 1.375rem;
 }
-/* Minimal CommonMark styling for the converged-direction reader (mirrors the prose
-   review window's reader-prose). */
-.reader-prose :deep(p) {
-  margin: 0.4rem 0;
-}
-.reader-prose :deep(ul),
-.reader-prose :deep(ol) {
-  margin: 0.4rem 0;
-  padding-left: 1.25rem;
-  list-style: revert;
-}
-.reader-prose :deep(li) {
-  margin: 0.2rem 0;
-}
-.reader-prose :deep(strong) {
-  color: rgb(226 232 240);
-  font-weight: 600;
-}
-.reader-prose :deep(code) {
-  border-radius: 0.25rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.05rem 0.3rem;
-  font-size: 0.85em;
-}
-.reader-prose :deep(pre) {
-  margin: 0.5rem 0;
-  overflow-x: auto;
-  border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.75rem;
-}
-.reader-prose :deep(blockquote) {
-  margin: 0.5rem 0;
-  border-left: 2px solid rgb(51 65 85);
-  padding-left: 0.75rem;
-  color: rgb(148 163 184);
-}
+/* The rendered-markdown presentation is the SHARED global `.reader-prose` sheet
+   (`assets/css/prose.css`), not a local copy: this reader shows the same agent-authored
+   markdown the step reader does, and a per-window duplicate is how the review surfaces
+   drift apart one property at a time. */
 </style>

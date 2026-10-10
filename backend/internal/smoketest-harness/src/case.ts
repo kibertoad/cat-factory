@@ -13,6 +13,7 @@ import {
 } from '@cat-factory/benchmark-harness'
 import {
   cloneRepo,
+  createPiAgentDir,
   type ProgressGuardLimits,
   runPi,
   writeAgentsContext,
@@ -48,11 +49,24 @@ export interface RunCaseOptions {
   relaxGuard?: boolean
 }
 
-/** Effectively-unbounded guard limits, used when `relaxGuard` is set. */
-const RELAXED_GUARD: ProgressGuardLimits = {
+/**
+ * Effectively-unbounded guard limits, used when `relaxGuard` is set.
+ *
+ * EVERY knob, including the ones a smoketest case never exercises (none wires a tool server): the point
+ * of this constant is that the guard never ends a captured run, so a knob missing here is a run cut
+ * short by a bound nobody chose. The non-action backstop is the live one, since a Pi loop reads and
+ * searches constantly with no action call between.
+ *
+ * Typed `Required<…>` rather than the interface itself, whose streak knobs are optional so a caller
+ * can omit them and take the defaults. Omitting one HERE is the bug, so this is the one place that
+ * must not compile without it.
+ */
+const RELAXED_GUARD: Required<ProgressGuardLimits> = {
   maxToolCallsWithoutEdit: Number.MAX_SAFE_INTEGER,
   maxConsecutiveErrors: Number.MAX_SAFE_INTEGER,
   maxConsecutiveWebCalls: Number.MAX_SAFE_INTEGER,
+  maxConsecutiveMcpCalls: Number.MAX_SAFE_INTEGER,
+  maxConsecutiveNonActionCalls: Number.MAX_SAFE_INTEGER,
 }
 
 /** The full captured run for one case (the result + the raw events for artifacts). */
@@ -87,12 +101,12 @@ export async function runCase(opts: RunCaseOptions): Promise<RunCaseOutput> {
   let error: string | undefined
   let filesChanged = 0
 
-  // Like the benchmark harness: writeAgentsContext / writePiModelsConfig write Pi's
-  // GLOBAL config under $HOME/.pi/agent, and `pi` reads it from there. Point both at
-  // a throwaway HOME for the run so we never clobber the developer's own ~/.pi/agent.
+  // Like the benchmark harness: Pi's config (AGENTS.md, models.json) goes into a throwaway
+  // config dir made for the run and handed to `pi` through `runPi`, so the developer's own
+  // ~/.pi/agent is never read or written. Unseeded, so their personal Pi setup stays out of it.
   const dir = await mkdtemp(join(tmpdir(), 'cat-smoke-repo-'))
-  const piHome = await mkdtemp(join(tmpdir(), 'cat-smoke-pihome-'))
-  const realHome = process.env.HOME
+  const piAgentDir = await createPiAgentDir()
+  const agentDir = piAgentDir.path
   const start = performance.now()
   try {
     await cloneRepo({
@@ -101,13 +115,13 @@ export async function runCase(opts: RunCaseOptions): Promise<RunCaseOutput> {
       dir,
       signal: opts.signal,
     })
-    process.env.HOME = piHome
-    await writeAgentsContext(system)
-    await writePiModelsConfig({ model: ref.model, proxyBaseUrl: endpoint.baseUrl })
+    await writeAgentsContext(system, { agentDir })
+    await writePiModelsConfig({ agentDir, model: ref.model, proxyBaseUrl: endpoint.baseUrl })
 
     try {
       await runPi({
         cwd: dir,
+        agentDir,
         model: ref.model,
         userPrompt: user,
         sessionToken,
@@ -132,10 +146,8 @@ export async function runCase(opts: RunCaseOptions): Promise<RunCaseOutput> {
       // Clone may have failed before a working tree existed; leave diff empty.
     }
   } finally {
-    if (realHome === undefined) delete process.env.HOME
-    else process.env.HOME = realHome
     await rm(dir, { recursive: true, force: true })
-    await rm(piHome, { recursive: true, force: true })
+    await piAgentDir.dispose()
   }
 
   const durationMs = Math.round(performance.now() - start)

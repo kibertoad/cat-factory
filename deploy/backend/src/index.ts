@@ -15,6 +15,8 @@ export {
   GitHubBackfillWorkflow,
   BootstrapWorkflow,
   EnvConfigRepairWorkflow,
+  EnvironmentTestWorkflow,
+  GuidedReviewWorkflow,
   ExecutionContainer,
   DeployContainer,
   WorkspaceEventsHub,

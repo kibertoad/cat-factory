@@ -7,8 +7,8 @@
 // Zoom is pure CSS `transform` (GPU, no canvas), so even large PNGs stay smooth. Keyboard:
 // Esc close · ←/→ prev/next · +/- zoom · 0 reset · double-click toggle fit↔2×.
 import { computed, ref, watch } from 'vue'
+import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
-import { useFocusTrap } from '~/composables/useFocusTrap'
 
 interface LightboxItem {
   artifactId: string
@@ -36,13 +36,19 @@ const scale = ref(1)
 const tx = ref(0)
 const ty = ref(0)
 
-// Move focus into the lightbox on open + trap Tab within it (and restore focus on close).
-// It's the topmost surface, so its trap stays live even over an owning review window.
-const dialogRoot = ref<HTMLElement | null>(null)
-useFocusTrap(
-  dialogRoot,
-  computed(() => props.open),
-)
+// Modal behaviour via the shared overlay stack (`@modular-vue/core`, the slice-5 release):
+// focus-trap + return, body-scroll lock, and — because it pushes onto the shared stack while
+// open — it becomes the TOP overlay over an owning review window (`ResultWindowShell`), so
+// Escape closes the lightbox first and the owner's trap goes inert until it closes. This is
+// the reconciliation that replaces the old `active: open && !lightboxOpen` guard the windows
+// used to fight over Tab.
+function close() {
+  emit('update:open', false)
+}
+const { dialogRef, isTop } = useModalBehavior({
+  active: () => props.open,
+  onClose: close,
+})
 
 const current = computed(() => props.items[props.index] ?? null)
 const total = computed(() => props.items.length)
@@ -74,9 +80,6 @@ watch(
   { immediate: true },
 )
 
-function close() {
-  emit('update:open', false)
-}
 function go(delta: number) {
   if (!total.value) return
   const next = (props.index + delta + total.value) % total.value
@@ -122,13 +125,12 @@ function onPointerUp() {
   dragging.value = false
 }
 
+// Escape / Tab / focus are owned by `useModalBehavior` (the shared stack). This handler owns
+// only the lightbox-specific navigation + zoom keys, gated on being the top overlay so it
+// stays inert if another overlay ever layers above it.
 function onKey(e: KeyboardEvent) {
-  if (!props.open) return
+  if (!props.open || !isTop.value) return
   switch (e.key) {
-    case 'Escape':
-      e.stopPropagation()
-      close()
-      break
     case 'ArrowLeft':
       go(-1)
       break
@@ -148,8 +150,6 @@ function onKey(e: KeyboardEvent) {
       break
   }
 }
-// Capture-phase so Esc closes the lightbox BEFORE the underlying window's own Esc handler
-// (both use window keydown; the lightbox is the topmost surface so it wins).
 onMounted(() => window.addEventListener('keydown', onKey, true))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 </script>
@@ -158,11 +158,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
   <Teleport to="body">
     <div
       v-if="open"
-      ref="dialogRoot"
+      ref="dialogRef"
       tabindex="-1"
-      class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
+      class="fixed inset-0 z-[60] flex flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
+      data-testid="artifact-lightbox"
       :aria-label="
         current
           ? t('media.lightbox.ariaLabel', { label: current.label })
@@ -171,27 +172,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       @click.self="close"
     >
       <!-- Toolbar -->
-      <div class="flex items-center gap-3 border-b border-slate-800/60 px-4 py-2.5">
-        <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-200">
+      <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">
+        <span class="min-w-0 flex-1 truncate text-sm font-medium text-default">
           {{ current?.label ?? t('media.lightbox.fallbackTitle') }}
         </span>
-        <span v-if="total > 1" class="shrink-0 text-[12px] tabular-nums text-slate-400">
+        <span v-if="total > 1" class="shrink-0 text-xs tabular-nums text-muted">
           {{ t('media.lightbox.counter', { current: index + 1, total }) }}
         </span>
         <div class="flex shrink-0 items-center gap-1">
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
             :title="t('media.lightbox.zoomOut')"
             :disabled="scale <= MIN_SCALE"
             @click="zoomBy(1 / 1.25)"
           >
             <UIcon name="i-lucide-zoom-out" class="h-4 w-4" />
           </button>
-          <span class="w-10 text-center text-[11px] tabular-nums text-slate-500">{{
+          <span class="w-10 text-center text-2xs tabular-nums text-dimmed">{{
             n(scale, 'percent')
           }}</span>
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
             :title="t('media.lightbox.zoomIn')"
             :disabled="scale >= MAX_SCALE"
             @click="zoomBy(1.25)"
@@ -199,14 +200,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             <UIcon name="i-lucide-zoom-in" class="h-4 w-4" />
           </button>
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             :title="t('media.lightbox.reset')"
             @click="resetView"
           >
             <UIcon name="i-lucide-maximize" class="h-4 w-4" />
           </button>
           <button
-            class="ms-1 rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            class="ms-1 rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             :title="t('media.lightbox.close')"
             @click="close"
           >
@@ -223,7 +224,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       >
         <button
           v-if="total > 1"
-          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
           :title="t('media.lightbox.prev')"
           @click="go(-1)"
         >
@@ -235,7 +236,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           :src="url"
           :alt="current?.alt ?? ''"
           draggable="false"
-          class="max-h-full max-w-full select-none rounded shadow-2xl"
+          class="max-h-full max-w-full select-none rounded-sm shadow-2xl"
           :class="[
             scale > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in',
             dragging ? '' : 'transition-transform duration-100',
@@ -247,18 +248,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           @pointerup="onPointerUp"
           @pointercancel="onPointerUp"
         />
-        <div v-else class="flex flex-col items-center gap-2 text-slate-500">
+        <div v-else class="flex flex-col items-center gap-2 text-dimmed">
           <UIcon
             :name="state === 'error' ? 'i-lucide-image-off' : 'i-lucide-loader'"
             class="h-8 w-8"
             :class="state === 'error' ? '' : 'animate-spin'"
           />
-          <p class="text-[12px]">
+          <p class="text-xs">
             {{ state === 'error' ? t('media.lightbox.failed') : t('media.lightbox.loading') }}
           </p>
           <button
             v-if="state === 'error' && current"
-            class="text-[12px] text-amber-300 hover:underline"
+            class="text-xs text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}
@@ -267,7 +268,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
         <button
           v-if="total > 1"
-          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
           :title="t('media.lightbox.next')"
           @click="go(1)"
         >

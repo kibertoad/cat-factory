@@ -4,38 +4,48 @@
   "description": "Agent Architecture Board — monorepo of reusable libraries (published to npm) + example deployments. See README.md.",
   "type": "module",
   "scripts": {
-    "build": "turbo run build --filter='./backend/**'",
+    "build": "turbo run build --filter='./backend/**' --filter='./sdk/**'",
     "build:all": "turbo run build",
     "build:tsc": "tsc -b backend/tsconfig.build.json",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test:run",
     "test:run": "turbo run test:run",
+    "test:changed": "turbo run test:run --concurrency=50% --output-logs=errors-only --env-mode=loose --filter='...[origin/main]'",
+    "test:quick": "turbo run test:run --concurrency=50% --output-logs=errors-only --filter='!@cat-factory/worker' --filter='!@cat-factory/node-server' --filter='!@cat-factory/local-server' --filter='!@cat-factory/gatekeeper-worker'",
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix && oxfmt .",
     "lint:monorepo": "sherif -i typescript -i @types/node",
     "lint:knip": "knip",
     "check:publish": "node scripts/check-publish-integrity.mjs",
+    "gen:openapi": "node scripts/generate-openapi.mjs",
+    "gen:sdk": "node scripts/generate-sdks.mjs",
+    "check:openapi": "node scripts/check-openapi.mjs",
+    "check:sdk": "node scripts/check-sdks.mjs",
     "dev:backend": "turbo run dev --filter=@cat-factory/deploy-backend",
     "dev:node": "turbo run dev --filter=@cat-factory/deploy-node",
     "dev:frontend": "turbo run dev --filter=@cat-factory/deploy-frontend",
     "changeset": "changeset",
-    "version": "changeset version && node scripts/sync-runner-image-tags.mjs",
+    "version": "changeset version && node scripts/sync-runner-image-tags.mjs && node scripts/sync-sdk-versions.mjs",
+    "sync:sdk-versions": "node scripts/sync-sdk-versions.mjs",
     "sync:image-tags": "node scripts/sync-runner-image-tags.mjs",
+    "changelog:archive": "node scripts/archive-changelogs.mjs",
     "ci:publish": "pnpm build && changeset publish"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.4",
-    "@changesets/cli": "^2.31.0",
-    "knip": "^6.23.0",
-    "oxfmt": "^0.56.0",
-    "oxlint": "^1.71.0",
-    "publint": "^0.3.21",
-    "sherif": "^1.12.0",
-    "turbo": "^2.10.0",
-    "typescript": "7.0.1-rc"
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^3.0.3",
+    "@stryker-mutator/api": "10.0.0",
+    "@valibot/to-json-schema": "^1.8.0",
+    "knip": "^6.40.0",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
+    "publint": "^0.3.25",
+    "sherif": "^1.13.0",
+    "turbo": "^2.11.7",
+    "typescript": "7.0.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@12.5.1"
 }

@@ -6,12 +6,14 @@
 // services — each owns its selection from creation. Persisted via the
 // serviceFragmentDefaults store (the backend replaces the whole list on each change).
 import { onMounted, ref } from 'vue'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const fragments = useFragmentsStore()
 const defaults = useServiceFragmentDefaultsStore()
 const ui = useUiStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const busy = ref(false)
 
@@ -24,17 +26,10 @@ const selected = computed(() =>
   defaults.fragmentIds.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
 )
 
-// Pool fragments not already in the default set, grouped by category.
+// Pool fragments not already in the default set, grouped into labelled per-category sections.
 const menu = computed(() => {
   const chosen = new Set(defaults.fragmentIds)
-  const groups = new Map<string, { label: string; onSelect: () => void }[]>()
-  for (const f of fragments.fragments) {
-    if (chosen.has(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => add(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.values()]
+  return buildFragmentPickerGroups(fragments.fragments, (id) => chosen.has(id), add)
 })
 
 async function save(ids: string[]) {
@@ -42,12 +37,7 @@ async function save(ids: string[]) {
   try {
     await defaults.set(ids)
   } catch (e) {
-    toast.add({
-      title: t('settings.serviceFragmentDefaults.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.serviceFragmentDefaults.saveFailed')
   } finally {
     busy.value = false
   }
@@ -65,14 +55,14 @@ function remove(id: string) {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-slate-400">
+    <p class="text-xs text-muted">
       {{ t('settings.serviceFragmentDefaults.intro') }}
     </p>
 
     <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SectionLabel as="span">
         {{ t('settings.serviceFragmentDefaults.defaultFragments') }}
-      </span>
+      </SectionLabel>
       <UDropdownMenu v-if="menu.length" :items="menu" :ui="{ content: 'max-h-72 overflow-y-auto' }">
         <UButton
           size="xs"
@@ -101,24 +91,24 @@ function remove(id: string) {
         {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-2xs text-dimmed">
       {{ t('settings.serviceFragmentDefaults.empty') }}
     </p>
 
-    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-800 pt-3 text-[11px]">
-      <span class="text-slate-500">
+    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-default pt-3 text-2xs">
+      <span class="text-dimmed">
         {{ t('settings.serviceFragmentDefaults.footer.question') }}
       </span>
       <button
         type="button"
-        class="font-medium text-primary-400 hover:underline"
+        class="font-medium text-primary hover:underline"
         @click="ui.openFragmentLibrary()"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
       </button>
       <button
         type="button"
-        class="font-medium text-primary-400 hover:underline"
+        class="font-medium text-primary hover:underline"
         @click="ui.openAccountSettings('fragments')"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageAccount') }}

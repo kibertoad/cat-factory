@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { RUNNER_IMAGE_UNWIRED_REASON, UnavailableError } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import {
   ContainerInstanceRegistry,
@@ -6,11 +7,12 @@ import {
   type LiveContainerStore,
 } from '../../src/infrastructure/containers/ContainerInstanceRegistry'
 import type { ExecutionContainer } from '../../src/infrastructure/containers/ExecutionContainer'
+import type { ResolveRunContainerNamespace } from '../../src/infrastructure/containers/runContainerNamespace'
 
 // Pure-logic coverage for the instance-level reaper: it must enumerate the live
-// inventory by age, SIGKILL each stale container through the EXEC_CONTAINER binding,
-// and clear its row — leaving fresh containers untouched. No workerd/D1 needed; the
-// store + namespace are faked, mirroring the sweeper specs.
+// inventory by age, SIGKILL each stale container through the container class that HOLDS it,
+// and clear its row, leaving fresh containers untouched. No workerd/D1 needed; the
+// store + namespaces are faked, mirroring the sweeper specs.
 
 /** In-memory LiveContainerStore. */
 class FakeStore implements LiveContainerStore {
@@ -27,16 +29,21 @@ class FakeStore implements LiveContainerStore {
   }
 }
 
-/** Fake EXEC_CONTAINER namespace recording which keys were SIGKILLed. */
-function fakeNamespace(killed: string[]): DurableObjectNamespace<ExecutionContainer> {
+/** Fake container namespace recording which keys were SIGKILLed, tagged with its class. */
+function fakeNamespace(killed: string[], tag = 'exec'): DurableObjectNamespace<ExecutionContainer> {
   return {
     idFromName: (name: string) => ({ name }),
     get: (id: { name: string }) => ({
       shutdown: async () => {
-        killed.push(id.name)
+        killed.push(`${tag}:${id.name}`)
       },
     }),
   } as unknown as DurableObjectNamespace<ExecutionContainer>
+}
+
+/** A resolver over ONE namespace, for the cases that never touch a second image variant. */
+function fixed(killed: string[]): ResolveRunContainerNamespace {
+  return () => fakeNamespace(killed)
 }
 
 const at = (now: number) => ({ now: () => now })
@@ -44,45 +51,45 @@ const at = (now: number) => ({ now: () => now })
 describe('ContainerInstanceRegistry: reaper', () => {
   it('register preserves the earliest started_at across replayed dispatches', async () => {
     const store = new FakeStore()
-    const reg = new ContainerInstanceRegistry(fakeNamespace([]), store, at(100))
-    await reg.register('job-1', 'run')
-    const second = new ContainerInstanceRegistry(fakeNamespace([]), store, at(500))
-    await second.register('job-1', 'run')
+    const reg = new ContainerInstanceRegistry(fixed([]), store, at(100))
+    await reg.register({ containerKey: 'job-1', kind: 'run' })
+    const second = new ContainerInstanceRegistry(fixed([]), store, at(500))
+    await second.register({ containerKey: 'job-1', kind: 'run' })
     expect(store.rows.get('job-1')?.startedAt).toBe(100)
   })
 
   it('release SIGKILLs the container and clears its inventory row', async () => {
     const store = new FakeStore()
     const killed: string[] = []
-    const reg = new ContainerInstanceRegistry(fakeNamespace(killed), store, at(100))
-    await reg.register('job-1', 'bootstrap', 'ws-1')
+    const reg = new ContainerInstanceRegistry(fixed(killed), store, at(100))
+    await reg.register({ containerKey: 'job-1', kind: 'bootstrap', workspaceId: 'ws-1' })
     await reg.release('job-1')
-    expect(killed).toEqual(['job-1'])
+    expect(killed).toEqual(['exec:job-1'])
     expect(store.rows.has('job-1')).toBe(false)
   })
 
   it('reaps only containers older than the ceiling and returns the count', async () => {
     const store = new FakeStore()
     const killed: string[] = []
-    const reg = new ContainerInstanceRegistry(fakeNamespace(killed), store, at(10_000))
+    const reg = new ContainerInstanceRegistry(fixed(killed), store, at(10_000))
     // started_at: old ones are stale; the fresh one is within the window.
-    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(1_000)).register(
-      'old-a',
-      'run',
-    )
-    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(1_500)).register(
-      'old-b',
-      'bootstrap',
-    )
-    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(9_900)).register(
-      'fresh',
-      'run',
-    )
+    await new ContainerInstanceRegistry(fixed([]), store, at(1_000)).register({
+      containerKey: 'old-a',
+      kind: 'run',
+    })
+    await new ContainerInstanceRegistry(fixed([]), store, at(1_500)).register({
+      containerKey: 'old-b',
+      kind: 'bootstrap',
+    })
+    await new ContainerInstanceRegistry(fixed([]), store, at(9_900)).register({
+      containerKey: 'fresh',
+      kind: 'run',
+    })
 
     const { reaped } = await reg.reapStaleBefore(5_000)
 
     expect(reaped).toBe(2)
-    expect(killed.sort()).toEqual(['old-a', 'old-b'])
+    expect(killed.sort()).toEqual(['exec:old-a', 'exec:old-b'])
     // The fresh container is left running and still recorded.
     expect(store.rows.has('fresh')).toBe(true)
     expect(store.rows.has('old-a')).toBe(false)
@@ -92,13 +99,103 @@ describe('ContainerInstanceRegistry: reaper', () => {
   it('reaps nothing when every container is within its lifetime', async () => {
     const store = new FakeStore()
     const killed: string[] = []
-    const reg = new ContainerInstanceRegistry(fakeNamespace(killed), store, at(10_000))
-    await new ContainerInstanceRegistry(fakeNamespace([]), store, at(9_000)).register('a', 'run')
+    const reg = new ContainerInstanceRegistry(fixed(killed), store, at(10_000))
+    await new ContainerInstanceRegistry(fixed([]), store, at(9_000)).register({
+      containerKey: 'a',
+      kind: 'run',
+    })
 
     const { reaped } = await reg.reapStaleBefore(5_000)
 
     expect(reaped).toBe(0)
     expect(killed).toEqual([])
     expect(store.rows.has('a')).toBe(true)
+  })
+
+  // The regression this column exists for: a run with a `tester-ui` step holds a SECOND
+  // container, in the UI class. The reaper kills through a namespace, and `idFromName` returns a
+  // usable stub in ANY namespace, so a UI container reaped through the executor class SIGKILLs
+  // an instance that was never started, drops the row, and reports success while the browser
+  // container keeps running to its own idle timeout. Nothing throws, which is why it needs a
+  // test rather than a type.
+  it('reaps each container through the class that holds it', async () => {
+    const store = new FakeStore()
+    const killed: string[] = []
+    const byVariant: ResolveRunContainerNamespace = (variant) =>
+      variant === 'ui' ? fakeNamespace(killed, 'ui') : fakeNamespace(killed, 'exec')
+    const reg = new ContainerInstanceRegistry(byVariant, store, at(10_000))
+    await new ContainerInstanceRegistry(byVariant, store, at(1_000)).register({
+      containerKey: 'run-1',
+      kind: 'run',
+    })
+    await new ContainerInstanceRegistry(byVariant, store, at(1_000)).register({
+      containerKey: 'ui:run-1',
+      kind: 'run',
+      image: 'ui',
+    })
+
+    const { reaped } = await reg.reapStaleBefore(5_000)
+
+    expect(reaped).toBe(2)
+    expect(killed.sort()).toEqual(['exec:run-1', 'ui:ui:run-1'])
+    expect(store.rows.size).toBe(0)
+  })
+
+  // The other half of that column: a row whose class this deployment no longer BINDS. The
+  // resolver is what refuses it, so the throw lands where the kill would have, and leaving the
+  // row "for the next pass" wedges the sweep on it for ever — an error every pass, for a
+  // container it can never address, while a genuinely transient failure needs the opposite.
+  it('drops a row it cannot address, reports it apart from the kills, and keeps sweeping', async () => {
+    const store = new FakeStore()
+    const killed: string[] = []
+    const unboundUi: ResolveRunContainerNamespace = (variant) => {
+      if (variant === 'ui') {
+        throw new UnavailableError(
+          'this deployment binds no UI-tester container class',
+          RUNNER_IMAGE_UNWIRED_REASON,
+          { image: variant, binding: 'UI_CONTAINER' },
+        )
+      }
+      return fakeNamespace(killed, 'exec')
+    }
+    const reg = new ContainerInstanceRegistry(unboundUi, store, at(10_000))
+    const seed = new ContainerInstanceRegistry(unboundUi, store, at(1_000))
+    await seed.register({ containerKey: 'ui:run-1', kind: 'run', image: 'ui' })
+    await seed.register({ containerKey: 'run-2', kind: 'run' })
+
+    const { reaped, unreachable } = await reg.reapStaleBefore(5_000)
+
+    // The unreachable row is NOT counted as a reclaim: it names a container still burning.
+    expect(reaped).toBe(1)
+    expect(unreachable).toBe(1)
+    // The sibling row is still swept — one wedged row never aborts the pass.
+    expect(killed).toEqual(['exec:run-2'])
+    expect(store.rows.size).toBe(0)
+  })
+
+  it('keeps a row whose kill failed for a TRANSIENT reason, so the next pass retries it', async () => {
+    // The distinction the branch above turns on: a transport hiccup is worth retrying and an
+    // unbound class is not, so only one of them may drop its row.
+    const store = new FakeStore()
+    const flaky: ResolveRunContainerNamespace = () =>
+      ({
+        idFromName: (name: string) => ({ name }),
+        get: () => ({
+          shutdown: async () => {
+            throw new Error('durable object unreachable')
+          },
+        }),
+      }) as unknown as DurableObjectNamespace<ExecutionContainer>
+    const reg = new ContainerInstanceRegistry(flaky, store, at(10_000))
+    await new ContainerInstanceRegistry(flaky, store, at(1_000)).register({
+      containerKey: 'run-3',
+      kind: 'run',
+    })
+
+    const { reaped, unreachable } = await reg.reapStaleBefore(5_000)
+
+    expect(reaped).toBe(0)
+    expect(unreachable).toBe(0)
+    expect(store.rows.has('run-3')).toBe(true)
   })
 })

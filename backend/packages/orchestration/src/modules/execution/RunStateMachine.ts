@@ -9,15 +9,45 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
+  LlmRollupCell,
+  Logger,
   PipelineStep,
+  RunLifecycleEventKind,
+  RunLifecycleSink,
+  RunLifecycleStep,
+  RunReclaimReport,
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import {
+  runActivationScope,
+  assertFound,
+  ConflictError,
+  dataIntegrityFaultOf,
+  describeError,
+  foldRollupTotals,
+  foldRollupsByPhase,
+  getErrorMessage,
+  isAsyncAgentExecutor,
+  isDataIntegrityError,
+  isInitiativeAgentKind,
+  noopLogger,
+  redactSecrets,
+  RunContendedError,
+  runBestEffort,
+} from '@cat-factory/kernel'
+import { allPullRequests, taskTypeAttachesPullRequest } from '@cat-factory/contracts'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
+import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
+import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type { AdvanceResult } from './advance.js'
+import {
+  applyDelegationCancellation,
+  dispatchedAgentKinds,
+  liveDelegations,
+} from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
 
 /**
@@ -30,16 +60,26 @@ export interface KaizenScheduler {
 
 /**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown
- * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). Only
- * the execution-relevant subset of {@link AgentFailureKind} is keyed.
+ * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). This is an
+ * EXHAUSTIVE {@link Record} over {@link AgentFailureKind} — the execution engine is the
+ * primary producer of that union, so every kind must carry a hint and none may reach the
+ * board hint-less. Keeping it exhaustive (rather than a `Partial`) makes a newly-added
+ * failure kind a typecheck failure here, the same drift guard bootstrap's
+ * `Record<BootstrapFailureKind, string>` provides (error-message initiative item G3).
  */
-const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
+const EXECUTION_FAILURE_HINTS: Record<AgentFailureKind, string> = {
+  preflight:
+    'A precondition failed before the agent’s container was started, so the run never began — most often the workspace has no connected GitHub repository, the selected model or provider isn’t configured, or a required credential is missing. The specific cause is shown above. Fix it (connect GitHub and link a repository, or pick a configured model in the workspace settings), then retry.',
   agent:
-    'An agent step failed after its automatic retries. Review the run, then retry to re-run the pipeline.',
+    'An agent step failed and stopped the run. Whether it had automatic retries left to spend is on the step itself: its attempt count says how many it made, and its failure detail carries what the container reported. Review those, then retry to re-run the pipeline.',
   job_failed:
     'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
+  delegated_failed:
+    'This step ran on an external executor your deployment registers, and that system reported a failure it called final. The platform did not run the work and holds no logs for it: the step carries the link to the executor’s own run, which is the whole post-mortem. Read it there, fix what failed, then retry to dispatch a fresh external run.',
   evicted:
     'The implementation container kept vanishing mid-run even after automatic fresh-container restarts. Most often this is transient: a deploy / new-version rollout draining the container, in which case simply retrying once the rollout has finished succeeds. If it persists, it points at a memory or crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id) and consider a heavier container instance type. Retry to try again.',
+  harness_shutdown:
+    'The container’s harness process exited cleanly while this step was still running, so something STOPPED it rather than it crashing: the host or deployment restarted, an operator stopped the container, or the agent’s own commands killed it (a shell command that kills processes by name can match the harness itself). This is deliberately not retried automatically, because a fresh container walks back into the same cause. The step’s failure detail carries the container’s last words; fix what stopped it, then retry.',
   timeout:
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
   rejected:
@@ -48,6 +88,8 @@ const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
     'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
   stalled:
     'This run stopped making progress — its durable driver was lost (most often a crashed or restarted orchestrator) and automatic recovery could not resume it in time, so it was flagged rather than left spinning. Retry to start a fresh run.',
+  state_unreadable:
+    'This run’s stored state could not be read, so nothing can resume it: retrying would re-read the same row. The run has been closed so it stops being re-driven; start the work again as a new run, and report the run id to whoever operates this deployment (the underlying row needs looking at).',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   dispatch:
     'The agent’s container could not be started — the run never began executing. The provider/runtime’s verbatim response is shown below. Most often this is transient (a capacity blip or a new-version rollout); retrying spins a fresh container. If it persists it points at a misconfigured container binding/image or runner pool. Retry to try again.',
@@ -73,9 +115,39 @@ export interface RunStateMachineDeps {
   /** The pure step/cursor mutators ({@link StepGraph}) the transitions build on. */
   stepGraph: StepGraph
   notificationService?: NotificationService
+  /**
+   * The outbound run-lifecycle push (today the workspace's registered webhook endpoint).
+   * Optional and best-effort BY CONTRACT — an unwired sink is byte-for-byte the prior
+   * behaviour, and a wired one may never propagate a receiver's outage into a run.
+   */
+  runLifecycleSink?: RunLifecycleSink
+  /**
+   * The engine's structured logger, so the best-effort outbound push reports its drops.
+   * `noopLogger` when a facade wired none (this class stays unit-testable standalone).
+   */
+  logger?: Logger
+  /**
+   * The merge track record. A no-merger pipeline's `pipeline_complete` card is a MERGE decision
+   * point too (confirming it merges the PR), so the class + a `pending_review` record are written
+   * here as well — otherwise a whole class of human merges would leave no evidence behind.
+   * Best-effort and optional: absent ⇒ the card is raised exactly as before.
+   */
+  mergeTrackRecord?: MergeTrackRecordService
   kaizenScheduler?: KaizenScheduler
   subscriptionActivations?: SubscriptionActivationRepository
   llmObservability?: LlmObservabilityService
+  /**
+   * Best-effort poke of the initiative execution loop (slice 3): called when a spawned child
+   * run reaches a terminal state so its owning initiative reconciles immediately instead of
+   * waiting for the next cron sweep. The optional `harvest` (slice 4) carries the settling run's
+   * forward-looking follow-ups + failure cause, folded onto the tracker before the reconcile.
+   * Fire-and-forget; a no-op when initiatives are unwired.
+   */
+  pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
 }
 
 /**
@@ -102,9 +174,17 @@ export class RunStateMachine {
   private readonly clock: Clock
   private readonly stepGraph: StepGraph
   private readonly notificationService?: NotificationService
+  private readonly runLifecycleSink?: RunLifecycleSink
+  private readonly log: Logger
+  private readonly mergeTrackRecord?: MergeTrackRecordService
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly llmObservability?: LlmObservabilityService
+  private readonly pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
 
   constructor(deps: RunStateMachineDeps) {
     this.executionRepository = deps.executionRepository
@@ -116,14 +196,39 @@ export class RunStateMachine {
     this.clock = deps.clock
     this.stepGraph = deps.stepGraph
     this.notificationService = deps.notificationService
+    this.runLifecycleSink = deps.runLifecycleSink
+    this.log = deps.logger ?? noopLogger
+    this.mergeTrackRecord = deps.mergeTrackRecord
     this.kaizenScheduler = deps.kaizenScheduler
     this.subscriptionActivations = deps.subscriptionActivations
     this.llmObservability = deps.llmObservability
+    this.pokeInitiativeLoop = deps.pokeInitiativeLoop
   }
 
-  /** Persist the instance (the single write seam shared by the engine + controllers). */
-  persistInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    return this.executionRepository.upsert(workspaceId, instance)
+  /**
+   * Persist a DURABLE-DRIVER (or gate-controller) instance mutation under OPTIMISTIC CONCURRENCY
+   * instead of a blind force-write. The driver loads a run, makes a LONG outbound call (a
+   * container poll up to 30 s / a GitHub gate probe / a deploy provision) or an inline gate LLM,
+   * mutates the instance in memory, then writes it back — a window in which a concurrent human
+   * action (a CAS'd `requestHumanReviewFix` / `approveStep` / `resolveDecision`) or a `cancel` /
+   * `stopRun` can move or delete the row. A blind `executionRepository.upsert` would silently
+   * clobber that write, or RE-INSERT a row `cancel` deleted as a zombie run.
+   * `compareAndSwap` instead writes ONLY when the stored `rev` still matches the one loaded
+   * onto this instance, and NEVER inserts — so on a lost race it returns `false` and this
+   * throws {@link RunContendedError}. The driver's entry points ({@link RunDispatcher}
+   * `pollAgentJob` / `pollGate` / `resolveGatePollExhaustion` and `ExecutionService`
+   * `advanceInstance`) catch it and re-drive on FRESH state (returning `{ kind: 'continue' }`)
+   * — behaviourally "re-apply the mechanical mutation on the winning snapshot" without an
+   * inline retry loop, since the driver reloads on every entry and the engine is replay-safe
+   * (race-audit 2.2 driver-half / 2.3). The one site that must NOT lose its in-memory delta on
+   * a re-drive — the running-poll fold, whose streamed follow-ups are drain-on-read — uses
+   * {@link mutateInstance} instead, which reload-and-re-applies in place. Human-action
+   * handlers likewise use {@link mutateInstance} (they must retry, not abort).
+   */
+  async casPersist(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    if (!(await this.executionRepository.compareAndSwap(workspaceId, instance))) {
+      throw new RunContendedError(instance.id)
+    }
   }
 
   /**
@@ -161,17 +266,39 @@ export class RunStateMachine {
     throw new ConflictError(`Execution '${executionId}' is being modified concurrently; retry`)
   }
 
-  async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+  async emitInstance(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    options: { rollUpMetrics?: boolean } = {},
+  ): Promise<void> {
     // Stamp each step with the run id so a lone step (in a pushed event, a log line, a
     // detail view) is self-describing for debugging; the value always equals the run id.
     for (const step of instance.steps) step.runId = instance.id
+    // The metrics rollup is a per-agent-kind GROUP BY over the whole run's
+    // `llm_call_metrics`, so running it on EVERY emit makes the drive loop pay
+    // O(emits × calls-in-run): the frequent progress-only poll folds (a subtask tick or
+    // a streamed follow-up while a container runs) re-aggregate the run just to redraw a
+    // progress bar. Those folds pass `rollUpMetrics: false`; the rollup then refreshes
+    // only on the emits that actually surface a settled step — step-boundary and terminal
+    // (`done`/`failed`) transitions. The SPA carries the last rollup forward across the
+    // metric-less folds, so the board's per-step metrics bar doesn't blank between
+    // boundaries (this is live telemetry, not slow-moving config, so no cache slice).
+    const rollUpMetrics = options.rollUpMetrics ?? true
     // The metrics rollup and the block fetch are independent, so run them concurrently
-    // — the rollup adds no serial latency to the (frequent) emit path.
+    // — the rollup adds no serial latency to the emit path when it does run.
     const [, block] = await Promise.all([
-      this.attachStepMetrics(workspaceId, instance),
+      rollUpMetrics ? this.attachStepMetrics(workspaceId, instance) : Promise.resolve(),
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
-    await this.events.executionChanged(workspaceId, instance, block)
+    // A HEADLESS internal anchor block (a public-API "initiative" run) must NEVER reach the SPA:
+    // the snapshot read filters it, but the live push path would otherwise broadcast the external
+    // run's brief (block.description) + LLM output (instance.steps[].output) — and the hidden block
+    // itself — to every connected client. The engine/durable driver never consume this event (they
+    // drive by run id) and the public API polls the repository directly, so suppressing the push for
+    // an internal run is safe. Terminal-state cleanup below still runs (activation delete / Kaizen).
+    if (!block?.internal) {
+      await this.events.executionChanged(workspaceId, instance, block)
+    }
     // When a run reaches a terminal state, schedule a post-run Kaizen grading for each
     // completed agent step (the scheduler skips verified combos + already-graded steps).
     // Best-effort + idempotent: a failure here must never derail the emit, and a re-emit
@@ -184,23 +311,232 @@ export class RunStateMachine {
         // Swallow — grading is an observability concern and must never break a run.
       }
     }
+    // Close the run's EXTERNAL trace by emitting the parents its generations and tool spans
+    // have been naming since the run started: the root span and one per agent kind. Here,
+    // beside the other terminal hooks, for the same reason the lifecycle edge is — a run
+    // reaches `done` from four sites and a fifth added later would silently emit nothing.
+    // A durable replay re-emits the BYTE-IDENTICAL spans: every id is DERIVED from the run
+    // rather than minted, and the extent is folded from stamps the run recorded rather than
+    // read off the clock here, so at-least-once delivery costs a duplicate a backend can
+    // collapse rather than a second, contradictory tree. No claim table is needed to make
+    // that true, which is why this can sit on a hook that fires again for a settled run.
+    if (instance.status === 'done' || instance.status === 'failed') {
+      await this.llmObservability?.recordRunTrace(workspaceId, instance)
+    }
     // When a run reaches a terminal state, delete its per-run personal-credential
     // activation immediately (individual-usage subscriptions) so the system-encrypted
     // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or
     // a re-emit of an already-cleared run is a no-op, and a failure here must never
     // derail the emit.
+    // A spawned initiative task reaching a terminal state pokes its owning initiative's loop so
+    // it reconciles the item (and spawns the next wave) immediately, not on the next cron sweep.
+    // Fire-and-forget — the poke swallows its own errors and the sweep is the backstop.
+    if (block?.initiativeId && (instance.status === 'done' || instance.status === 'failed')) {
+      // Harvest the settling run's forward-looking follow-ups + failure cause from the instance
+      // already in hand (no extra read) so the loop folds them onto the tracker before reconciling.
+      this.pokeInitiativeLoop?.(workspaceId, block.initiativeId, extractRunHarvest(instance))
+    }
     if (
       this.subscriptionActivations &&
       (instance.status === 'done' || instance.status === 'failed')
     ) {
       try {
-        await this.subscriptionActivations.deleteByExecution(instance.id)
+        await this.subscriptionActivations.deleteByScope(runActivationScope(instance.id))
       } catch {
         // Swallow — a failure here must never derail the emit. This is not a silent
         // data-loss path: the TTL sweep reclaims the row as a backstop, and the sweep
         // (Worker cron / Node retention timer) logs its own errors, so a *systemic*
         // cleanup failure surfaces there rather than being lost here.
       }
+    }
+    // Push the run's terminal edge outward (the workspace's registered webhook endpoint), so a
+    // headless integration learns its task finished without polling. Deliberately HERE, beside
+    // the other terminal hooks, rather than at each site that flips a run `done`: there are four
+    // of those and a fifth added later would silently deliver nothing. The cost of that choice is
+    // that a durable replay can re-emit a settled run, so delivery is AT-LEAST-ONCE and the body
+    // carries a `deliveryId` stable per (run, event) for the receiver to dedupe on — which is what
+    // makes the cheap contract the right one here (unlike a merge or a posted review, where the
+    // effect is not the receiver's to make idempotent).
+    //
+    // LAST of the terminal hooks, and behind `runBestEffort`, because it is the only one that
+    // leaves the deployment: the sink's contract says it absorbs its own transport failures, but
+    // a sink that BREAKS that contract must not be able to strand the credential-activation
+    // cleanup above — a lingering system-encrypted token copy is a worse outcome than a dropped
+    // webhook, and the guard is what makes that ordering independent of a third-party sink.
+    if (instance.status === 'done' || instance.status === 'failed') {
+      await this.publishRunLifecycle(
+        workspaceId,
+        instance,
+        block,
+        instance.status === 'done' ? 'run.completed' : 'run.failed',
+      )
+    }
+  }
+
+  /**
+   * Push a run's `run.started` edge. Called from the ONE hand-off funnel every start path ends
+   * with (`handOffLiveRun`), AFTER the block has been flipped to `in_progress` and the durable
+   * runner has the run: the outbound call is the last thing in the sequence, so a slow or dead
+   * receiver costs the announcement and never the run.
+   *
+   * It is still once-per-run by construction, because the claim that precedes the hand-off
+   * (`claimLiveRunOrConflict`) is what mints a live run — a genuinely concurrent double-start
+   * loses there rather than reaching here — and a start path added later inherits both, since
+   * one that skipped the funnel would not start its durable runner either (a loud failure, not a
+   * silently undelivered event). That is the opposite trade from the terminal edge, which has
+   * four sites and therefore hooks the emit funnel at the cost of at-least-once delivery.
+   *
+   * The block is PASSED IN rather than re-read: every caller already holds it, and on a
+   * mothership deployment a read here is a network round trip on the run-start path.
+   */
+  async publishRunStarted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null | undefined,
+  ): Promise<void> {
+    await this.publishRunLifecycle(workspaceId, instance, block, 'run.started')
+  }
+
+  /**
+   * Project a run transition for the outbound sink and hand it over. A no-op when no sink is
+   * wired, and wrapped in `runBestEffort`: the port's contract is that an implementation absorbs
+   * its own transport failures (a receiver outage must not fail the run it watches), and the
+   * guard is what keeps that contract from being load-bearing on a sink this package does not
+   * own — the callers are a run's start hand-off and its terminal emit, neither of which may be
+   * derailed by a third-party sink that throws.
+   *
+   * The projection is deliberately small and made HERE rather than in the transport: the engine
+   * owns what a run means, so a transport cannot widen what leaves the deployment by reaching for
+   * another field.
+   */
+  async publishRunLifecycle(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null | undefined,
+    event: RunLifecycleEventKind,
+    /** The step a `run.step_completed` is about; omitted on the three run edges. */
+    step?: RunLifecycleStep,
+  ): Promise<void> {
+    const sink = this.runLifecycleSink
+    if (!sink) return
+    // A headless internal anchor block is the public API's own run — its "task" is not a board
+    // task and its title is the caller's brief, so there is nothing an external receiver could do
+    // with it that `GET /api/v1/jobs/:id` does not already serve. Skipped for the same reason the
+    // live push is.
+    if (block?.internal) return
+    await runBestEffort(
+      this.log,
+      'execution.publishRunLifecycle',
+      () =>
+        sink.runTransitioned(workspaceId, {
+          event,
+          runId: instance.id,
+          taskId: instance.blockId,
+          // A block that vanished under us (a delete racing the settle) still yields a usable
+          // event: the ids are what a receiver routes on, and an empty title is honest about
+          // what was read.
+          taskTitle: block?.title ?? '',
+          pipelineId: instance.pipelineId,
+          pipelineName: instance.pipelineName,
+          startedAt: instance.createdAt ?? null,
+          occurredAt: this.clock.now(),
+          // Null is a REAL answer on a terminal event — a findings/spike pipeline opens no PR —
+          // so a receiver must not read it as "not known yet".
+          pullRequestUrl: block?.pullRequest?.url ?? null,
+          failure:
+            event === 'run.failed' && instance.failure
+              ? {
+                  kind: instance.failure.kind,
+                  // The failure prose is engine-authored but routinely quotes a provider error,
+                  // a command's stderr or a request URL, and this is the one projection of it
+                  // that leaves the deployment to an operator-supplied endpoint — so it is
+                  // scrubbed at the EMIT site, like every other field carrying captured output.
+                  // (`detail` is deliberately not projected at all: it is the verbatim half.)
+                  message: redactSecrets(instance.failure.message) ?? '',
+                  reason: instance.failure.reason ?? null,
+                }
+              : null,
+          step: step ?? null,
+        }),
+      { workspaceId, executionId: instance.id, event },
+    )
+  }
+
+  /**
+   * Push a STEP BOUNDARY outward: one `run.step_completed` for the step at `stepIndex`.
+   *
+   * See {@link publishStepsCompleted}, which this is the single-step spelling of.
+   */
+  async publishStepCompleted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndex: number,
+  ): Promise<void> {
+    await this.publishStepsCompleted(workspaceId, instance, [stepIndex])
+  }
+
+  /**
+   * Push one `run.step_completed` per settled step, in the order given.
+   *
+   * Called from the three methods every path that finishes a step and moves the run's cursor
+   * funnels through, and that is what makes the event trustworthy rather than approximately right.
+   * `settleStepAndAdvance` settles a step that RAN (an agent result, a companion, a one-shot, a
+   * gated skip); `settleAdvancedGate` settles one a human or a resolver just released;
+   * `OneShotStepController.completeRunSkippingRemaining` settles a step plus the tail its decision
+   * skipped, which is the one path that moves the cursor by more than one and therefore the one
+   * that needs a LIST. A hook per call site is exactly the drift the terminal edge already learned
+   * to avoid.
+   *
+   * **Published LAST at every one of those sites**, after the run's own state is durable and after
+   * any run edge the same settle pushes. Announcing first is a delivery for an advance that can
+   * still lose its compare-and-swap, and on the final step it is the run's last step reported
+   * complete while the run still reads running.
+   *
+   * A BLOCK READ is paid here, ONCE for the whole batch and only when a sink is wired, because the
+   * projection needs the same `internal` / title / PR fields the run edges carry and a step
+   * boundary is not a hot path (once per step, against a run that just spent minutes in a
+   * container). Guarding on the sink first is what keeps a deployment with no webhook module
+   * paying nothing at all.
+   *
+   * The read is best-effort and its failure publishes NOTHING, wrapped so that "the row says no
+   * block" and "the read did not answer" stay different facts: a headless run is suppressed by
+   * `block.internal`, so a failed read that fell through to a null block would push a step edge
+   * for a job anchor no external receiver can address anything with. Publishing is a notification
+   * concern either way and may not derail the advance that called it, which is the whole reason
+   * `publishRunStarted` takes its block as a parameter rather than reading one.
+   */
+  async publishStepsCompleted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndexes: readonly number[],
+  ): Promise<void> {
+    if (!this.runLifecycleSink || stepIndexes.length === 0) return
+    const read = await runBestEffort(
+      this.log,
+      'execution.publishStepCompleted',
+      async () => ({ block: await this.blockRepository.get(workspaceId, instance.blockId) }),
+      { workspaceId, executionId: instance.id },
+    )
+    if (!read) return
+    for (const stepIndex of stepIndexes) {
+      const step = instance.steps[stepIndex]
+      if (!step) continue
+      await this.publishRunLifecycle(workspaceId, instance, read.block, 'run.step_completed', {
+        index: stepIndex,
+        agentKind: step.agentKind,
+        // Derived HERE rather than passed by each caller: `skipped` is the engine's own record of a
+        // step it decided against running, and a second site deciding what to call that is a second
+        // site that can call it something else.
+        outcome: step.skipped ? 'skipped' : 'completed',
+        // Which OCCURRENCE of this boundary the delivery is, so a step the engine re-runs for
+        // rework is a second delivery rather than one the receiver's mandatory `deliveryId` dedupe
+        // discards. `attempts` counts fresh starts and survives `resetStepForRerun`, which is
+        // exactly the grain: a durable REPLAY of one settle re-reports the same number (nothing
+        // restarted the step), where a bounce-and-re-run reports the next one. A step that never
+        // started (the tail a one-shot decision skips) settles once and reads as attempt 1.
+        attempt: step.attempts ?? 1,
+        final: stepIndex === instance.steps.length - 1,
+      })
     }
   }
 
@@ -210,20 +546,55 @@ export class RunStateMachine {
    * (not step index), so the aggregate is per-agent-kind within the run; steps
    * sharing a kind get the same rollup. Best-effort and a no-op when the sink is
    * not wired, so it never blocks an emit.
+   *
+   * The store returns the finer `(agentKind, phase)` grain, so the step's headline numbers
+   * are a fold up to the kind and its `byPhase` breakdown is the same cells re-cut — ONE
+   * aggregate for both, since an emit runs this on every step settlement.
    */
   private async attachStepMetrics(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     if (!this.llmObservability) return
     try {
       const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)
       if (summaries.length === 0) return
-      const byKind = new Map(summaries.map((s) => [s.agentKind, s]))
+      // Labelled once per emit from the SAME service that priced the cells, so the amount and
+      // its currency can never come from different tables.
+      const costCurrency = this.llmObservability.rollupCurrency ?? undefined
+      const cellsByKind = new Map<string, LlmRollupCell[]>()
+      for (const cell of summaries) {
+        const bucket = cellsByKind.get(cell.agentKind)
+        if (bucket) bucket.push(cell)
+        else cellsByKind.set(cell.agentKind, [cell])
+      }
       for (const step of instance.steps) {
-        const s = byKind.get(step.agentKind)
-        if (!s) continue
+        const cells = cellsByKind.get(step.agentKind)
+        if (!cells) continue
+        const s = foldRollupTotals(cells)
+        // Costliest phase first, so the board surface shows the slice worth attacking rather
+        // than whichever one the store happened to return first.
+        const byPhase = foldRollupsByPhase(cells)
+          .map((p) => ({
+            phase: p.phase,
+            calls: p.calls,
+            promptTokens: p.promptTokens,
+            cacheReadTokens: p.cacheReadTokens,
+            cacheWriteTokens: p.cacheWriteTokens,
+            completionTokens: p.completionTokens,
+            carryCostTokens: p.carryCostTokens,
+            errors: p.errors,
+            costEstimate: p.costEstimate,
+          }))
+          .sort((a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls)
+        // The currency labels EVERY amount in this payload, so it is stated whenever any of
+        // them exists — the step's own total OR one of its phases. Keying it on the total
+        // alone withheld the label from exactly the mixed-model step whose total is null
+        // BECAUSE one phase ran unpriced, leaving its priced phases with money and no
+        // denomination. Absent still means there is nothing here to mislabel.
+        const priced = s.costEstimate != null || byPhase.some((p) => p.costEstimate != null)
         step.metrics = {
           calls: s.calls,
           promptTokens: s.promptTokens,
-          cachedPromptTokens: s.cachedPromptTokens,
+          cacheReadTokens: s.cacheReadTokens,
+          cacheWriteTokens: s.cacheWriteTokens,
           completionTokens: s.completionTokens,
           peakCompletionTokens: s.peakCompletionTokens,
           maxOutputTokens: s.maxOutputTokens,
@@ -232,6 +603,10 @@ export class RunStateMachine {
           overheadMs: s.overheadMs,
           errors: s.errors,
           warnings: s.warnings,
+          carryCostTokens: s.carryCostTokens,
+          costEstimate: s.costEstimate,
+          costCurrency: priced ? costCurrency : undefined,
+          byPhase,
         }
       }
     } catch (error) {
@@ -288,11 +663,148 @@ export class RunStateMachine {
   }
 
   /**
-   * The pure in-memory half of {@link advancePastResolvedGate}: stamp the gate step done
-   * and move the run cursor (final step → run `done`; else start the next step). No
-   * persistence and no external effects, so it is safe inside a {@link mutateInstance}
-   * callback (which may re-run the mutation on a CAS retry). Returns whether the gate
-   * was the final step.
+   * Persist the run under CAS and then emit it, in that order. Adjacent `casPersist` +
+   * `emitInstance` is the single most-repeated pair in the engine, and the ordering is the
+   * point: emitting first would push a state the durable row does not yet hold, so a browser
+   * that reloads on the event reads BACK the older run. Taking the pair together makes
+   * "persisted but not emitted" (and its inverse) unrepresentable at a call site.
+   *
+   * `blockStatus` folds in the `updateBlockProgress` that precedes the pair on the step-boundary
+   * paths; `rollUpMetrics` is forwarded to {@link emitInstance}.
+   */
+  async persistAndEmit(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    options: { blockStatus?: 'in_progress' | 'blocked'; rollUpMetrics?: boolean } = {},
+  ): Promise<void> {
+    if (options.blockStatus) {
+      await this.updateBlockProgress(workspaceId, instance, options.blockStatus)
+    }
+    await this.casPersist(workspaceId, instance)
+    await this.emitInstance(
+      workspaceId,
+      instance,
+      options.rollUpMetrics === undefined ? {} : { rollUpMetrics: options.rollUpMetrics },
+    )
+  }
+
+  /**
+   * Clear a settled HUMAN-GATE step's live state. The four human-gate controllers
+   * (review / visual-confirmation / interview / human-test) share this prologue verbatim
+   * before {@link settleStepAndAdvance}; the agent-result paths do their own step marking
+   * earlier, around logic that has to run in between, so they do not use it.
+   *
+   * `approval` is cleared rather than left resolved because the gate is finished: a lingering
+   * approval object is what a later re-entry would read as a still-open decision.
+   */
+  finishHumanGateStep(step: PipelineStep, options: { clearPendingInterview?: boolean } = {}): void {
+    this.stepGraph.finishStep(step)
+    step.progress = 1
+    // Live subtask counts only describe an in-flight step; a stale "3/8" against a finished
+    // gate is the board lying about work that is over.
+    step.subtasks = undefined
+    step.approval = null
+    if (options.clearPendingInterview) step.pendingInterview = null
+  }
+
+  /**
+   * THE run's terminal transition: finish this step, then either finish the run or advance the
+   * cursor to the next one. Every path that completes a step ends here, which is the point.
+   *
+   * Two invariants live in this method and nowhere else:
+   *
+   *  - **`stopRunContainer` fires ONLY on the final step.** A pipeline's steps share the run's
+   *    container (a step declaring a different executor image gets a second one, but that one is
+   *    shared by every step on that image too), so reclaiming between steps kills the next step's
+   *    workspace. It was re-asserted by hand at seven call sites before this existed.
+   *  - **`updateBlockProgress` → `casPersist` → `emitInstance`, in that order** (via
+   *    {@link persistAndEmit}), so no observer ever sees a state the durable row does not hold.
+   *
+   * The three real variations across the call sites are options rather than copies:
+   * `confidence` (only the agent-result path has one to hand `finalizeBlock`) and
+   * `resolverOwnsTerminalStatus` (the resolver that just ran already set the block's terminal
+   * status, so advancing to a trailing step must refresh progress rather than overwrite it back
+   * to `in_progress`; a claim made EARLIER in the run is read off the block itself, see
+   * {@link blockIsTerminal}). The caller marks the step itself, either through
+   * {@link finishHumanGateStep} or in its own prologue.
+   */
+  async settleStepAndAdvance(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    isFinalStep: boolean,
+    options: { confidence?: number; resolverOwnsTerminalStatus?: boolean } = {},
+  ): Promise<AdvanceResult> {
+    // The step that just settled is the one the cursor still points at: it moves below, and only
+    // when the run has somewhere to move to.
+    const settledIndex = instance.currentStep
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, options.confidence)
+      await this.persistAndEmit(workspaceId, instance)
+      // The run is finished: reclaim its per-run container now instead of letting it idle out
+      // its sleepAfter window (~10 min of billed-but-useless compute). Only safe HERE, on the
+      // final step, because all of a pipeline's steps share the one container keyed by the
+      // execution id. Best-effort and idempotent.
+      await this.stopRunContainer(workspaceId, instance)
+      // AFTER the terminal `run.completed` that `persistAndEmit` above pushed, so a receiver
+      // reading its endpoint's queue in order sees the run settle and then learns which step
+      // settled it, rather than a final step whose run has not finished yet.
+      await this.publishStepCompleted(workspaceId, instance, settledIndex)
+      return { kind: 'done' }
+    }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) this.stepGraph.startStep(next)
+    // A resolver that already set the block's TERMINAL status (the merger flips it to
+    // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as the run
+    // advances to a trailing step: refresh progress only, preserving that status. (The final
+    // step's `finalizeBlock` then leaves a `done` block alone.)
+    if (options.resolverOwnsTerminalStatus || (await this.blockIsTerminal(workspaceId, instance))) {
+      await this.refreshBlockProgress(workspaceId, instance)
+      await this.persistAndEmit(workspaceId, instance)
+    } else {
+      await this.persistAndEmit(workspaceId, instance, { blockStatus: 'in_progress' })
+    }
+    // LAST, for the same reason the final branch above publishes after its terminal edge: the CAS
+    // write is what makes this advance real, and a delivery pushed ahead of it describes a step
+    // boundary a lost race then un-does.
+    await this.publishStepCompleted(workspaceId, instance, settledIndex)
+    return { kind: 'continue' }
+  }
+
+  /**
+   * Whether the block ALREADY holds a terminal status, i.e. some earlier step in this run put it
+   * there and no later step may take it back.
+   *
+   * `options.resolverOwnsTerminalStatus` answers only for the step settling right now, which is
+   * enough while the claiming step is the last one but not one step further: with `merger →
+   * assessor → disposer`, the merger's claim is honoured as the run advances past IT, and then the
+   * assessor settles claiming nothing and writes `in_progress` over a `done` that a real merge
+   * produced. `finalizeBlock`'s merger backstop then reads the downgraded row and rewrites the
+   * merged task as `pr_ready`. The board's own status is the durable record of the claim, so it is
+   * what a later step has to be judged against rather than what the previous resolver returned.
+   *
+   * One read per advancing step. The cheaper alternative — carrying the claim on the instance —
+   * would put a new field through both facades' run mappers, and a field dropped by one of them is
+   * exactly the silent half-persisted pin this is here to stop being possible.
+   */
+  private async blockIsTerminal(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<boolean> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    return block?.status === 'done' || block?.status === 'pr_ready'
+  }
+
+  /**
+   * The pure in-memory half of advancing past a resolved gate (paired with its side-effect
+   * counterpart {@link settleAdvancedGate}): stamp the gate step done and move the run cursor
+   * (final step → run `done`; else start the next step). No persistence and no external
+   * effects, so it is safe inside a {@link mutateInstance} callback (which may re-run the
+   * mutation on a CAS retry). Every gate-resume path — the engine's follow-up resolvers,
+   * `resolveCompanionExceeded`, and the review gate's `resumeRun` — runs this under
+   * `mutateInstance` then calls {@link settleAdvancedGate} on the winning snapshot. Returns
+   * whether the gate was the final step.
    */
   advanceRunPastGate(instance: ExecutionInstance, stepIndex: number): boolean {
     const step = instance.steps[stepIndex]!
@@ -325,34 +837,22 @@ export class RunStateMachine {
     if (stepIndex === instance.steps.length - 1) {
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.stopRunContainer(workspaceId, instance)
+    } else if (await this.blockIsTerminal(workspaceId, instance)) {
+      // Same rule as {@link settleStepAndAdvance}: a gate resolved after the step that set the
+      // block's terminal status moves the bar, it does not take the status back.
+      await this.refreshBlockProgress(workspaceId, instance)
     } else {
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
     await this.emitInstance(workspaceId, instance)
-  }
-
-  /**
-   * Finish a gate step whose decision a human resolved and advance the run: stamp the step
-   * done, finalize the block (final step) or start the next, persist, signal the durable
-   * driver that the decision is `approved`, and emit.
-   */
-  async advancePastResolvedGate(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    stepIndex: number,
-  ): Promise<void> {
-    const decisionId = instance.steps[stepIndex]!.approval!.id
-    const isFinalStep = this.advanceRunPastGate(instance, stepIndex)
-    if (isFinalStep) {
-      await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance)
-    } else {
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
-    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
-    await this.emitInstance(workspaceId, instance)
+    // LAST, matching {@link settleStepAndAdvance}: the instance write already landed under CAS
+    // before this method ran, and a gate released on the run's FINAL step pushes its terminal
+    // edge through the emit above, so a receiver never reads the run's last step complete while
+    // the run still reads running. The gate's own step is what finished here, and
+    // `advanceRunPastGate` has already moved the cursor past it, which is why the index is a
+    // parameter rather than read off the instance.
+    await this.publishStepCompleted(workspaceId, instance, stepIndex)
   }
 
   /**
@@ -361,9 +861,13 @@ export class RunStateMachine {
    * looked merged when the PR was still open with red CI. Instead:
    *   - if the pipeline has a `merger` step, it already owned the merge/notify
    *     decision (see `resolveMergerStep`); we only backstop a missing one;
-   *   - otherwise the work is complete but unmerged: leave the PR open (`pr_ready`)
-   *     and raise a `pipeline_complete` notification for a human to confirm + merge.
-   * `done` now strictly means the PR was merged (see the engine's `finalizeMerge`).
+   *   - if there is no merger AND the run opened NO PR (a research/findings pipeline
+   *     such as a `spike`), it finishes cleanly as `done` — nothing to merge or confirm;
+   *   - if there is no merger but a PR IS open, the work is complete but unmerged: leave
+   *     the PR open (`pr_ready`) and raise a `pipeline_complete` notification for a human
+   *     to confirm + merge.
+   * `done` means either the PR was merged (see the engine's `finalizeMerge`) or the run
+   * produced no PR to merge.
    */
   async finalizeBlock(
     workspaceId: string,
@@ -374,6 +878,16 @@ export class RunStateMachine {
     if (!block || block.status === 'done') return
 
     if ((block.level ?? 'frame') !== 'task') {
+      // An initiative block's PLANNING run finishing means execution BEGINS, not that
+      // the initiative is done — the block stays `in_progress`, and the execution loop
+      // (a later slice) flips it terminal once every tracker item settles.
+      if (instance.steps.some((s) => isInitiativeAgentKind(s.agentKind))) {
+        await this.blockRepository.update(workspaceId, block.id, {
+          status: 'in_progress',
+          progress: 0,
+        })
+        return
+      }
       // A mapping-only run (just the `blueprints` step, e.g. kicked off after a
       // bootstrap) leaves the service frame `ready` and droppable rather than
       // marking the whole service "done".
@@ -403,9 +917,30 @@ export class RunStateMachine {
       return
     }
 
+    // No merger AND no PR was produced: a read-only / findings pipeline (a PR deep-review, a
+    // spike, a bare analysis) opened nothing to merge — the run's OUTPUT is the deliverable, so
+    // the task is simply `done`. Marking it `pr_ready` + raising the (PR-assuming)
+    // `pipeline_complete` card would strand it in a confirm-and-merge flow that has no PR to act
+    // on. This is the no-PR terminal path the review/spike pipelines rely on to finish cleanly.
+    // (`allPullRequests` already counts `block.pullRequest`, so a zero result means there is no
+    // primary PR nor any peer PR.) A pull request the task ATTACHED belongs to whoever opened it,
+    // so it is not this run's to confirm or merge either.
+    if (allPullRequests(block).length === 0 || taskTypeAttachesPullRequest(block.taskType)) {
+      await this.blockRepository.update(workspaceId, block.id, { status: 'done', progress: 1 })
+      return
+    }
+
     // No merger in this pipeline: complete but unmerged — ask a human to confirm.
-    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
+    // The card is raised BEFORE the block flips, for the same reason as `MergeResolver`'s
+    // review path: the card is the only actionable prompt (nothing re-drives a confirm-and-merge
+    // and the sweepers never see a settled run), so a raise that throws must not leave behind a
+    // `pr_ready` block that looks finished-and-waiting with an empty inbox. The flip is
+    // deliberately OUTSIDE the raise helper (which no-ops when no notification service is
+    // wired): a deployment running without notifications must still finish its blocks.
+    // Re-raising on a driver replay is safe — `NotificationService.raise` de-dupes the open
+    // card on (workspace, block, type) — so this ordering costs no duplicate inbox entry.
     await this.raisePipelineComplete(workspaceId, instance, block)
+    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
   }
 
   private async raisePipelineComplete(
@@ -413,6 +948,13 @@ export class RunStateMachine {
     instance: ExecutionInstance,
     block: Block,
   ): Promise<void> {
+    // Record the decision point BEFORE the card so the card can carry the record id (the human
+    // confirms + tags in one tap). No merger ran, so there are no scores — just the class.
+    const record = await this.mergeTrackRecord?.recordDecision(workspaceId, {
+      block,
+      executionId: instance.id,
+      decision: 'pending_review',
+    })
     if (!this.notificationService) return
     await this.notificationService.raise(workspaceId, {
       type: 'pipeline_complete',
@@ -425,7 +967,113 @@ export class RunStateMachine {
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
         pipelineName: instance.pipelineName,
+        ...(record && record.changeClass !== 'unknown' ? { changeClass: record.changeClass } : {}),
+        ...(record ? { mergeTrackRecordId: record.id } : {}),
       },
+    })
+  }
+
+  /**
+   * Load a run for a DRIVER or a settle path, DISPOSING of one whose stored row cannot be decoded
+   * (`null`, so the caller stops) instead of propagating the decode throw.
+   *
+   * Without this, a run row that violates its own contract is not merely unreadable, it is
+   * IMMORTAL: `listStale` keeps returning it (it stays `running`), every re-drive throws on the
+   * load, and the hard-stall backstop that exists to settle exactly such a run throws here, on
+   * its first line. The failure is recognised BY TYPE rather than by "the load threw", because a
+   * transient database outage must still propagate and leave the run alone.
+   *
+   * The FAULT narrows it further, and this is the sharper cut. Only a `malformed` row is disposed
+   * of; a value this build merely does not RECOGNISE propagates untouched, because a rolling deploy
+   * runs two builds at once and an unknown `ExecutionStatus` member reads identically whether the
+   * column is corrupt or was written by the newer replica thirty seconds ago. Disposal is
+   * irreversible and a re-drive costs a tick, so the tie is broken towards the reversible half; the
+   * propagating throw is counted (`sweep.run_recovery_failed`) and, if the row really is corrupt,
+   * settled by the hard-stall backstop.
+   *
+   * Both entry points that read a run they intend to MOVE go through this one method:
+   * {@link failRun} below and `ExecutionService.advanceInstance`. Disposing at the driver is what
+   * settles the row on its first re-drive rather than after the hard-stall deadline; having the
+   * settle path share it is what stops the backstop throwing on the runs it exists for.
+   */
+  async loadOrDispose(workspaceId: string, executionId: string): Promise<ExecutionInstance | null> {
+    try {
+      return await this.executionRepository.get(workspaceId, executionId)
+    } catch (error) {
+      if (!isDataIntegrityError(error)) throw error
+      if (dataIntegrityFaultOf(error) !== 'malformed') {
+        this.log.error(
+          'run row holds a value this build does not recognise; leaving it for a build that might',
+          { workspaceId, executionId, ...describeError(error) },
+        )
+        throw error
+      }
+      await this.failUnreadableRun(workspaceId, executionId, error)
+      return null
+    }
+  }
+
+  /**
+   * Settle a run whose stored row cannot be decoded, through the ONE write that does not read it
+   * first: `markFailed` is pure SQL on both facades, so it lands where every richer path (container
+   * reclaim, the step attribution, the lifecycle emit) cannot even begin, having no instance to work
+   * from. Those omissions are the honest outcome and not a degradation to paper over: an undecodable
+   * row names no step to attribute and no container to reclaim by job id.
+   *
+   * The BLOCK is the exception, and the one that matters to a person. Settling the run row alone
+   * leaves the card frozen `in_progress` forever: the run is dropped from the board snapshot, so
+   * there is no failure card and no Retry either, and the operator-visible half of the incident is
+   * never resolved. The run cannot name its block, but the block names the RUN
+   * (`BlockRepository.getByExecution` over the reverse link a start stamps), so the projection is
+   * reachable from the run id alone. No progress is written with it: the step list lives in the row
+   * that could not be read, and a fabricated 0 would report a run that never started.
+   */
+  private async failUnreadableRun(
+    workspaceId: string,
+    executionId: string,
+    cause: unknown,
+  ): Promise<void> {
+    this.log.error('run row could not be decoded; failing it instead of re-driving', {
+      workspaceId,
+      executionId,
+      ...describeError(cause),
+    })
+    await this.executionRepository.markFailed(workspaceId, executionId, {
+      kind: 'state_unreadable',
+      message: 'This run’s stored state could not be read, so it could not be resumed.',
+      detail: getErrorMessage(cause),
+      hint: EXECUTION_FAILURE_HINTS.state_unreadable,
+      reason: 'run_state_unreadable',
+      occurredAt: this.clock.now(),
+      lastSubtasks: null,
+      // No `stepIndex`: the cursor lives in the row that could not be read, and the field is
+      // optional precisely so a producer that does not know it says nothing rather than "0".
+    })
+    // AFTER the run write, and best-effort: the disposal's whole job is to get the row out of
+    // `running`, so a board read that fails must not resurrect the immortal run it just settled.
+    await runBestEffort(this.log, 'run.disposeUnreadable.projectBlock', async () => {
+      const block = await this.blockRepository.getByExecution(workspaceId, executionId)
+      // A block that carries no run id (a `cancel` cleared it, or the row was never started
+      // through the board) is a real state, not a failure: there is nothing to project onto.
+      if (!block) {
+        this.log.warn('no block carries the unreadable run; nothing to mark blocked', {
+          workspaceId,
+          executionId,
+        })
+        return
+      }
+      await this.blockRepository.update(workspaceId, block.id, { status: 'blocked' })
+      // A BOARD event, not an execution one: there is no instance to push, and this is precisely
+      // the change `boardChanged` exists for. The updated block RIDES it (the patch is the only
+      // field that moved, so the local copy is what the write left behind) so a connected client
+      // patches the card in place instead of paying for a whole snapshot. Suppressed for a headless
+      // internal anchor block on the same grounds `emitInstance` suppresses its push.
+      if (!block.internal) {
+        await this.events.boardChanged(workspaceId, {
+          reason: 'run-state-unreadable',
+          block: { ...block, status: 'blocked' },
+        })
+      }
     })
   }
 
@@ -440,8 +1088,11 @@ export class RunStateMachine {
     message: string,
     kind: AgentFailureKind = 'agent',
     detail: string | null = null,
+    /** Machine-readable cause code (e.g. an environment failure's `deploy_runner_unwired`) so
+     *  the SPA can render precise guidance without string-matching the prose. */
+    reason: string | null = null,
   ): Promise<void> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
+    const instance = await this.loadOrDispose(workspaceId, executionId)
     if (!instance) return
     // Reclaim the per-run container on the failure path too: a failed run otherwise
     // leaves its container to idle out sleepAfter. This is the single funnel for
@@ -454,39 +1105,87 @@ export class RunStateMachine {
     // so there should only ever be one write — but this guards against a future path that
     // both records a failure and returns `job_failed`, which would otherwise clobber the
     // good record with a generic one (the companion-rejected regression).
-    if (instance.status === 'failed') return
+    // `done` is terminal too: a `stopRun` racing a run that just COMPLETED (the merger merged
+    // the PR, block `done`) must NOT re-mark it `failed`/`blocked` — the PR merged. This read
+    // is best-effort (a status can advance to `done` between here and the `markFailed` write),
+    // so `markFailed` itself is SQL-guarded against `done`/`failed` as the authoritative check
+    // (race-audit 2.3).
+    if (instance.status === 'failed' || instance.status === 'done') return
     const failure: AgentFailure = {
       kind,
       message,
       detail,
-      hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
+      hint: EXECUTION_FAILURE_HINTS[kind],
+      reason,
       occurredAt: this.clock.now(),
       lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,
+      // Attribute the failure to the in-flight step so the step-detail overlay can filter its
+      // "execution history" to this step's prior attempts (carried forward on retry unchanged).
+      stepIndex: instance.currentStep,
     }
     await this.executionRepository.markFailed(workspaceId, executionId, failure)
-    // Progress reflects how far the pipeline got before failing.
-    const done = instance.steps.filter((s) => s.state === 'done').length
-    const progress = instance.steps.length > 0 ? done / instance.steps.length : 0
-    await this.blockRepository.update(workspaceId, instance.blockId, {
-      status: 'blocked',
-      progress,
-    })
+    // Re-read the AUTHORITATIVE post-write run: `markFailed` is SQL-guarded against a
+    // `done`/`failed` row, so a `stopRun` racing a run that just merged (the merger flipped
+    // the run `done` in the load→write window above) leaves the row `done` — the terminal
+    // guard on line 517 read a stale snapshot and can't catch that. Project the failure onto
+    // the BLOCK only when the run actually transitioned to `failed`; otherwise flipping the
+    // block to `blocked` here would clobber the `done` a merged task's block already carries,
+    // resurfacing the exact "looks failed but the PR merged" inconsistency this audit closes
+    // for the run row — the block projection is the same clobber one layer out (race-audit 2.3).
     const failed = await this.executionRepository.get(workspaceId, executionId)
+    if (failed?.status === 'failed') {
+      // Progress reflects how far the pipeline got before failing.
+      const done = failed.steps.filter((s) => s.state === 'done').length
+      const progress = failed.steps.length > 0 ? done / failed.steps.length : 0
+      await this.blockRepository.update(workspaceId, failed.blockId, {
+        status: 'blocked',
+        progress,
+      })
+    }
     if (failed) await this.emitInstance(workspaceId, failed)
   }
 
-  /** Reclaim the per-run container (per-job backends cancel the parked job; run-container
-   * backends use the run id). Best-effort: a vanished container is nothing to reclaim. */
+  /**
+   * Reclaim the run's containers (per-job backends cancel the parked job; run-container backends
+   * use the run id). Best-effort: a vanished container is nothing to reclaim.
+   *
+   * ContainerS, plural, and the kinds are why: a step declaring a non-default executor image runs
+   * in its OWN container beside the run's ordinary one, and only the executor knows which kind
+   * declared which image. So the reclaim hands over every kind this run dispatched and lets the
+   * executor map them to the containers it opened; naming one job here reclaimed exactly one, and
+   * a run with a `tester-ui` step leaked the browser container on every terminal path.
+   */
   async stopRunContainer(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor) || !executor.stopJob) return
+    if (!isAsyncAgentExecutor(executor) || !executor.reclaimRun) return
     // The in-flight step's job id (when a job is parked), so a per-job backend can
     // cancel exactly it; the run-container backends ignore it and use the run id.
     const jobId = instance.steps[instance.currentStep]?.jobId ?? instance.id
+    // Work this run has running in somebody ELSE's system, which the container reclaim above
+    // cannot reach and the executor cannot re-derive: a delegated step's whole identity there is
+    // what its claim persisted. Named here for the same reason the dispatched kinds are: only
+    // the engine holds the steps.
+    const delegations = liveDelegations(instance, workspaceId)
+    let report: RunReclaimReport | undefined
     try {
-      await executor.stopJob({ jobId, runId: instance.id, workspaceId })
+      const outcome = await executor.reclaimRun({
+        jobId,
+        runId: instance.id,
+        workspaceId,
+        agentKinds: dispatchedAgentKinds(instance),
+        ...(delegations.length > 0 ? { delegations } : {}),
+      })
+      if (outcome) report = outcome
     } catch {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
+    }
+    // Only a run that actually HELD external work writes again, so nothing changes for a
+    // deployment that delegates nothing. What is written is whether the external run stopped:
+    // an executor with no `cancel` leaves it alive, and the record says so rather than reading
+    // as a clean teardown (see `applyDelegationCancellation`).
+    if (delegations.length === 0) return
+    if (applyDelegationCancellation(instance, report?.delegations)) {
+      await this.casPersist(workspaceId, instance)
     }
   }
 
@@ -513,16 +1212,22 @@ export class RunStateMachine {
    * the old decision timeout the run waits indefinitely, so the inbox card — which the
    * periodic sweep escalates yellow → red — is the only signal a human is needed.
    *
-   * Non-clobbering: if ANY open notification is already on the block (a more specific
-   * `merge_review`, iteration-cap `decision_required`, etc.), it is left untouched and we
-   * raise nothing — so the richer message wins. Best-effort: no notification service
-   * (tests) or a missing block is a no-op.
+   * Non-clobbering: if an open notification for THIS run already sits on the block (a more
+   * specific `merge_review`, iteration-cap `decision_required`, etc. — all raised with this
+   * `executionId`), it is left untouched and we raise nothing, so the richer message wins.
+   *
+   * The suppression is scoped to `executionId`, NOT the bare block (F7, stuck-run audit): a
+   * `blocked` run's only recovery signal is this card, and a STALE card left on the block by a
+   * PRIOR run (a `pipeline_complete` / `merge_review` / `followup_pending` the human never
+   * cleared) must NOT stand in for it — otherwise dismissing that unrelated card leaves the
+   * parked run with no discoverable signal and nothing re-drives a `blocked` run. Best-effort:
+   * no notification service (tests) or a missing block is a no-op.
    */
   async ensureWaitingNotification(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     const svc = this.notificationService
     if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    if (open.some((n) => n.blockId === instance.blockId)) return
+    const onBlock = await svc.listOpenByBlock(workspaceId, instance.blockId)
+    if (onBlock.some((n) => n.executionId === instance.id)) return
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return
     await svc.raise(workspaceId, {
@@ -545,5 +1250,49 @@ export class RunStateMachine {
     const svc = this.notificationService
     if (!svc) return
     await svc.clearWaitingDecision(workspaceId, instance.blockId)
+  }
+
+  /**
+   * Raise the workspace-scoped "runs paused by the spend budget" card (F3, stuck-run audit).
+   * A spend-`paused` run is invisible to the sweeper and has no auto-resume, so the paused board
+   * badge used to be its ONLY signal — the least-discoverable park in the system. This surfaces
+   * it in the inbox (where the escalation sweep can flip it red). Workspace-scoped (`blockId`
+   * null), so ONE card covers every paused run rather than one per run.
+   * Best-effort: no notification service (tests) is a no-op.
+   *
+   * The early return is about the WRITE, not the dedup: `raise` de-dupes on its own, but it
+   * persists the re-raise either way, and this runs once per paused run per step for as long as
+   * the budget stays exhausted. The card's title and body are constant, so there is never a
+   * content refresh to lose by skipping it. One indexed read replaces a read plus a write.
+   */
+  async raiseBudgetPaused(workspaceId: string): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    if (await svc.findOpenByType(workspaceId, 'budget_paused')) return
+    await svc.raise(workspaceId, {
+      type: 'budget_paused',
+      blockId: null,
+      executionId: null,
+      title: 'Runs paused: spend budget reached',
+      body:
+        'One or more runs on metered models are paused because a spend budget (workspace, ' +
+        'account, or user) is exhausted. Raise the budget, then resume from the spend panel.',
+    })
+  }
+
+  /**
+   * Clear the workspace-scoped `budget_paused` card once the spend pause is being lifted (called
+   * from `resumePaused`). Idempotent + best-effort; if the budget is still exhausted a resumed run
+   * simply re-pauses and re-raises the card on its next step. Routed through the same
+   * `clearByType` seam the platform-health sweep uses, so a block-less card is raised and cleared
+   * through indexed lookups rather than a scan of the workspace's open inbox. That seam settles
+   * EVERY open card of the type in one statement, which is what the inbox scan it replaced was
+   * really buying: two runs pausing in the same tick can still race the un-indexable block-less
+   * raise into two cards, and a clear that took only the newest would leave the other red forever.
+   */
+  async clearBudgetPaused(workspaceId: string): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    await svc.clearByType(workspaceId, 'budget_paused')
   }
 }

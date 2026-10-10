@@ -27,13 +27,36 @@ const appliesToSchema = v.object({
 
 const tagsSchema = v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))
 
+/**
+ * The condensed variant a tenant LINKS to a managed fragment: the same standard stated
+ * tersely, folded for implementer kinds in place of the full body. Capped well under the
+ * body cap because a brief that isn't materially shorter defeats its own purpose, and an
+ * empty string is accepted as "unlink it" (which re-opens the fragment to auto-generation).
+ */
+const briefSchema = v.pipe(v.string(), v.trim(), v.maxLength(4000))
+
+/**
+ * The longest a fragment id may be, ANYWHERE one is authored, minted or named.
+ *
+ * One constant rather than a number per surface, because the id vocabulary crosses a boundary the
+ * separate numbers cannot see: `GET /api/v1/prompt-fragments` publishes ids that a task creation
+ * then names back, so a door capping them tighter than the library mints them refuses ids the same
+ * API just offered, and does it as a generic length error rather than as the "no such standard"
+ * the caller could act on. Every producer is held to this (the hand-authored `id` below, the
+ * repo-source mint in `fragment-source.logic.ts`), which is what makes "the catalog serves it ⇒ the
+ * create accepts it" structural rather than a coincidence of two numbers.
+ */
+export const MAX_FRAGMENT_ID_LENGTH = 200
+
 /** Create a hand-authored fragment at a tier. `id` defaults to a slug of the title. */
 export const createPromptFragmentSchema = v.object({
-  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FRAGMENT_ID_LENGTH))),
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   body: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20000)),
+  /** Optional linked short version; omitted ⇒ a long body is condensed automatically. */
+  brief: v.optional(briefSchema),
   tags: v.optional(tagsSchema),
   appliesTo: v.optional(appliesToSchema),
   /** Semver of the body; defaults to `1.0.0`. */
@@ -47,11 +70,31 @@ export const updatePromptFragmentSchema = v.object({
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   summary: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500))),
   body: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20000))),
+  /** Send `''` to UNLINK the brief and hand the fragment back to auto-generation. */
+  brief: v.optional(briefSchema),
   tags: v.optional(tagsSchema),
   appliesTo: v.optional(appliesToSchema),
   version: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40))),
 })
 export type UpdatePromptFragmentInput = v.InferOutput<typeof updatePromptFragmentSchema>
+
+/**
+ * Ask the backend to suggest a concise title for a hand-authored fragment from its
+ * content — an INLINE LLM call surfaced as the "auto-generate title" button in the
+ * fragment editor. The body is required (the title is derived from it); the summary is
+ * folded in when present for extra signal.
+ */
+export const generateFragmentTitleSchema = v.object({
+  body: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20000)),
+  summary: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+})
+export type GenerateFragmentTitleInput = v.InferOutput<typeof generateFragmentTitleSchema>
+
+/** The suggested title the auto-generate endpoint returns. */
+export const generatedFragmentTitleSchema = v.object({
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+})
+export type GeneratedFragmentTitle = v.InferOutput<typeof generatedFragmentTitleSchema>
 
 /**
  * Link an external document (a Confluence/Notion page or a GitHub file) as a
@@ -64,7 +107,7 @@ export const createDocumentFragmentSchema = v.object({
   source: documentSourceKindSchema,
   /** A page id or full page/file URL, resolved by the source's provider. */
   ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FRAGMENT_ID_LENGTH))),
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   tags: v.optional(tagsSchema),
   appliesTo: v.optional(appliesToSchema),

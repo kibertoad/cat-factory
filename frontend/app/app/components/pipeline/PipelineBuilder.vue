@@ -1,15 +1,34 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
+import { DEPLOYER_AGENT_KIND } from '@cat-factory/contracts'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
+import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
+import EstimateThresholdFields from '~/components/pipeline/EstimateThresholdFields.vue'
+import GateConfigFields from '~/components/pipeline/GateConfigFields.vue'
+import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
+import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
+import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
+import { showOverrideField } from '~/utils/uiMode'
+import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
+import { CONDITION_MARKERS, stepConditionsAt } from '~/utils/pipeline'
+
+/** The cycle button's icon per state — the two condition markers, plus the unconditional one. */
+const CONDITION_ICONS = {
+  always: 'i-lucide-infinity',
+  frontend: CONDITION_MARKERS.frontend.icon,
+  backend: CONDITION_MARKERS.backend.icon,
+} as const
 import {
   agentKindMeta,
   companionForProducer,
   isConsensusEligibleKind,
   isTesterKind,
+  mayCarrySkipAxis,
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
@@ -31,6 +50,31 @@ function addParticipant(i: number) {
 function removeParticipant(i: number, pIdx: number) {
   pipelines.draftConsensus[i]?.participants.splice(pIdx, 1)
 }
+/**
+ * The consensus escalation gate exposes only the two axes its toggle seeds (risk + impact) —
+ * complexity is a fine reason to run a deeper TEST audit but a poor reason to convene a panel,
+ * which is about disagreement risk. A module constant rather than a template literal so the
+ * array identity is stable across re-renders.
+ */
+const CONSENSUS_ESTIMATE_AXES: readonly EstimateAxis[] = ['risk', 'impact']
+
+// Writing one axis floor back onto each of the three draft gates. These are functions rather
+// than assignments inlined in the template because a template `v-if` does not narrow inside an
+// event handler's closure, so the inline form needs a non-null assertion at every call site —
+// and a `!` on a gate that has since been toggled off is the one shape that throws.
+function setCompanionGatingAxis(i: number | null, axis: EstimateAxis, value: number | undefined) {
+  const gating = i === null ? undefined : pipelines.draftGating[i]
+  if (gating) gating[ESTIMATE_AXIS_FIELD[axis]] = value
+}
+function setConsensusGatingAxis(i: number, axis: EstimateAxis, value: number | undefined) {
+  const gating = pipelines.draftConsensus[i]?.gating
+  if (gating) gating[ESTIMATE_AXIS_FIELD[axis]] = value
+}
+function setTesterQualityGatingAxis(i: number, axis: EstimateAxis, value: number | undefined) {
+  const gating = pipelines.draftTesterQuality[i]?.gating
+  if (gating) gating[ESTIMATE_AXIS_FIELD[axis]] = value
+}
+
 /** Toggle gating on/off for a draft step's consensus config. */
 function toggleGating(i: number) {
   const cfg = pipelines.draftConsensus[i]
@@ -39,9 +83,162 @@ function toggleGating(i: number) {
     ? { ...cfg.gating, enabled: false }
     : { enabled: true, minRisk: 0.6, minImpact: 0.6, onMissingEstimate: 'consensus' }
 }
+
+// ---- The workspace consensus-GROUP tier set -------------------------------
+// A step either authors its panel inline (the participants + gating editor below) or names a
+// SET of workspace groups, each with its own estimate bar, and the engine runs the most
+// demanding tier the task clears. The two are mutually exclusive by design — a non-empty tier
+// set takes over — so the builder shows one editor or the other rather than both at once.
+const consensusGroups = useConsensusGroupsStore()
+
+/** Whether the draft step at `i` has escalated to the group library. */
+function usesGroups(i: number): boolean {
+  return (pipelines.draftConsensus[i]?.groupIds?.length ?? 0) > 0
+}
+
+function isGroupSelected(i: number, groupId: string): boolean {
+  return pipelines.draftConsensus[i]?.groupIds?.includes(groupId) ?? false
+}
+
+/**
+ * The bar a group sets, as display text: its highest named threshold, or the "always" label when
+ * it is ungated. What a reader needs from the tier list is where each panel sits relative to the
+ * others, which is exactly this one number.
+ */
+function groupBarLabel(groupId: string): string {
+  const group = consensusGroups.groups.find((g) => g.id === groupId)
+  if (!group) return ''
+  const bar = consensusGroups.barFor(group)
+  return bar === null ? t('pipeline.builder.consensusGroupAlways') : `≥ ${bar}`
+}
 const agents = useAgentsStore()
 const ui = useUiStore()
+const uiMode = useUiModeStore()
+const agentPrompts = useAgentPromptsStore()
+const agentSettings = useAgentSettingsStore()
+
+// The agent kind whose system prompt is open in the editor (null = closed). Per-KIND, not
+// per-step: an override applies to every run of that agent in the workspace, so two steps of
+// the same kind are two views of one prompt.
+const promptEditorKind = ref<AgentKind | null>(null)
+
+/**
+ * Whether the "edit this agent's prompt" affordance shows for a kind. Editing a prompt is an
+ * OVERRIDE of what the product ships, so it follows the override rule: hidden in basic mode
+ * while the kind is running the shipped prompt, and revealed as soon as the workspace actually
+ * carries an override — otherwise a basic-mode user would be running on an edited prompt they
+ * can neither see nor clear.
+ */
+function showPromptEditor(kind: AgentKind): boolean {
+  return showOverrideField(uiMode.isAdvanced, agentPrompts.isCustomized(kind) || null)
+}
+
+/**
+ * Whether this step's own output-budget field shows. Same override rule as the prompt editor: a
+ * step with no pinned ceiling inherits, so the control is advanced-only until a value actually
+ * exists — at which point it must be visible in BOTH tiers, or a basic-mode user runs on a budget
+ * a teammate pinned and they can neither see nor clear.
+ */
+function showOutputBudget(index: number): boolean {
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftMaxOutputTokens(index) ?? null)
+}
+
+/**
+ * What a step with no pinned ceiling actually runs on: the workspace's per-kind setting when it
+ * has one. Shown as the field's placeholder. Undefined ⇒ the deployment default, which the SPA
+ * deliberately does NOT guess at — it is env-resolved per agent kind and a number invented here
+ * would be wrong on the deployments that tuned it.
+ */
+function inheritedOutputBudget(kind: AgentKind): number | undefined {
+  return agentSettings.maxOutputTokensFor(kind)
+}
+/**
+ * Whether to offer the agent-kind VARIANT picker on this step: only when the deployment
+ * registered variants for its kind, and then only in advanced mode WHILE the step is still on the
+ * shipped prompt. Picking a variant is an OVERRIDE of what the kind ships, so `showOverrideField`
+ * keeps it visible the moment one is set — a step varied by a teammate (or by the API) must never
+ * become invisible to a basic-mode user who would then have no way to see, let alone undo, it.
+ */
+function showVariantPicker(index: number, kind: AgentKind): boolean {
+  if (!agents.variantsForKind(kind).length) return false
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftAgentVariantId(index) ?? null)
+}
+
+/**
+ * Whether to offer this step's GATE configuration (approvers + required approvals, and any
+ * parameters its registered gate declares). There has to be something to configure: either the
+ * step carries a human approval gate, or its kind has a registered gate that declares parameters.
+ *
+ * Then it is an OVERRIDE like the variant picker above — advanced-only until a value is actually
+ * set, and visible in both tiers from then on. That second half is load-bearing here rather than
+ * cosmetic: the builder saves the whole step-options bag, so a configured policy invisible to a
+ * basic-mode editor would be a policy they silently save over.
+ */
+function showGateConfig(index: number, kind: AgentKind): boolean {
+  const gated = pipelines.draftGates[index] === true
+  const declaresFields = pipelines.gateConfigForms.some((form) => form.kind === kind)
+  if (!gated && !declaresFields) return false
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftGateConfig(index) ?? null)
+}
+
+/**
+ * The variants registered for a step's kind as USelect items, with an explicit "shipped prompt"
+ * entry so clearing the pick is a choice in the same list rather than a separate affordance.
+ */
+function variantSelectItems(kind: AgentKind) {
+  return [
+    { label: t('pipeline.builder.variantShipped'), value: '' },
+    ...agents.variantsForKind(kind).map((variant) => ({ label: variant.label, value: variant.id })),
+  ]
+}
+
 const releaseHealth = useReleaseHealthStore()
+const skills = useSkillsStore()
+
+// The account's skill catalog (from the workspace snapshot) as USelect items for the per-step
+// skill picker. A `skill` step is parametrized by the picked skill (`stepOptions.skillId`).
+const skillSelectItems = computed(() => skills.catalog.map((s) => ({ label: s.name, value: s.id })))
+
+// The workspace's foundational-services catalog, for the binary-output storage/context picker.
+const foundational = useFoundationalServicesStore()
+
+/**
+ * Whether this step's kind is a BINARY-OUTPUT generator, and therefore needs the storage +
+ * context picker. Read off the kind's projected `binaryOutput` flag rather than a kind-id list,
+ * so a deployment's generator opts in by carrying the trait exactly as the engine's own checks
+ * key on it.
+ *
+ * Deliberately NOT behind `showOverrideField` / `isAdvanced` the way the variant picker is: a
+ * variant OVERRIDES what the kind ships, while this selection is REQUIRED. A basic-mode user
+ * who cannot see it has a step that cannot be saved and no way to find out why.
+ */
+function showBinaryOutputPicker(kind: AgentKind): boolean {
+  return agentKindMeta(kind).binaryOutput === true
+}
+
+/**
+ * Whether to offer the Deployer's "keep this environment past the run" declaration on the step at
+ * `index`. An OVERRIDE in the `showOverrideField` sense — reclaiming what a run stood up is the
+ * default and the everyday shape, and a deliberately retained preview environment is not the
+ * everyday delivery loop — so it is `advanced`-tier, and a step that already CARRIES the
+ * declaration keeps showing it in either mode (never hide the way back).
+ *
+ * Hiding it strands nobody: the fault it answers (`deployer_without_disposer`) always has the
+ * tier-neutral fix of adding the Disposer back, which both the inline hint and the save refusal
+ * name FIRST. That is what makes this different from the binary-output picker above, where the
+ * selection is required and hiding it would leave a step with no savable form at all.
+ */
+function showRetainEnvironmentToggle(kind: AgentKind, index: number): boolean {
+  if (kind !== DEPLOYER_AGENT_KIND) return false
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftRetainEnvironment(index) || null)
+}
+
+// A step's picked skill id is no longer in the account catalog (the source dir was renamed or
+// unlinked). The step will fail cleanly at dispatch; flag it so the user re-picks.
+function skillMissing(index: number): boolean {
+  const id = pipelines.draftSkillId(index)
+  return !!id && !skills.catalog.some((s) => s.id === id)
+}
 
 const open = computed({
   get: () => ui.builderOpen,
@@ -51,8 +248,20 @@ const open = computed({
 // Refresh the observability-integration state whenever the builder opens so the palette
 // knows whether to offer the post-release-health gate (it's loaded on demand, not from
 // the snapshot). Best-effort: a failure just leaves the gate hidden.
-watch(open, (isOpen) => {
-  if (isOpen) releaseHealth.load().catch(() => {})
+onModalOpen(open, () => {
+  releaseHealth.load().catch(() => {})
+  // The prompt-override index badges the steps whose agent no longer runs the shipped prompt.
+  // Best-effort: the builder is fully usable without it, and a deployment that wires no
+  // override store answers 503 here.
+  agentPrompts.loadIndex().catch(() => {})
+  // The workspace's per-kind output ceilings, which the per-step field shows as its inherited
+  // placeholder and the prompt editor edits. Best-effort on the same terms as the prompt index.
+  agentSettings.load().catch(() => {})
+  // The resolved foundational-services catalog, which the binary-output picker offers from.
+  // Single-flighted per workspace, so this shares the panel's load rather than adding one. A
+  // failure is not swallowed into an empty picker: the store records `available: false`, and
+  // the picker says the catalog is unreachable rather than "no services exist".
+  void foundational.ensureProbed()
 })
 
 function add(kind: AgentKind) {
@@ -71,6 +280,7 @@ function toggleSaved(id: string) {
 }
 
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 // ---- "Add agent" mini-form -------------------------------------------------
 const addAgentOpen = ref(false)
@@ -121,13 +331,9 @@ async function save() {
       toast.add({ title: t('pipeline.builder.toast.addOneFirst'), color: 'warning' })
     }
   } catch (e) {
-    // Surface the backend reason (e.g. post-release-health rejected without an
-    // observability integration) rather than a generic failure.
-    toast.add({
-      title: t('pipeline.builder.toast.saveFailed'),
-      description: e instanceof Error ? e.message : undefined,
-      color: 'error',
-    })
+    // Through the funnel, so the backend reason (e.g. post-release-health rejected without an
+    // observability integration) is reachable as copyable detail rather than raw prose up front.
+    present(e, 'pipeline.builder.toast.saveFailed')
   }
 }
 
@@ -150,22 +356,12 @@ function companionLabel(kind: string): string | null {
   return companion ? agentKindMeta(companion).label : null
 }
 
-// Surfaced as an inline hint: a gated step needs a task-estimator before it (mirrors the
-// backend validation, which also rejects the save/start). Both the companion estimate gate
-// (`draftGating`) and the Tester QC companion's estimate gate (`draftTesterQuality[i].gating`)
-// count — either without a preceding estimator is rejected on save.
-const gatingNeedsEstimator = computed(() => {
-  const kinds = pipelines.draft
-  const hasEstimatorBefore = (i: number) =>
-    kinds.slice(0, i).some((k, j) => k === 'task-estimator' && pipelines.draftEnabled[j] !== false)
-  for (let i = 0; i < kinds.length; i++) {
-    if (pipelines.draftEnabled[i] === false) continue
-    const gated =
-      pipelines.draftGating[i]?.enabled || pipelines.draftTesterQuality[i]?.gating?.enabled
-    if (gated && !hasEstimatorBefore(i)) return true
-  }
-  return false
-})
+// Everything that is WRONG with the draft, as an ordered list of hints the template renders once,
+// plus the purpose conflict that also disables Save. Lives in its own composable because each of
+// these is one predicate beside one identically-styled line, and five of them had crowded out the
+// component (`usePipelineDraftWarnings`).
+const { hints: draftWarnings, stepsDisallowedByPurpose } =
+  usePipelineDraftWarnings(showBinaryOutputPicker)
 
 // ---- draft labels ----------------------------------------------------------
 const newLabel = ref('')
@@ -184,53 +380,30 @@ const showArchived = ref(false)
 const allLabels = computed(() =>
   [...new Set(pipelines.pipelines.flatMap((p) => p.labels ?? []))].sort(),
 )
-const archivedCount = computed(() => pipelines.pipelines.filter((p) => p.archived).length)
-const visiblePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => {
-    if (!showArchived.value && p.archived) return false
-    if (labelFilter.value && !(p.labels ?? []).includes(labelFilter.value)) return false
-    return true
+// The library is narrowed by the same purpose the palette is: browsing at `review` lists the
+// pipelines built for reviewing, not the whole workspace catalog. `narrowPipelineLibrary` owns the
+// reduction so the rule is unit-testable and each hint counts the population its own control can
+// actually reveal, rather than the rows another dial is hiding either way.
+//
+// It is a BROWSING dial of its own, not a read of `draftPurpose`. The draft's purpose is an
+// authoring field with no "unclassified" setting, so keying the library straight off it would
+// leave the only ways back through the hidden rows a re-classification of the pipeline being
+// edited (which persists) or discarding the draft. This ref is what "relax THIS dial alone" means
+// for the purpose: it defaults to following the draft and the hint below toggles it, changing what
+// is listed and nothing that gets saved.
+const browseEveryPurpose = ref(false)
+const library = computed(() =>
+  narrowPipelineLibrary(pipelines.pipelines, {
+    purpose: browseEveryPurpose.value ? null : pipelines.draftPurpose,
+    label: labelFilter.value,
+    showArchived: showArchived.value,
   }),
 )
-async function toggleArchive(p: Pipeline) {
-  try {
-    if (p.archived) await pipelines.unarchive(p.id)
-    else await pipelines.archive(p.id)
-  } catch {
-    toast.add({ title: t('pipeline.builder.toast.updateFailed'), color: 'error' })
-  }
-}
-
-/** Load a custom pipeline into the draft for in-place editing. */
-function edit(p: Pipeline) {
-  pipelines.loadForEdit(p)
-}
-
-const { confirm } = useConfirm()
-async function removePipeline(p: Pipeline) {
-  const ok = await confirm({
-    title: t('pipeline.builder.confirmDeletePipeline.title'),
-    description: t('pipeline.builder.confirmDeletePipeline.body', { name: p.name }),
-    variant: 'destructive',
-    confirmLabel: t('common.delete'),
-    icon: 'i-lucide-trash-2',
-  })
-  if (ok) void pipelines.removePipeline(p.id)
-}
-
-/** Clone any pipeline (incl. a read-only built-in) into an editable copy, then edit it. */
-async function clone(p: Pipeline) {
-  try {
-    const copy = await pipelines.clonePipeline(p.id)
-    toast.add({
-      title: t('pipeline.builder.toast.cloned', { name: p.name, copy: copy.name }),
-      color: 'success',
-      icon: 'i-lucide-copy',
-    })
-  } catch {
-    toast.add({ title: t('pipeline.builder.toast.cloneFailed'), color: 'error' })
-  }
-}
+const visiblePipelines = computed(() => library.value.offered)
+// The library ROW's actions (archive, the two scope defaults, edit, clone, delete) — one cohesive
+// group, extracted so this component stays inside its size budget. See
+// `usePipelineLibraryActions` for why they belong together.
+const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelineLibraryActions()
 </script>
 
 <template>
@@ -246,11 +419,14 @@ async function clone(p: Pipeline) {
            columns filling the full height. -->
       <div class="grid grid-cols-1 gap-4 lg:h-full lg:grid-cols-3">
         <!-- agent palette -->
-        <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
+        <div
+          class="flex flex-col lg:min-h-0 lg:overflow-hidden"
+          data-testid="pipeline-builder-palette"
+        >
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="h3">
               {{ t('pipeline.builder.agentPalette') }}
-            </h3>
+            </SectionLabel>
             <UButton
               color="primary"
               variant="soft"
@@ -262,16 +438,19 @@ async function clone(p: Pipeline) {
             </UButton>
           </div>
           <div class="flex-1 pe-1 lg:min-h-0 lg:overflow-y-auto">
-            <AgentPalette @add="add" />
+            <AgentPalette v-model:purpose="pipelines.draftPurpose" @add="add" />
           </div>
         </div>
 
         <!-- draft chain -->
-        <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
+        <div
+          class="flex flex-col lg:min-h-0 lg:overflow-hidden"
+          data-testid="pipeline-builder-draft"
+        >
           <div class="mb-2 flex items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="h3">
               {{ t('pipeline.builder.pipeline') }}
-            </h3>
+            </SectionLabel>
             <UButton
               color="neutral"
               variant="soft"
@@ -288,6 +467,17 @@ async function clone(p: Pipeline) {
             :placeholder="t('pipeline.builder.namePlaceholder')"
             size="sm"
             class="mb-2"
+            data-testid="pipeline-builder-name"
+          />
+
+          <!-- Description: the prose summary shown next to the step list in the pipeline pickers. -->
+          <UTextarea
+            v-model="pipelines.draftDescription"
+            :placeholder="t('pipeline.builder.descriptionPlaceholder')"
+            :rows="2"
+            autoresize
+            size="sm"
+            class="mb-2 w-full"
           />
 
           <!-- Labels: organize the pipeline in the library (filter/search). -->
@@ -301,30 +491,34 @@ async function clone(p: Pipeline) {
               class="gap-1"
             >
               {{ l }}
-              <button type="button" class="hover:text-rose-400" @click="removeLabel(l)">
+              <button type="button" class="hover:text-app-error-400" @click="removeLabel(l)">
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
               </button>
             </UBadge>
             <input
               v-model="newLabel"
               :placeholder="t('pipeline.builder.labelPlaceholder')"
-              class="w-20 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-200 focus:w-28"
+              class="w-20 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-2xs text-default focus:w-28"
               @keydown.enter.prevent="addLabel"
               @blur="addLabel"
             />
           </div>
 
+          <!-- Every draft fault the builder can name, each mirroring a refusal the save boundary
+             makes, so the user fixes it before the round trip (`usePipelineDraftWarnings`). -->
           <p
-            v-if="gatingNeedsEstimator"
-            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+            v-for="warning in draftWarnings"
+            :key="warning.key"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-app-warning-800/50 bg-app-warning-950/30 px-2 py-1 text-2xs text-app-warning-300"
+            :data-testid="warning.testId"
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
-            {{ t('pipeline.builder.gatingNeedsEstimator') }}
+            {{ t(warning.key) }}
           </p>
 
           <div
             v-if="pipelines.draft.length === 0"
-            class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500"
+            class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-muted p-4 text-center text-xs text-dimmed"
           >
             {{ t('pipeline.builder.emptyDraft') }}
           </div>
@@ -333,16 +527,17 @@ async function clone(p: Pipeline) {
             <li
               v-for="(unit, vi) in pipelines.units"
               :key="unit.index"
-              class="flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
+              class="flex flex-col gap-2 rounded-lg border border-muted bg-elevated/60 p-2"
               :class="{ 'opacity-50': pipelines.draftEnabled[unit.index] === false }"
+              data-testid="pipeline-draft-step"
+              :data-agent-kind="unit.kind"
+              :data-gated="pipelines.draftGates[unit.index] === true"
             >
               <div class="flex items-center gap-1.5">
-                <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
-                  vi + 1
-                }}</span>
+                <span class="w-4 shrink-0 text-center text-3xs text-dimmed">{{ vi + 1 }}</span>
                 <AgentKindIcon :kind="unit.kind" icon-class="h-4 w-4" />
                 <span
-                  class="min-w-0 flex-1 truncate text-xs text-slate-100"
+                  class="min-w-0 flex-1 truncate text-xs text-app-100"
                   :class="{ 'line-through': pipelines.draftEnabled[unit.index] === false }"
                   :title="agentKindMeta(unit.kind).description"
                 >
@@ -386,6 +581,31 @@ async function clone(p: Pipeline) {
                     "
                     @click="toggleEnabled(unit)"
                   />
+                  <!-- Run condition: restrict this step to tasks that change a frontend
+                     service, or to tasks that change anything else. Cycles through the three
+                     states (see `cycleDraftStepCondition`). Shown in BOTH interface tiers, and
+                     not behind `showOverrideField`: cloning a built-in carries the tester pair's
+                     conditions in, so a control that hid them by default would leave a basic-mode
+                     editor saving a step whose "when does this run" they were never shown.
+
+                     Offered only where the step MAY be skipped at all. A condition is a skip axis,
+                     so the engine holds it to the same gatability rule as an estimate gate
+                     (`assertValidRunConditions`) — without this the builder invited a condition on
+                     `merger` and answered the save with a 422. -->
+                  <UButton
+                    v-if="mayCarrySkipAxis(unit.kind)"
+                    :icon="CONDITION_ICONS[pipelines.draftStepCondition(unit.index) ?? 'always']"
+                    :color="pipelines.draftStepCondition(unit.index) ? 'info' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      t(
+                        `pipeline.builder.condition.${pipelines.draftStepCondition(unit.index) ?? 'always'}`,
+                      )
+                    "
+                    data-testid="pipeline-step-condition"
+                    @click="pipelines.cycleDraftStepCondition(unit.index)"
+                  />
                   <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
                   <UButton
@@ -400,6 +620,7 @@ async function clone(p: Pipeline) {
                         ? t('pipeline.builder.approvalRemoveTooltip')
                         : t('pipeline.builder.approvalAddTooltip')
                     "
+                    data-testid="pipeline-step-gate"
                     @click="pipelines.toggleDraftGate(unit.index)"
                   />
                   <!-- Consensus: run this step through the multi-model mechanism (eligible
@@ -466,6 +687,64 @@ async function clone(p: Pipeline) {
                     "
                     @click="pipelines.toggleDraftTesterQuality(unit.index)"
                   />
+                  <!-- Auto-recommendation: the requirements reviewer pre-answers findings it
+                     judges answerable from universal practice / provided context, offering them
+                     as editable default answers (requirements-review steps only). On by default. -->
+                  <UButton
+                    v-if="unit.kind === 'requirements-review'"
+                    :icon="
+                      pipelines.draftAutoRecommendEnabled(unit.index)
+                        ? 'i-lucide-sparkles'
+                        : 'i-lucide-circle-slash'
+                    "
+                    :color="
+                      pipelines.draftAutoRecommendEnabled(unit.index) ? 'secondary' : 'neutral'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftAutoRecommendEnabled(unit.index)
+                        ? t('pipeline.builder.autoRecommendDisableTooltip')
+                        : t('pipeline.builder.autoRecommendEnableTooltip')
+                    "
+                    @click="pipelines.toggleDraftAutoRecommend(unit.index)"
+                  />
+                  <!-- Keep the environment this Deployer stands up past the end of the run: the
+                     preview a reviewer pokes at after the PR is open. Off by default, and the
+                     save boundary refuses a Deployer that neither reclaims nor declares this,
+                     so the tick is how an unreclaimed environment says it is deliberate. -->
+                  <UButton
+                    v-if="showRetainEnvironmentToggle(unit.kind, unit.index)"
+                    :icon="
+                      pipelines.draftRetainEnvironment(unit.index)
+                        ? 'i-lucide-lock'
+                        : 'i-lucide-cloud-off'
+                    "
+                    :color="pipelines.draftRetainEnvironment(unit.index) ? 'warning' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftRetainEnvironment(unit.index)
+                        ? t('pipeline.builder.retainEnvironmentClearTooltip')
+                        : t('pipeline.builder.retainEnvironmentSetTooltip')
+                    "
+                    @click="pipelines.toggleDraftRetainEnvironment(unit.index)"
+                  />
+                  <!-- System prompt: replace what this agent kind ships with, for every run in
+                     this workspace, with the full revision history to switch back through. -->
+                  <UButton
+                    v-if="showPromptEditor(unit.kind)"
+                    icon="i-lucide-file-pen-line"
+                    :color="agentPrompts.isCustomized(unit.kind) ? 'warning' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      agentPrompts.isCustomized(unit.kind)
+                        ? t('pipeline.builder.promptEditedTooltip')
+                        : t('pipeline.builder.promptEditTooltip')
+                    "
+                    @click="promptEditorKind = unit.kind"
+                  />
                   <UButton
                     icon="i-lucide-chevron-up"
                     color="neutral"
@@ -495,21 +774,122 @@ async function clone(p: Pipeline) {
                 </div>
               </div>
 
+              <!-- Skill picker: the one generic `skill` kind is parametrized per step by the
+                 picked account skill (its `stepOptions.skillId`). Bind directly to the store. -->
+              <div v-if="unit.kind === 'skill'" class="ms-6 flex flex-col gap-1">
+                <USelect
+                  :model-value="pipelines.draftSkillId(unit.index)"
+                  :items="skillSelectItems"
+                  value-key="value"
+                  size="xs"
+                  :placeholder="t('pipeline.builder.skillPlaceholder')"
+                  :disabled="!skillSelectItems.length"
+                  @update:model-value="pipelines.setDraftSkillId(unit.index, $event)"
+                />
+                <p v-if="!skillSelectItems.length" class="text-3xs text-dimmed">
+                  {{ t('pipeline.builder.skillNoneAvailable') }}
+                </p>
+                <p v-else-if="skillMissing(unit.index)" class="text-3xs text-app-warning-400">
+                  {{ t('pipeline.builder.skillMissing') }}
+                </p>
+              </div>
+
+              <!-- Agent-kind VARIANT picker: a deployment-registered alternate prompt for this
+                 step's kind (`stepOptions.agentVariantId`). The step still runs the kind — only
+                 the prompt changes — so this is an override of the shipped text, shown only where
+                 the deployment registered one. -->
+              <div
+                v-if="showVariantPicker(unit.index, unit.kind)"
+                class="ms-6 flex items-center gap-2"
+              >
+                <span class="text-3xs text-dimmed">
+                  {{ t('pipeline.builder.variantLabel') }}
+                </span>
+                <USelect
+                  class="w-56"
+                  :model-value="pipelines.draftAgentVariantId(unit.index) ?? ''"
+                  :items="variantSelectItems(unit.kind)"
+                  value-key="value"
+                  size="xs"
+                  @update:model-value="
+                    pipelines.setDraftAgentVariantId(unit.index, $event || undefined)
+                  "
+                />
+              </div>
+
+              <!-- Gate configuration: who may clear this step's approval gate and how many of
+                 them, plus the parameters its registered gate declares. An OVERRIDE of the
+                 defaults (one approval from anyone entitled to write, the gate's shipped knobs),
+                 so it is advanced-only until a step actually configures something — at which point
+                 it must stay visible in both tiers, or a member editing the pipeline would save
+                 over a policy they were never shown. -->
+              <GateConfigFields
+                v-if="showGateConfig(unit.index, unit.kind)"
+                :index="unit.index"
+                :gated="pipelines.draftGates[unit.index] === true"
+                :kind="unit.kind"
+              />
+
+              <!-- Binary-output picker: a generator kind's step is parametrized by the
+                 foundational STORAGE service its artifacts go through (`stepOptions.binaryOutput`)
+                 plus any services consulted for the generation's scope. Required, not an
+                 override — so it shows in both interface tiers. -->
+              <BinaryOutputStepPicker
+                v-if="showBinaryOutputPicker(unit.kind)"
+                :index="unit.index"
+              />
+
+              <!-- This step's own output-token ceiling. An OVERRIDE of the workspace's per-kind
+                 setting (itself an override of the deployment routing default), so it is
+                 advanced-only until a value is pinned; empty inherits. -->
+              <div v-if="showOutputBudget(unit.index)" class="ms-6 flex items-center gap-2">
+                <span class="text-3xs text-dimmed">
+                  {{ t('pipeline.outputBudget.stepLabel') }}
+                </span>
+                <OutputBudgetInput
+                  class="w-28"
+                  :model-value="pipelines.draftMaxOutputTokens(unit.index)"
+                  :inherited-value="inheritedOutputBudget(unit.kind)"
+                  @update:model-value="
+                    pipelines.setDraftMaxOutputTokens(unit.index, $event ?? undefined)
+                  "
+                />
+              </div>
+
               <!-- Attached companion: a dependent reviewer for this producer, optionally
                  gated on the task estimate. -->
               <div
                 v-if="unit.companionIndex !== null"
-                class="ms-6 space-y-2 rounded-md border border-fuchsia-800/40 bg-fuchsia-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-hue-fuchsia/40 bg-app-hue-fuchsia/10 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
-                  <UIcon name="i-lucide-corner-down-right" class="h-3.5 w-3.5 text-slate-500" />
+                  <UIcon name="i-lucide-corner-down-right" class="h-3.5 w-3.5 text-dimmed" />
                   <AgentKindIcon
                     :kind="pipelines.draft[unit.companionIndex]!"
                     icon-class="h-4 w-4"
                   />
-                  <span class="min-w-0 flex-1 truncate text-slate-200">
+                  <span class="min-w-0 flex-1 truncate text-default">
                     {{ agentKindMeta(pipelines.draft[unit.companionIndex]!).label }}
                   </span>
+                  <!-- A companion is an agent kind with a prompt of its own, and this row is its
+                     only route to it — so the affordance belongs here too, not only on producers. -->
+                  <UButton
+                    v-if="showPromptEditor(pipelines.draft[unit.companionIndex]!)"
+                    icon="i-lucide-file-pen-line"
+                    :color="
+                      agentPrompts.isCustomized(pipelines.draft[unit.companionIndex]!)
+                        ? 'warning'
+                        : 'neutral'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      agentPrompts.isCustomized(pipelines.draft[unit.companionIndex]!)
+                        ? t('pipeline.builder.promptEditedTooltip')
+                        : t('pipeline.builder.promptEditTooltip')
+                    "
+                    @click="promptEditorKind = pipelines.draft[unit.companionIndex]!"
+                  />
                   <UButton
                     :icon="
                       pipelines.draftGating[unit.companionIndex]?.enabled
@@ -526,153 +906,154 @@ async function clone(p: Pipeline) {
                     @click="pipelines.toggleDraftGating(unit.companionIndex)"
                   />
                 </div>
-                <div
+                <EstimateThresholdFields
                   v-if="pipelines.draftGating[unit.companionIndex]?.enabled"
-                  class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2"
-                >
-                  <span class="text-[10px] text-slate-500">{{
-                    t('pipeline.builder.runWhenAny')
-                  }}</span>
-                  <label class="text-slate-400">{{
-                    t('pipeline.builder.complexityThreshold')
-                  }}</label>
-                  <input
-                    v-model.number="pipelines.draftGating[unit.companionIndex]!.minComplexity"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftGating[unit.companionIndex]!.minRisk"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.impactThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftGating[unit.companionIndex]!.minImpact"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                </div>
+                  :gating="pipelines.draftGating[unit.companionIndex]!"
+                  :axes="ESTIMATE_AXES"
+                  outcome="step"
+                  @update="
+                    (axis, value) => setCompanionGatingAxis(unit.companionIndex, axis, value)
+                  "
+                />
               </div>
 
               <!-- Consensus config (shown when the step is consensus-enabled). -->
               <div
                 v-if="pipelines.draftConsensus[unit.index]?.enabled"
-                class="ms-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-success-800/40 bg-app-success-950/20 p-2 text-xs"
               >
-                <div class="flex items-center gap-2">
-                  <label class="text-slate-400">{{ t('pipeline.builder.strategy') }}</label>
-                  <select
-                    v-model="pipelines.draftConsensus[unit.index]!.strategy"
-                    class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  >
-                    <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
-                      {{ s.label }}
-                    </option>
-                  </select>
-                  <label
-                    v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                    class="ms-2 text-slate-400"
-                    >{{ t('pipeline.builder.rounds') }}</label
-                  >
-                  <input
-                    v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                    v-model.number="pipelines.draftConsensus[unit.index]!.rounds"
-                    type="number"
-                    min="1"
-                    max="5"
-                    placeholder="2"
-                    class="w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
+                <!-- The workspace consensus-GROUP tier set: pick which reusable panels this
+                     step may escalate to. Each group carries its own estimate bar; the engine
+                     runs the most demanding one the task clears, and none clearing means the
+                     standard single agent runs. Selecting any group replaces the inline panel
+                     editor below, so the step has exactly one source of truth for its panel. -->
+                <div
+                  v-if="consensusGroups.hasGroups"
+                  class="space-y-1 border-b border-default pb-2"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-app-success-400" />
+                    <span class="text-toned">{{ t('pipeline.builder.consensusGroups') }}</span>
+                  </div>
+                  <p class="text-2xs text-dimmed">
+                    {{ t('pipeline.builder.consensusGroupsHint') }}
+                  </p>
+                  <div class="flex flex-wrap gap-1">
+                    <button
+                      v-for="group in consensusGroups.groups"
+                      :key="group.id"
+                      type="button"
+                      class="rounded-sm border px-1.5 py-0.5 text-2xs"
+                      :class="
+                        isGroupSelected(unit.index, group.id)
+                          ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
+                          : 'border-muted bg-default text-muted hover:text-default'
+                      "
+                      :title="group.description"
+                      @click="pipelines.toggleDraftConsensusGroup(unit.index, group.id)"
+                    >
+                      {{ group.name }}
+                      <span class="ms-1 text-dimmed">{{ groupBarLabel(group.id) }}</span>
+                    </button>
+                  </div>
                 </div>
 
-                <!-- participants -->
-                <div class="space-y-1">
-                  <div
-                    v-for="(p, pIdx) in pipelines.draftConsensus[unit.index]!.participants"
-                    :key="p.id"
-                    class="flex items-center gap-1.5"
-                  >
+                <div v-if="usesGroups(unit.index)" class="text-2xs text-dimmed">
+                  {{ t('pipeline.builder.consensusGroupsActive') }}
+                </div>
+
+                <template v-else>
+                  <div class="flex items-center gap-2">
+                    <label class="text-muted">{{ t('pipeline.builder.strategy') }}</label>
+                    <select
+                      v-model="pipelines.draftConsensus[unit.index]!.strategy"
+                      class="rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                    >
+                      <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
+                        {{ s.label }}
+                      </option>
+                    </select>
+                    <label
+                      v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
+                      class="ms-2 text-muted"
+                      >{{ t('pipeline.builder.rounds') }}</label
+                    >
                     <input
-                      v-model="p.role"
-                      :placeholder="t('pipeline.builder.rolePlaceholder')"
-                      class="w-28 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                    />
-                    <input
-                      v-model="p.modelId"
-                      :placeholder="t('pipeline.builder.modelIdPlaceholder')"
-                      class="flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-300"
-                    />
-                    <UButton
-                      icon="i-lucide-x"
-                      color="error"
-                      variant="ghost"
-                      size="xs"
-                      :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
-                      :title="t('pipeline.builder.removeParticipant')"
-                      @click="removeParticipant(unit.index, pIdx)"
+                      v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
+                      v-model.number="pipelines.draftConsensus[unit.index]!.rounds"
+                      type="number"
+                      min="1"
+                      max="5"
+                      placeholder="2"
+                      class="w-12 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
                     />
                   </div>
-                  <UButton
-                    icon="i-lucide-plus"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    :label="t('pipeline.builder.addParticipant')"
-                    @click="addParticipant(unit.index)"
-                  />
-                </div>
 
-                <!-- gating -->
-                <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
-                  <UButton
-                    :icon="
-                      pipelines.draftConsensus[unit.index]!.gating?.enabled
-                        ? 'i-lucide-toggle-right'
-                        : 'i-lucide-toggle-left'
-                    "
-                    :color="
-                      pipelines.draftConsensus[unit.index]!.gating?.enabled ? 'success' : 'neutral'
-                    "
-                    variant="ghost"
-                    size="xs"
-                    :label="t('pipeline.builder.gateOnEstimate')"
-                    :title="t('pipeline.builder.consensusGateTooltip')"
-                    @click="toggleGating(unit.index)"
+                  <!-- participants -->
+                  <div class="space-y-1">
+                    <div
+                      v-for="(p, pIdx) in pipelines.draftConsensus[unit.index]!.participants"
+                      :key="p.id"
+                      class="flex items-center gap-1.5"
+                    >
+                      <input
+                        v-model="p.role"
+                        :placeholder="t('pipeline.builder.rolePlaceholder')"
+                        class="w-28 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                      />
+                      <input
+                        v-model="p.modelId"
+                        :placeholder="t('pipeline.builder.modelIdPlaceholder')"
+                        class="flex-1 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-toned"
+                      />
+                      <UButton
+                        icon="i-lucide-x"
+                        color="error"
+                        variant="ghost"
+                        size="xs"
+                        :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
+                        :title="t('pipeline.builder.removeParticipant')"
+                        @click="removeParticipant(unit.index, pIdx)"
+                      />
+                    </div>
+                    <UButton
+                      icon="i-lucide-plus"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      :label="t('pipeline.builder.addParticipant')"
+                      @click="addParticipant(unit.index)"
+                    />
+                  </div>
+
+                  <!-- gating -->
+                  <div class="flex flex-wrap items-center gap-2 border-t border-default pt-2">
+                    <UButton
+                      :icon="
+                        pipelines.draftConsensus[unit.index]!.gating?.enabled
+                          ? 'i-lucide-toggle-right'
+                          : 'i-lucide-toggle-left'
+                      "
+                      :color="
+                        pipelines.draftConsensus[unit.index]!.gating?.enabled
+                          ? 'success'
+                          : 'neutral'
+                      "
+                      variant="ghost"
+                      size="xs"
+                      :label="t('pipeline.builder.gateOnEstimate')"
+                      :title="t('pipeline.builder.consensusGateTooltip')"
+                      @click="toggleGating(unit.index)"
+                    />
+                  </div>
+                  <EstimateThresholdFields
+                    v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled"
+                    :gating="pipelines.draftConsensus[unit.index]!.gating!"
+                    :axes="CONSENSUS_ESTIMATE_AXES"
+                    outcome="consensus"
+                    @update="(axis, value) => setConsensusGatingAxis(unit.index, axis, value)"
                   />
-                  <template v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled">
-                    <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
-                    <input
-                      v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minRisk"
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                    />
-                    <label class="text-slate-400">{{
-                      t('pipeline.builder.impactThreshold')
-                    }}</label>
-                    <input
-                      v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minImpact"
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                    />
-                  </template>
-                </div>
+                </template>
               </div>
 
               <!-- Test quality-control companion config (shown when QC is enabled on a Tester
@@ -682,11 +1063,11 @@ async function clone(p: Pipeline) {
                   isTesterKind(unit.kind) &&
                   pipelines.draftTesterQuality[unit.index]?.enabled !== false
                 "
-                class="ms-6 space-y-2 rounded-md border border-sky-800/40 bg-sky-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-info-800/40 bg-app-info-950/20 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
-                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-sky-400" />
-                  <span class="min-w-0 flex-1 truncate text-slate-200">
+                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-app-info-400" />
+                  <span class="min-w-0 flex-1 truncate text-default">
                     {{ t('pipeline.builder.testerQualityLabel') }}
                   </span>
                   <UButton
@@ -707,43 +1088,13 @@ async function clone(p: Pipeline) {
                     @click="pipelines.toggleDraftTesterQualityGating(unit.index)"
                   />
                 </div>
-                <div
+                <EstimateThresholdFields
                   v-if="pipelines.draftTesterQuality[unit.index]?.gating?.enabled"
-                  class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2"
-                >
-                  <span class="text-[10px] text-slate-500">{{
-                    t('pipeline.builder.runWhenAny')
-                  }}</span>
-                  <label class="text-slate-400">{{
-                    t('pipeline.builder.complexityThreshold')
-                  }}</label>
-                  <input
-                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minComplexity"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minRisk"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.impactThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minImpact"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                </div>
+                  :gating="pipelines.draftTesterQuality[unit.index]!.gating!"
+                  :axes="ESTIMATE_AXES"
+                  outcome="step"
+                  @update="(axis, value) => setTesterQualityGatingAxis(unit.index, axis, value)"
+                />
               </div>
             </li>
           </ol>
@@ -753,21 +1104,25 @@ async function clone(p: Pipeline) {
              moved to the task card / inspector when the palettes were removed). -->
         <div v-if="pipelines.pipelines.length" class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="h3">
               {{ t('pipeline.builder.savedPipelines') }}
-            </h3>
+            </SectionLabel>
             <UButton
-              v-if="archivedCount"
+              v-if="library.archivedInScope"
               :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
               :color="showArchived ? 'primary' : 'neutral'"
               variant="ghost"
               size="xs"
-              @click="showArchived = !showArchived"
+              @click="
+                () => {
+                  showArchived = !showArchived
+                }
+              "
             >
               {{
                 showArchived
                   ? t('pipeline.builder.hideArchived')
-                  : t('pipeline.builder.archivedCount', { count: archivedCount })
+                  : t('pipeline.builder.archivedCount', { count: library.archivedInScope })
               }}
             </UButton>
           </div>
@@ -796,11 +1151,45 @@ async function clone(p: Pipeline) {
             </UBadge>
           </div>
 
+          <!-- What the purpose is holding back, and the way past it. Stated here rather than
+               beside the palette's purpose control because this is where the absence is noticed:
+               a narrowed library must never read as the whole one, and a hint that only NAMES an
+               absence sends the reader to the authoring dial one column left, whose every setting
+               narrows and whose every change is saved. -->
+          <div
+            v-if="browseEveryPurpose || library.hiddenByPurpose"
+            class="mb-2 flex shrink-0 flex-wrap items-center gap-x-2 px-1 text-3xs text-dimmed"
+          >
+            <span>
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.everyPurposeListed')
+                  : t(
+                      'pipeline.builder.purposeHiddenPipelines',
+                      { count: library.hiddenByPurpose },
+                      library.hiddenByPurpose,
+                    )
+              }}
+            </span>
+            <button
+              type="button"
+              class="underline underline-offset-2 hover:text-toned"
+              data-testid="pipeline-library-purpose-toggle"
+              @click="browseEveryPurpose = !browseEveryPurpose"
+            >
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.narrowToDraftPurpose')
+                  : t('pipeline.builder.listEveryPurpose')
+              }}
+            </button>
+          </div>
+
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <li
               v-for="p in visiblePipelines"
               :key="p.id"
-              class="group rounded-lg border border-slate-700 bg-slate-800/40"
+              class="group rounded-lg border border-muted bg-elevated/40"
               :class="{ 'opacity-60': p.archived }"
             >
               <div class="flex items-center gap-2 px-2 py-1.5">
@@ -813,9 +1202,9 @@ async function clone(p: Pipeline) {
                     :name="
                       expandedSaved.has(p.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'
                     "
-                    class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                    class="h-3.5 w-3.5 shrink-0 text-dimmed"
                   />
-                  <span class="min-w-0 flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
+                  <span class="min-w-0 flex-1 truncate text-xs text-default">{{ p.name }}</span>
                   <UBadge
                     v-for="l in p.labels ?? []"
                     :key="l"
@@ -835,7 +1224,33 @@ async function clone(p: Pipeline) {
                   >
                     {{ t('pipeline.builder.defaultBadge') }}
                   </UBadge>
-                  <span class="shrink-0 text-[10px] text-slate-500">
+                  <!-- Which scope this rung is the default for. Shown at BOTH interface tiers even
+                       though the controls below are advanced-only: the control is an override, the
+                       resulting default is a decision, and a decision nobody can see is the
+                       concealed-setting failure. -->
+                  <UBadge
+                    v-if="p.isDefault"
+                    color="primary"
+                    variant="subtle"
+                    size="xs"
+                    class="shrink-0"
+                    :title="t('pipeline.builder.scopeDefault.interactiveHint')"
+                    data-testid="pipeline-interactive-default"
+                  >
+                    {{ t('pipeline.builder.scopeDefault.interactive') }}
+                  </UBadge>
+                  <UBadge
+                    v-if="p.isUnattendedDefault"
+                    color="info"
+                    variant="subtle"
+                    size="xs"
+                    class="shrink-0"
+                    :title="t('pipeline.builder.scopeDefault.unattendedHint')"
+                    data-testid="pipeline-unattended-default"
+                  >
+                    {{ t('pipeline.builder.scopeDefault.unattended') }}
+                  </UBadge>
+                  <span class="shrink-0 text-3xs text-dimmed">
                     {{
                       t(
                         'pipeline.builder.stepCount',
@@ -848,6 +1263,38 @@ async function clone(p: Pipeline) {
                 <div
                   class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
                 >
+                  <!-- The two DEFAULT claims, advanced-tier (see `toggleDefault`). An archived
+                         pipeline is not offered either: the backend refuses a hidden row as a
+                         default, and a control that can only fail is worse than no control. Safe
+                         to hide rather than a way to strand a claim, because the same rule refuses
+                         ARCHIVING a row that still holds one: a hidden row never holds a default,
+                         so there is never one here to release. -->
+                  <template v-if="uiMode.isAdvanced && !p.archived && !p.internal">
+                    <UButton
+                      :icon="p.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
+                      :color="p.isDefault ? 'primary' : 'neutral'"
+                      variant="ghost"
+                      size="xs"
+                      :title="
+                        p.isDefault
+                          ? t('pipeline.builder.scopeDefault.releaseInteractive')
+                          : t('pipeline.builder.scopeDefault.claimInteractive')
+                      "
+                      @click="toggleDefault(p, 'interactive')"
+                    />
+                    <UButton
+                      :icon="p.isUnattendedDefault ? 'i-lucide-bot' : 'i-lucide-bot-off'"
+                      :color="p.isUnattendedDefault ? 'info' : 'neutral'"
+                      variant="ghost"
+                      size="xs"
+                      :title="
+                        p.isUnattendedDefault
+                          ? t('pipeline.builder.scopeDefault.releaseUnattended')
+                          : t('pipeline.builder.scopeDefault.claimUnattended')
+                      "
+                      @click="toggleDefault(p, 'unattended')"
+                    />
+                  </template>
                   <!-- Archive/unarchive: organize the library without deleting. Works on
                          built-ins too (view metadata, not structure). -->
                   <UButton
@@ -899,7 +1346,7 @@ async function clone(p: Pipeline) {
               <!-- Full ordered step list, revealed on click. -->
               <ol
                 v-if="expandedSaved.has(p.id)"
-                class="space-y-1 border-t border-slate-800 px-2 py-2 ps-7"
+                class="space-y-1 border-t border-default px-2 py-2 ps-7"
               >
                 <li
                   v-for="(k, i) in p.agentKinds"
@@ -910,10 +1357,18 @@ async function clone(p: Pipeline) {
                     p.enabled?.[i] === false ? t('pipeline.builder.disabledStepTooltip') : undefined
                   "
                 >
-                  <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
-                    i + 1
-                  }}</span>
+                  <span class="w-4 shrink-0 text-center text-3xs text-dimmed">{{ i + 1 }}</span>
                   <AgentKindIcon :kind="k" show-label />
+                  <!-- A step that does not run on every task says so HERE, in the library, because
+                       this list is what a reader compares two pipelines by: a preset whose testers
+                       are conditional and one whose testers always run look identical otherwise. -->
+                  <UIcon
+                    v-for="c in stepConditionsAt(p, i)"
+                    :key="c"
+                    :name="CONDITION_MARKERS[c].icon"
+                    class="h-3 w-3 shrink-0 text-app-info-400"
+                    :title="t(CONDITION_MARKERS[c].key)"
+                  />
                 </li>
               </ol>
             </li>
@@ -931,7 +1386,8 @@ async function clone(p: Pipeline) {
           color="primary"
           icon="i-lucide-save"
           size="sm"
-          :disabled="pipelines.draft.length === 0"
+          :disabled="pipelines.draft.length === 0 || stepsDisallowedByPurpose.length > 0"
+          data-testid="pipeline-builder-save"
           @click="save"
         >
           {{ pipelines.editingId ? t('pipeline.builder.update') : t('pipeline.builder.save') }}
@@ -945,11 +1401,9 @@ async function clone(p: Pipeline) {
     <template #body>
       <div class="space-y-3">
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('pipeline.builder.addAgentModal.name') }}
-          </label>
+          </SectionLabel>
           <UInput
             v-model="newAgentName"
             :placeholder="t('pipeline.builder.addAgentModal.namePlaceholder')"
@@ -958,11 +1412,9 @@ async function clone(p: Pipeline) {
           />
         </div>
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('pipeline.builder.addAgentModal.description') }}
-          </label>
+          </SectionLabel>
           <UTextarea
             v-model="newAgentDesc"
             :rows="2"
@@ -987,7 +1439,16 @@ async function clone(p: Pipeline) {
 
     <template #footer>
       <div class="flex w-full items-center justify-end gap-2">
-        <UButton color="neutral" variant="ghost" size="sm" @click="addAgentOpen = false">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          @click="
+            () => {
+              addAgentOpen = false
+            }
+          "
+        >
           {{ t('common.cancel') }}
         </UButton>
         <UButton
@@ -1002,4 +1463,8 @@ async function clone(p: Pipeline) {
       </div>
     </template>
   </UModal>
+
+  <!-- The per-workspace system-prompt editor for one agent kind. Mounted alongside the builder
+       (not inside its slideover body) so its own modal isn't nested inside the scrolling column. -->
+  <AgentPromptEditor :agent-kind="promptEditorKind" @close="promptEditorKind = null" />
 </template>

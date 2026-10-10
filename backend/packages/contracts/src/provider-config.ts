@@ -12,8 +12,21 @@ import * as v from 'valibot'
 // expose a {@link ConnectionTestResult}-returning probe the UI calls before save.
 // ---------------------------------------------------------------------------
 
-/** How a config field is rendered/collected. */
-export const providerConfigFieldTypeSchema = v.picklist(['text', 'password', 'select'])
+/**
+ * How a config field is rendered/collected. `text`/`password`/`select` are the originals;
+ * `number`, `checkbox`, and `textarea` were added so a NATIVE backend's typed flat fields
+ * (a numeric port, a boolean skip-TLS toggle, a multi-line PEM CA bundle) render generically
+ * instead of forcing a bespoke per-backend form. The wire value stays a string in every case
+ * (`"8080"`, `"true"`, the PEM text); the backend coerces + Valibot-validates it on register.
+ */
+export const providerConfigFieldTypeSchema = v.picklist([
+  'text',
+  'password',
+  'select',
+  'number',
+  'checkbox',
+  'textarea',
+])
 export type ProviderConfigFieldType = v.InferOutput<typeof providerConfigFieldTypeSchema>
 
 /** One config value a provider needs, rendered as a single form field. */
@@ -101,14 +114,117 @@ export const providerDescriptorSchema = v.object({
    * connection yet.
    */
   savedManifest: v.optional(v.record(v.string(), v.unknown())),
+  /**
+   * The runner-backend analogue of `manifestTemplate`/`savedManifest` for a NATIVE backend
+   * whose config is a discriminated `{ kind, <payload> }` object (Kubernetes, EKS, …) rather
+   * than a manifest. It is the base config object the SPA overlays the flat `configFields`
+   * onto: every non-secret field is written to the SINGLE non-`kind` payload key, each secret
+   * field to the write-only bundle, and the assembled `{ kind, <payload> }` is POSTed as the
+   * register `config`. When a connection exists this is the STORED config, so a re-save
+   * preserves advanced API-only fields (resources / nodeSelector / …) the flat form never
+   * renders; on a first connect it is the empty skeleton. Absent ⇒ a manifest-style provider
+   * (use `manifestTemplate`/the manifest editor instead). Carries NO secret values.
+   */
+  configTemplate: v.optional(v.record(v.string(), v.unknown())),
+  /**
+   * Current stored NON-SECRET flat values (keyed by `configFields[].key`) for prefilling a
+   * native flat-field form, so an edit shows the live config instead of blanks. Secrets are
+   * never included (write-only). Absent ⇒ no connection yet.
+   */
+  values: v.optional(v.record(v.string(), v.string())),
 })
 export type ProviderDescriptor = v.InferOutput<typeof providerDescriptorSchema>
+
+/**
+ * A non-fatal gap in an otherwise-valid provider config: the connection works, but something
+ * it never declared costs a recovery or cleanup path that only shows itself during an
+ * incident. Machine-readable, because the backend does not localize prose — the SPA maps the
+ * `code` to its own copy and keeps `message` only as the untranslated last resort.
+ */
+export const connectionWarningCodeSchema = v.picklist([
+  'runner_manifest_no_release',
+  'runner_manifest_no_status_path',
+  // A stored personal access token OUTRANKS the deployment credential on the run path, so its
+  // scope is the blast radius of every run its owner starts (backend/docs/security-model.md).
+  // A classic token carrying `repo` reaches every repository its owner can push to — routinely
+  // far wider than the workspace's App installation, and invisible unless we say so here.
+  'github_pat_classic_account_wide',
+  // A classic token that is merely broader than it needs to be: admin/delete/workflow-class
+  // scopes the platform never uses.
+  'github_pat_scopes_beyond_need',
+  // The token authenticated, but GitHub returned no scope header at all — so we cannot state
+  // its reach. Reported rather than assumed: "unknown breadth" and "narrow" are not the same
+  // fact, and treating them alike is exactly how an over-broad token stays silent.
+  'github_pat_scope_unreadable',
+  // GitHub returned the scope header with an EMPTY value: a classic token minted with nothing
+  // ticked. Distinct from the code above because it is the opposite fact — a positively stated
+  // "this token grants no scopes at all" rather than an unreadable one — and it is the state a
+  // reader is most likely to have produced by accident, since GitHub's form ticks nothing by
+  // default and the token still authenticates.
+  'github_pat_no_scopes',
+])
+export type ConnectionWarningCode = v.InferOutput<typeof connectionWarningCodeSchema>
+
+export const connectionWarningSchema = v.object({
+  code: connectionWarningCodeSchema,
+  /** The backend's own English account of the gap, also written to the deployment log. */
+  message: v.string(),
+})
+export type ConnectionWarning = v.InferOutput<typeof connectionWarningSchema>
+
+/**
+ * The transport-level class of a connection failure, for a probe that never got an ANSWER: each
+ * member is a different fix (a stopped host, a typo'd name, an untrusted certificate, a credential
+ * that cannot become a header). Machine-readable for the same reason {@link ConnectionWarningCode}
+ * is: the backend does not localize prose, and this is the most-read prose in the connect forms,
+ * so the SPA maps the member to translated copy and keeps the backend's English account as the
+ * technical detail beside it.
+ *
+ * It lives here rather than in kernel because BOTH sides have to agree about the answer: kernel is
+ * invisible to the SPA, so the union kept there would be restated by hand on the forms. Kernel's
+ * `describeConnectionFailure` is the one producer.
+ *
+ * `unknown` is a real member, not a placeholder: it means the thrown error was read and matched
+ * nothing, which is why such a failure is reported as itself with no remedy rather than being
+ * assigned the nearest-looking one.
+ */
+export const connectionFailureCauseSchema = v.picklist([
+  'refused',
+  'dns',
+  'timeout',
+  // Cancelled rather than timed out: a shutting-down process or a superseded request. Kept apart
+  // from `timeout` because the remedies diverge (a timeout points at a firewall or a saturated
+  // host; an abort points at nothing and simply wants re-running).
+  'aborted',
+  'unreachable',
+  'reset',
+  'tls-untrusted',
+  'tls-expired',
+  'tls-hostname',
+  'tls-protocol',
+  'invalid-header',
+  'unknown',
+])
+export type ConnectionFailureCause = v.InferOutput<typeof connectionFailureCauseSchema>
 
 /** The outcome of a provider connection test (never throws to the client). */
 export const connectionTestResultSchema = v.object({
   ok: v.boolean(),
   /** Human-readable detail — a success hint or the failure reason. */
   message: v.optional(v.string()),
+  /**
+   * What CLASS of transport failure this was, when the probe never got an answer. Present only on
+   * such a failure: a success has none, and so does a failure that IS an answer (an HTTP status
+   * the provider maps itself), because those carry no transport cause to name. The SPA renders the
+   * headline from this and keeps {@link message} as the untranslated detail underneath.
+   */
+  failureCause: v.optional(connectionFailureCauseSchema),
+  /**
+   * Gaps in the config being tested. Independent of `ok`: a warned config still connects, and
+   * the test is the one moment the operator is looking at this backend, so it is where they
+   * find out. Absent/empty ⇒ nothing to report.
+   */
+  warnings: v.optional(v.array(connectionWarningSchema)),
 })
 export type ConnectionTestResult = v.InferOutput<typeof connectionTestResultSchema>
 
@@ -120,7 +236,7 @@ export type RepoValidationSeverity = v.InferOutput<typeof repoValidationSeverity
 export const repoValidationIssueSchema = v.object({
   severity: repoValidationSeveritySchema,
   message: v.string(),
-  /** The repo-relative path the issue concerns, when applicable (e.g. `.kargo.yml`). */
+  /** The repo-relative path the issue concerns, when applicable (e.g. `.deploy.yml`). */
   path: v.optional(v.string()),
 })
 export type RepoValidationIssue = v.InferOutput<typeof repoValidationIssueSchema>

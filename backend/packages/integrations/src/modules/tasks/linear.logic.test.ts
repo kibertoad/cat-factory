@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildLinearIntakeFilter,
   linearIssueSearchHit,
+  mapLinearBugCandidates,
   mapLinearChildIds,
   mapLinearComments,
+  mapLinearIntakeResults,
   mapLinearIssue,
   mapLinearRelations,
   mapLinearSearchResults,
@@ -173,5 +176,163 @@ describe('mapLinearTeams', () => {
       { id: 't1', name: 'Engineering', key: 'ENG' },
       { id: 't2', name: 't2', key: '' },
     ])
+  })
+})
+
+describe('buildLinearIntakeFilter', () => {
+  it('compiles every predicate onto one IssueFilter', () => {
+    expect(
+      buildLinearIntakeFilter({
+        board: { linearTeamId: 'team-uuid' },
+        titleFragment: 'crash',
+        labels: ['bug', 'triage'],
+        limit: 5,
+      }),
+    ).toEqual({
+      state: { type: { nin: ['completed', 'canceled'] } },
+      team: { id: { eq: 'team-uuid' } },
+      title: { containsIgnoreCase: 'crash' },
+      and: [
+        { labels: { some: { name: { eq: 'bug' } } } },
+        { labels: { some: { name: { eq: 'triage' } } } },
+      ],
+    })
+  })
+
+  it('always filters to open issues even with no predicates', () => {
+    expect(buildLinearIntakeFilter({ board: {}, limit: 5 })).toEqual({
+      state: { type: { nin: ['completed', 'canceled'] } },
+    })
+  })
+})
+
+describe('mapLinearIntakeResults', () => {
+  const payload = {
+    issues: {
+      nodes: [
+        { identifier: 'ENG-9', title: 'newest', url: 'u9', createdAt: '2026-03-01T00:00:00Z' },
+        { identifier: 'ENG-1', title: 'oldest', url: 'u1', createdAt: '2026-01-01T00:00:00Z' },
+        { identifier: 'ENG-5', title: 'middle', url: 'u5', createdAt: '2026-02-01T00:00:00Z' },
+      ],
+    },
+  }
+
+  it('orders oldest-created-first and caps at the limit', () => {
+    const hits = mapLinearIntakeResults(payload, 2)
+    expect(hits.map((h) => h.externalId)).toEqual(['ENG-1', 'ENG-5'])
+    expect(hits[0]!.source).toBe('linear')
+  })
+
+  it('drops excluded identifiers case-insensitively', () => {
+    const hits = mapLinearIntakeResults(payload, 5, ['eng-1'])
+    expect(hits.map((h) => h.externalId)).toEqual(['ENG-5', 'ENG-9'])
+  })
+
+  it('tolerates an empty/malformed payload', () => {
+    expect(mapLinearIntakeResults({}, 3)).toEqual([])
+    expect(mapLinearIntakeResults({ issues: { nodes: [{}] } }, 3)).toEqual([])
+  })
+})
+
+describe('buildLinearIntakeFilter (bug hunt)', () => {
+  it('pushes the unassigned predicate into the IssueFilter', () => {
+    expect(
+      buildLinearIntakeFilter({
+        board: { linearTeamId: 'team_1' },
+        unassignedOnly: true,
+        limit: 5,
+      }),
+    ).toMatchObject({ assignee: { null: true } })
+  })
+
+  it('leaves the recurring intake filter untouched when the flag is absent', () => {
+    expect(
+      buildLinearIntakeFilter({ board: { linearTeamId: 'team_1' }, limit: 5 }),
+    ).not.toHaveProperty('assignee')
+  })
+})
+
+describe('mapLinearBugCandidates', () => {
+  const node = {
+    identifier: 'ENG-2',
+    title: 'Upload times out',
+    url: 'https://linear.app/acme/issue/ENG-2',
+    description: 'Large files stall at 90%.',
+    createdAt: '2026-01-02T00:00:00.000Z',
+    priorityLabel: 'Urgent',
+    state: { name: 'Todo' },
+    labels: { nodes: [{ name: 'bug' }, { name: 'upload' }] },
+    comments: { nodes: [{}, {}, {}] },
+  }
+
+  it('projects the candidate fields the ranking reasons over', () => {
+    expect(mapLinearBugCandidates({ issues: { nodes: [node] } }, 10)).toEqual([
+      {
+        source: 'linear',
+        externalId: 'ENG-2',
+        title: 'Upload times out',
+        url: 'https://linear.app/acme/issue/ENG-2',
+        status: 'Todo',
+        // Linear has no issue-type notion, so this stays empty rather than being guessed
+        // from a label.
+        type: '',
+        priority: 'Urgent',
+        labels: ['bug', 'upload'],
+        description: 'Large files stall at 90%.',
+        createdAt: '2026-01-02T00:00:00.000Z',
+        // The bounded probe's page length: a floor, which is all the "how contested is this"
+        // signal needs.
+        commentCount: 3,
+      },
+    ])
+  })
+
+  it('drops the already-worked identifiers case-insensitively', () => {
+    const other = { ...node, identifier: 'ENG-3' }
+    expect(
+      mapLinearBugCandidates({ issues: { nodes: [node, other] } }, 10, ['eng-2']).map(
+        (c) => c.externalId,
+      ),
+    ).toEqual(['ENG-3'])
+  })
+
+  it('orders oldest-first and caps at the limit, whatever order the page arrived in', () => {
+    const nodes = [
+      { ...node, identifier: 'ENG-9', createdAt: '2026-03-01T00:00:00.000Z' },
+      { ...node, identifier: 'ENG-1', createdAt: '2026-01-01T00:00:00.000Z' },
+      { ...node, identifier: 'ENG-5', createdAt: '2026-02-01T00:00:00.000Z' },
+    ]
+    expect(mapLinearBugCandidates({ issues: { nodes } }, 2).map((c) => c.externalId)).toEqual([
+      'ENG-1',
+      'ENG-5',
+    ])
+  })
+
+  it('fills the gaps a sparse node leaves, and skips one with no identifier', () => {
+    expect(mapLinearBugCandidates({ issues: { nodes: [{}, { identifier: 'ENG-7' }] } }, 5)).toEqual(
+      [
+        {
+          source: 'linear',
+          externalId: 'ENG-7',
+          title: '(untitled)',
+          url: 'https://linear.app/issue/ENG-7',
+          status: '',
+          type: '',
+          priority: null,
+          labels: [],
+          description: '',
+          createdAt: '',
+          commentCount: 0,
+        },
+      ],
+    )
+  })
+
+  it('truncates a body long enough to dominate the ranking prompt', () => {
+    const [candidate] = mapLinearBugCandidates(
+      { issues: { nodes: [{ ...node, description: 'x'.repeat(5_000) }] } },
+      5,
+    )
+    expect(candidate?.description).toHaveLength(1_200)
   })
 })

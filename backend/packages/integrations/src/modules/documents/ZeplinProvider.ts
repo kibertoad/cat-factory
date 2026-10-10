@@ -8,7 +8,7 @@ import {
 import { renderDesignContext } from './design.logic.js'
 import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
 import {
-  MAX_SCREENS,
+  SCREEN_FETCH_LIMIT,
   ZEPLIN_API_HOST,
   ZEPLIN_DESCRIPTOR,
   buildZeplinDesignContext,
@@ -16,6 +16,8 @@ import {
   splitZeplinExternalId,
   unwrapArray,
   unwrapObject,
+  zeplinDroppedScreenId,
+  zeplinUrlFor,
   type ZeplinComponent,
   type ZeplinDesignTokens,
   type ZeplinScreen,
@@ -67,9 +69,23 @@ export class ZeplinProvider implements DocumentSourceProvider {
     return parseZeplinRef(input)
   }
 
+  canonicalUrl(externalId: string): string {
+    return zeplinUrlFor(externalId)
+  }
+
+  /**
+   * The screen the link named when `parseRef` could not read its id and fell back to the whole
+   * project. See `zeplinDroppedScreenId`: the widened reference is otherwise indistinguishable
+   * from the one the user meant.
+   */
+  droppedScope(input: string, externalId: string): string | null {
+    return zeplinDroppedScreenId(input, externalId)
+  }
+
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const { projectId, screenId } = splitZeplinExternalId(externalId)
     if (!projectId) {
@@ -77,7 +93,7 @@ export class ZeplinProvider implements DocumentSourceProvider {
     }
 
     // Primary read: validates the token + that the project exists (throws on a bad token).
-    const project = await this.get<{ name?: string }>(
+    const project = await this.get<{ name?: string; updated?: string | number }>(
       credentials,
       `/projects/${encodeURIComponent(projectId)}`,
     )
@@ -104,8 +120,9 @@ export class ZeplinProvider implements DocumentSourceProvider {
       externalId,
       projectName: project.name ?? projectId,
       screens,
-      components: unwrapArray<ZeplinComponent>(components, 'components'),
-      designTokens,
+      components: unwrapArray<ZeplinComponent>(components.value, 'components'),
+      designTokens: designTokens.value,
+      failedReads: { components: components.failed, designTokens: designTokens.failed },
     })
 
     const body = renderDesignContext(context)
@@ -121,7 +138,29 @@ export class ZeplinProvider implements DocumentSourceProvider {
       title: context.title,
       url: context.url,
       body,
+      version: project.updated !== undefined ? String(project.updated) : '',
     }
+  }
+
+  /**
+   * The cheap version probe: read only the project object for its `updated`
+   * timestamp, skipping the screens + components + design-token reads that make up
+   * the bulk of a full fetch.
+   */
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string | null,
+  ): Promise<string> {
+    const { projectId } = splitZeplinExternalId(externalId)
+    if (!projectId) {
+      throw new ZeplinApiError(400, `Zeplin ref is missing a project id: ${externalId}`)
+    }
+    const project = await this.get<{ updated?: string | number }>(
+      credentials,
+      `/projects/${encodeURIComponent(projectId)}`,
+    )
+    return project.updated !== undefined ? String(project.updated) : ''
   }
 
   /** Fetch the single referenced screen, or a bounded list of the project's screens. */
@@ -142,16 +181,23 @@ export class ZeplinProvider implements DocumentSourceProvider {
     }
     const listed = await this.get<unknown>(
       credentials,
-      `/projects/${encodeURIComponent(projectId)}/screens?limit=${MAX_SCREENS}`,
+      `/projects/${encodeURIComponent(projectId)}/screens?limit=${SCREEN_FETCH_LIMIT}`,
     )
     return unwrapArray<ZeplinScreen>(listed, 'screens')
   }
 
-  private async bestEffort<T>(fn: () => Promise<T>): Promise<T | null> {
+  /**
+   * A supplementary read that may not fail the import. It reports WHETHER it failed, because
+   * a dropped read and a project that simply has no components/tokens render identically as
+   * an absent section, and only the caller can state which one happened.
+   */
+  private async bestEffort<T>(fn: () => Promise<T>): Promise<{ value: T | null; failed: boolean }> {
     try {
-      return await fn()
+      return { value: await fn(), failed: false }
     } catch {
-      return null
+      // silent-catch-ok: the failure is REPORTED through the returned flag, which the
+      // rendered body states as a note rather than passing off as an empty section.
+      return { value: null, failed: true }
     }
   }
 

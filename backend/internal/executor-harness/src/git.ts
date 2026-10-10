@@ -3,7 +3,7 @@ import { appendFile, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
+import type { BootstrapTargetSpec, RepoSpec } from './job.js'
 import { pathExists } from './fs-utils.js'
 import { redactSecrets } from './redact.js'
 import { loadRunnerLimits } from './runner.js'
@@ -61,14 +61,18 @@ const GIT_TIMEOUT_MS = Math.max(
 // Emptying the helper list (`credential.helper=` with no value RESETS the multi-valued config,
 // dropping the system/global/local helpers) removes GCM from the chain, so git falls back to
 // the harness's own askpass helper — which returns the per-job PAT we already hold (see
-// `authEnv`). `credential.interactive=false` is belt-and-suspenders for any backend that still
-// runs. The token is never in argv; only this non-secret config is.
-const NON_INTERACTIVE_CREDENTIAL_ARGS = [
-  '-c',
-  'credential.helper=',
-  '-c',
-  'credential.interactive=false',
-]
+// `authEnv`). The token is never in argv; only this non-secret config is.
+//
+// DO NOT re-add `-c credential.interactive=false` here. It reads like harmless belt-and-braces
+// but modern git (≥ 2.47, incl. the executor image + host git) HONORS `credential.interactive`
+// and treats invoking GIT_ASKPASS as "interactive" — so with it set git SKIPS the askpass
+// entirely and dies with "fatal: unable to get password from user", failing EVERY authenticated
+// clone/push on both the native and container paths (it clones a public base repo fine — that
+// needs no auth — then fails only at push, which is what makes it look intermittent). The GCM
+// popup it was meant to belt-and-braces against is already fully handled by the emptied helper
+// list above plus `GIT_TERMINAL_PROMPT=0` / `GCM_INTERACTIVE=never` in the env (see authEnv /
+// nonInteractiveGitEnv). Exported so a unit test can pin that this arg never creeps back in.
+export const NON_INTERACTIVE_CREDENTIAL_ARGS = ['-c', 'credential.helper=']
 
 /**
  * Env applied to git commands that DON'T carry {@link authEnv} (local ops like config/checkout/
@@ -109,6 +113,135 @@ function gitSubcommand(args: string[]): string {
 }
 
 /**
+ * Why a push to the work branch was REFUSED. Both mean the branch carries commits this push
+ * would drop, and git tells them apart by whether our object database HOLDS the tip the remote
+ * reports: it does for a tip our own checkout created, so the two are distinguishable and need
+ * different remedies (see {@link PUSH_REJECTION_REMEDIES}).
+ *
+ *  - `local-rewrite`: we HAVE the remote's tip and are no longer descended from it, i.e. this
+ *    checkout amended / reset / rebased a commit that had already been pushed. Git labels it
+ *    `(non-fast-forward)`.
+ *  - `remote-writer`: the remote's tip is a commit this checkout has never seen (`(fetch first)`),
+ *    or our lease found the branch moved past what we published (`(stale info)`), so a SECOND
+ *    writer owns the branch.
+ */
+export type PushRejection = 'local-rewrite' | 'remote-writer'
+
+/**
+ * Whether `stderr` is a REFUSED push, and which shape. Ordered: the lease/fetch-first shapes are
+ * checked first, because a `(stale info)` refusal also prints the generic "failed to push some
+ * refs" line the non-fast-forward shape shares. Pure, so both branches are unit-tested against
+ * real git output rather than inferred.
+ */
+export function classifyPushRejection(stderr: string): PushRejection | undefined {
+  // A HOST-side refusal is not contention, and re-dispatching cannot help: branch protection, a
+  // pre-receive hook or a token policy is declining the write itself, and GitHub's protected-branch
+  // message says "refusing to allow a non-fast-forward push", which would otherwise read as a
+  // rewrite. Git's own labels separate the two cleanly (`! [remote rejected]` is the server
+  // declining, `! [rejected]` is git's own fast-forward/lease check), so such a failure stays a
+  // plain `git` fault with the write-access remedy below.
+  if (/remote rejected|protected branch|hook declined|refusing to allow/i.test(stderr)) {
+    return undefined
+  }
+  if (/\(stale info\)|\(fetch first\)|remote contains work that you do not/i.test(stderr)) {
+    return 'remote-writer'
+  }
+  if (
+    /\(non-fast-forward\)|tip of your current branch is behind|branch tip is behind/i.test(stderr)
+  ) {
+    return 'local-rewrite'
+  }
+  return undefined
+}
+
+/**
+ * The remedy each {@link PushRejection} earns. A `Record`, so a new rejection shape cannot be
+ * classified without saying what a human should do about it. Neither is "run `git pull`", which is
+ * what git's own hint advises and is advice for a person at a terminal, not for an autonomous run.
+ */
+const PUSH_REJECTION_REMEDIES: Record<PushRejection, string> = {
+  'local-rewrite':
+    'The push was refused because the commit it publishes is not descended from the one the work ' +
+    'branch already holds: this checkout rewrote history that had already been pushed (an amend, ' +
+    "reset or rebase of an existing commit). The platform checkpoint-pushes the agent's commits " +
+    'while it works and lets a run force over its OWN published checkpoint, so what stays refused ' +
+    'is a rewrite it cannot attribute to this pass: commits an earlier run published, or a rewrite ' +
+    'that dropped the branch tip this pass started from. The engine re-dispatches the step to ' +
+    'resume from the branch as it stands; work already on the branch is never dropped.',
+  'remote-writer':
+    'The push was refused because another writer advanced this work branch while the run was ' +
+    'working (a second dispatch for the same block, or a person pushing to it). Nothing is lost: ' +
+    "the other writer's commits stay on the branch and the engine re-dispatches the step so the " +
+    'agent resumes on top of them. If it recurs, check whether two runs are active for the same block.',
+}
+
+/**
+ * Classify the common shapes of git's own stderr into an actionable remedy, else undefined
+ * (an unrecognized failure keeps just its raw stderr). This is the FIRST-WRAP-POINT for
+ * unavoidable third-party text (per the error-message initiative's I6): git's stderr is the
+ * only signal we get for a clone/push auth or access fault, so we match it ONCE here and
+ * APPEND a cause + fix, never rewrite the raw line. Host-neutral — the same remedy serves a
+ * GitHub-App installation token and a GitLab/GitHub PAT (local mode). Pure, so it is
+ * unit-tested over a fixed set of stderr strings.
+ */
+export function describeGitFailure(stderr: string): string | undefined {
+  const s = stderr.toLowerCase()
+  // A refused push first: its stderr carries neither an auth nor an access shape, so a miss here
+  // would leave the operator git's own "use 'git pull' before pushing again" hint and nothing else.
+  const rejection = classifyPushRejection(stderr)
+  if (rejection) return PUSH_REJECTION_REMEDIES[rejection]
+  // Rate-limit / abuse-detection first: the host returns these as a 403, which would
+  // otherwise fall into the write-access shape below and be mislabeled as a permission
+  // problem — but the fix is to wait, not to grant access.
+  if (/rate limit|secondary rate|abuse detection/i.test(stderr)) {
+    return (
+      'The git host rate-limited this run (a primary/secondary rate limit or abuse-detection ' +
+      'trip). This is usually transient — wait a few minutes and retry. If it persists, reduce ' +
+      'the number of concurrent runs against this host.'
+    )
+  }
+  // Order matters: a 404 "repository not found" is sometimes GitHub's stand-in for "your
+  // token can't see this private repo", so it is checked before the generic auth shape.
+  if (
+    /repository not found|remote:\s*not found|returned error:\s*404|fatal:\s*could not read from remote repository/i.test(
+      stderr,
+    ) &&
+    !/authentication failed|invalid username or password/i.test(s)
+  ) {
+    return (
+      'The repository could not be found or is not visible to the credential used for this run. ' +
+      'It may have been deleted, renamed, or made private, or the GitHub App installation / access ' +
+      'token no longer has access to it. Confirm the repository still exists and that the connected ' +
+      'GitHub App (or, in local mode, the GITHUB_PAT) can see it, then retry.'
+    )
+  }
+  if (
+    /authentication failed|invalid username or password|could not read username|could not read password|terminal prompts disabled|support for password authentication was removed|returned error:\s*401|http basic:\s*access denied/i.test(
+      stderr,
+    )
+  ) {
+    return (
+      'Git authentication was rejected — the credential this run used was refused. The GitHub App ' +
+      'installation token (or, in local mode, the GITHUB_PAT) is most likely expired, rotated, ' +
+      'revoked, or no longer installed on this repository. Reconnect the GitHub App for the ' +
+      'workspace (or regenerate the PAT with repo scope in local mode), then retry.'
+    )
+  }
+  if (
+    /permission to .* denied|remote:\s*permission|protected branch|pre-receive hook declined|returned error:\s*403|http 403/i.test(
+      stderr,
+    )
+  ) {
+    return (
+      'Git authenticated but the credential lacks WRITE access to push to this repository. Grant ' +
+      'the connected GitHub App (or the local-mode PAT) write permission on the repo — and, if the ' +
+      'target branch is protected, the permission its branch-protection rule requires — then retry.'
+    )
+  }
+  return undefined
+}
+
+/**
  * Wrap a git failure into a credential-scrubbed {@link HarnessFailure}('git') with an ACCURATE
  * message. Three cases the old bare "Command failed: git …" collapsed together:
  *  - a per-command timeout kill → say it STALLED (and name the usual causes) instead of a blank
@@ -134,8 +267,24 @@ function gitFailure(err: unknown, args: string[], aborted: boolean): HarnessFail
   }
   const stderr = typeof e?.stderr === 'string' ? e.stderr : (e?.stderr?.toString() ?? '')
   const base = e instanceof Error ? e.message : String(err)
-  const combined = stderr.trim() ? `${base}\n${stderr.trim()}` : base
-  const failure = new HarnessFailure('git', redactSecrets(combined))
+  // `execFile` builds its rejection message as `Command failed: <cmd>\n<stderr>`, so for the
+  // ordinary non-zero exit the stderr is ALREADY in `base`, and appending it again printed every
+  // git failure's output twice, which reads as two attempts. Append only what `base` lacks
+  // (a killed/other rejection whose message carries no output).
+  const tail = stderr.trim()
+  const combined = tail && !base.includes(tail) ? `${base}\n${tail}` : base
+  // Append a cause + fix for the recognized auth/access/push-rejection shapes, keeping the raw
+  // (scrubbed) stderr above it as the detail. The remedy is static text with no secrets, so it is
+  // added after redaction.
+  const remedy = describeGitFailure(combined)
+  const message = remedy ? `${redactSecrets(combined)}\n${remedy}` : redactSecrets(combined)
+  // A REFUSED push is not a generic `git` fault: the branch moved under this run, which the engine
+  // recovers from by re-dispatching the step onto the branch as it now stands. It gets its own
+  // structured cause so that recovery keys off a classification rather than this message.
+  const failure = new HarnessFailure(
+    classifyPushRejection(combined) ? 'branch-contended' : 'git',
+    message,
+  )
   if (e?.stack) failure.stack = redactSecrets(e.stack)
   return failure
 }
@@ -455,14 +604,115 @@ export async function commitTrackedEdits(
  * --exclude-standard`). The harness deliberately never blanket-stages new files (the
  * agent owns commit selection), so this is exactly what {@link commitTrackedEdits}
  * does NOT capture — a NEW file the agent created but forgot to commit. The caller
- * surfaces it as a warning so that silent loss is at least observable in the logs.
+ * surfaces it as a warning, and the salvage commits it, so that loss is at least observable.
+ *
+ * `-z` for the reason given on {@link splitNulPaths}: the default output C-QUOTES any path git
+ * considers unusual, and a quoted path is not the name of a file. The salvage stages exactly
+ * what this returns, so a single accented filename would make its one `git add` exit 128 and
+ * discard the whole all-or-nothing salvage.
  */
 export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Promise<string[]> {
-  const out = await git(['ls-files', '--others', '--exclude-standard'], { cwd: dir, signal })
-  return out
-    .split('\n')
-    .map((line) => line.replace(/\r$/, '').trim())
-    .filter((path) => path !== '')
+  return splitNulPaths(
+    await git(['ls-files', '--others', '--exclude-standard', '-z'], { cwd: dir, signal }),
+  )
+}
+
+/**
+ * Split git's NUL-delimited path output into real, unescaped paths.
+ *
+ * Every path-listing git command here passes `-z`, and this is why: without it git renders a
+ * path containing a non-ASCII byte, a quote, a backslash or a newline as a C-QUOTED STRING
+ * (`"caf\303\251.ts"`), quotes and octal escapes included. That string is not a filename — feed
+ * it back to `git add` and the command exits 128 with `pathspec ... did not match any files`, and
+ * `stat` on it reports nothing. `-z` turns the quoting off entirely (a NUL cannot occur in a path,
+ * so no escaping is needed) and is the ONLY setting that is correct for every path: `core.quotePath
+ * =false` covers the non-ASCII case alone and still quotes the other three.
+ *
+ * A trailing NUL leaves an empty final field, which is dropped along with any other blank.
+ */
+function splitNulPaths(out: string): string[] {
+  return out.split('\0').filter((path) => path !== '')
+}
+
+/**
+ * The raw `git status --porcelain -z --untracked-files=all` output for `dir` — every path git
+ * considers changed, with untracked files enumerated INDIVIDUALLY rather than collapsed to their
+ * directory.
+ *
+ * The raw string, not a parsed list, because its two consumers want different things from it and
+ * the parse ({@link changedPathsFromPorcelain}) is pure and shared: the workspace probe wants "is
+ * anything here at all", the salvage wants the paths themselves. Gitignored paths are absent by
+ * construction, which is what keeps a dependency install from reading as agent progress.
+ *
+ * NOTHING IS STAGED, unlike {@link hasAgentChanges}: this runs mid-flight, while the agent is
+ * still working, so a `git add -A` here would silently stage files the agent had not chosen and
+ * change what a later `commitTrackedEdits` captures.
+ */
+export async function workingTreeStatus(dir: string, signal?: AbortSignal): Promise<string> {
+  return git(['status', '--porcelain', '-z', '--untracked-files=all'], { cwd: dir, signal })
+}
+
+/**
+ * Stage exactly `paths` and commit them with `message`, returning the new commit's sha (or null
+ * when git found nothing to commit — a path that vanished between listing and staging).
+ *
+ * Three separate things stop a path being read as something other than a path. `--` terminates
+ * the options, so one beginning with `-` cannot be read as a flag. Each path is a separate argv
+ * entry, so no shell ever sees them. And each is prefixed `:(literal)`, which is what `--` does
+ * NOT cover: everything after `--` is a PATHSPEC, not a filename, so its leading `:` is read as
+ * pathspec magic and its wildcards are matched as a glob. An agent-authored `:notes.txt` makes a
+ * bare `git add -- :notes.txt` exit 128 on `did not match any files` — and since this stages every
+ * path in ONE command, that one name discards the whole all-or-nothing salvage, exactly as an
+ * unquoted accented name did. `:(literal)` matches the entry as itself and nothing else.
+ *
+ * The commit is SCOPED to those same pathspecs, and so is the staged-anything check above it. A
+ * bare `git commit` takes whatever the index holds, which is not the same set: an agent killed
+ * mid-flight leaves its own `git add` staged, and that content would then land under a message
+ * naming only the paths passed here, counted by a caller that had never looked at it. The commit
+ * and the claim made about it have to describe ONE set of files. Content the agent staged and this
+ * call did not name stays staged for whoever commits it next.
+ *
+ * The caller has already decided WHICH paths belong; this only commits them.
+ */
+export async function commitPaths(
+  dir: string,
+  paths: string[],
+  message: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (paths.length === 0) return null
+  const pathspecs = paths.map(literalPathspec)
+  await git(['add', '--', ...pathspecs], { cwd: dir, signal })
+  const staged = await git(['diff', '--cached', '--name-only', '--', ...pathspecs], {
+    cwd: dir,
+    signal,
+  })
+  if (staged.trim() === '') return null
+  await git(['commit', '-m', message, '--', ...pathspecs], { cwd: dir, signal })
+  return headCommit(dir, signal)
+}
+
+/** One path as a pathspec that matches only itself — see {@link commitPaths} for why. */
+function literalPathspec(path: string): string {
+  return `:(literal)${path}`
+}
+
+/**
+ * The untracked, non-ignored paths in the working tree with whole untracked DIRECTORIES
+ * collapsed to a single `dir/` entry (`--directory`), rather than every file beneath them.
+ *
+ * The sibling {@link listUntrackedFiles} answers "what did the agent forget to commit", where
+ * every individual file is the point. This one answers "what appeared in the tree", where it is
+ * emphatically not: a dependency install leaves tens of thousands of files under one directory,
+ * and enumerating them would cost a multi-megabyte listing to learn a single name.
+ */
+export async function listUntrackedPaths(dir: string, signal?: AbortSignal): Promise<string[]> {
+  return splitNulPaths(
+    await git(
+      ['ls-files', '--others', '--exclude-standard', '--directory', '--no-empty-directory', '-z'],
+      { cwd: dir, signal },
+    ),
+  )
 }
 
 /**
@@ -480,6 +730,38 @@ export async function excludeFromGit(
   try {
     const excludePath = join(dir, '.git', 'info', 'exclude')
     await appendFile(excludePath, `\n${pattern}\n`, 'utf8')
+  } catch {
+    // A missing .git/info/exclude (worktree layout) or write error is non-fatal.
+    void signal
+  }
+}
+
+/**
+ * Locally exclude LITERAL paths — never patterns — from this checkout, in ONE write.
+ *
+ * The sibling {@link excludeFromGit} takes an author-written pattern for a known sentinel. These
+ * paths instead come from the FILESYSTEM (what a dependency install left behind), so two things
+ * differ. Each is escaped, because a directory named `pkg[1]` read as a gitignore character class
+ * excludes something else entirely and, being a no-op on the real path, fails silently. And they
+ * are appended together, because a per-path append would cost one file write per entry to build
+ * a list that is already known in full.
+ *
+ * Anchored: `ls-files` reports repo-root-relative paths and a gitignore pattern containing a
+ * slash is root-anchored, which is what makes `packages/api/node_modules/` exclude that service's
+ * tree and not a same-named directory elsewhere. Best-effort, exactly like its sibling.
+ */
+export async function excludePathsFromGit(
+  dir: string,
+  paths: readonly string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  if (paths.length === 0) return
+  // Escape every gitignore metacharacter, plus a leading `#` (comment) or `!` (negation) which
+  // are only special in that position.
+  const escaped = paths.map((p) => p.replace(/[[\]*?\\]/g, '\\$&').replace(/^([#!])/, '\\$1'))
+  try {
+    const excludePath = join(dir, '.git', 'info', 'exclude')
+    await appendFile(excludePath, `\n${escaped.join('\n')}\n`, 'utf8')
   } catch {
     // A missing .git/info/exclude (worktree layout) or write error is non-fatal.
     void signal
@@ -533,6 +815,46 @@ export async function branchAheadOfBase(
 }
 
 /**
+ * The files `commitish` changes relative to its merge base with the PR base branch — i.e.
+ * everything the work branch has added on top of base, `git diff --name-only <base>...<commitish>`.
+ *
+ * The BUGFIX REPRODUCTION PROOF uses this to answer the one question that decides whether a GREEN
+ * pre-fix tree means anything: does that tree ALREADY carry non-test work committed on this
+ * branch? A resumed run's `baseSha` is whatever the branch tip was when this pass started, which
+ * in the designed flow is the reproduction step's test commit — but after an eviction it is this
+ * same coder step's own interrupted work, fix included. Reporting "the check passed before your
+ * change, so it does not demonstrate the defect" in that case is simply false.
+ *
+ * `undefined` means "could not determine" (a shallow clone with no reachable merge base, a fetch
+ * failure, an unknown ref), never an empty list: the caller must degrade to its prior behaviour
+ * rather than read a failed probe as "the tree is clean".
+ *
+ * NUL-delimited so a path containing a newline (legal in git) cannot split into two entries.
+ */
+export async function changedFilesSinceBase(
+  dir: string,
+  baseBranch: string,
+  ghToken: string,
+  commitish: string,
+  signal?: AbortSignal,
+): Promise<string[] | undefined> {
+  try {
+    await git(['fetch', 'origin', `+refs/heads/${baseBranch}:refs/cat-factory/base`], {
+      cwd: dir,
+      signal,
+      env: await authEnv(ghToken),
+    })
+    const out = await git(['diff', '--name-only', '-z', `refs/cat-factory/base...${commitish}`], {
+      cwd: dir,
+      signal,
+    })
+    return out.split('\0').filter((p) => p !== '')
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Whether the checked-out branch has a real, examinable diff against
  * `origin/<baseBranch>` — i.e. the base branch's remote-tracking ref exists (so the
  * merge base resolves) AND there are changes between that merge base and HEAD. The
@@ -555,21 +877,29 @@ export async function hasDiffAgainstBase(
 }
 
 /**
- * Parse the paths out of `git status --porcelain` (v1) output. Each line is
- * `XY <path>`, or `XY <old> -> <new>` for a rename/copy (we keep the new path);
- * git quotes paths with special characters, which we unquote. Blank lines are
- * skipped. Pure so the no-op detection can be tested without spawning git.
+ * Parse the paths out of `git status --porcelain -z` (v1) output.
+ *
+ * `-z` rather than the default, for the reason given on {@link splitNulPaths}: the default
+ * C-QUOTES any path git considers unusual, so `caf\u00e9.ts` arrives as the seven-character
+ * literal `"caf\303\251.ts"` and every consumer that then touches the file misses it. In `-z`
+ * every field is a real path and nothing is escaped.
+ *
+ * Each NUL-terminated field is `XY <path>`. A rename or copy (`R`/`C` in either status column)
+ * spends a SECOND field on its original path, which is consumed and dropped: we keep the new
+ * path, the one that now exists in the tree. Pure so the no-op detection and the workspace
+ * probe's sentinel rule can be tested without spawning git.
  */
 export function changedPathsFromPorcelain(status: string): string[] {
+  const fields = status.split('\0')
   const paths: string[] = []
-  for (const raw of status.split('\n')) {
-    const line = raw.replace(/\r$/, '')
-    if (line.trim() === '') continue
-    let path = line.slice(3)
-    const arrow = path.indexOf(' -> ')
-    if (arrow !== -1) path = path.slice(arrow + 4)
-    path = path.trim().replace(/^"(.*)"$/, '$1')
-    if (path) paths.push(path)
+  for (let index = 0; index < fields.length; index++) {
+    const entry = fields[index] ?? ''
+    if (entry === '') continue
+    // `XY ` then the path. A field too short to hold both is not a status entry (a stray
+    // trailing fragment), so there is no path in it to keep.
+    if (entry.length <= 3) continue
+    if (entry[0] === 'R' || entry[0] === 'C' || entry[1] === 'R' || entry[1] === 'C') index++
+    paths.push(entry.slice(3))
   }
   return paths
 }
@@ -578,18 +908,111 @@ export function changedPathsFromPorcelain(status: string): string[] {
  * Whether the agent changed anything in a cloned checkout. Stages the working
  * tree and inspects the porcelain status: an empty result means the bootstrapper
  * made no adaptation — a no-op we must not pass off as a successful push. (The
- * harness writes its prompt context to Pi's global `~/.pi/agent/AGENTS.md`, never
+ * harness writes its prompt context to the AGENTS.md of Pi's per-pass config dir, never
  * into the checkout, so every change reported here is a genuine agent edit.)
  */
 export async function hasAgentChanges(dir: string, signal?: AbortSignal): Promise<boolean> {
   await git(['add', '-A'], { cwd: dir, signal })
-  const status = await git(['status', '--porcelain'], { cwd: dir, signal })
+  const status = await git(['status', '--porcelain', '-z'], { cwd: dir, signal })
   return changedPathsFromPorcelain(status).length > 0
 }
 
 /** The commit SHA at `dir`'s HEAD — captured right after clone as the base tip. */
 export async function headCommit(dir: string, signal?: AbortSignal): Promise<string> {
   return (await git(['rev-parse', 'HEAD'], { cwd: dir, signal })).trim()
+}
+
+/**
+ * Add a DETACHED worktree of `commitish` at `worktreePath`, sharing `dir`'s object database.
+ *
+ * The bugfix reproduction proof runs the declared check against two trees of the SAME clone (the
+ * pre-fix tree and the final tree), so a worktree is the only mechanism that gets both without a
+ * second clone, a second fetch, or disturbing the agent's own checkout — which must stay exactly
+ * as the agent left it, since the push and the PR come off it.
+ *
+ * `--detach` (rather than a branch) is deliberate: a worktree that claimed a branch would collide
+ * with the work branch checked out in `dir`, and nothing here ever commits.
+ *
+ * `worktreePath` is expected to live OUTSIDE the checkout (a per-job temp root), so the worktree's
+ * `.git` pointer file can never be swept into the agent's commit by a broad `git add -A`.
+ */
+export async function addWorktree(
+  dir: string,
+  worktreePath: string,
+  commitish: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await git(['worktree', 'add', '--detach', worktreePath, commitish], { cwd: dir, signal })
+}
+
+/**
+ * Remove a worktree previously added by {@link addWorktree} and prune the stale administrative
+ * entry, never throwing: teardown is bookkeeping, and a run whose PROOF succeeded must not fail
+ * because a temp directory could not be cleaned up. The caller still deletes the temp root, so a
+ * failure here leaks only a `.git/worktrees/<name>` record inside a container that is about to be
+ * destroyed anyway.
+ */
+export async function removeWorktree(
+  dir: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    await git(['worktree', 'remove', '--force', worktreePath], { cwd: dir, signal })
+  } catch {
+    // Fall through to the prune, which cleans up the record even when the directory is gone.
+  }
+  try {
+    await git(['worktree', 'prune'], { cwd: dir, signal })
+  } catch {
+    // Best-effort by design (see the doc comment).
+  }
+}
+
+/**
+ * Which of `paths` actually exist in `commitish`'s tree. Used by the reproduction proof to tell a
+ * DECLARED test file that was committed from one that only ever existed as an untracked working-
+ * tree file: the proof runs against committed trees, so an unadded test is invisible to it — and
+ * equally invisible to the push, which is the point worth telling the agent about rather than
+ * reporting a verdict computed without the reproduction in it.
+ *
+ * Returns the input order/spelling of the paths that matched, so the caller can diff against its
+ * declared list to name the missing ones verbatim.
+ */
+export async function pathsPresentAtCommit(
+  dir: string,
+  commitish: string,
+  paths: readonly string[],
+  signal?: AbortSignal,
+): Promise<string[]> {
+  if (paths.length === 0) return []
+  const out = await git(['ls-tree', '-r', '--name-only', '-z', commitish, '--', ...paths], {
+    cwd: dir,
+    signal,
+  })
+  // NUL-delimited so a path containing a newline (legal in git) can't split into two entries.
+  const present = new Set(out.split('\0').filter((p) => p !== ''))
+  return paths.filter((p) => present.has(p))
+}
+
+/**
+ * Check `paths` out of `commitish` into `dir`'s working tree (and index), leaving every other file
+ * untouched.
+ *
+ * This is how the reproduction's declared TEST files are placed onto the pre-fix worktree, and the
+ * narrowness is the whole safety property: a whole-tree checkout would drag the FIX across too and
+ * green the base, manufacturing a "the test does not capture the defect" verdict out of a
+ * perfectly good reproduction. Only the paths the caller has already sanitized are passed, and
+ * `--` stops any of them being read as a revision.
+ */
+export async function checkoutPathsFrom(
+  dir: string,
+  commitish: string,
+  paths: readonly string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  if (paths.length === 0) return
+  await git(['checkout', commitish, '--', ...paths], { cwd: dir, signal })
 }
 
 /** Stage everything and commit; returns false when there was nothing to commit. */
@@ -694,20 +1117,249 @@ export async function refreshFromBaseIfClean(
 }
 
 /**
- * Push the work branch to origin. The remote URL carries only the username, so
- * the token is supplied here via the askpass env (never in argv).
+ * The directory the reference-branches prompt section suggests for a `git worktree add` checkout of
+ * a reference branch alongside the agent's own work. Excluded from the checkout (below) so the
+ * embedded worktree can never be staged into the agent's PR — mirrors the `.cat-context/` treatment
+ * in {@link file://./pi.ts}. Kept in step with the same literal in the backend's
+ * `renderReferenceBranchesSection` (a separate package, so a shared constant isn't feasible).
+ */
+export const REFERENCE_WORKTREE_DIR = '.cat-reference'
+
+/**
+ * Fetch pre-existing REFERENCE branches into their `origin/<b>` tracking refs, so the agent can
+ * inspect them read-only (`git log origin/<b>`, two-dot `git diff origin/<b>`,
+ * `git show origin/<b>:<path>`) without any git network credentials of its own. The primary
+ * checkout is a shallow single-branch clone, so these refs aren't present until fetched — and the
+ * harness (which holds the per-job token) is the only place that can reach the remote. Uses an
+ * explicit destination refspec (`+refs/heads/<b>:refs/remotes/origin/<b>`) and `--no-tags` so a
+ * reference branch's tags don't pollute the checkout. Best-effort PER branch: a fetch failure (a
+ * branch deleted since dispatch, a transient network error) is reported via `onSkip` and skipped,
+ * never fatal — a reference branch is context, not the run's starting point (contrast the WORKING
+ * branch, whose absence fails the dispatch loudly). Returns the branch names that fetched cleanly.
+ *
+ * On any successful fetch it locally excludes {@link REFERENCE_WORKTREE_DIR} from this checkout, so
+ * if the agent follows the prompt's suggested `git worktree add .cat-reference/<b>` a broad
+ * `git add -A` can never embed that worktree as a stray gitlink in the run's PR.
+ */
+export async function fetchReferenceBranches(opts: {
+  dir: string
+  branches: string[]
+  ghToken: string
+  signal?: AbortSignal
+  /** Called once per branch that failed to fetch, so the caller (which owns a logger) can warn. */
+  onSkip?: (branch: string, reason: string) => void
+}): Promise<string[]> {
+  const { dir, branches, ghToken, signal, onSkip } = opts
+  if (branches.length === 0) return []
+  const env = await authEnv(ghToken)
+  const fetched: string[] = []
+  for (const branch of branches) {
+    try {
+      await git(
+        ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
+        { cwd: dir, signal, env },
+      )
+      fetched.push(branch)
+    } catch (err) {
+      onSkip?.(branch, err instanceof Error ? err.message : String(err))
+    }
+  }
+  // Keep the suggested reference-worktree dir out of the agent's commits (best-effort, per-clone).
+  if (fetched.length > 0) await excludeFromGit(dir, `${REFERENCE_WORKTREE_DIR}/`, signal)
+  return fetched
+}
+
+/** The local tracking ref a fetched PR/MR head lands on, so the reviewer reads `origin/pr-head`. */
+export const PR_HEAD_REF = 'refs/remotes/origin/pr-head'
+
+/**
+ * The `git fetch` refspec that maps a PR/MR's server-side HEAD ref onto {@link PR_HEAD_REF}. A
+ * PR head is a synthetic ref the host maintains, NOT part of a normal clone: GitHub exposes it at
+ * `refs/pull/<n>/head`, GitLab at `refs/merge-requests/<n>/head`. Pure so the provider branch is
+ * unit-tested without a network. The leading `+` forces the update (the ref is read-only here).
+ */
+export function pullHeadRefspec(number: number, provider: 'github' | 'gitlab'): string {
+  const src =
+    provider === 'gitlab' ? `refs/merge-requests/${number}/head` : `refs/pull/${number}/head`
+  return `+${src}:${PR_HEAD_REF}`
+}
+
+/**
+ * Fetch the reviewed PR/MR's HEAD into {@link PR_HEAD_REF} so a read-only reviewer can inspect the
+ * PROPOSED code — files the PR adds (absent from the base checkout) and the head version of every
+ * modified file — with `git diff origin/<base>...origin/pr-head`, `git show origin/pr-head:<path>`.
+ * The base clone never includes the pull ref, and the container agent holds no git credential of
+ * its own (the token lives with the harness), so the agent's own `git fetch pull/<n>/head` fails
+ * on a private repo — this harness-side fetch (which carries the token out of band via GIT_ASKPASS,
+ * exactly like {@link fetchReferenceBranches}) is what actually makes the head reachable.
+ *
+ * Best-effort: a fetch failure (a closed/deleted PR, a host without the pull ref, a transient
+ * network error) is reported via `onSkip` and swallowed — the review then proceeds on the base
+ * checkout + the injected diff, never fails. Returns whether the head was fetched.
+ */
+export async function fetchPullRequestHead(opts: {
+  dir: string
+  number: number
+  provider: 'github' | 'gitlab'
+  ghToken: string
+  signal?: AbortSignal
+  /** Called when the fetch failed, so the caller (which owns a logger) can warn. */
+  onSkip?: (reason: string) => void
+}): Promise<boolean> {
+  const { dir, number, provider, ghToken, signal, onSkip } = opts
+  try {
+    await git(['fetch', '--no-tags', 'origin', pullHeadRefspec(number, provider)], {
+      cwd: dir,
+      signal,
+      env: await authEnv(ghToken),
+    })
+    return true
+  } catch (err) {
+    onSkip?.(err instanceof Error ? err.message : String(err))
+    return false
+  }
+}
+
+/**
+ * Push the work branch to origin and return the sha it PUBLISHED. The remote URL carries only the
+ * username, so the token is supplied here via the askpass env (never in argv).
+ *
+ * The push names an explicit SOURCE COMMIT (`<sha>:refs/heads/<branch>`) rather than the branch,
+ * which is what makes the return value exact rather than a guess. The agent commits while this
+ * runs, so `git push origin <branch>` publishes whatever the branch ref holds at the moment git
+ * reads it, and a caller that leases against a sha it read either side of that has leased against
+ * the wrong commit. Reading it back from `refs/remotes/origin/<branch>` afterwards is worse than
+ * inexact, it is EMPTY on the production checkout: a fresh coding run clones one branch
+ * (`cloneRepo`), so the remote's fetch refspec covers the base alone and `git push` creates no
+ * tracking ref for the work branch at all. Naming the sha needs no ref and no round trip.
+ *
+ * `-u` goes with it: with a non-branch source git sets no upstream config (verified), nothing in
+ * the harness reads that config, and the agent is told never to push or pull.
+ *
+ * `expectRemoteSha` turns the push into a LEASED force (`--force-with-lease=<branch>:<sha>`), which
+ * is how a run whose own checkpoint push it has since rewritten still lands. It is deliberately NOT
+ * a plain `--force`: the lease succeeds only while the remote still holds the sha THIS run
+ * published, so a second writer's commits refuse the push (`(stale info)`) instead of being
+ * clobbered. Callers therefore pass only a sha this same pass published; leasing against a tip we
+ * merely CLONED would force over an earlier run's work.
  */
 export async function pushBranch(
   dir: string,
   branch: string,
   ghToken: string,
   signal?: AbortSignal,
-): Promise<void> {
-  await git(['push', '-u', 'origin', branch], {
+  opts: { expectRemoteSha?: string } = {},
+): Promise<string> {
+  const sha = (
+    await git(['rev-parse', '--verify', `refs/heads/${branch}`], { cwd: dir, signal })
+  ).trim()
+  const lease = opts.expectRemoteSha ? [`--force-with-lease=${branch}:${opts.expectRemoteSha}`] : []
+  await git(['push', ...lease, 'origin', `${sha}:refs/heads/${branch}`], {
     cwd: dir,
     signal,
     env: await authEnv(ghToken),
   })
+  return sha
+}
+
+/**
+ * Whether `sha` is still reachable from `branch`'s tip, i.e. the branch CONTAINS it:
+ * `git rev-list --count --max-count=1 <sha> --not refs/heads/<branch>` is 0 when everything
+ * reachable from `sha` is reachable from the branch too (the tip itself counts as contained).
+ *
+ * Phrased as a rev-list rather than `merge-base --is-ancestor` on purpose: the latter answers "no"
+ * by EXITING 1, which is indistinguishable here from a broken checkout, and this probe's whole job
+ * is to be trusted only when it is a definite answer. Tri-state for the same reason (as
+ * {@link branchAheadOfBase} is):
+ *
+ *  - `true`: confirmed contained.
+ *  - `false`: confirmed dropped, so the branch was rewritten below `sha`.
+ *  - `undefined`: could not determine (an unknown object, a rev-list error). A caller must not read
+ *    a failed probe as either answer.
+ *
+ * The work-branch lease is gated on this: see {@link workBranchLease}.
+ */
+export async function branchContainsCommit(
+  dir: string,
+  branch: string,
+  sha: string,
+  signal?: AbortSignal,
+): Promise<boolean | undefined> {
+  try {
+    const out = await git(
+      ['rev-list', '--count', '--max-count=1', sha, '--not', `refs/heads/${branch}`],
+      { cwd: dir, signal },
+    )
+    const count = Number(out.trim())
+    return Number.isNaN(count) ? undefined : count === 0
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The work branch's tip when it holds something UNPUBLISHED, else undefined: the answer to whether a
+ * checkpoint tick has anything to do. Two ways of having nothing:
+ *
+ *  - the tip is still `baseSha`, so this pass has committed nothing. Pushing here would create the
+ *    work branch at the base commit, and a later retry would see that zero-diff branch via
+ *    `remoteBranchExists`, resume it as work, and fail to open a PR ("no commits between base and
+ *    head"). A pass that never commits must leave NO branch behind.
+ *  - the tip is `publishedSha`, so the last push already published it. Without this the checkpoint
+ *    re-pushed an unchanged branch on every tick: an hour-long run committing eight times issued
+ *    ~60 pushes, ~52 of them a full authenticated round trip answering "Everything up-to-date",
+ *    each one counting against the host's push rate limits.
+ *
+ * That second condition is also what keeps the INTERVAL the right knob. It expresses the acceptable
+ * loss window when a container dies (a property of the deployment's infra churn), not a rate: gated
+ * this way, the tick publishes at most one push per commit the agent makes, whatever the model or
+ * the run's length, so nothing here needs to be tuned per model.
+ */
+export async function unpublishedWorkBranchTip(args: {
+  dir: string
+  /** The branch tip this pass started from. */
+  baseSha: string
+  /** The sha this pass published, if any ({@link pushBranch}'s return). */
+  publishedSha: string | undefined
+  signal?: AbortSignal
+}): Promise<string | undefined> {
+  const head = await headCommit(args.dir, args.signal)
+  if (head === args.baseSha || head === args.publishedSha) return undefined
+  return head
+}
+
+/**
+ * The lease a work-branch push is entitled to (the `opts` {@link pushBranch} takes): the sha this
+ * pass last published, and nothing at all before it has published one.
+ *
+ * The extra condition is what bounds the force to THIS pass's own commits, which the lease alone
+ * does not do and the design promises. Once one checkpoint has landed, a rewrite that drops
+ * `baseSha` (the tip the pass started from, which on a RESUMED branch is an earlier run's published
+ * work) would still lease successfully against our own checkpoint and carry those earlier commits
+ * away with it. So the lease is withheld unless the branch still CONTAINS `baseSha`: the push then
+ * goes out plain, git refuses it as a non-fast-forward, and the engine re-dispatches onto the
+ * branch as it stands.
+ *
+ * A probe that could not answer withholds it too (`onWithheld('unreadable')`), because the two
+ * mistakes are not symmetric: withholding costs a refused rewrite and one re-dispatch, trusting an
+ * unreadable probe costs commits.
+ */
+export async function workBranchLease(args: {
+  dir: string
+  branch: string
+  /** The branch tip this pass started from. */
+  baseSha: string
+  /** The sha this pass published, if any (`pushBranch`'s return). */
+  publishedSha: string | undefined
+  signal?: AbortSignal
+  /** Told why the lease was withheld, so the harness can log it with its own logger. */
+  onWithheld?: (probe: 'unreadable' | 'dropped') => void
+}): Promise<{ expectRemoteSha?: string }> {
+  if (!args.publishedSha) return {}
+  const contains = await branchContainsCommit(args.dir, args.branch, args.baseSha, args.signal)
+  if (contains === true) return { expectRemoteSha: args.publishedSha }
+  args.onWithheld?.(contains === undefined ? 'unreadable' : 'dropped')
+  return {}
 }
 
 /**
@@ -721,364 +1373,33 @@ export async function pushBranch(
  * .gitignore and/or license picked on the new-repo page), so a fast-forward is
  * impossible. The Worker pre-flights that the target is empty or holds only that
  * boilerplate, so overwriting it is safe and intended.
+ *
+ * `signal` is the job watchdog's, and threading it is load-bearing rather than tidy: without
+ * it the six commands below are bounded only by their own per-command timeouts, so an abort
+ * raised during the push phase cannot interrupt them and the job keeps working for up to
+ * ~6 × `GIT_TIMEOUT_MS` past its max-duration kill. Every other git helper here threads it.
  */
 export async function reinitAndPush(opts: {
   dir: string
   target: BootstrapTargetSpec
   ghToken: string
   message: string
+  signal?: AbortSignal
 }): Promise<void> {
-  await rm(join(opts.dir, '.git'), { recursive: true, force: true })
-  await git(['init'], { cwd: opts.dir })
+  const { dir, signal } = opts
+  await rm(join(dir, '.git'), { recursive: true, force: true })
+  await git(['init'], { cwd: dir, signal })
   // Start the history on the target's default branch (init may default to master).
-  await git(['checkout', '-b', opts.target.defaultBranch], { cwd: opts.dir })
-  await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir })
-  await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir })
-  await git(['add', '-A'], { cwd: opts.dir })
-  await git(['commit', '-m', opts.message], { cwd: opts.dir })
+  await git(['checkout', '-b', opts.target.defaultBranch], { cwd: dir, signal })
+  await git(['config', 'user.name', GIT_AUTHOR], { cwd: dir, signal })
+  await git(['config', 'user.email', GIT_EMAIL], { cwd: dir, signal })
+  await git(['add', '-A'], { cwd: dir, signal })
+  await git(['commit', '-m', opts.message], { cwd: dir, signal })
   const url = authenticatedCloneUrl(opts.target.cloneUrl)
-  await git(['remote', 'add', 'origin', url], { cwd: opts.dir })
+  await git(['remote', 'add', 'origin', url], { cwd: dir, signal })
   await git(['push', '--force', '-u', 'origin', opts.target.defaultBranch], {
-    cwd: opts.dir,
+    cwd: dir,
+    signal,
     env: await authEnv(opts.ghToken),
   })
-}
-
-export interface OpenPullRequestOptions {
-  owner: string
-  name: string
-  ghToken: string
-  head: string
-  base: string
-  pr: PrSpec
-  apiBase?: string
-  /**
-   * The repo's clone URL. Used (when {@link provider} is absent) to detect the provider and,
-   * for GitLab, to derive the REST base + project path from its host — so the harness opens a
-   * GitLab **merge request** rather than POSTing to GitHub's pulls API. Absent ⇒ GitHub.
-   */
-  cloneUrl?: string
-  /**
-   * The VCS provider, when the dispatcher knows it (the server derives it from the configured
-   * source-control backend and sets `repo.provider`). AUTHORITATIVE — it overrides host
-   * inference — so a self-managed GitLab on an arbitrarily-named host (e.g. `git.acme.com`,
-   * which {@link inferVcsProvider} can't recognise) still opens a merge request instead of
-   * being misrouted to GitHub's API. Absent ⇒ inferred from {@link cloneUrl}'s host.
-   */
-  provider?: 'github' | 'gitlab'
-  signal?: AbortSignal
-}
-
-/**
- * The VCS host a clone URL points at. The harness is otherwise provider-agnostic (its git
- * auth is a host-neutral GIT_ASKPASS credential), but the "open the PR/MR" REST call is not:
- * GitHub and GitLab have different endpoints, so infer which to call from the host. GitHub is
- * the default; a host of `gitlab.com` or one in the `gitlab.*` / `*.gitlab.*` family (covering
- * self-managed instances named that way) is treated as GitLab.
- */
-export function inferVcsProvider(cloneUrl: string): 'github' | 'gitlab' {
-  let host = ''
-  try {
-    host = new URL(cloneUrl).host.toLowerCase()
-  } catch {
-    return 'github'
-  }
-  if (host === 'gitlab.com' || host.startsWith('gitlab.') || host.includes('.gitlab.')) {
-    return 'gitlab'
-  }
-  return 'github'
-}
-
-/** The GitLab REST v4 base for a clone URL's host, e.g. `https://gitlab.com/api/v4`. */
-export function gitlabApiBaseFromCloneUrl(cloneUrl: string): string {
-  const u = new URL(cloneUrl)
-  return `${u.protocol}//${u.host}/api/v4`
-}
-
-/**
- * The URL-encoded GitLab project path from a clone URL — the full namespace path (so subgroups
- * survive), with the trailing `.git` stripped, e.g.
- * `https://gitlab.com/group/sub/proj.git` → `group%2Fsub%2Fproj`.
- */
-export function gitlabProjectPath(cloneUrl: string): string {
-  const path = new URL(cloneUrl).pathname.replace(/^\/+/, '').replace(/\.git$/, '')
-  return encodeURIComponent(path)
-}
-
-/** The abort reason as an Error (the watchdog aborts with one), or a generic fallback. */
-function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error('aborted')
-}
-
-/** Whether a thrown fetch error is an AbortError (caller-initiated, never retried). */
-function isAbortError(err: unknown): boolean {
-  return err instanceof Error && err.name === 'AbortError'
-}
-
-/**
- * Parse a `Retry-After` header into ms, bounded so it can't stall the job. Accepts BOTH
- * forms the spec allows: integer delay-seconds (`120`) and an HTTP-date (`Wed, 21 Oct 2026
- * 07:28:00 GMT`); the latter is turned into a delay from now. A past/zero/unparseable value
- * yields undefined so the caller falls back to exponential backoff.
- */
-function retryAfterMs(res: Response): number | undefined {
-  const raw = res.headers.get('retry-after')
-  if (!raw) return undefined
-  const secs = Number(raw)
-  if (Number.isFinite(secs)) {
-    return secs > 0 ? Math.min(secs * 1000, MAX_RETRY_AFTER_MS) : undefined
-  }
-  const at = Date.parse(raw)
-  if (Number.isNaN(at)) return undefined
-  const ms = at - Date.now()
-  return ms > 0 ? Math.min(ms, MAX_RETRY_AFTER_MS) : undefined
-}
-
-/** Sleep `ms`, rejecting immediately (with the abort reason) if `signal` aborts meanwhile. */
-function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(abortError(signal))
-    const onAbort = (): void => {
-      clearTimeout(timer)
-      reject(abortError(signal as AbortSignal))
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
-}
-
-const MAX_RETRY_AFTER_MS = 8_000
-const RETRY_BASE_MS = 500
-const RETRY_MAX_DELAY_MS = 4_000
-
-/**
- * Run a single HTTP request with bounded retry for TRANSIENT failures, so a momentary
- * upstream blip (a 5xx, a 429 rate-limit, or a dropped connection) no longer fails an
- * otherwise-complete run on its very last step (opening the PR/MR). Up to 3 attempts
- * (2 retries) with exponential backoff + jitter (honoring a `Retry-After` on a 429),
- * every wait abort-aware so the inactivity/max-duration watchdog still cancels promptly.
- *
- * ONLY transient failures retry: a `>=500`/`429` response, or a network-level fetch
- * rejection. A 4xx (incl. the 422/409 "already exists" the callers treat as success) is
- * returned to the caller unretried, and a caller abort is rethrown at once. The response
- * body is never read here, so the caller's existing status handling is unchanged.
- */
-async function withApiRetry(
-  fn: () => Promise<Response>,
-  opts: { signal?: AbortSignal; attempts?: number } = {},
-): Promise<Response> {
-  const maxAttempts = opts.attempts ?? 3
-  let lastError: unknown
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (opts.signal?.aborted) throw abortError(opts.signal)
-    let res: Response | undefined
-    try {
-      res = await fn()
-    } catch (err) {
-      // A caller/watchdog abort is terminal; a network error is transient → retry.
-      if (isAbortError(err) || opts.signal?.aborted) throw err
-      lastError = err
-    }
-    if (res) {
-      const transient = res.status >= 500 || res.status === 429
-      if (!transient || attempt >= maxAttempts) return res
-      const after = retryAfterMs(res)
-      // Discard the unread body before retrying so the connection can be reused.
-      await res.body?.cancel().catch(() => {})
-      await abortableDelay(after ?? backoffMs(attempt), opts.signal)
-      continue
-    }
-    if (attempt >= maxAttempts) break
-    await abortableDelay(backoffMs(attempt), opts.signal)
-  }
-  // Exhausted on a network-level rejection (no HTTP response): an upstream API failure.
-  const message =
-    lastError instanceof Error ? lastError.message : 'API request failed after retries'
-  throw new HarnessFailure('api', redactSecrets(message))
-}
-
-/** Exponential backoff (base 500ms, capped 4s) with up to 25% positive jitter. */
-function backoffMs(attempt: number): number {
-  const base = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_MS * 2 ** (attempt - 1))
-  return base + Math.floor(base * 0.25 * Math.random())
-}
-
-/**
- * Open a PR (GitHub) or merge request (GitLab) for the pushed branch; returns its web URL.
- * The provider is chosen from the EXPLICIT `opts.provider` when the dispatcher set it,
- * falling back to host inference from the clone URL only when it didn't — so a self-managed
- * GitLab whose host isn't named `gitlab.*` still opens an MR instead of being misrouted to
- * GitHub's API. The GitHub path is unchanged.
- */
-export async function openPullRequest(opts: OpenPullRequestOptions): Promise<string | null> {
-  const provider = opts.provider ?? (opts.cloneUrl ? inferVcsProvider(opts.cloneUrl) : 'github')
-  if (provider === 'gitlab') {
-    if (!opts.cloneUrl) {
-      throw new Error('Cannot open a GitLab merge request without the repo clone URL')
-    }
-    return openGitLabMergeRequest({ ...opts, cloneUrl: opts.cloneUrl })
-  }
-  const apiBase = opts.apiBase ?? 'https://api.github.com'
-  const path = `${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.name)}`
-  const res = await withApiRetry(
-    () =>
-      fetch(`${apiBase}/repos/${path}/pulls`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${opts.ghToken}`,
-          accept: 'application/vnd.github+json',
-          'user-agent': 'cat-factory-executor',
-          'x-github-api-version': '2022-11-28',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: opts.pr.title,
-          head: opts.head,
-          base: opts.base,
-          body: opts.pr.body,
-        }),
-        // Bound on the watchdog so a hung GitHub call can't stall the job.
-        ...(opts.signal ? { signal: opts.signal } : {}),
-      }),
-    { signal: opts.signal },
-  )
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '')
-    // A resumed run pushes to a branch that already has an open PR; GitHub answers
-    // 422 "A pull request already exists". That's success for us — return the
-    // existing PR's url rather than failing the resumed run.
-    if (res.status === 422 && /pull request already exists/i.test(detail)) {
-      const existing = await findOpenPullRequestUrl(opts)
-      if (existing) return existing
-    }
-    // The head branch has nothing ahead of base ("No commits between <base> and <head>").
-    // That is not an API failure — there is simply nothing to open a PR for (e.g. a resumed
-    // branch whose earlier PR was merged with a merge commit, leaving the branch reachable
-    // from base). Signal it with null so the caller records a clean no-op instead of failing
-    // the run with GitHub's opaque 422.
-    if (res.status === 422 && /no commits between/i.test(detail)) return null
-    throw new HarnessFailure(
-      'api',
-      redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
-    )
-  }
-  const body = (await res.json()) as { html_url?: string }
-  if (!body.html_url) throw new HarnessFailure('api', 'GitHub did not return a PR url')
-  return body.html_url
-}
-
-/** GitLab API headers for the PAT (the `PRIVATE-TOKEN` auth GitLab uses). */
-function gitlabHeaders(token: string): Record<string, string> {
-  return {
-    'private-token': token,
-    accept: 'application/json',
-    'user-agent': 'cat-factory-executor',
-    'content-type': 'application/json',
-  }
-}
-
-/**
- * Open a GitLab merge request (the analogue of {@link openPullRequest} for GitLab). The REST
- * base + project path are derived from the clone URL's host, so it works for gitlab.com and a
- * self-managed instance alike. `head`→`source_branch`, `base`→`target_branch`. On a duplicate
- * (a resumed run whose branch already has an open MR — GitLab answers 409) the existing MR's
- * web URL is returned instead of failing the run, mirroring the GitHub 422 handling.
- */
-async function openGitLabMergeRequest(
-  opts: OpenPullRequestOptions & { cloneUrl: string },
-): Promise<string> {
-  const apiBase = gitlabApiBaseFromCloneUrl(opts.cloneUrl)
-  const project = gitlabProjectPath(opts.cloneUrl)
-  const res = await withApiRetry(
-    () =>
-      fetch(`${apiBase}/projects/${project}/merge_requests`, {
-        method: 'POST',
-        headers: gitlabHeaders(opts.ghToken),
-        body: JSON.stringify({
-          source_branch: opts.head,
-          target_branch: opts.base,
-          title: opts.pr.title,
-          description: opts.pr.body,
-        }),
-        ...(opts.signal ? { signal: opts.signal } : {}),
-      }),
-    { signal: opts.signal },
-  )
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '')
-    // GitLab returns 409 (sometimes 400) when an open MR already exists for this source
-    // branch; that is success for a resumed run — return the existing MR's url.
-    if (
-      (res.status === 409 || res.status === 400) &&
-      /already exists|open merge request/i.test(detail)
-    ) {
-      const existing = await findOpenMergeRequestUrl(apiBase, project, opts)
-      if (existing) return existing
-    }
-    throw new HarnessFailure(
-      'api',
-      redactSecrets(`Failed to open merge request (HTTP ${res.status}): ${detail.slice(0, 300)}`),
-    )
-  }
-  const body = (await res.json()) as { web_url?: string }
-  if (!body.web_url) throw new HarnessFailure('api', 'GitLab did not return a merge request url')
-  return body.web_url
-}
-
-/** Find the open GitLab MR for `opts.head`→`opts.base`, returning its web_url or undefined. */
-async function findOpenMergeRequestUrl(
-  apiBase: string,
-  project: string,
-  opts: { head: string; base: string; ghToken: string; signal?: AbortSignal },
-): Promise<string | undefined> {
-  // Filter by BOTH branches: a source branch can have open MRs to several targets, so the
-  // source alone could match an MR against a different base than the one we just tried to open.
-  const query = new URLSearchParams({
-    source_branch: opts.head,
-    target_branch: opts.base,
-    state: 'opened',
-  })
-  const res = await fetch(`${apiBase}/projects/${project}/merge_requests?${query}`, {
-    headers: gitlabHeaders(opts.ghToken),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  })
-  if (!res.ok) return undefined
-  const list = (await res.json().catch(() => [])) as Array<{ web_url?: string }>
-  return Array.isArray(list) && list[0]?.web_url ? list[0].web_url : undefined
-}
-
-/** Find the open PR for `opts.head` on `opts.base`, returning its html_url or undefined. */
-async function findOpenPullRequestUrl(opts: {
-  owner: string
-  name: string
-  ghToken: string
-  head: string
-  base: string
-  apiBase?: string
-  signal?: AbortSignal
-}): Promise<string | undefined> {
-  const apiBase = opts.apiBase ?? 'https://api.github.com'
-  // Encode the ref-derived query params: a branch/owner containing `&` or `#` would
-  // otherwise split the query string or inject an unintended parameter.
-  const query = new URLSearchParams({
-    head: `${opts.owner}:${opts.head}`,
-    base: opts.base,
-    state: 'open',
-  })
-  const path = `${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.name)}`
-  const res = await fetch(`${apiBase}/repos/${path}/pulls?${query}`, {
-    headers: {
-      authorization: `Bearer ${opts.ghToken}`,
-      accept: 'application/vnd.github+json',
-      'user-agent': 'cat-factory-executor',
-      'x-github-api-version': '2022-11-28',
-    },
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  })
-  if (!res.ok) return undefined
-  const list = (await res.json().catch(() => [])) as Array<{ html_url?: string }>
-  return Array.isArray(list) && list[0]?.html_url ? list[0].html_url : undefined
 }

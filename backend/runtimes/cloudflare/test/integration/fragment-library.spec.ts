@@ -7,7 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { fragmentLibraryDeps, makeApp, type TestApp } from '../helpers'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 
 describe('prompt-fragment library (ADR 0006)', () => {
   describe('when the module is not configured', () => {

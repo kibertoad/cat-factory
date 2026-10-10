@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DriveConfig } from '@cat-factory/node-server'
+import { noopLogger } from '@cat-factory/kernel'
+import { MachineTokenUnavailableError } from '@cat-factory/server'
+import { type DriveConfig, NodeRealtimeHub, createDbClient } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
   SqliteWorkRunner,
@@ -14,12 +16,15 @@ import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 // Unit coverage for the mothership composition seam (docs/initiatives/mothership-mode.md):
 //   - the boot-mode probe,
 //   - composeMothership wiring the remote (RPC) org repos + the local node:sqlite credential
-//     store (org reads hit the mothership over HTTP; credentials stay local),
+//     store (org reads hit the mothership over HTTP; credentials — incl. the subscription-token /
+//     personal-subscription / activation trio — stay local),
 //   - the in-process work runner's per-execution serialization (the no-pg-boss drive analogue).
 // All in-process / in-memory — no Postgres, no network, no Docker.
 
 const BASE_ENV = (over: Record<string, string | undefined>): NodeJS.ProcessEnv => ({
   LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+  LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
+  LOCAL_MOTHERSHIP_TELEMETRY_DB: ':memory:',
   LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
   LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   ...over,
@@ -169,11 +174,182 @@ describe('composeMothership', () => {
         inputTokens: 0,
         outputTokens: 0,
         requestCount: 0,
+        enabled: true,
+        isDefault: false,
         deletedAt: null,
       })
       const keys = await credentialStore.providerApiKeyRepository.listByScope('workspace', 'ws_1')
       expect(keys.map((k) => k.id)).toEqual(['key_1'])
       expect(seen).toHaveLength(1) // still just the one org read — credentials never left the laptop
+    } finally {
+      close()
+    }
+  })
+
+  it('reads the catalog’s builtin tier from the mothership, not from this node’s own registry', async () => {
+    // The estate a deployment registers in CODE is org state, and a mothership deployment is TWO
+    // processes. Registering it on both was the only route before this, and a node one build
+    // behind — the normal state of a local node — then resolved a catalog quietly missing
+    // whatever the mothership had since added, which reads exactly like an Architect judging a
+    // service irrelevant. So the tier rides the machine API like every other org read.
+    const seen: { url: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') })
+      return new Response(
+        JSON.stringify({ entries: [{ id: 'file-storage', name: 'File Storage', contracts: [] }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    })
+
+    const { foundationalBuiltins, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test/', LOCAL_MOTHERSHIP_TOKEN: 'machine-tok' }),
+    )
+    try {
+      const entries = await foundationalBuiltins.entries()
+      expect(entries.map((entry) => entry.id)).toEqual(['file-storage'])
+      // Same base URL and same per-request machine token as the persistence RPC, so the tier
+      // follows one connect/expiry lifecycle rather than a second one.
+      expect(seen).toEqual([
+        { url: 'https://m.test/internal/foundational-services', auth: 'Bearer machine-tok' },
+      ])
+    } finally {
+      close()
+    }
+  })
+
+  it('reads the agent-kind capability layer from the mothership, and MERGES it', async () => {
+    // The fourth of the same family, and the only one that merges rather than replaces: this
+    // node's build owns each kind's executable half (prompts, hooks, output parsers), so the
+    // catalog stays local, while `assignSkills`/`assignToolServers` are the deployment's layer —
+    // data whose absence here is silent, since the agent simply works without the org's playbook.
+    const seen: { url: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') })
+      return new Response(
+        JSON.stringify({
+          kinds: [
+            {
+              kind: 'coder',
+              skills: { bundled: [], catalog: [{ skillId: 'src:s1:playbook' }], unknown: [] },
+              toolServers: { servers: [], unknown: [] },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    })
+
+    const { agentKinds, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test/', LOCAL_MOTHERSHIP_TOKEN: 'machine-tok' }),
+    )
+    try {
+      const views = await agentKinds.capabilities()
+      expect(views[0]?.skills.catalog).toEqual([{ skillId: 'src:s1:playbook' }])
+      // Same base URL and same per-request machine token as the persistence RPC.
+      expect(seen).toEqual([
+        { url: 'https://m.test/internal/agent-kinds', auth: 'Bearer machine-tok' },
+      ])
+    } finally {
+      close()
+    }
+  })
+
+  it('serves the local-first telemetry bucket from the laptop, never over the RPC', async () => {
+    // Telemetry is written on the hot path of every LLM call / dispatch / provisioning attempt and
+    // read back by the observability panel + the board's per-step rollups. If it resolved to the
+    // remote registry, every write would come back `unknown_method` (swallowed by the best-effort
+    // recorders) and every read empty — with nothing failing. So assert BOTH halves: the data
+    // round-trips, and not one byte of it reached the wire.
+    let rpcCalls = 0
+    vi.stubGlobal('fetch', async () => {
+      rpcCalls += 1
+      return new Response(JSON.stringify({ ok: true, value: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const { repos, telemetryStore, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 't' }),
+    )
+    try {
+      await repos.provisioningLogRepository.append({
+        id: 'plog_1',
+        workspaceId: 'ws_1',
+        subsystem: 'container',
+        operation: 'dispatch',
+        targetId: 'job_1',
+        providerId: null,
+        blockId: null,
+        executionId: 'exec_1',
+        outcome: 'success',
+        error: null,
+        detail: null,
+        createdAt: 1000,
+      })
+      await repos.agentSearchQueryRepository.record({
+        id: 'q_1',
+        workspaceId: 'ws_1',
+        executionId: 'exec_1',
+        agentKind: 'researcher',
+        provider: null,
+        query: 'q',
+        resultCount: 1,
+        createdAt: 1000,
+      })
+
+      // Read back THROUGH the composed registry (what the engine holds)...
+      expect((await repos.provisioningLogRepository.list('ws_1')).map((r) => r.id)).toEqual([
+        'plog_1',
+      ])
+      expect(
+        (await repos.agentSearchQueryRepository.listByExecution('ws_1', 'exec_1')).map((q) => q.id),
+      ).toEqual(['q_1'])
+      // ...and confirm it is the SAME store the composition owns and prunes.
+      expect(
+        (await telemetryStore.provisioningLogRepository.list('ws_1')).map((r) => r.id),
+      ).toEqual(['plog_1'])
+      expect(rpcCalls).toBe(0)
+
+      // The org half of the registry is unaffected — it still goes to the mothership.
+      await repos.workspaceRepository.get('ws_1')
+      expect(rpcCalls).toBe(1)
+    } finally {
+      close()
+    }
+  })
+
+  it('falls the three run-scoped sinks through to the mothership when local holds nothing', async () => {
+    // The READ-THROUGH half. A mothership-mode SPA shows the whole org's board, so most runs a
+    // developer opens were driven somewhere else entirely and have no local rows at all; a run
+    // this node DID drive loses its rows to the local prune. Both used to render as an empty
+    // panel indistinguishable from a run that spent nothing.
+    const seen: { url: string; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url, body: JSON.parse(String(init.body)) as unknown })
+      return new Response(JSON.stringify({ ok: true, value: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const { repos, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 't' }),
+    )
+    try {
+      expect(await repos.agentSearchQueryRepository.listByExecution('ws_1', 'exec_far')).toEqual([])
+      // It went to the DEDICATED read endpoint, not through the persistence proxy — the local-first
+      // bucket must never appear in the persistence registry, whose repositories resolve WHOLE
+      // (writes included).
+      expect(seen[0]!.url).toBe('https://m.test/internal/telemetry/read')
+      expect(seen[0]!.body).toMatchObject({
+        workspaceId: 'ws_1',
+        repo: 'agentSearchQueryRepository',
+        method: 'listPage',
+      })
+      // The two sinks that are deliberately never ingested have nothing upstream to read through
+      // to, so they stay local-only and cost no round trip.
+      const before = seen.length
+      expect(await repos.provisioningLogRepository.list('ws_1')).toEqual([])
+      expect(seen).toHaveLength(before)
     } finally {
       close()
     }
@@ -308,6 +484,7 @@ const DRIVE_CFG: DriveConfig = {
   jobPollFailureTolerance: 1,
   ciPollIntervalMs: 1,
   ciMaxPolls: 1,
+  advanceTimeoutMs: 0,
 }
 
 // Large lease / backoff / sweep so timing never interferes with the synchronous assertions; the
@@ -322,7 +499,7 @@ const RUNNER_OPTS: SqliteWorkRunnerOptions = {
   concurrency: 10,
 }
 
-const silentLog = { info: () => {}, error: () => {}, warn: () => {} } as never
+const silentLog = noopLogger
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 // Track runners/queues so their (unref'd) timers + handles are released after each test.
@@ -519,9 +696,13 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
     // The LOCAL key sealing the credential store — distinct from (and never) the mothership's.
     ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    // Required inbound-auth secret for the agent-container transports (applyLocalDefaults enforces it).
+    HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
     LOCAL_MOTHERSHIP_URL: 'https://m.test',
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+    LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
+    LOCAL_MOTHERSHIP_TELEMETRY_DB: ':memory:',
     LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
     LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   }
@@ -540,10 +721,547 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     // The API-key pool is wired from the LOCAL sqlite credential store (sealed with the local key).
     expect(container.apiKeys).toBeDefined()
     expect(container.localModelEndpoints).toBeDefined()
-    // The per-user Postgres-only services are OFF in mothership mode (no db; PR 3 makes them local).
-    expect(container.subscriptions).toBeUndefined()
-    expect(container.personalSubscriptions).toBeUndefined()
+    // The subscription-credential services are now wired from the LOCAL sqlite store too (PR 3 —
+    // the subscription-token pool + per-user personal creds + their per-run activations are
+    // laptop-local, leased + decrypted by the local container executor). Previously OFF in
+    // mothership mode; now ON because their local-sqlite bucket exists.
+    expect(container.subscriptions).toBeDefined()
+    expect(container.personalSubscriptions).toBeDefined()
+    // The local-mode settings panel is served from the LOCAL sqlite singleton (no Postgres).
+    expect(container.localSettings).toBeDefined()
     // The SPA flag is surfaced so the UI can label local-vs-mothership storage.
     expect(container.config.localMode?.mothership).toBe(true)
+  })
+})
+
+describe('composeMothership realtime upstream adapter', () => {
+  it('publishes an engine event to the mothership over /internal/events/publish with the machine token', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      composed.realtimeAdapter.publish({
+        workspaceId: 'ws_1',
+        payload: '{"type":"board","reason":"x","at":1}',
+        originConnectionId: 'cid_3',
+      })
+      // publish is fire-and-forget — let the POST settle.
+      await new Promise((r) => setTimeout(r, 0))
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/events/publish')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      // The tab's cid is deliberately NOT forwarded — see the dedicated echo-suppression test
+      // below; the wire carries THIS NODE's stable id so the mothership skips our own subscription.
+      expect(seen[0]!.body).toEqual({
+        workspaceId: 'ws_1',
+        payload: '{"type":"board","reason":"x","at":1}',
+        originConnectionId: expect.stringMatching(/^mothership-node-/),
+      })
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('never throws when the mothership is unreachable (best-effort, delivered locally already)', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('network down')
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      expect(() =>
+        composed.realtimeAdapter.publish({ workspaceId: 'ws_1', payload: '{}' }),
+      ).not.toThrow()
+      await new Promise((r) => setTimeout(r, 0))
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('attaches the machineEventRelay seam and fans engine events upstream when a hub is wired', async () => {
+    // The Node facade's mothership-side inbound seam is attached whenever a realtime sink is wired
+    // (both facades — the symmetric change), so a mothership-mode node can ALSO serve as a
+    // mothership if pointed at. And with the mothership adapter layered over the hub, a broadcast
+    // fans to the local hub AND up to the mothership.
+    const posted: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      posted.push(`${String(url)}::${String(init.body)}`)
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const hub = new NodeRealtimeHub()
+    const container = buildLocalContainer({
+      env: BASE_ENV({
+        ENVIRONMENT: 'test',
+        AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+      realtimeSink: hub,
+    })
+    // Seam attached (this deployment can be a mothership too).
+    expect(container.machineEventRelay).toBeDefined()
+    // A relayed event is delivered into the local hub via that seam (no throw with no sockets).
+    expect(() =>
+      container.machineEventRelay!.ingest({ workspaceId: 'ws_1', payload: '{}' }),
+    ).not.toThrow()
+    await container.onShutdown?.()
+  })
+
+  it('stamps the NODE connection id on every upstream publish, replacing the originating tab cid', () => {
+    // The outbound leg's echo-suppression contract. The mothership's fan-out skips the socket
+    // whose `?cid=` matches `originConnectionId` — and the socket that must be skipped is THIS
+    // node's inbound subscription, not some tab the mothership has never seen. Passing the tab id
+    // through would mean every event this laptop produced came straight back down and reached its
+    // own browsers twice.
+    const posted: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      posted.push(JSON.parse(String(init.body)))
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      composed.realtimeAdapter.publish({
+        workspaceId: 'ws_1',
+        payload: '{}',
+        originConnectionId: 'a-browser-tab',
+      })
+      const sent = posted[0] as { originConnectionId?: string }
+      expect(sent.originConnectionId).not.toBe('a-browser-tab')
+      // The two legs must agree, so the id is the same one the subscriber connects with.
+      expect(sent.originConnectionId).toMatch(/^mothership-node-/)
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('binds the inbound event subscriber to the injected realtime rooms (and only in mothership mode)', () => {
+    // The INBOUND leg is demand-driven: it opens an upstream stream per workspace someone is
+    // watching HERE, which it learns from the hub's room transitions. Assert the wiring itself
+    // (that `buildLocalContainer` attached to the injected watcher) rather than the connect, so
+    // this stays a pure unit test.
+    const watchers: number[] = []
+    const rooms = {
+      watchRooms: () => {
+        watchers.push(1)
+        return () => {}
+      },
+    }
+    const env = BASE_ENV({
+      ENVIRONMENT: 'test',
+      AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+      ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+      HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+      LOCAL_MOTHERSHIP_URL: 'https://m.test',
+      LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+    })
+    const container = buildLocalContainer({
+      env,
+      realtimeSink: new NodeRealtimeHub(),
+      realtimeRooms: rooms,
+    })
+    expect(watchers).toHaveLength(1)
+    return container.onShutdown?.()
+  })
+})
+
+describe('composeMothership telemetry ingest delegation', () => {
+  it('uploads a run batch to the ingest endpoint with the machine token', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true, stored: { metrics: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      const result = await composed.telemetryClient.ingest({
+        workspaceId: 'ws_1',
+        executionId: 'exec_1',
+        metrics: [],
+      })
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/telemetry/ingest')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      // The batch names the run it belongs to; the mothership binds that pair and stamps it onto
+      // every row, so the node cannot file telemetry into a workspace or run it did not address.
+      expect(seen[0]!.body).toMatchObject({ workspaceId: 'ws_1', executionId: 'exec_1' })
+      expect(result.metrics).toBe(1)
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('skips the upload but rejects on a node that has not logged in yet', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return new Response('{}')
+    })
+    const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      // Nothing to authenticate with, so no guaranteed-403 upload of megabytes on every sweep —
+      // but the skip REJECTS, because the sweep advances a run's high-water mark on a resolved
+      // ingest and would otherwise mark rows uploaded that never left the laptop.
+      await expect(
+        composed.telemetryClient.ingest({ workspaceId: 'ws_1', executionId: 'exec_1' }),
+      ).rejects.toBeInstanceOf(MachineTokenUnavailableError)
+      expect(calls).toBe(0)
+    } finally {
+      composed.close()
+    }
+  })
+})
+
+describe('composeMothership secret delegation', () => {
+  it('names the ROW, with the machine token, never the ciphertext', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true, plaintext: '{"url":"https://env.test"}' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await expect(
+        composed.secretDelegate.unseal({
+          source: 'environment_access',
+          workspaceId: 'ws_1',
+          key: ['env_1'],
+        }),
+      ).resolves.toBe('{"url":"https://env.test"}')
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/secrets/unseal')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      expect(seen[0]!.body).toEqual({
+        source: 'environment_access',
+        workspaceId: 'ws_1',
+        key: ['env_1'],
+      })
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('seals upstream so a row this node provisions stays readable by the org', async () => {
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)))
+      return new Response(JSON.stringify({ ok: true, envelope: 'v1.org.sealed' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await expect(
+        composed.secretDelegate.seal(
+          { source: 'environment_access', workspaceId: 'ws_1' },
+          '{"url":"https://env.test"}',
+        ),
+      ).resolves.toBe('v1.org.sealed')
+      expect(bodies).toEqual([
+        {
+          source: 'environment_access',
+          workspaceId: 'ws_1',
+          plaintext: '{"url":"https://env.test"}',
+        },
+      ])
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('threads the delegate into the container built with no Postgres, end to end', async () => {
+    // The wiring guard for `buildLocalContainer` → `buildNodeContainer`'s `secretDelegate` seam,
+    // asserted through the SERVICE rather than by reading the option back: a node with no `db`
+    // reads the environment row over the persistence RPC and then has to OPEN its access cipher,
+    // which is precisely the step that used to fail. The local cipher here could never open
+    // `v1.mothership.sealed`, so a passing assertion is the delegation having been threaded all
+    // the way to `EnvironmentProvisioningService`.
+    const posted: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const target = String(url)
+      posted.push(target)
+      const json = (value: unknown) =>
+        new Response(JSON.stringify(value), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      if (target.endsWith('/internal/secrets/unseal')) {
+        return json({
+          ok: true,
+          plaintext: JSON.stringify({ kind: 'url', url: 'https://env.test' }),
+        })
+      }
+      if (target.endsWith('/internal/persistence')) {
+        const body = JSON.parse(String(init.body)) as { repo: string; method: string }
+        if (body.repo === 'environmentRegistryRepository' && body.method === 'get') {
+          return json({
+            ok: true,
+            value: {
+              id: 'env_1',
+              workspaceId: 'ws_1',
+              blockId: 'blk_1',
+              frameId: null,
+              executionId: null,
+              providerId: 'compose',
+              externalId: 'ext_1',
+              url: 'https://env.test',
+              status: 'ready',
+              accessCipher: 'v1.mothership.sealed',
+              provisionFieldsCipher: null,
+              reachability: null,
+              provisionType: 'docker-compose',
+              engine: 'local-docker',
+              createdAt: 1,
+              expiresAt: null,
+              lastError: null,
+              deletedAt: null,
+            },
+          })
+        }
+        return json({ ok: true, value: null })
+      }
+      return json({ ok: true })
+    })
+    const container = buildLocalContainer({
+      env: BASE_ENV({
+        ENVIRONMENT: 'test',
+        AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      const provisioning = container.environments?.provisioningService
+      expect(provisioning).toBeDefined()
+      const handle = await provisioning!.getHandleWithAccess('ws_1', 'env_1')
+      expect(handle?.access).toEqual({ kind: 'url', url: 'https://env.test' })
+      expect(posted).toContain('https://m.test/internal/secrets/unseal')
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+
+  it('THROWS on a node that has not logged in yet, never an empty credential', async () => {
+    // The opposite disposition from the notification channel above, and deliberately so: a
+    // delivery that silently doesn't happen costs a Slack message, while a credential that
+    // silently reads as empty provisions infrastructure against nothing.
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return new Response('{}')
+    })
+    const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      await expect(
+        composed.secretDelegate.unseal({ source: 'observability_connection', workspaceId: 'ws_1' }),
+      ).rejects.toThrow(/machine token/i)
+      expect(calls).toBe(0)
+    } finally {
+      composed.close()
+    }
+  })
+})
+
+describe('composeMothership notification delivery delegation', () => {
+  const notification = { id: 'ntf_1', workspaceId: 'ws_1', title: 'Merge review' } as never
+
+  it('asks the mothership to deliver the row by id, with the machine token', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await composed.notificationChannel.deliver('ws_1', notification, 'raised')
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/notifications/deliver')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      // Identifiers ONLY — the mothership re-reads its own row, so this node can never inject
+      // forged notification text into the org's Slack.
+      // …plus the delivery EDGE, which the row cannot supply: the mothership's alert transports
+      // stand down on anything but a raise, and a raise and an escalation are both `open`.
+      expect(seen[0]!.body).toEqual({
+        workspaceId: 'ws_1',
+        notificationId: 'ntf_1',
+        reason: 'raised',
+      })
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('never throws when the mothership is unreachable (a raise is never broken by delivery)', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('network down')
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await expect(
+        composed.notificationChannel.deliver('ws_1', notification, 'raised'),
+      ).resolves.toBeUndefined()
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('skips the round-trip entirely on a node that has not logged in yet', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return new Response('{}')
+    })
+    // No LOCAL_MOTHERSHIP_TOKEN and an empty token cache ⇒ nothing to authenticate with. The row
+    // is still persisted remotely and the in-app card still renders; only delegation is skipped.
+    const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      await composed.notificationChannel.deliver('ws_1', notification, 'raised')
+      expect(calls).toBe(0)
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('threads the delegating channel into the container built with no Postgres', async () => {
+    // The wiring guard for `buildLocalContainer` → `buildNodeContainer`'s `notificationChannels`
+    // seam. The composed channel isn't observable on the container, but the EXTERNAL subset is:
+    // the Node facade surfaces it as `machineNotificationDelivery`, and with Slack off and no
+    // realtime sink the only external channel is the mothership one. So a delivery through that
+    // seam must reach the mothership's endpoint — which is exactly the channel having been
+    // threaded into the engine's fan-out.
+    const posted: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      posted.push(String(url))
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const container = buildLocalContainer({
+      env: BASE_ENV({
+        ENVIRONMENT: 'test',
+        AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      expect(container.machineNotificationDelivery).toBeDefined()
+      await container.machineNotificationDelivery!.deliver('ws_1', notification, 'raised')
+      // Containment, not equality: booting the container also fires background persistence RPCs.
+      expect(posted).toContain('https://m.test/internal/notifications/deliver')
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+})
+
+describe('mothership-mode node as a secret-delegation SERVER', () => {
+  // The inverse of every test above: not "can this node ask a mothership", but "may this node be
+  // asked". It may not, and the reason is the key split itself. Its `ENCRYPTION_KEY` seals its own
+  // agent/model credentials under a LOCAL key, which is a different key from the one the org's
+  // rows carry, so answering `/internal/secrets/seal` here would store a row the org can never
+  // open: the silent split the whole delegation exists to remove, one write later.
+  //
+  // `repositories` cannot be the thing that stops it, which is why this is asserted on the
+  // CAPABILITY. A mothership-mode node populates that registry too (with the RPC-backed remote
+  // repos), so it is present on precisely the deployment it would need to exclude. `secretCipherFor`
+  // is the seam only a deployment authoritative for the rows wires, and the controller 503s without
+  // it.
+  const DELEGATION_ENV = (over: Record<string, string | undefined> = {}) =>
+    BASE_ENV({
+      ENVIRONMENT: 'test',
+      AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+      ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+      HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+      ...over,
+    })
+
+  it('wires no sealed-secret cipher when it holds no database of its own', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: true, value: null })))
+    const container = buildLocalContainer({
+      env: DELEGATION_ENV({
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      // Present, and deliberately not the discriminator: this is the remote registry.
+      expect(container.repositories).toBeDefined()
+      expect(container.secretCipherFor).toBeUndefined()
+      // The drift sweep's inventory has nothing local to enumerate either, for the same reason.
+      expect(container.sealedSecretInventory).toBeUndefined()
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+
+  it('wires it when the node holds its own database, so an ordinary deployment can still be a mothership', async () => {
+    // The half that makes the assertion above a GATE rather than a feature nobody wired: gating on
+    // `db` must not turn the delegation off everywhere. No query is issued during construction, so
+    // the pool never has to be reachable.
+    const { db } = createDbClient('postgres://unused:unused@127.0.0.1:5432/unused')
+    const container = buildLocalContainer({ db, env: DELEGATION_ENV() })
+    try {
+      expect(container.secretCipherFor).toBeDefined()
+      expect(container.sealedSecretInventory).toBeDefined()
+    } finally {
+      await container.onShutdown?.()
+    }
   })
 })

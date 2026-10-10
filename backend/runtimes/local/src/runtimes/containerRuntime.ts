@@ -9,30 +9,69 @@
 // adapter (`DockerRuntimeAdapter`) parameterised by binary + networking. Apple
 // `container` gets its own (`AppleContainerRuntimeAdapter`).
 
-/** The in-container port the executor-harness listens on. */
-export const HARNESS_PORT = 8080
+import { createHash } from 'node:crypto'
+import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
+import { tailPostMortemMaterial } from '@cat-factory/kernel'
+import type { HostBridge } from '@cat-factory/integrations'
+
+/**
+ * The in-container port the executor-harness listens on, re-exported from the wire contract so
+ * the adapters, the transports and the image itself all address one number.
+ */
+export const HARNESS_PORT = HARNESS_JOB_PORT
 
 /** Injectable CLI runner (docker/podman/container) — overridable in tests. */
 export type ContainerExec = (args: string[]) => Promise<{ stdout: string; stderr: string }>
 
 /**
+ * How much of a container's captured output any consumer of {@link formatContainerLogs} may see.
+ *
+ * A LINE bound is not a bound. `docker logs --tail 50` counts lines, and fifty lines of an agent
+ * echoing a diff, a lockfile or a base64 blob is tens of kilobytes, which then meets
+ * `composePostMortem`'s head-keeping cap and loses precisely the crash the tail was read for.
+ * Sized well under that cap so the composed verdict in front of the logs always survives, and
+ * matched to the native transport's own `STDERR_TAIL_CHARS` so the two local backends bound
+ * their post-mortems alike.
+ */
+export const MAX_CONTAINER_LOG_CHARS = 2_000
+
+/**
  * Shape a container's captured `logs` output into a short tail for a fail-fast spin-up
- * error: trim + drop empty stdout/stderr, join with newlines, and (when the CLI can't
- * `--tail` itself, e.g. Apple `container`) keep only the last `tailLines`. Shared by the
- * adapters' `logs()` impls so they can't drift in how they shape the tail.
+ * error: trim + drop empty stdout/stderr, join with newlines, (when the CLI can't `--tail`
+ * itself, e.g. Apple `container`) keep only the last `tailLines`, and bound the result to
+ * {@link MAX_CONTAINER_LOG_CHARS}. Shared by the adapters' `logs()` impls so they can't drift
+ * in how they shape the tail, and the one place the character bound is applied: every reader
+ * of a container's output goes through here, so none of them can forget it.
  */
 export function formatContainerLogs(stdout: string, stderr: string, tailLines?: number): string {
   const out = [stdout, stderr]
     .map((s) => s.trim())
     .filter(Boolean)
     .join('\n')
-  return tailLines ? out.split('\n').slice(-tailLines).join('\n') : out
+  const lineBounded = tailLines ? out.split('\n').slice(-tailLines).join('\n') : out
+  return tailPostMortemMaterial(lineBounded, MAX_CONTAINER_LOG_CHARS)
 }
 
 /** Where the orchestrator connects to reach a run's harness. */
 export interface ContainerEndpoint {
   host: string
   port: number
+}
+
+/** How a stopped container ended, as far as its runtime can report it. */
+export interface ContainerExitState {
+  /** One line for the post-mortem: the exit code, plus an OOM kill where the runtime flags one. */
+  description: string
+  /**
+   * The workload's exit code, where the runtime reports one.
+   *
+   * ABSENT IS NOT ZERO. A `0` here is a verdict, not a detail: it means the harness exited
+   * cleanly while a job was still running, which is a SHUTDOWN rather than an eviction and is
+   * handled as terminal instead of being retried. Apple `container` reports a coarse status with
+   * no code, and a runtime that cannot tell must leave this undefined rather than default it, or
+   * every container death there is reported as somebody shutting the harness down.
+   */
+  code?: number
 }
 
 /** What a runtime can and cannot do, consumed by the engine's Tester gate. */
@@ -58,18 +97,44 @@ export interface RuntimeCapabilities {
 /** A container to start — per-run, or a reusable POOL member when `pool` is set. */
 export interface RunContainerSpec {
   /**
-   * For a per-run container this is the run id (the container key + label). For a POOL
-   * member it is a synthetic member id used only for the container name — the member is
-   * NOT labelled with it (lease state lives in the transport), so a label lookup never
-   * finds it; the transport tracks `containerId → {repo, leasedTo}` in-process instead.
+   * The container's IDENTITY within this install (its name and/or label). For an ordinary
+   * per-run container this is the run id; for a step on a non-default executor image it is
+   * kernel's variant-qualified `containerKeyForRef` key, since such a step gets its OWN
+   * container beside the run's. For a POOL member it is a synthetic member id used only for
+   * the container name — the member is NOT labelled with it (lease state lives in the
+   * transport), so a label lookup never finds it; the transport tracks
+   * `containerId → {repo, leasedTo}` in-process instead.
+   *
+   * Named for what it IS rather than `runId`, because an adapter that reads it as a run id
+   * writes an encoding it cannot reverse: that is how the Apple adapter's name sanitiser came
+   * to fold `ui:<runId>` onto a name the orphan sweep then read as a dead run.
    */
-  runId: string
+  containerKey: string
   image: string
   sharedSecret: string
   /** Run privileged (only the Tester `test` kind, only when the runtime supports DinD). */
   privileged: boolean
   /** Optional `--network` (docker family only). */
   network?: string
+  /**
+   * Names to re-point inside the container, each with what to re-point it AT, over and above the
+   * standing {@link ContainerRuntimeAdapter.hostAlias}.
+   *
+   * Two targets, and they cover two different failures. `host-gateway` carries the
+   * ephemeral-environment host on a LOCAL deployment, where the URL resolves to loopback: correct
+   * for the operator's browser, and the container's own empty network namespace, so the failure is
+   * a total connection refusal that reads as a dead environment. An address carries the REMOTE
+   * version of the same gap, where the name lives in a DNS view the deployment cannot see and the
+   * balancer fronting it is perfectly reachable. See kernel's `environment-host-bridge.logic.ts`
+   * for why a rewritten URL cannot serve both audiences, and which addresses may be named.
+   *
+   * An /etc/hosts entry rather than anything cleverer because it wins over DNS and leaves the
+   * `Host` header alone, which is what name-based ingress routing needs. Empty/absent adds nothing.
+   * A runtime that honours none of this declares {@link ContainerRuntimeAdapter.honoursHostBridges}
+   * false, so the transport can SAY the job will not reach its environment rather than dropping the
+   * entries silently.
+   */
+  extraHosts?: readonly HostBridge[]
   /** Extra `-e KEY=VALUE` env passed into the container. */
   env: Record<string, string>
   /** Host resource limits derived from the service's abstract instance size. */
@@ -81,7 +146,7 @@ export interface RunContainerSpec {
    */
   pool?: boolean
   /**
-   * Extra in-container ports to publish to a HOST port ALONGSIDE the harness `:8080` (read back
+   * Extra in-container ports to publish to a HOST port ALONGSIDE the harness's own (read back
    * via {@link ContainerRuntimeAdapter.endpoint} with the port argument). Used by the
    * browsable-preview transport to reach the served app's port (e.g. 4173). Each entry names the
    * in-`container` port and, optionally, the `host` port to pin it to: an explicit `host` gives a
@@ -116,15 +181,45 @@ export interface ContainerRuntimeAdapter {
    * (`http://<ip>:<servePort>`), which is NOT pre-knowable and so is never injected.
    */
   readonly publishesToLocalhost: boolean
+  /**
+   * Whether this runtime can install {@link RunContainerSpec.extraHosts} in the container it
+   * starts.
+   *
+   * Declared rather than inferred because the two answers cost different things and only one of
+   * them is visible. A runtime that honours bridges pays for them (a job needing one leaves the
+   * warm pool and its container is replaced), which is worth it because the alternative is a step
+   * that fails every single time. A runtime that CANNOT is not thereby fine: its job is going to
+   * spend its tester step on connection failures and report the environment as dead, which is the
+   * exact misreading this whole mechanism exists to stop. Saying so lets the transport name it once
+   * at dispatch instead of dropping the entries in silence.
+   */
+  readonly honoursHostBridges: boolean
 
   /** Start a per-run container detached; resolves to its container id/name. */
   run(exec: ContainerExec, spec: RunContainerSpec): Promise<string>
-  /** The (running-or-exited) container for a run, if any. */
-  find(exec: ContainerExec, runId: string): Promise<string | undefined>
+  /** The (running-or-exited) container for a {@link RunContainerSpec.containerKey}, if any. */
+  find(exec: ContainerExec, containerKey: string): Promise<string | undefined>
   /**
    * The host+port the orchestrator should connect to reach the container's `inContainerPort`
    * (default {@link HARNESS_PORT}), or undefined if not ready. The preview transport passes the
    * served-app port (published via {@link RunContainerSpec.publishPorts}) to reach the app.
+   *
+   * "Not ready" INCLUDES a container that has EXITED: {@link find} deliberately returns
+   * running-or-exited containers, so every adapter must map a dead one to `undefined` rather
+   * than throwing whatever its CLI printed. Callers rely on that — the transport's `resolve()`
+   * treats an endpoint-less container as absent and re-creates a fresh one, so an adapter that
+   * throws here instead breaks the fresh-container recovery and surfaces a CLI message ("no
+   * public port '<port>/tcp' published for …") as the run's cause of death, masking the real one.
+   *
+   * A fault against a container that is still RUNNING is a different thing (a daemon blip, a
+   * misconfigured publish) and SHOULD throw: the spin-up path folds it into its fail-fast
+   * diagnostic, and swallowing it there would replace a real cause with a bare timeout.
+   *
+   * When a runtime can't tell the two apart from what its CLI reports, prefer `undefined`: the
+   * cost is a lost diagnostic on the spin-up path (which times out and says so), where the cost
+   * of throwing is a wedged run that can never replace its own dead container. The Apple adapter
+   * is in that position — `container inspect` faults identically for a reaped container and for a
+   * runtime problem — while the docker adapter re-checks liveness and honours both halves.
    */
   endpoint(
     exec: ContainerExec,
@@ -134,6 +229,17 @@ export interface ContainerRuntimeAdapter {
   /** Whether the container is currently running. */
   isRunning(exec: ContainerExec, containerId: string): Promise<boolean>
   /**
+   * HOW a stopped container ended: the exit code, and whether the runtime OOM-killed it. Resolves
+   * `undefined` when the container is still running, was already reaped, or the runtime can't
+   * report it. Best-effort as a DIAGNOSTIC (use {@link isRunning} for liveness), but its
+   * {@link ContainerExitState.code} is read as a verdict: see that field.
+   *
+   * Worth having beside {@link logs}: a container killed by the runtime's cgroup limit exits
+   * with an empty log tail, so the exit state is the ONLY thing separating "OOM-killed" from
+   * "the agent process threw and printed nothing".
+   */
+  exitState(exec: ContainerExec, containerId: string): Promise<ContainerExitState | undefined>
+  /**
    * A short tail of the container's logs (stdout+stderr), best-effort — resolves to `''`
    * on any error or when the runtime can't read them. Used to explain WHY a container
    * exited during boot (image entrypoint crash, missing env, OOM) so a fail-fast spin-up
@@ -142,8 +248,8 @@ export interface ContainerRuntimeAdapter {
   logs(exec: ContainerExec, containerId: string): Promise<string>
   /** Force-remove a single container (idempotent). */
   remove(exec: ContainerExec, containerId: string): Promise<void>
-  /** Force-remove every container for a run (idempotent). */
-  removeRun(exec: ContainerExec, runId: string): Promise<void>
+  /** Force-remove every container under a container key (idempotent). */
+  removeRun(exec: ContainerExec, containerKey: string): Promise<void>
   /** Reap exited managed containers left by crashes; resolves to the count removed. */
   reapExited(exec: ContainerExec): Promise<number>
   /**
@@ -153,12 +259,19 @@ export interface ContainerRuntimeAdapter {
    */
   listPoolMembers(exec: ContainerExec): Promise<string[]>
   /**
-   * Every managed, still-RUNNING per-run container this runtime holds, tagged by its run
-   * id. Used at boot to reap containers whose run has since gone terminal/away (their
-   * `release()` never ran because the previous process crashed). Exited ones are handled
-   * by {@link reapExited}; this covers the ones still up.
+   * Every managed, still-RUNNING per-run container this runtime holds, tagged by the
+   * {@link RunContainerSpec.containerKey} it was started under. Used at boot to reap containers
+   * whose run has since gone terminal/away (their `release()` never ran because the previous
+   * process crashed). Exited ones are handled by {@link reapExited}; this covers the ones still
+   * up.
+   *
+   * The key must round-trip EXACTLY: the caller maps it back to a run to ask whether that run is
+   * still live, so an adapter that cannot recover what it was given reports a live container's
+   * run as unknown and the sweep deletes it mid-step.
    */
-  listRunContainers(exec: ContainerExec): Promise<Array<{ runId: string; containerId: string }>>
+  listRunContainers(
+    exec: ContainerExec,
+  ): Promise<Array<{ containerKey: string; containerId: string }>>
 }
 
 export type RuntimeId = 'docker' | 'podman' | 'orbstack' | 'colima' | 'apple'
@@ -245,7 +358,8 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
   },
 }
 
-const RUNTIME_IDS = Object.keys(PROFILES) as RuntimeId[]
+/** The accepted `LOCAL_CONTAINER_RUNTIME` ids, in declaration order (for messages). */
+export const RUNTIME_IDS = Object.keys(PROFILES) as RuntimeId[]
 
 /** Resolve the runtime profile for an id (defaults to docker for an unknown value). */
 export function runtimeProfile(id: RuntimeId): RuntimeProfile {
@@ -255,12 +369,25 @@ export function runtimeProfile(id: RuntimeId): RuntimeProfile {
 /**
  * The runtime selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack |
  * colima | apple). Defaults to `docker`; an unrecognised value also falls back to
- * docker (logged by the preflight). Explicit selection is the supported path.
+ * docker (logged by the preflight, see {@link unrecognizedRuntimeId}). Explicit
+ * selection is the supported path.
  */
 export function resolveRuntimeId(env: NodeJS.ProcessEnv): RuntimeId {
   const raw = env.LOCAL_CONTAINER_RUNTIME?.trim().toLowerCase()
   if (raw && (RUNTIME_IDS as string[]).includes(raw)) return raw as RuntimeId
   return 'docker'
+}
+
+/**
+ * The raw `LOCAL_CONTAINER_RUNTIME` value when it is SET but not one of the accepted
+ * runtime ids — i.e. the typo `resolveRuntimeId` silently fell back to `docker` for.
+ * Undefined when the var is unset or valid. The preflight logs this so an unrecognised
+ * value is visible at boot instead of silently running docker (error-message coverage A9).
+ */
+export function unrecognizedRuntimeId(env: NodeJS.ProcessEnv): string | undefined {
+  const raw = env.LOCAL_CONTAINER_RUNTIME?.trim()
+  if (!raw) return undefined
+  return (RUNTIME_IDS as string[]).includes(raw.toLowerCase()) ? undefined : raw
 }
 
 /**
@@ -272,4 +399,27 @@ export function resolveHostAlias(env: NodeJS.ProcessEnv): string {
   const explicit = env.LOCAL_HARNESS_HOST_ALIAS?.trim()
   if (explicit) return explicit
   return runtimeProfile(resolveRuntimeId(env)).hostAlias
+}
+
+/**
+ * A stable, non-secret per-INSTALLATION id used to NAMESPACE every managed container (via a
+ * Docker label / the Apple container name), so a machine running two local installs against ONE
+ * container daemon never adopts, reaps, or re-leases a neighbour's container (ADR 0026 D5).
+ *
+ * Derived as a short fingerprint of `HARNESS_SHARED_SECRET` — the exact axis the isolation
+ * protects: a pooled container bakes that secret in at creation, and ONLY an install that shares
+ * the secret can authenticate to it, so keying the install id on the secret makes the reaper's
+ * rule precisely "adopt iff mutually authenticable" (two installs that genuinely share a secret,
+ * e.g. a copied `.env`, are safe to share containers and correctly get the same id). The digest is
+ * one-way and truncated, so the label leaks nothing usable about the secret. Falls back to other
+ * stable config (the database URL, then the public URL) when the secret is unset, so the id is
+ * always defined; `default` is the last resort.
+ */
+export function resolveInstallId(env: NodeJS.ProcessEnv): string {
+  const seed =
+    env.HARNESS_SHARED_SECRET?.trim() ||
+    env.DATABASE_URL?.trim() ||
+    env.PUBLIC_URL?.trim() ||
+    'default'
+  return createHash('sha256').update(seed).digest('hex').slice(0, 16)
 }

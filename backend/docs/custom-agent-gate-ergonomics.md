@@ -1,7 +1,13 @@
 # Custom agent & gate authoring ergonomics
 
+> **Authoring a gate or a judge is on the website**:
+> [Custom Gates & Judges](https://www.catfactory.ai/extend/custom-gates.html) owns the
+> registration and the shapes, with agent kinds on
+> [Custom Agents](https://www.catfactory.ai/extend/custom-agents.html). This page is the
+> ergonomics layer both sit on: the helpers, and what fails loudly at boot.
+
 Companion to [`custom-agents.md`](./custom-agents.md) (the three-stage agent model) and the
-"Gates vs agents" section of [`../../CLAUDE.md`](../../CLAUDE.md). That doc covers _what_ the
+"Gates vs agents" section of [`../../AGENTS.md`](../../AGENTS.md). That doc covers _what_ the
 extension seams are; this one covers the ergonomics layered on top so writing a custom agent
 kind or gate is less boilerplate-heavy and fails loudly when misconfigured.
 
@@ -13,10 +19,10 @@ The canonical worked example exercising everything below is
 Four rough edges made authoring a custom agent/gate harder than it should be:
 
 1. **Provider wiring boilerplate + an unsafe `!`.** Every gate's data source was a module
-   global trio — `let provider; wireFoo(); getFoo()` — re-authored in each package, and the
+   global trio (`let provider; wireFoo(); getFoo()`) re-authored in each package, and the
    gate read it with a non-null assertion (`getFoo()!`) after a separate `wired()` check.
 2. **Hand-written coercers.** A structured agent declared a free-string `output.shapeHint`
-   _and_ a lenient `coerce(value: unknown)` that never throws — duplicated, unrelated to each
+   _and_ a lenient `coerce(value: unknown)` that never throws: duplicated, unrelated to each
    other, in every package. The repo already standardises on valibot everywhere else.
 3. **No boot-time validation.** A typo'd gate `helperKind`, an unknown `resultView`, or a
    pipeline naming a non-existent kind surfaced mid-run (a failed dispatch) or silently (a
@@ -29,61 +35,134 @@ Four rough edges made authoring a custom agent/gate harder than it should be:
 
 A provider is identified by a typed `ProviderToken<T>` defined once and exported next to its
 interface. The deployment wires an impl at startup; the gate reads it back through its
-`GateContext` — no module global, and `requireProvider` is a real guard, not a `!`.
+`GateContext`, no module global, and `requireProvider` is a real guard, not a `!`.
+
+The provider registry is the app-owned kernel `ProviderRegistry` the facade injects (via
+`CoreDependencies.providerRegistry` → the gate machine's `GateContext`). A deployment's `wireX`
+handle takes that instance; the gate reads it back through `ctx` (`getProvider` / `requireProvider` /
+`isProviderWired`).
 
 ```ts
-// kernel: defineProviderToken / wireProvider / getProvider / requireProvider / isProviderWired
+// kernel: defineProviderToken + the app-owned ProviderRegistry (wire/get/isWired/require methods)
 export const LICENSE_PROVIDER = defineProviderToken<LicenseProvider>('license')
-export function wireLicenseProvider(p: LicenseProvider | undefined) {
-  wireProvider(LICENSE_PROVIDER, p)
+export function wireLicenseProvider(registry: ProviderRegistry, p: LicenseProvider | undefined) {
+  registry.wire(LICENSE_PROVIDER, p)
 }
 
-registerGate(LICENSE_CHECK_KIND, (ctx) => ({
+gateRegistry.register(LICENSE_CHECK_KIND, (ctx) => ({
   kind: LICENSE_CHECK_KIND,
   helperKind: LICENSE_FIXER_KIND,
-  wired: () => isProviderWired(LICENSE_PROVIDER),
+  wired: () => ctx.isProviderWired(LICENSE_PROVIDER),
   // SAFE: the engine only probes a gate whose wired() is true.
   probe: async (ws, blk) => mapReport(await ctx.requireProvider(LICENSE_PROVIDER).check(ws, blk)),
   // …
 }))
 ```
 
-`requireProvider` throwing inside `probe` is sound because `wired()` (= `isProviderWired(token)`)
-gates whether the engine probes at all — the "checked `wired`, then asserted `!`" race is gone.
-The built-in `@cat-factory/gates` suite dogfoods this (its `wireCiStatusProvider` etc. keep their
-public signatures, now delegating to `wireProvider`), so facade wiring is unchanged.
+`requireProvider` throwing inside `probe` is sound because `wired()` (= `ctx.isProviderWired(token)`)
+gates whether the engine probes at all: the "checked `wired`, then asserted `!`" race is gone.
+The built-in `@cat-factory/gates` suite dogfoods this (its `wireCiStatusProvider` etc. take the
+registry as their first arg and wire onto that instance), so a fresh registry per build starts
+empty and nothing leaks between builds.
 
 ## Schema-driven structured output
 
-`defineStructuredOutput(schema)` (`@cat-factory/agents`) turns ONE valibot schema into both the
-engine `AgentOutputSpec` (the `shapeHint` fed to the harness repair call) and a typed
-`parse`/`safeParse`. `registerAgentKind` auto-fills `agent.output` from it.
+`defineStructuredOutput(schema)` turns ONE valibot schema into both the engine `AgentOutputSpec`
+(the `shapeHint` the harness repair call sees) and a typed `parse`/`safeParse`; `registerAgentKind`
+auto-fills `agent.output` from it. The worked example, including how to build the schema out of
+`v.fallback` / `v.optional` so one noisy field degrades instead of failing the whole parse, is on
+the website's
+[Structured output](https://www.catfactory.ai/extend/custom-agents.html#structured-output-from-one-schema).
 
-```ts
-const securityAssessment = defineStructuredOutput(
-  v.object({
-    risk: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
-    findings: v.optional(
-      v.array(v.object({ title: v.fallback(v.string(), 'Untitled') /* … */ })),
-      [],
-    ),
-  }),
-)
-registerAgentKind({
-  kind: SECURITY_AUDITOR_KIND,
-  agent: { surface: 'container-explore', clone: { branch: 'pr' } }, // output derived from the schema
-  structuredOutput: securityAssessment,
-  postOps: [renderReportPostOp], // uses securityAssessment.safeParse(ctx.result.custom)
-})
-```
+**Why it lives in `agents` rather than kernel**, which is the fact a change here has to keep true:
+kernel cannot depend on valibot (it imports only `contracts` + `ai`). Kernel's
+`AgentStepSpec.output` keeps its plain-string shape and only the DERIVED spec crosses into it, so
+the schema and its parser stay in the agents registration layer. Moving either down breaks kernel's
+dependency floor.
 
-`safeParse` returns `undefined` on a malformed reply (so a post-op's `if (!parsed) return` guard
-holds) and applies `v.fallback`/`v.optional` defaults, degrading exactly like the old coercer.
-Pass `{ shapeHint }` to override the auto-derived hint for an unusual shape.
+## Companions (registering a rework pair)
 
-**Why agents, not kernel:** kernel cannot depend on valibot (it imports only `contracts` + `ai`).
-Kernel's `AgentStepSpec.output` keeps its plain-string shape; only the derived spec crosses into
-it — the schema/parser stays in the agents registration layer.
+A companion GRADES the immediately-preceding producer's output and, when that grading does not
+pass, loops THAT producer back for automatic rework on a bounded budget before any human is asked.
+Choose it over a [judge](../../docs/initiatives/judge-registry.md) when the remedy is the producer
+running again rather than a verdict being disposed.
+
+Register it with `AgentKindRegistry.registerCompanion`, beside the kind's own registration: a
+companion is a relationship BETWEEN kinds, so it lives on the kind registry rather than a registry
+of its own. Several things bite:
+
+- **The pairing is registered SEPARATELY from the kind**, so every read goes through the registry.
+  A projection built off the kind's own definition sees no companions at all.
+- **The free lookups take the registry OPTIONALLY** and fall back to the built-ins (the shape
+  `isGatableKind` uses), so a call site that omits it silently sees built-in pairs only. That is a
+  wrong ANSWER rather than a missing argument, which is why it survives a typecheck.
+- **The PROMPT is the platform's**, not the registration's: every companion runs the shared
+  companion prompt (`companionSystemPrompt`), which weaves in the pairing's `reviews` label, the
+  JSON verdict shape, and `REVIEW_FINDINGS_LAYOUT` (one severity-graded `comments` entry per point,
+  and a `summary` that is a verdict rather than a second copy of the list). So a registration
+  contributes the label and the threshold, and a deployment companion's findings arrive graded like
+  every other one's, not even a per-workspace prompt override can drop that
+  (`OVERRIDE_PRESERVED_FRAGMENTS` puts the contract back over an edited prompt).
+- **A `blocker` finding holds the run, whatever the rating.** The two halves of a verdict are read
+  independently (kernel's `disposeCompanionVerdict`): a rating is one number over a whole
+  deliverable, so a review can score work above its bar and still have named something that must
+  not ship. While a blocker is open the producer is reworked; once the rounds are gone the step
+  parks, and THAT park is the one an unattended risk policy will not answer, because accepting the
+  work anyway overrules a review rather than reporting that the automation gave up (kernel's
+  `CompanionParkReason`). A loop `companionLoopStalled` stops EARLY reaches the same park on the
+  rounds it abandoned, so the reason is re-decided for that abandoned budget rather than assumed to
+  be a spent one: giving up is the automation's to report, an open blocker is not, and a stalled
+  loop can carry both. Nothing is registered for this: grading is in the shared prompt, so a
+  deployment's own pairing gets it. What a registration should not do is teach its reviewer to
+  express urgency by lowering the rating instead.
+- **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the
+  immediate predecessor, so a companion separated from its producer would grade whatever happens to
+  sit in front of it. The same reasoning drives the cascade-skip rule in
+  [`pipeline-catalog-collapse.md`](../../docs/initiatives/pipeline-catalog-collapse.md), where a
+  skipped producer takes its companion with it.
+- **A rework round re-dispatches the producer for real**, and nothing has to be registered for that:
+  `dispatchEpochFor` mints the harness job id off the run's own record of what it has dispatched
+  (`recordDispatchAttribution`'s per-kind count), so every round gets an id of its own. It used to be
+  a hand-maintained sum of per-loop counters, which the companion loop was never added to (its round
+  count lives on the COMPANION step and is not readable from the producer at all), so a
+  container-backed producer re-attached to its FIRST completed job every round: the harness replays a
+  job id it already holds, and a companion then re-graded a byte-identical artifact until the budget
+  ran out. Anything new that re-runs a step inherits the fix; nothing needs a counter of its own.
+- **The BUDGET is the task's risk policy, never the registration**: `companionMaxReworks` (4 on
+  every built-in, and on the unattended preset too: a round here re-runs the producer, so unlike
+  the judgement-only budgets beside it the round not taken is an artifact not improved). A step is seeded with the
+  catalog default at run start, where no policy is resolved yet, so the resolved value is adopted
+  onto `step.companion.maxAttempts` on the grading that records the step's FIRST verdict, the same
+  way the Tester's quality budget is adopted on its first report. Read ONCE, and keyed on the
+  verdict list rather than on the attempt count, because two things grade a step again on an
+  unspent budget: a human's "request changes" on a gated companion charges no round
+  (`requestStepChanges`), and a human's extra round at the cap RAISES that same field
+  (`resolveCompanionExceeded`), so a later read would report a ceiling the step no longer has.
+  `0` is a posture rather than an off switch: the companion still grades, and its first verdict
+  below the bar goes straight to the iteration-cap park (or to `proceed` under
+  `autonomy: 'unattended'`) instead of buying a round. It does not widen what counts as a pass: a
+  blocker under a `0` budget parks immediately rather than being accepted.
+- **The first-batch rule is SUBORDINATE to that budget.** A companion's first batch of comments
+  loops its producer back whatever the rating was, because that first set of findings is worth a
+  round even from work that scored well. The round is bought from `companionMaxReworks`, so with
+  none to buy the rating decides alone. Read the other way round, a `0` policy parked every
+  companion step (a review with nothing at all to say is the rare one) and, unattended, stamped
+  `capSettledByPolicy` on producers that had met their bar.
+- **A loop that ENDS with points still open hands them to the next producer.** A companion can pass
+  work it still has findings against: past the first forced round a `major` no longer holds the run
+  (only a `blocker` does), and a human may approve over a `blocker` on the companion's own gate.
+  Those points were never sent back to anyone, so `openFindingsFor` reads the LAST verdict's
+  non-nit comments onto the reviewed step's `priorOutputs` entry, and every later step is shown them
+  under the artifact they are about, worded so they cannot read as already handled. Earlier rounds
+  are deliberately excluded: each of those WAS answered, and re-raising it would re-open settled work
+  against a producer with no standing to settle it. The consumer is asked not to build the defect in,
+  never to go and revise a predecessor's document.
+- **The producer answers in its REPLY.** `FEEDBACK_ACCOUNTING_DIRECTIVE` makes it account for every
+  point (changed, or argued down with a reason) as a "Response to review" section in the reply, never
+  in a committed artifact, because that reply is what the next round folds in as prior work — for a
+  `container-explore` companion too, which reads it beside the checkout. The grader is told to hold
+  that accounting to the WORK, and NOT to treat a missing one as a finding: a producer whose
+  deliverable is a pushed commit legitimately answers with the change alone.
 
 ## Boot-time registration validation
 
@@ -91,12 +170,12 @@ it — the schema/parser stays in the agents registration layer.
 aggregated error on any unambiguous misconfig; a facade calls `validateRegistrationsOnce()` after
 all `register*` imports + provider wiring, before serving.
 
-| Check                                                                                                  | Severity             |
-| ------------------------------------------------------------------------------------------------------ | -------------------- |
-| gate `helperKind` resolves to a registered container kind or a built-in helper                         | error                |
-| `presentation.resultView` is a known `RESULT_VIEW_IDS` id                                              | error                |
-| pipeline `agentKinds` are known (only when `knownAgentKinds` is supplied — no built-in catalog exists) | error                |
-| `postOps` declared without structured output                                                           | warn (`onWarn` sink) |
+| Check                                                                                                 | Severity             |
+| ----------------------------------------------------------------------------------------------------- | -------------------- |
+| gate `helperKind` resolves to a registered container kind or a built-in helper                        | error                |
+| `presentation.resultView` is a known `RESULT_VIEW_IDS` id                                             | error                |
+| pipeline `agentKinds` are known (only when `knownAgentKinds` is supplied, no built-in catalog exists) | error                |
+| `postOps` declared without structured output                                                          | warn (`onWarn` sink) |
 
 Wired symmetrically: the Worker validates on its first `fetch` (the once-guard keeps it off the
 hot path), the Node facade in `start()` after building the container. Orchestration is
@@ -109,10 +188,10 @@ runtime-neutral, so warnings go to an `onWarn` callback the facade backs with it
 
   | surface             | read-only guardrail | final-answer-in-reply |
   | ------------------- | ------------------- | --------------------- |
-  | `inline`            | –                   | ✓                     |
+  | `inline`            | ✗                   | ✓                     |
   | `container-explore` | ✓                   | ✓                     |
-  | `container-coding`  | –                   | –                     |
-  | no agent step       | –                   | –                     |
+  | `container-coding`  | ✗                   | ✗                     |
+  | no agent step       | ✗                   | ✗                     |
 
   (Built-in read-only kinds keep their `isReadOnlyAgentKind` path; built-ins get final-answer
   from their own track prompts, so it's only added to _registered_ kinds here.)
@@ -124,19 +203,55 @@ runtime-neutral, so warnings go to an `onWarn` callback the facade backs with it
   and register the component in `StepResultViewHost.vue`. A structured agent with no bespoke UI
   uses `generic-structured`.
 
+## Per-step gate settings (declared, not hard-coded)
+
+A gate's knobs belong to the gate, not to the engine or to the workspace merge preset. Declare them
+on the REGISTRATION as descriptor fields and they drive three things at once: validation at pipeline
+save, re-validation at run start, and the authoring form the SPA renders in the pipeline builder
+(projected onto the board snapshot as `gateConfigForms`, rendered by the shared
+`DescriptorFields.vue`).
+
+```ts
+gateRegistry.register(MY_GATE_KIND, myGate, {
+  configFields: [
+    { key: 'maxAttempts', label: 'Helper attempts', type: 'number', min: 0, max: 20 },
+    { key: 'soakMinutes', label: 'Soak window (minutes)', type: 'number', min: 1, max: 1440 },
+  ],
+})
+```
+
+The filled values are validated (unknown keys and out-of-range numbers are refused at SAVE, not
+clamped at read) and copied onto the live gate state once on first entry, so the gate reads them off
+`gateState.config` on every poll with no plumbing per parameter:
+
+```ts
+probe: async (workspaceId, blockId, gateState) => {
+  const soak = gateConfigNumber(gateState.config, 'soakMinutes') ?? DEFAULT_SOAK_MINUTES
+  …
+},
+// The GATE decides how its own budget is overridden — the engine never learns the field's name.
+attemptBudget: (preset, config) => gateConfigNumber(config, 'maxAttempts') ?? preset.ciMaxAttempts,
+```
+
+A gate that declares nothing accepts no per-step fields, which is the honest default: an undeclared
+key is indistinguishable from a typo'd one. The built-ins are the worked example
+(`@cat-factory/gates`' `gateConfigFields.ts`); the design record is
+[ADR 0038](./adr/0038-per-step-gate-config.md), which also covers the OTHER half of a step's gate
+config — the approver policy and quorum on a human approval gate, which the platform owns rather
+than the gate.
+
 ## Runtime symmetry rules (recap)
 
-Per CLAUDE.md: any provider wiring or validation hook lands in BOTH `runtimes/cloudflare` and
+Per AGENTS.md: any provider wiring or validation hook lands in BOTH `runtimes/cloudflare` and
 `runtimes/node` (local inherits node), and shared gate behaviour gets a `conformance` assertion.
 The gates package depends only on kernel + contracts, never on orchestration.
 
 ## Authoring checklist
 
-1. Define a valibot schema → `defineStructuredOutput` for any structured kind.
-2. `registerAgentKind({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`
-   — the surface drives the prompt directives and the container requirement; `presentation.resultView`
-   (if set) must be a `RESULT_VIEW_IDS` id.
-3. For a gate: `defineProviderToken` + a one-line `wireX`; `registerGate(kind, ctx => ({ wired: () => isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
-   The `helperKind` must be a registered container kind (or a built-in helper).
-4. `registerPipeline(...)` to chain the kinds.
-5. The facade wires the provider impl at startup and (already) calls `validateRegistrationsOnce()`.
+The step-by-step is on the website, split the way the seams are:
+[Add a Custom Agent Kind](https://www.catfactory.ai/extend/custom-agents.html) and
+[Add a Custom Gate or Judge](https://www.catfactory.ai/extend/custom-gates.html). What this page
+adds to both is the order the registrations have to happen in, which neither page can state without
+knowing what validates when: shared definitions (skills, tool servers, traits, provider tokens)
+before the kinds that reference them by id, kinds before the pipelines that chain them, and the
+facade's `validateRegistrationsOnce()` after all of it.

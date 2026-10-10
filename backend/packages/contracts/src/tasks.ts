@@ -1,5 +1,7 @@
 import * as v from 'valibot'
 import { credentialFieldSchema } from './documents.js'
+import { namespacedIdSchema } from './primitives.js'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
 // Task-source integration wire contracts. A workspace can connect to one or
@@ -16,9 +18,132 @@ import { credentialFieldSchema } from './documents.js'
 // it lives in the core ports / D1 layer.
 // ---------------------------------------------------------------------------
 
-/** The external task trackers cat-factory can link to. */
-export const taskSourceKindSchema = v.picklist(['jira', 'github', 'linear'])
+/** The task sources this build ships. A deployment registers its own beside them (see below). */
+export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear', 'gitlab'] as const
+
+/**
+ * One of the sources this build ships, as a type. Its use is a `Record<BuiltinTaskSourceKind, …>`
+ * where a caller must state something for EVERY built-in and a deployment-registered source is
+ * handled separately: a fifth built-in then fails to compile until it has an answer, where an
+ * `if`-chain over the same ids would silently fall through to whatever the last branch returns.
+ */
+export type BuiltinTaskSourceKind = (typeof BUILTIN_TASK_SOURCE_KINDS)[number]
+
+/**
+ * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
+ * `<ns>:<name>`, e.g. `acme:servicenow`) a deployment registers in code on its app-owned
+ * `TaskSourceRegistry` — the same `picklist ∪ namespaced` shape `taskTypeSchema` uses, for the
+ * same reasons.
+ *
+ * Two consequences are load-bearing:
+ *
+ *  - **The built-ins keep their BARE ids**, so every persisted `source` column, every stored
+ *    connection and every imported issue row is unchanged by the widening. There is no migration
+ *    here because there is nothing to migrate.
+ *  - **A bare non-built-in id still FAILS validation.** `servicenow` is a typo; `acme:servicenow`
+ *    is a deployment's registration. Keeping the namespace mandatory is what tells those apart,
+ *    and it is why widening does not turn every misspelled `:source` path segment into a
+ *    plausible-looking miss.
+ *
+ * The schema is the GRAMMAR, never the authority on what EXISTS: a namespaced id passes here and
+ * is then resolved against the registry at the boundary, so an id no deployment registered is
+ * refused by the thing that actually knows.
+ */
+export const taskSourceKindSchema = v.union([
+  v.picklist(BUILTIN_TASK_SOURCE_KINDS),
+  namespacedIdSchema,
+])
 export type TaskSourceKind = v.InferOutput<typeof taskSourceKindSchema>
+
+/**
+ * Type guard for the source GRAMMAR, so a caller with a raw path segment (the webhook receiver's
+ * `:source`) can pre-filter without importing valibot.
+ *
+ * It deliberately does NOT answer whether the source EXISTS. A grammatically valid id is resolved
+ * against the registry immediately afterwards, and that is what refuses an unregistered one — so
+ * the two failures stay distinct: a malformed segment is a bad request, an unregistered one is a
+ * source this deployment does not serve.
+ */
+export function isTaskSourceKind(value: unknown): value is TaskSourceKind {
+  return typeof value === 'string' && v.is(taskSourceKindSchema, value)
+}
+
+// ---- Inbound tracker webhooks (push-driven intake + ticket replies) --------
+// The per-connection delivery endpoint an operator pastes into the tracker's webhook form, plus
+// the secret that authenticates it. The secret rides the connection's sealed credential bag (no
+// new table), so this surface is purely mint/read/clear. See
+// `backend/docs/adr/0032-tracker-webhook-intake.md`.
+
+/** The webhook state of one task-source connection, safe to read back at any time. */
+export const taskSourceWebhookSchema = v.object({
+  source: taskSourceKindSchema,
+  /**
+   * Whether this source can receive webhooks at all on this deployment (its provider ships a
+   * webhook adapter). `false` ⇒ the delivery path 404s and minting is refused.
+   */
+  supported: v.boolean(),
+  /** Whether a secret is currently stored — i.e. whether deliveries will be accepted. */
+  configured: v.boolean(),
+  /**
+   * The path to paste into the tracker, relative to the deployment's public base URL. Returned
+   * even when unconfigured so an operator can see where deliveries will go before minting.
+   */
+  deliveryPath: v.string(),
+  /**
+   * Comma-separated author handles / emails / vendor ids allowed to drive a parked review from a
+   * ticket comment. Empty ⇒ any NON-BOT author, which is the right default for a private tracker
+   * and the wrong one for a public repo.
+   */
+  replyAllow: v.string(),
+  /**
+   * Whether the connection's sealed credential bag could be OPENED to answer this.
+   *
+   * `false` ⇒ `configured` and `replyAllow` are UNKNOWN rather than empty, and are reported at
+   * their safe defaults. The distinction has to be on the wire because the two states demand
+   * opposite actions from an operator: an unconfigured connection wants a secret minted, while an
+   * unreadable one wants the deployment's reach to its key service fixed (or the source
+   * re-connected) — and minting against the second silently discards whatever the bag still holds.
+   * A read-only panel is also the wrong place to fail: this endpoint is where someone lands to
+   * find out what is wrong, so it states the gap instead of 503ing about it.
+   */
+  credentialsReadable: v.boolean(),
+})
+export type TaskSourceWebhook = v.InferOutput<typeof taskSourceWebhookSchema>
+
+/**
+ * The freshly-minted secret, returned EXACTLY ONCE. It is sealed into the connection's credential
+ * bag immediately and never read back — the same one-shot contract as an API key, for the same
+ * reason: a secret a surface will hand out again is a secret an operator never has to rotate.
+ */
+export const taskSourceWebhookSecretSchema = v.object({
+  ...taskSourceWebhookSchema.entries,
+  secret: v.string(),
+})
+export type TaskSourceWebhookSecret = v.InferOutput<typeof taskSourceWebhookSecretSchema>
+
+/**
+ * Mint (or rotate) the connection's webhook secret, optionally seeding the reply allow-list in the
+ * same call so first-time setup is one round trip. Editing the allow-list LATER goes through
+ * {@link updateTaskSourceWebhookSchema} instead — rotation is destructive (the tracker's configured
+ * secret stops verifying immediately), so it must never be a side effect of an unrelated edit.
+ */
+export const configureTaskSourceWebhookSchema = v.object({
+  replyAllow: v.optional(v.pipe(v.string(), v.maxLength(2_000))),
+})
+export type ConfigureTaskSourceWebhookInput = v.InferOutput<typeof configureTaskSourceWebhookSchema>
+
+/**
+ * Edit the reply allow-list, leaving the secret alone.
+ *
+ * Its own route because tightening the allow-list is exactly what an operator does when a tracker
+ * turns out to be more public than they thought — and folding it into the mint would answer that
+ * with a rotated secret and a dead webhook until they re-paste it. `replyAllow` is required here:
+ * a PATCH with nothing to set is a caller mistake, not a no-op.
+ */
+export const updateTaskSourceWebhookSchema = v.object({
+  replyAllow: v.pipe(v.string(), v.maxLength(2_000)),
+})
+export type UpdateTaskSourceWebhookInput = v.InferOutput<typeof updateTaskSourceWebhookSchema>
 
 // ---- Provider self-description (drives the generic connect UI) ------------
 // `credentialFieldSchema` is shared with the document-source contracts: a
@@ -57,6 +182,21 @@ export const taskSourceDescriptorSchema = v.object({
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
 
+/**
+ * The narrowing predicates an issue-intake query (the recurring `bug-intake` schedule and the
+ * interactive bug hunt share one vocabulary) can carry, as the closed set a source states its
+ * gaps against. The kernel port owns the query shape; this picklist is the member list, here
+ * because the SPA renders one form field per predicate and has to agree with the backend about
+ * which of them a given source will actually apply.
+ */
+export const issueIntakePredicateSchema = v.picklist([
+  'titleFragment',
+  'labels',
+  'issueType',
+  'unassignedOnly',
+])
+export type IssueIntakePredicate = v.InferOutput<typeof issueIntakePredicateSchema>
+
 /** A Linear team, offered in the ticket-filing team picker. */
 export const linearTeamSchema = v.object({
   id: v.string(),
@@ -69,14 +209,62 @@ export type LinearTeam = v.InferOutput<typeof linearTeamSchema>
  * A source's descriptor plus the workspace's live state for it: whether it is
  * usable right now (`available`) and whether the workspace offers it (`enabled`,
  * the per-workspace toggle, default true). A credentialed source (Jira) is
- * `available` once connected; GitHub Issues is `available` once the workspace's
- * GitHub App is installed (it rides that App, so there is nothing to connect).
+ * `available` once connected; a VCS-backed one (GitHub Issues, GitLab Issues) is
+ * `available` once the workspace's VCS connection is that source's provider (it
+ * rides that connection, so there is nothing to connect on the source itself).
  * `available && enabled` is what makes a source offered for import.
  */
 export const taskSourceStateSchema = v.object({
   ...taskSourceDescriptorSchema.entries,
   available: v.boolean(),
   enabled: v.boolean(),
+  /**
+   * The VCS provider whose workspace connection this source authenticates through, or `null`
+   * for a source that carries its own credentials.
+   *
+   * On the wire because the REMEDY for an unavailable source is not derivable from
+   * `available: false` plus an empty `credentialFields`: "connect Jira" opens this source's own
+   * credential form, while "the GitLab connection is missing" points at an entirely different
+   * settings surface, and pointing at the wrong one is a worse failure than saying nothing. It
+   * is DERIVED from the registered provider for the same reason `supportsIntake` is: a
+   * descriptor field declaring it would drift from the availability rule it is supposed to
+   * explain.
+   */
+  ridesVcsProvider: v.nullable(vcsProviderSchema),
+  /**
+   * Whether this source can back a recurring `bug-intake` schedule, i.e. whether its provider
+   * implements the predicate search intake runs. DERIVED from the provider rather than declared
+   * on the descriptor beside it, because the answer is a fact about the registered
+   * implementation and a declared one drifts from it silently.
+   *
+   * It is on the STATE rather than the descriptor for the same reason `available` is: a source
+   * the schedule form offers but cannot search is not a source with a missing field, it is a
+   * schedule that can never fire, and the form has to know which before it renders a picker.
+   */
+  supportsIntake: v.boolean(),
+  /**
+   * The intake predicates this source's provider will NOT apply, because its vendor cannot
+   * express them. Empty for a source that applies all of them.
+   *
+   * On the wire because the form offering a predicate is the only place the gap is meetable: a
+   * dropped predicate leaves a schedule that saves, fires, and picks up the wrong issue, and the
+   * SPA cannot infer which those are from the source id without restating the backend's compiler
+   * (the exact split `binaryFormatCoverage` exists to avoid). So the field is rendered with the
+   * substitution stated on it rather than silently misleading.
+   */
+  ignoredIntakePredicates: v.array(issueIntakePredicateSchema),
+  /**
+   * Whether every issue of this source belongs to ONE repository (GitHub Issues, GitLab Issues),
+   * so the surfaces that read it SCOPE to a service frame's linked repo instead of asking which
+   * board to read. DERIVED from the provider's declared `repoScope`, like `supportsIntake`,
+   * because a descriptor field restating it drifts from the rule it is supposed to explain.
+   *
+   * On the wire because the SPA has to decide what to RENDER before it can ask the backend
+   * anything: a bug hunt on a repo-backed source shows the service it scans, a hunt on a
+   * repo-less one shows a board picker, and a client that guessed would either hide the only
+   * control that scopes a Jira hunt or offer a board field that is refused on submit.
+   */
+  repoBacked: v.boolean(),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 
@@ -94,6 +282,15 @@ export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
  *   - `forbidden`     — authenticated but lacking the needed scope, e.g. the
  *                       GitHub App has no Issues permission (HTTP 403).
  *   - `unreachable`   — the source host could not be reached (network / DNS).
+ *   - `rate_limited`  — the credential is good and the quota is spent, so the fix
+ *                       is to wait rather than to reconnect. Its own verdict
+ *                       because the status a vendor answers with cannot say it:
+ *                       Linear reports an exhausted quota as HTTP 400 with a
+ *                       `RATELIMITED` error code, which reads as a malformed
+ *                       request, and GitHub's secondary limit arrives as a 403,
+ *                       which reads as a missing permission. Both send an
+ *                       operator to re-mint a credential that was never the
+ *                       problem.
  *   - `error`         — anything else (unexpected status or body).
  */
 export const taskSourceDiagnosticStatusSchema = v.picklist([
@@ -103,6 +300,7 @@ export const taskSourceDiagnosticStatusSchema = v.picklist([
   'auth_failed',
   'forbidden',
   'unreachable',
+  'rate_limited',
   'error',
 ])
 export type TaskSourceDiagnosticStatus = v.InferOutput<typeof taskSourceDiagnosticStatusSchema>
@@ -236,18 +434,57 @@ export const importTaskSchema = v.object({
 })
 export type ImportTaskInput = v.InferOutput<typeof importTaskSchema>
 
+/**
+ * Machine-readable causes of a REFUSED task-source read (an issue search, a board listing),
+ * carried on the 400's `error.details.reason` so the SPA can word each case precisely — and,
+ * for the two that have a fix attached, point at it — instead of showing the backend's
+ * untranslated prose (AGENTS.md "Backend strings").
+ *
+ * Single source of truth lives HERE, like {@link CONFLICT_REASONS}, because the emit sites and
+ * the consumer sit in different packages: `@cat-factory/server` and `@cat-factory/integrations`
+ * throw these, the SPA maps them to localized copy. A bare string literal on both sides is how
+ * a rename silently degrades the SPA to the generic message with nothing failing to typecheck.
+ */
+export const TASK_SOURCE_READ_REASONS = [
+  // The search's originating service frame has no linked repository, so there is nothing to
+  // scope a repo-backed search to. The one reason with a user-facing fix: link a repo.
+  'repo_not_linked',
+  // A repo-backed provider was asked to search with no scope at all. Defence in depth behind
+  // the required `blockId` and `repo_not_linked` — unreachable from the SPA, which is why it
+  // maps to no bespoke copy.
+  'repo_scope_required',
+  // A `bug-intake` schedule or bug hunt reached the GitHub query builder with no repository
+  // configured. Refused rather than searching everything the credential can reach.
+  'missing_board',
+  // A board scope that is not a plain `owner/repo` slug — it could smuggle a second search
+  // qualifier past the `repo:` prefix and widen the very scope it is meant to pin.
+  'invalid_board',
+  // The tracker cannot enumerate boards for a bug hunt, so the SPA offers a free-text field
+  // instead. Distinct from a tracker OUTAGE, which must be shown as the error it is.
+  'boards_unsupported',
+  // A board was listed or named for a REPO-BACKED source, whose board is not a choice at all:
+  // it is the repository the hunt's service frame is linked to. Distinct from
+  // `boards_unsupported` because the answers are opposite: that one means "type the board in
+  // yourself", this one means "there is nothing to type, pick the service instead". The SPA knows
+  // which from `TaskSourceState.repoBacked` before it renders either.
+  'board_from_service',
+] as const
+
+export type TaskSourceReadReason = (typeof TASK_SOURCE_READ_REASONS)[number]
+
 /** Search a tracker's issues by free text (title/content). */
 export const searchTasksSchema = v.object({
   query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   /**
-   * The board block the search runs from (a service frame or one of its
-   * tasks/modules). For a repo-backed source (GitHub Issues) this scopes the
-   * search to that service's linked repository — so hits never leak in from
-   * sibling repos, a pasted issue URL resolves to that exact issue, and a bare
-   * issue number resolves against the service's repo. Omitted for an unscoped
-   * workspace-wide search (the standalone "import an issue" surface).
+   * The board block the search runs from (a service frame or one of its tasks/modules).
+   * REQUIRED: for a repo-backed source (GitHub Issues) it is what scopes the search to that
+   * service's linked repository, so hits never leak in from other repos and a bare issue
+   * number resolves against the service's repo. There is deliberately no unscoped mode —
+   * an unscoped GitHub issue search reaches every repository the deployment's credential can
+   * see, which for a PAT is all of public GitHub. Repo-less sources (Jira, Linear) still
+   * receive it and simply have nothing to narrow.
    */
-  blockId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+  blockId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type SearchTasksInput = v.InferOutput<typeof searchTasksSchema>
 

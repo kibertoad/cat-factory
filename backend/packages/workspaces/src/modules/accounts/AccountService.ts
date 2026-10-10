@@ -12,8 +12,15 @@ import type {
   MembershipRepository,
   UserRepository,
 } from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
+import type { AuditRecorder, Clock, IdGenerator } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  NotFoundError,
+  UnavailableError,
+  ValidationError,
+  assertFound,
+  noopAuditRecorder,
+} from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // AccountService: the tenancy layer. An account is the owner of workspaces —
@@ -30,6 +37,46 @@ export interface AccountServiceDependencies {
   clock: Clock
   /** Optional: resolve member display details (name/email/avatar) for the roster. */
   userRepository?: UserRepository
+  /**
+   * Optional: invalidate the spend service's cached account-tier limit when an account's
+   * budget changes, so the new ceiling takes effect immediately (wired to
+   * `SpendService.invalidateAccountLimit`).
+   */
+  onAccountBudgetChanged?: (accountId: string) => void | Promise<void>
+  /**
+   * Optional: signal that an account's MEMBERSHIP roster changed (a member added or their roles
+   * changed), so the workspace-rbac `workspaceAccess` cache can drop its entries (account
+   * membership is a prerequisite for every board in the account, so a grant/revocation there
+   * changes access to potentially many boards). Wired to `caches.workspaceAccess.invalidateAll()`
+   * — the coarse fallback is deliberate: these are rare management actions and enumerating the
+   * account's boards just to invalidate isn't worth a port method. Absent (tests / no cache) ⇒
+   * resolution reads live.
+   */
+  onAccountMembershipChanged?: (accountId: string) => void | Promise<void>
+  /**
+   * The operator hard ceiling on the account-tier budget (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`),
+   * or null/undefined when uncapped. Enforced on write so a submitted value can't exceed the
+   * cap (the docs promise server-side enforcement; the gate additionally clamps at read time).
+   * A late-bound getter so it tracks the live pricing config.
+   */
+  resolveAccountBudgetCap?: () => number | null | undefined
+  /**
+   * Where privileged tenancy actions are recorded for an account admin to read back. Optional
+   * so the service stays unit-testable standalone (normalised once to `noopAuditRecorder`);
+   * REQUIRED on `CoreDependencies`, so a facade cannot silently run unaudited.
+   */
+  audit?: AuditRecorder
+  /**
+   * End every session a user currently holds, bound from `UserService.revokeSessions` (the
+   * generation bump plus the cache invalidation that must follow it).
+   *
+   * A bound callback rather than the service itself, so this service depends on the one
+   * CAPABILITY it needs instead of on another service's whole surface — and so the two-step
+   * ordering that makes a revocation coherent stays owned by the one place that knows about the
+   * cache. Optional for standalone unit-testability; absent ⇒ {@link revokeMemberSessions}
+   * refuses rather than reporting a revocation it did not perform.
+   */
+  revokeUserSessions?: (userId: string) => Promise<unknown>
 }
 
 /** The signed-in identity the tenancy decisions are made against. */
@@ -50,6 +97,7 @@ function toWire(account: AccountRecord, roles: Account['roles']): Account {
     createdAt: account.createdAt,
     roles,
     ...(account.defaultCloudProvider ? { defaultCloudProvider: account.defaultCloudProvider } : {}),
+    ...(account.spendMonthlyLimit != null ? { spendMonthlyLimit: account.spendMonthlyLimit } : {}),
   }
 }
 
@@ -58,7 +106,11 @@ function toMember(m: Membership): AccountMember {
 }
 
 export class AccountService {
-  constructor(private readonly deps: AccountServiceDependencies) {}
+  private readonly audit: AuditRecorder
+
+  constructor(private readonly deps: AccountServiceDependencies) {
+    this.audit = deps.audit ?? noopAuditRecorder
+  }
 
   /**
    * Ensure a user has a personal account (account-of-one) with an owner
@@ -72,15 +124,19 @@ export class AccountService {
       await this.ensureMembership(existing.id, user.id, ['admin'])
       return existing
     }
-    const account: AccountRecord = {
+    // First sign-in for this user: create the account atomically. The read above and this
+    // write are NOT a transaction, so concurrent first-load requests all read null; a plain
+    // `create` would then have every one of them INSERT and all-but-one 500 on the
+    // personal-account unique index. `ensurePersonal` inserts-or-returns the surviving row,
+    // so the concurrent callers converge on the same account instead.
+    const account = await this.deps.accountRepository.ensurePersonal({
       id: this.deps.idGenerator.next('acc'),
       type: 'personal',
       name: user.name?.trim() || user.login,
       githubAccountLogin: user.login,
       ownerUserId: user.id,
       createdAt: this.deps.clock.now(),
-    }
-    await this.deps.accountRepository.create(account)
+    })
     await this.ensureMembership(account.id, user.id, ['admin'])
     return account
   }
@@ -131,6 +187,23 @@ export class AccountService {
   async accessibleAccountIds(userId: string): Promise<string[]> {
     const memberships = await this.deps.membershipRepository.listByUser(userId)
     return memberships.map((m) => m.accountId)
+  }
+
+  /**
+   * The account scopes that drive workspace-RBAC board visibility: every account the user
+   * belongs to, plus the subset they hold `admin` in (the escape hatch — an account admin
+   * sees every board in the account, incl. `restricted` ones, and resolves to workspace
+   * admin). Derived from the SINGLE `listByUser` read, so it costs no extra query over
+   * {@link accessibleAccountIds}.
+   */
+  async accessibleAccountScopes(
+    userId: string,
+  ): Promise<{ accountIds: string[]; adminAccountIds: string[] }> {
+    const memberships = await this.deps.membershipRepository.listByUser(userId)
+    return {
+      accountIds: memberships.map((m) => m.accountId),
+      adminAccountIds: memberships.filter((m) => m.roles.includes('admin')).map((m) => m.accountId),
+    }
   }
 
   async isMember(accountId: string, userId: string): Promise<boolean> {
@@ -202,10 +275,47 @@ export class AccountService {
     input: UpdateAccountInput,
   ): Promise<Account> {
     const acting = await this.requireAdmin(accountId, actingUserId)
-    // An explicit key (even `undefined`) means "clear"; an absent key leaves it.
+    // An explicit key (even `undefined`) means "clear"; an absent key leaves it. Each key that
+    // was actually present is audited SEPARATELY after its own write commits, so the log states
+    // what changed rather than that "settings were edited" — a single event for a two-key patch
+    // would make a budget raise unreadable next to a cloud-provider switch. Presence, not
+    // difference: re-submitting the same value is an action an admin took, and a log that
+    // silently drops the no-ops would leave an admin unable to tell "nobody touched this" from
+    // "somebody confirmed it".
     if ('defaultCloudProvider' in input) {
+      const provider = input.defaultCloudProvider ?? null
       await this.deps.accountRepository.updateSettings(accountId, {
-        defaultCloudProvider: input.defaultCloudProvider ?? null,
+        defaultCloudProvider: provider,
+      })
+      await this.audit.record({
+        accountId,
+        actor: { kind: 'user', userId: actingUserId },
+        action: 'account.settings_changed',
+        targetType: 'account',
+        targetId: accountId,
+        details: { defaultCloudProvider: provider },
+      })
+    }
+    if ('spendMonthlyLimit' in input) {
+      const limit = input.spendMonthlyLimit ?? null
+      const cap = this.deps.resolveAccountBudgetCap?.()
+      if (limit != null && cap != null && limit > cap) {
+        throw new ValidationError(
+          `Account monthly budget (${limit}) exceeds the operator cap (${cap}).`,
+        )
+      }
+      await this.deps.accountRepository.updateSettings(accountId, { spendMonthlyLimit: limit })
+      // Drop the spend service's cached account limit so the new ceiling takes effect now.
+      await this.deps.onAccountBudgetChanged?.(accountId)
+      // `null` is the CLEARED ceiling, and it has to reach the viewer as null rather than as a
+      // zero or an omitted key: "no limit" and "a limit of nothing" are opposite policies.
+      await this.audit.record({
+        accountId,
+        actor: { kind: 'user', userId: actingUserId },
+        action: 'account.budget_changed',
+        targetType: 'account',
+        targetId: accountId,
+        details: { limit },
       })
     }
     const account = assertFound(
@@ -244,6 +354,17 @@ export class AccountService {
       createdAt: this.deps.clock.now(),
     }
     await this.deps.membershipRepository.upsert(membership)
+    // A new account membership grants access to every non-restricted board in the account, so drop
+    // the workspace-access cache (workspace-rbac). After the write commits.
+    await this.deps.onAccountMembershipChanged?.(accountId)
+    await this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.member_added',
+      targetType: 'user',
+      targetId: userId,
+      details: { roles: membership.roles.join(', ') },
+    })
     return toMember(membership)
   }
 
@@ -262,7 +383,61 @@ export class AccountService {
     }
     const membership: Membership = { ...target, roles: next }
     await this.deps.membershipRepository.upsert(membership)
+    // An account-role change (e.g. gaining/losing `admin`) changes the workspace-access escape
+    // hatch, so drop the workspace-access cache (workspace-rbac). After the write commits.
+    await this.deps.onAccountMembershipChanged?.(accountId)
+    // Both role sets, because the interesting question about a role change is what it was
+    // before: a log that records only the new value cannot tell a promotion from a demotion.
+    await this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.member_roles_changed',
+      targetType: 'user',
+      targetId: targetUserId,
+      details: { previousRoles: target.roles.join(', '), roles: next.join(', ') },
+    })
     return toMember(membership)
+  }
+
+  /**
+   * End every session a member of this account currently holds (admin-only).
+   *
+   * The offboarding lever: it withdraws AUTHENTICATION and nothing else, leaving membership and
+   * roles exactly as they were. Deliberately not folded into a role change — the RBAC gate
+   * re-reads roles on the next request, so a downgrade needs no revocation, and coupling the two
+   * would sign a person out of every board because their role on one was adjusted.
+   *
+   * The target must be a member of THIS account: without that check an admin of any account could
+   * end the sessions of any user on the deployment by guessing an id. `requireMember` 404s
+   * otherwise, so the refusal also does not confirm that the id names anybody.
+   *
+   * Self-revocation is allowed, unlike the self-demotion guard on {@link setMemberRoles}. The two
+   * refusals protect different things: dropping your own admin can leave an account with nobody
+   * able to administer it, whereas signing yourself out is recoverable by signing back in — and
+   * an admin who has just lost a laptop is exactly who needs it.
+   */
+  async revokeMemberSessions(
+    accountId: string,
+    actingUserId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    await this.requireAdmin(accountId, actingUserId)
+    await this.requireMember(accountId, targetUserId)
+    const revoke = this.deps.revokeUserSessions
+    if (!revoke) {
+      throw new UnavailableError('Session revocation is not configured on this deployment')
+    }
+    await revoke(targetUserId)
+    // AFTER the revocation commits, so the log never claims access was withdrawn that was not.
+    // `record` never throws, so a store outage costs the row and never the offboarding.
+    await this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.member_sessions_revoked',
+      targetType: 'user',
+      targetId: targetUserId,
+      details: {},
+    })
   }
 
   private async ensureMembership(

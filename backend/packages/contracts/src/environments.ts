@@ -1,5 +1,22 @@
 import * as v from 'valibot'
-import { customBackendKindSchema } from './primitives.js'
+import {
+  customBackendKindSchema,
+  environmentSecretRefSchema,
+  nonEmpty,
+  urlString,
+} from './primitives.js'
+import { environmentReachabilitySchema } from './environment-reachability.js'
+import { stackRecipeSchema } from './stack-recipes.js'
+import {
+  eksProvisionConfigSchema,
+  kubernetesHelmReleaseSchema,
+  kubernetesImageOverrideSchema,
+  kubernetesManifestSourceSchema,
+  kubernetesProvisionConfigSchema,
+  kubernetesRendererSchema,
+  kubernetesSecretInjectionSchema,
+  kubernetesUrlSourceSchema,
+} from './environments-kubernetes.js'
 
 // ---------------------------------------------------------------------------
 // Ephemeral environment provider wire contracts. Every organization rolls its
@@ -19,18 +36,6 @@ import { customBackendKindSchema } from './primitives.js'
 // registration, stored encrypted-at-rest in D1, and resolved in-memory at call
 // time. Nothing here ever carries a raw secret on the wire.
 // ---------------------------------------------------------------------------
-
-/**
- * A reference to a credential by logical key. Resolves against the workspace's
- * encrypted secret bundle (supplied at registration), not an env var.
- */
-export const environmentSecretRefSchema = v.object({
-  key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_.-]+$/), v.minLength(1), v.maxLength(64)),
-})
-export type EnvironmentSecretRef = v.InferOutput<typeof environmentSecretRefSchema>
-
-const nonEmpty = v.pipe(v.string(), v.minLength(1))
-const urlString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000))
 
 /**
  * How the worker authenticates to the org's *management* API (the one we call to
@@ -99,6 +104,38 @@ export const environmentStatusSchema = v.picklist([
 ])
 export type EnvironmentStatus = v.InferOutput<typeof environmentStatusSchema>
 
+/**
+ * What an INDEPENDENT probe found after a teardown call succeeded — the difference between
+ * "the provider accepted the destroy request" and "the environment is gone".
+ *
+ * The two are routinely not the same thing, which is why this exists as a computed observation
+ * rather than a boolean read off the teardown call's own return value. A manifest-driven
+ * provider whose manifest declares no `teardown:` template destroys nothing and reports
+ * `torn_down`; a Kubernetes namespace `DELETE` returns immediately while the namespace sits in
+ * `Terminating` for however long its finalizers take. Recording either as a reclaimed
+ * environment is how a still-running, still-billing environment comes to be reported as torn
+ * down on a pull request.
+ *
+ * The four are kept apart because each is a different person's problem:
+ *  - `confirmed`:     the probe says the environment is gone. The only state that proves it.
+ *  - `still_standing`: the probe says it is STILL THERE. The teardown was a no-op (typically a
+ *                       manifest with no `teardown:` template) and somebody has to reclaim it
+ *                       AND fix the provider config, or every future run leaks one too.
+ *  - `unverifiable`:   the provider offers no way to check (its probe is not implemented, or it
+ *                       cannot describe a resource that no longer exists). A CONFIGURATION
+ *                       fact, unchanged between runs, and not something a retry fixes.
+ *  - `unconfirmed`:    the probe ran and could not settle the question — it errored, or the
+ *                       resource is mid-`Terminating`. TRANSIENT: the TTL sweep re-probes, and
+ *                       the answer may well be `confirmed` next pass.
+ */
+export const teardownConfirmationSchema = v.picklist([
+  'confirmed',
+  'still_standing',
+  'unverifiable',
+  'unconfirmed',
+])
+export type TeardownConfirmation = v.InferOutput<typeof teardownConfirmationSchema>
+
 export const environmentAccessSchemeSchema = v.picklist([
   'none',
   'bearer',
@@ -129,6 +166,31 @@ export type EnvironmentAccessMapping = v.InferOutput<typeof environmentAccessMap
  */
 export const environmentResponseMappingSchema = v.object({
   urlPath: v.optional(v.string()),
+  /**
+   * Where the response states the ADDRESSES that carry traffic for `urlPath`'s host: a string, or
+   * an array of strings, or an array of `{ address, label }` objects.
+   *
+   * The half of addressing a URL cannot express. An org whose per-environment DNS record lives in
+   * an internal view publishes a name that resolves nowhere from the deployment while the
+   * balancers fronting it are perfectly reachable, and this is how such a provider says so
+   * without the platform having to know its topology. Absent (the ordinary case) means the name
+   * is the only thing to try.
+   */
+  addressesPath: v.optional(v.string()),
+  /**
+   * The same, for a management API that identifies those balancers by NAME: a string, an array of
+   * strings, or an array of `{ host, label }` objects. The platform resolves each name when it
+   * dials, and grades every address it answers with exactly as a stated address is graded.
+   *
+   * A second path rather than more shapes on {@link addressesPath}, because a bare string there
+   * already means an address and cannot be re-read as a name without guessing: a manifest saying
+   * which kind it publishes is the whole difference between resolving a balancer FQDN and handing
+   * a resolver a non-canonical literal that answers loopback. Declaring both is fine, and the
+   * addresses are then tried ahead of the names; a provider that wants a different order between
+   * the two states them all through `addressesPath` as `{ address }` / `{ host }` objects, which
+   * is the one shape that can interleave them.
+   */
+  hostsPath: v.optional(v.string()),
   statusPath: v.optional(v.string()),
   statusMap: v.optional(v.array(v.object({ from: v.string(), to: environmentStatusSchema }))),
   expiresAtPath: v.optional(v.string()),
@@ -153,8 +215,8 @@ export const environmentManifestSchema = v.object({
   /** Fallback TTL (ms) when the response carries no explicit expiry. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
   /**
-   * Opaque, provider-specific configuration for a CUSTOM backend (e.g. a Kargo project,
-   * link-selection key, status map). The generic HttpEnvironmentProvider ignores it
+   * Opaque, provider-specific configuration for a CUSTOM backend (e.g. a project
+   * reference, link-selection key, status map). The generic HttpEnvironmentProvider ignores it
    * entirely; a custom backend — registered by reference into the app-owned
    * `EnvironmentBackendRegistry` (see `backend/docs/native-environment-adapter.md`) — reads
    * + validates it off the per-call
@@ -183,25 +245,143 @@ export type EnvironmentManifest = v.InferOutput<typeof environmentManifestSchema
  * The provision type a service declares — the INPUT SHAPE it produces. `infraless` means
  * the service stands up no environment (the Tester runs with no infra). A `custom` service
  * additionally pins a `manifestId` (see {@link serviceProvisioningSchema}).
+ *
+ * `cloudflare` is the per-PR Cloudflare Workers preview: unlike every other type the service
+ * declares NOTHING repo-specific here, because the recipe lives in the repo's own preview
+ * workflow rather than in a compose file or a manifest tree the platform reads. Declaring the
+ * type is the whole service side of it.
  */
 export const provisionTypeSchema = v.picklist([
   'kubernetes',
   'docker-compose',
+  'cloudflare',
   'custom',
   'infraless',
 ])
 export type ProvisionType = v.InferOutput<typeof provisionTypeSchema>
 
 /**
+ * Machine-readable cause of an environment-provisioning failure, surfaced on the run's
+ * {@link AgentFailure.reason} so the SPA can render precise, actionable guidance instead of
+ * string-matching the provider prose (the failure analogue of {@link ConflictReason}).
+ *
+ * It is also what decides whether an automated `deploy-fixer` may be dispatched at all (see
+ * {@link isRepoFixableEnvironmentFailure}), which is the reason this vocabulary earns its keep
+ * rather than staying a single member beside a verbatim provider string. A coding agent handed a
+ * checkout will always find something to change; the classification is what stops it being asked
+ * to, for a cause no edit in that checkout could address.
+ *
+ *  - `deploy_runner_unwired` — the service's provider needs a container-backed deploy (a real
+ *    render/apply) but no deploy runner is wired on this deployment. The fix is deployment-level
+ *    config (a runner pool / `LOCAL_DEPLOY_RUNTIME` / the Cloudflare DeployContainer binding), so
+ *    the SPA gates its runtime-specific hint on this reason rather than on the prose.
+ *  - `config_incomplete` — the manifests are fine and the PLATFORM did not fill them in: a
+ *    `{{placeholder}}` the connection was meant to supply rendered empty, or a required handler
+ *    field is unset. The repository is not at fault and editing it is actively harmful, because
+ *    the only edit available is to hard-code the value the substitution exists to vary.
+ *  - `manifest_invalid` — the manifests the repo supplied were rejected on their own merits
+ *    (a malformed document, a missing required field, an unknown kind, a schema violation) with
+ *    every substitution resolved. The ONE cause a checkout edit can actually fix.
+ *  - `image_unavailable` — the workload's image could not be pulled (absent tag, private
+ *    registry, no pull secret). Not repo-fixable: the image is published by CI, so an agent
+ *    "fixing" this in the checkout is one step from editing the workflow that builds it.
+ *  - `workload_unhealthy` — the objects applied cleanly and the workload never became ready
+ *    (crash loop, OOM kill, unschedulable). This is the deployed CODE or the cluster's capacity,
+ *    which is the tester's subject and the operator's, not a manifest repair.
+ *  - `permission_denied` — the cluster refused the credentials (401/403, missing RBAC).
+ *  - `cluster_unreachable` — the provider could not be reached at all.
+ *  - `timeout` — the provision ran past its deadline with no terminal cause observed. This is
+ *    what a `deployer` records when its readiness wait expires: the provider kept answering
+ *    `provisioning` and never said why.
+ *  - `environment_not_ready` — the environment settled in a state it will not leave on its own
+ *    (`expired`, torn down under the run) or is still coming up when a step that needs it is
+ *    about to be dispatched. Distinct from `timeout` because nothing waited: there is a live
+ *    verdict, and it is not `ready`.
+ *  - `environment_missing` — a service whose steps run against an ephemeral environment has
+ *    none at all. The fix is the CHAIN (a tester with no `deployer` ahead of it) rather than the
+ *    provider, which is why it does not share `environment_not_ready`'s code.
+ *  - `environment_unreachable`: the provider called it `ready`, and neither the URL's own name
+ *    nor any address the provider stated for it carried. The one member of this vocabulary that
+ *    is about REACHING rather than provisioning, and it is here rather than in
+ *    `EnvironmentUnreachableReason` because this is the vocabulary the deployer settles a frame
+ *    in. Which LAYER failed is the sibling vocabulary's answer and rides the environment's own
+ *    `reachability.proof.reason`.
+ */
+export const environmentFailureReasonSchema = v.picklist([
+  'deploy_runner_unwired',
+  'config_incomplete',
+  'manifest_invalid',
+  'image_unavailable',
+  'workload_unhealthy',
+  'permission_denied',
+  'cluster_unreachable',
+  'timeout',
+  'environment_not_ready',
+  'environment_missing',
+  'environment_unreachable',
+])
+export type EnvironmentFailureReason = v.InferOutput<typeof environmentFailureReasonSchema>
+
+/**
+ * Whether a failure of this cause could be fixed by editing the repository the run has checked
+ * out, and therefore whether an automated fixer may be dispatched against it.
+ *
+ * An exhaustive `Record` rather than a set membership test, so a new cause fails the build until
+ * somebody decides this about it. The default a new member would otherwise silently inherit is
+ * the dangerous one in both directions: `true` spends a container and invites a plausible-looking
+ * edit to code that was never wrong, and `false` quietly removes a class from remediation with
+ * nothing recording that anyone chose to.
+ *
+ * ONLY `manifest_invalid` is true, and the bar is deliberately that high. The motivating failure
+ * (`exec_194b231198454c7785f29589`) was a `Deployment` rejected for `spec.template.spec.
+ * containers[0].image: Required value` where the manifest correctly said `image: "{{image}}"`
+ * and the workspace connection carried no `imageTemplate` to fill it. An agent given that error
+ * and that checkout has exactly one move: hard-code an image. The run goes green, per-PR image
+ * substitution is permanently defeated, and the unwired connection the failure was reporting is
+ * hidden. Classification is what makes the difference between a repair and a plausible guess.
+ *
+ * An UNCLASSIFIED failure (no reason recorded at all) is not fixable either: the callers treat
+ * an absent reason as false, because "we could not tell what went wrong" is not evidence that a
+ * checkout edit would help.
+ */
+const REPO_FIXABLE_ENVIRONMENT_FAILURES: Record<EnvironmentFailureReason, boolean> = {
+  deploy_runner_unwired: false,
+  config_incomplete: false,
+  manifest_invalid: true,
+  image_unavailable: false,
+  workload_unhealthy: false,
+  permission_denied: false,
+  cluster_unreachable: false,
+  timeout: false,
+  environment_not_ready: false,
+  environment_missing: false,
+  // A route that does not carry is a DNS zone, a security group or a load balancer, none of
+  // which is in the checkout. An agent handed "nothing could reach it" and a repo has exactly
+  // one move, which is to change the address the manifest publishes, and that is the fact the
+  // failure was reporting rather than the fault.
+  environment_unreachable: false,
+}
+
+/** See {@link REPO_FIXABLE_ENVIRONMENT_FAILURES}. An absent/unknown reason is never fixable. */
+export function isRepoFixableEnvironmentFailure(
+  reason: string | null | undefined,
+): reason is EnvironmentFailureReason {
+  if (!reason) return false
+  return REPO_FIXABLE_ENVIRONMENT_FAILURES[reason as EnvironmentFailureReason] === true
+}
+
+/**
  * The engine a workspace/user handler uses to stand up / connect to an environment for a
  * provision type. `none` is the synthetic engine for `infraless`. `local-docker` runs a
  * compose stack locally; `local-k3s`/`remote-kubernetes` drive a kube apiserver;
+ * `cloudflare` drives a repo's preview workflow over the VCS deployments API;
  * `remote-custom` is the generic BYO HTTP management API.
  */
 export const infraEngineSchema = v.picklist([
   'local-docker',
   'local-k3s',
   'remote-kubernetes',
+  'cloudflare',
   'remote-custom',
   'none',
 ])
@@ -217,305 +397,114 @@ export const manifestIdSchema = v.pipe(
 export type ManifestId = v.InferOutput<typeof manifestIdSchema>
 
 // ---------------------------------------------------------------------------
-// Kubernetes ephemeral-environment backend.
+// Cloudflare Workers preview environment backend.
 //
-// A native backend that deploys an operator-authored set of k3s/Kubernetes
-// manifests into a per-PR namespace, reached over the kube-apiserver via HTTPS
-// (the same client the Kubernetes RUNNER backend uses). Unlike the manifest
-// HTTP provider, this is NOT a declarative HTTP template: the apiserver is driven
-// directly. The ServiceAccount bearer token lives in the encrypted secret bundle
-// (key `apiToken`, shared with the runner backend); everything non-secret is
-// config here.
+// A native backend that stands up a per-PR Cloudflare Worker (its own D1 databases, its own
+// SPA preview) by driving the TARGET REPOSITORY'S OWN preview workflow over the VCS
+// Deployments API. The platform never talks to Cloudflare: it creates a deployment, reads
+// that deployment's statuses for readiness, and posts an `inactive` status to tear down.
+//
+// Why the deployments API and not the Cloudflare API. Standing a Worker up means BUILDING it
+// — installing a pnpm workspace, running migrations, uploading a bundle. That needs a CI
+// runner, which no facade has (and the Cloudflare facade has neither a filesystem nor a
+// container). The repository already has a runner; the deployments API is the smallest
+// possible control plane over it, and it is plain outbound HTTPS, so this backend works
+// identically on every facade. See `deploy/preview/README.md` for the reference workflow.
 // ---------------------------------------------------------------------------
 
-/** The secret-bundle key the Kubernetes env backend reads the ServiceAccount token from. */
-export const KUBERNETES_ENV_TOKEN_SECRET_KEY = 'apiToken'
+/** The secret-bundle key the Cloudflare env backend reads its VCS API token from. */
+export const CLOUDFLARE_ENV_TOKEN_SECRET_KEY = 'githubToken'
 
-/** A `{{var}}`-templated string rendered against the provision vars. */
-const templateString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500))
+/** Default templates, exported so the provider, the UI hints and the docs cannot drift apart. */
+export const CLOUDFLARE_DEFAULT_WORKER_NAME_TEMPLATE = 'cat-factory-pr-{{pullNumber}}'
+export const CLOUDFLARE_DEFAULT_ENVIRONMENT_NAME_TEMPLATE = 'pr-{{pullNumber}}'
 
 /**
- * A PINNED helm chart version: an exact SemVer (optionally `v`-prefixed, with optional
- * pre-release / build metadata). Floating tags (`latest`, `*`, `^1.0`, `1.x`, ranges) are
- * rejected so provisioning is deterministic.
+ * A `{{pullNumber}}`/`{{branch}}`/`{{blockId}}`-templated resource name. Constrained to the
+ * characters a Worker name and a deployment environment name both accept ONCE RENDERED, so a
+ * bad template fails at the write boundary rather than producing an unreachable URL.
  */
-const pinnedChartVersion = v.pipe(
+const cloudflareNameTemplate = v.pipe(
   v.string(),
   v.trim(),
+  v.minLength(1),
+  v.maxLength(120),
   v.regex(
-    /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/,
-    'version must be a pinned semver (e.g. 1.2.3), not a floating tag like latest or ^1.0.',
+    /^[a-z0-9{}-]+$/,
+    'may contain only lowercase letters, digits, hyphens and {{placeholders}}',
   ),
 )
 
 /**
- * How the manifests at `path` are turned into apiserver-ready resources. `raw` (the
- * default, and the only one the in-Worker native REST adapter handles) treats `path` as
- * a single manifest file or a flat directory of already-valid YAML docs. `kustomize`
- * treats `path` as an overlay directory (`kustomization.yaml` + `resources`/`components`/
- * `bases`) that must be `kustomize build`-rendered before apply — which only the
- * container-backed deploy adapter can do (it shells out to real `kustomize`/`helm`).
+ * What it takes to REACH the VCS API this backend drives, split out of the full config for the
+ * reason {@link kubernetesConnectionConfigSchema} states: teardown posts one `inactive`
+ * deployment status and needs nothing else, so a `workersSubdomain` or name template that
+ * stopped matching the contract must not be what strands a live preview.
+ *
+ * `apiBaseUrl` stays validated because the fallback is the PUBLIC API root: silently posting a
+ * GitHub Enterprise deployment's teardown to `api.github.com` is a wrong-host write, not a
+ * degradation. Absent is fine (that IS the documented default); present but unusable is not.
  */
-export const kubernetesRendererSchema = v.picklist(['raw', 'kustomize'])
-export type KubernetesRenderer = v.InferOutput<typeof kubernetesRendererSchema>
+export const cloudflareConnectionConfigSchema = v.object({
+  /** VCS API root. Absent ⇒ `https://api.github.com`. Set it for GitHub Enterprise Server. */
+  apiBaseUrl: v.optional(urlString),
+})
+export type CloudflareConnectionConfig = v.InferOutput<typeof cloudflareConnectionConfigSchema>
 
 /**
- * Where the per-PR manifests are read from. `colocated` reads them from the block's
- * own repo at the PR head branch; `separate` reads them from a different repo (the
- * Kubernetes definition often lives outside the service repo). `renderer` (absent ⇒
- * `raw`) selects how `path` is turned into resources; `kustomize` requires the
- * container-backed deploy adapter.
+ * The Cloudflare preview engine connection (the "how"). Everything here is non-secret; the
+ * VCS API token rides the encrypted secret bundle under
+ * {@link CLOUDFLARE_ENV_TOKEN_SECRET_KEY}.
+ *
+ * The two name templates are the CONTRACT WITH THE WORKFLOW, which is why they are config and
+ * not constants: the platform derives the environment name it deploys under and the Worker
+ * URL it hands the tester, and the workflow names its resources from the same values. Change
+ * one and you must change the other. They default to the reference workflow's shape, so a
+ * deployment that copied `deploy/preview` unmodified sets neither.
  */
-export const kubernetesManifestSourceSchema = v.variant('type', [
-  v.object({
-    type: v.literal('colocated'),
-    /** File or directory path within the PR repo (read at the PR head branch). */
-    path: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-    renderer: v.optional(kubernetesRendererSchema),
-  }),
-  v.object({
-    type: v.literal('separate'),
-    /** `owner/repo` of the manifests repo. */
-    repo: v.pipe(v.string(), v.trim(), v.regex(/^[^/\s]+\/[^/\s]+$/, 'must be "owner/repo"')),
-    /** Branch/tag/sha to read at; absent ⇒ that repo's default branch. */
-    ref: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
-    /** File or directory path within the manifests repo. */
-    path: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-    renderer: v.optional(kubernetesRendererSchema),
-  }),
-])
-export type KubernetesManifestSource = v.InferOutput<typeof kubernetesManifestSourceSchema>
-
-/** How the environment URL is derived once the manifests are applied. */
-export const kubernetesUrlSourceSchema = v.variant('source', [
-  v.object({
-    source: v.literal('ingressTemplate'),
-    /** Host template, e.g. `{{branch}}.preview.example.com`; rendered with the provision vars. */
-    hostTemplate: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-    scheme: v.optional(v.picklist(['http', 'https'])),
-  }),
-  v.object({
-    source: v.literal('ingressStatus'),
-    /** Ingress object to read `.status.loadBalancer` from; absent ⇒ the only Ingress applied. */
-    ingressName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
-    scheme: v.optional(v.picklist(['http', 'https'])),
-  }),
-  v.object({
-    source: v.literal('serviceStatus'),
-    /** Service object to read `.status.loadBalancer` (k3s ServiceLB) from. */
-    serviceName: v.pipe(v.string(), v.trim(), v.minLength(1)),
-    port: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
-    scheme: v.optional(v.picklist(['http', 'https'])),
-  }),
-  v.object({
-    source: v.literal('gatewayStatus'),
-    /** Gateway-API `Gateway` to read `.status.addresses[]` from; absent ⇒ the only one applied. */
-    gatewayName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
-    scheme: v.optional(v.picklist(['http', 'https'])),
-  }),
-  v.object({
-    source: v.literal('httpRouteStatus'),
-    /** `HTTPRoute` whose `parentRefs` resolve to the Gateway address; absent ⇒ the only one applied. */
-    httpRouteName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
-    scheme: v.optional(v.picklist(['http', 'https'])),
-  }),
-])
-export type KubernetesUrlSource = v.InferOutput<typeof kubernetesUrlSourceSchema>
-
-export const kubernetesEnvironmentConfigSchema = v.object({
-  /** Human label for the connection (shown in the UI). */
+export const cloudflareEnvironmentConfigSchema = v.object({
+  ...cloudflareConnectionConfigSchema.entries,
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
-  /** kube-apiserver root URL, e.g. `https://my-cluster.example:6443`. */
-  apiServerUrl: urlString,
-  /** PEM CA bundle to verify the apiserver TLS cert (omit only for a publicly-trusted CA). */
-  caCertPem: v.optional(v.string()),
-  /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
-  insecureSkipTlsVerify: v.optional(v.boolean()),
   /**
-   * Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`.
-   * Rendered with the provision vars then sanitized to an RFC1123 label; absent ⇒ a
-   * default derived from the PR number / block id.
+   * The account's `*.workers.dev` subdomain — the preview URL is
+   * `https://<worker>.<subdomain>.workers.dev`. The platform can DERIVE that before anything
+   * is built, which is what lets a tester be handed a URL without waiting on a deploy that
+   * takes minutes.
    */
-  namespaceTemplate: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
-  /** Where the manifests are read from (co-located in the PR repo, or a separate repo). */
-  manifestSource: kubernetesManifestSourceSchema,
-  /** How the environment URL is derived once applied. */
-  url: kubernetesUrlSourceSchema,
+  workersSubdomain: v.pipe(
+    v.string(),
+    v.trim(),
+    v.minLength(1),
+    v.maxLength(63),
+    v.regex(
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
+      'must be a bare workers.dev subdomain label, e.g. "my-account"',
+    ),
+  ),
   /**
-   * Optional image reference made available to the manifests as `{{image}}` (e.g. a
-   * CI-built image tagged by branch/sha). Itself a template over the provision vars.
+   * `owner/repo` carrying the preview workflow. Absent ⇒ THE BLOCK'S OWN REPO, resolved per
+   * provision — which is the point of a built-in backend over a pasted manifest: one handler
+   * serves every repository in the workspace instead of being pinned to one.
    */
-  imageTemplate: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  repo: v.optional(
+    v.pipe(v.string(), v.trim(), v.regex(/^[^/\s]+\/[^/\s]+$/, 'must be "owner/repo"')),
+  ),
+  /** Worker name template; the URL is derived from it. Absent ⇒ `cat-factory-pr-{{pullNumber}}`. */
+  workerNameTemplate: v.optional(cloudflareNameTemplate),
+  /** Deployment environment name template. Absent ⇒ `pr-{{pullNumber}}`. */
+  environmentNameTemplate: v.optional(cloudflareNameTemplate),
   /** Fallback TTL (ms) after which the env is swept + torn down. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
-  /**
-   * How long (seconds) the container deploy adapter waits for each Deployment to roll out
-   * before reporting the env still `provisioning` (the backend keeps polling). Only the
-   * container-backed render path honors it; absent ⇒ the harness default (180s).
-   */
-  rolloutTimeoutSeconds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
-  /** Extra labels stamped on the namespace + every applied resource. */
-  labels: v.optional(v.record(v.string(), v.string())),
-  /** Extra annotations stamped on the namespace. */
-  annotations: v.optional(v.record(v.string(), v.string())),
 })
-export type KubernetesEnvironmentConfig = v.InferOutput<typeof kubernetesEnvironmentConfigSchema>
-
-// ---------------------------------------------------------------------------
-// Kustomize / Helm render inputs (container-backed deploy adapter only).
-//
-// These ride a service's provisioning (the "what/where") and are consumed by the
-// container deploy adapter, which runs real `kubectl`/`kustomize`/`helm`. The native
-// in-Worker REST adapter ignores them (raw manifests only). Values for any `secretRef`
-// resolve from the workspace encrypted bundle at provision time — the config carries
-// secret KEYS, never values (the same invariant the manifest-HTTP provider enforces).
-// ---------------------------------------------------------------------------
-
-/**
- * A structured image override (the kustomize `images:` equivalent, generalizing the
- * legacy `{{image}}` text substitution). Matches a container image by `name` and
- * overrides its repo and/or tag/digest; the override values are templated over the
- * provision vars (e.g. `newTagTemplate: '{{branch}}'`).
- */
-export const kubernetesImageOverrideSchema = v.pipe(
-  v.object({
-    /** The image to match (the `name:` in a kustomization `images:` entry), e.g. `registry/app`. */
-    name: nonEmpty,
-    /** Optional replacement repo, templated; absent ⇒ keep the original repo. */
-    newNameTemplate: v.optional(templateString),
-    /** Replacement tag, templated (e.g. `{{branch}}` / `{{sha}}`); mutually exclusive with digest. */
-    newTagTemplate: v.optional(templateString),
-    /** Replacement digest, templated; alternative to a tag. */
-    digestTemplate: v.optional(templateString),
-  }),
-  v.check(
-    (o) =>
-      o.newNameTemplate !== undefined ||
-      o.newTagTemplate !== undefined ||
-      o.digestTemplate !== undefined,
-    'an image override must set at least one of newNameTemplate, newTagTemplate, or digestTemplate.',
-  ),
-  v.check(
-    (o) => !(o.newTagTemplate !== undefined && o.digestTemplate !== undefined),
-    'newTagTemplate and digestTemplate are mutually exclusive on an image override.',
-  ),
-)
-export type KubernetesImageOverride = v.InferOutput<typeof kubernetesImageOverrideSchema>
-
-/** A single templated `--set path=value` for a helm release. */
-export const kubernetesHelmSetSchema = v.object({
-  /** Dotted `--set` path, e.g. `config.rateLimit.enabled`. */
-  path: nonEmpty,
-  /** The value, templated over the provision vars. */
-  valueTemplate: v.pipe(v.string(), v.trim(), v.maxLength(2000)),
-})
-export type KubernetesHelmSet = v.InferOutput<typeof kubernetesHelmSetSchema>
-
-/**
- * A helm release the deploy adapter installs/upgrades (`helm upgrade --install`).
- * `scope: 'shared'` is a cluster singleton (installed once, never torn down per-PR —
- * e.g. an ingress/gateway controller); `per-environment` (the default) re-installs in
- * each per-PR namespace. The `version` pin is required so provisioning is deterministic.
- */
-export const kubernetesHelmReleaseSchema = v.object({
-  /** Release name. */
-  name: nonEmpty,
-  /** Chart ref: an OCI ref (`oci://…`) or, with `repo`, a `repo/chart` name. */
-  chart: nonEmpty,
-  /** Chart repo URL; absent ⇒ `chart` is an OCI ref. */
-  repo: v.optional(urlString),
-  /** PINNED chart version, e.g. `1.2.3` / `v1.2.3` (floating tags like `latest`/`^1.0` rejected). */
-  version: pinnedChartVersion,
-  /** Namespace to install into, templated; absent ⇒ the environment namespace. */
-  namespaceTemplate: v.optional(templateString),
-  /** Inline `--values` overrides. */
-  values: v.optional(v.record(v.string(), v.unknown())),
-  /** Templated `--set` overrides. */
-  set: v.optional(v.array(kubernetesHelmSetSchema)),
-  /** Secret-bundle-backed values folded in at provision time (`--set <path>=<secret>`). */
-  valuesSecretRefs: v.optional(
-    v.array(v.object({ path: nonEmpty, secretRef: environmentSecretRefSchema })),
-  ),
-  scope: v.optional(v.picklist(['per-environment', 'shared'])),
-})
-export type KubernetesHelmRelease = v.InferOutput<typeof kubernetesHelmReleaseSchema>
-
-/** One entry inside an injected Secret: a logical key mapped to a secret-bundle ref OR a templated value. */
-export const kubernetesSecretEntrySchema = v.pipe(
-  v.object({
-    /** Key inside the rendered Secret / `.env`. */
-    key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_.-]+$/), v.minLength(1), v.maxLength(256)),
-    /** Resolve the value from the workspace encrypted bundle by key. */
-    secretRef: v.optional(environmentSecretRefSchema),
-    /** OR a non-secret value, templated over the provision vars. */
-    valueTemplate: v.optional(v.pipe(v.string(), v.maxLength(2000))),
-  }),
-  v.check(
-    (e) => (e.secretRef === undefined) !== (e.valueTemplate === undefined),
-    'a secret entry must set exactly one of secretRef or valueTemplate.',
-  ),
-)
-export type KubernetesSecretEntry = v.InferOutput<typeof kubernetesSecretEntrySchema>
-
-/**
- * How the deploy adapter feeds resolved secret values in before apply, discriminated by
- * `mode`. The mapping of logical keys is in-repo intent; the values resolve from the
- * encrypted bundle at provision time (the config carries secret KEYS, never values).
- *
- * - `secret`: materialize a `Secret` resource named `secretName` directly in the namespace.
- * - `generatorEnvFile`: write the entries as a `KEY=value` `.env` file at `envFilePath`
- *   (repo-relative, inside the overlay tree) BEFORE `kustomize build`, so the overlay's own
- *   existing `secretGenerator` consumes it. This is the common ephemeral-environment shape
- *   where a Component declares `secretGenerator: { envs: ['.env'] }`, the Secret is named by
- *   the overlay, and the real `.env` is supplied at deploy time (e.g. from a secrets manager).
- *   Use this instead of `secret` when the manifests already declare a `secretGenerator`, so
- *   the two don't collide.
- */
-export const kubernetesSecretInjectionSchema = v.variant('mode', [
-  v.object({
-    mode: v.literal('secret'),
-    /** Target Secret name in the namespace. */
-    secretName: nonEmpty,
-    /** Secret `type`; absent ⇒ `Opaque`. */
-    secretType: v.optional(nonEmpty),
-    entries: v.array(kubernetesSecretEntrySchema),
-  }),
-  v.object({
-    mode: v.literal('generatorEnvFile'),
-    /**
-     * Repo-relative path within the overlay tree to write the `KEY=value` env file the
-     * overlay's `secretGenerator` reads (e.g. `overlays/<env>/<component>/.env`). The
-     * overlay names the Secret.
-     */
-    envFilePath: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-    entries: v.array(kubernetesSecretEntrySchema),
-  }),
-])
-export type KubernetesSecretInjection = v.InferOutput<typeof kubernetesSecretInjectionSchema>
-
-/**
- * The full Kubernetes provision config the deploy adapter consumes: the combined cluster +
- * URL + manifest-source config PLUS the kustomize/helm render inputs (image overrides, helm
- * releases, secret injections). It is assembled at provision time by MERGING the workspace
- * kube engine config (the "how": apiserver, sizing, shared helm releases) with the service's
- * own provisioning (the "what/where": manifest source, per-environment helm releases, image
- * overrides, secret injections) — so the provider reads everything it needs from one place.
- * The native in-Worker REST adapter ignores the render fields (raw manifests only); the
- * container-backed deploy adapter consumes them. Carries secret KEYS, never values.
- */
-export const kubernetesProvisionConfigSchema = v.object({
-  ...kubernetesEnvironmentConfigSchema.entries,
-  /** Structured image overrides (the kustomize `images:` shape), templated over provision vars. */
-  images: v.optional(v.array(kubernetesImageOverrideSchema)),
-  /** Helm releases to install — workspace-shared singletons merged with the service's per-env ones. */
-  helmReleases: v.optional(v.array(kubernetesHelmReleaseSchema)),
-  /** Secrets fed in before apply (a `Secret` resource or a `secretGenerator` `.env`). */
-  secretInjections: v.optional(v.array(kubernetesSecretInjectionSchema)),
-})
-export type KubernetesProvisionConfig = v.InferOutput<typeof kubernetesProvisionConfigSchema>
+export type CloudflareEnvironmentConfig = v.InferOutput<typeof cloudflareEnvironmentConfigSchema>
 
 /** Built-in environment backend kinds the contract knows by name. */
-export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+export const RESERVED_ENVIRONMENT_BACKEND_KINDS = [
+  'manifest',
+  'kubernetes',
+  'eks',
+  'cloudflare',
+] as const
 
 /**
  * The `kind` slug of a CUSTOM (third-party, programmatically-registered) environment
@@ -542,6 +531,8 @@ export const customEnvironmentBackendKindSchema = customBackendKindSchema(
 export const environmentBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: environmentManifestSchema }),
   v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesProvisionConfigSchema }),
+  v.object({ kind: v.literal('eks'), eks: eksProvisionConfigSchema }),
+  v.object({ kind: v.literal('cloudflare'), cloudflare: cloudflareEnvironmentConfigSchema }),
   v.object({ kind: customEnvironmentBackendKindSchema, manifest: environmentManifestSchema }),
 ])
 export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>
@@ -565,6 +556,21 @@ export const serviceProvisioningSchema = v.object({
   composePath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** `docker-compose`: the compose stack is for local development only (advisory). */
   localDevOnly: v.optional(v.boolean()),
+  /**
+   * `docker-compose`: build the stack's images from the repo's Dockerfiles instead of
+   * pulling pre-built images (advisory; the load-bearing switch is the workspace handler's
+   * `providerConfig.build`). When set, the PR head is cloned into a working tree so `build:`
+   * contexts, in-checkout bind mounts, and relative `env_file`s resolve.
+   */
+  composeBuild: v.optional(v.boolean()),
+  /**
+   * `docker-compose`: the declarative STACK RECIPE for a complex multi-step bring-up —
+   * multi-`-f` layering, profiles, env-file materialization, external networks / shared-stack
+   * refs, ordered setup/teardown steps + a terminal health gate. Absent ⇒ the simple
+   * single-file `composePath` + `up --wait` path (when set, `recipe.composeFiles` supersedes
+   * `composePath`). See {@link stackRecipeSchema}.
+   */
+  recipe: v.optional(stackRecipeSchema),
   /** `custom`: the custom-manifest-type id this service produces (matched to a remote-custom handler). */
   manifestId: v.optional(manifestIdSchema),
   /** `custom`: optional path to the custom manifest within the repo. */
@@ -599,7 +605,7 @@ export const kubernetesEngineConfigSchema = v.object({
   /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
   insecureSkipTlsVerify: v.optional(v.boolean()),
   /**
-   * Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`. With
+   * Namespace name template for the per-PR environment, e.g. `cf-env-pr{{pullNumber}}`. With
    * `renderer: 'kustomize'`, ABSENT ⇒ honor the overlay's own `namespace:` when it pins one
    * (the shared-namespace ephemeral-env shape, where base + overlay name a fixed namespace);
    * SET ⇒ override it (the adapter sets the namespace at build time) for true per-PR
@@ -643,6 +649,7 @@ export const infraHandlerConfigSchema = v.variant('engine', [
   v.object({ engine: v.literal('local-docker'), manifest: environmentManifestSchema }),
   v.object({ engine: v.literal('local-k3s'), kubernetes: kubernetesEngineConfigSchema }),
   v.object({ engine: v.literal('remote-kubernetes'), kubernetes: kubernetesEngineConfigSchema }),
+  v.object({ engine: v.literal('cloudflare'), cloudflare: cloudflareEnvironmentConfigSchema }),
   v.object({
     engine: v.literal('remote-custom'),
     manifest: environmentManifestSchema,
@@ -804,12 +811,48 @@ export const environmentHandleSchema = v.object({
   providerId: v.string(),
   externalId: v.nullable(v.string()),
   url: v.nullable(v.string()),
+  /**
+   * What the platform knows about ADDRESSING this environment, beside the name in `url`: the
+   * addresses its provider states carry traffic for that name, and what dialling them proved.
+   *
+   * Beside `url` rather than folded into it because they answer different questions and only one
+   * of them is a claim. `url` is what a browser opens and what an ingress routes on, and it stays
+   * exactly as the provider published it; this is whether anything can actually get there, which
+   * before it existed nothing had ever asked. Null for an environment provisioned before this
+   * field, and for a provider that states no addresses and has not been probed.
+   */
+  reachability: v.optional(v.nullable(environmentReachabilitySchema)),
   status: environmentStatusSchema,
   /** Present only on the dedicated access endpoint / in agent context. */
   access: v.optional(environmentAccessHandleSchema),
   createdAt: v.number(),
   expiresAt: v.nullable(v.number()),
   lastError: v.nullable(v.string()),
+  /**
+   * The provider's own account of a state it has not left yet: why this environment is not
+   * ready. Written on every provision and poll regardless of status, so unlike `lastError` it
+   * is present WHILE an environment is still coming up. Null when the provider said nothing.
+   */
+  statusNote: v.optional(v.nullable(v.string())),
+  /**
+   * When the provider last ANSWERED a status poll for this environment, and how many answers the
+   * platform has recorded.
+   *
+   * The one trail polling leaves. The provisioning log records an attempt that threw and a poll
+   * that turned an environment `failed`; an answer wrote nothing anywhere, so a readiness wait
+   * that polled for four minutes was indistinguishable from no polling at all, and a reader (the
+   * environment investigation, then a human) took the silence for the second.
+   *
+   * An answer reporting `failed` counts: this says how much polling HAPPENED, never how much of it
+   * went well. A poll that THREW does not, having a provisioning-log row of its own.
+   *
+   * `pollCount` is a FLOOR, not a ledger: it is written from the count the poll read at its start,
+   * so two polls racing cost it an increment. `lastPolledAt` is exact, a lost race there leaving
+   * the later of the two stamps. Null / 0 means no answered poll is RECORDED, which is all a
+   * reader may conclude from it.
+   */
+  lastPolledAt: v.optional(v.nullable(v.number())),
+  pollCount: v.optional(v.number()),
   /**
    * The service's declared provision type this environment was stood up for
    * (`kubernetes` | `docker-compose` | `custom` | `infraless`). Recorded at provision
@@ -961,7 +1004,13 @@ export type ProvisioningDetectionConfidence = v.InferOutput<
 
 /** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
 export const provisioningDetectionNoteSchema = v.object({
-  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`. */
+  /**
+   * Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` |
+   * `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` |
+   * `manifestRoot` | `composeService` | `composeBuild` | `composeFiles` | `composeProfiles` |
+   * `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` | `healthGate` |
+   * `seedDump` | `repoCli`.
+   */
   field: v.string(),
   confidence: provisioningDetectionConfidenceSchema,
   /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
@@ -1042,19 +1091,123 @@ export type ProvisioningManifestRootCandidate = v.InferOutput<
 >
 
 /**
+ * A candidate Docker Compose file for `-f` layering (slice 2 detection). The base file(s) are
+ * pre-selected into `provisioning.recipe.composeFiles`; OS-specific overrides
+ * (`dev.wsl.override.yml`, `dev.mac.override.yml`) are surfaced here — annotated with `os` and
+ * NOT auto-layered — so the wizard binds the one matching the operator's machine.
+ */
+export const provisioningComposeFileCandidateSchema = v.object({
+  /** Repo-relative compose file path (a value `recipe.composeFiles` would take). */
+  path: v.string(),
+  /** The file's base name (e.g. `dev.wsl.override.yml`). */
+  name: v.string(),
+  /** For an OS-specific override, which OS it targets; absent ⇒ OS-neutral (a base layer). */
+  os: v.optional(v.picklist(['wsl', 'mac', 'linux', 'windows'])),
+  /** True for a base layer pre-selected into `composeFiles`; an OS override is opt-in. */
+  recommended: v.boolean(),
+})
+export type ProvisioningComposeFileCandidate = v.InferOutput<
+  typeof provisioningComposeFileCandidateSchema
+>
+
+/**
+ * A `COMPOSE_PROFILES` label the compose files declare (slice 2 detection). Surfaced
+ * default-OFF — an optional service group the user opts into; `recommended` is set only for a
+ * profile the detector deems part of the base bring-up (rare — most profiles are optional).
+ */
+export const provisioningProfileCandidateSchema = v.object({
+  /** The `profiles:` label (e.g. `peer`, `backends`). */
+  profile: v.string(),
+  /** Whether to pre-enable it (default false — profiles are opt-in). */
+  recommended: v.boolean(),
+})
+export type ProvisioningProfileCandidate = v.InferOutput<typeof provisioningProfileCandidateSchema>
+
+/**
+ * A `.sql` dump found under a seed-ish directory (`deployment/`, `seed/`, `db/`,
+ * `docker-entrypoint-initdb.d/`) — a LOW-confidence candidate the wizard confirms, turning it
+ * into a `compose-exec` seed-import step (piping the dump via `stdinFile`). Never auto-applied.
+ */
+export const provisioningSeedDumpCandidateSchema = v.object({
+  /** Repo-relative path of the SQL dump. */
+  path: v.string(),
+  /** The dump file's base name. */
+  name: v.string(),
+  /** The heuristic top pick among several dumps. */
+  recommended: v.boolean(),
+})
+export type ProvisioningSeedDumpCandidate = v.InferOutput<
+  typeof provisioningSeedDumpCandidateSchema
+>
+
+/**
+ * A REPORT-ONLY hint that the repo carries its OWN imperative bring-up — a Makefile, a
+ * `bin/*console*` repo CLI, a justfile/Taskfile with setup-looking targets. Detection never
+ * parses shell; it only flags the file so the wizard can suggest running the environment
+ * ANALYST (slice 8) to translate that bring-up into recipe steps. Its presence sets the
+ * "consider deep analysis" nudge.
+ */
+export const provisioningRepoCliHintSchema = v.object({
+  /** Repo-relative path of the CLI / build file that triggered the hint. */
+  path: v.string(),
+  /** What kind of imperative entry point it is. */
+  kind: v.picklist(['makefile', 'repo-cli', 'justfile', 'taskfile']),
+})
+export type ProvisioningRepoCliHint = v.InferOutput<typeof provisioningRepoCliHintSchema>
+
+/**
  * A non-binding provisioning recommendation detected from a service's repo. `provisioning`
- * carries the service-owned config to prefill (the "what + where"); `urlSource`/`namespace`
- * are engine-level suggestions the workspace handler owns (the detector can READ them from
- * the manifests but they aren't stored on the service); the candidate arrays + `notes` drive
- * the confirm UI. `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
+ * carries the service-owned config to prefill (the "what + where", now including a
+ * `docker-compose` service's {@link stackRecipeSchema | recipe} — layered compose files,
+ * profiles, env-file pairs, external networks); `urlSource`/`namespace` are engine-level
+ * suggestions the workspace handler owns (the detector can READ them from the manifests but
+ * they aren't stored on the service); the candidate arrays + `notes` drive the confirm UI.
+ * `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
  *
  * The candidate arrays let the user CHOOSE instead of accepting a silent auto-pick:
  * `overlayCandidates` (which overlay within a kustomize root), `manifestRootCandidates` (which
- * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice), and
- * `composeServiceCandidates` (which compose service). Each note's `field` is one of
- * `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` |
- * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`.
+ * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice),
+ * `composeServiceCandidates` (which compose service), `composeFileCandidates` (which OS override
+ * to layer), `profileCandidates` (which optional profiles to enable), and `seedDumpCandidates`
+ * (which SQL dump to seed from). `repoCliHint` flags a repo with its own imperative bring-up
+ * (a nudge toward the analyst). Each note's `field` is one of `provisionType` | `renderer` |
+ * `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` |
+ * `serviceDir` | `manifestRoot` | `composeService` | `composeBuild` | `composeFiles` |
+ * `composeProfiles` | `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` |
+ * `healthGate` | `seedDump` | `repoCli`.
  */
+/**
+ * A single extracted key/value a CUSTOM provider's `detect()` surfaced (a health port/path
+ * parsed from its manifest, a deploy command, …) for the SPA to prefill into the connect/
+ * provision form. Advisory — nothing is applied without the user confirming.
+ */
+export const provisioningCustomConfigSeedSchema = v.object({
+  /** The config field name the provider names (e.g. `healthPort`, `healthPath`, `deployCommand`). */
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  /** The extracted value (stringified). */
+  value: v.pipe(v.string(), v.maxLength(1000)),
+})
+export type ProvisioningCustomConfigSeed = v.InferOutput<typeof provisioningCustomConfigSeedSchema>
+
+/**
+ * A CUSTOM manifest type whose `detect()` hook matched the repo, surfaced by the arbitration
+ * sweep (when no type was pre-selected). The best-ranked one is pre-selected (`recommended`);
+ * the rest let the user switch if the platform guessed wrong.
+ */
+export const detectedManifestTypeCandidateSchema = v.object({
+  /** The matched custom-manifest-type id (the value `provisioning.manifestId` would take). */
+  manifestId: v.string(),
+  /** The type's human label (for the picker). */
+  label: v.string(),
+  /** How confident that provider's `detect()` was in the match. */
+  confidence: provisioningDetectionConfidenceSchema,
+  /** The top-ranked candidate (the one pre-selected in `provisioning.manifestId`). */
+  recommended: v.boolean(),
+})
+export type DetectedManifestTypeCandidate = v.InferOutput<
+  typeof detectedManifestTypeCandidateSchema
+>
+
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),
   /** The prefilled service provisioning the user confirms/edits (the "what + where"). */
@@ -1071,6 +1224,31 @@ export const provisioningRecommendationSchema = v.object({
   serviceDirCandidates: v.optional(v.array(provisioningServiceDirCandidateSchema)),
   /** Candidate compose services to pick from when the compose file declares several (advisory). */
   composeServiceCandidates: v.optional(v.array(provisioningComposeServiceCandidateSchema)),
+  /** Candidate compose files for `-f` layering (base pre-selected; OS overrides opt-in). */
+  composeFileCandidates: v.optional(v.array(provisioningComposeFileCandidateSchema)),
+  /** `COMPOSE_PROFILES` labels the compose files declare (surfaced default-off). */
+  profileCandidates: v.optional(v.array(provisioningProfileCandidateSchema)),
+  /** Low-confidence SQL seed dumps to confirm as `compose-exec` seed steps. */
+  seedDumpCandidates: v.optional(v.array(provisioningSeedDumpCandidateSchema)),
+  /** Report-only: the repo has its own imperative bring-up ⇒ suggest the environment analyst. */
+  repoCliHint: v.optional(provisioningRepoCliHintSchema),
+  /**
+   * `custom` only: config a matching custom provider's `detect()` extracted from its manifest(s)
+   * (health port/path, deploy command, …) for the SPA to prefill. Advisory.
+   */
+  customConfigSeed: v.optional(v.array(provisioningCustomConfigSeedSchema)),
+  /**
+   * `custom` only: the OTHER manifest files a multi-file custom signature matched beyond the
+   * primary `provisioning.manifestPath` (e.g. the deploy script + compose file alongside the
+   * root manifest), surfaced for context.
+   */
+  secondaryManifestPaths: v.optional(v.array(v.string())),
+  /**
+   * `custom` only: every registered custom type whose `detect()` matched, produced by the
+   * arbitration sweep when no `manifestId` was pre-selected. The top-ranked is reflected in
+   * `provisioning.manifestId`; the list lets the user switch.
+   */
+  detectedManifestTypeCandidates: v.optional(v.array(detectedManifestTypeCandidateSchema)),
   /** Per-field confidence + hints for the SPA. */
   notes: v.array(provisioningDetectionNoteSchema),
 })
@@ -1099,8 +1277,12 @@ export const detectServiceProvisioningSchema = v.object({
    */
   prefer: v.optional(provisionTypeSchema),
   /**
-   * `custom` only: the selected custom-manifest-type id. Its `defaultManifestPath` seeds the
-   * path search (see {@link customManifestTypeSchema}). Ignored for other provision types.
+   * `custom` only: the selected custom-manifest-type id. When PRESENT, that type's `detect()`
+   * hook runs (or its `defaultManifestPath` seeds the path search when it has no hook — see
+   * {@link customManifestTypeSchema}). When ABSENT with `prefer: 'custom'`, the detector runs
+   * an ARBITRATION sweep across every registered custom type's `detect()` and proposes the
+   * best-matching one (echoed back in `provisioning.manifestId` + `detectedManifestTypeCandidates`).
+   * Ignored for other provision types.
    */
   manifestId: v.optional(manifestIdSchema),
   /**
@@ -1110,3 +1292,31 @@ export const detectServiceProvisioningSchema = v.object({
   currentManifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
 })
 export type DetectServiceProvisioningInput = v.InferOutput<typeof detectServiceProvisioningSchema>
+
+/**
+ * Re-validate a native backend's config read back off a stored {@link EnvironmentManifest}'s
+ * `providerConfig`, or throw naming what is wrong with it.
+ *
+ * `providerConfig` is `Record<string, unknown>` on the wire, deliberately: it is the carrier
+ * for whatever settings a backend defines. So reading a config back out used to be an
+ * assertion. The connect controller does validate on the way IN, but the value has been through
+ * storage since: a config written before a schema change, or edited in the database, would flow
+ * on as a fake-valid object and only misbehave deep inside a provision. Parsing here names the
+ * offending field at the boundary instead, and every native backend re-reads its config the
+ * same way rather than each picking its own wording.
+ */
+export function parseStoredProviderConfig<T>(
+  schema: v.GenericSchema<unknown, T>,
+  raw: unknown,
+  label: string,
+): T {
+  const parsed = v.safeParse(schema, raw)
+  if (parsed.success) return parsed.output
+  const detail = parsed.issues
+    .map((issue) => {
+      const path = issue.path?.map((segment) => String(segment.key)).join('.')
+      return path ? `${path}: ${issue.message}` : issue.message
+    })
+    .join('; ')
+  throw new Error(`${label} has an invalid stored providerConfig: ${detail}`)
+}

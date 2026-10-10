@@ -76,12 +76,15 @@ describe('FetchGitHubClient.searchInstallationRepos', () => {
       owner: 'acme',
       ownerType: 'Organization',
     })
-    expect(hits.map((r) => r.githubId)).toEqual([1])
+    expect(hits.items.map((r) => r.githubId)).toEqual([1])
     const searchUrl = urls.find((u) => u.includes('/search/repositories'))
     expect(searchUrl).toBeDefined()
     // Only the name segment is searched, scoped to the org — never an unscoped global query.
     const q = decodeURIComponent(new URL(searchUrl!).searchParams.get('q') ?? '')
     expect(q).toBe('gateway in:name fork:true org:acme')
+    // GitHub reports the full match count, so this leg knows what it left behind rather than
+    // guessing from a page that happens to be full.
+    expect(hits.truncated).toBe(false)
   })
 
   it('falls back to filtering the installation listing when no account scope is available', async () => {
@@ -92,15 +95,19 @@ describe('FetchGitHubClient.searchInstallationRepos', () => {
       ],
     })
     const hits = await makeClient().searchInstallationRepos(1, 'gateway')
-    expect(hits.map((r) => r.githubId)).toEqual([1])
+    expect(hits.items.map((r) => r.githubId)).toEqual([1])
     // No account to scope a GitHub search to → must NOT hit the global search endpoint.
     expect(urls.some((u) => u.includes('/search/repositories'))).toBe(false)
     expect(urls.some((u) => u.includes('/installation/repositories'))).toBe(true)
+    expect(hits.truncated).toBe(false)
   })
 
-  it('returns [] for a blank query without any request', async () => {
+  it('returns an EMPTY, non-truncated page for a blank query without any request', async () => {
     const { urls } = stubRoutes({})
-    expect(await makeClient().searchInstallationRepos(1, '   ', { owner: 'acme' })).toEqual([])
+    expect(await makeClient().searchInstallationRepos(1, '   ', { owner: 'acme' })).toEqual({
+      items: [],
+      truncated: false,
+    })
     expect(urls).toEqual([])
   })
 })

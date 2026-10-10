@@ -1,31 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { UpdateBlockInput } from '@cat-factory/contracts'
-import type {
-  Block,
-  BlockType,
-  CreateTaskType,
-  FrameRepoType,
-  TaskTypeFields,
-} from '~/types/domain'
-import { useServicesStore } from '~/stores/services'
-import { useWorkspaceStore } from '~/stores/workspace'
+import type { Block } from '~/types/domain'
 import { useBlockQueries } from '~/composables/useBlockQueries'
+import type { PendingRemoval } from '~/stores/board/context'
+import { createBoardMutations } from '~/stores/board/mutations'
+import { createBoardPlacement } from '~/stores/board/placement'
+import { createBoardRemoval } from '~/stores/board/removal'
 
 /**
  * The board: architecture blocks and the dependency edges between them. Blocks
  * are owned by the backend — this store is a hydrated cache. Read getters are
  * pure client logic (see {@link useBlockQueries}); every mutation calls the API
- * and applies the authoritative block the server returns.
+ * and applies the authoritative block the server returns. The write operations
+ * live in cohesive factories ({@link createBoardMutations} / {@link createBoardPlacement} /
+ * {@link createBoardRemoval},
+ * under `stores/board/`) that close over the shared state assembled here — a size-only
+ * split, not a new seam.
  */
-/** A detached subtree captured before an optimistic delete, restored on failure. */
-interface RemovalSnapshot {
-  /** The removed block + all its descendants, in their original order. */
-  removed: Block[]
-  /** Survivors whose `dependsOn`/`epicId` lost an edge to a removed block (originals to restore). */
-  edges: { id: string; dependsOn: string[]; epicId: string | null }[]
-}
-
 export const useBoardStore = defineStore('board', () => {
   const api = useApi()
   const toast = useToast()
@@ -33,12 +24,59 @@ export const useBoardStore = defineStore('board', () => {
   // global i18n instance (the same handle `plugins/locale.client.ts` uses) rather than
   // `useI18n()`, which requires an active component instance.
   const nuxtApp = useNuxtApp()
-  const tr = (key: string): string => (nuxtApp.$i18n as { t: (k: string) => string }).t(key)
+  const tr = (key: string, params?: Record<string, unknown>): string =>
+    (nuxtApp.$i18n as { t: (k: string, p?: Record<string, unknown>) => string }).t(
+      key,
+      params ?? {},
+    )
   const blocks = ref<Block[]>([])
+  // Client-side monotonic guard against a stale full-snapshot `hydrate` CLOBBERING newer live
+  // state. A run's status transitions (…→ in_progress → pr_ready/done) reach the board as
+  // targeted `execution`-event `upsert`s; a `refresh()` whose snapshot was FETCHED earlier (its
+  // block still `in_progress`) can resolve AFTER such an upsert and, since `hydrate` REPLACES the
+  // list, overwrite the just-applied terminal status back to the stale value — with no further
+  // event to restore it (the documented real-time coherence hazard; reliably hit under CI
+  // latency). Blocks carry no server revision, so we stamp each live `upsert` with a monotonic
+  // sequence and let `hydrate` preserve any block upserted AFTER the refresh's captured baseline.
+  let liveUpsertSeq = 0
+  const liveUpsertAt = new Map<string, number>()
+  // Archived service frames (`archived === true`): hidden from the board but preserved and
+  // restorable with no expiry. Hydrated from the snapshot's `archivedServices`; the frames
+  // themselves are NOT in `blocks` (the snapshot filters an archived frame + its subtree out).
+  const archived = ref<Block[]>([])
 
   // Pure derivations (hierarchy, status/progress, sizing) live in the composable.
   const queries = useBlockQueries(blocks)
   const { getBlock } = queries
+
+  /**
+   * Blocks hidden by an optimistic delete whose backend call hasn't fired yet, keyed by
+   * the deleted root's id. Their subtree stays filtered out of every incoming server
+   * snapshot (`hydrate`) and single-block live event (`upsert`) for the undo window, so a
+   * coarse refresh or a stray event can't resurrect a block the user just deleted.
+   */
+  const pendingRemovals = new Map<string, PendingRemoval>()
+  // Flat set of every id in a pending removal (root + descendants), for O(1) checks in the
+  // hot upsert path. Kept in lockstep with `pendingRemovals`.
+  const pendingDoomed = new Set<string>()
+
+  /**
+   * Drop any pending-removal subtree from a reconciled block list and prune survivors'
+   * edges to it — the same detach the backend will perform once the deferred delete fires.
+   * Applied to every hydrate so the undo window survives a full refresh.
+   */
+  function applyPendingRemovals(list: Block[]): Block[] {
+    if (pendingDoomed.size === 0) return list
+    const survivors = list.filter((b) => !pendingDoomed.has(b.id))
+    for (const b of survivors) {
+      if (b.dependsOn.some((d) => pendingDoomed.has(d))) {
+        b.dependsOn = b.dependsOn.filter((d) => !pendingDoomed.has(d))
+      }
+      if (b.epicId != null && pendingDoomed.has(b.epicId)) b.epicId = null
+      if (b.initiativeId != null && pendingDoomed.has(b.initiativeId)) b.initiativeId = null
+    }
+    return survivors
+  }
 
   /**
    * Reconcile the cached blocks against a server snapshot, reusing the existing
@@ -62,375 +100,74 @@ export const useBoardStore = defineStore('board', () => {
     }
     return s
   }
-  function hydrate(next: Block[]) {
+  /**
+   * Baseline for {@link hydrate}: capture this BEFORE a refresh's snapshot fetch and pass it
+   * back in, so a block that received a live `upsert` while the fetch was in flight is preserved
+   * (its live state is newer than the snapshot). Callers that don't pass a baseline get a plain
+   * full replace (initial load / board switch — no live-upsert race to guard).
+   */
+  function hydrateBaseline(): number {
+    return liveUpsertSeq
+  }
+  function hydrate(next: Block[], since = liveUpsertSeq) {
     const prev = new Map(blocks.value.map((b) => [b.id, b]))
-    blocks.value = next.map((n) => {
+    const reconciled = next.map((n) => {
       const existing = prev.get(n.id)
+      // A block live-`upsert`ed AFTER this refresh's fetch started is newer than the snapshot —
+      // keep the live version instead of clobbering it back to the stale snapshot value.
+      if (existing && (liveUpsertAt.get(n.id) ?? 0) > since) return existing
       return existing && jsonFor(existing) === jsonFor(n) ? existing : n
     })
+    // Keep blocks the user just deleted hidden while their delete is still pending.
+    blocks.value = applyPendingRemovals(reconciled)
+  }
+
+  /** Replace the archived-services list from the snapshot (absent ⇒ none). */
+  function hydrateArchived(next: Block[] = []) {
+    archived.value = [...next]
   }
 
   /** Insert or replace a block returned by the backend. */
   function upsert(block: Block) {
+    // A live event for a block awaiting its deferred delete must not resurrect it.
+    if (pendingDoomed.has(block.id)) return
+    // Stamp the live-upsert order so a later, staler refresh `hydrate` can't clobber this.
+    liveUpsertAt.set(block.id, ++liveUpsertSeq)
     const i = blocks.value.findIndex((b) => b.id === block.id)
     if (i >= 0) blocks.value[i] = block
     else blocks.value.push(block)
   }
 
-  async function addBlock(type: BlockType, position: { x: number; y: number }): Promise<Block> {
-    const block = await api.addFrame(useWorkspaceStore().requireId(), { type, position })
-    upsert(block)
-    return block
+  // The write operations, split into cohesive factories sharing the state above (a size-only
+  // extraction — behaviour is identical to the former in-closure functions). `undoRemove` stays
+  // internal to the removal factory (only its delete toast wires it), so it is NOT re-exported.
+  const context = {
+    blocks,
+    getBlock,
+    upsert,
+    pendingRemovals,
+    pendingDoomed,
+    api,
+    toast,
+    tr,
+    present: usePipelineErrorToast().present,
   }
-
-  /**
-   * Import an existing GitHub repo (the App is installed + it's projected) as a
-   * service frame, with no bootstrap run. The backend links the repo to the new
-   * frame and returns it `ready`; we upsert it onto the board.
-   */
-  async function addServiceFromRepo(
-    repoGithubId: number,
-    opts?: {
-      directory?: string
-      isMonorepo?: boolean
-      type?: FrameRepoType
-      position?: { x: number; y: number }
-    },
-  ): Promise<Block> {
-    const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), {
-      repoGithubId,
-      ...(opts?.directory ? { directory: opts.directory } : {}),
-      ...(opts?.isMonorepo !== undefined ? { isMonorepo: opts.isMonorepo } : {}),
-      ...(opts?.type ? { type: opts.type } : {}),
-      ...(opts?.position ? { position: opts.position } : {}),
-    })
-    upsert(block)
-    return block
-  }
-
-  /**
-   * Add a task inside a container (a service or a module). The user supplies the
-   * title (and optional description) — the task is created in `planned` state and
-   * is not launched until the user explicitly starts a pipeline on it.
-   */
-  async function addTask(
-    containerId: string,
-    title: string,
-    description?: string,
-    options?: {
-      taskType?: CreateTaskType
-      taskTypeFields?: TaskTypeFields
-      mergePresetId?: string
-      modelPresetId?: string
-      pipelineId?: string
-      agentConfig?: Record<string, string>
-      technical?: boolean
-    },
-  ): Promise<Block | undefined> {
-    if (!getBlock(containerId)) return
-    const block = await api.addTask(useWorkspaceStore().requireId(), containerId, {
-      title,
-      description,
-      ...(options?.taskType ? { taskType: options.taskType } : {}),
-      ...(options?.taskTypeFields ? { taskTypeFields: options.taskTypeFields } : {}),
-      ...(options?.mergePresetId ? { mergePresetId: options.mergePresetId } : {}),
-      ...(options?.modelPresetId ? { modelPresetId: options.modelPresetId } : {}),
-      ...(options?.pipelineId ? { pipelineId: options.pipelineId } : {}),
-      ...(options?.agentConfig ? { agentConfig: options.agentConfig } : {}),
-      ...(options?.technical ? { technical: true } : {}),
-    })
-    upsert(block)
-    return block
-  }
-
-  /**
-   * Add an epic grouping node. Epics are non-structural: they group tasks via the tasks'
-   * `epicId`, so this just drops a new `epic`-level block on the board.
-   */
-  async function addEpic(
-    title: string,
-    position: { x: number; y: number },
-    options?: { description?: string; parentId?: string },
-  ): Promise<Block> {
-    const block = await api.addEpic(useWorkspaceStore().requireId(), {
-      title,
-      position,
-      ...(options?.description ? { description: options.description } : {}),
-      ...(options?.parentId ? { parentId: options.parentId } : {}),
-    })
-    upsert(block)
-    return block
-  }
-
-  /** Assign a task to an epic, or detach it (epicId: null). */
-  async function assignToEpic(taskId: string, epicId: string | null) {
-    const t = getBlock(taskId)
-    if (!t) return
-    const prev = t.epicId ?? null
-    t.epicId = epicId // optimistic
-    try {
-      upsert(await api.assignToEpic(useWorkspaceStore().requireId(), taskId, { epicId }))
-    } catch (e) {
-      t.epicId = prev
-      toast.add({
-        title: tr('board.toast.epicFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /** Add a module (sub-frame) inside a service. */
-  async function addModule(
-    serviceId: string,
-    name: string,
-    position?: { x: number; y: number },
-  ): Promise<Block | undefined> {
-    if (!getBlock(serviceId)) return
-    const block = await api.addModule(useWorkspaceStore().requireId(), serviceId, {
-      name,
-      position,
-    })
-    upsert(block)
-    return block
-  }
-
-  /** Move a block into a new container at a new local position. */
-  async function reparentBlock(
-    id: string,
-    newParentId: string,
-    position: { x: number; y: number },
-  ) {
-    const b = getBlock(id)
-    const parent = getBlock(newParentId)
-    if (!b || !parent || b.id === newParentId) return
-    // tasks may live in services or modules; modules only in services
-    if (b.level === 'task' && parent.level !== 'frame' && parent.level !== 'module') return
-    if (b.level === 'module' && parent.level !== 'frame') return
-    // Optimistic: drop the block into the new container immediately so it doesn't
-    // briefly snap back to its old home while the request is in flight. Snapshot
-    // the old home so a rejected reparent restores it rather than leaving the
-    // block in the wrong container (a structural lie that survives until re-hydrate).
-    const prevParentId = b.parentId
-    const prevPosition = b.position
-    b.parentId = newParentId
-    b.position = position
-    try {
-      upsert(
-        await api.reparentBlock(useWorkspaceStore().requireId(), id, {
-          parentId: newParentId,
-          position,
-        }),
-      )
-    } catch (e) {
-      b.parentId = prevParentId
-      b.position = prevPosition
-      toast.add({
-        title: tr('board.toast.moveFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /**
-   * Optimistically drop a block and its descendants from the cache, returning a
-   * snapshot so the removal can be undone if the backend call fails. The server
-   * cascades to descendants, so we mirror that here. Exposed for other stores
-   * (e.g. recurring pipelines) that delete a block through their own endpoint.
-   */
-  function detach(id: string): RemovalSnapshot | null {
-    if (!getBlock(id)) return null
-    const doomed = new Set<string>([id])
-    let grew = true
-    while (grew) {
-      grew = false
-      for (const b of blocks.value) {
-        if (b.parentId && doomed.has(b.parentId) && !doomed.has(b.id)) {
-          doomed.add(b.id)
-          grew = true
-        }
-      }
-    }
-    const removed = blocks.value.filter((b) => doomed.has(b.id))
-    // Survivors that pointed at a doomed block (dependency edge or epic membership) lose
-    // that link — snapshot the originals so a failed delete restores them faithfully.
-    const edges = blocks.value
-      .filter(
-        (b) =>
-          !doomed.has(b.id) &&
-          (b.dependsOn.some((d) => doomed.has(d)) || (b.epicId != null && doomed.has(b.epicId))),
-      )
-      .map((b) => ({ id: b.id, dependsOn: [...b.dependsOn], epicId: b.epicId ?? null }))
-    blocks.value = blocks.value.filter((b) => !doomed.has(b.id))
-    for (const b of blocks.value) {
-      if (b.dependsOn.some((d) => doomed.has(d))) {
-        b.dependsOn = b.dependsOn.filter((d) => !doomed.has(d))
-      }
-      // A member of a deleted epic loses its membership (the task itself survives).
-      if (b.epicId != null && doomed.has(b.epicId)) b.epicId = null
-    }
-    return { removed, edges }
-  }
-
-  /** Re-insert a detached subtree and restore its broken edges (delete rollback). */
-  function reattach(snap: RemovalSnapshot) {
-    for (const b of snap.removed) if (!getBlock(b.id)) blocks.value.push(b)
-    for (const e of snap.edges) {
-      const b = getBlock(e.id)
-      if (b) {
-        b.dependsOn = e.dependsOn
-        b.epicId = e.epicId
-      }
-    }
-  }
-
-  /**
-   * Delete a block. The subtree is hidden IMMEDIATELY (optimistic) so the board
-   * feels instant; if the backend rejects the delete we put it back and surface a
-   * toast rather than silently leaving a ghost.
-   */
-  async function removeBlock(id: string) {
-    const snap = detach(id)
-    if (!snap) return
-    try {
-      await api.removeBlock(useWorkspaceStore().requireId(), id)
-    } catch (e) {
-      reattach(snap)
-      toast.add({
-        title: tr('board.toast.deleteFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /**
-   * Local-only optimistic position update during an active drag — no persistence.
-   * A drag fires this on every pointer move so the block tracks the cursor without
-   * a per-move API round-trip; the final position is committed once via
-   * {@link moveBlock} (or {@link reparentBlock}) on release. Persisting every move
-   * raced: out-of-order responses to the burst of in-flight writes could land a
-   * stale position last, snapping the block back after the user let go.
-   */
-  function previewMove(id: string, position: { x: number; y: number }) {
-    const b = getBlock(id)
-    if (b) b.position = position
-  }
-
-  async function moveBlock(id: string, position: { x: number; y: number }) {
-    const b = getBlock(id)
-    if (!b) return
-    const prevPosition = b.position
-    b.position = position // optimistic: keep the drag feeling instant
-    try {
-      // A mounted service frame's position is a PER-WORKSPACE layout override on the mount, not
-      // on the (shared) block — so route a frame drag there. Other moves write the block.
-      const services = useServicesStore()
-      const mount = services.serviceByFrameBlock[id]
-        ? services.byServiceId[services.serviceByFrameBlock[id]!.id]
-        : undefined
-      if (mount) {
-        await services.updateLayout(mount.serviceId, position)
-        return
-      }
-      upsert(await api.moveBlock(useWorkspaceStore().requireId(), id, { position }))
-    } catch (e) {
-      // Restore the pre-drag position — a rejected move must not leave the block at a
-      // spot the server never stored (a lie that survives until the next re-hydrate).
-      b.position = prevPosition
-      toast.add({
-        title: 'Could not move',
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /** Patch the user-editable fields of a block (title, features, threshold…). */
-  async function updateBlock(id: string, patch: UpdateBlockInput) {
-    const b = getBlock(id)
-    if (!b) return
-    // Snapshot ONLY the fields this patch touches so a rejected write restores them exactly
-    // (a patch may set several at once) rather than leaving a stale optimistic value stuck on
-    // screen with no feedback — the same rollback contract the other mutations here follow.
-    const prev: Record<string, unknown> = {}
-    const patchRecord = patch as Record<string, unknown>
-    const record = b as unknown as Record<string, unknown>
-    for (const key of Object.keys(patch)) prev[key] = record[key]
-    Object.assign(b, patch) // optimistic
-    try {
-      upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
-    } catch (e) {
-      // Re-resolve the block: a live event may have replaced its object reference (`upsert`
-      // swaps in a fresh one) while the write was in flight, so `b` can be stale. Only revert
-      // fields that still hold OUR optimistic value, so a newer server value that landed
-      // mid-flight isn't clobbered by the rollback.
-      const cur = getBlock(id) as unknown as Record<string, unknown> | undefined
-      if (cur) {
-        for (const key of Object.keys(patch)) {
-          if (cur[key] === patchRecord[key]) cur[key] = prev[key]
-        }
-      }
-      toast.add({
-        title: tr('board.toast.updateFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /**
-   * Toggle a dependency edge target -> source (target dependsOn source). The backend
-   * rejects an edge that would close a cycle (422) — surface that as a toast rather than
-   * letting it throw unhandled out of a board gesture.
-   */
-  async function toggleDependency(targetId: string, sourceId: string) {
-    if (targetId === sourceId || !getBlock(targetId)) return
-    try {
-      upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
-    } catch (e) {
-      toast.add({
-        title: tr('board.toast.linkFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /** Remove a dependency edge target -> source if it exists. */
-  async function removeDependency(targetId: string, sourceId: string) {
-    const t = getBlock(targetId)
-    if (!t || !t.dependsOn.includes(sourceId)) return
-    // the backend exposes a single toggle; the edge exists, so toggling removes it
-    upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
-  }
+  const mutations = createBoardMutations(context)
+  const placement = createBoardPlacement(context)
+  const { detach, reattach, removeBlock } = createBoardRemoval(context)
 
   return {
     blocks,
+    archived,
     hydrate,
+    hydrateBaseline,
+    hydrateArchived,
     upsert,
     ...queries,
-    addBlock,
-    addServiceFromRepo,
-    addTask,
-    addModule,
-    addEpic,
-    assignToEpic,
-    reparentBlock,
+    ...mutations,
+    ...placement,
     detach,
     reattach,
     removeBlock,
-    previewMove,
-    moveBlock,
-    updateBlock,
-    toggleDependency,
-    removeDependency,
   }
 })

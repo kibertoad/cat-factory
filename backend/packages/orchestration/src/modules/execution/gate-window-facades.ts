@@ -4,6 +4,7 @@ import type {
   ClarityReview,
   ExecutionInstance,
   RequirementReview,
+  RequestRecommendationItem,
   ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
@@ -29,7 +30,7 @@ import type { ReviewGateController, ReviewKind } from './ReviewGateController.js
  * with the kind pre-applied, so the requirements / clarity windows honour the task's preset
  * identically. Shared by the pipeline gate and the off-path inspector "Run review" surface.
  */
-export class ReviewWindowActions<TReview extends ReviewCommon> {
+class ReviewWindowActions<TReview extends ReviewCommon> {
   constructor(
     protected readonly reviewGate: ReviewGateController,
     protected readonly kind: ReviewKind<TReview>,
@@ -87,10 +88,9 @@ export class RequirementReviewActions extends ReviewWindowActions<RequirementRev
   requestRecommendations(
     workspaceId: string,
     blockId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
   ): Promise<RequirementReview> {
-    return this.reviewGate.requestRecommendations(this.kind, workspaceId, blockId, itemIds, note)
+    return this.reviewGate.requestRecommendations(this.kind, workspaceId, blockId, items)
   }
 
   /**

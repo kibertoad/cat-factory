@@ -1,0 +1,11 @@
+-- The live-container inventory records WHICH container class holds each instance.
+--
+-- A run whose `tester-ui` step declares the `ui` executor image gets a SECOND container, in its
+-- own Durable Object namespace (a Cloudflare Container's image is pinned per class). The reaper
+-- kills through a namespace, and the container key alone cannot say which one: looked up in the
+-- executor namespace, a leaked UI container is never killed and the failed kill still reads as a
+-- success, because `idFromName` returns a stub for an instance that was never started.
+--
+-- Nullable, meaning the default executor class, so rows written before this column existed keep
+-- reaping exactly as they did.
+ALTER TABLE live_containers ADD COLUMN image TEXT;

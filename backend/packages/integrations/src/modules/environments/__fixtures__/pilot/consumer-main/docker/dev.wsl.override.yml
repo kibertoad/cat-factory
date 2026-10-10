@@ -1,0 +1,5 @@
+# Sanitized fixture — the WSL-specific `-f` override the detector surfaces as an
+# opt-in `composeFileCandidate` (os: wsl). Filename-only signal (see dev.mac.override.yml).
+services:
+  app: {}
+  daemon-symfony: {}

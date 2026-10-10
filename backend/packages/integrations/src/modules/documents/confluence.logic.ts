@@ -1,5 +1,5 @@
 import type { DocumentSearchResult, DocumentSourceDescriptor } from '@cat-factory/kernel'
-import { assertSafeAtlassianBaseUrl, normalizeAtlassianBaseUrl } from '@cat-factory/kernel'
+import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
 
 // Confluence-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing a page id out of user input, validating/securing
@@ -84,11 +84,6 @@ export function parseConfluenceSearchResults(
     })
   }
   return out
-}
-
-/** Drop a trailing slash and a trailing `/wiki` so we can build paths uniformly. */
-export function normalizeBaseUrl(baseUrl: string): string {
-  return normalizeAtlassianBaseUrl(baseUrl)
 }
 
 /**

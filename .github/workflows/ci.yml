@@ -1,5 +1,17 @@
 name: CI
 
+# Runs on every PR (the full gate suite) and on push to main (post-merge). The two events
+# run DIFFERENT subsets, on purpose. Pure PRE-MERGE gates — lint/format, publish integrity,
+# the repo guards, changeset presence and workflow security — run ONLY on PRs (+ manual
+# dispatch): each is deterministic from the diff's content and none can block an already-
+# merged commit, so re-running them on main produces no signal a PR run didn't already give.
+# Push to main runs only the checks with genuine POST-MERGE value — build/typecheck (incl.
+# the Drizzle migration-lineage check that catches non-commutative merges), the test lanes,
+# and container acceptance — which surface integration/merge-race failures that no single
+# PR's `pull/<n>/merge` was ever tested against. Each PR-only job carries a
+# `github.event_name != 'push'` guard (dispatch still runs them so CI changes are measurable
+# on a branch); the `changeset` job predates this and uses the narrower pull_request-only form.
+
 on:
   push:
     branches: [main]
@@ -23,19 +35,46 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
+      cliSupervise: ${{ steps.filter.outputs.cliSupervise }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
+      eks: ${{ steps.filter.outputs.eks }}
+      gatekeeper: ${{ steps.filter.outputs.gatekeeper }}
+      litellm: ${{ steps.filter.outputs.litellm }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      # Coarse test-lane gating (computed in the `scope` step below):
+      #   backendCode — backend source OR a root build/dependency input changed. Gates the
+      #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
+      #                 docs-only PR leaves it false so those lanes skip.
+      #   code        — ANY real source changed (backend, frontend, `sdk/*`, a `deploy/*`
+      #                 example, or a root build input), i.e. NOT a docs-/prose-only diff.
+      #                 Gates the cross-stack lanes (`test-units`, `test-e2e`) AND the build
+      #                 lanes (`build-typecheck`, `publish-integrity`, `frontend-check`), so a
+      #                 docs-only PR runs no tests and no builds — only lint, the repo
+      #                 guards, changeset, and zizmor. (On non-PR events both flags are
+      #                 forced true — see `scope`.)
+      backendCode: ${{ steps.scope.outputs.backendCode }}
+      code: ${{ steps.scope.outputs.code }}
+      # Shard shape for the sharded test lanes (test-worker / test-db / test-e2e), chosen by
+      # event. A push to `main` is post-merge and un-hurried, so it collapses each lane to a
+      # SINGLE shard (fewer runner-minutes, higher wall-clock — the intended trade). Every
+      # other event (a PR, or a manual workflow_dispatch used to measure sharded timing) keeps
+      # the full 3-way split. `shardMatrix` feeds the job `matrix.shard`; `shardTotal` is the
+      # `--shard=<i>/<N>` denominator (vitest/playwright accept the degenerate `1/1`).
+      shardMatrix: ${{ steps.shards.outputs.matrix }}
+      shardTotal: ${{ steps.shards.outputs.total }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - id: filter
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           # The acceptance suite builds the executor image (whose context is
           # just executor-harness/) and drives it from host-side scaffolding
@@ -76,6 +115,20 @@ jobs:
               - 'backend/packages/cli/vitest.integration.config.ts'
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
+            # The `cat-factory supervise` suite drives the BUILT CLI out-of-process against a real
+            # child — the only way to catch a supervisor that exits 0 when its child dies. It needs
+            # a build but NO cluster, so it runs in the cluster-free `test-units` lane and carries
+            # its own filter: folding it into `kubernetes` above would both gate it behind an
+            # unrelated k3d spin-up and, since that list matches `k3s*.ts`, never run it for a
+            # change to `supervise*.ts` at all.
+            cliSupervise:
+              - 'backend/packages/cli/src/supervise*.ts'
+              - 'backend/packages/cli/src/host-shell.ts'
+              - 'backend/packages/cli/src/args.ts'
+              - 'backend/packages/cli/src/bin.ts'
+              - 'backend/packages/cli/vitest.supervise.config.ts'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # The deploy-harness integration suite (also in `test-k8s`) drives `handleDeploy`
             # against the SAME k3d cluster with real kubectl/kustomize, so it only runs when the
             # harness itself changes.
@@ -83,19 +136,236 @@ jobs:
               - 'backend/internal/deploy-harness/**'
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
+            # The EKS integration suite (`test-eks`) boots a floci-emulated EKS cluster (a real
+            # k3s behind the AWS EKS API), so it only runs when the EKS package, the wire
+            # contracts that define its config, or the ports it implements change. This job is
+            # NON-BLOCKING (not in the aggregated `Test` gate) while floci support settles.
+            eks:
+              - 'backend/packages/eks/**'
+              - 'backend/packages/contracts/src/runners.ts'
+              - 'backend/packages/contracts/src/environments.ts'
+              - 'backend/packages/contracts/src/primitives.ts'
+              - 'backend/packages/integrations/src/modules/kubernetes/**'
+              - '.github/workflows/ci.yml'
+            # The LiteLLM gateway lane (`test-litellm`) runs a REAL LiteLLM proxy in Docker against
+            # a stubbed model upstream, so it runs when either half of what it covers moves: the
+            # OpenAI-compatible resolvers and the endpoint table that decides what each provider
+            # may claim, or the lane's own harness, pinned gateway config and vitest project.
+            # The AI SDK is in here too, and not incidentally: both behaviours the lane
+            # characterises (the `json_object` downgrade, and usage being absent from a stream) are
+            # the SDK's defaults rather than ours, so an `@ai-sdk/openai-compatible` bump that
+            # flipped either would otherwise skip the only test that can see it.
+            litellm:
+              - 'backend/packages/agents/src/providers/**'
+              - 'backend/packages/agents/package.json'
+              - 'backend/packages/server/test/integration/**'
+              - 'backend/packages/server/vitest.integration.config.ts'
+              - 'backend/packages/server/package.json'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+            # The Cloudflare OS Gatekeeper (`test-gatekeeper`) is a CONSUMER of the published
+            # surface, not part of the backend: `@cat-factory/gatekeeper-worker` and the template
+            # that installs it depend on `@cat-factory/sdk` and `@cat-factory/gatekeeper-bindings`
+            # exactly as an outside integrator would, and nothing in `backend/packages` may depend
+            # on either. This lane is its own for the same reason it is NON-BLOCKING (not in the
+            # aggregated `Test` gate, the shape `test-eks` has): the Cloudflare OS protocol is
+            # still moving, and a partner-side breaking change must not turn this repo's CI red.
+            #
+            # The non-blockingness is scoped to the RUNTIME suite, which is where a moving
+            # protocol actually bites: `test-units` excludes `@cat-factory/gatekeeper-worker` so
+            # its workerd run happens only here. Build and typecheck are the opposite case and
+            # deliberately DO block: the machinery is a published npm package, so a `dist` that
+            # does not compile is our break to fix before it ships, and `publish-integrity` has
+            # to see that `dist` to run publint/attw over it. `sdkSrc` in the `src` filter below
+            # is what makes that true rather than merely intended: without it an
+            # `sdk/gatekeeper-worker/**`-only diff left `code` false and skipped both lanes.
+            #
+            # The last four entries are what the LIVE half of this lane needs. A change to the
+            # `/api/v1` CONTRACTS already lands here through `sdk/gatekeeper/**`, because the
+            # bindings table is generated from the spec and `check:sdk` refuses a diff that did not
+            # regenerate it; what that cannot see is BEHAVIOUR that moved under an unchanged
+            # contract, which is exactly the disagreement the live suite exists to catch. That is
+            # the whole publicApi module, and `orchestration` one layer under it: the live suite's
+            # central claim is that a real run PARKS, RAISES the notification the card is built
+            # from, and LEAVES the park when answered, and all three of those live in the engine
+            # rather than in the controller that serves them. Without it the lane skips exactly the
+            # PRs that would break it. The line is drawn there and not deeper: the repositories the
+            # engine persists through are covered cross-runtime by conformance, which the live
+            # suite adds nothing to. The harness paths are here because the phase and the boot it
+            # runs against live in them.
+            gatekeeper:
+              - 'deploy/gatekeeper/**'
+              - 'sdk/gatekeeper/**'
+              - 'sdk/gatekeeper-worker/**'
+              - 'sdk/typescript/**'
+              - 'backend/packages/server/src/modules/publicApi/**'
+              - 'backend/packages/orchestration/**'
+              - 'backend/internal/sdk-smoketest/**'
+              - 'backend/internal/e2e/src/**'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
+            # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
+            # SDK clients plus both MCP access paths (the published stdio server and the hosted
+            # endpoint) against it, so it runs when EITHER side of that contract moves: the
+            # SDKs themselves, the generator that writes them, the published spec, the Valibot
+            # contracts the spec is generated FROM, or the controllers that serve `/api/v1`. That
+            # last pair is the point — an SDK is only correct relative to the surface it talks to,
+            # and a controller change that breaks a client would otherwise be caught by nothing
+            # until an integration hit it in production.
+            sdk:
+              - 'sdk/**'
+              - 'scripts/sdk/**'
+              - 'scripts/generate-sdks.mjs'
+              - 'scripts/check-sdks.mjs'
+              - 'docs/openapi.json'
+              - 'backend/packages/contracts/src/public-api.ts'
+              - 'backend/packages/contracts/src/public-api-keys.ts'
+              - 'backend/packages/contracts/src/debug-api.ts'
+              # The WHOLE routes directory, not the public files by name: the generator walks the
+              # contracts barrel and takes every `/api/v1` path it finds, so a new route file (or
+              # `_shared.ts`, which now carries the `withMinScope` floors the spec publishes)
+              # changes the spec without touching any name a hand-list could hold.
+              - 'backend/packages/contracts/src/routes/**'
+              - 'backend/packages/server/src/modules/publicApi/**'
+              # The other half of the hosted MCP endpoint: the in-process dispatch every tool call
+              # rides. A loopback-only edit changes what the hosted phase is smoketested against.
+              - 'backend/packages/server/src/http/loopback.ts'
+              - 'backend/internal/sdk-smoketest/**'
+              # The harness boots the e2e test server, so a change to that wiring changes what the
+              # SDKs are smoketested against.
+              - 'backend/internal/e2e/src/**'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
+            # Root build / dependency / CI inputs that can change the outcome of ANY suite:
+            # the lockfile, the workspace + root package manifests, the shared tsconfigs, the
+            # Turbo task graph, and this workflow (or the composite actions it calls). Any of
+            # these forces every lane to run — a dep or build-graph change is never "no-op".
+            rootBuild:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+              - 'backend/tsconfig*.json'
+              - 'turbo.json'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
+
+      # A SECOND paths-filter with `predicate-quantifier: every` so each rule set is an AND —
+      # which is what makes the `!` exclusions actually SUBTRACT (under the default `some`
+      # quantifier a broad `**`-style positive would still match a doc file, defeating the
+      # exclusion). It can't share the step above, whose OR-style positive filters rely on
+      # `some`. Purpose: decide whether a diff touched real SOURCE, treating markdown/prose as
+      # non-code so a docs-only change is genuinely "zero code changes".
+      - id: src
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            # Backend source in any package / runtime / internal harness — but NOT markdown
+            # or the backend/docs tree, so a backend docs-only edit doesn't drag in the whole
+            # backend test matrix.
+            backendSrc:
+              - 'backend/**'
+              - '!**/*.md'
+              - '!backend/docs/**'
+            # Frontend layer source, likewise minus its markdown docs.
+            frontendSrc:
+              - 'frontend/**'
+              - '!**/*.md'
+            # The `sdk/*` tree: the four published clients, the MCP and gatekeeper projections
+            # over them, and the Gatekeeper Worker machinery. Real source that the `code` flag
+            # used to miss entirely, which meant an sdk-ONLY diff (a hand-written transport, the
+            # Gatekeeper machinery) skipped `build-typecheck`, `publish-integrity` and
+            # `test-units`, the three lanes that compile the published `dist`, run publint/attw
+            # over it and run these packages' own unit suites. `sdk-smoketest` has its own filter
+            # and stayed green on its own, so the `Test` and `Build` gates read as passes with
+            # nothing having typechecked the diff. It also drags `test-e2e` in, which an sdk
+            # change cannot affect: accepted, because an sdk-only PR is rare (a generated change
+            # rides a contracts edit, which is `backendSrc` already) and a fourth flag to shave it
+            # would buy less than it costs in scope to reason about.
+            sdkSrc:
+              - 'sdk/**'
+              - '!**/*.md'
+            # Example deployments (`deploy/*`) — the assembled-product wiring. `test-e2e`
+            # builds and serves `deploy/frontend` as its real SPA (Playwright's webServer
+            # runs `pnpm --filter @cat-factory/deploy-frontend run build && ... preview`), so a
+            # deploy-only change must still run the cross-stack lanes. Kept a SEPARATE filter
+            # (not another positive on `frontendSrc`): under `predicate-quantifier: every`
+            # multiple positives are AND-ed, so `frontend/**` AND `deploy/**` would match
+            # nothing. Markdown excluded so a deploy README edit stays docs-only.
+            deploySrc:
+              - 'deploy/**'
+              - '!**/*.md'
+
+      # Fold the two paths-filter steps into the coarse lane flags the jobs gate on. Kept in a
+      # shell step (not inline `if:` expressions) so each job's condition stays a single,
+      # readable output reference. Values are our own 'true'/'false' strings passed via env —
+      # never interpolated into the script body — so there's no template-injection surface.
+      - id: scope
+        env:
+          BACKEND_SRC: ${{ steps.src.outputs.backendSrc }}
+          FRONTEND_SRC: ${{ steps.src.outputs.frontendSrc }}
+          DEPLOY_SRC: ${{ steps.src.outputs.deploySrc }}
+          SDK_SRC: ${{ steps.src.outputs.sdkSrc }}
+          ROOT_BUILD: ${{ steps.filter.outputs.rootBuild }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          backend=false
+          code=false
+          if [ "$BACKEND_SRC" = 'true' ] || [ "$ROOT_BUILD" = 'true' ]; then backend=true; fi
+          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ] || [ "$SDK_SRC" = 'true' ]; then code=true; fi
+          # Change-gating only makes sense against a PR base. On non-PR events (a push to
+          # `main`, or a manual `workflow_dispatch`) paths-filter diffs against the default
+          # branch, so a dispatch on `main` — HEAD == base tip — yields an EMPTY diff and every
+          # filter reads false. Don't let that skip the whole suite green: on any non-PR event
+          # run everything, matching the pre-gating behaviour (these lanes had no change gate).
+          if [ "$EVENT_NAME" != 'pull_request' ]; then backend=true; code=true; fi
+          {
+            echo "backendCode=$backend"
+            echo "code=$code"
+          } >> "$GITHUB_OUTPUT"
+          echo "backendCode=$backend | code=$code" \
+            "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
+            "sdkSrc=$SDK_SRC rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
+
+      # Pick the shard shape for the sharded test lanes. Gate on `push` specifically (not
+      # "not a PR") so a manual workflow_dispatch — the way CI timing is measured before a
+      # change lands — still exercises the real 3-way split; only an actual push to `main`
+      # runs everything in one shard. `matrix` is a JSON array the jobs `fromJSON` into their
+      # `matrix.shard`; `total` is the `--shard` denominator (`1/1` is the valid "run all" case).
+      - id: shards
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = 'push' ]; then
+            matrix='[1]'
+            total=1
+          else
+            matrix='[1, 2, 3]'
+            total=3
+          fi
+          {
+            echo "matrix=$matrix"
+            echo "total=$total"
+          } >> "$GITHUB_OUTPUT"
+          echo "shardMatrix=$matrix | shardTotal=$total (event=$EVENT_NAME)"
 
   lint:
     name: Lint & format
-    # Skip on the Changesets "Release Packages" PR: its diff is bot-generated
-    # CHANGELOG.md entries + version bumps, which we don't author or gate on
-    # oxfmt, and lint is not a required check anyway. Mirrors the `changeset`
-    # job's skip below.
-    if: github.head_ref != 'changeset-release/main'
+    # PR-ONLY pre-merge gate: oxlint/oxfmt are deterministic per file and sherif checks
+    # cross-package manifest consistency — none of it yields a post-merge signal a PR run
+    # didn't already give (and a merge race that drifted a dep version would also break the
+    # build/test lanes that DO run on main), so this doesn't run on push to main.
+    # Also skip on the Changesets "Release Packages" PR: its diff is bot-generated
+    # CHANGELOG.md entries + version bumps, which we don't author or gate on oxfmt, and lint
+    # is not a required check anyway. Mirrors the `changeset` job's skip below.
+    if: ${{ github.event_name != 'push' && github.head_ref != 'changeset-release/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -113,24 +383,45 @@ jobs:
       - name: Monorepo lint (sherif)
         run: pnpm lint:monorepo
 
-  build-typecheck:
-    name: Build & typecheck
+  # The two pure-node repo guards (no install needed) used to open the `build-typecheck`
+  # job. They live in their OWN job so that change-gating the build lanes on `code` (below)
+  # cannot take them along: both are exactly the checks a docs-/markdown-only PR is most
+  # likely to trip — the package catalog IS README.md content, and the image-tag consistency
+  # check reads the pinned tag files — so they must run on every PR regardless of scope.
+  # But they are PURE PRE-MERGE GATES with no post-merge signal (both are deterministic from
+  # content, so a push re-run could only repeat the PR's verdict), so they do NOT run
+  # on push to main. On a PR the `Build` gate accepts nothing but `success` from this job; on
+  # push it is skipped and the gate tolerates that (see `build-gate`).
+  repo-guards:
+    name: Repo guards
+    # PR-only pre-merge gate (see the block comment above): skipped on push to main.
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
+    # The guards themselves run in well under a minute; the budget is sized for the
+    # checkout below, which is the slow part. `fetch-depth: 0` makes actions/checkout
+    # fetch every tag as well as every branch (there is no input that opts out of the
+    # tags: the all-history refspec hard-codes `+refs/tags/*:refs/tags/*`), and this
+    # repo publishes a tag per package per release, so that is 20k+ refs. On a slow
+    # runner that fetch has taken over five minutes, which used to abort this job
+    # inside checkout with no guard having run, and read downstream as a red `Build`.
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history so the runner-image-tag guard below can diff against the PR base
+          # Full history so the runner-image-tag guard can diff against the PR base
           # (origin/${{ github.base_ref }}) and read the base's wrangler.toml.
           fetch-depth: 0
           persist-credentials: false
 
-      # Guard the executor-harness runner image tag BEFORE the expensive build: the harness
-      # version and the cat-factory-executor:<tag> pins in deploy/backend/{package.json,
-      # wrangler.toml} must stay in lockstep, and an image-source change must bump the tag.
-      # deploy.yml runs the same check post-merge on main; this catches the mistake on the PR
-      # instead of turning main red. BASE_REF is empty off PRs (push/dispatch) → the script
+      # Guard the executor-harness runner image tag: the harness version and the
+      # cat-factory-executor:<tag> pins in deploy/backend/{package.json, wrangler.toml} must
+      # stay in lockstep, and an image-source change must bump the tag. This repo publishes
+      # the image (docker-publish.yml) but operates no deployment of its own, so the PR is
+      # the primary place the drift is caught (docker-publish.yml re-runs the same guard as
+      # a publisher-side backstop): a deployment consuming the published image reads those
+      # pins as the supported tag. BASE_REF is empty off PRs (push/dispatch) → the script
       # runs the consistency check only. Pure node + git; no install needed.
       - name: Guard runner image tag
         env:
@@ -142,11 +433,268 @@ jobs:
             node scripts/check-runner-image-tag.mjs
           fi
 
+      # The CONVERSE of the guard above, and the other half of the same loop: that one asks
+      # whether an image-source change bumped the tag, this asks whether a tag bump had a source
+      # change. A harness package's version IS its image tag, so a changeset naming one versions
+      # the image: `changeset version` plus the tag sync roll every deploy pin, and a deployment
+      # mirroring them pulls and rolls out an image whose contents did not change. #2076 shipped
+      # exactly that for `@cat-factory/deploy-harness` (0.2.15 -> 0.2.16 in #2077, no source
+      # change), which is what this exists to stop recurring. BASE_REF is empty off PRs, where
+      # there is no base to diff and the check skips. Its fixtures run in the `node --test` step
+      # below. Pure node + git; no install.
+      - name: Guard image-harness changesets
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            node scripts/check-image-harness-changesets.mjs --since "origin/${BASE_REF}"
+          fi
+
+      # Guard the deploy templates' placeholder invariant: `deploy/*`'s wrangler configs are
+      # templates, so a live line may not carry a real account id, resource id or hostname
+      # (the docs promise `REPLACE_WITH_*` placeholders and example names, and this is what
+      # keeps a filled-in copy from being committed back during real-deployment testing).
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard deploy templates
+        run: node scripts/check-deploy-placeholders.mjs
+
+      # Guard against a package script spawning a WORKSPACE CLI by its bin name. Those bins
+      # point at `dist/`, so pnpm cannot link the shim on a fresh checkout (the `[WARN] Failed
+      # to create bin` lines every install prints) and nothing re-links after a build: the
+      # script then fails only for someone who just cloned, never here, because this lane's
+      # node_modules cache was populated after a build. Pure node; no install.
+      - name: Guard workspace bin scripts
+        run: node scripts/check-workspace-bin-scripts.mjs
+
+      # Guard the version numbers a branch introduces against the npm registry. In practice this
+      # gates the RELEASE PR, the only branch that moves a version field. `changeset publish`
+      # reports "already published on npm" as a warn and exits 0, and it says that about every
+      # package the release did NOT bump, so the one time it means a collision reads exactly like
+      # the two dozen times it is routine: the release goes green having shipped everything else
+      # pinned to a version this repo never built (2026-08-06, @cat-factory/prompt-fragments'
+      # first major landing on a number a 2026-06-17 hand-publish had parked an unbuilt shell on).
+      # Only answerable BEFORE the publish, which is why it reads the branch and not that output.
+      # Needs the full history the checkout above already fetches. No install; one registry
+      # request per re-versioned package, and none at all on a feature PR.
+      - name: Guard release versions
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            node scripts/check-release-versions.mjs --since "origin/${BASE_REF}"
+          fi
+
       # Guard the human/LLM-facing package map: every workspace package must have a
       # package.json description AND a row in the README repository-layout tables, so a new
       # package can't become invisible to the docs an LLM reads first. Pure node; no install.
       - name: Guard package catalog
         run: node scripts/check-package-catalog.mjs
+
+      # Soft max-lines budget with ratcheted legacy allowances — the re-accretion guard for
+      # the engine god-files (the 2026-07 quality review's item #5): a file over its budget
+      # fails here instead of silently regrowing between audits. Pure node; no install.
+      - name: Guard file-size budgets
+        run: node scripts/check-file-size.mjs
+
+      # Bans a tracked AGENTS.md anywhere: Claude Code reads a directory's AGENTS.md INSTEAD of its
+      # AGENTS.md, so one committed file silently switches off the per-package guidance at and
+      # below it (#2257). Pure node; no install.
+      - name: Guard against a re-added AGENTS.md
+        run: node scripts/check-no-claude-md.mjs
+
+      # Bans raw Tailwind palette utilities (`bg-slate-900`, `text-indigo-400`) in the SPA: the
+      # theme migration (#2239) moved them onto the `app.config.ts` aliases (`neutral`/`primary`)
+      # so the config actually recolors the app, and a reintroduced raw class silently opts back
+      # out. Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA theme aliases
+        run: node scripts/check-frontend-palette.mjs
+
+      # Bans font-size literals (`text-[11px]`, `font-size: 11px`, `fontSize: '11px'`) in the SPA: a
+      # theme document's `fontSize` is a root `font-size`, so Tailwind's rem steps follow it and a px
+      # literal does not (#2248). Its fixtures run in the `node --test` step below. Pure node; no
+      # install.
+      - name: Guard SPA type scale
+        run: node scripts/check-frontend-type-scale.mjs
+
+      # Bans corner radii that ignore the theme in the SPA. The scale itself is fixed in
+      # `main.css`, which binds `--radius` and `--radius-4xl` onto `--ui-radius` so every
+      # `rounded-*` utility follows a theme document's `radius` (#2251); what is left to ban is an
+      # arbitrary value and a raw `border-radius` literal, neither of which the rebind can reach.
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA radius scale
+        run: node scripts/check-frontend-radius.mjs
+
+      # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
+      # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
+      # apply the same text a local Claude Code session does. This fails if the two have drifted, so
+      # there is no second copy anyone maintains by hand. Pure node; no install.
+      - name: Guard the bundled Nuxt UI skill
+        run: node scripts/generate-nuxt-ui-skill.mjs --check
+
+      # Bans `.catch(() => {})` in backend non-test source — a swallowed failure with no log and
+      # no cause (observability-logging-gaps.md, B1). `runBestEffort` keeps the swallow and adds
+      # the evidence; a genuinely-silent drop annotates itself. Pure node; no install.
+      #
+      # Every guard's own fixtures run first: a guard is the only thing stopping the idiom it bans
+      # from regrowing, so a silent regression in ITS logic (the silent-drop detector's first
+      # version had one, and so did the component-import guard's) would disarm it while still
+      # reporting green. The glob picks up each `scripts/*.test.mjs` automatically. `node --test`
+      # is the built-in runner, so the install-free property of this job holds.
+      - name: Test the guard detectors
+        run: node --test 'scripts/*.test.mjs'
+
+      - name: Guard silent promise drops
+        run: node scripts/check-silent-catch.mjs
+
+      # Requires every inline LLM caller to build its credential scope through kernel's
+      # `resolveInlineScope`, naming what it holds (block / run / user / workspace) rather than
+      # hand-building a `{ workspaceId }` literal. A caller that drops the run or user it was
+      # holding still resolves a model and still answers; it just answers on the deployment's
+      # routing default instead of the model the workspace's preset names, and the only symptom
+      # is the bill. Six callers had drifted there. Its fixtures run in the `node --test` step
+      # above. Pure node, no install.
+      - name: Guard inline model scopes
+        run: node scripts/check-inline-model-scope.mjs
+
+      # Requires every layer component used in a Vue template to be imported by path. Nuxt
+      # registers a component under its path-prefixed name, so a bare tag renders NOTHING —
+      # silently, with no typecheck error and no failing test. Seven had shipped that way. Its
+      # fixtures run in the `node --test` step above. Pure node, no install, no `.nuxt` build.
+      - name: Guard layer component imports
+        run: node scripts/check-component-imports.mjs
+
+      # Requires every environment variable the platform documents to be RESERVED — unusable as a
+      # tool-server / generative-integration credential key. Without it, a variable added outside
+      # the reserved prefix families becomes resolvable into an agent process the day it is added,
+      # silently. Reads docs/environment-variables.md, which the doc sweep already requires a new
+      # variable to appear in, so it fails in the same PR. Its fixtures run in the `node --test`
+      # step above. Pure node, no install.
+      - name: Guard reserved credential keys
+        run: node scripts/check-reserved-env-keys.mjs
+
+      # Requires every human-approval-gate raise to go through `buildStepApproval`. Two engine
+      # settle paths raise the same checkpoint, and the one that hand-rolled the literal silently
+      # stopped snapshotting the step's approver policy and quorum: a gate naming two approvers
+      # then resolved as one anyone could clear. Fails OPEN, so nothing else catches it. Its
+      # fixtures run in the `node --test` step above. Pure node, no install.
+      - name: Guard gate-approval raises
+        run: node scripts/check-gate-approval-raise.mjs
+
+      # Requires the connection-failure cause vocabulary ported into each of the four published
+      # SDKs to still agree with the canonical one in contracts. The SDKs have no dependencies by
+      # design, so no test inside one can see that list, and drift is silent in both directions.
+      # Its fixtures run in the `node --test` step above. Pure node, no install.
+      - name: Guard SDK connection-failure vocabularies
+        run: node scripts/check-sdk-connection-causes.mjs
+
+      # Requires every markdown file that SHIPS in a published tarball to link inside its own
+      # package. An escaping relative link resolves perfectly from a checkout and is dead for the
+      # consumer who installed the package, so it is invisible to everyone able to fix it: an org
+      # building against the published packages could not read the reusable-operations reference
+      # its own `@cat-factory/app` doc pointed at. Its fixtures run in the `node --test` step
+      # above. Pure node, no install.
+      - name: Guard shipped documentation links
+        run: node scripts/check-shipped-doc-links.mjs
+
+      # Requires every doc URL built in code to resolve to a file AND a heading. Three modules build
+      # them (server, kernel, agents: each sits below the last and cannot import it) and they land in
+      # operator-facing error messages, so the reader who follows a stale one is already mid-failure.
+      # Nothing else can see the coupling: reducing `vcs-providers.md` deleted the `## Setup` the
+      # GitLab webhook-rejection warning deep-linked, and the unit test asserting that message
+      # contains `vcs-providers.md#setup` passed throughout, because it only knew about the string.
+      # Its fixtures run in the `node --test` step above. Pure node, no install, no network.
+      - name: Guard documentation anchors
+        run: node scripts/check-doc-anchors.mjs
+
+      # Requires every RELATIVE link in a repo markdown file to resolve to a path and, where it
+      # deep-links one, a heading. The two guards above sound like they cover this and neither does:
+      # the shipped-doc one walks published package directories only, and the anchor one resolves
+      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because AGENTS.md
+      # REQUIRES that when a completed initiative tracker converts to an ADR. Twelve links were
+      # dangling when this landed, three of them at trackers deleted exactly that way. Generated
+      # CHANGELOGs are out of scope: frozen history correctly naming what was true when written. Its
+      # fixtures run in the `node --test` step above. Pure node, no install, no network.
+      - name: Guard documentation links
+        run: node scripts/check-doc-links.mjs
+
+      # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
+      # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
+      # the script as "the same set CI runs", which is the only evidence that set really needs no
+      # Postgres and no `workerd`. Add a fourth database-backed facade and whichever list is updated
+      # second silently changes what the other means: the script either starts demanding a database
+      # it says it does not need, or quietly stops covering a package CI covers, which is worse
+      # because it reports green. Its fixtures run in the `node --test` step above. Pure node.
+      - name: Guard test-lane parity
+        run: node scripts/check-test-lane-parity.mjs
+
+      # Requires every group of the split conformance suite to run on every facade. Wiring the
+      # suite used to be one call per facade, which nobody could half-do; it is now five group
+      # functions across fifteen spec files, and a facade missing one reports GREEN — the
+      # assertions it skips are indistinguishable from assertions that passed. That is the failure
+      # the conformance package exists to prevent, so it cannot be left to whoever wires the next
+      # group remembering all three trees. Its fixtures run in the `node --test` step above. Pure
+      # node, no install, no network.
+      - name: Guard conformance group parity
+        run: node scripts/check-conformance-group-parity.mjs
+
+      # Requires every file that makes an outbound HTTP call to be classified as a VENDOR surface
+      # the external-API sweep verifies or an INTERNAL one it does not. Almost every third-party
+      # surface here is reached by hand (a path we typed, a header we pinned), so nothing else in
+      # CI can see the vendor move one, and the sweep that reads the vendor's live docs is only as
+      # good as its inventory. Left to regexes retyped each run it undercounts: the skill's own
+      # worked example found four GitHub API-version pins where the tree has fourteen, and two
+      # document providers were invisible to both of its greps. This is also the half the sweep
+      # cannot cover, since an integration landing BETWEEN sweeps is unswept for months, and it
+      # fails in that PR instead. Its fixtures run in the `node --test` step above. Pure node, no
+      # install, no network.
+      - name: Guard external API inventory
+        run: node scripts/check-external-api-inventory.mjs
+
+      # Requires every workflow that gates on a runner image's sources to gate on the SAME list
+      # `scripts/runner-images.mjs` declares that image is built from. The descriptors already
+      # feed the tag guard and the tag sync; the path filters were the one copy left by hand, and
+      # both ways they can drift are silent — a source the publisher then never publishes, or a
+      # change the PR-side image smoketest skips. Its fixtures run in the `node --test` step
+      # above. Pure node, no install, no network.
+      - name: Guard runner image path gates
+        run: node scripts/check-runner-image-paths.mjs
+
+      # Guard the Cloudflare runtime pins: ONE wrangler, and through it one workerd and one
+      # miniflare. `@cloudflare/vitest-plugin` pins wrangler exactly and the Worker suite
+      # runs inside the pool's workerd, while `wrangler deploy` ships wrangler's, so a second copy
+      # means the runtime the tests prove is not the runtime that ships. Both halves stay green
+      # while that is true, which is why it needs an assertion rather than a convention. Also
+      # holds `@cloudflare/workers-types` to the resolved workerd's date, since its version IS a
+      # workerd date and a caret floats the types ahead of the runtime they describe. Reads the
+      # lockfile and the workspace manifests. Its fixtures run in the `node --test` step above.
+      # Pure node, no install, no network.
+      - name: Guard Cloudflare runtime pins
+        run: node scripts/check-cloudflare-runtime-pins.mjs
+
+  # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
+  # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
+  # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`
+  # (core), `publish-integrity`, and `frontend-check` — each of which needs the built `dist/`
+  # so each does its own Turbo-cached `pnpm build` (the builds can't be shared within a run:
+  # every lane starts at once). All three lanes are change-gated on the coarse `code` flag:
+  # nothing in them reads prose, so a docs-only PR skips them (the pure-node guards that DO
+  # read markdown live in the always-on `repo-guards` job above). The `build-gate` job below
+  # aggregates them into a single required status, mirroring the `Test` gate, so branch
+  # protection requires one "Build" check regardless of how the lanes are later re-sliced.
+  build-typecheck:
+    name: Build & typecheck
+    needs: changes
+    # Build/typecheck outcomes can only change when real source (or a root build input)
+    # changed — a docs-only PR skips the lane and the `Build` gate treats the skip as a pass.
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -160,20 +708,6 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Publish-integrity backstop: publint + attw over every publishable package's packed
-      # output, so an empty-shell publish (dist/ missing — the @cat-factory/gitlab /
-      # provider-s3 incident; prepublishOnly is the other guard) or a broken exports map
-      # fails the PR instead of the npm consumer. Needs the dist/ built above.
-      - name: Check publish integrity (publint + attw)
-        run: pnpm check:publish
-
-      # Unused files / exports / dependencies across the workspace. The knip.json config is
-      # scoped to pass today (see its comments for deliberate ignores); tightening the
-      # baseline is tracked separately. Runs after the build because workspace packages
-      # resolve each other through their exports maps into the gitignored dist/.
-      - name: Knip (unused code & deps)
-        run: pnpm lint:knip
-
       # The internal harnesses (executor-harness, benchmark-harness) are NOT in the
       # `backend/tsconfig.build.json` project-reference graph, so `pnpm build` above
       # never typechecks them — a type error in the harness `src` used to surface only
@@ -185,6 +719,102 @@ jobs:
           pnpm --filter @cat-factory/executor-harness run typecheck
           pnpm --filter @cat-factory/benchmark-harness run typecheck
 
+      # Verify the Node facade's Drizzle migration lineage stays consistent with
+      # `schema.ts`: no forked/non-commutative history and no un-generated drift
+      # (an edited schema without its `pnpm db:generate` migration). Offline — a
+      # pure snapshot diff, no database needed.
+      - name: Check Drizzle migrations
+        run: pnpm --filter @cat-factory/node-server run db:check
+
+  # Publish-integrity lane (split out of build-typecheck so its intrinsic ~1min doesn't sit on
+  # the serial critical path). Needs the built dist/ (publint packs each package's output).
+  # PR-ONLY: this is a pure pre-merge gate — publint/attw/knip catch a broken publish artifact
+  # (empty-shell dist/, broken exports map, unused code) BEFORE it lands, and the real publish
+  # (release.yml) does its own fresh build + prepublishOnly. Re-running it on push to main gives
+  # no new signal (deterministic from content, and it can't un-merge the commit), so it is
+  # skipped there.
+  publish-integrity:
+    name: Publish integrity
+    needs: changes
+    # publint/attw/knip all analyse built output and source imports — meaningless on a
+    # docs-only diff, so this lane change-gates exactly like build-typecheck. And, being a
+    # pre-merge gate, it is skipped on push to main (github.event_name != 'push').
+    if: ${{ github.event_name != 'push' && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      - name: Build libraries
+        run: pnpm build
+
+      # Publish-integrity backstop: publint + attw over every publishable package's packed
+      # output, so an empty-shell publish (dist/ missing — the @cat-factory/gitlab /
+      # provider-s3 incident; prepublishOnly is the other guard) or a broken exports map
+      # fails the PR instead of the npm consumer. Needs the dist/ built above.
+      - name: Check publish integrity (publint + attw)
+        run: pnpm check:publish
+
+      # OpenAPI drift guard: regenerate the public `/api/v1` spec from the Valibot contracts
+      # and diff it against the committed docs/openapi.json. Fails if a public contract changed
+      # without running `pnpm gen:openapi`. Needs the contracts dist built above.
+      - name: Check OpenAPI spec is up to date
+        run: pnpm check:openapi
+
+      # SDK drift guard: regenerate all four public-API clients (TypeScript / Python / Go / Java)
+      # from the committed spec and diff them against what is in the tree, plus a version-skew
+      # check across each SDK's manifest and the constant its transport stamps into `User-Agent`.
+      # Runs HERE rather than in `repo-guards` because it reads docs/openapi.json, which the
+      # step above has just proven current — checking the SDKs against a stale spec would report
+      # them clean while both were wrong. Pure node once the spec exists.
+      - name: Check SDK clients are up to date
+        run: pnpm check:sdk
+
+      # Unused files / exports / dependencies across the workspace. The knip.json config is
+      # scoped to pass today (see its comments for deliberate ignores); tightening the
+      # baseline is tracked separately. Runs after the build because workspace packages
+      # resolve each other through their exports maps into the gitignored dist/.
+      - name: Knip (unused code & deps)
+        run: pnpm lint:knip
+
+  # Frontend lane (typecheck + i18n guards + the real SPA compile), split out of
+  # build-typecheck. Needs fetch-depth 0 for the i18n locale-parity base diff, and the built
+  # dist/ (the frontend layer imports the built libraries).
+  frontend-check:
+    name: Frontend checks
+    needs: changes
+    # The i18n catalogs are .json (never matched by the docs filter) and everything else
+    # here compiles source, so a docs-only diff cannot affect this lane; change-gates like
+    # the other build lanes.
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the i18n locale-parity guard can diff against the PR base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      - name: Build libraries
+        run: pnpm build
+
       # Typecheck the frontend layer's shippable code (the deploy apps have no
       # source of their own, and the libraries are typechecked by the build above).
       - name: Typecheck frontend layer
@@ -193,7 +823,7 @@ jobs:
       # i18n drift guard (tier 3): fail if a `t('…')` references a key absent from the
       # catalog. Complements the typed-message-keys typecheck above (tier 1), which can't
       # see a runtime-built key. Unused keys are reported but non-blocking — see the
-      # script header and CLAUDE.md → Internationalization.
+      # script header and AGENTS.md → Internationalization.
       - name: Check i18n keys
         run: pnpm --filter @cat-factory/app run i18n:check
 
@@ -213,6 +843,8 @@ jobs:
       # inline handler) used to slip through every check — nothing in CI built the
       # frontend. We run `nuxt generate` (not `nuxt build`) so this mirrors the EXACT
       # command the Pages deployment ships with, catching `generate`-only failures too.
+      # This is NOT redundant with the typecheck above: `nuxt generate` runs no type-checking
+      # (no `typeCheck: true` in nuxt.config) and the two catch disjoint error classes.
       # NUXT_PUBLIC_API_BASE is baked in at build time; a placeholder is fine for a pure
       # compile check.
       - name: Build frontend SPA
@@ -220,30 +852,86 @@ jobs:
         env:
           NUXT_PUBLIC_API_BASE: http://localhost:8787
 
-      # Verify the Node facade's Drizzle migration lineage stays consistent with
-      # `schema.ts`: no forked/non-commutative history and no un-generated drift
-      # (an edited schema without its `pnpm db:generate` migration). Offline — a
-      # pure snapshot diff, no database needed.
-      - name: Check Drizzle migrations
-        run: pnpm --filter @cat-factory/node-server run db:check
+  # Single aggregated status named "Build" so branch protection can require one check
+  # regardless of how the build/typecheck lanes above are sliced. Mirrors the `Test` gate:
+  # the three build lanes are change-gated on `code`, so `skipped` is a legitimate result on
+  # a docs-only PR — but only when the `changes` job itself succeeded (a failed detection
+  # job would skip every lane on empty outputs and pass this gate with nothing built — the
+  # same fail-open hole `test-gate` closes). `repo-guards` and `publish-integrity` are
+  # PR-only pre-merge gates (they don't run on push to main): on a pull_request the gate
+  # demands `success` from `repo-guards` (it is never change-gated there, so a skip means
+  # something went wrong), while on push both are legitimately `skipped` and tolerated.
+  build-gate:
+    name: Build
+    needs: [changes, repo-guards, build-typecheck, publish-integrity, frontend-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Verify all build lanes passed (or were correctly skipped)
+        env:
+          EVENT: ${{ github.event_name }}
+          CHANGES: ${{ needs.changes.result }}
+          GUARDS: ${{ needs.repo-guards.result }}
+          CORE: ${{ needs.build-typecheck.result }}
+          PUBLISH: ${{ needs.publish-integrity.result }}
+          FRONTEND: ${{ needs.frontend-check.result }}
+        run: |
+          echo "event: $EVENT | changes: $CHANGES | repo-guards: $GUARDS" \
+            "| build-typecheck: $CORE | publish-integrity: $PUBLISH | frontend-check: $FRONTEND"
+          if [ "$CHANGES" != 'success' ]; then
+            echo "::error::change detection did not succeed; refusing to pass the build gate"
+            exit 1
+          fi
+          # repo-guards is a PR-only gate: on a pull_request it must have run and passed (it
+          # is never change-gated); on push/dispatch to main it is skipped by design.
+          if [ "$EVENT" = 'pull_request' ]; then
+            if [ "$GUARDS" != 'success' ]; then
+              echo "::error::the repo-guards job reported '$GUARDS' on a PR"
+              exit 1
+            fi
+          elif [ "$GUARDS" != 'success' ] && [ "$GUARDS" != 'skipped' ]; then
+            echo "::error::the repo-guards job reported '$GUARDS'"
+            exit 1
+          fi
+          for lane in "$CORE" "$PUBLISH" "$FRONTEND"; do
+            case "$lane" in
+              success | skipped) ;;
+              *)
+                echo "::error::a required build lane reported '$lane'"
+                exit 1
+                ;;
+            esac
+          done
+          echo "All build lanes passed or were skipped with no relevant changes."
 
   # The Cloudflare worker suite (58 files) is the dominant test cost, and its
-  # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly
-  # parallel across jobs but not within one. Split it into 2 shards via vitest
+  # per-file overhead is intrinsic vitest-plugin isolate setup: embarrassingly
+  # parallel across jobs but not within one. Split it into 3 shards via vitest
   # --shard (deterministic file partition); each shard runs in its own miniflare
   # local D1, so there is no cross-shard contention. No Postgres here — the
-  # worker uses a local D1 inside the Workers pool.
+  # worker uses a local D1 inside the Workers pool. (3 shards, matching test-e2e:
+  # each shard's ~90s run at /2 dropped this lane onto the blocking critical path,
+  # so a third shard keeps the per-shard wall-clock bounded.)
   test-worker:
     name: Test worker (shard ${{ matrix.shard }})
+    needs: changes
+    # Pure-backend lane: the Cloudflare worker facade never imports the frontend, so a
+    # frontend-only or docs-only PR has nothing here to test and skips (the `Test` gate
+    # treats that skip as a pass).
+    if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -256,8 +944,13 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # Pass the shard index + denominator via env (not inline `${{ }}` in the script body),
+      # so there's no template-injection surface — matching the `scope`/`shards` steps.
       - name: Run worker shard
-        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/2
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/worker exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Every non-worker package that needs NO database: the pure-unit suites
   # (orchestration, integrations, server, agents, gates, …) plus the frontend layer.
@@ -265,11 +958,17 @@ jobs:
   # paying the database's ~20s init or sharing its lane.
   test-units:
     name: Test units (no DB)
+    needs: changes
+    # Cross-stack lane: this runs every non-facade package's unit suite, which spans the
+    # backend shared packages AND the frontend layer — so it runs whenever ANY real source
+    # changed, and skips only on a docs-/prose-only PR (nothing to test).
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -281,15 +980,29 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Exclude the worker (its own sharded job) and the two Postgres facades (the
-      # test-db job below). Everything left is database-free pure-unit work.
+      # Exclude the worker (its own sharded job), the two Postgres facades (the test-db job
+      # below) and the Gatekeeper machinery, whose suite boots real `workerd` and belongs to
+      # the non-blocking `test-gatekeeper` lane. Everything left is infra-free pure-unit work.
+      # `@cat-factory/deploy-gatekeeper` deliberately stays: its remaining suite is a plain-Node
+      # check that the template's policy still compiles against the generated operation table,
+      # and that one SHOULD gate, because a policy the table no longer supports is our break
+      # rather than a partner's. `scripts/check-test-lane-parity.mjs` holds this list and
+      # `pnpm test:quick` to the same set.
       - name: Run unit packages
         run: >-
           pnpm
           --filter='!@cat-factory/worker'
           --filter='!@cat-factory/node-server'
           --filter='!@cat-factory/local-server'
+          --filter='!@cat-factory/gatekeeper-worker'
           -r run test:run
+
+      # `cat-factory supervise` driven as its own process against the `dist/bin.js` built above.
+      # It spawns a real child and binds an ephemeral port, but needs no cluster/DB/network — so it
+      # belongs in this lane rather than behind the k3d spin-up in `test-k8s`.
+      - name: CLI supervise integration test
+        if: ${{ needs.changes.outputs.cliSupervise == 'true' }}
+        run: pnpm --filter @cat-factory/cli run test:supervise
 
   # The Postgres-backed conformance + integration suites (Node + Local facades) — the
   # only tests that need a database. Each vitest worker gets its OWN database
@@ -297,39 +1010,44 @@ jobs:
   # the conformance suite is split into per-group spec files that fan out across workers.
   test-db:
     name: Test DB (node/local) (shard ${{ matrix.shard }})
+    needs: changes
+    # Pure-backend lane (Node + Local Postgres facades): skips on a frontend-only or
+    # docs-only PR, exactly like `test-worker`.
+    if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
-    # SHARDED across 2 jobs via vitest's --shard (deterministic file partition), mirroring the
+    # SHARDED across 3 jobs via vitest's --shard (deterministic file partition), mirroring the
     # `test-worker` / `test-e2e` sharding. The Postgres-backed lane grew when the mothership-mode
     # conformance config was added (the local suite now also runs the shared suite against a
-    # remote-RPC backend), so sharding keeps wall-clock roughly flat. Each shard is its own job, so
-    # the Postgres service below is instantiated per shard — a fresh, private datastore each — and
-    # the harness still gives each vitest worker its own database within a shard.
+    # remote-RPC backend); 3 shards keep this lane off the blocking-path pole (each shard runs
+    # node-server then local-server sequentially, so its test step is the sum of both slices).
+    # Each shard is its own job, so the Postgres container below is started per shard — a fresh,
+    # private datastore each — and the harness still gives each vitest worker its own database
+    # within a shard.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cat_factory_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Start Postgres in the BACKGROUND instead of a `services:` container: the service
+      # block's image pull + health check ran serially before the job's first step (~20s),
+      # whereas backgrounding it here hides that entirely behind setup + build. The
+      # readiness wait below gates the test step. Fully job-private, exactly like the
+      # service container was (each shard is its own runner VM).
+      #
+      # Both halves live in `.github/scripts/` because the e2e lane below needs exactly the
+      # same pair, and the two copies this replaced had to be fixed twice.
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -339,20 +1057,29 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
       # Node + Local share this one Postgres server; the harness gives each vitest worker
       # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
       # two facades, the mothership-mode config, and their parallel workers never collide. Each
       # package's spec files are partitioned across the shards by vitest's --shard.
-      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/2)
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
+      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
         run: |
-          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/2
-          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/2
+          pnpm --filter @cat-factory/node-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
+          pnpm --filter @cat-factory/local-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
   # same Postgres service as the Node suite; Playwright's own webServer boots both the
   # backend (src/testServer.ts) and the SPA (deploy/frontend's nuxt dev). Covers
-  # frontend + backend, so it runs on every PR (not gated by the backend paths filter).
+  # frontend + backend, so it is gated only on the coarse `code` flag (any real source,
+  # frontend OR backend) — it still runs on every code PR, but a docs-only diff skips it.
   #
   # NON-BLOCKING: deliberately NOT a dependency of the aggregated `Test` gate below, so a
   # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
@@ -364,40 +1091,38 @@ jobs:
   #
   # SHARDED across 3 jobs via Playwright's --shard (deterministic file partition), mirroring
   # the `test-worker` vitest sharding above. Each shard is its own job, so the Postgres
-  # service below is instantiated per shard — every shard gets a fresh, private datastore,
-  # which keeps the serial `workers: 1` config valid within a shard. Each shard emits a
-  # `blob` report; the `test-e2e-report` job merges them into one HTML report. (Bumped 2 → 3
-  # as the spec count grew — each shard runs its files serially, so more shards keeps the
-  # per-shard wall-clock bounded as coverage expands.)
+  # container below is started per shard — every shard gets a fresh, private datastore,
+  # which keeps the serial `workers: 1` config valid within a shard. Each shard fails loudly
+  # on its own (a red shard job) and uploads its `test-results/` trace + video on failure;
+  # there is no combined-report merge job. (Bumped 2 → 3 as the spec count grew — each shard
+  # runs its files serially, so more shards keeps the per-shard wall-clock bounded as
+  # coverage expands.)
   test-e2e:
     name: Test e2e (shard ${{ matrix.shard }})
+    needs: changes
+    # Skip only on a docs-only diff; any frontend or backend source change runs it.
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cat_factory_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Background Postgres boot, same rationale + same scripts as `test-db` above: hide the
+      # image pull behind setup/build/browser-install; the wait below gates the tests
+      # (Playwright's webServer boots the backend, whose migrate() is the first DB touch).
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -417,69 +1142,38 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
+      # ONLY on a cache miss, which is what the step above always intended. A hit has
+      # already restored the browser, so all a re-run buys is `--with-deps`' unconditional
+      # apt round trip for OS packages the runner image already carries — and that call is
+      # network-bound with a very long tail: 12s at the median across shards, but 484s on
+      # one run, which was that entire run's wall clock (11m against a ~4m baseline). The
+      # cache key is exact-match (no restore-keys), so a miss means the browser is genuinely
+      # absent and the full install, OS deps included, still runs.
       - name: Install Playwright Chromium
+        if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
       - name: Run e2e shard
-        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard="$SHARD/$SHARD_TOTAL"
 
-      # Each shard uploads its `blob` report (mergeable) so `test-e2e-report` can recombine
-      # them into a single HTML report. `test-results/` carries the per-failure trace + video
-      # (retain-on-failure) that actually make a flake diagnosable.
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: e2e-blob-report-${{ matrix.shard }}
-          path: backend/internal/e2e/blob-report
-          retention-days: 7
-          if-no-files-found: ignore
-
+      # A red shard fails loudly on its own (the step above exits non-zero, incl. on a flaky
+      # retry via `failOnFlakyTests`), so there is no combined-report merge job — the diagnosis
+      # material is this shard's console output plus the `test-results/` trace + video below
+      # (retain-on-failure), uploaded per shard.
       - name: Upload shard test-results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: e2e-test-results-${{ matrix.shard }}
           path: backend/internal/e2e/test-results
-          retention-days: 7
-          if-no-files-found: ignore
-
-  # Merge the per-shard Playwright `blob` reports into one HTML report. Runs even when a
-  # shard failed (`!cancelled()`) — that's exactly when the combined report is wanted.
-  # Like `test-e2e`, this is NON-BLOCKING (not in `test-gate.needs`).
-  test-e2e-report:
-    name: Test e2e (merged report)
-    needs: [test-e2e]
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm + Node + install
-        uses: ./.github/actions/setup
-
-      # Gather every shard's blob report into one directory (merge-multiple flattens the
-      # per-shard artifacts) for `playwright merge-reports`.
-      - name: Download blob reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: e2e-blob-report-*
-          path: backend/internal/e2e/all-blob-reports
-          merge-multiple: true
-
-      - name: Merge into HTML report
-        run: pnpm --filter @cat-factory/e2e run test:e2e:merge
-
-      - name: Upload merged Playwright report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: playwright-report
-          path: backend/internal/e2e/playwright-report
           retention-days: 7
           if-no-files-found: ignore
 
@@ -494,10 +1188,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.kubernetes == 'true' || needs.changes.outputs.deployHarness == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -518,8 +1213,8 @@ jobs:
       # its image/namespace-override + secretGenerator cases.
       - name: Install k3d + kubectl + kustomize
         run: |
-          K3D_VERSION=v5.7.5
-          KUBECTL_VERSION=v1.31.2
+          K3D_VERSION=v5.9.0
+          KUBECTL_VERSION=v1.36.4
           KUSTOMIZE_VERSION=v5.8.1
           curl -sSfL "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64" -o "$RUNNER_TEMP/k3d"
           curl -sSfL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "$RUNNER_TEMP/kubectl"
@@ -560,12 +1255,36 @@ jobs:
       # Build the tiny mock-harness image (the in-pod HTTP server the runner suite drives) and
       # pre-pull nginx (the env suite's workload), then import BOTH into the cluster so no pod
       # has to pull from a registry — fast and flake-free.
+      # `k3d image import` is NOT trustworthy on its exit code: it can log
+      # `ERRO failed to import images in node ...` for the only node in the cluster and still print
+      # `Successfully imported image(s)` and exit 0. The pods then fall back to Docker Hub, where a
+      # locally-built tag does not exist, and the suite fails 30s later with three confusing
+      # `ErrImagePull`s that name a registry nothing was ever meant to reach. So VERIFY the images
+      # are really in the node's containerd and retry the import if not — the import is provisioning
+      # for the suite, not the thing under test, and a bounded retry here is what keeps the
+      # "no pod pulls from a registry" property this step exists to provide.
       - name: Build + import test images
         run: |
           docker build -t cat-factory-mock-harness:it \
             backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
           docker pull nginx:1.27-alpine
-          k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it
+          imported() {
+            docker exec k3d-cf-it-server-0 ctr -n k8s.io images ls -q \
+              | grep -q "docker.io/library/cat-factory-mock-harness:it" \
+              && docker exec k3d-cf-it-server-0 ctr -n k8s.io images ls -q \
+              | grep -q "docker.io/library/nginx:1.27-alpine"
+          }
+          for attempt in 1 2 3; do
+            k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it || true
+            if imported; then
+              echo "test images present in the cluster node (attempt ${attempt})"
+              exit 0
+            fi
+            echo "::warning::k3d reported success but an image is missing from the node (attempt ${attempt}/3); retrying"
+            sleep 5
+          done
+          echo "::error::test images could not be imported into the k3d node; the suite would fail with ErrImagePull"
+          exit 1
 
       # A namespace + ServiceAccount for the runner pods, bound to cluster-admin (an ephemeral
       # throwaway cluster), and a short-lived token. The env suite creates its own per-PR
@@ -621,40 +1340,427 @@ jobs:
         if: ${{ always() }}
         run: k3d cluster delete cf-it || true
 
+  # EKS integration suite. NON-BLOCKING (intentionally NOT in the aggregated `Test` gate's
+  # `needs`, like `test-e2e`) while floci support settles — the EKS unit tests (the SigV4/STS
+  # golden vector + the contract round-trip) already run in the required `test` lane. This job
+  # boots floci (a local, LocalStack-compatible AWS emulator whose EKS "real mode" stands up a
+  # REAL k3s container per cluster and exposes its Kubernetes API server on a host port), creates
+  # a cluster via the AWS CLI, exports its endpoint/CA + test credentials as `EKS_IT_*`, and runs
+  # the suite. NOTE (verified against floci 1.5.30): floci wires k3s to its own token webhook that
+  # maps any `aws eks get-token` bearer token to cluster-admin — it is NOT aws-iam-authenticator
+  # and does NOT verify the SigV4 signature, so this suite exercises the token TRANSPORT while the
+  # SigV4 SIGNING correctness is covered by the golden-vector unit test in the required lane. The
+  # floci bootstrap is best-effort (`continue-on-error`): if it can't stand a cluster up, the suite
+  # self-skips on the missing `EKS_IT_*` env rather than failing.
+  test-eks:
+    name: Test EKS (floci)
+    needs: changes
+    if: ${{ needs.changes.outputs.eks == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The integration specs import the built `dist` of the workspace libraries.
+      - name: Build libraries
+        run: pnpm build
+
+      # Boot floci + create an EKS cluster via the AWS CLI, then export EKS_IT_* for the suite.
+      # Best-effort: any failure leaves EKS_IT_* unset, so the suite self-skips (never reds this
+      # non-blocking job). Refine the floci invocation here as its tooling stabilises.
+      - name: Boot floci + provision EKS cluster
+        continue-on-error: true
+        run: |
+          set -x
+          CLUSTER=cat-factory-it
+          REGION=us-east-1
+          # floci exposes the AWS API on :4566 (LocalStack-compatible endpoint). Published on
+          # Docker Hub as floci/floci; pinned to a known-good version rather than :latest so the
+          # emulated EKS behaviour matches what this suite is validated against. `-u root` is
+          # floci's documented invocation (it needs the mounted docker socket).
+          docker run -d --name floci -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock -u root floci/floci:1.5.30 || exit 0
+          for _ in $(seq 1 30); do curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1 && break; sleep 2; done
+          export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=$REGION
+          AWS="aws --endpoint-url=http://localhost:4566 --region $REGION"
+          $AWS eks create-cluster --name "$CLUSTER" \
+            --role-arn arn:aws:iam::000000000000:role/eks-service-role \
+            --resources-vpc-config '{}' || exit 0
+          for _ in $(seq 1 60); do
+            STATUS="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.status' --output text 2>/dev/null || echo PENDING)"
+            [ "$STATUS" = "ACTIVE" ] && break
+            sleep 3
+          done
+          ENDPOINT="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.endpoint' --output text)"
+          CA="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.certificateAuthority.data' --output text | base64 -d)"
+          [ -n "$ENDPOINT" ] || exit 0
+          {
+            echo "EKS_IT_APISERVER=$ENDPOINT"
+            echo "EKS_IT_REGION=$REGION"
+            echo "EKS_IT_CLUSTER_NAME=$CLUSTER"
+            echo "EKS_IT_ACCESS_KEY_ID=test"
+            echo "EKS_IT_SECRET_ACCESS_KEY=test"
+            echo "EKS_IT_STS_HOST=localhost:4566"
+            echo "EKS_IT_INSECURE=1"
+            echo 'EKS_IT_CA_PEM<<EKS_CA_EOF'
+            echo "$CA"
+            echo 'EKS_CA_EOF'
+          } >> "$GITHUB_ENV"
+
+      # Build the mock-harness image + best-effort LOAD it into floci's emulated k3s. A
+      # host-built image is NOT visible to k3s's own containerd, so a runner pod would
+      # ImagePullBackOff unless the image is imported — hence `EKS_IT_RUNNER_IMAGE` (which drives
+      # the image-needing runner suite) is exported ONLY when a load path actually succeeds. If
+      # floci exposes no importable cluster, the var stays unset and the runner suite self-skips,
+      # while the environment suite (testConnection/teardown — no image needed) still exercises
+      # the minted-token → apiserver seam. `k3d image import` is tried first (floci's k3s is
+      # commonly a k3d cluster); refine here as floci's tooling stabilises.
+      - name: Build + load mock-harness image into k3s
+        continue-on-error: true
+        run: |
+          set -x
+          docker build -t cat-factory-mock-harness:it \
+            backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
+          loaded=""
+          if command -v k3d >/dev/null 2>&1; then
+            CLUSTER="$(k3d cluster list -o json 2>/dev/null | python3 -c 'import sys,json; cs=json.load(sys.stdin); print(cs[0]["name"] if cs else "")' 2>/dev/null || echo "")"
+            if [ -n "$CLUSTER" ] && k3d image import cat-factory-mock-harness:it -c "$CLUSTER"; then
+              loaded=1
+            fi
+          fi
+          if [ -n "$loaded" ]; then
+            echo "EKS_IT_RUNNER_IMAGE=cat-factory-mock-harness:it" >> "$GITHUB_ENV"
+          else
+            echo "Could not load the image into an emulated k3s cluster; the runner suite will self-skip."
+          fi
+
+      - name: EKS integration tests
+        env:
+          EKS_IT_NAMESPACE: cat-factory-it
+        run: pnpm --filter @cat-factory/eks run test:integration
+
+      - name: Tear down floci
+        if: ${{ always() }}
+        run: docker rm -f floci || true
+
+  # Our `litellm` resolver against a REAL LiteLLM proxy in Docker, which calls a canned
+  # OpenAI-compatible upstream stood up by the suite itself. No provider key is configured and no
+  # tokens are billed: the gateway is real, only the model behind it is stubbed.
+  #
+  # It exists because `litellm` and `bifrost` are OPERATOR-HOSTED gateways with no public endpoint,
+  # which is exactly what makes them the two providers our other tests can say the least about. A
+  # unit test can assert what the endpoint table says; only a live instance shows the alias being
+  # rewritten in both directions, the upstream credential being substituted for the caller's, and
+  # whether token counts survive the hop into the spend rollup.
+  #
+  # BLOCKING (in the aggregated `Test` gate, the shape `test-k8s` has, not the advisory shape
+  # `test-eks` has): the image is pinned and the upstream is a local stub, so no emulator and no
+  # third party's DRIFT can red this lane for reasons outside the repo. Its one third-party reach
+  # is fetching that pinned image from GHCR, where a 429 or a timeout is the runner's weather
+  # rather than a verdict on the code, so the harness retries the pull up to three times, exactly
+  # as `test-k8s` retries `k3d cluster create` and for the same reason.
+  test-litellm:
+    name: Test LiteLLM gateway
+    needs: changes
+    if: ${{ needs.changes.outputs.litellm == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # The suite imports the built `dist` of the workspace libraries.
+      - name: Build libraries
+        run: pnpm build
+
+      # The image tag lives in the suite's own harness and the suite pulls it (with its own bounded
+      # retry), so it is written once. A pre-pull step here would be that same version in a second
+      # place, and the copy no one runs locally is the one that goes stale.
+      - name: LiteLLM gateway integration tests
+        run: pnpm --filter @cat-factory/server run test:integration
+
+      # The suite removes its own container on both exits, but a cancelled or timed-out job never
+      # reaches that code. Sweeping by the name prefix the harness mints costs nothing on an
+      # ephemeral runner and is what keeps a self-hosted one from accumulating live proxies.
+      # `xargs -r` rather than a shell variable: the id list has to word-split to remove more than
+      # one container, and an unquoted expansion is what shellcheck reads (rightly, in general) as
+      # an accident. It also does nothing at all when the list is empty, which is the normal case.
+      - name: Remove leftover gateway containers
+        if: ${{ always() }}
+        run: docker ps -aq --filter 'name=cat-factory-litellm-it-' | xargs -r docker rm -f
+
+  # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
+  # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's
+  # `needs`, the shape `test-eks` and `test-e2e` have): this Worker tracks a partner protocol that
+  # is still moving, and a change on that side must not red this repo's required check.
+  #
+  # It runs the same Worker TWICE, against two origins, and the second one is why this job now
+  # needs a database. The hermetic run binds a scripted cat-factory as the pool's outbound service,
+  # which is what makes it fast and deterministic — and is also the only thing it cannot check,
+  # since a fixture agrees with the package by construction. The LIVE run takes that fixture away:
+  # `@cat-factory/sdk-smoketest` boots the real Node facade (real Postgres, real pg-boss, fake
+  # agents), seeds a workspace that parks, and points the Worker at it, so a request shape the
+  # bindings and the SDK both consider correct meets the surface that has to accept it.
+  test-gatekeeper:
+    name: Test Gatekeeper (workerd)
+    needs: changes
+    if: ${{ needs.changes.outputs.gatekeeper == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Backgrounded, the same pair the DB and e2e lanes use, so the image pull hides behind the
+      # install and the build below rather than running serially in front of them.
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Both packages import their dependencies through the built `dist`: the machinery imports the
+      # SDK and the bindings table, and the template imports the machinery. The smoketest harness is
+      # filtered in as well because the live run below boots a real backend through it, which is
+      # every backend package's `dist`.
+      - name: Build the published surface it consumes
+        run: >-
+          pnpm exec turbo run build
+          --filter=@cat-factory/gatekeeper-worker... --filter=@cat-factory/sdk-smoketest...
+
+      - name: Typecheck
+        run: >-
+          pnpm exec turbo run typecheck
+          --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
+
+      - name: Gatekeeper tests (hermetic, scripted origin)
+        run: >-
+          pnpm exec turbo run test:run
+          --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
+
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
+      # The same Worker against the real `/api/v1`. The harness owns the boot and the seed and runs
+      # the package's `test/live` specs in workerd with no outbound service, so every call the
+      # Gatekeeper makes leaves the isolate and lands on the deployment.
+      - name: Gatekeeper tests (live, against a real deployment)
+        run: pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=gatekeeper
+
   # Single aggregated status named "Test" so branch protection can require one
-  # check regardless of the job/shard layout. Fails unless every test job passed.
-  # NOTE: `test-e2e` is intentionally NOT in `needs` — it's non-blocking for now (see the
-  # job comment above), so its result does not gate this required status.
+  # check regardless of the job/shard layout. Fails unless every test job passed OR was
+  # legitimately skipped by the change-detection gate (no relevant changes → nothing to run).
+  # NOTE: `test-e2e`, `test-eks` and `test-gatekeeper` are intentionally NOT in `needs`: they're
+  # non-blocking for now (see their job comments above), so their result does not gate this
+  # required status.
   test-gate:
     name: Test
-    needs: [test-worker, test-units, test-db, test-k8s]
+    needs: [changes, test-worker, test-units, test-db, test-k8s, test-litellm, sdk-smoketest]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Verify all test jobs passed
+      - name: Verify all test jobs passed (or were correctly skipped)
         env:
+          # The change-detection job's own status. It MUST have succeeded: a `skipped` lane is
+          # only trustworthy if the paths filter that decided to skip it actually ran. If
+          # `changes` failed, the lanes below skip on empty outputs and this gate would pass
+          # with nothing tested — so gate on it explicitly to close that fail-open hole.
+          CHANGES: ${{ needs.changes.result }}
+          # Each lane is `success` when it ran, or `skipped` when the change-detection gate
+          # found no relevant changes for it (a pure-backend lane on a frontend/docs PR, any
+          # lane on a docs-only PR, or `test-k8s` on a non-Kubernetes PR). Both count as a pass.
           WORKER: ${{ needs.test-worker.result }}
           UNITS: ${{ needs.test-units.result }}
           DB: ${{ needs.test-db.result }}
-          # `test-k8s` only runs when Kubernetes files change, so on an unrelated PR it is
-          # SKIPPED — which counts as a pass here (the gate must not block a non-K8s PR on an
-          # un-run job). When it does run, it must succeed.
           K8S: ${{ needs.test-k8s.result }}
+          # The LiteLLM gateway lane. It gates rather than advises because nothing external can
+          # move under it: the gateway image is pinned and the model upstream is a local stub.
+          LITELLM: ${{ needs.test-litellm.result }}
+          # The cross-SDK smoketest. It is the ONLY check that can see the four clients
+          # disagree, so it gates like any other lane rather than being advisory — a client
+          # that decodes a field differently or maps a refusal to the wrong class must not be
+          # mergeable. Skipped (no `sdk` changes) counts as a pass exactly like the rest.
+          SDK: ${{ needs.sdk-smoketest.result }}
         run: |
-          echo "worker shards: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
-          test "$WORKER" = "success" && test "$UNITS" = "success" && test "$DB" = "success"
-          test "$K8S" = "success" || test "$K8S" = "skipped"
+          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S | litellm: $LITELLM | sdk: $SDK"
+          if [ "$CHANGES" != 'success' ]; then
+            echo "::error::change detection did not succeed; refusing to pass the test gate"
+            exit 1
+          fi
+          for lane in "$WORKER" "$UNITS" "$DB" "$K8S" "$LITELLM" "$SDK"; do
+            case "$lane" in
+              success | skipped) ;;
+              *)
+                echo "::error::a required test lane reported '$lane'"
+                exit 1
+                ;;
+            esac
+          done
+          echo "All required test lanes passed or were skipped with no relevant changes."
+
+  # The cross-SDK smoketest: boot a REAL Node backend (real Postgres, real pg-boss, only the
+  # LLM/agent side faked) and drive the SAME scenario through all four public-API SDK clients —
+  # TypeScript, Python, Go and Java — then compare their observation reports field by field.
+  #
+  # It exists because the four clients are generated from one spec and are supposed to be
+  # interchangeable, and nothing else in CI can see them disagree. A per-SDK unit test can only
+  # assert that a client matches what ITS author expected; the parity comparison catches one
+  # language decoding a field differently, mapping a refusal to the wrong error class, dropping a
+  # null, or paginating one page short — including the case where nobody had written down what
+  # the right answer was. (It earned its keep immediately: the Java client's default HTTP/2 sent
+  # an h2c upgrade on cleartext connections that the Node facade answered with a 404 on every
+  # call, which the three other SDKs' agreement is exactly what made obvious.)
+  #
+  # Gated on the `sdk` filter, so it runs when either side of the contract moves — the clients and
+  # their generator, or the `/api/v1` contracts and controllers they talk to.
+  sdk-smoketest:
+    name: SDK smoketest (4 languages + MCP)
+    needs: changes
+    if: ${{ needs.changes.outputs.sdk == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
+      # Every toolchain below is installed on purpose, so a MISSING one is a broken workflow
+      # rather than a developer's laptop — and the harness must fail rather than quietly shrink
+      # the matrix to whatever happened to be present. A silent skip is indistinguishable from a
+      # pass, and "the Go SDK is fine" is the wrong thing to conclude from "Go was not installed".
+      SDK_SMOKETEST_REQUIRE_ALL: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same background-Postgres pair the DB and e2e lanes use, so its startup hides behind the
+      # toolchain setup and the build below.
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # NO dependency caching on either of these, deliberately. The Go SDK has zero dependencies
+      # and the Java SDK has three, so a cache saves ~30s of small downloads — while the cache
+      # RESTORE itself is unbounded work this job cannot supervise: `cache: maven` once spent 14
+      # minutes deciding there was no cache to restore, which ate the job's whole timeout and
+      # reported as a cancellation with no failing step to point at. Downloading is the cheaper
+      # and far more predictable half of that trade.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.23'
+          cache: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Build libraries
+        run: pnpm build
+
+      # The SDKs must be regenerable from the committed spec before they are smoketested: a
+      # smoketest that passed against hand-edited clients would prove nothing about what
+      # `pnpm gen:sdk` produces, which is what actually ships.
+      - name: Check SDK clients are up to date
+        run: pnpm check:sdk
+
+      # Each SDK's own unit tests, before the smoketest that needs a database. They cover the
+      # HAND-WRITTEN half — above all the four independent SSE readers, whose framing bugs (a read
+      # boundary mid-record, a terminal frame arriving as the socket closes) surface in production
+      # as a run that silently appears to stall and which the smoketest structurally cannot
+      # provoke. The TypeScript ones run in the ordinary `test-units` lane.
+      - name: Test the Go SDK
+        working-directory: sdk/go
+        run: |
+          # `gofmt -l` lists what it WOULD reformat and exits 0 either way, so the emptiness of
+          # its output is the assertion. Generated Go is emitted already-formatted (the emitter
+          # reproduces gofmt's column alignment rather than shelling out to it), so a hit here
+          # means the emitter drifted from what gofmt does.
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would reformat: $unformatted"
+            exit 1
+          fi
+          go vet ./...
+          go test ./...
+
+      - name: Test the Java SDK
+        working-directory: sdk/java
+        run: mvn -B test
+
+      - name: Test the Python SDK
+        working-directory: sdk/python
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest tests -q
+
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
+      # The four clients compared against each other, then the MCP phases: the published server
+      # spawned as a real process, and a Streamable HTTP client against the hosted endpoint, both
+      # on the same backend. The build above is what puts `sdk/mcp/dist/bin.js` there; the harness
+      # fails naming the build command if it is absent, because nothing about that phase can be
+      # concluded without it.
+      - name: Run the cross-SDK smoketest
+        run: pnpm --filter @cat-factory/sdk-smoketest run smoketest
 
   acceptance:
     name: Container acceptance (Docker)
     needs: changes
     if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -676,14 +1782,14 @@ jobs:
         run: pnpm build
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Pre-build the executor image with a cross-run GHA layer cache and load it
       # into the daemon. The expensive layers (apt git, the global Pi CLI install,
       # the two Pi extensions) restore from cache instead of rebuilding every run.
       # The suite then skips its own (uncached) `docker build` via the env flag.
       - name: Build executor image (cached)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: backend/internal/executor-harness
           file: backend/internal/executor-harness/Dockerfile
@@ -709,10 +1815,11 @@ jobs:
     # fail by construction.
     if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Need history back to the base branch so `changeset status` can diff.
           fetch-depth: 0
@@ -729,13 +1836,18 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: pnpm changeset status --since="origin/${BASE_REF}"
 
+  # PR-ONLY pre-merge gate: actionlint + zizmor lint the workflow / composite-action files
+  # themselves, which is deterministic from their content and gives no post-merge signal — so
+  # it runs on PRs (and manual dispatch) but not on push to main.
   zizmor:
     name: Zizmor (workflow security)
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -758,7 +1870,7 @@ jobs:
         run: '"$RUNNER_TEMP/actionlint" -color'
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
         with:
           # Print findings to the job log and fail on them rather than
           # uploading SARIF, so this works without GitHub Advanced Security.

@@ -1,4 +1,5 @@
 import {
+  checkGitHubBranchProtectionContract,
   commentGitHubIssueContract,
   commitGitHubFilesContract,
   connectGitHubContract,
@@ -7,12 +8,14 @@ import {
   disconnectGitHubContract,
   getGitHubConnectionContract,
   getGitHubInstallUrlContract,
+  getGitHubPatCheckContract,
   listGitHubAvailableReposContract,
   listGitHubBranchesContract,
   listGitHubInstallationsContract,
   listGitHubIssuesContract,
   listGitHubPullsContract,
   listGitHubReposContract,
+  listGitHubRepoFilesContract,
   listGitHubRepoTreeContract,
   mergeGitHubPullRequestContract,
   openGitHubPullRequestContract,
@@ -24,17 +27,30 @@ import type { GitHubModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { checkGitHubPat } from '../../github/patCheck.js'
 import { StateSigner } from '../../github/state.js'
+import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
+import { requirePermission, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the GitHub module or send a 503, returning null when unconfigured. */
-function requireGitHub<E extends AppEnv>(c: Context<E>): GitHubModule | null {
-  return c.get('container').github ?? null
+/** Resolve the GitHub module, or refuse with a 503 naming what isn't wired. */
+function requireGitHub<E extends AppEnv>(c: Context<E>): GitHubModule {
+  return requireCapability(c.get('container').github, 'GitHub integration is not configured')
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'GitHub integration is not configured' } }, 503)
+/**
+ * The GitHub module as a REFUSAL only. The install URL is signed from config alone, so this
+ * route reads nothing off the module — but offering an install link on a deployment with no
+ * GitHub integration wired would send the user through an OAuth round trip that lands
+ * nowhere. Discarding a `requireGitHub` result would read as a no-op statement, so the
+ * guard is named for what it does and returns `void`.
+ */
+function assertGitHubWired<E extends AppEnv>(c: Context<E>): void {
+  requireGitHub(c)
+}
 
 /**
  * Workspace-scoped GitHub endpoints: connection management, projection reads
@@ -46,14 +62,14 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function githubController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  mountWorkspacePermission(app, 'integrations.manage', ['/github'])
 
   // ---- connection ---------------------------------------------------------
 
   // The URL the frontend should redirect to so a workspace owner can install
   // the App; carries an HMAC-signed `state` binding the install to this workspace.
   buildHonoRoute(app, getGitHubInstallUrlContract, async (c) => {
-    const github = requireGitHub(c)
-    if (!github) return unavailable(c)
+    assertGitHubWired(c)
     const config = c.get('container').config.github
     const signer = new StateSigner(config.webhookSecret)
     // Bind the install to this workspace AND the signed-in user, with a short
@@ -70,16 +86,24 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getGitHubConnectionContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const connection = await github.installationService.getConnection(param(c, 'workspaceId'))
     return c.json({ connection }, 200)
   })
+
+  // What the personal access token this workspace's runs would authenticate as can actually do.
+  // Deliberately NOT behind `requireGitHub`: local mode reaches GitHub with a PAT and wires no
+  // App module at all, which is the deployment shape where this check matters most. The
+  // resolution itself reports `not_applicable` when no PAT is in play, so an App deployment gets
+  // a clean 200 rather than the 503 a capability guard would raise on a question that has a
+  // perfectly good answer.
+  buildHonoRoute(app, getGitHubPatCheckContract, async (c) =>
+    c.json(await checkGitHubPat(c, param(c, 'workspaceId')), 200),
+  )
 
   // Discover the App's installations so the UI can offer a pick instead of a
   // manually typed installation id (the caller already owns :workspaceId).
   buildHonoRoute(app, listGitHubInstallationsContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const installations = await github.installationService.listAvailableInstallations(
       param(c, 'workspaceId'),
     )
@@ -92,7 +116,6 @@ export function githubController(): Hono<AppEnv> {
   // there is no whole-installation backfill on connect.
   buildHonoRoute(app, connectGitHubContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     const { installationId } = c.req.valid('json')
     const connection = await github.installationService.connect(workspaceId, installationId)
@@ -103,20 +126,21 @@ export function githubController(): Hono<AppEnv> {
   // workspace links each. Drives the per-workspace repo picker.
   buildHonoRoute(app, listGitHubAvailableReposContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
-    return c.json(
-      await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
-        q: c.req.valid('query').q,
-      }),
-      200,
-    )
+    const viewer = await resolveViewerPat(c)
+    // The rows only. This picker searches as you type, so a listing that stopped at a provider cap
+    // is answered by narrowing the query, which is what the typeahead already invites; the public
+    // adoption read publishes the flag because its caller has no such next move.
+    const { repos } = await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
+      q: c.req.valid('query').q,
+      ...viewer,
+    })
+    return c.json(repos, 200)
   })
 
   // Set the exact set of repos this workspace links. Projects the selection,
   // tombstones the rest, and deep-syncs the linked repos.
   buildHonoRoute(app, setGitHubLinkedReposContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const repos = await github.syncService.setLinkedRepos(
       param(c, 'workspaceId'),
       c.req.valid('json').repoGithubIds,
@@ -128,7 +152,6 @@ export function githubController(): Hono<AppEnv> {
   // frames target the same repo, each pinned to a subdirectory (the picker below).
   buildHonoRoute(app, setGitHubRepoMonorepoContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const repo = await github.syncService.setRepoMonorepo(
       param(c, 'workspaceId'),
       Number(c.req.valid('param').repoGithubId),
@@ -141,7 +164,6 @@ export function githubController(): Hono<AppEnv> {
   // service to a subdirectory. `path` ('' = root) is the directory to list.
   buildHonoRoute(app, listGitHubRepoTreeContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     return c.json(
       await github.syncService.listRepoDirectory(
         param(c, 'workspaceId'),
@@ -152,9 +174,21 @@ export function githubController(): Hono<AppEnv> {
     )
   })
 
+  // List every file in a repo (its whole tree, one recursive read) so the doc-context
+  // picker can search files by path without walking the tree level-by-level.
+  buildHonoRoute(app, listGitHubRepoFilesContract, async (c) => {
+    const github = requireGitHub(c)
+    return c.json(
+      await github.syncService.listRepoFiles(
+        param(c, 'workspaceId'),
+        Number(c.req.valid('param').repoGithubId),
+      ),
+      200,
+    )
+  })
+
   buildHonoRoute(app, disconnectGitHubContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     await github.installationService.disconnect(param(c, 'workspaceId'))
     return c.body(null, 204)
   })
@@ -163,7 +197,6 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, resyncGitHubContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     const { repoGithubId, full } = c.req.valid('json')
     const { gateways } = c.get('container')
@@ -191,13 +224,28 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listGitHubReposContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     return c.json(await github.service.listRepos(param(c, 'workspaceId')), 200)
+  })
+
+  // The branch-protection preflight: for each linked repo, is its DEFAULT branch protected on
+  // the host? Live (not projected) and explicitly invoked — see the contract for why.
+  //
+  // Gated IMPERATIVELY, which is the one place in this controller a READ is. The mounted
+  // `mountWorkspacePermission` deliberately lets reads through, on the premise that a read is
+  // cheap and safe; this one is neither. It spends the installation's GitHub rate limit — a
+  // shared, exhaustible budget the CI gate and the merger draw on for every run — so leaving it
+  // on the read tier would let any viewer degrade the write path by holding down a button. It is
+  // also an operator diagnostic about how the deployment is configured, which is what
+  // `integrations.manage` names. The SPA hides the affordance for the same reason, but that is
+  // presentation; this is the control.
+  buildHonoRoute(app, checkGitHubBranchProtectionContract, async (c) => {
+    requirePermission(c, 'integrations.manage')
+    const github = requireGitHub(c)
+    return c.json(await github.service.checkDefaultBranchProtection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, listGitHubBranchesContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     return c.json(
       await github.service.listBranches(
         param(c, 'workspaceId'),
@@ -209,29 +257,35 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listGitHubPullsContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     return c.json(await github.service.listPullRequests(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, listGitHubIssuesContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     return c.json(await github.service.listIssues(param(c, 'workspaceId')), 200)
   })
 
-  // ---- writes -------------------------------------------------------------
+  // The repo/branch/PR/issue WRITE routes, registered by a sibling so this controller stays
+  // within the per-function line budget. Same `app`, so the permission middleware above still
+  // covers them.
+  registerGitHubWriteRoutes(app)
 
+  return app
+}
+
+/**
+ * The GitHub WRITE surface: create a repo (privileged App tier) / branch / commit / PR, merge a
+ * PR and comment on an issue. Split out of {@link githubController} purely for size; it registers
+ * onto the SAME app instance, so the workspace-permission middleware mounted there still applies.
+ */
+function registerGitHubWriteRoutes(app: Hono<AppEnv>): void {
   // Programmatically create a repository under the connected account (privileged
   // App tier, ADR 0005). 503 when no privileged App is configured; 409 when the
   // account isn't actually privileged, so the caller can fall back.
   buildHonoRoute(app, createGitHubRepoContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     if (!github.provisioningService) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Direct repo creation is not configured' } },
-        503,
-      )
+      throw new UnavailableError('Direct repo creation is not configured')
     }
     const workspaceId = param(c, 'workspaceId')
     const { name, private: isPrivate, description } = c.req.valid('json')
@@ -242,6 +296,13 @@ export function githubController(): Hono<AppEnv> {
       name,
       private: isPrivate,
       description,
+      // Always with an initial commit, because every repository this endpoint creates exists to
+      // be bootstrapped into, and a `pull_request` bootstrap is opened BETWEEN two commits: a
+      // repository with none is refused at pre-flight, which would refuse the repository the
+      // platform had just made for the user one click earlier. It costs the other delivery
+      // nothing, since a force-pushed bootstrap replaces that commit's history outright and the
+      // pre-flight tolerates the boilerplate either way.
+      autoInit: true,
     })
     if (result.status === 'delegated') {
       return c.json(
@@ -259,7 +320,6 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, createGitHubBranchContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const body = c.req.valid('json')
     const branch = await github.service.createBranch(
       param(c, 'workspaceId'),
@@ -272,7 +332,6 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, commitGitHubFilesContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const result = await github.service.commitFiles(
       param(c, 'workspaceId'),
       Number(c.req.valid('param').repoGithubId),
@@ -283,7 +342,6 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, openGitHubPullRequestContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const pr = await github.service.openPullRequest(
       param(c, 'workspaceId'),
       Number(c.req.valid('param').repoGithubId),
@@ -294,7 +352,6 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, mergeGitHubPullRequestContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const params = c.req.valid('param')
     await github.service.mergePullRequest(
       param(c, 'workspaceId'),
@@ -307,7 +364,6 @@ export function githubController(): Hono<AppEnv> {
 
   buildHonoRoute(app, commentGitHubIssueContract, async (c) => {
     const github = requireGitHub(c)
-    if (!github) return unavailable(c)
     const params = c.req.valid('param')
     await github.service.comment(
       param(c, 'workspaceId'),
@@ -317,6 +373,4 @@ export function githubController(): Hono<AppEnv> {
     )
     return c.body(null, 204)
   })
-
-  return app
 }

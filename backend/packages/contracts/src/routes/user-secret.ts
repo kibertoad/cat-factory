@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { connectionTestResultSchema } from '../provider-config.js'
 import {
@@ -49,7 +49,7 @@ export const removeUserSecretContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: kindParams,
   pathResolver: ({ kind }) => `/user-secrets/${kind}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const testUserSecretContract = defineApiContract({

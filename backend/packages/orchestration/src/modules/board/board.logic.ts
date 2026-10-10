@@ -1,5 +1,11 @@
-import type { Block, BlockLevel, Position, ServiceConnection } from '@cat-factory/kernel'
-import { connectionNeighborIds } from '@cat-factory/contracts'
+import type {
+  AprioriBranch,
+  Block,
+  BlockLevel,
+  Position,
+  ServiceConnection,
+} from '@cat-factory/kernel'
+import { aprioriWorkingBranch, connectionNeighborIds } from '@cat-factory/contracts'
 
 // Pure board computations — no IO, no ports. They operate on plain in-memory
 // block arrays so they can be exhaustively unit-tested and are reused verbatim
@@ -31,6 +37,16 @@ export function serviceOf(blocks: Block[], block: Block): Block | undefined {
 }
 
 /**
+ * Task-level descendants of `rootId` that have NOT finished (`status !== 'done'` — the sole
+ * terminal block status). Backs the "can't delete a service with unfinished work, archive it
+ * instead" guard: a non-empty result means the frame must be archived rather than deleted.
+ */
+export function unfinishedTasksUnder(blocks: Block[], rootId: string): Block[] {
+  const subtree = descendantIds(blocks, rootId)
+  return blocks.filter((b) => subtree.has(b.id) && b.level === 'task' && b.status !== 'done')
+}
+
+/**
  * Every descendant id of `rootId` (tasks, modules and their tasks), including
  * the root itself — used to cascade a delete.
  */
@@ -56,6 +72,10 @@ export function canReparent(childLevel: BlockLevel, parent: Block): boolean {
   // An epic may optionally be placed under a service/module (or live top-level); it is a
   // grouping node, never a container, so nothing reparents INTO it.
   if (childLevel === 'epic') return parent.level === 'frame' || parent.level === 'module'
+  // An initiative lives directly under a service frame (like a module). The tasks its
+  // execution loop spawns join it via their `initiativeId` membership link (epic-style),
+  // never by reparenting into it.
+  if (childLevel === 'initiative') return parent.level === 'frame'
   return false // frames are not nested
 }
 
@@ -169,3 +189,56 @@ export function involvedServiceIdsError(
   }
   return null
 }
+
+/**
+ * Why a task's `aprioriBranches` patch is invalid, or null when it is fine. The two modes are
+ * mechanically disjoint (read-only `reference` branches vs the single `working` branch the run
+ * builds inside), so the write boundary enforces: at most ONE `working` entry; no duplicate
+ * names (which also rules out a name in both modes at once); the working entry FROZEN once a PR
+ * exists (its head already pins the run's branch — reference entries stay editable); and no
+ * working entry on a multi-repo task (v1 excludes minting a user branch name across peer repos).
+ * The branch names themselves are shape-validated by the contract (`aprioriBranchSchema`); this
+ * guards the cross-entry invariants against the task's CURRENT state (`task`).
+ */
+export function aprioriBranchesError(
+  branches: AprioriBranch[],
+  task: Block,
+  hasInvolvedServices: boolean,
+): string | null {
+  const seen = new Set<string>()
+  let workingCount = 0
+  for (const branch of branches) {
+    if (seen.has(branch.name)) return `Duplicate apriori branch '${branch.name}'`
+    seen.add(branch.name)
+    if (branch.mode === 'working') workingCount++
+  }
+  if (workingCount > 1) return 'At most one working apriori branch is allowed'
+  const working = aprioriWorkingBranch(branches)
+  if (working !== undefined && hasInvolvedServices) {
+    return 'A working apriori branch is not supported on a multi-repo task'
+  }
+  // Once a PR exists its head is the run's pinned branch, so the working entry is frozen —
+  // changing (or dropping/adding) it would silently diverge from what is already running.
+  // Reference entries stay editable, so only a change to the working name is rejected.
+  if (task.pullRequest && working !== aprioriWorkingBranch(task.aprioriBranches)) {
+    return "The working branch cannot be changed once the task's pull request exists"
+  }
+  return null
+}
+
+/**
+ * The kinds of coarse board change a mutation pushes. A closed union (rather than a free
+ * string) so a typo can't silently produce an unrecognised signal — the SPA treats every
+ * value the same (a debounced full refresh), but the conformance suite asserts specific
+ * ones, and keeping the set explicit documents what the board service emits.
+ */
+export type BoardChangeReason =
+  | 'block-added'
+  | 'block-updated'
+  | 'block-moved'
+  | 'block-reparented'
+  | 'block-removed'
+  | 'block-archived'
+  | 'block-restored'
+  | 'epic-assigned'
+  | 'dependency-toggled'

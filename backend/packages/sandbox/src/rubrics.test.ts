@@ -1,23 +1,60 @@
-import type { SandboxExpectation } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import { renderExpectationBrief, rubricFor, scoreExpectations, weightedTotal } from './rubrics.js'
-
-const expectation = (
-  over: Partial<SandboxExpectation> & Pick<SandboxExpectation, 'id'>,
-): SandboxExpectation => ({
-  summary: over.id,
-  detail: '',
-  trickiness: 1,
-  impact: 1,
-  matchHints: [],
-  ...over,
-})
+import { type SandboxTaskType, SANDBOX_TASK_TYPES, rubricFor, weightedTotal } from './rubrics.js'
 
 describe('rubricFor', () => {
   it('returns the dimension set for each task', () => {
     expect(rubricFor('code-review').dimensions.map((d) => d.key)).toContain('issue_detection')
     expect(rubricFor('implementation').dimensions.map((d) => d.key)).toContain('faithfulness')
     expect(rubricFor('requirement-review').dimensions.map((d) => d.key)).toContain('gap_coverage')
+    expect(rubricFor('architecture-review').dimensions.map((d) => d.key)).toContain(
+      'failure_mode_reasoning',
+    )
+    expect(rubricFor('bug-triage').dimensions.map((d) => d.key)).toContain('symptom_separation')
+    expect(rubricFor('estimation').dimensions.map((d) => d.key)).toContain('axis_independence')
+    expect(rubricFor('answer-recommendation').dimensions.map((d) => d.key)).toContain(
+      'confidence_calibration',
+    )
+  })
+
+  it('gives every shipped task a usable, uniquely-keyed, positively-weighted rubric', () => {
+    // Derived from SANDBOX_TASK_TYPES rather than a hand-listed set: a rubric added without
+    // dimensions, or with a duplicate key (which would make `weightedTotal` read one score twice),
+    // fails here instead of grading every cell on a broken scale.
+    for (const task of SANDBOX_TASK_TYPES) {
+      const dims = rubricFor(task).dimensions
+      expect(dims.length, `${task} has no dimensions`).toBeGreaterThan(0)
+      const keys = dims.map((d) => d.key)
+      expect(new Set(keys).size, `${task} has duplicate dimension keys`).toBe(keys.length)
+      for (const dim of dims) {
+        expect(dim.weight, `${task}/${dim.key} weight`).toBeGreaterThan(0)
+        expect(dim.label.length, `${task}/${dim.key} label`).toBeGreaterThan(0)
+        expect(dim.description.length, `${task}/${dim.key} description`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('keeps the technical-review rubrics free of the product-scope bar', () => {
+    // The reason these rubrics exist. `product_scope` docks a finding for being technical, which
+    // is exactly what a design critique and a bug triage are FOR: grading them on
+    // `requirement-review` punished their highest-value findings (partition keys, durability,
+    // session affinity). If someone re-adds that dimension to either, this fails.
+    for (const task of ['architecture-review', 'bug-triage'] satisfies SandboxTaskType[]) {
+      expect(rubricFor(task).dimensions.map((d) => d.key)).not.toContain('product_scope')
+    }
+    // ...while the two stages that DO settle the product layer keep it.
+    for (const task of [
+      'requirement-review',
+      'answer-recommendation',
+    ] satisfies SandboxTaskType[]) {
+      expect(rubricFor(task).dimensions.map((d) => d.key)).toContain('product_scope')
+    }
+  })
+})
+
+describe('SANDBOX_TASK_TYPES', () => {
+  it('lists exactly the tasks `rubricFor` can answer, with no duplicates', () => {
+    expect(new Set(SANDBOX_TASK_TYPES).size).toBe(SANDBOX_TASK_TYPES.length)
+    for (const task of SANDBOX_TASK_TYPES) expect(rubricFor(task).task).toBe(task)
   })
 })
 
@@ -44,81 +81,14 @@ describe('weightedTotal', () => {
     // Only issue_detection (w=3) present → mean is just its score.
     expect(weightedTotal('code-review', [{ key: 'issue_detection', score: 4 }])).toBe(4)
   })
-})
 
-describe('scoreExpectations', () => {
-  it('matches an expectation via its summary, token-sequence (not substring)', () => {
-    const out = scoreExpectations(
-      [expectation({ id: 'a', summary: 'missing reset logic' })],
-      'The token bucket has a MISSING   reset logic bug.',
-    )
-    expect(out.caught.map((e) => e.id)).toEqual(['a'])
-    // `reset logic` must NOT match inside `preset logic`.
-    const noMatch = scoreExpectations(
-      [expectation({ id: 'a', summary: 'reset logic' })],
-      'The preset logic is fine.',
-    )
-    expect(noMatch.missed.map((e) => e.id)).toEqual(['a'])
-  })
-
-  it('prefers matchHints over summary when present', () => {
-    const out = scoreExpectations(
-      [
-        expectation({
-          id: 'a',
-          summary: 'unbounded memory growth',
-          matchHints: ['Map', 'never evicted'],
-        }),
-      ],
-      'The buckets are never evicted from the table.',
-    )
-    expect(out.caught.map((e) => e.id)).toEqual(['a'])
-  })
-
-  it('weights the miss penalty by impact (missing high-impact hurts most)', () => {
-    const exps = [expectation({ id: 'low', impact: 1 }), expectation({ id: 'high', impact: 5 })]
-    // Catch only the low-impact one → impactRecall = 1 - 5/6 ≈ 0.17, and the
-    // high-impact miss is flagged.
-    const out = scoreExpectations(exps, 'low')
-    expect(out.impactRecall).toBe(0.17)
-    expect(out.missedHighImpact).toEqual(['high'])
-  })
-
-  it('awards the wow bonus only for catching tricky items, never penalizes missing them', () => {
-    const exps = [
-      expectation({ id: 'tricky-caught', trickiness: 5, summary: 'tricky-caught' }),
-      expectation({ id: 'tricky-missed', trickiness: 4, summary: 'tricky-missed' }),
-      expectation({ id: 'easy', trickiness: 1, summary: 'easy' }),
-    ]
-    const out = scoreExpectations(exps, 'tricky-caught and easy are here')
-    // wowBonus = 5 / (5 + 4) ≈ 0.56; the easy item does not dilute it.
-    expect(out.wowBonus).toBe(0.56)
-  })
-
-  it('treats an empty expectation set as full recall and no wow on offer', () => {
-    expect(scoreExpectations([], 'anything')).toMatchObject({ impactRecall: 1, wowBonus: 1 })
-  })
-
-  it('reports wowBonus 1 when nothing is tricky', () => {
-    const out = scoreExpectations([expectation({ id: 'a', trickiness: 2, summary: 'a' })], 'a')
-    expect(out.wowBonus).toBe(1)
-  })
-})
-
-describe('renderExpectationBrief', () => {
-  it('renders impact/trickiness and is empty for no expectations', () => {
-    expect(renderExpectationBrief([])).toBe('')
-    const brief = renderExpectationBrief([
-      expectation({
-        id: 'a',
-        summary: 'no time-window reset',
-        detail: 'lifetime cap, not a rate limit',
-        impact: 5,
-        trickiness: 3,
-      }),
-    ])
-    expect(brief).toContain('no time-window reset')
-    expect(brief).toContain('impact 5, trickiness 3')
-    expect(brief).toContain('lifetime cap, not a rate limit')
+  it('scores a full sheet for every shipped task within the 1..5 band', () => {
+    // A rubric whose weights or keys drifted would show up here as a total outside the scale.
+    for (const task of SANDBOX_TASK_TYPES) {
+      const perfect = rubricFor(task).dimensions.map((d) => ({ key: d.key, score: 5 }))
+      const floor = rubricFor(task).dimensions.map((d) => ({ key: d.key, score: 1 }))
+      expect(weightedTotal(task, perfect), `${task} top`).toBe(5)
+      expect(weightedTotal(task, floor), `${task} bottom`).toBe(1)
+    }
   })
 })

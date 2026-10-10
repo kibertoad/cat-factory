@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { StepMetrics } from '~/types/execution'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The shared "Model activity" block: the LLM observability rollup (StepMetricsBar) under
 // a labelled header with a "View all calls →" link into the full per-call panel. Used by
@@ -13,6 +14,8 @@ import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 // nothing only when there's neither a run to inspect nor any recorded calls.
 const props = defineProps<{
   metrics?: StepMetrics | null
+  /** How the step's tokens were billed, so the rollup's amount is not read as spend. */
+  billing?: 'metered' | 'subscription'
   /** The run whose per-call panel the header link / bar click opens. */
   instanceId?: string
 }>()
@@ -29,12 +32,12 @@ function openObservability() {
 <template>
   <div v-if="instanceId || hasCalls">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="span">
         {{ t('observability.modelActivity') }}
-      </span>
+      </SectionLabel>
       <button
         v-if="instanceId"
-        class="text-[11px] text-sky-400 hover:text-sky-300"
+        class="text-2xs text-app-info-400 hover:text-app-info-300"
         @click="openObservability"
       >
         {{ t('observability.viewAllCalls') }}
@@ -43,6 +46,7 @@ function openObservability() {
     <StepMetricsBar
       v-if="hasCalls && metrics"
       :metrics="metrics"
+      :billing="billing"
       clickable
       @inspect="openObservability"
     />

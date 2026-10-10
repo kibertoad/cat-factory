@@ -1,1154 +1,861 @@
 # @cat-factory/provider-bedrock
 
-## 0.7.125
+## 0.7.556
 
 ### Patch Changes
 
-- Updated dependencies [b216fdc]
-  - @cat-factory/kernel@0.74.0
-  - @cat-factory/agents@0.27.0
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/agents@0.171.2
 
-## 0.7.124
+## 0.7.555
 
 ### Patch Changes
 
-- Updated dependencies [7fd6a19]
-  - @cat-factory/kernel@0.73.0
-  - @cat-factory/agents@0.26.18
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
 
-## 0.7.123
+## 0.7.554
 
 ### Patch Changes
 
-- Updated dependencies [0ac0dc4]
-  - @cat-factory/kernel@0.72.0
-  - @cat-factory/agents@0.26.17
+- Updated dependencies [97175f8]
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
 
-## 0.7.122
+## 0.7.553
 
 ### Patch Changes
 
-- Updated dependencies [36f4cf6]
-- Updated dependencies [b78adf5]
-  - @cat-factory/kernel@0.71.0
-  - @cat-factory/agents@0.26.16
+- @cat-factory/agents@0.170.1
+  - @cat-factory/kernel@0.354.2
 
-## 0.7.121
+## 0.7.552
 
 ### Patch Changes
 
-- Updated dependencies [e0aab3f]
-  - @cat-factory/kernel@0.70.2
-  - @cat-factory/agents@0.26.15
+- Updated dependencies [8766c3f]
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/kernel@0.354.1
 
-## 0.7.120
+## 0.7.551
 
 ### Patch Changes
 
-- Updated dependencies [0d51638]
-  - @cat-factory/kernel@0.70.1
-  - @cat-factory/agents@0.26.14
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
 
-## 0.7.119
+## 0.7.550
 
 ### Patch Changes
 
-- Updated dependencies [eb67d40]
-  - @cat-factory/kernel@0.70.0
-  - @cat-factory/agents@0.26.13
+- Updated dependencies [075ff13]
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/agents@0.168.4
 
-## 0.7.118
+## 0.7.549
 
 ### Patch Changes
 
-- @cat-factory/agents@0.26.12
-- @cat-factory/kernel@0.69.8
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/agents@0.168.3
 
-## 0.7.117
+## 0.7.548
 
 ### Patch Changes
 
-- Updated dependencies [7f9d215]
-  - @cat-factory/kernel@0.69.7
-  - @cat-factory/agents@0.26.11
-
-## 0.7.116
-
-### Patch Changes
-
-- Updated dependencies [4955639]
-  - @cat-factory/agents@0.26.10
-
-## 0.7.115
-
-### Patch Changes
-
-- @cat-factory/agents@0.26.9
-- @cat-factory/kernel@0.69.6
-
-## 0.7.114
-
-### Patch Changes
-
-- @cat-factory/agents@0.26.8
-- @cat-factory/kernel@0.69.5
-
-## 0.7.113
-
-### Patch Changes
-
-- Updated dependencies [fc8df61]
-  - @cat-factory/agents@0.26.7
-
-## 0.7.112
-
-### Patch Changes
-
-- @cat-factory/agents@0.26.6
-- @cat-factory/kernel@0.69.4
-
-## 0.7.111
-
-### Patch Changes
-
-- @cat-factory/agents@0.26.5
-- @cat-factory/kernel@0.69.3
-
-## 0.7.110
-
-### Patch Changes
-
-- Updated dependencies [d7f6e1c]
-- Updated dependencies [63cf6de]
-  - @cat-factory/kernel@0.69.2
-  - @cat-factory/agents@0.26.4
-
-## 0.7.109
-
-### Patch Changes
-
-- Updated dependencies [120de05]
-  - @cat-factory/kernel@0.69.1
-  - @cat-factory/agents@0.26.3
-
-## 0.7.108
-
-### Patch Changes
-
-- Updated dependencies [dcc8b32]
-  - @cat-factory/kernel@0.69.0
-  - @cat-factory/agents@0.26.2
-
-## 0.7.107
-
-### Patch Changes
-
-- Updated dependencies [16ee6cc]
-  - @cat-factory/kernel@0.68.1
-  - @cat-factory/agents@0.26.1
-
-## 0.7.106
-
-### Patch Changes
-
-- Updated dependencies [16621f8]
-  - @cat-factory/kernel@0.68.0
-  - @cat-factory/agents@0.26.0
-
-## 0.7.105
-
-### Patch Changes
-
-- Updated dependencies [9b26ff1]
-- Updated dependencies [e0aa45e]
-- Updated dependencies [f70c273]
-- Updated dependencies [6c51e31]
-- Updated dependencies [33687cf]
-  - @cat-factory/kernel@0.67.0
-  - @cat-factory/agents@0.25.0
-
-## 0.7.104
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.16
-- @cat-factory/kernel@0.66.1
-
-## 0.7.103
-
-### Patch Changes
-
-- Updated dependencies [fb53662]
-  - @cat-factory/kernel@0.66.0
-  - @cat-factory/agents@0.24.15
-
-## 0.7.102
-
-### Patch Changes
-
-- Updated dependencies [6f95aff]
-  - @cat-factory/kernel@0.65.0
-  - @cat-factory/agents@0.24.14
-
-## 0.7.101
-
-### Patch Changes
-
-- Updated dependencies [3643708]
-  - @cat-factory/kernel@0.64.0
-  - @cat-factory/agents@0.24.13
-
-## 0.7.100
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.12
-- @cat-factory/kernel@0.63.4
-
-## 0.7.99
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.11
-- @cat-factory/kernel@0.63.3
-
-## 0.7.98
-
-### Patch Changes
-
-- Updated dependencies [2e1354f]
-  - @cat-factory/kernel@0.63.2
-  - @cat-factory/agents@0.24.10
-
-## 0.7.97
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.9
-- @cat-factory/kernel@0.63.1
-
-## 0.7.96
-
-### Patch Changes
-
-- Updated dependencies [f568a8c]
-  - @cat-factory/kernel@0.63.0
-  - @cat-factory/agents@0.24.8
-
-## 0.7.95
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.7
-- @cat-factory/kernel@0.62.4
-
-## 0.7.94
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.6
-- @cat-factory/kernel@0.62.3
-
-## 0.7.93
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.5
-- @cat-factory/kernel@0.62.2
-
-## 0.7.92
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.4
-- @cat-factory/kernel@0.62.1
-
-## 0.7.91
-
-### Patch Changes
-
-- Updated dependencies [858799e]
-  - @cat-factory/kernel@0.62.0
-  - @cat-factory/agents@0.24.3
-
-## 0.7.90
-
-### Patch Changes
-
-- @cat-factory/agents@0.24.2
-- @cat-factory/kernel@0.61.1
-
-## 0.7.89
-
-### Patch Changes
-
-- Updated dependencies [15c5894]
-  - @cat-factory/kernel@0.61.0
-  - @cat-factory/agents@0.24.1
-
-## 0.7.88
-
-### Patch Changes
-
-- Updated dependencies [f383515]
-  - @cat-factory/kernel@0.60.0
-  - @cat-factory/agents@0.24.0
-
-## 0.7.87
-
-### Patch Changes
-
-- Updated dependencies [e4cddb4]
-  - @cat-factory/kernel@0.59.0
-  - @cat-factory/agents@0.23.4
-
-## 0.7.86
-
-### Patch Changes
-
-- Updated dependencies [337d94d]
-  - @cat-factory/kernel@0.58.0
-  - @cat-factory/agents@0.23.3
-
-## 0.7.85
-
-### Patch Changes
-
-- 6009266: Refresh dependencies to their latest release-age-compliant versions: the Vercel AI
-  SDK family within its `workers-ai-provider`-compatible majors (`ai` 6.0.214,
-  `@ai-sdk/anthropic` 3.0.89, `@ai-sdk/openai` 3.0.77, `@ai-sdk/openai-compatible`
-  2.0.54, `@ai-sdk/amazon-bedrock` 4.0.124), `drizzle-orm`/`drizzle-kit` 1.0.0-rc.4,
-  and `yaml` 2.9.0, plus refreshed transitive resolutions.
-- Updated dependencies [6009266]
-  - @cat-factory/agents@0.23.2
-  - @cat-factory/kernel@0.57.1
-
-## 0.7.84
-
-### Patch Changes
-
-- Updated dependencies [1952d6b]
-- Updated dependencies [1952d6b]
-  - @cat-factory/kernel@0.57.0
-  - @cat-factory/agents@0.23.1
-
-## 0.7.83
-
-### Patch Changes
-
-- Updated dependencies [5fd0ffa]
-  - @cat-factory/agents@0.23.0
-  - @cat-factory/kernel@0.56.1
-
-## 0.7.82
-
-### Patch Changes
-
-- Updated dependencies [f9a173f]
-  - @cat-factory/kernel@0.56.0
-  - @cat-factory/agents@0.22.6
-
-## 0.7.81
-
-### Patch Changes
-
-- Updated dependencies [fdeb466]
-  - @cat-factory/kernel@0.55.4
-  - @cat-factory/agents@0.22.5
-
-## 0.7.80
-
-### Patch Changes
-
-- @cat-factory/agents@0.22.4
-- @cat-factory/kernel@0.55.3
-
-## 0.7.79
-
-### Patch Changes
-
-- @cat-factory/agents@0.22.3
-- @cat-factory/kernel@0.55.2
-
-## 0.7.78
-
-### Patch Changes
-
-- @cat-factory/agents@0.22.2
-- @cat-factory/kernel@0.55.1
-
-## 0.7.77
-
-### Patch Changes
-
-- Updated dependencies [d5a0637]
-- Updated dependencies [915861c]
-  - @cat-factory/kernel@0.55.0
-  - @cat-factory/agents@0.22.1
-
-## 0.7.76
-
-### Patch Changes
-
-- Updated dependencies [48a3df6]
-- Updated dependencies [48a3df6]
-  - @cat-factory/kernel@0.54.0
-  - @cat-factory/agents@0.22.0
-
-## 0.7.75
-
-### Patch Changes
-
-- @cat-factory/agents@0.21.17
-- @cat-factory/kernel@0.53.1
-
-## 0.7.74
-
-### Patch Changes
-
-- Updated dependencies [69558f9]
-  - @cat-factory/kernel@0.53.0
-  - @cat-factory/agents@0.21.16
-
-## 0.7.73
-
-### Patch Changes
-
-- Updated dependencies [29d8b5d]
-  - @cat-factory/kernel@0.52.0
-  - @cat-factory/agents@0.21.15
-
-## 0.7.72
-
-### Patch Changes
-
-- Updated dependencies [40f687d]
-  - @cat-factory/kernel@0.51.0
-  - @cat-factory/agents@0.21.14
-
-## 0.7.71
-
-### Patch Changes
-
-- Updated dependencies [e0f1149]
-  - @cat-factory/kernel@0.50.0
-  - @cat-factory/agents@0.21.13
-
-## 0.7.70
-
-### Patch Changes
-
-- Updated dependencies [fc324d2]
-  - @cat-factory/kernel@0.49.0
-  - @cat-factory/agents@0.21.12
-
-## 0.7.69
-
-### Patch Changes
-
-- Updated dependencies [e3b3540]
-  - @cat-factory/kernel@0.48.0
-  - @cat-factory/agents@0.21.11
-
-## 0.7.68
-
-### Patch Changes
-
-- @cat-factory/agents@0.21.10
-- @cat-factory/kernel@0.47.2
-
-## 0.7.67
-
-### Patch Changes
-
-- @cat-factory/agents@0.21.9
-- @cat-factory/kernel@0.47.1
-
-## 0.7.66
-
-### Patch Changes
-
-- Updated dependencies [4b5d267]
-  - @cat-factory/kernel@0.47.0
-  - @cat-factory/agents@0.21.8
-
-## 0.7.65
-
-### Patch Changes
-
-- Updated dependencies [764c05b]
-- Updated dependencies [764c05b]
-- Updated dependencies [8727f2b]
-- Updated dependencies [56e6ce6]
-  - @cat-factory/kernel@0.46.0
-  - @cat-factory/agents@0.21.7
-
-## 0.7.64
-
-### Patch Changes
-
-- 8fad695: Update dependencies to latest.
-
-  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
-    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
-    so the test runner / CI is pinned to **Node 26**. Production runtime is
-    unaffected — `undici` is a dev/test dependency only, and the service still runs
-    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
-  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
-    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
-    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
-    `@aws-sdk/client-s3` 3.1075.
-  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
-    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
-    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
-  - Pinned the whole Vue runtime family to one version via a pnpm `override`
-    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
-    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
-    bundled into the SPA; Vue's render internals are module-level singletons, so the
-    second copy crashed the app on boot (`Cannot read properties of null (reading
-'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
-    version = one singleton.
-  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
-    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
-
-- Updated dependencies [8fad695]
-  - @cat-factory/kernel@0.45.5
-  - @cat-factory/agents@0.21.6
-
-## 0.7.63
-
-### Patch Changes
-
-- @cat-factory/agents@0.21.5
-- @cat-factory/kernel@0.45.4
-
-## 0.7.62
-
-### Patch Changes
-
-- Updated dependencies [ab146e5]
-  - @cat-factory/kernel@0.45.3
-  - @cat-factory/agents@0.21.4
-
-## 0.7.61
-
-### Patch Changes
-
-- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
-  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
-  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
-  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
-  removes that footgun for every publishable library.
-- Updated dependencies [c11a0cc]
-  - @cat-factory/agents@0.21.3
-  - @cat-factory/kernel@0.45.2
-
-## 0.7.60
-
-### Patch Changes
-
-- Updated dependencies [5363166]
-  - @cat-factory/kernel@0.45.1
-  - @cat-factory/agents@0.21.2
-
-## 0.7.59
-
-### Patch Changes
-
-- Updated dependencies [eab73b8]
-  - @cat-factory/kernel@0.45.0
-  - @cat-factory/agents@0.21.1
-
-## 0.7.58
-
-### Patch Changes
-
-- Updated dependencies [e641417]
-  - @cat-factory/kernel@0.44.0
-  - @cat-factory/agents@0.21.0
-
-## 0.7.57
-
-### Patch Changes
-
-- Updated dependencies [bbafec9]
-- Updated dependencies [bbafec9]
-  - @cat-factory/kernel@0.43.0
-  - @cat-factory/agents@0.20.3
-
-## 0.7.56
-
-### Patch Changes
-
-- @cat-factory/agents@0.20.2
-- @cat-factory/kernel@0.42.2
-
-## 0.7.55
-
-### Patch Changes
-
-- Updated dependencies [d1027ec]
-  - @cat-factory/kernel@0.42.1
-  - @cat-factory/agents@0.20.1
-
-## 0.7.54
-
-### Patch Changes
-
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-- Updated dependencies [32c653f]
-  - @cat-factory/kernel@0.42.0
-  - @cat-factory/agents@0.20.0
-
-## 0.7.53
-
-### Patch Changes
-
-- Updated dependencies [b5231b0]
-  - @cat-factory/kernel@0.41.0
-  - @cat-factory/agents@0.19.0
-
-## 0.7.52
-
-### Patch Changes
-
-- Updated dependencies [6d829bb]
-  - @cat-factory/kernel@0.40.0
-  - @cat-factory/agents@0.18.5
-
-## 0.7.51
-
-### Patch Changes
-
-- Updated dependencies [714b7c9]
-  - @cat-factory/kernel@0.39.0
-  - @cat-factory/agents@0.18.4
-
-## 0.7.50
-
-### Patch Changes
-
-- @cat-factory/agents@0.18.3
-- @cat-factory/kernel@0.38.1
-
-## 0.7.49
-
-### Patch Changes
-
-- Updated dependencies [692ccb4]
-  - @cat-factory/agents@0.18.2
-
-## 0.7.48
-
-### Patch Changes
-
-- Updated dependencies [a4ea607]
-  - @cat-factory/kernel@0.38.0
-  - @cat-factory/agents@0.18.1
-
-## 0.7.47
-
-### Patch Changes
-
-- Updated dependencies [76543fa]
-  - @cat-factory/kernel@0.37.0
-  - @cat-factory/agents@0.18.0
-
-## 0.7.46
-
-### Patch Changes
-
-- Updated dependencies [17adf4c]
-  - @cat-factory/kernel@0.36.0
-  - @cat-factory/agents@0.17.2
-
-## 0.7.45
-
-### Patch Changes
-
-- Updated dependencies [eb48652]
-  - @cat-factory/kernel@0.35.0
-  - @cat-factory/agents@0.17.1
-
-## 0.7.44
-
-### Patch Changes
-
-- Updated dependencies [9f7ee39]
-- Updated dependencies [81b60d4]
-  - @cat-factory/kernel@0.34.0
-  - @cat-factory/agents@0.17.0
-
-## 0.7.43
-
-### Patch Changes
-
-- Updated dependencies [4dd6e97]
-  - @cat-factory/agents@0.16.1
-
-## 0.7.42
-
-### Patch Changes
-
-- Updated dependencies [ea59e91]
-  - @cat-factory/kernel@0.33.0
-  - @cat-factory/agents@0.16.0
-
-## 0.7.41
-
-### Patch Changes
-
-- Updated dependencies [b82304e]
-  - @cat-factory/kernel@0.32.0
-  - @cat-factory/agents@0.15.2
-
-## 0.7.40
-
-### Patch Changes
-
-- Updated dependencies [765cc42]
-  - @cat-factory/kernel@0.31.0
-  - @cat-factory/agents@0.15.1
-
-## 0.7.39
-
-### Patch Changes
-
-- Updated dependencies [52d886a]
-  - @cat-factory/kernel@0.30.0
-  - @cat-factory/agents@0.15.0
-
-## 0.7.38
-
-### Patch Changes
-
-- Updated dependencies [a639189]
-  - @cat-factory/kernel@0.29.0
-  - @cat-factory/agents@0.14.9
-
-## 0.7.37
-
-### Patch Changes
-
-- @cat-factory/agents@0.14.8
-- @cat-factory/kernel@0.28.1
-
-## 0.7.36
-
-### Patch Changes
-
-- Updated dependencies [69d2270]
-  - @cat-factory/kernel@0.28.0
-  - @cat-factory/agents@0.14.7
-
-## 0.7.35
-
-### Patch Changes
-
-- Updated dependencies [3546e3d]
-  - @cat-factory/kernel@0.27.0
-  - @cat-factory/agents@0.14.6
-
-## 0.7.34
-
-### Patch Changes
-
-- Updated dependencies [a62044d]
-  - @cat-factory/kernel@0.26.1
-  - @cat-factory/agents@0.14.5
-
-## 0.7.33
-
-### Patch Changes
-
-- Updated dependencies [2aae8bc]
-  - @cat-factory/kernel@0.26.0
-  - @cat-factory/agents@0.14.4
-
-## 0.7.32
-
-### Patch Changes
-
-- Updated dependencies [f4f954b]
-  - @cat-factory/kernel@0.25.0
-  - @cat-factory/agents@0.14.3
-
-## 0.7.31
-
-### Patch Changes
-
-- Updated dependencies [ce81233]
-  - @cat-factory/kernel@0.24.0
-  - @cat-factory/agents@0.14.2
-
-## 0.7.30
-
-### Patch Changes
-
-- Updated dependencies [7346a4f]
-  - @cat-factory/kernel@0.23.0
-  - @cat-factory/agents@0.14.1
-
-## 0.7.29
-
-### Patch Changes
-
-- Updated dependencies [6ff1f10]
-  - @cat-factory/kernel@0.22.0
-  - @cat-factory/agents@0.14.0
-
-## 0.7.28
-
-### Patch Changes
-
-- Updated dependencies [04befe8]
-  - @cat-factory/kernel@0.21.0
-  - @cat-factory/agents@0.13.0
-
-## 0.7.27
-
-### Patch Changes
-
-- Updated dependencies [be182e8]
-  - @cat-factory/kernel@0.20.0
-  - @cat-factory/agents@0.12.0
-
-## 0.7.26
-
-### Patch Changes
-
-- Updated dependencies [2c24da8]
-  - @cat-factory/kernel@0.19.0
-  - @cat-factory/agents@0.11.16
-
-## 0.7.25
-
-### Patch Changes
-
-- Updated dependencies [4120ac5]
-  - @cat-factory/kernel@0.18.0
-  - @cat-factory/agents@0.11.15
-
-## 0.7.24
-
-### Patch Changes
-
-- Updated dependencies [25efe48]
-  - @cat-factory/kernel@0.17.0
-  - @cat-factory/agents@0.11.14
-
-## 0.7.23
-
-### Patch Changes
-
-- Updated dependencies [c7b8012]
-  - @cat-factory/kernel@0.16.2
-  - @cat-factory/agents@0.11.13
-
-## 0.7.22
-
-### Patch Changes
-
-- Updated dependencies [aa06003]
-  - @cat-factory/kernel@0.16.1
-  - @cat-factory/agents@0.11.12
-
-## 0.7.21
-
-### Patch Changes
-
-- Updated dependencies [208c933]
-  - @cat-factory/kernel@0.16.0
-  - @cat-factory/agents@0.11.11
-
-## 0.7.20
-
-### Patch Changes
-
-- Updated dependencies [494fb34]
-  - @cat-factory/kernel@0.15.1
-  - @cat-factory/agents@0.11.10
-
-## 0.7.19
-
-### Patch Changes
-
-- Updated dependencies [0ac64b8]
-  - @cat-factory/kernel@0.15.0
-  - @cat-factory/agents@0.11.9
-
-## 0.7.18
-
-### Patch Changes
-
-- Updated dependencies [7d1f829]
-  - @cat-factory/agents@0.11.8
-
-## 0.7.17
-
-### Patch Changes
-
-- Updated dependencies [fde0437]
-  - @cat-factory/kernel@0.14.0
-  - @cat-factory/agents@0.11.7
-
-## 0.7.16
-
-### Patch Changes
-
-- Updated dependencies [77b7d31]
-  - @cat-factory/agents@0.11.6
-  - @cat-factory/kernel@0.13.4
-
-## 0.7.15
-
-### Patch Changes
-
-- @cat-factory/agents@0.11.5
-- @cat-factory/kernel@0.13.3
-
-## 0.7.14
-
-### Patch Changes
-
-- Updated dependencies [ce27690]
-  - @cat-factory/kernel@0.13.2
-  - @cat-factory/agents@0.11.4
-
-## 0.7.13
-
-### Patch Changes
-
-- Updated dependencies [c8bd144]
-  - @cat-factory/kernel@0.13.1
-  - @cat-factory/agents@0.11.3
-
-## 0.7.12
-
-### Patch Changes
-
-- Updated dependencies [5c915fd]
-  - @cat-factory/kernel@0.13.0
-  - @cat-factory/agents@0.11.2
-
-## 0.7.11
-
-### Patch Changes
-
-- Updated dependencies [22d7fff]
-  - @cat-factory/agents@0.11.1
-
-## 0.7.10
-
-### Patch Changes
-
-- Updated dependencies [128e12e]
-- Updated dependencies [4de2f5f]
-  - @cat-factory/kernel@0.12.0
-  - @cat-factory/agents@0.11.0
-
-## 0.7.9
-
-### Patch Changes
-
-- f8a24e0: Refresh dependencies to latest. Notable major bumps: TypeScript 5→6 (tooling
-  packages), vitest 3→4, pino 9→10, `@hono/node-server` 1→2, `@hono/valibot-validator`
-  0.5→0.6, happy-dom 15→20, and `@types/node` →26. Patch/minor refreshes for `ai`,
-  `hono`, `wrangler`, `pg-boss`, `ws`, `@ai-sdk/*`, `oxlint`, and the Cloudflare
-  workers tooling.
-- Updated dependencies [f8a24e0]
-  - @cat-factory/agents@0.10.1
-  - @cat-factory/kernel@0.11.1
-
-## 0.7.8
-
-### Patch Changes
-
-- Updated dependencies [1e31cbc]
-  - @cat-factory/kernel@0.11.0
-  - @cat-factory/agents@0.10.0
-
-## 0.7.7
-
-### Patch Changes
-
-- Updated dependencies [d0081e1]
-  - @cat-factory/agents@0.9.0
-  - @cat-factory/kernel@0.10.1
-
-## 0.7.6
-
-### Patch Changes
-
-- Updated dependencies [ae29687]
-  - @cat-factory/kernel@0.10.0
-  - @cat-factory/agents@0.8.2
-
-## 0.7.5
-
-### Patch Changes
-
-- Updated dependencies [5c20968]
-  - @cat-factory/kernel@0.9.0
-  - @cat-factory/agents@0.8.1
-
-## 0.7.4
-
-### Patch Changes
-
-- Updated dependencies [c70df09]
-  - @cat-factory/agents@0.8.0
-  - @cat-factory/kernel@0.8.0
-
-## 0.7.3
-
-### Patch Changes
-
-- Updated dependencies [a0a1bcc]
-  - @cat-factory/kernel@0.7.3
-  - @cat-factory/agents@0.7.3
-
-## 0.7.2
-
-### Patch Changes
-
-- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
-- Updated dependencies [4fa5ed9]
-  - @cat-factory/agents@0.7.2
-  - @cat-factory/kernel@0.7.2
-
-## 0.7.1
-
-### Patch Changes
-
-- 7463cf2: Add `repository` metadata (url + monorepo `directory`) to every published package.json. npm provenance attestation rejected the previous release because `repository.url` was empty and could not be matched against the source repo; declaring it lets the publish (and provenance) succeed, and re-triggers publishing of all packages from the failed release.
-- Updated dependencies [7463cf2]
-  - @cat-factory/agents@0.7.1
-  - @cat-factory/kernel@0.7.1
-
-## 0.7.0
-
-### Minor Changes
-
-- 8eed38c: Introduce a generic, extensible AI provisioning facade so model resolution is no
-  longer hardwired to the Cloudflare Worker.
-
-  `@cat-factory/agents` now exposes `CompositeModelProvider` — a `ModelProvider`
-  composed from one or more mixable `ProviderRegistry` maps — plus the base,
-  runtime-neutral resolvers (`openAiResolver`, `anthropicResolver`,
-  `openAiCompatibleResolver`, `cloudflareRestResolver`, `baseProviderRegistry`) and
-  the shared OpenAI-compatible endpoint constants. Direct vendor usage works on any
-  runtime; `cloudflareRestResolver` adds a non-binding path to Cloudflare-hosted
-  models (Workers AI REST / AI Gateway) for non-Worker deployments.
-
-  AWS Bedrock support ships as a separate opt-in package,
-  `@cat-factory/provider-bedrock` (`bedrockResolver` / `bedrockRegistry`), so the
-  AWS SDK is pulled in only by deployments that use it. It throws a clear
-  `Unsupported Bedrock model` for any model id outside its configured allow-list.
-
-  `@cat-factory/worker`'s `CloudflareModelProvider` is now a thin composition of the
-  shared facade (behaviour unchanged: same providers, same "not configured" errors),
-  and a new installation extension point — `registerModelRegistry` — lets a
-  deployment mix extra provider registries (e.g. Bedrock) into every container build,
-  including the durable Workflow and cron-sweeper paths.
-
-### Patch Changes
-
-- 8eed38c: Author relative imports with explicit `.js` extensions across the shared backend
-  packages so their emitted `dist` is directly resolvable by Node's ESM loader (no
-  bundler required). This lets the Node runtime run the built output on plain Node
-  (`node dist/main.js`) — no tsx, no esbuild bundle — and is inert for the Cloudflare
-  Worker (wrangler bundles regardless). `handlebars/runtime` is imported as
-  `handlebars/runtime.js` for the same reason (its type is sourced from the full
-  package, type-only). No behaviour or public-API change.
-- Updated dependencies [d94e75c]
-- Updated dependencies [6406c8c]
-- Updated dependencies [3d9a9d8]
-- Updated dependencies [db77061]
-- Updated dependencies [a48c620]
-- Updated dependencies [3bc8c79]
-- Updated dependencies [9d3a956]
-- Updated dependencies [8d11833]
-- Updated dependencies [ad9ba9e]
-- Updated dependencies [f83ffd7]
-- Updated dependencies [8065fed]
-- Updated dependencies [385bd93]
-- Updated dependencies [e50e78a]
-- Updated dependencies [0972696]
-- Updated dependencies [b48c455]
-- Updated dependencies [e9b9356]
-- Updated dependencies [e8005ba]
-- Updated dependencies [3a12f15]
-- Updated dependencies [3a12f15]
-- Updated dependencies [b40da13]
-- Updated dependencies [3a12f15]
-- Updated dependencies [8eed38c]
-- Updated dependencies [084bf43]
-- Updated dependencies [8eed38c]
-- Updated dependencies [157cd02]
-- Updated dependencies [7c37653]
-- Updated dependencies [db77061]
-- Updated dependencies [f49fa30]
-- Updated dependencies [6406c8c]
-- Updated dependencies [57d70fa]
-- Updated dependencies [6406c8c]
-- Updated dependencies [918764f]
-- Updated dependencies [918764f]
-- Updated dependencies [fe0b7f8]
-- Updated dependencies [f73652c]
-- Updated dependencies [db336b1]
-- Updated dependencies [8807f5c]
-- Updated dependencies [9be11e1]
-- Updated dependencies [5ec0d25]
-- Updated dependencies [197264e]
-- Updated dependencies [a691853]
-- Updated dependencies [7d5e060]
-- Updated dependencies [4a08935]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [70e8ef0]
-- Updated dependencies [b287996]
-- Updated dependencies [b156b4b]
-- Updated dependencies [5c8ca33]
-- Updated dependencies [7cf2a2d]
-- Updated dependencies [2d66d34]
-- Updated dependencies [197264e]
-- Updated dependencies [3a12f15]
-- Updated dependencies [37baa7f]
-- Updated dependencies [c664fe6]
-- Updated dependencies [553a67d]
-- Updated dependencies [b80d657]
-- Updated dependencies [4026793]
-- Updated dependencies [311a110]
-- Updated dependencies [f16ae62]
-- Updated dependencies [d65c979]
-- Updated dependencies [75a0441]
-- Updated dependencies [7157fd7]
-- Updated dependencies [21ca647]
-- Updated dependencies [8eed95b]
-- Updated dependencies [a97e485]
-- Updated dependencies [de5a9d7]
-- Updated dependencies [f647733]
-- Updated dependencies [d5e9141]
-- Updated dependencies [2dd7e56]
-- Updated dependencies [2d66d34]
-- Updated dependencies [86a5843]
-- Updated dependencies [a54ada2]
-- Updated dependencies [5ca8086]
-- Updated dependencies [d0697d1]
-- Updated dependencies [0090313]
-- Updated dependencies [7dc8e57]
-- Updated dependencies [cc8d96a]
-- Updated dependencies [43f2443]
-- Updated dependencies [acac735]
-- Updated dependencies [3841315]
-- Updated dependencies [48d2f0d]
-- Updated dependencies [3e6a844]
-  - @cat-factory/kernel@0.7.0
-  - @cat-factory/agents@0.7.0
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/kernel@0.351.0
+
+## 0.7.547
+
+### Patch Changes
+
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/agents@0.168.1
+
+## 0.7.546
+
+### Patch Changes
+
+- Updated dependencies [7760397]
+  - @cat-factory/agents@0.168.0
+
+## 0.7.545
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/agents@0.167.0
+
+## 0.7.544
+
+### Patch Changes
+
+- 30d08c7: Take the agent CLIs at their newest, correct the one under-metering price row, and refresh the
+  dependency tree.
+  
+  **Re-verified every catalog route against its serving provider, and the catalog needed nothing.**
+  Anthropic, OpenAI, Google, xAI, DeepSeek, Moonshot, Z.ai, Alibaba and Cloudflare Workers AI were
+  each read fresh. Every model this catalog selects is still served under the id it names, and every
+  frontier launch since the last sweep is already here, so the honest result is no entry added and
+  none retired. Claude Mythos 5.1 stays out for the reason it always has: invitation-only through
+  Project Glasswing, with no public route to declare. What is new elsewhere is a cheaper or smaller
+  tier of something already carried (Gemini 3.5 Flash-Lite, GPT-5.4, Grok 4.3, a `-highspeed`
+  variant of Kimi K2.7 Code, `@cf/qwen/qwen3.8-27b` and `@cf/openai/gpt-oss-20b` on Workers AI), and
+  a tier nothing here would route to does not earn a catalog entry.
+  
+  **One price row was metering below what it bills.** `check-openrouter-pins.mjs` reported
+  `openrouter:z-ai/glm-5.2` as the single understated pin: the gateway's blend for that slug has
+  finished converging on Z.ai's own $1.40 / $4.40 list, which the previous note predicted and the
+  numbers had not followed. Understatement is the one direction a budget gate may not sit in, so the
+  fresh classes move up to the figures every other GLM-5.2 row already carried. Its named cache rate
+  is dropped rather than re-pinned, because the gateway's $0.14/M now IS the 0.1x floor the new input
+  rate derives, and the retired 0.21 pin was written against a $0.26/M blend that no longer exists.
+  Nothing else moved: 29 of 30 pinned slugs are at or above their live rate, which is the margin the
+  table is for.
+  
+  **Several notes were making claims that had stopped being true**, and in a table where a wrong
+  figure looks exactly like a right one, the reasoning is what the next reader checks the figure
+  against. Kimi K2.5 has left the Workers AI model index (its row stays, for recorded spend, but it
+  no longer "runs on Workers AI"). DeepSeek now documents `deepseek-v4-flash` as retired with the
+  legacy name served by `deepseek-flash`, so that row's justification narrows to the historical one.
+  Z.ai's GLM-5.3 Flash launch promotion has lapsed, so the row's list price is simply the price. The
+  Gemini Flash rate is Google's own discount to 2026-12-31, not the undiscounted rate the note
+  claimed, which makes it the one row deliberately below a published number and worth saying so.
+  OpenRouter now publishes a cache rate on both Muse Spark slugs, so the reason neither names one
+  moves to the half of that argument that still holds, which is about this platform, not about Meta.
+  The DeepSeek and Kimi gateway-blend observations are restamped with this sweep's read.
+  
+  **Agent CLIs.** Claude Code moves to 2.1.274, ahead of the 24h age window, as the Dockerfile's
+  standing note allows for those three pins alone. Pi holds at 0.85.1 and Codex at 0.154.0, both
+  already newest (Codex 0.155.0 is alpha-only). The two Pi extensions move to 2.10.1, which does NOT
+  take that exemption and has aged past the window. The `node:26-trixie-slim` digest is unchanged:
+  the tag still resolves to the pinned one. Both harness images bump.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution and a dedupe; no package
+  changed major and no name was dropped. Four holds were re-verified at HEAD rather than assumed, and
+  all four still bind: `@cloudflare/vitest-pool-workers@0.22.0` is newest and pins wrangler 4.124.0
+  exactly, which keeps wrangler, workerd, miniflare and `@cloudflare/workers-types` where they are and
+  keeps vitest on 4.x (the pool peers `^4.1.0`, so vitest 5 cannot be taken); drizzle stays on its
+  1.0.0-rc line; the frontend stays on TypeScript 6 for `vue-tsc`. Three Docker GitHub Actions move to
+  their newest aged releases.
+  
+  One bump was a source change rather than a number. `@clack/prompts` 1.8.1 respells every prompt's
+  result from `Promise<Value | symbol>` to `Promise<Value | typeof CANCEL_SYMBOL>`, and the CLI's
+  `bailIfCancelled` was declared `(value: T | symbol): T` so that inference would peel the symbol arm
+  off. A unique symbol does not match a wide `symbol` parameter slot, so under the new spelling `T`
+  swallowed the union whole and four call sites went back to holding a symbol they thought they had
+  been rid of — a typecheck failure here, but the same shape that reaches `.trim()` at runtime when it
+  is not. The helper now takes the whole result type and returns `Exclude<T, symbol>`, which is
+  indifferent to which spelling a future release uses and is what clack's own `group()` does with the
+  same values.
+- Updated dependencies [30d08c7]
+  - @cat-factory/agents@0.166.3
+  - @cat-factory/kernel@0.348.1
+
+## 0.7.543
+
+### Patch Changes
+
+- 9f8cabc: Re-point the DeepSeek Flash route at the model DeepSeek actually serves, take the agent CLIs at
+  their newest, and refresh the dependency tree.
+  
+  **A retired model behind a live alias.** DeepSeek retired V4-Flash and V4-Flash-Vision-Exp on
+  2026-09-10 and made `deepseek-flash` the canonical, unversioned name for V4.1-Flash. The old
+  `deepseek-v4-flash` id still resolves, but only as a TEMPORARY compatibility alias onto the new
+  model, which is the quietest shape this catalog's failures take: nothing throws and nothing fails
+  to dispatch, so the picker went on saying "DeepSeek V4 Flash" while a different model answered, at
+  a rate the spend table did not carry, and the route dies outright whenever the alias is withdrawn.
+  All three DeepSeek-served arms of the `deepseek` entry (direct, subscription, and the OpenRouter
+  one, which must name the same model or the entry straddles two) now name the live model. The entry
+  keeps its `deepseek` id: that id is what a workspace persists against a block, and this is the same
+  slot following the vendor's own successor, so re-minting it would invalidate every stored pick to
+  say nothing new. `acceptsImages` is new on both refs and is a real capability gain rather than a
+  correction, since V4.1-Flash folds the vision line back into the main model.
+  
+  Two adjacent claims were re-read rather than trusted. The 2026-09-10 release note said
+  `deepseek-v4-pro` would route to V4.1-Flash from 2026-09-14, which would have silently demoted that
+  entry to a cheaper, weaker model; DeepSeek has since decided to keep serving V4 Pro with billing
+  unchanged, so it is untouched. And OpenRouter still serves a separate `deepseek/deepseek-v4-flash`
+  at a fifth of the price, which this entry deliberately does not keep: it is the retired build, and
+  an entry whose direct and gateway arms named different models is the neighbouring-version trap the
+  catalog header bans. Both retired price keys stay in the table so historical spend rows keep
+  costing correctly.
+  
+  **No other catalog gap.** Every frontier launch since the last sweep was checked against its
+  serving provider and is already here: Claude Fable 5.1, Gemini 3.8 Flash, Muse Spark 1.3 and GPT-6
+  Astra. Claude Mythos 5.1 stays out on purpose. It is the same model as Fable 5.1 at identical
+  pricing, offered by invitation only through Project Glasswing with no public route on any provider
+  this platform reaches, so an entry could only be a re-badge that `effectiveVariant` would pick and
+  then fail to dispatch. "Astra Pro" stays out for the reason recorded last time, re-checked here:
+  OpenRouter mints a slug for it, but reasoning effort is a parameter on the single `gpt-6-astra` id.
+  
+  **Agent CLIs at their newest**, ahead of the 24h `minimumReleaseAge` window, as the Dockerfile's
+  standing note allows for those three pins alone: Claude Code 2.1.265 to 2.1.270 and Codex 0.153.4
+  to 0.154.0 (still above the 0.153.0 floor `gpt-6-astra` needs). Pi holds at 0.85.1, already newest.
+  The two Pi extensions do NOT take that exemption and hold at 2.9.0: 2.10.0 published three hours
+  before this change and has not aged past the window. Both harness images move to the newest
+  `node:26-trixie-slim` digest that has (node 26.8.2), and the executor image tag rolls to 1.158.0
+  with the deploy image at 0.6.8.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, 31 resolved names moved, no
+  package name dropped. `pg-boss` 12.31.0 brings `rrule-temporal` and `temporal-spec` in as new
+  transitive deps, the only additions. A `pnpm dedupe` follows the bump because the partial
+  re-resolution left `@types/node` resolved at two patch versions. Four holds are unchanged and were
+  re-verified at HEAD rather than assumed: `vitest` at 4.1.11 and `wrangler` at 4.124.0
+  (`@cloudflare/vitest-pool-workers` 0.22.0 is still newest, peers `vitest: ^4.1.0` and pins that
+  wrangler exactly), `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date, which
+  that pool pins), and frontend TypeScript at 6.0.3 (vue-tsc 3.3.11 reaches for
+  `typescript/lib/tsc`, absent from TS 7's exports map). pnpm moves 11.24.0 to 11.26.0, staying on
+  its major. WireMock holds at 3.13.1, still its newest non-prerelease. Actions: `setup-java` v6.0.0
+  to v6.0.1 and `zizmor-action` v0.6.3 to v0.6.4; every other pinned action is already newest.
+- Updated dependencies [9f8cabc]
+  - @cat-factory/agents@0.166.2
+  - @cat-factory/kernel@0.348.0
+
+## 0.7.542
+
+### Patch Changes
+
+- Updated dependencies [69fc66c]
+  - @cat-factory/kernel@0.347.0
+  - @cat-factory/agents@0.166.1
+
+## 0.7.541
+
+### Patch Changes
+
+- Updated dependencies [2cf867d]
+  - @cat-factory/agents@0.166.0
+  - @cat-factory/kernel@0.346.2
+
+## 0.7.540
+
+### Patch Changes
+
+- Updated dependencies [5dc7506]
+  - @cat-factory/agents@0.165.0
+  - @cat-factory/kernel@0.346.1
+
+## 0.7.539
+
+### Patch Changes
+
+- Updated dependencies [44b27a7]
+  - @cat-factory/kernel@0.346.0
+  - @cat-factory/agents@0.164.0
+
+## 0.7.538
+
+### Patch Changes
+
+- Updated dependencies [b75fa3c]
+  - @cat-factory/kernel@0.345.0
+  - @cat-factory/agents@0.163.0
+
+## 0.7.537
+
+### Patch Changes
+
+- Updated dependencies [bba4beb]
+  - @cat-factory/kernel@0.344.0
+  - @cat-factory/agents@0.162.0
+
+## 0.7.536
+
+### Patch Changes
+
+- @cat-factory/agents@0.161.1
+  - @cat-factory/kernel@0.343.1
+
+## 0.7.535
+
+### Patch Changes
+
+- Updated dependencies [2ae7e2b]
+  - @cat-factory/kernel@0.343.0
+  - @cat-factory/agents@0.161.0
+
+## 0.7.534
+
+### Patch Changes
+
+- Updated dependencies [6ff632f]
+  - @cat-factory/agents@0.160.0
+  - @cat-factory/kernel@0.342.1
+
+## 0.7.533
+
+### Patch Changes
+
+- Updated dependencies [ca5be97]
+  - @cat-factory/kernel@0.342.0
+  - @cat-factory/agents@0.159.1
+
+## 0.7.532
+
+### Patch Changes
+
+- Updated dependencies [5f06bfb]
+  - @cat-factory/kernel@0.341.0
+  - @cat-factory/agents@0.159.0
+
+## 0.7.531
+
+### Patch Changes
+
+- Updated dependencies [8dc6677]
+  - @cat-factory/kernel@0.340.0
+  - @cat-factory/agents@0.158.0
+
+## 0.7.530
+
+### Patch Changes
+
+- 636fcf3: Re-verify every curated model route against its serving provider, take the agent CLIs at their
+  newest, and refresh the dependency tree.
+  
+  **A withdrawn route, caught by the pin checker.** OpenRouter has withdrawn the undated
+  `qwen/qwen3.8-max` and now serves the dated `qwen/qwen3.8-max-0902` instead. That is the silent
+  failure `scripts/check-openrouter-pins.mjs` exists for: nothing throws, `effectiveVariant` keeps
+  choosing the gateway for a workspace holding only an OpenRouter key, and every dispatch fails on
+  a dead slug. The two entries swap arms accordingly, and the floating entry is deliberately NOT
+  re-pointed at the dated slug: following an alias onto a snapshot is the identity the pinned entry
+  beside it exists to hold.
+  
+  **GLM-5.3 gains the two routes it was waiting for.** It shipped subscription-only because Z.ai
+  had not yet released the weights; Workers AI picked it up on 2026-08-28 and OpenRouter serves
+  `z-ai/glm-5.3` today. Both were read off the serving provider before being declared, and each
+  carries that provider's own window rather than the vendor's headline figure: Workers AI
+  1,048,576, OpenRouter 1,310,720, the coding plan 1M.
+  
+  **Qwen3.8 Flash joins the catalog**, on DashScope and OpenRouter. It is the cheapest 1M-window
+  entry here that reads images, which is what earns it a curated slot rather than the dynamic
+  OpenRouter catalog: it is the natural low-cost tier for the inline steps that reach for
+  `glm-flash` today, and a per-token rate is what those steps are chosen on.
+  
+  **One pinned rate was understating the budget gate.** `openrouter:x-ai/grok-4.6` carried xAI's
+  SHORT band ($2 / $6) with its cache tier left to derive, while the direct `xai:grok-4.6` row
+  carried the long band as its comment explains. xAI bills a request whose prompt reaches 200K
+  tokens entirely at the doubled rate and OpenRouter is a passthrough, so the gateway row now
+  matches: a cache read was metering at 60% below the live rate on a route that really does record
+  the class (`x-ai` is `auto-prefix` on the gateway). Every other pin came back at or above its
+  live rate, and every curated `openrouter` context window matches what the gateway serves.
+  
+  **Two omissions re-checked rather than assumed.** GPT-6 Astra still declares no `bedrock` arm:
+  Codex 0.153.3 did add Astra to the Bedrock picker, so the route demonstrably exists, but neither
+  AWS nor OpenAI publishes the model id it addresses, and a `baseModelId` guessed from a
+  neighbouring entry is precisely the dead pin repaired above. Still no separate "Astra Pro" entry
+  either, though the reasoning has narrowed: OpenRouter has minted its own `openai/gpt-6-astra-pro`
+  slug, while OpenAI's model doc states reasoning effort is a parameter on the single `gpt-6-astra`
+  id and Codex has no such `--model` slug. A second entry could therefore carry one arm re-badging
+  a model already here at byte-identical pricing, and the two-entry shape is for a choice made with
+  the price in front of you.
+  
+  **Agent CLIs.** Pi 0.85.0 -> 0.85.1 and Claude Code 2.1.261 -> 2.1.263 take their newest releases
+  ahead of the 24h age window, as the Dockerfile's standing note allows for those three pins. Codex
+  holds at 0.153.4 (already newest) and both Pi extensions at 2.9.0. Playwright in the UI image goes
+  1.62.1 -> 1.63.0 with `@playwright/test`. The executor image tag rolls to 1.154.0.
+  
+  **Dependency refresh.** Direct ranges plus a lockfile re-resolution: 56 resolved names moved, no
+  package name added or dropped. Four holds are unchanged and were re-verified at HEAD rather than
+  restated: vitest at 4.1.11 and wrangler at 4.124.0 (`@cloudflare/vitest-pool-workers` 0.22.0 is
+  still the newest and peers `vitest: ^4.1.0` while pinning that wrangler exactly),
+  `@cloudflare/workers-types` at 5.20260815.1 (the resolved workerd's date), and frontend TypeScript
+  at 6.0.3 (`vue-tsc` 3.3.11 calls `require.resolve('typescript/lib/tsc')`, which TS 7's exports map
+  does not carry). Base images are unchanged: `node:26-trixie-slim` still resolves to the digest
+  already pinned. GitHub Actions: `docker/setup-qemu-action` v4.2.0 -> v4.3.0, `pnpm/action-setup`
+  v6.0.10 -> v6.1.0, `zizmorcore/zizmor-action` v0.6.2 -> v0.6.3.
+- Updated dependencies [636fcf3]
+  - @cat-factory/agents@0.157.2
+  - @cat-factory/kernel@0.339.0
+
+## 0.7.529
+
+### Patch Changes
+
+- 386c4a2: Add GPT-6 Astra to the curated catalog, take the agent CLIs at their newest, and refresh the
+  dependency tree.
+  
+  **GPT-6 Astra.** OpenAI's new flagship (2026-09-03) joins the catalog as `gpt-6-astra` with a
+  Codex subscription arm and an OpenRouter pay-as-you-go arm, a 1.05M window and image input. The
+  model id IS the Codex `--model` slug, the same rule the GPT-5.6 tiers already follow. Two shapes
+  were decided by checking the routes rather than the announcement:
+  
+  - **No `bedrock` arm**, even though OpenAI named Bedrock among the launch-day routes. No published
+    model card names the Bedrock **id** for Astra, and this catalog declares a flavour only once the
+    route is verified to serve that exact model: a declared-but-absent route is selected by
+    `effectiveVariant` and then fails at dispatch, with nothing upstream of the dispatch to catch it.
+    The arm can be added, additively, when the id lands.
+  - **No separate "Astra Pro" entry.** Pro is not a second model or a second API id: it is this same
+    `gpt-6-astra` served with `reasoning.mode` set to `pro`, and it exists only inside the ChatGPT
+    plans, never on the API or in Codex. An entry for it could only name a route nothing here can
+    dispatch.
+  
+  Astra is priced at $10 / $50 per 1M, the most expensive model this catalog can select on either
+  OpenAI route, so it gets its own `openai:` and `openrouter:` spend rows rather than metering
+  against the bare provider fallback. Its cached input is $1, the same 0.1x read multiplier the
+  GPT-5.6 tiers use, so the derived cache tiers are already exact. The 2x "Fast mode" rate is
+  deliberately not modelled: nothing here dispatches it, and a row set to a mode we never request
+  would over-meter every ordinary Astra run against the budget gate.
+  
+  The built-in `mdp_chatgpt` preset deliberately stays on `gpt-5.6-sol` this round. It names a
+  vendor rather than a generation and is meant to roll forward as that vendor's flagship moves, but
+  Astra is still rolling out per-organization: rolling the preset now would repoint every workspace
+  holding it onto a model its subscription may not serve yet, and the failure would land at dispatch.
+  It is a one-line roll-forward once the rollout completes.
+  
+  **Agent CLIs.** Claude Code 2.1.260 -> 2.1.261, Codex 0.153.2 -> 0.153.4 and Pi 0.84.4 -> 0.85.0
+  all take their newest releases ahead of the 24h age window, as the Dockerfile's standing note
+  allows for those three pins. The Codex pin now also carries a floor the catalog depends on: Astra
+  resolves only from Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than
+  falling back, so that coupling is recorded at both ends. Both Pi extensions are already newest at
+  2.9.0. The executor image tag rolls to 1.152.0.
+  
+  **Dependency refresh.** Direct ranges plus a full lockfile re-resolution: 70 resolved names moved,
+  no package name added or dropped. Four holds, each on a live constraint rather than caution, and
+  the first three are one constraint at three levels:
+  
+  - vitest and `@vitest/coverage-v8` stay on 4.1.11: `@cloudflare/vitest-pool-workers` 0.22.0 is the
+    newest release and still peers `vitest: ^4.1.0`.
+  - wrangler holds at 4.124.0 for the sixth round, pinned exactly as a dependency of that same package.
+  - `@cloudflare/workers-types` holds at 5.20260815.1, one level further down. Its version encodes a
+    workerd DATE and the wrangler above pins `workerd@1.20260815.1`, so moving the types to
+    5.20260904.1 would describe a runtime three weeks newer than the one that actually executes: an
+    API added in the gap typechecks green and throws in production. That is the whole reason
+    `check-cloudflare-runtime-pins` exists, and it is what caught the attempt.
+  - TypeScript holds at 6.0.3 on the frontend, where `vue-tsc` resolves `typescript/lib/tsc`, which
+    TS 7 no longer exports.
+- Updated dependencies [386c4a2]
+  - @cat-factory/agents@0.157.1
+  - @cat-factory/kernel@0.338.0
+
+## 0.7.528
+
+### Patch Changes
+
+- Updated dependencies [76e2c1d]
+  - @cat-factory/kernel@0.337.0
+  - @cat-factory/agents@0.157.0
+
+## 0.7.527
+
+### Patch Changes
+
+- Updated dependencies [5c50d30]
+  - @cat-factory/agents@0.156.3
+  - @cat-factory/kernel@0.336.1
+
+## 0.7.526
+
+### Patch Changes
+
+- cd220f2: Add five catalog models, take the agent CLIs at their newest, and refresh the dependency tree.
+  
+  **Five new curated models.** Claude Fable 5.1, Gemini 3.8 Flash, a pinned Qwen3.8-Max-0902
+  snapshot, and Meta's Muse Spark 1.3 in both of its commercial tiers. Every route was checked
+  against the serving provider's live catalogue before it was declared, which is what decided three
+  of the shapes:
+  
+  - **Claude Fable 5.1** is the first Claude entry carrying subscription, OpenRouter and Bedrock arms
+    at once. Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch day rather than a
+    generation behind, so the flavour is declared against a verified route. Its OpenRouter slug is
+    DOTTED (`anthropic/claude-fable-5.1`) where the API id is dashed; the two genuinely disagree and
+    normalising either spelling yields a dead id.
+  - **Qwen3.8-Max-0902** is DashScope-only. OpenRouter serves the undated alias and publishes no dated
+    slug, and a flavour declared before its route exists is picked by `effectiveVariant` and then
+    fails at dispatch. It is a separate entry rather than a repoint of `qwen3.8-max` for the reason
+    `claude-opus-4-8` is separate: a block pinned to a snapshot must keep getting that build.
+  - **Muse Spark 1.3 ships as TWO entries**, standard and contributor. They are the same model on the
+    same route and differ only in what Meta may do with the traffic: the contributor tier costs a
+    twelfth on input in exchange for Meta training on the prompts and completions. That is a choice
+    an operator has to make with the price in front of them, and one entry could only make it
+    silently, so the two prices sit in separate rows and the SPA's "enable recommended" set omits the
+    contributor slug.
+  
+  `meta` joins the OpenRouter vendor-prefix family map beside `meta-llama`, so an account that blocks
+  the Meta family blocks Muse Spark too rather than leaving it unclassified.
+  
+  **The bare `bedrock` price row moved up a tier**, from ~$5/$30 to ~$10/$50 per 1M. A Bedrock ref
+  carries the account's own geo prefix, so `priceFor` can only ever match the bare provider key, and
+  that row is deliberately set to the frontier tier the catalog can select there. Fable 5.1 moved that
+  ceiling; leaving the row behind would have metered every Fable-5.1-on-Bedrock run at half its cost.
+  
+  **Both runner image tags roll**: the executor to 1.150.0 for the CLI bumps, and the deploy image
+  to 0.6.2 because the dependency round moved `@types/node` in its `package.json`, which the image
+  builds from. A dep bump inside a harness IS an image-source change, and republishing over a live
+  tag does not roll a deployment out.
+  
+  **Agent CLIs at their newest, ahead of the age window**, as the Dockerfile's standing note allows
+  for exactly these pins: Claude Code 2.1.252 -> 2.1.260 and Codex 0.152.0 -> 0.153.2. Pi is already
+  at its newest (0.84.4). Both Pi extensions move 2.8.0 -> 2.9.0 and have aged past the window, so
+  they take the ordinary route.
+  
+  **Dependency refresh**: direct ranges plus a lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits under the `minimumReleaseAge` gate. 68 resolved
+  names move and the re-resolve adds and drops nothing, leaving 1388 names on both sides. Direct:
+  the `@ai-sdk/*` line (`amazon-bedrock@^5.0.73`, `anthropic@^4.0.49`, `openai@^4.0.57`,
+  `openai-compatible@^3.0.43`, `provider@^4.0.10`), `ai@^7.0.91`, `@aws-sdk/client-s3@^3.1125.0`, the
+  `@opentelemetry/*` set (`0.222.0` exporters, `2.11.0` SDK), `@types/node@^26.4.1`,
+  `happy-dom@^20.13.2`, `knip@^6.34.0`, `oxfmt@^0.66.0`, `oxlint@^1.81.0`, `undici@^8.10.1`. The AI
+  SDK family stays inside the `ai@^7` + `@ai-sdk/*@^4` majors that pair with `workers-ai-provider`.
+  
+  Three holds, each for a reason rather than for the age window:
+  
+  - **TypeScript stays at 6.0.3 on the frontend** while the backend is already on 7.0.2. TS 7 was
+    tried and reverted: `vue-tsc@3.3.11` resolves `typescript/lib/tsc`, which TS 7 no longer exports,
+    so the typecheck dies with `ERR_PACKAGE_PATH_NOT_EXPORTED` before reading a single file. vue-tsc
+    is the real gate for `.vue`, so the frontend moves when vue-tsc does.
+  - **wrangler holds at 4.124.0 and `@cloudflare/workers-types` at 5.20260815.1** for the fifth round
+    running. `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins wrangler
+    exactly; the types version IS the workerd date that pin resolves.
+  - **`@types/node@26.4.0` and `undici@8.10.0` keep a second resolved copy** beside the new ones, held
+    by upstream ranges (`@types/pg`, `happy-dom`, `nuxt`, `unifont`) rather than by anything here.
+  
+  Also re-pins `openrouter:deepseek/deepseek-v4-flash`, the one row `check-openrouter-pins.mjs`
+  reported as metering BELOW the live rate. The alias drifted up ~9% since the 2026-09-01 read, and a
+  budget gate is allowed to be early but never short.
+- Updated dependencies [cd220f2]
+  - @cat-factory/agents@0.156.2
+  - @cat-factory/kernel@0.336.0
+
+## 0.7.525
+
+### Patch Changes
+
+- Updated dependencies [d36d0a8]
+  - @cat-factory/kernel@0.335.1
+  - @cat-factory/agents@0.156.1
+
+## 0.7.524
+
+### Patch Changes
+
+- Updated dependencies [0f3fb10]
+  - @cat-factory/kernel@0.335.0
+  - @cat-factory/agents@0.156.0
+
+## 0.7.523
+
+### Patch Changes
+
+- Updated dependencies [745eae8]
+  - @cat-factory/kernel@0.334.0
+  - @cat-factory/agents@0.155.0
+
+## 0.7.522
+
+### Patch Changes
+
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/kernel@0.333.0
+  - @cat-factory/agents@0.154.0
+
+## 0.7.521
+
+### Patch Changes
+
+- Updated dependencies [3b11b10]
+  - @cat-factory/kernel@0.332.0
+  - @cat-factory/agents@0.153.1
+
+## 0.7.520
+
+### Patch Changes
+
+- Updated dependencies [9dfd40b]
+  - @cat-factory/kernel@0.331.0
+  - @cat-factory/agents@0.153.0
+
+## 0.7.519
+
+### Patch Changes
+
+- Updated dependencies [1c79070]
+  - @cat-factory/kernel@0.330.0
+  - @cat-factory/agents@0.152.0
+
+## 0.7.518
+
+### Patch Changes
+
+- Updated dependencies [8b015a3]
+  - @cat-factory/kernel@0.329.0
+  - @cat-factory/agents@0.151.0
+
+## 0.7.517
+
+### Patch Changes
+
+- Updated dependencies [ec0aba1]
+  - @cat-factory/kernel@0.328.0
+  - @cat-factory/agents@0.150.0
+
+## 0.7.516
+
+### Patch Changes
+
+- Updated dependencies [436f373]
+  - @cat-factory/kernel@0.327.0
+  - @cat-factory/agents@0.149.1
+
+## 0.7.515
+
+### Patch Changes
+
+- Updated dependencies [a745ee2]
+  - @cat-factory/kernel@0.326.0
+  - @cat-factory/agents@0.149.0
+
+## 0.7.514
+
+### Patch Changes
+
+- Updated dependencies [92232a6]
+- Updated dependencies [a08d2ad]
+  - @cat-factory/kernel@0.325.0
+  - @cat-factory/agents@0.148.0
+
+## 0.7.513
+
+### Patch Changes
+
+- Updated dependencies [dc4a5d9]
+- Updated dependencies [4d999cb]
+  - @cat-factory/kernel@0.324.0
+  - @cat-factory/agents@0.147.0
+
+## 0.7.512
+
+### Patch Changes
+
+- 0f426b3: Refresh the dependency tree and the bundled agent CLIs.
+  
+  **Direct ranges plus a lockfile re-resolution from an empty tree**, so transitives move to the
+  newest release each declared range already admits, under the `minimumReleaseAge` gate:
+  
+  - **Direct**: `ai@^7.0.84 → ^7.0.85`, `@ai-sdk/anthropic@^4.0.45 → ^4.0.46`,
+    `@ai-sdk/openai@^4.0.51 → ^4.0.52`, `@ai-sdk/openai-compatible@^3.0.40 → ^3.0.41`,
+    `@ai-sdk/provider@^4.0.8 → ^4.0.9`, `@ai-sdk/amazon-bedrock@^5.0.67 → ^5.0.68`,
+    `happy-dom@^20.11.15 → ^20.12.0`, `pg-boss@^12.28.1 → ^12.29.0`,
+    `layered-loader@^16.1.0 → ^16.1.1`. The whole `@ai-sdk` line and `ai` were named as
+    age-blocked by the previous round and have now aged past the window. `layered-loader`
+    16.1.1 is 23 hours old and would miss it, but the package is ours and sits on
+    `minimumReleaseAgeExclude`, which is exactly the case that list exists for.
+  - **Transitives the re-resolve moved**, 32 resolved entries added against 32 removed:
+    `zod@4.5.2 → 4.5.4`, `@ai-sdk/gateway@4.0.68 → 4.0.69`,
+    `@ai-sdk/provider-utils@5.0.33 → 5.0.34`, `qs@6.15.3 → 6.16.0`,
+    `serialize-javascript@7.1.0 → 7.1.1`, `type-fest@5.8.0 → 5.9.0`, `ignore@7.0.6 → 7.0.7`,
+    `electron-to-chromium@1.5.416 → 1.5.417`.
+  
+  The tree is structurally unchanged: 1434 distinct names and 1967 resolved entries on both
+  sides, with no name added and none removed. The two-`zod` split the previous round introduced
+  holds along the same seam: `@cloudflare/vitest-pool-workers` keeps its hard-pinned `4.4.3` for
+  its own config validation, and every app-reachable consumer (the AI SDK family,
+  `@modelcontextprotocol/sdk`, `drizzle-orm`) moves to `4.5.4` together, so a schema built in one
+  module is still read by the same identity in another.
+  
+  **The agent CLIs**: Claude Code `2.1.251 → 2.1.252` and Codex `0.151.0 → 0.152.0`, both taken
+  at their newest under the Dockerfile's standing exemption from the age window (2.1.252 is 17
+  hours old, 0.152.0 is 8). That exemption covers exactly those three pins and is an explicit
+  call re-made on each bump. Pi is already newest at `0.84.4`, as are both Pi extensions at
+  `2.8.0`, and the extensions are held to the ordinary window regardless.
+  
+  The executor image tag rolls to `1.145.0` for the two CLI pins, because republishing over a
+  live tag does not roll a deployment out. The deploy image is untouched at `0.6.1`: nothing
+  under `backend/internal/deploy-harness/` moved.
+  
+  **Held back by the age window rather than by a compatibility call**, and takeable next round:
+  `ai@7.0.87` with `@ai-sdk/openai@4.0.53` and `@ai-sdk/amazon-bedrock@5.0.69` beside it (all
+  published late on 2026-08-31), `@aws-sdk/client-s3@3.1123.0`, `knip@6.34.0`, `undici@8.10.1`,
+  and the OpenTelemetry line (`@opentelemetry/sdk-*` and `resources` at 2.11.0, the two OTLP
+  exporters at 0.222.0).
+  
+  **Held by a deliberate call**, unchanged: `wrangler` stays at `4.124.0` and
+  `@cloudflare/workers-types` at `5.20260815.1` for the sixth round running, because
+  `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins that exact
+  wrangler, and the types are derived from the `workerd@1.20260815.1` it brings. `4.127.1` is
+  available and would split the runtime the tests prove from the runtime that ships. Drizzle
+  stays at `1.0.0-rc.4`: still only per-commit `rc.5` snapshots. The frontend layer stays on
+  `typescript@^6.0.3` while the rest of the tree is on `7.0.2`, which is why sherif ignores that
+  name. The `node:26-trixie-slim` base digest and the `searxng` tag in the local compose stack
+  are both already the newest published.
+- Updated dependencies [0f426b3]
+  - @cat-factory/agents@0.146.6
+  - @cat-factory/kernel@0.323.2
+
+## 0.7.511
+
+### Patch Changes
+
+- 332ef26: Refresh the dependency tree, the agent CLIs and the local web-search image.
+  
+  **Direct ranges plus a lockfile re-resolution from an empty tree**, so transitives move to the
+  newest release each declared range already admits, under the `minimumReleaseAge` gate:
+  
+  - **Direct**: `ai@^7.0.83 → ^7.0.84`, `@ai-sdk/anthropic@^4.0.44 → ^4.0.45`,
+    `@ai-sdk/openai@^4.0.50 → ^4.0.51`, `@ai-sdk/openai-compatible@^3.0.39 → ^3.0.40`,
+    `@ai-sdk/amazon-bedrock@^5.0.66 → ^5.0.67`, `@aws-sdk/client-s3@^3.1120.0 → ^3.1121.0`,
+    `happy-dom@^20.11.12 → ^20.11.15`, `knip@^6.32.3 → ^6.33.0`, `pg-boss@^12.28.0 → ^12.28.1`.
+    Every one of these was named as held back by the age window in the previous round and has now
+    aged past it.
+  - **Transitives the re-resolve moved**, 42 resolved entries added against 43 removed:
+    `oxc-parser@0.143.0 → 0.147.0` with its 19 platform bindings, `@ai-sdk/gateway@4.0.68`,
+    `@ai-sdk/provider-utils@5.0.33`, `express-rate-limit@8.7.0`, `fastq@1.20.3`,
+    `formatly@0.3.0 → 0.7.0` (knip's own range), `ip-address@10.7.0`, `json-rpc-2.0@1.8.0`,
+    `open@11.0.2`, `powershell-utils@0.2.1`, `pretty-bytes@7.1.2`, `pretty-ms@9.3.1`,
+    `@iconify/collections@1.0.730`.
+  
+  The tree stays at 1387 distinct names on both sides, and 1614 resolved entries becomes 1613:
+  `@oxc-project/types` collapses from three copies to two and `get-tsconfig` from two to one, while
+  `zod` gains a second.
+  
+  **That second `zod` is deliberate and is worth knowing about**, because a duplicated singleton is
+  usually a bug here. No workspace package declares `zod`, so every copy of it fills an
+  auto-installed optional peer slot, and until now the exact `zod@4.4.3` that
+  `@cloudflare/vitest-pool-workers@0.22.0` pins as a hard dependency was the only version in the
+  tree, which dragged every other consumer onto it. `zod@4.5.2` has now aged past the window, so the
+  peer slots take it and the pool's pin no longer speaks for the whole graph. The split is along a
+  seam nothing crosses: `4.4.3` is reachable only from the vitest pool, which uses it to validate its
+  own config, and everything app-reachable (the AI SDK family, `@modelcontextprotocol/sdk`,
+  `drizzle-orm`) moves to `4.5.2` together, so there is still exactly one `zod` identity in every
+  place a schema is built in one module and read in another. Do not "fix" this with a top-level
+  override pinning `4.4.3`: that would freeze the whole tree on a decision that belongs to the test
+  pool, which is the mistake the `wrangler` note in `pnpm-workspace.yaml` exists to prevent.
+  
+  **Held back by the age window rather than by a compatibility call**, and takeable next round:
+  `ai@7.0.85` and the whole `@ai-sdk` line beside it (`anthropic@4.0.46`, `openai@4.0.52`,
+  `openai-compatible@3.0.41`, `amazon-bedrock@5.0.68`) were all published about six hours ago, and
+  `happy-dom@20.12.0` misses by two and a half hours.
+  
+  **The agent CLIs**: Codex `0.150.1 → 0.151.0`, and both Pi extensions `2.7.1 → 2.8.0`. Pi
+  (`0.84.4`) and Claude Code (`2.1.251`) are already at their newest. The Dockerfile's standing
+  exemption that lets the three CLI pins run ahead of the age window is not exercised this round:
+  every version taken here has aged past it on its own, the extensions included, which is the rule
+  they are held to anyway.
+  
+  The executor image tag rolls to `1.144.0` for those pins, because republishing over a live tag does
+  not roll a deployment out. The deploy image is unchanged and stays at `0.6.1`: nothing under
+  `backend/internal/deploy-harness/` moved, and its `kubectl`/`kustomize`/`helm` pins are managed
+  deliberately rather than swept (`kubectl` has a `v1.37.0` available against the pinned `v1.36.4`,
+  which is a call for its own change).
+  
+  **The `searxng` image in the local compose stack takes `2026.8.29-d226b78bc`**, 29 hours old, after
+  holding two rounds at `2026.8.22-9fea41204` for tags that kept landing an hour or two short of the
+  window. The `node:26-trixie-slim` digest both runner Dockerfiles pin does not move: the tag still
+  resolves to `sha256:c0753125` (Node 26.8.1), unchanged since 2026-08-27.
+  
+  **Standing holds, restated so the next round need not re-derive them**: `wrangler` and
+  `@cloudflare/workers-types` do not move for the fifth round running, because
+  `@cloudflare/vitest-pool-workers@0.22.0` is still the newest pool and still pins `wrangler@4.124.0`
+  exactly, and the types version is the workerd date that pin resolves to. `drizzle-orm` and
+  `drizzle-kit` stay at `1.0.0-rc.4`: the only newer publishes are per-commit `rc.5` snapshots, not a
+  release to pin against. The frontend keeps `typescript@^6.0.3` against the root's `7.0.2` because
+  `vue-tsc@3.3.11` is what pairs with it, so moving it is a Nuxt-toolchain decision rather than a
+  sweep. The Java SDK moves nothing: jackson, junit, jspecify and every build plugin are already at
+  their newest stable on Maven Central, and Go and Python have no dependencies by design.
+- Updated dependencies [332ef26]
+  - @cat-factory/agents@0.146.5
+  - @cat-factory/kernel@0.323.1
+
+<!-- archived-releases -->
+
+Older releases: [`CHANGELOG-ARCHIVE.md`](./CHANGELOG-ARCHIVE.md).

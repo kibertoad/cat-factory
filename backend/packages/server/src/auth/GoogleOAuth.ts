@@ -3,7 +3,19 @@
 // mirror of GitHubOAuth. Endpoints default to Google's but are overridable for tests.
 
 const DEFAULT_OAUTH_BASE = 'https://accounts.google.com'
-const DEFAULT_API_BASE = 'https://www.googleapis.com'
+
+/**
+ * The userinfo host, taken from Google's own discovery document
+ * (`accounts.google.com/.well-known/openid-configuration`, read 2026-08-18), which publishes
+ * `"userinfo_endpoint": "https://openidconnect.googleapis.com/v1/userinfo"`.
+ *
+ * This used to be `www.googleapis.com/oauth2/v3/userinfo`, which Google's OIDC guide and API
+ * reference no longer document at all: they do not say it stopped answering and they do not say
+ * it still does, which is an undocumented endpoint carrying every Google sign-in. The host is not
+ * retired (the same document still serves `jwks_uri` from it), so this is a path move.
+ */
+const DEFAULT_API_BASE = 'https://openidconnect.googleapis.com'
+const USERINFO_PATH = '/v1/userinfo'
 const TOKEN_PATH = 'https://oauth2.googleapis.com/token'
 
 export interface GoogleOAuthDependencies {
@@ -11,7 +23,7 @@ export interface GoogleOAuthDependencies {
   clientSecret: string
   /** OAuth host (authorize). Defaults to accounts.google.com. */
   oauthBase?: string
-  /** Userinfo API base. Defaults to www.googleapis.com. */
+  /** Userinfo API base. Defaults to Google's published `userinfo_endpoint` host. */
   apiBase?: string
 }
 
@@ -85,7 +97,7 @@ export class GoogleOAuth {
 
   /** Resolve the authenticated Google user behind an access token. */
   async fetchUser(accessToken: string): Promise<GoogleIdentity> {
-    const res = await fetch(new URL('/oauth2/v3/userinfo', this.apiBase), {
+    const res = await fetch(new URL(USERINFO_PATH, this.apiBase), {
       headers: { authorization: `Bearer ${accessToken}` },
     })
     if (!res.ok) throw new Error(`Google userinfo fetch failed (HTTP ${res.status})`)

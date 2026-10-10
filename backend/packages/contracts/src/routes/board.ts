@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import { blockSchema } from '../entities.js'
 import {
   addEpicSchema,
@@ -9,6 +9,7 @@ import {
   assignEpicSchema,
   moveBlockSchema,
   reparentSchema,
+  resizeBlockSchema,
   toggleDependencySchema,
   updateBlockSchema,
 } from '../requests.js'
@@ -83,6 +84,14 @@ export const moveBlockContract = defineApiContract({
   responsesByStatusCode: { 200: blockSchema, ...errorResponses },
 })
 
+export const resizeBlockContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/resize`,
+  requestBodySchema: resizeBlockSchema,
+  responsesByStatusCode: { 200: blockSchema, ...errorResponses },
+})
+
 export const reparentBlockContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: blockIdParams,
@@ -95,7 +104,23 @@ export const removeBlockContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
+})
+
+export const archiveBlockContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/archive`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: blockSchema, ...errorResponses },
+})
+
+export const restoreBlockContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/restore`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: blockSchema, ...errorResponses },
 })
 
 export const toggleDependencyContract = defineApiContract({

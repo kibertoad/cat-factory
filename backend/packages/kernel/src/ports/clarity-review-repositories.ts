@@ -11,8 +11,18 @@ export interface ClarityReviewRepository {
   getByBlock(workspaceId: string, blockId: string): Promise<ClarityReview | null>
   /** A review by its id, or null if it does not exist. */
   get(workspaceId: string, id: string): Promise<ClarityReview | null>
-  /** Create or replace a review (the service deletes a block's prior review first). */
+  /** Force-write a review, bumping its `rev` (seeding / the insert behind {@link replaceForBlock}). */
   upsert(workspaceId: string, review: ClarityReview): Promise<void>
-  /** Drop any existing review(s) for a block (called before a fresh review run). */
-  deleteByBlock(workspaceId: string, blockId: string): Promise<void>
+  /**
+   * Rev-guarded conditional update — the clarity mirror of
+   * `RequirementReviewRepository.compareAndSwap`, with the same never-inserts contract.
+   */
+  compareAndSwap(workspaceId: string, review: ClarityReview): Promise<boolean>
+  /**
+   * ATOMICALLY make `review` the block's one live review (a single conflict-targeted upsert
+   * against the UNIQUE block index) — the clarity mirror of
+   * `RequirementReviewRepository.replaceForBlock`, including why a transactioned
+   * delete-then-insert is NOT an acceptable implementation.
+   */
+  replaceForBlock(workspaceId: string, review: ClarityReview): Promise<void>
 }

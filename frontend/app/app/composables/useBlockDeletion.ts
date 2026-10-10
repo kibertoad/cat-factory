@@ -15,8 +15,53 @@ export function useBlockDeletion() {
   const execution = useExecutionStore()
   const ui = useUiStore()
   const recurring = useRecurringPipelinesStore()
+  const toast = useToast()
+  const { present } = usePipelineErrorToast()
   const { confirm } = useConfirm()
   const { t } = useI18n()
+  const access = useWorkspaceAccess()
+
+  /** A service is any top-level frame; only services are archivable. */
+  function isService(block: Block): boolean {
+    return block.level === 'frame' && block.parentId === null
+  }
+
+  /** Unfinished (`status !== 'done'`) task descendants of a service — the delete blocker. */
+  function unfinishedTaskCount(block: Block): number {
+    return board.descendantsOf(block.id).filter((b) => b.level === 'task' && b.status !== 'done')
+      .length
+  }
+
+  /**
+   * Archive a service: hide it (restorable with no expiry) instead of deleting. Used both as the
+   * explicit inspector action and as the automatic fallback when a service that still has
+   * unfinished work can't be deleted.
+   */
+  async function archiveBlock(block: Block | undefined | null): Promise<boolean> {
+    if (!block || !isService(block)) return false
+    // Archiving is a `board.write` mutation — a read-only viewer's keyboard/inspector path
+    // no-ops (the inspector button is disabled for them; this guards the shortcut too).
+    if (!access.canWriteBoard.value) return false
+    const ok = await confirm({
+      title: t('panels.inspector.confirmArchive.title'),
+      description: t('panels.inspector.confirmArchive.body', { name: block.title }),
+      confirmLabel: t('panels.inspector.archiveService'),
+      icon: 'i-lucide-archive',
+    })
+    if (!ok) return false
+    ui.select(null)
+    try {
+      await board.archiveService(block.id)
+      toast.add({
+        title: t('board.toast.archived', { name: block.title }),
+        icon: 'i-lucide-archive',
+        color: 'neutral',
+      })
+    } catch (e) {
+      present(e, 'board.toast.archiveFailed')
+    }
+    return true
+  }
 
   /** Resolve the confirm title/body for a block, matching the inspector's delete-label kinds. */
   function copyFor(block: Block): { title: string; body: string } {
@@ -27,15 +72,41 @@ export function useBlockDeletion() {
         ? 'task'
         : block.level === 'module'
           ? 'module'
-          : 'service'
-    return {
-      title: t(`panels.inspector.confirmDelete.${kind}.title`),
-      body: t(`panels.inspector.confirmDelete.${kind}.body`, { name: block.title }),
+          : // An initiative names itself rather than falling through to the service copy, which
+            // would describe a blast radius orders of magnitude larger than the real one. Its
+            // cascade is also genuinely different from a container's: the plan goes with it, but
+            // the tasks its loop already spawned are NOT descendants — the backend only detaches
+            // their membership link — so the count branch below deliberately doesn't apply.
+            block.level === 'initiative'
+            ? 'initiative'
+            : 'service'
+    const title = t(`panels.inspector.confirmDelete.${kind}.title`)
+    // For a container (service/module) state the exact cascade size so the blast radius is
+    // explicit — "and everything inside it" hides how many tasks/modules go with it.
+    if (kind === 'module' || kind === 'service') {
+      const count = board.descendantsOf(block.id).length
+      if (count > 0) {
+        return {
+          title,
+          body: t(
+            'panels.inspector.confirmDelete.containerBodyWithCount',
+            { name: block.title, count },
+            count,
+          ),
+        }
+      }
     }
+    return { title, body: t(`panels.inspector.confirmDelete.${kind}.body`, { name: block.title }) }
   }
 
   async function deleteBlock(block: Block | undefined | null): Promise<boolean> {
     if (!block) return false
+    // Deletion is a `board.write` mutation — no-op for a read-only viewer (guards both the
+    // inspector Delete button and the global Delete-key shortcut, which share this path).
+    if (!access.canWriteBoard.value) return false
+    // A service with unfinished work can't be deleted (the backend rejects it) — archive it
+    // instead. Route straight to the archive flow so the user is never handed a dead-end error.
+    if (isService(block) && unfinishedTaskCount(block) > 0) return archiveBlock(block)
     const { title, body } = copyFor(block)
     const ok = await confirm({
       title,
@@ -54,10 +125,13 @@ export function useBlockDeletion() {
       void recurring.remove(schedule.id)
       return true
     }
-    execution.cancel(block.id)
-    void board.removeBlock(block.id)
+    // Cancelling the run is irreversible, so defer it into the delete's commit: it fires only
+    // once the (deferred) delete actually lands, so an undo within the window leaves a running
+    // pipeline intact rather than restoring a block whose run was already torn down. Target the
+    // workspace the block was deleted from in case the user switched mid-window.
+    void board.removeBlock(block.id, { onCommit: (wsId) => execution.cancel(block.id, wsId) })
     return true
   }
 
-  return { deleteBlock }
+  return { deleteBlock, archiveBlock }
 }

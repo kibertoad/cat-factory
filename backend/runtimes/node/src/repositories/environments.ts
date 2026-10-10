@@ -140,9 +140,15 @@ function rowToEnvironment(row: EnvironmentRow): EnvironmentRecord {
     status: row.status as EnvironmentRecord['status'],
     accessCipher: row.access_cipher,
     provisionFieldsCipher: row.provision_fields_cipher,
+    reachability: row.reachability ?? null,
+    lastPolledAt: row.last_polled_at ?? null,
+    // `?? 0` for a row written before the column existed, where the count is genuinely zero: this
+    // marker's whole job is to say how much polling is RECORDED, and none is.
+    pollCount: row.poll_count ?? 0,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     lastError: row.last_error,
+    statusNote: row.status_note,
     deletedAt: row.deleted_at,
     provisionType: row.provision_type ?? null,
     engine: row.engine ?? null,
@@ -156,8 +162,12 @@ const PATCH_COLUMNS = {
   status: 'status',
   accessCipher: 'access_cipher',
   provisionFieldsCipher: 'provision_fields_cipher',
+  reachability: 'reachability',
+  lastPolledAt: 'last_polled_at',
+  pollCount: 'poll_count',
   expiresAt: 'expires_at',
   lastError: 'last_error',
+  statusNote: 'status_note',
   provisionType: 'provision_type',
   engine: 'engine',
 } as const satisfies Record<keyof EnvironmentRecordPatch, string>
@@ -179,9 +189,13 @@ export class DrizzleEnvironmentRegistryRepository implements EnvironmentRegistry
       status: record.status,
       access_cipher: record.accessCipher,
       provision_fields_cipher: record.provisionFieldsCipher,
+      reachability: record.reachability,
+      last_polled_at: record.lastPolledAt,
+      poll_count: record.pollCount,
       created_at: record.createdAt,
       expires_at: record.expiresAt,
       last_error: record.lastError,
+      status_note: record.statusNote,
       deleted_at: null,
       provision_type: record.provisionType,
       engine: record.engine,
@@ -230,6 +244,47 @@ export class DrizzleEnvironmentRegistryRepository implements EnvironmentRegistry
         and(
           eq(environments.workspace_id, workspaceId),
           eq(environments.block_id, blockId),
+          isNull(environments.deleted_at),
+        ),
+      )
+      .orderBy(desc(environments.created_at))
+      .limit(1)
+    return rows[0] ? rowToEnvironment(rows[0]) : null
+  }
+
+  async getByBlockAndFrame(
+    workspaceId: string,
+    blockId: string,
+    frameId: string,
+  ): Promise<EnvironmentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(environments)
+      .where(
+        and(
+          eq(environments.workspace_id, workspaceId),
+          eq(environments.block_id, blockId),
+          eq(environments.frame_id, frameId),
+          isNull(environments.deleted_at),
+        ),
+      )
+      .orderBy(desc(environments.created_at))
+      .limit(1)
+    return rows[0] ? rowToEnvironment(rows[0]) : null
+  }
+
+  async getFramelessByBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<EnvironmentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(environments)
+      .where(
+        and(
+          eq(environments.workspace_id, workspaceId),
+          eq(environments.block_id, blockId),
+          isNull(environments.frame_id),
           isNull(environments.deleted_at),
         ),
       )

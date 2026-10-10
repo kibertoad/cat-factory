@@ -1,7 +1,8 @@
+import { createOrgSecretCipher } from '@cat-factory/kernel'
 import type {
   BlockRepository,
+  OrgSecretCipher,
   ObservabilityConnectionRepository,
-  ObservabilityProviderKind,
   ReleaseEvidence,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
@@ -9,7 +10,9 @@ import type {
   ReleaseHealthReport,
   ReleaseSignal,
   SecretCipher,
+  SecretDelegate,
 } from '@cat-factory/kernel'
+import type { ObservabilityProviderRegistry } from './registry.js'
 
 /**
  * A single observability vendor's reads, built from its already-decrypted credentials.
@@ -28,11 +31,6 @@ export type ObservabilityAdapterFactory = (
   opts: { fetchImpl?: typeof fetch },
 ) => ObservabilityAdapter
 
-/** The set of observability providers a facade can serve. */
-export type ObservabilityProviderRegistry = Partial<
-  Record<ObservabilityProviderKind, ObservabilityAdapterFactory>
->
-
 export interface RegistryReleaseHealthProviderDependencies {
   observabilityConnectionRepository: ObservabilityConnectionRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
@@ -40,6 +38,12 @@ export interface RegistryReleaseHealthProviderDependencies {
   blockRepository: BlockRepository
   /** Decrypts the workspace's sealed credentials blob at call time. */
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the connection row was sealed under the
+   * MOTHERSHIP's key and this process holds none. The gate probe runs wherever the RUN runs, so
+   * without it a mothership-mode deployment could save a connection and never probe with it.
+   */
+  secretDelegate?: SecretDelegate
   /** The provider adapters this facade can build. */
   registry: ObservabilityProviderRegistry
   /** Override fetch (tests). */
@@ -55,7 +59,14 @@ export interface RegistryReleaseHealthProviderDependencies {
  * a `healthy`/empty report when nothing is configured (the gate passes through).
  */
 export class RegistryReleaseHealthProvider implements ReleaseHealthProvider {
-  constructor(private readonly deps: RegistryReleaseHealthProviderDependencies) {}
+  private readonly orgSecrets: OrgSecretCipher
+
+  constructor(private readonly deps: RegistryReleaseHealthProviderDependencies) {
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
+  }
 
   async probe(workspaceId: string, blockId: string, since: number): Promise<ReleaseHealthReport> {
     const resolved = await this.resolve(workspaceId, blockId)
@@ -99,11 +110,14 @@ export class RegistryReleaseHealthProvider implements ReleaseHealthProvider {
 
     const connection = await this.deps.observabilityConnectionRepository.get(workspaceId)
     if (!connection) return null
-    const factory = this.deps.registry[connection.provider]
+    const factory = this.deps.registry.get(connection.provider)
     if (!factory) return null
 
     const credentials: unknown = JSON.parse(
-      await this.deps.secretCipher.decrypt(connection.credentials),
+      await this.orgSecrets.decryptFor(
+        { source: 'observability_connection', workspaceId },
+        connection.credentials,
+      ),
     )
     const adapter = factory(credentials, { fetchImpl: this.deps.fetchImpl })
     return { adapter, config }

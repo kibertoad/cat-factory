@@ -1,0 +1,759 @@
+import { AgentKindRegistry } from '@cat-factory/agents'
+import type { Block } from '@cat-factory/kernel'
+import { PLATFORM_ASSET_STORAGE_SERVICE_ID } from '@cat-factory/contracts'
+import {
+  ASSET_STORAGE_CAPABILITY,
+  ConflictError,
+  UnavailableError,
+  ValidationError,
+  defaultBinaryGeneratorRegistry,
+  registryBinaryGeneratorSource,
+} from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { FoundationalServiceResolver } from './run-foundational-services.js'
+import {
+  assertAttachedPullRequestNotMerged,
+  RunAdmission,
+  type RunAdmissionDeps,
+} from './RunAdmission.js'
+
+// Focused coverage of the BINARY-OUTPUT admission guard (the rest of the `assert*` family is
+// exercised through the engine's integration suites). The stubs satisfy exactly the reads a
+// non-visual, non-tester, non-deployer chain takes through `assertRunnable`.
+
+const registry = new AgentKindRegistry()
+registry.register({
+  kind: 'image-generator',
+  systemPrompt: 'You generate images.',
+  traits: ['binary-output'],
+})
+// The shipped `media-generator`'s shape: it generates AND it declares that its bytes land in the
+// platform's own store. Which of those two is true of a given RUN is the step's selection to say.
+registry.register({
+  kind: 'platform-generator',
+  systemPrompt: 'You generate images into the platform store.',
+  traits: ['binary-output', 'binary-storage'],
+})
+// The `tester-ui` shape: it stores binaries and has no step-level selection to make, so the trait
+// is the whole statement.
+registry.register({
+  kind: 'screenshot-taker',
+  systemPrompt: 'You capture screenshots.',
+  traits: ['binary-storage'],
+})
+
+const block = { id: 'b1', level: 'task', dependsOn: [], title: 'T' } as unknown as Block
+
+function catalogResolver(
+  services: { id: string; capabilities: string[] }[],
+): FoundationalServiceResolver {
+  return {
+    catalogFor: vi.fn(async () =>
+      services.map((s) => ({
+        ...s,
+        name: s.id,
+        summary: '',
+        description: '',
+        contracts: [],
+      })),
+    ),
+    catalogIdsFor: vi.fn(async () => services.map((s) => s.id)),
+    contextFilesFor: vi.fn(async () => []),
+    binaryOutputContextFilesFor: vi.fn(async () => []),
+    credentialsFor: vi.fn(async () => []),
+  }
+}
+
+/** A deployment registering one image integration and one music integration. */
+function generatorRegistry() {
+  const generators = defaultBinaryGeneratorRegistry()
+  generators.registerAll([
+    {
+      id: 'retro-diffusion',
+      name: 'Retro Diffusion',
+      summary: 'Pixel-art image generation.',
+      description: '',
+      modalities: ['image'],
+    },
+    {
+      id: 'studio-music',
+      name: 'Studio Music',
+      summary: 'Instrumental music generation.',
+      description: '',
+      modalities: ['audio'],
+    },
+    // The one that pins its formats down. `3d` is the modality where the container IS the
+    // requirement: a Godot importer takes GLB and not USDZ, and neither opens in an art pipeline.
+    {
+      id: 'meshy',
+      name: 'Meshy',
+      summary: 'Text- and image-to-3D.',
+      description: '',
+      modalities: ['3d-model'],
+      mediaTypes: ['model/gltf-binary', 'model/obj'],
+    },
+  ])
+  return generators
+}
+
+function admission(
+  resolver?: FoundationalServiceResolver,
+  generatorSource = registryBinaryGeneratorSource(generatorRegistry()),
+  resolveBinaryArtifactStore?: RunAdmissionDeps['resolveBinaryArtifactStore'],
+): RunAdmission {
+  const deps = {
+    ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
+    workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
+    blockRepository: { listByWorkspace: vi.fn(async () => []) },
+    executionRepository: { listLive: vi.fn(async () => []) },
+    contextBuilder: {
+      resolveServiceFrame: vi.fn(async () => null),
+      resolveServiceConfig: vi.fn(async () => null),
+      resolveFrontendConfig: vi.fn(async () => null),
+    },
+    agentKindRegistry: registry,
+    spend: { isOverBudget: vi.fn(async () => false) },
+    ...(resolver ? { foundationalServiceResolver: resolver } : {}),
+    binaryGeneratorSource: generatorSource,
+  } as unknown as RunAdmissionDeps
+  return new RunAdmission(deps)
+}
+
+async function refusal(run: Promise<void>): Promise<ConflictError> {
+  try {
+    await run
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConflictError)
+    return error as ConflictError
+  }
+  throw new Error('expected the admission to refuse')
+}
+
+describe('RunAdmission — binary-output selection', () => {
+  const storage = { id: 'asset-store', capabilities: [ASSET_STORAGE_CAPABILITY] }
+  const inventory = { id: 'entity-inventory', capabilities: ['generation-context'] }
+
+  it('refuses a generator step with NO selection as a structural fault (the shape check)', async () => {
+    await expect(
+      admission(catalogResolver([storage])).assertRunnable(
+        'ws',
+        block,
+        { agentKinds: ['image-generator'], stepOptions: [null] },
+        null,
+      ),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('refuses a storage id the catalog does not contain', async () => {
+    const error = await refusal(
+      admission(catalogResolver([storage])).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [{ binaryOutput: { storageServiceId: 'gone' } }],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_service_invalid',
+      serviceId: 'gone',
+      problem: 'unknown_service',
+      role: 'storage',
+    })
+  })
+
+  it('refuses a storage service without the asset-storage capability tag', async () => {
+    const error = await refusal(
+      admission(catalogResolver([inventory])).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [{ binaryOutput: { storageServiceId: 'entity-inventory' } }],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({ problem: 'not_storage_capable' })
+  })
+
+  it('refuses an unknown CONTEXT id too — a typo there silently thins the scope', async () => {
+    const error = await refusal(
+      admission(catalogResolver([storage])).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            { binaryOutput: { storageServiceId: 'asset-store', contextServiceIds: ['gone'] } },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({ serviceId: 'gone', role: 'context' })
+  })
+
+  it('names EVERY unresolved id, so one edit clears the refusal', async () => {
+    // Surfacing only the first would cost a refuse-fix-restart round per lost service, each one a
+    // full admission cycle. `details.issues` is the machine-readable whole; the headline fields
+    // stay for the SPA toast.
+    const error = await refusal(
+      admission(catalogResolver([storage])).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'gone-store',
+                contextServiceIds: ['gone-inventory', 'entity-inventory'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_service_invalid',
+      serviceId: 'gone-store',
+      issues: [
+        { role: 'storage', serviceId: 'gone-store', problem: 'unknown_service' },
+        { role: 'context', serviceId: 'gone-inventory', problem: 'unknown_service' },
+        { role: 'context', serviceId: 'entity-inventory', problem: 'unknown_service' },
+      ],
+    })
+    expect(error.message).toContain('gone-inventory')
+    expect(error.message).toContain('entity-inventory')
+  })
+
+  it('admits a resolvable selection, and a chain with no generator step at all', async () => {
+    const adm = admission(catalogResolver([storage, inventory]))
+    await expect(
+      adm.assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                contextServiceIds: ['entity-inventory'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    ).resolves.toBeUndefined()
+    await expect(
+      adm.assertRunnable('ws', block, { agentKinds: ['coder'] }, null),
+    ).resolves.toBeUndefined()
+  })
+
+  it('skips resolution with no catalog seam wired (presence still holds via the shape check)', async () => {
+    await expect(
+      admission().assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [{ binaryOutput: { storageServiceId: 'anything' } }],
+        },
+        null,
+      ),
+    ).resolves.toBeUndefined()
+    await expect(
+      admission().assertRunnable(
+        'ws',
+        block,
+        { agentKinds: ['image-generator'], stepOptions: [null] },
+        null,
+      ),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('imposes nothing on a DISABLED generator step', async () => {
+    await expect(
+      admission(catalogResolver([])).assertRunnable(
+        'ws',
+        block,
+        { agentKinds: ['image-generator'], enabled: [false], stepOptions: [null] },
+        null,
+      ),
+    ).resolves.toBeUndefined()
+  })
+})
+
+describe('RunAdmission — generative integration selection', () => {
+  const storageOnly = () =>
+    catalogResolver([{ id: 'asset-store', capabilities: [ASSET_STORAGE_CAPABILITY] }])
+
+  it('admits a selection whose integrations cover every content type the step declares', async () => {
+    await expect(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['retro-diffusion', 'studio-music'],
+                modalities: ['image', 'audio'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    ).resolves.toBeUndefined()
+  })
+
+  it('refuses an integration id the deployment does not register, under its OWN reason', async () => {
+    // A separate reason from `binary_output_service_invalid` on purpose: that one is fixed in the
+    // workspace catalog, this one in the deployment's build. One reason would send half the
+    // readers to the wrong place.
+    const error = await refusal(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['ghost-synth'] },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'unknown_generator',
+      generatorId: 'ghost-synth',
+    })
+  })
+
+  it('refuses a content type no selected integration produces', async () => {
+    const error = await refusal(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['retro-diffusion'],
+                modalities: ['image', 'audio'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'modality_uncovered',
+      modality: 'audio',
+    })
+    expect(error.message).toContain('audio')
+  })
+
+  it('refuses a FORMAT no selected integration emits, one notch under the content type', async () => {
+    // The failure this rule exists for: a mesh delivered in a container the engine cannot import
+    // is not a thinner deliverable, and at the end of a paid run it reads as a bad generation.
+    const error = await refusal(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['meshy'],
+                modalities: ['3d-model'],
+                mediaTypes: ['model/gltf-binary', 'model/fbx'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'media_type_uncovered',
+      mediaType: 'model/fbx',
+    })
+    expect(error.message).toContain('model/fbx')
+  })
+
+  it('admits a format an integration DECLINED to declare rather than punishing the honesty', async () => {
+    // `retro-diffusion` declares no `mediaTypes` — a documented "only the modality is known"
+    // state, not an empty answer. The run starts and the gap is stated in the brief instead.
+    await expect(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['retro-diffusion'],
+                mediaTypes: ['image/webp'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    ).resolves.toBeUndefined()
+  })
+
+  it('refuses the generative half even with NO catalog seam wired', async () => {
+    // The registry is in-process composition data, so this check needs no I/O and must not be
+    // skipped alongside the catalog read — a deployment with no catalog can still point a step at
+    // an integration it never registered.
+    const error = await refusal(
+      admission().assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            { binaryOutput: { storageServiceId: 'anything', generatorIds: ['ghost-synth'] } },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({ reason: 'binary_output_generator_invalid' })
+  })
+
+  it('refuses an UNREADABLE integration set as an outage, never as an unknown generator', async () => {
+    // The disposition that carries the mothership-mode seam. Softening an unreachable source to
+    // an empty one would refuse every generator-selecting step with `unknown_generator` for the
+    // duration of the outage — a false configuration error, reported against the very step the
+    // product's own picker filled in, which is the misattribution the remote source exists to
+    // remove. Admitting anyway is the other wrong answer: the run would dispatch with no brief
+    // and no credential, and the agent would discover at the end of a paid run that it had
+    // nothing to generate with.
+    const unreachable = {
+      views: async () => {
+        throw new UnavailableError(
+          'The deployment’s generative integrations could not be read from the mothership',
+          'binary_generators_unreachable',
+          { status: 503 },
+        )
+      },
+      documentsFor: async () => new Map(),
+    }
+    await expect(
+      admission(
+        catalogResolver([{ id: 'asset-store', capabilities: [ASSET_STORAGE_CAPABILITY] }]),
+        unreachable,
+      ).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              // An id this deployment DOES register — so an empty-set reading would have called
+              // it unknown, which is exactly the claim that must not be made.
+              binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+            },
+          ],
+        },
+        null,
+      ),
+    ).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable' },
+    })
+  })
+})
+
+// The START-GUARD half of how a preset's route order reaches a run. The dispatch half rides
+// `AgentRunContext.providerPreference`; this half rides the capability set the guard resolves, and
+// wiring only one is silent either way — a run ADMITTED against a route it never takes, or every
+// dispatch quietly on the deployment's default order.
+describe('RunAdmission — the capability set is resolved under the block’s preset', () => {
+  function capabilityAdmission() {
+    const resolveProviderCapabilities = vi.fn(async () => ({
+      directProviders: new Set<string>(),
+      subscriptionVendors: new Set<string>(),
+      cloudflareEnabled: true,
+    }))
+    const deps = {
+      workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
+      blockRepository: { listByWorkspace: vi.fn(async () => []) },
+      executionRepository: { listLive: vi.fn(async () => []) },
+      contextBuilder: {
+        resolveServiceFrame: vi.fn(async () => null),
+        resolveServiceConfig: vi.fn(async () => null),
+        resolveFrontendConfig: vi.fn(async () => null),
+      },
+      agentKindRegistry: registry,
+      spend: { isOverBudget: vi.fn(async () => false) },
+      binaryGeneratorSource: registryBinaryGeneratorSource(generatorRegistry()),
+      resolveProviderCapabilities,
+    } as unknown as RunAdmissionDeps
+    return { admission: new RunAdmission(deps), resolveProviderCapabilities }
+  }
+
+  it('passes the block’s SELECTED preset id, so the guard walks the dispatch order', async () => {
+    const { admission: guard, resolveProviderCapabilities } = capabilityAdmission()
+    const pinned = { ...block, modelPresetId: 'mdp_compliance' } as unknown as Block
+    await guard.assertRunnable('ws', pinned, { agentKinds: ['coder'], stepOptions: [null] }, 'u1')
+    expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', 'u1', 'mdp_compliance')
+  })
+
+  it('passes undefined when the block selects none (⇒ the workspace default preset)', async () => {
+    const { admission: guard, resolveProviderCapabilities } = capabilityAdmission()
+    await guard.assertRunnable('ws', block, { agentKinds: ['coder'], stepOptions: [null] }, 'u1')
+    expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', 'u1', undefined)
+  })
+})
+
+// The HARNESS-REACHABILITY guard resolves the step's model itself, which makes it a second copy of
+// the dispatch precedence — and every way it can disagree refuses a run that would have worked, or
+// stays silent on a block that would not. These pin it against what `ModelRouter.resolveDispatchRef`
+// actually does.
+describe('RunAdmission — the step harness is resolved the way the DISPATCH resolves it', () => {
+  /** A deployment whose only generative integration is served by the codex CLI. */
+  function codexGenerators() {
+    const generators = defaultBinaryGeneratorRegistry()
+    generators.register({
+      id: 'codex-images',
+      name: 'Codex image generation',
+      summary: 'gpt-image-2 through the Codex CLI.',
+      description: '',
+      modalities: ['image'],
+      transport: 'harness',
+      harness: 'codex',
+    })
+    return registryBinaryGeneratorSource(generators)
+  }
+
+  const selection = {
+    agentKinds: ['image-generator'],
+    stepOptions: [
+      {
+        binaryOutput: {
+          storageServiceId: 'asset-store',
+          generatorIds: ['codex-images'],
+          modalities: ['image' as const],
+        },
+      },
+    ],
+  }
+
+  function harnessAdmission(options: {
+    generatorSource?: ReturnType<typeof codexGenerators>
+    subscriptionVendors?: string[]
+    workspaceDefault?: string
+  }) {
+    const resolveProviderCapabilities = vi.fn(async () => ({
+      // An OpenRouter key, so a dual-mode OpenAI model has a metered route to resolve onto.
+      directProviders: new Set(['openrouter']),
+      subscriptionVendors: new Set(options.subscriptionVendors ?? []),
+      cloudflareEnabled: false,
+    }))
+    const resolveWorkspaceModelDefault = vi.fn(async () => options.workspaceDefault)
+    const deps = {
+      workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
+      blockRepository: { listByWorkspace: vi.fn(async () => []) },
+      executionRepository: { listLive: vi.fn(async () => []) },
+      contextBuilder: {
+        resolveServiceFrame: vi.fn(async () => null),
+        resolveServiceConfig: vi.fn(async () => null),
+        resolveFrontendConfig: vi.fn(async () => null),
+      },
+      agentKindRegistry: registry,
+      spend: { isOverBudget: vi.fn(async () => false) },
+      binaryGeneratorSource: options.generatorSource ?? codexGenerators(),
+      resolveProviderCapabilities,
+      resolveWorkspaceModelDefault,
+    } as unknown as RunAdmissionDeps
+    return {
+      admission: new RunAdmission(deps),
+      resolveProviderCapabilities,
+      resolveWorkspaceModelDefault,
+    }
+  }
+
+  it('admits a codex-served generator on a dual-mode model the workspace has a token for', async () => {
+    // "Subscriptions always win" is applied ON TOP of the catalog's flavour order, which puts
+    // `subscription` LAST. Reading the flavour order alone resolves `gpt-5.6-sol` to its OpenRouter
+    // route (harness `pi`) and refuses a step that is about to dispatch on codex — telling the
+    // operator to pin a codex model that is already what will run.
+    const { admission: guard } = harnessAdmission({ subscriptionVendors: ['codex'] })
+    const pinned = { ...block, modelId: 'gpt-5.6-sol' } as unknown as Block
+    await expect(guard.assertRunnable('ws', pinned, selection, 'u1')).resolves.toBeUndefined()
+  })
+
+  it('refuses it when the same model has no subscription to be routed onto', async () => {
+    // The other side of the same override: with no codex token the step really does run on the
+    // OpenRouter route, under Pi, where the CLI's image tool does not exist.
+    const { admission: guard } = harnessAdmission({})
+    const pinned = { ...block, modelId: 'gpt-5.6-sol' } as unknown as Block
+    const error = await refusal(guard.assertRunnable('ws', pinned, selection, 'u1'))
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'generator_harness_unavailable',
+      requiredHarness: 'codex',
+      resolvedHarness: 'pi',
+    })
+  })
+
+  it('falls THROUGH an unresolvable block pin to the workspace default, as the dispatch does', async () => {
+    // `resolveStepModelRef` does not stop at a stale pin, it tries the next source. Stopping here
+    // switched the guard OFF on exactly the blocks most likely to be misconfigured.
+    const { admission: guard } = harnessAdmission({ workspaceDefault: 'gpt-5.6-sol' })
+    const stale = { ...block, modelId: 'model-retired-last-year' } as unknown as Block
+    const error = await refusal(guard.assertRunnable('ws', stale, selection, 'u1'))
+    expect(error.details).toMatchObject({ problem: 'generator_harness_unavailable' })
+  })
+
+  it('resolves NO model when the deployment registers no harness-served integration', async () => {
+    // The rule cannot fire, so the capability read and the per-kind default lookup it needs are
+    // pure waste on every start of every pipeline carrying a binary-output step.
+    const source = registryBinaryGeneratorSource(generatorRegistry())
+    const { admission: guard, resolveWorkspaceModelDefault } = harnessAdmission({
+      generatorSource: source,
+    })
+    await guard.assertRunnable(
+      'ws',
+      block,
+      {
+        agentKinds: ['image-generator'],
+        stepOptions: [
+          {
+            binaryOutput: {
+              storageServiceId: 'asset-store',
+              generatorIds: ['retro-diffusion'],
+              modalities: ['image' as const],
+            },
+          },
+        ],
+      },
+      'u1',
+    )
+    // The later provider guard reads the per-kind default too, but only for a block with NO pin;
+    // this block has none, so a call here would be the harness resolution's own. It must not
+    // happen twice for one kind.
+    expect(resolveWorkspaceModelDefault.mock.calls).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The BINARY-STORAGE precondition, which is about the account's own content storage rather than
+// about the catalog. The trait says a kind stores binaries; only the STEP says where they land,
+// and before this the guard read the trait alone: a generator repointed at an org's object
+// service was refused a run over a store its bytes were never going to touch, and the refusal
+// named a content-storage settings page that had nothing to do with the failure.
+// ---------------------------------------------------------------------------
+describe('RunAdmission — the binary-storage precondition', () => {
+  const platformStorage = {
+    id: PLATFORM_ASSET_STORAGE_SERVICE_ID,
+    capabilities: [ASSET_STORAGE_CAPABILITY],
+  }
+  const orgStorage = { id: 'file-storage', capabilities: [ASSET_STORAGE_CAPABILITY] }
+  // One recording resolver, cleared per test: the last case asserts the guard never REACHES it,
+  // which a shared call log from the refusals above would satisfy in the wrong direction.
+  const STORAGE_OFF = vi.fn(async () => null)
+  beforeEach(() => STORAGE_OFF.mockClear())
+
+  function guard(services: { id: string; capabilities: string[] }[]): RunAdmission {
+    return admission(catalogResolver(services), undefined, STORAGE_OFF)
+  }
+
+  it('refuses a kind that stores with no selection to make, exactly as before', async () => {
+    const error = await refusal(
+      guard([]).assertRunnable('ws', block, { agentKinds: ['screenshot-taker'] }, null),
+    )
+    expect(error.details).toMatchObject({ reason: 'binary_storage_unconfigured' })
+  })
+
+  it('refuses a generator whose step stores through the PLATFORM asset service', async () => {
+    // The shipped `pl_media` shape: those bytes land in exactly the store the account has not
+    // configured, so the refusal points at the right settings page.
+    const error = await refusal(
+      guard([platformStorage]).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['platform-generator'],
+          stepOptions: [{ binaryOutput: { storageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID } }],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({ reason: 'binary_storage_unconfigured' })
+  })
+
+  it('admits the SAME kind when its step stores through an org service', async () => {
+    await guard([orgStorage]).assertRunnable(
+      'ws',
+      block,
+      {
+        agentKinds: ['platform-generator'],
+        stepOptions: [{ binaryOutput: { storageServiceId: 'file-storage' } }],
+      },
+      null,
+    )
+    // The account store is not merely tolerated as absent here: it is never consulted, because
+    // nothing in this run reaches it. A resolver call would mean the guard still believes the
+    // kind decides, and would refuse the moment the resolver answered null in production.
+    expect(STORAGE_OFF).not.toHaveBeenCalled()
+  })
+
+  it('ignores a DISABLED step, like every other shape check', async () => {
+    await guard([orgStorage]).assertRunnable(
+      'ws',
+      block,
+      {
+        agentKinds: ['image-generator', 'screenshot-taker'],
+        stepOptions: [{ binaryOutput: { storageServiceId: 'file-storage' } }, null],
+        enabled: [true, false],
+      },
+      null,
+    )
+  })
+})
+
+describe('assertAttachedPullRequestNotMerged', () => {
+  it('refuses a merge step on a task that attached somebody else’s pull request', () => {
+    expect(() =>
+      assertAttachedPullRequestNotMerged({ taskType: 'resolve-conflicts' }, [
+        'conflicts',
+        'merger',
+      ]),
+    ).toThrow(ConflictError)
+  })
+
+  it('admits the attached task without a merge step, and a merge step on any other task', () => {
+    expect(() =>
+      assertAttachedPullRequestNotMerged({ taskType: 'resolve-conflicts' }, ['conflicts']),
+    ).not.toThrow()
+    expect(() =>
+      assertAttachedPullRequestNotMerged({ taskType: 'feature' }, ['coder', 'merger']),
+    ).not.toThrow()
+  })
+})

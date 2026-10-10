@@ -41,10 +41,27 @@ export interface UserSecretRepository {
 export type ResolveUserGitHubToken = (userId: string) => Promise<string | null>
 
 /**
- * Run `fn` with the run initiator in ambient context, so the engine GitHub client can
- * prefer that user's PAT. The real implementation is AsyncLocalStorage-backed and lives
- * in a facade-facing package (it needs a runtime that has `node:async_hooks`); the engine
- * receives it as an injected seam and defaults to a pass-through (`(_, fn) => fn()`),
- * so tests/conformance run unchanged. Pure type only — no runtime import here.
+ * Which credential a run's outbound provider calls should be attributed to: WHO started it,
+ * and WHICH workspace's policy governs whether that person's own token may be used at all.
+ *
+ * The workspace is not decoration. `allowInitiatorPat` is a per-workspace switch, so the
+ * initiator alone cannot answer "may this run push as them" — and resolving the workspace
+ * downstream from the installation id would be ambiguous (one installation can serve several
+ * workspaces) exactly where the answer must not be guessed.
  */
-export type RunInitiatorScope = <T>(initiatedBy: string | null | undefined, fn: () => T) => T
+export interface RunCredentialScope {
+  /** The user who started the run; absent/null for a run nobody is attributed to. */
+  initiatedBy?: string | null
+  /** The workspace the run belongs to — what the credential policy is resolved against. */
+  workspaceId: string
+}
+
+/**
+ * Run `fn` with the run's credential scope in ambient context, so the engine GitHub client can
+ * prefer the initiator's PAT (where the workspace permits it). The real implementation is
+ * AsyncLocalStorage-backed and lives in a facade-facing package (it needs a runtime that has
+ * `node:async_hooks`); the engine receives it as an injected seam and defaults to a
+ * pass-through (`(_, fn) => fn()`), so tests/conformance run unchanged. Pure type only — no
+ * runtime import here.
+ */
+export type RunInitiatorScope = <T>(scope: RunCredentialScope, fn: () => T) => T

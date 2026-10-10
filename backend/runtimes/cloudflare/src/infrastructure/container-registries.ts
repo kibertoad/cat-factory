@@ -1,0 +1,166 @@
+import {
+  defaultDelegatedExecutorRegistry,
+  defaultJudgeRegistry,
+  defaultProviderRegistry,
+  defaultStepResolverRegistry,
+  defaultVcsRegistry,
+} from '@cat-factory/kernel'
+import {
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
+import { createBackendRegistries } from '@cat-factory/integrations'
+import { gateRegistryWithBuiltins } from '@cat-factory/gates'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
+import { registeredBinaryGeneratorRegistry } from './binaryGenerators'
+import { registeredBinaryStoreRegistry } from './binaryStores'
+import type { CoreDependencies } from '@cat-factory/orchestration'
+
+/** The app-owned registries the Worker facade resolves once per build. */
+export type WorkerRegistries = Required<
+  Pick<
+    CoreDependencies,
+    | 'environmentBackendRegistry'
+    | 'runnerBackendRegistry'
+    | 'customManifestTypeRegistry'
+    | 'userSecretKindRegistry'
+    | 'agentKindRegistry'
+    | 'gateRegistry'
+    | 'judgeRegistry'
+    | 'delegatedExecutorRegistry'
+    | 'stepResolverRegistry'
+    | 'initiativePresetRegistry'
+    | 'vcsRegistry'
+    | 'providerRegistry'
+    | 'promptFragmentRegistry'
+    | 'binaryGeneratorRegistry'
+    | 'binaryStoreRegistry'
+  >
+>
+
+/**
+ * Resolve the app-owned backend registries (env + runner kind → provider, agent-kind, gate,
+ * step-resolver, initiative-preset, VCS, gate-provider): the injected instance via `overrides`,
+ * else the built-in default. Extracted from {@link buildContainer} to keep its cyclomatic
+ * complexity down — the many `overrides.X ?? default()` fallbacks are behaviour-neutral here, and
+ * the opt-in AWS EKS backends are registered by reference exactly as before (`register` is
+ * idempotent, so a re-used injected registry from the conformance harness is safe).
+ */
+/**
+ * The Worker facade's OWN default agent-kind registry: the built-ins plus the opt-in Nuxt UI
+ * capability (the vendored skill + MCP server on the coder kinds). Used at EVERY point the facade
+ * mints its own default rather than taking a deployment's injected instance: the entry point
+ * (`resolveEntryRegistries`, whose instance boot validation and `GET /internal/agent-kinds` serve)
+ * and the override-less `buildContainer(env)` builders (the durable driver). Defaulting in only one
+ * of the two is the split-brain this guards against. Mirrors the Node facade's `resolveNodeAppRegistries`.
+ */
+export function defaultWorkerAgentKindRegistry(): AgentKindRegistry {
+  const registry = defaultAgentKindRegistry()
+  registerNuxtUiCapability(registry)
+  return registry
+}
+
+export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): WorkerRegistries {
+  const defaultRegistries = createBackendRegistries()
+  const environmentBackendRegistry =
+    overrides.environmentBackendRegistry ?? defaultRegistries.environmentBackendRegistry
+  const runnerBackendRegistry =
+    overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
+  const customManifestTypeRegistry =
+    overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
+  const userSecretKindRegistry =
+    overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
+  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference). This
+  // resolver runs inside `buildContainer`, which the durable driver calls with NO overrides
+  // (`buildContainer(env)`), so this is where those override-less builders get the facade's own
+  // default — the one carrying the opt-in Nuxt UI capability. The REQUEST path is defaulted one
+  // level up in `resolveEntryRegistries`, whose result is spread into these overrides, so an
+  // injected instance (a deployment's, or the entry point's own default) always wins here.
+  const agentKindRegistry = overrides.agentKindRegistry ?? defaultWorkerAgentKindRegistry()
+  // The app-owned gate registry: the injected instance, else a fresh one with the built-in
+  // `@cat-factory/gates` suite installed — so a container built directly for a scheduled/cron sweep
+  // (no overrides) still has the gates its re-driven runs need.
+  const gateRegistry = overrides.gateRegistry ?? gateRegistryWithBuiltins()
+  // The app-owned step-resolver registry: the injected instance else an empty default (the built-in
+  // `merger` resolver is a privileged engine built-in, not a registry entry).
+  const stepResolverRegistry = overrides.stepResolverRegistry ?? defaultStepResolverRegistry()
+  // The app-owned JUDGE registry (the fourth step-taxonomy bucket): the injected instance, else an
+  // empty default — the platform ships no built-in judges, so every entry is a deployment's own.
+  const judgeRegistry = overrides.judgeRegistry ?? defaultJudgeRegistry()
+  // The app-owned DELEGATED-EXECUTOR registry (the external systems a deployment plugs in as the
+  // executor of a step): the injected instance, else an empty default: the platform ships none,
+  // so every entry is a deployment's own, exactly like the judges above.
+  const delegatedExecutorRegistry =
+    overrides.delegatedExecutorRegistry ?? defaultDelegatedExecutorRegistry()
+  // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
+  // any a deployment registered by reference).
+  const initiativePresetRegistry =
+    overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
+  // The app-owned VCS provider registry: a fresh instance per build (the injected one via
+  // `overrides`, else empty). The GitLab provider is registered onto it by the caller when configured.
+  const vcsRegistry = overrides.vcsRegistry ?? defaultVcsRegistry()
+  // The app-owned provider registry the built-in gates probe through: a fresh instance per build
+  // (the injected one via `overrides`, else empty), wired by the caller when a gate is configured.
+  const providerRegistry = overrides.providerRegistry ?? defaultProviderRegistry()
+  // The app-owned best-practice standards pool: the injected instance, else a fresh one carrying
+  // the shipped `@cat-factory/prompt-fragments` catalog and its per-task-type default sets. The
+  // default belongs HERE for the same reason the gate registry's does: the engine's own default is
+  // deliberately empty, and a container built directly (a cron sweep, a Workflow step, a Durable
+  // Object) takes no overrides, so defaulting only at the `createWorker` entry point would fold no
+  // standards into exactly the runs nobody is watching.
+  const promptFragmentRegistry =
+    overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins()
+  // The app-owned generative binary integrations: the injected instance, else the PROCESS-WIDE
+  // registration, else a fresh one carrying the shipped `@cat-factory/binary-generators` set.
+  //
+  // Two fallbacks rather than one, because two different builds are wrong without them and only
+  // the second is a platform concern. A container built directly (a cron re-drive, a Workflow
+  // step) takes no overrides, and the durable dispatch path is where a binary-output step's brief
+  // is composed: defaulting only at `createWorker` would leave those runs composing a brief with
+  // no integration in it at all. Defaulting to the SHIPPED set there fixes that for the platform's
+  // own integration and leaves a deployment's own absent on the same paths, which is why the
+  // registration exists. `infrastructure/binaryGenerators.ts` holds it, with the store registry's
+  // reasoning and the one way this differs from it.
+  const binaryGeneratorRegistry =
+    overrides.binaryGeneratorRegistry ?? registeredBinaryGeneratorRegistry()
+  // The app-owned registry of the deployment's OWN binary artifact stores: the injected instance,
+  // else the PROCESS-WIDE registration (empty when a deployment registered none; the platform's
+  // R2 backend is this facade's own wiring, not an entry).
+  //
+  // The fallback differs in kind from every other one here, and the difference is the whole
+  // point. The others fall back to a default the PLATFORM ships, so a container built with no
+  // overrides is still correct. This registry has no platform default: its entire content is a
+  // deployment's own, so falling back to a fresh empty one leaves the override-less builders
+  // (the `ExecutionWorkflow` wake that stores a visual-confirmation screenshot, the queue
+  // consumers, the Durable Objects) resolving NO store for an account that selected one. The gate
+  // passes through when no store resolves, so nothing fails: the run completes having captured
+  // nothing. `infrastructure/binaryStores.ts` holds the registration this reads.
+  const binaryStoreRegistry = overrides.binaryStoreRegistry ?? registeredBinaryStoreRegistry()
+
+  // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
+  // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
+  // by `kind`), so a re-used injected registry (the conformance harness) is safe.
+  runnerBackendRegistry.register(eksRunnerBackend)
+  environmentBackendRegistry.register(eksEnvironmentBackend)
+
+  return {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+    agentKindRegistry,
+    gateRegistry,
+    judgeRegistry,
+    delegatedExecutorRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    vcsRegistry,
+    providerRegistry,
+    promptFragmentRegistry,
+    binaryGeneratorRegistry,
+    binaryStoreRegistry,
+  }
+}

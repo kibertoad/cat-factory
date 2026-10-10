@@ -1,7 +1,7 @@
 import type { AgentKind } from '@cat-factory/contracts'
 import { type ProviderCapabilities, resolveModelRef } from '@cat-factory/kernel'
 import type { AgentModelConfig } from '@cat-factory/agents'
-import type { AgentsConfig } from '@cat-factory/server'
+import { ENV_HELP, type AgentsConfig, configProblem } from '@cat-factory/server'
 import type { Env } from '../env'
 import { num } from './utils'
 
@@ -17,7 +17,12 @@ function parseModelOverrides(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error('AGENT_MODELS is not valid JSON')
+    throw configProblem({
+      key: 'AGENT_MODELS',
+      summary: ENV_HELP.AGENT_MODELS.summary,
+      remedy: `It is not valid JSON. ${ENV_HELP.AGENT_MODELS.remedy}`,
+      docsUrl: ENV_HELP.AGENT_MODELS.docsUrl,
+    })
   }
   if (typeof parsed !== 'object' || parsed === null) return {}
 
@@ -26,7 +31,12 @@ function parseModelOverrides(
     const provider = value.provider
     const model = value.model
     if (typeof provider !== 'string' || typeof model !== 'string') {
-      throw new Error(`AGENT_MODELS.${kind} requires string "provider" and "model"`)
+      throw configProblem({
+        key: 'AGENT_MODELS',
+        summary: ENV_HELP.AGENT_MODELS.summary,
+        remedy: `Entry "${kind}" is missing a string "provider" and/or "model". ${ENV_HELP.AGENT_MODELS.remedy}`,
+        docsUrl: ENV_HELP.AGENT_MODELS.docsUrl,
+      })
     }
     out[kind] = {
       ref: { provider, model },
@@ -45,17 +55,22 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // direct DashScope per-workspace by the executor when a Qwen key is configured).
   // An operator can still pin a specific provider/model via the env vars.
   const qwenDefault = resolveModelRef('qwen', caps)
+  // Parse the two shared numeric knobs ONCE: each is read across every model config
+  // below, and `parseNumericEnv` warns per call, so a single garbage value would emit
+  // one warning per site. Hoisting collapses that to one warning per var (A8).
+  const envTemperature = num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE)
+  const envMaxOutputTokens = num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS)
   const defaultConfig: AgentModelConfig = {
     ref: {
       provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
       model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
     },
-    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
+    temperature: envTemperature ?? 0.4,
     // 5000, not 512: the default model is a *reasoning* model whose `<think>`
     // tokens count against this cap, so a tight limit truncates the answer mid
     // reasoning (finish_reason: length). Operators can still override via env or
     // pin a leaner cap per kind in AGENT_MODELS.
-    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
 
   // The agentic phases — design (bootstrap/architect), build (coder) and review
@@ -67,8 +82,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // of these per kind.
   const agenticDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
-    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   // The coder (implementer) runs the longest, most tool-heavy loop, where GLM-5.2
   // on Workers AI was observed emitting malformed tool calls (e.g. `write` with no
@@ -78,8 +93,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // it while design/review stay on GLM-5.2.
   const coderDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
-    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   // Companions (reviewer / spec-companion / architect-companion) return their whole
   // verdict — rating + summary + per-item comments — as ONE inline JSON reply. On a
@@ -89,17 +104,34 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // like the reviewer was already on.
   const companionDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
-    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 12000,
   }
   // The conflict-resolver clones a PR head with merge conflicts and rewrites the
   // conflicted hunks against the base — a focused, diff-heavy reasoning task over
-  // potentially large files. Kimi K2.5 (a 1T-param agentic model native on Workers AI,
+  // potentially large files. Kimi K2.6 (a 1T-param agentic model native on Workers AI,
   // 256K window) handles that better than the small default MoE.
   const conflictResolverDefault: AgentModelConfig = {
-    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.5' },
-    temperature: num(env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num(env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
+  }
+  // The inline document-planning kinds return their WHOLE deliverable as one reply, so this
+  // cap bounds the artifact itself rather than acting as a safety net: at 5000 the research
+  // brief truncates mid-answer (finish_reason: length) and the run drafts from a half-written
+  // brief. A doc-researcher brief — facts, sources, prior art, open questions — was observed
+  // needing ~20k output tokens, so budget 24k; the outliner's section plan needs roughly half
+  // that. Both stay on the cheap default MODEL (only the budget was wrong, not the routing).
+  // NB: on the subscription-CLI inline path the cap is advisory and NOT enforced (see the
+  // harness's `InlineJob.maxOutputTokens`), which is why observed usage can exceed it; raising
+  // it fixes the metered provider path, where it really does truncate.
+  const docResearcherDefault: AgentModelConfig = {
+    ...defaultConfig,
+    maxOutputTokens: envMaxOutputTokens ?? 24000,
+  }
+  const docOutlinerDefault: AgentModelConfig = {
+    ...defaultConfig,
+    maxOutputTokens: envMaxOutputTokens ?? 10000,
   }
   const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {
     architect: agenticDefault,
@@ -108,6 +140,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
     'architect-companion': companionDefault,
     coder: coderDefault,
     'conflict-resolver': conflictResolverDefault,
+    'doc-researcher': docResearcherDefault,
+    'doc-outliner': docOutlinerDefault,
   }
   // Env overrides win over the built-in agentic defaults.
   Object.assign(byKind, parseModelOverrides(env.AGENT_MODELS))
@@ -117,6 +151,10 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
       default: defaultConfig,
       byKind,
     },
-    resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
+    // The preset's route order is folded ONTO the deployment capabilities rather than replacing
+    // them: which routes EXIST is a deployment fact (keys, the Bedrock allow-list, the CF binding),
+    // and the preset only reorders how they are preferred.
+    resolveBlockModel: (modelId, providerPreference) =>
+      resolveModelRef(modelId, providerPreference?.length ? { ...caps, providerPreference } : caps),
   }
 }

@@ -1,0 +1,139 @@
+# @cat-factory/caching
+
+The app-level caching seam (see `docs/initiatives/caching-layer.md` in the repo).
+`createAppCaches(options)` builds the named, typed read-through caches the services
+consume through the kernel `AppCaches` port, implemented on
+[`layered-loader`](https://github.com/kibertoad/layered-loader).
+
+## Design rules
+
+- **In-memory only.** Each cache is a per-replica LRU (`layered-loader` `GroupLoader`
+  over its in-memory tier). A replica always repopulates from its own data source on a
+  miss. There is deliberately **no Redis (or any async) data tier**.
+- **Redis is an invalidation bus, never a data tier.** In a multi-node Node deployment
+  the facade injects a `notificationPairFactory` (built from layered-loader's
+  `createGroupNotificationPair` over dedicated ioredis clients, gated on `REDIS_URL`);
+  a write on one node then broadcasts the invalidated key/group so every peer drops its
+  in-memory entry. Only keys/groups travel on the wire, never values. Absent the
+  factory (single replica, local mode, tests) the loaders are bare in-memory with zero
+  extra dependency.
+- **Invalidate after commit, at every write site.** The consuming service calls
+  `invalidate`/`invalidateGroup` (or the coarse `invalidateAll` for rare wide-blast
+  writes) after the DB write commits; layered-loader publishes to peers automatically.
+- **Staleness probes for git-backed caches.** A profile with `ttlLeftBeforeRefreshInMsecs`
+  turns on preemptive in-memory refresh (layered-loader ≥ 14.5.3): an entry hit inside the
+  window runs the caller's per-read `isStillCurrent` probe (a sha/hash compare, strictly
+  cheaper than the load) in the background: TTL bump when the source hasn't moved, full
+  background reload otherwise. DB-backed invalidation-driven caches leave the window unset:
+  a DB read as a probe saves nothing over the DB read as the load.
+- **Deep imports keep ioredis out of every runtime but Node.** layered-loader's root
+  index eagerly loads its Redis modules (and `ioredis`), so this package deep-imports
+  only the in-memory machinery. The Redis notification classes are loaded dynamically
+  by the Node facade alone, behind `REDIS_URL`.
+
+## The Cloudflare Worker profiles
+
+A Worker isolate has no cross-isolate invalidation bus and no Redis, so a bare TTL'd
+in-isolate cache over **mutable cross-instance state** would serve stale data after a
+write processed by another isolate: a correctness bug, not an optimization. Push is
+structurally unavailable there (an isolate holds no subscription between requests), so
+the Worker has two stances, selected by whether its `CACHE_GENERATIONS` Durable Object
+binding exists:
+
+- **`ISOLATE_SAFE_APP_CACHES_PROFILE`** (the fallback, and prior behaviour): caches of
+  mutable state are **pass-through** (`enabled: false`; every read runs its load), and
+  only caches of immutable or self-verifying entries (sha-pinned repo reads, external
+  documents re-validated by a version probe) get real TTLs.
+- **`ISOLATE_COHERENT_APP_CACHES_PROFILE`**: the isolate-safe profile plus
+  **pull-coherent** caches. A coherent cache keeps a real TTL, and its profile entry
+  carries a `coherencyWindowMsecs`: a read whose group snapshot is older than the
+  window re-reads the injected `CacheGenerationStore` (one monotonic counter per
+  (cache, group), one round trip per group serving every coherent cache) and, on a
+  moved counter, applies layered-loader 16.1's local, fencing, non-publishing
+  `applyRemoteInvalidation*` primitives before serving. Every invalidation site bumps
+  the directory right after its local invalidation, awaited by the write path.
+  Cross-isolate staleness is bounded by the window (5s on the pilot), instead of
+  indefinite (a bare TTL) or zero-at-the-cost-of-every-read (pass-through).
+
+Error posture, deliberately asymmetric: a probe failure fails CLOSED (the read
+invalidates locally and loads fresh, so a directory outage degrades to pass-through
+performance, never staleness); a bump failure fails OPEN (the write and its local
+invalidation already happened; peers heal at the TTL, and
+`cache.coherency_bump_failure` is the visible trace). `createAppCaches` refuses a
+profile that sets a window on an enabled cache with no `generationStore` wired.
+
+A coherent cache also declares whether it ever invalidates CACHE-WIDE, with
+`cacheWideInvalidation`. Only a cache that does needs the reserved `'*'` epoch counter
+probed beside its own group, and that shard is ONE globally placed Durable Object, so a
+cache with no `invalidateAll` call site would be paying a cross-colo round trip that
+structurally cannot return news. It is declared rather than inferred, and `invalidateAll`
+on a coherent cache that did not declare it THROWS: dropping the entries here while every
+peer keeps serving theirs to the TTL is exactly the hole the flag exists to close.
+
+## Isolate runtimes: nothing may cross an invocation
+
+Two rules, both from the same fact: on Cloudflare, I/O is scoped to the invocation that
+created it, and an invocation that touches another's I/O is **destroyed** with "Cannot
+perform I/O on behalf of a different request", at the runtime level, where no `catch` in
+the joining code can see it.
+
+- **Background work is adopted by the CURRENT invocation.** Pass `scheduleBackgroundWork`
+  and hand the promise to `ctx.waitUntil`, resolving the context at call time rather than
+  closing over one (the Worker reads the ambient ExecutionContext off an
+  AsyncLocalStorage; see `runtimes/cloudflare/src/infrastructure/appCachesHost.ts`).
+- **In-flight promises are never shared between invocations.** This is what
+  `currentInvocation` is for. The bag is one per ISOLATE, which is what makes its entries
+  caches rather than per-invocation memos, but it also puts layered-loader's in-flight
+  load map (and the coherency probe's) in reach of a second concurrent invocation on every
+  same-key miss. Supplying `currentInvocation` moves the MISS path onto per-invocation
+  loads: reads still serve from the isolate-scoped in-memory tier and a hit still schedules
+  its preemptive refresh, but a miss loads for itself rather than joining a promise it
+  cannot safely await. Within one invocation the coalescing is kept, and an invocation the
+  runtime cannot name (a Workflows step, which has no ExecutionContext) coalesces with
+  nothing, because two loads that cannot be told apart must be assumed to be different
+  contexts. Node supplies nothing here and keeps layered-loader's own load path unchanged.
+
+Because a miss now publishes outside the loader, that publish is fenced locally: an
+invalidation landing while a load is in flight discards the late write instead of
+resurrecting the entry it dropped (the caller still receives the value it loaded).
+
+`fragmentDocumentBody` is the first self-verifying cache that stays **enabled** on the
+Worker even without the directory: its entries are external Confluence/Notion/GitHub/…
+page content re-validated by the source's cheap version probe
+(`ttlLeftBeforeRefreshInMsecs` + `isStillCurrent`), so a peer isolate's cached body
+self-heals within the refresh window without an invalidation bus.
+`workspaceSettings` is the pull-coherency pilot (one invalidation site, no
+`invalidateAll`, hot on the Worker); further flips are one profile row each, in their
+own slice.
+
+## Named caches
+
+| Cache                  | Value                                           | Group / key                                          | Profile                                       |
+| ---------------------- | ----------------------------------------------- | ---------------------------------------------------- | --------------------------------------------- |
+| `fragmentCatalog`      | merged per-workspace catalog                    | `workspaceId` / `workspaceId`                        | TTL + invalidation; pass-through on Worker    |
+| `fragmentDocumentBody` | a document-backed fragment's live external body | `viaWorkspaceId` / `<source>:<externalId>`           | TTL + version probe; enabled on both facades  |
+| `repoProjection`       | a workspace's whole GitHub repo projection      | `workspaceId` / `workspaceId`                        | TTL + invalidation; pass-through on Worker    |
+| `repoFiles`            | checkout-free `RepoFiles` reads on a branch     | `<inst>:<owner>/<repo>@<branch>` / `f:`\|`d:` + path | TTL + head-sha probe; enabled on both facades |
+
+## Usage
+
+```ts
+import { createAppCaches } from '@cat-factory/caching'
+
+// Node facade (multi-node): inject the Redis-backed notification pair factory.
+const caches = createAppCaches({ notificationPairFactory, logger })
+
+// Cloudflare Worker: the module-scope host picks the coherent profile when the
+// CACHE_GENERATIONS Durable Object is bound, else the isolate-safe fallback
+// (runtimes/cloudflare/src/infrastructure/appCachesHost.ts).
+const caches = createAppCaches({
+  profile: ISOLATE_COHERENT_APP_CACHES_PROFILE,
+  generationStore, // DO-backed on the Worker; any CacheGenerationStore elsewhere
+  scheduleBackgroundWork, // adopt detached refreshes onto ctx.waitUntil
+})
+
+// A consuming service reads through its named handle…
+const catalog = await caches.fragmentCatalog.get(key, workspaceId, () => loadCatalog())
+// …and every write path invalidates after commit.
+await caches.fragmentCatalog.invalidateGroup(workspaceId)
+```

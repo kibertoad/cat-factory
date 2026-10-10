@@ -7,6 +7,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
 } from '../domain/types.js'
 import type { VcsConnectionRef, VcsRepoRef } from '../domain/vcs-types.js'
@@ -17,6 +18,9 @@ import type { VcsConnectionRef, VcsRepoRef } from '../domain/vcs-types.js'
 // until then they are reused as-is (their shapes are not GitHub-specific).
 import type {
   CommitFilesResult,
+  CreateReviewInput,
+  CreateReviewResult,
+  GitHubChangedFile,
   GitHubCodeSearchHit,
   GitHubIssueComment,
   GitHubIssueDetail,
@@ -27,13 +31,17 @@ import type {
   GitHubSubIssue,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
+  RepoTreeListing,
 } from './github-client.js'
 
 export type {
   CommitFilesResult,
+  GitHubChangedFile,
   GitHubCodeSearchHit,
   GitHubIssueComment,
   GitHubIssueDetail,
@@ -44,9 +52,12 @@ export type {
   GitHubSubIssue,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
+  RepoTreeListing,
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +101,13 @@ export interface VcsClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoContentEntry[]>
+  /**
+   * List a repository's ENTIRE tree on a ref recursively (in as few calls as the
+   * provider allows), so a caller can search files by path without an N+1 walk. Every
+   * entry carries its full, repo-root-relative `path` and `type`, and the listing says
+   * whether the provider truncated it. Empty listing for an empty repo / unknown ref.
+   */
+  listTree(connection: VcsConnectionRef, ref: VcsRepoRef, gitRef?: string): Promise<RepoTreeListing>
   /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
   getFileContent(
     connection: VcsConnectionRef,
@@ -131,12 +149,27 @@ export interface VcsClient {
     ref: VcsRepoRef,
     issueNumber: number,
   ): Promise<GitHubSubIssue[]>
-  /** Search issues visible to the connection by free text. */
+  /**
+   * Search issues visible to the connection by free text. `order` overrides the default
+   * ranking — `created-asc` sorts oldest-first (the issue-intake pickup order).
+   */
   searchIssues(
     connection: VcsConnectionRef,
     query: string,
     limit?: number,
+    order?: 'created-asc',
   ): Promise<GitHubIssueSearchHit[]>
+  /**
+   * Predicate-search ONE project's issues, every predicate pushed into the vendor request.
+   * Optional, and the counterpart of {@link VcsClient.searchIssues} for a vendor whose issue
+   * search carries no repository qualifier of its own: see the `GitHubClient` twin for why
+   * the scope is an argument rather than query text.
+   */
+  searchProjectIssues?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<ProjectIssuePage>
   /** Code-search files visible to the connection. */
   searchCode(
     connection: VcsConnectionRef,
@@ -187,6 +220,37 @@ export interface VcsClient {
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null>
+  /**
+   * A pull request by number — the projection plus its web `url` — or null when the repo has NO
+   * such PR. Any other read failure throws, so "does not exist" stays distinguishable from "could
+   * not be read" (the review-task create validation refuses only on the former). Optional.
+   */
+  getPullRequest?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null>
+  /** The source (head) branch of a PR, or null when the PR can't be read. Optional. */
+  getPullRequestHeadRef?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
+   * The head commit SHA of a PR, or null when the PR can't be read. The PR-deep-review captures
+   * it at review start and re-reads it at `post` time to detect a branch update (drift). Optional.
+   */
+  getPullRequestHeadSha?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /** List the files a PR changed (path + stats + patch), for PR-deep-review slicing. Optional. */
+  listChangedFiles?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]>
   /** List a PR's review threads with resolved state + anchor + comments. Optional. */
   listReviewThreads?(
     connection: VcsConnectionRef,
@@ -206,6 +270,16 @@ export interface VcsClient {
     ref: VcsRepoRef,
     threadId: string,
   ): Promise<void>
+  /**
+   * Publish a PR review's findings as individual inline comments + a summary (the deep-review
+   * "post" resolution), returning a per-comment {@link CreateReviewResult}. Optional.
+   */
+  createReview?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<CreateReviewResult>
 
   // ---- writes -------------------------------------------------------------
   createBranch(
@@ -228,17 +302,50 @@ export interface VcsClient {
   ): Promise<{ number: number; url: string }>
   /** Close an issue as resolved (idempotent from the caller's view). */
   closeIssue(connection: VcsConnectionRef, ref: VcsRepoRef, number: number): Promise<void>
+  /**
+   * Comment on an ISSUE by its issue number, as distinct from {@link VcsClient.comment}, which
+   * addresses the PR/MR conversation. See the {@link GitHubClient} counterpart for why the two
+   * cannot be one call: on GitLab they are different endpoints over different number spaces, so
+   * routing an issue comment through `comment` posts it onto an unrelated merge request.
+   */
+  commentOnIssue?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+    body: string,
+  ): Promise<void>
+  /**
+   * Apply a label to an issue, creating it in the project first where the vendor requires that.
+   * The in-progress mark for a provider with no workflow status of its own. Idempotent:
+   * re-applying a present label is not an error. Optional, like the {@link GitHubClient} twin.
+   */
+  applyIssueLabel?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void>
   openPullRequest(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest>
+  ): Promise<OpenedPullRequest>
   updatePullRequest(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     number: number,
     patch: { title?: string; body?: string; state?: 'open' | 'closed'; base?: string },
   ): Promise<GitHubPullRequest>
+  /**
+   * Read a PR's current description/body verbatim (`null` when it has none). Backs the
+   * engine's verification-report upsert, which splices a marker-delimited region into the
+   * body it just read — see the {@link GitHubClient} counterpart.
+   */
+  getPullRequestBody(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
   /** Read a PR's lazily-computed mergeability (the gate normalises the result). */
   getPullRequestMergeability(
     connection: VcsConnectionRef,

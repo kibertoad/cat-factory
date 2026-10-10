@@ -11,24 +11,49 @@
     { "path": "packages/sandbox-fixtures/tsconfig.build.json" },
     { "path": "packages/prompt-fragments/tsconfig.build.json" },
     { "path": "packages/kernel/tsconfig.build.json" },
+    { "path": "packages/caching/tsconfig.build.json" },
     { "path": "packages/consensus/tsconfig.build.json" },
     { "path": "packages/spend/tsconfig.build.json" },
     { "path": "packages/integrations/tsconfig.build.json" },
+    { "path": "packages/eks/tsconfig.build.json" },
     { "path": "packages/workspaces/tsconfig.build.json" },
     { "path": "packages/agents/tsconfig.build.json" },
     { "path": "packages/gates/tsconfig.build.json" },
+    // A DelegatedExecutor over GitHub Actions: the three problems every GitHub-hosted deployment
+    // hits when plugging its own executor into a step, solved once (correlation, conclusions, result).
+    { "path": "packages/delegation-github-actions/tsconfig.build.json" },
+    { "path": "packages/binary-generators/tsconfig.build.json" },
+    // The acceptance-suite building blocks. It depends on the published TypeScript SDK, which lives
+    // outside `backend/`, so its own reference reaches across into `sdk/typescript`.
+    { "path": "packages/acceptance-kit/tsconfig.build.json" },
     { "path": "packages/gitlab/tsconfig.build.json" },
     { "path": "packages/sandbox/tsconfig.build.json" },
     { "path": "packages/provider-bedrock/tsconfig.build.json" },
     { "path": "packages/provider-cloudflare/tsconfig.build.json" },
     { "path": "packages/provider-s3/tsconfig.build.json" },
     { "path": "packages/observability-langfuse/tsconfig.build.json" },
+    { "path": "packages/observability-otel/tsconfig.build.json" },
     { "path": "packages/orchestration/tsconfig.build.json" },
     { "path": "packages/server/tsconfig.build.json" },
     { "path": "internal/conformance/tsconfig.build.json" },
     { "path": "internal/example-custom-agent/tsconfig.build.json" },
+    { "path": "internal/example-delegated-executor/tsconfig.build.json" },
     { "path": "runtimes/cloudflare/tsconfig.build.json" },
     { "path": "runtimes/node/tsconfig.build.json" },
-    { "path": "runtimes/local/tsconfig.build.json" }
+    { "path": "runtimes/local/tsconfig.build.json" },
+    // The public-API TypeScript SDK. It lives outside `backend/` (beside its three sibling
+    // clients under `sdk/`) but is an ordinary published workspace package, so it belongs in the
+    // build graph like any other — a package reachable only transitively drops out the moment
+    // that reference goes away.
+    { "path": "../sdk/typescript/tsconfig.build.json" },
+    // The MCP facade over that same surface, for the same reason. It depends on the SDK above,
+    // so it is reachable transitively today — which is exactly the state that silently drops a
+    // package out of the build the day that dependency changes.
+    { "path": "../sdk/mcp/tsconfig.build.json" },
+    // The gatekeeper bindings over that same surface, for the same reason again.
+    { "path": "../sdk/gatekeeper/tsconfig.build.json" },
+    // The Gatekeeper Worker machinery a deployment installs. It is reachable through the bindings
+    // above only in the other direction, so without its own reference it would never be built.
+    { "path": "../sdk/gatekeeper-worker/tsconfig.build.json" }
   ]
 }

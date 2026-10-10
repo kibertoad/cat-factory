@@ -9,7 +9,7 @@ export interface JobStore {
   query(text: string, values?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }>
 }
 
-export type AdvanceJobState = 'live' | 'orphaned' | 'missing'
+type AdvanceJobState = 'live' | 'orphaned' | 'missing'
 
 export interface AdvanceJobStatus {
   state: AdvanceJobState

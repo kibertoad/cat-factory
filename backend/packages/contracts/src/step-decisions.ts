@@ -1,0 +1,322 @@
+import * as v from 'valibot'
+import { gateApprovalRecordSchema, gateApproverPolicySchema } from './gate-config.js'
+
+// ---------------------------------------------------------------------------
+// The HUMAN decisions a run's step can be holding: a question an agent raised, the review comments
+// a person or a quality companion left on an output, a companion's stored verdict, and the approval
+// gate a step parks on.
+//
+// Split out of `execution.ts` (which keeps the run/step runtime state that COMPOSES these), for the
+// same reason `gate.ts` and `human-verdict-gates.ts` are separate: they are one cohesive cluster,
+// they are what a decision-answering surface reads, and `execution.ts` is at its size budget. Both
+// files are re-exported from the package barrel, so consumers are unaffected. This file depends
+// only on `gate-config.ts` (the per-step gate configuration an approval gate snapshots when it is
+// raised), never on `execution.ts`: that one composes this, not the other way round.
+// ---------------------------------------------------------------------------
+
+/**
+ * A question an agent raised mid-work and would not answer unilaterally. Unlike an approval gate
+ * (which fires AFTER a step produced its output), resolving a decision RE-RUNS the same step with
+ * the choice folded in. `chosen` is null while the run is parked on it.
+ */
+export const decisionSchema = v.object({
+  id: v.string(),
+  question: v.string(),
+  options: v.array(v.string()),
+  chosen: v.nullable(v.string()),
+})
+export type Decision = v.InferOutput<typeof decisionSchema>
+
+/**
+ * How urgently a review comment must be acted on, worst first. The three levels are the ones a
+ * reviewer already writes as prose group labels ("Must fix" / "Should fix" / "Minor"), promoted to
+ * a field so the ENGINE can act on them rather than a human having to read the summary to find out
+ * what blocks the work.
+ *
+ * `blocker` is the load-bearing member and the only one with mechanical force: while a companion's
+ * latest verdict carries one, the producer is reworked and the run does not advance past the step,
+ * whatever the overall rating says (see {@link hasBlockingReviewComments} and kernel's
+ * `disposeCompanionVerdict`). A rating is one number over a whole deliverable, so a review that
+ * found something genuinely unshippable could still average above the bar and be waved through;
+ * that is the gap this closes. `major` and `minor` differ only in how a reader (and a reworking
+ * producer) should prioritise them.
+ */
+export const reviewCommentSeveritySchema = v.picklist(['blocker', 'major', 'minor'])
+export type ReviewCommentSeverity = v.InferOutput<typeof reviewCommentSeveritySchema>
+
+/** Rank of a {@link ReviewCommentSeverity}, for worst-first ordering and "at or above" tests. */
+export const REVIEW_COMMENT_SEVERITY_RANK: Record<ReviewCommentSeverity, number> = {
+  minor: 0,
+  major: 1,
+  blocker: 2,
+}
+
+const REVIEW_COMMENT_SEVERITY_SET: ReadonlySet<string> = new Set(
+  reviewCommentSeveritySchema.options,
+)
+
+/**
+ * Whether a value is still a member of the vocabulary — DERIVED from the picklist, so it cannot
+ * drift from it the way a hand-written second list would.
+ *
+ * The vocabulary is closed but PERSISTED (a verdict's `comments`, a gate's `comments`, a step's
+ * `rework.comments`), and the schema's `severity` fallback does NOT cover those reads: a stored run
+ * row is mapped onto {@link StepReviewComment} by the facade repositories, never re-parsed, so the
+ * fallback runs on the MODEL REPLY and nowhere else. A member retired from the union therefore goes
+ * on existing in saved rows with its type claiming otherwise, and every `Record<ReviewCommentSeverity, …>`
+ * over it is total against the TYPE and partial against the DATA. Narrow with this at the read
+ * boundary and render the negative case as the unrecognised level it is.
+ *
+ * A retired member here is NAMED rather than dropped or mapped onto a current one, for the reason
+ * `isBinaryModality` names its own: nothing knows which surviving level was meant, and the reader
+ * that meets a stale value first is the panel asking a person to act on the finding. What it must
+ * never do is claim an urgency nobody graded. It carries no mechanical force either (a stale value
+ * is not a `blocker`), so retiring a member means restating the stored rows in the same change;
+ * this is what keeps the interim honest instead of invisible.
+ */
+export function isReviewCommentSeverity(value: string): value is ReviewCommentSeverity {
+  return REVIEW_COMMENT_SEVERITY_SET.has(value)
+}
+
+/** Where an ungraded comment (and an unrecognised level) sorts: below every graded one. */
+export const UNGRADED_REVIEW_COMMENT_RANK = -1
+
+/**
+ * The rank a comment's severity sorts and compares at: {@link REVIEW_COMMENT_SEVERITY_RANK} while
+ * the vocabulary holds it, and {@link UNGRADED_REVIEW_COMMENT_RANK} when the comment carries no
+ * severity (a person's) or one this build no longer knows ({@link isReviewCommentSeverity}).
+ *
+ * The ONE place that lookup happens, so an unrecognised value cannot reach the `Record` raw and
+ * come back `undefined` — which sorts by `NaN` and compares false against every floor at once.
+ */
+export function reviewCommentSeverityRank(severity: string | undefined): number {
+  return severity !== undefined && isReviewCommentSeverity(severity)
+    ? REVIEW_COMMENT_SEVERITY_RANK[severity]
+    : UNGRADED_REVIEW_COMMENT_RANK
+}
+
+/**
+ * One GitHub-review-style comment left on a specific block or item of an agent's
+ * proposal — either by a human reviewing an approval gate, or by a quality
+ * companion (e.g. the Spec Reviewer) grading a structured output. `quotedSource`
+ * is the verbatim raw markdown of the block the comment targets (sliced from the
+ * proposal by its source line range), so a "request changes" re-run can quote the
+ * agent's own text back to it rather than a re-rendered approximation. It is
+ * OPTIONAL because a comment may instead anchor to a structured item via
+ * {@link anchorId} (e.g. a spec requirement / acceptance-criterion id), where the
+ * reviewed output is rendered as discrete items rather than free prose and there is
+ * no quoted source range — the shape a companion returns.
+ */
+export const stepReviewCommentSchema = v.object({
+  /**
+   * Verbatim raw-markdown source of the commented prose block. Optional: a comment
+   * may instead anchor to a structured item via {@link anchorId}, where there is no
+   * prose source to quote.
+   */
+  quotedSource: v.optional(v.string()),
+  /**
+   * 0-based source line range [start, end) of the commented prose block, for
+   * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
+   * item via {@link anchorId} (e.g. a spec requirement/acceptance-criterion id), where
+   * there is no prose line range.
+   */
+  srcStart: v.optional(v.number()),
+  srcEnd: v.optional(v.number()),
+  /**
+   * Stable id of the structured item the comment targets (e.g. a spec
+   * requirement/criterion id), when the reviewed output is rendered as structured
+   * items rather than free prose. Absent for prose-range comments.
+   */
+  anchorId: v.optional(v.string()),
+  /**
+   * How urgently this point must be acted on (see {@link reviewCommentSeveritySchema}).
+   *
+   * Absent on a HUMAN's comment, which carries no such grading: a person requesting changes on an
+   * approval gate is already holding the run, so there is nothing for a severity to decide. Absent
+   * too on a comment recorded before this field existed. An absent severity is therefore read as
+   * "ungraded", NEVER as a blocker and never as a nit — the one reader that acts on the value
+   * ({@link hasBlockingReviewComments}) asks only whether a `blocker` is present.
+   *
+   * An out-of-vocabulary value from a model reads as `major`, the same "unreadable severity reads
+   * as its safe default" rule the judge and PR-review findings use. `major` rather than either
+   * extreme on purpose: a typo must not manufacture a hard stop, and it must not silently retire
+   * one either, so it lands where the point still costs a rework round without holding the run.
+   *
+   * That fallback covers the MODEL REPLY, which is the only input this schema parses. A stored row
+   * is mapped onto the type by the facade repositories rather than re-parsed, so a value this build
+   * has retired reaches a reader with the fallback never having run: narrow those reads with
+   * {@link isReviewCommentSeverity} / {@link reviewCommentSeverityRank}.
+   */
+  severity: v.optional(v.fallback(reviewCommentSeveritySchema, 'major')),
+  /** The reviewer's note on this block / item. */
+  body: v.string(),
+})
+export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
+
+/**
+ * The comments that MUST be fixed before the work moves on, worst-first-ordered input aside.
+ *
+ * The pure rule, in contracts rather than in the engine, because both sides have to agree about
+ * it: the engine decides whether the run advances, and the SPA states on the parked step WHY it
+ * stopped and which points to look at. Restated on each side, the panel would eventually count
+ * findings the engine did not.
+ */
+export function blockingReviewComments(
+  comments: readonly StepReviewComment[] | undefined,
+): StepReviewComment[] {
+  return (comments ?? []).filter((comment) => comment.severity === 'blocker')
+}
+
+/** Whether any of `comments` is a `blocker` (see {@link blockingReviewComments}). */
+export function hasBlockingReviewComments(
+  comments: readonly StepReviewComment[] | undefined,
+): boolean {
+  return (comments ?? []).some((comment) => comment.severity === 'blocker')
+}
+
+/**
+ * Whether a review raised anything it did NOT call a nit.
+ *
+ * What separates a batch worth sending back to the producer from one that only had polish to offer:
+ * a `minor` is stated to the reviewer as "never worth holding anything for", so a rule that spent a
+ * producer re-run plus a re-grading call on one would make that instruction false (kernel's
+ * `disposeCompanionVerdict` is the reader).
+ *
+ * Everything that is not the nit level counts, which puts an UNGRADED comment and a level this build
+ * has retired on the acting side. Both are cases where the urgency is unknown rather than known to
+ * be low, and the cheap error is one wasted round against a point silently dropped.
+ */
+export function hasReviewCommentsBeyondNits(
+  comments: readonly StepReviewComment[] | undefined,
+): boolean {
+  return (comments ?? []).some((comment) => comment.severity !== 'minor')
+}
+
+/**
+ * The comments a review raised that it did NOT call a nit: the array behind
+ * {@link hasReviewCommentsBeyondNits}, paired with it exactly as
+ * {@link blockingReviewComments} is paired with {@link hasBlockingReviewComments}.
+ *
+ * Its reader is the one that carries findings PAST the round that raised them: a companion may
+ * pass the work with points still open, and the producer downstream is handed those points beside
+ * the output they qualify. Nits are dropped there for the reason the disposition rule drops them.
+ * The reviewer is told a `minor` is "never worth holding anything for", so spending a downstream
+ * agent's attention on one would make that instruction false.
+ *
+ * Same membership rule as the predicate, which is why they sit together: everything that is not
+ * the nit level counts, so an UNGRADED comment and a level this build has retired both travel. The
+ * urgency there is unknown rather than known to be low, and a point silently dropped is the
+ * expensive error.
+ */
+export function reviewCommentsBeyondNits(
+  comments: readonly StepReviewComment[] | undefined,
+): StepReviewComment[] {
+  return (comments ?? []).filter((comment) => comment.severity !== 'minor')
+}
+
+/** `comments` ordered worst severity first; an ungraded comment sorts last. Stable within a level. */
+export function bySeverityWorstFirst(comments: readonly StepReviewComment[]): StepReviewComment[] {
+  return [...comments].sort(
+    (a, b) => reviewCommentSeverityRank(b.severity) - reviewCommentSeverityRank(a.severity),
+  )
+}
+
+/**
+ * The standardized, stored verdict a quality companion produced for an output it
+ * graded — shared by every companion site (the pipeline companion step and the
+ * requirements-rework gate). The raw model response is {@link companionAssessmentSchema}
+ * (rating + summary + comments); this is the persisted, self-describing record of how
+ * that assessment was applied: the `rating`, the `threshold` it was judged against,
+ * whether it `passed`, and the `feedback` surfaced to the human / fed into a rework.
+ */
+export const companionVerdictSchema = v.object({
+  /** Overall quality of the graded output (0..1, higher = better). */
+  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** The quality bar the rating had to reach to pass. */
+  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** Whether the rating met the threshold. */
+  passed: v.boolean(),
+  /** The companion's challenge / justification (its assessment summary). */
+  feedback: v.string(),
+  /**
+   * The per-item challenges this round anchored (the assessment's own `comments`).
+   *
+   * Stored, rather than left to the summary alone, because the verdict list is what a LATER round
+   * is shown: a companion re-grades a document it has already reviewed, and the question worth
+   * spending a rework budget on is "was what I asked for done", which it cannot answer against a
+   * summary that named none of the specific asks. The producer is handed the same list for the
+   * mirror-image reason — so it cannot regress on a point raised two rounds ago and forgotten.
+   *
+   * Absent on a round that anchored nothing, and on every verdict written before this existed.
+   *
+   * Their SEVERITIES are what makes the verdict self-describing: `passed: false` on a round whose
+   * rating cleared `threshold` is only readable next to the `blocker` that held it (see
+   * {@link reviewCommentSeveritySchema}).
+   */
+  comments: v.optional(v.array(stepReviewCommentSchema)),
+})
+export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
+
+/**
+ * An approval gate's lifecycle: `pending` while awaiting the human; terminal
+ * `approved`/`rejected`; `changes_requested` re-runs the step. Named (rather
+ * than inlined in {@link stepApprovalSchema}) because the public decision
+ * projection reports the same states, and two picklists spelling one lifecycle
+ * is how the SPA and the API end up disagreeing about what `pending` means.
+ */
+export const stepApprovalStatusSchema = v.picklist([
+  'pending',
+  'approved',
+  'changes_requested',
+  'rejected',
+])
+export type StepApprovalStatus = v.InferOutput<typeof stepApprovalStatusSchema>
+
+/**
+ * A human approval gate raised after a step whose pipeline marked it
+ * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
+ * re-runs the same step on resolution), an approval gate fires once the step has
+ * already produced its `proposal`; approving advances the run (carrying the —
+ * possibly edited — proposal forward as context), requesting changes re-runs the
+ * same step with the human's `feedback` (+ per-block `comments`), and rejecting
+ * stops the run entirely (a terminal `rejected` failure the board can retry).
+ *
+ * It is also the engine's GENERIC parking mechanism, which is the trap for anything that reads it:
+ * a review gate, a brainstorm, a fork choice, a human-verdict gate, a follow-up triage and an
+ * interview all leave a `pending` approval here while being driven by their own verbs entirely.
+ * "This step has a pending approval" therefore does NOT mean "this is an approval gate"; the
+ * engine's `dedicatedParkSurface` is what tells the two apart.
+ */
+export const stepApprovalSchema = v.object({
+  /** Unique id of this gate; the durable run parks on it like a decision. */
+  id: v.string(),
+  /** `pending` while awaiting the human; terminal `approved`/`rejected`; `changes_requested` re-runs the step. */
+  status: stepApprovalStatusSchema,
+  /** The agent's output the human is reviewing (editable before approval). */
+  proposal: v.string(),
+  /** When changes were requested, the human's freeform guidance fed into the re-run. */
+  feedback: v.optional(v.string()),
+  /** When changes were requested, per-block review comments fed into the re-run. */
+  comments: v.optional(v.array(stepReviewCommentSchema)),
+  /**
+   * How many distinct approvals this gate needs before the run advances, SNAPSHOTTED from the
+   * step's `stepOptions.gateConfig.minApprovals` when the gate was raised. Absent ⇒ 1.
+   *
+   * Snapshotted rather than re-read on each approval for the reason a run's merge role is pinned
+   * at admission: the pipeline definition is editable while a run is parked on it, and a bar that
+   * moved under the people already counted toward it is a bar nobody agreed to.
+   */
+  requiredApprovals: v.optional(v.number()),
+  /**
+   * Who may resolve this gate, snapshotted alongside {@link requiredApprovals}. Absent ⇒ anyone
+   * the workspace RBAC gate admits to write. See {@link gateApproverPolicySchema}.
+   */
+  approverPolicy: v.optional(gateApproverPolicySchema),
+  /**
+   * The approvals recorded so far, one per distinct identity, oldest first. Reaching
+   * {@link requiredApprovals} entries is what flips `status` to `approved`; below it the gate
+   * stays `pending` and the run stays parked. Absent/empty on a gate nobody has cleared yet.
+   */
+  approvals: v.optional(v.array(gateApprovalRecordSchema)),
+})
+export type StepApproval = v.InferOutput<typeof stepApprovalSchema>

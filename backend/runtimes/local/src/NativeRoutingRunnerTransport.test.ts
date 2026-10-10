@@ -82,6 +82,7 @@ describe('NativeRoutingRunnerTransport', () => {
     )
     const view = await router.poll({ runId: 'never', jobId: 'dispatched' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/evicted or crashed/)
   })
 
@@ -113,12 +114,10 @@ describe('NativeRoutingRunnerTransport', () => {
 
   it('drops the remembered route when a poll reports the job evicted', async () => {
     const ambient = fakeTransport('ambient')
-    ambient.poll = vi.fn(
-      async (): Promise<RunnerJobView> => ({
-        state: 'failed',
-        error: 'Job not found (container evicted or crashed)',
-      }),
-    )
+    ambient.poll = vi.fn(async (): Promise<RunnerJobView> => ({
+      state: 'failed',
+      error: 'Job not found (container evicted or crashed)',
+    }))
     const managed = fakeTransport('managed')
     const router = new NativeRoutingRunnerTransport(
       () => ambient,

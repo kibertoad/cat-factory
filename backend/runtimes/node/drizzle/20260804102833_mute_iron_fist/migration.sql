@@ -1,0 +1,2 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "class_rules_by_role" text DEFAULT '{}' NOT NULL;--> statement-breakpoint
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "dry_run_roles" text DEFAULT '[]' NOT NULL;

@@ -1,7 +1,10 @@
 import type { AgentRunContext, FrontendConfig } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { userPromptFor } from '../catalog.js'
+import { defaultAgentKindRegistry } from '../kinds/registry.js'
 import { MOCK_AGENT_KIND, mockFrontendSection } from './mock.js'
+
+const registry = defaultAgentKindRegistry()
 
 function frontendConfig(overrides: Partial<FrontendConfig> = {}): FrontendConfig {
   return { backendBindings: [], ...overrides }
@@ -95,6 +98,7 @@ describe('mockFrontendSection', () => {
           bindings: [{ envVar: 'PUB_PAYMENTS_URL' }],
         },
       }),
+      registry,
     )
     expect(prompt).toContain('FRONTEND UI TEST')
     expect(prompt).toContain('`mocks/mappings/*.json`')

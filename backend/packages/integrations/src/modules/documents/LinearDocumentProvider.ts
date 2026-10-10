@@ -10,7 +10,9 @@ import { LinearGraphqlClient, linearAuthFromCredentials } from '../shared/linear
 import {
   LINEAR_DOCS_DESCRIPTOR,
   LINEAR_DOCUMENT_QUERY,
+  LINEAR_DOCUMENT_VERSION_QUERY,
   LINEAR_DOCUMENTS_SEARCH_QUERY,
+  linearDocumentVersion,
   mapLinearDocument,
   mapLinearDocumentSearch,
   parseLinearDocRef,
@@ -25,7 +27,7 @@ import {
 //
 // Runtime-neutral: it depends only on the kernel ports + the shared client (global
 // `fetch`, present on both runtimes), so the Cloudflare and Node facades compose
-// the SAME class (see CLAUDE.md "Keep the runtimes symmetric").
+// the SAME class (see AGENTS.md "Keep the runtimes symmetric").
 
 export class LinearDocumentProvider implements DocumentSourceProvider {
   readonly kind = 'linear' as const
@@ -46,12 +48,30 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<{
       document?: Parameters<typeof mapLinearDocument>[0]['document']
     }>(LINEAR_DOCUMENT_QUERY, { id: externalId })
     return mapLinearDocument(data)
+  }
+
+  /**
+   * The cheap version probe: query only the document's `updatedAt`, skipping the
+   * (potentially large) `content` field a full fetch downloads.
+   */
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string | null,
+  ): Promise<string> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const data = await client.query<{ document?: { updatedAt?: string | null } | null }>(
+      LINEAR_DOCUMENT_VERSION_QUERY,
+      { id: externalId },
+    )
+    return linearDocumentVersion(data)
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {

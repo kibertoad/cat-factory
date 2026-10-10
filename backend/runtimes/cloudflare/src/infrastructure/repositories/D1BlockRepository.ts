@@ -1,9 +1,15 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
-import type { Block } from '@cat-factory/contracts'
+import type { Block, BlockStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
-import { type BlockRow, blockInsertValues, blockPatchToColumns, rowToBlock } from './mappers'
+import {
+  type BlockRow,
+  blockCompletionStamp,
+  blockInsertValues,
+  blockPatchToColumns,
+  rowToBlock,
+} from './mappers'
 
 const blockContext = (row: BlockRow) => ({ table: 'blocks', id: row.id })
 
@@ -20,14 +26,6 @@ export class D1BlockRepository implements BlockRepository {
       .bind(workspaceId)
       .all<BlockRow>()
     // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
-    return tryDecodeRows(results, rowToBlock, blockContext)
-  }
-
-  async listByService(serviceId: string): Promise<Block[]> {
-    const { results } = await this.db
-      .prepare('SELECT * FROM blocks WHERE service_id = ? ORDER BY rowid')
-      .bind(serviceId)
-      .all<BlockRow>()
     return tryDecodeRows(results, rowToBlock, blockContext)
   }
 
@@ -50,6 +48,14 @@ export class D1BlockRepository implements BlockRepository {
     const row = await this.db
       .prepare('SELECT * FROM blocks WHERE workspace_id = ? AND id = ?')
       .bind(workspaceId, id)
+      .first<BlockRow>()
+    return row ? rowToBlock(row) : null
+  }
+
+  async getByExecution(workspaceId: string, executionId: string): Promise<Block | null> {
+    const row = await this.db
+      .prepare('SELECT * FROM blocks WHERE workspace_id = ? AND execution_id = ? LIMIT 1')
+      .bind(workspaceId, executionId)
       .first<BlockRow>()
     return row ? rowToBlock(row) : null
   }
@@ -108,12 +114,25 @@ export class D1BlockRepository implements BlockRepository {
 
   async update(workspaceId: string, id: string, patch: BlockPatch): Promise<void> {
     const set = blockPatchToColumns(patch)
-    const columns = Object.keys(set)
-    if (columns.length === 0) return
-    const assignments = columns.map((c) => `${c} = ?`).join(', ')
+    const assignments = Object.keys(set).map((c) => `${c} = ?`)
+    const binds = Object.values(set)
+
+    // `completed_at` is derived here rather than at the call sites that mark a task done
+    // (see `blockCompletionStamp`). `COALESCE` is what makes the stamp first-write-wins
+    // against a replaying durable driver: SQLite evaluates the right-hand side against the
+    // row's PRE-update value, so a second `done` write keeps the original date.
+    const stamp = blockCompletionStamp(patch, Date.now())
+    if (stamp.kind === 'stampIfUnset') {
+      assignments.push(`completed_at = COALESCE(completed_at, ?)`)
+      binds.push(stamp.at)
+    } else if (stamp.kind === 'clear') {
+      assignments.push(`completed_at = NULL`)
+    }
+
+    if (assignments.length === 0) return
     await this.db
-      .prepare(`UPDATE blocks SET ${assignments} WHERE workspace_id = ? AND id = ?`)
-      .bind(...Object.values(set), workspaceId, id)
+      .prepare(`UPDATE blocks SET ${assignments.join(', ')} WHERE workspace_id = ? AND id = ?`)
+      .bind(...binds, workspaceId, id)
       .run()
   }
 
@@ -128,6 +147,21 @@ export class D1BlockRepository implements BlockRepository {
       .run()
   }
 
+  async shiftChildPositions(
+    workspaceId: string,
+    parentId: string,
+    dx: number,
+    dy: number,
+  ): Promise<void> {
+    if (dx === 0 && dy === 0) return
+    await this.db
+      .prepare(
+        'UPDATE blocks SET pos_x = pos_x + ?, pos_y = pos_y + ? WHERE workspace_id = ? AND parent_id = ?',
+      )
+      .bind(dx, dy, workspaceId, parentId)
+      .run()
+  }
+
   async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return
     const placeholders = ids.map(() => '?').join(', ')
@@ -135,5 +169,49 @@ export class D1BlockRepository implements BlockRepository {
       .prepare(`DELETE FROM blocks WHERE workspace_id = ? AND id IN (${placeholders})`)
       .bind(workspaceId, ...ids)
       .run()
+  }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM blocks WHERE workspace_id = ? AND internal = 1 AND status = 'in_progress'",
+      )
+      .bind(workspaceId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
+  }
+
+  async listServiceTasks(
+    workspaceId: string,
+    frameId: string,
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<Block[]> {
+    // A `task` may only hang off a `frame` or a `module`, so "parented by the frame, or by a
+    // module of the frame" covers the whole task subtree — no recursion needed. The module leg is
+    // a SUBQUERY, not an id list bound from a prior read: D1 rejects any statement with more than
+    // 100 bound parameters, so an `IN (...)` over the modules would hard-fail on a service that
+    // accumulated ~96 of them. Both legs ride idx_blocks_parent (workspace_id, parent_id).
+    const where = [
+      `workspace_id = ?`,
+      `(parent_id = ? OR parent_id IN (
+          SELECT id FROM blocks WHERE workspace_id = ? AND parent_id = ? AND level = 'module'))`,
+      `level = 'task'`,
+      // `internal` is a nullable flag: an ordinary block stores NULL, an anchor stores 1.
+      `(internal IS NULL OR internal = 0)`,
+    ]
+    const binds: (string | number)[] = [workspaceId, frameId, workspaceId, frameId]
+    if (opts.status) {
+      where.push('status = ?')
+      binds.push(opts.status)
+    }
+    if (opts.afterId) {
+      where.push('id > ?')
+      binds.push(opts.afterId)
+    }
+    const { results } = await this.db
+      .prepare(`SELECT * FROM blocks WHERE ${where.join(' AND ')} ORDER BY id LIMIT ?`)
+      .bind(...binds, opts.limit)
+      .all<BlockRow>()
+    return tryDecodeRows(results, rowToBlock, blockContext)
   }
 }

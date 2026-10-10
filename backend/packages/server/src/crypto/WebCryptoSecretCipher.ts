@@ -1,4 +1,4 @@
-import type { SecretCipher } from '@cat-factory/kernel'
+import { type SecretCipher, SecretDecryptError } from '@cat-factory/kernel'
 import { base64url, base64urlToBytes } from './encoding.js'
 
 // Authenticated encryption of credentials at rest, on Web Crypto (AES-256-GCM)
@@ -57,13 +57,33 @@ export class WebCryptoSecretCipher implements SecretCipher {
   }
 
   async decrypt(envelope: string): Promise<string> {
-    const parts = envelope.split('.')
-    if (parts.length !== 4 || parts[0] !== VERSION) {
-      throw new Error('Invalid secret envelope')
+    // Parse the `v1.` envelope up front. A wrong structure OR an undecodable segment
+    // (base64url that `atob` rejects — a mid-envelope corruption) both mean the ciphertext
+    // never reaches decryption, so this is a corruption/format problem, not a key mismatch
+    // (that surfaces below as an authentication failure). Usual causes: a truncated database
+    // column, or a value copied between environments on a different encryption scheme/version.
+    // Both funnel through one actionable message (original kept as `cause`).
+    let salt: Uint8Array<ArrayBuffer>
+    let iv: Uint8Array<ArrayBuffer>
+    let ciphertext: Uint8Array<ArrayBuffer>
+    try {
+      const parts = envelope.split('.')
+      if (parts.length !== 4 || parts[0] !== VERSION) {
+        throw new Error(`unexpected envelope structure (${parts.length} segments)`)
+      }
+      salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
+      iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
+      ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
+    } catch (e) {
+      throw new SecretDecryptError(
+        'corrupt',
+        'A stored secret is not a valid encryption envelope: it is truncated or corrupted, ' +
+          'or was written by a different encryption scheme/version — most likely a truncated ' +
+          'database column, or a value copied between environments. Re-enter the affected ' +
+          'credential to re-seal it under the current ENCRYPTION_KEY.',
+        { cause: e },
+      )
     }
-    const salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
-    const iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
-    const ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
     const key = await this.deriveKey(salt)
     let plain: ArrayBuffer
     try {
@@ -74,8 +94,10 @@ export class WebCryptoSecretCipher implements SecretCipher {
       // credential sealed under the previous key is now unrecoverable. The raw Web Crypto
       // failure is the opaque DOMException "The operation failed for an operation-specific
       // reason", which surfaced verbatim as a run/request failure with no clue to the cause.
-      // Rethrow an actionable message (preserving the original as `cause`).
-      throw new Error(
+      // Rethrow an actionable, TYPED message (preserving the original as `cause`) so the
+      // D6.2 drift sweep can bucket this as `key-mismatch` without parsing the text.
+      throw new SecretDecryptError(
+        'key-mismatch',
         'A stored secret could not be decrypted: the encryption key (ENCRYPTION_KEY) does not ' +
           'match the one it was sealed under — it was most likely rotated or regenerated. ' +
           'Restore the original key, or re-enter the affected credential to re-seal it under the current key.',

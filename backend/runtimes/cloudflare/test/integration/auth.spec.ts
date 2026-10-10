@@ -42,6 +42,8 @@ const INFRASTRUCTURE = {
   },
   // The Worker serves only the self-contained UI-test container, so a browsable preview is off.
   frontendPreview: { supported: false },
+  // The hosted Worker facade governs the account-wide model-family policy.
+  modelPolicy: { supported: true },
 }
 
 function fetchWith(
@@ -64,6 +66,7 @@ function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
     name: 'The Octocat',
     avatarUrl: 'https://example.com/a.png',
     exp: Date.now() + 60_000,
+    gen: 0,
     ...overrides,
   }
   return new HmacSigner(SECRET).sign(payload)
@@ -76,7 +79,7 @@ describe('auth', () => {
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({
         enabled: false,
-        providers: { github: false, password: false, google: false },
+        providers: { github: false, password: false, google: false, sso: false },
         // Hosted PAT login is always offered for GitHub (a user pastes their own PAT); it is
         // independent of the OAuth app being configured.
         patLogin: { providers: ['github'] },
@@ -88,7 +91,7 @@ describe('auth', () => {
       const res = await fetchWith(authEnv, { path: '/auth/config' })
       expect(await res.json()).toEqual({
         enabled: true,
-        providers: { github: true, password: false, google: false },
+        providers: { github: true, password: false, google: false, sso: false },
         patLogin: { providers: ['github'] },
         infrastructure: INFRASTRUCTURE,
       })
@@ -103,7 +106,7 @@ describe('auth', () => {
       })
       expect(await res.json()).toEqual({
         enabled: true,
-        providers: { github: true, password: false, google: false },
+        providers: { github: true, password: false, google: false, sso: false },
         patLogin: { providers: ['github', 'gitlab'] },
         infrastructure: INFRASTRUCTURE,
       })
@@ -116,7 +119,7 @@ describe('auth', () => {
       )
       expect(await res.json()).toEqual({
         enabled: false,
-        providers: { github: false, password: false, google: false },
+        providers: { github: false, password: false, google: false, sso: false },
         patLogin: { providers: ['github'] },
         testingNoAuth: true,
         infrastructure: INFRASTRUCTURE,
@@ -158,6 +161,14 @@ describe('auth', () => {
     })
 
     it('allows a valid session', async () => {
+      // Seed the session user's `users` row (created at login in production) so the first
+      // authenticated request's `ensurePersonalAccount` satisfies the
+      // `accounts.owner_user_id → users(id)` foreign key. Idempotent.
+      await env.DB.prepare(
+        'INSERT OR IGNORE INTO users (id, name, email, avatar_url, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+        .bind('usr_42', 'octocat', null, null, Date.now())
+        .run()
       const token = await session()
       const res = await fetchWith(authEnv, { path: '/workspaces', token })
       expect(res.status).toBe(200)

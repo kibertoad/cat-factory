@@ -5,6 +5,8 @@ import type {
   FrontendDetectionNote,
   FrontendPackageManager,
 } from '@cat-factory/contracts'
+import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
+import { RepoReadError } from './repo-read-error.js'
 
 // ---------------------------------------------------------------------------
 // Frontend-config AUTO-DETECTION: a deterministic, pure-TS heuristic that proposes a NON-BINDING
@@ -18,8 +20,11 @@ import type {
 
 /**
  * The narrow slice of {@link RepoFiles} the detector needs — a {@link RepoFiles} satisfies it
- * structurally, and a test supplies an in-memory fake. Reads are best-effort: a missing path
- * yields `null` / `[]` (never throws), so the heuristics degrade gracefully on partial repos.
+ * structurally, and a test supplies an in-memory fake. A MISSING path yields `null`, so the
+ * heuristics degrade gracefully on partial repos. A genuine read fault (auth/permission revoked,
+ * rate limit, transport error) may THROW — the real reader throws on any non-404 status. The
+ * {@link BudgetedRepoScanner} tolerates that (records it, keeps scanning) so a truly unreadable
+ * repo surfaces an actionable error instead of a misleading "not a frontend repo"; see its `readFault`.
  */
 export interface FrontendRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
@@ -62,55 +67,8 @@ const MAX_BINDINGS = 12
 // Bounds the total reads so a pathological repo can't fan out unboundedly. Reads are intentionally
 // SEQUENTIAL (not batched): the budget short-circuit depends on deterministic in-order accounting.
 // A real frontend resolves in a handful of reads; the cap only bites on decoy-heavy repos, where
-// truncation is surfaced as a note (see `Scanner.exhausted`).
+// truncation is surfaced as a note (see `BudgetedRepoScanner.exhausted`).
 const READ_BUDGET = 60
-
-/** Join + normalize repo-relative path segments, collapsing `.`/`..`. */
-function joinPath(...parts: (string | undefined)[]): string {
-  const segs: string[] = []
-  for (const part of parts) {
-    if (!part) continue
-    for (const seg of part.split('/')) {
-      if (!seg || seg === '.') continue
-      if (seg === '..') segs.pop()
-      else segs.push(seg)
-    }
-  }
-  return segs.join('/')
-}
-
-/** Stateful repo reader with a hard read budget so detection can't fan out without bound. */
-class Scanner {
-  private reads = 0
-  private truncated = false
-  constructor(
-    private readonly reader: FrontendRepoReader,
-    private readonly gitRef: string | undefined,
-  ) {}
-
-  /**
-   * True only once a read was ACTUALLY skipped because the budget was hit — so a complete scan
-   * that happens to spend exactly the budget doesn't spuriously report itself truncated.
-   */
-  get exhausted(): boolean {
-    return this.truncated
-  }
-
-  async getFile(path: string): Promise<string | null> {
-    if (this.reads >= READ_BUDGET) {
-      this.truncated = true
-      return null
-    }
-    this.reads++
-    const file = await this.reader.getFile(path, this.gitRef)
-    return file?.content ?? null
-  }
-
-  /** True when a file exists (a cheap presence probe that still spends one read). */
-  async exists(path: string): Promise<boolean> {
-    return (await this.getFile(path)) !== null
-  }
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -180,7 +138,7 @@ interface FrameworkGuess {
  * the common case (`dist`); Nuxt/Next carry ambiguity (SSR vs static export) surfaced as a note.
  */
 async function detectFramework(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   pkg: PackageJson | null,
 ): Promise<FrameworkGuess | null> {
@@ -190,7 +148,7 @@ async function detectFramework(
   const anyConfig = async (bases: string[]) => {
     for (const base of bases) {
       for (const ext of ['ts', 'js', 'mjs', 'cjs']) {
-        if (await scanner.exists(joinPath(root, `${base}.${ext}`))) return true
+        if (await scanner.exists(joinRepoPath(root, `${base}.${ext}`))) return true
       }
     }
     return false
@@ -250,6 +208,66 @@ function emptyRecommendation(message: string): FrontendConfigRecommendation {
 }
 
 /**
+ * Serve mode from package.json scripts: a production-preview script ⇒ command mode, else the static
+ * default. Mutates `config`/`notes` in place.
+ */
+function applyServeMode(
+  pkg: PackageJson,
+  config: FrontendConfig,
+  notes: FrontendDetectionNote[],
+): void {
+  const serveScript = SERVE_SCRIPT_CANDIDATES.find((s) => s in pkg.scripts)
+  if (serveScript) {
+    config.serveMode = 'command'
+    config.serveScript = serveScript
+    notes.push({
+      field: 'serveMode',
+      confidence: 'low',
+      message: `Found a "${serveScript}" script ⇒ proposing Command serve mode. Static (serving the build output) is usually cheaper for a UI test — switch if the build is fully static.`,
+    })
+  } else {
+    config.serveMode = 'static'
+    notes.push({
+      field: 'serveMode',
+      confidence: 'high',
+      message: 'No preview/serve script found ⇒ serving the build output statically.',
+    })
+  }
+}
+
+/**
+ * Backend bindings: env-var NAMES from the dotenv examples matching a backend/base-URL suffix, added
+ * as mock bindings (capped at {@link MAX_BINDINGS}). Vite's `import.meta.env` usage isn't scanned
+ * (too broad) — the dotenv examples are the reliable, bounded source. Mutates `config`/`notes`.
+ */
+async function applyBackendBindings(
+  scanner: BudgetedRepoScanner,
+  root: string,
+  config: FrontendConfig,
+  notes: FrontendDetectionNote[],
+): Promise<void> {
+  const envNames = new Set<string>()
+  for (const file of ENV_EXAMPLE_FILES) {
+    const content = await scanner.getFile(joinRepoPath(root, file))
+    if (!content) continue
+    for (const key of parseEnvExampleKeys(content)) {
+      if (BACKEND_ENV_PATTERNS.some((re) => re.test(key))) envNames.add(key)
+    }
+  }
+  if (envNames.size > 0) {
+    const bindings: FrontendBackendBinding[] = [...envNames]
+      .slice(0, MAX_BINDINGS)
+      .map((envVar) => ({ envVar, source: { kind: 'mock' } }))
+    config.backendBindings = bindings
+    notes.push({
+      field: 'backendBindings',
+      confidence: 'low',
+      message: `Found ${bindings.length} backend URL env var(s) in a .env example, added as mock bindings. Point any at a service frame (the service under test).${envNames.size > bindings.length ? ` ${envNames.size - bindings.length} more were omitted.` : ''}`,
+    })
+  }
+}
+
+/**
  * Detect a recommended frontend config for a repo, read CHECKOUT-FREE. Reads are rooted at
  * `options.directory` (the frontend's subdirectory) or the repo root. Every inferred field carries
  * a confidence note; nothing found ⇒ a `detected: false` recommendation with an explanatory note.
@@ -259,15 +277,15 @@ export async function detectFrontendConfig(
   reader: FrontendRepoReader,
   options: DetectFrontendConfigOptions = {},
 ): Promise<FrontendConfigRecommendation> {
-  const root = joinPath(options.directory ?? '')
-  const scanner = new Scanner(reader, options.gitRef)
+  const root = joinRepoPath(options.directory ?? '')
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
   const notes: FrontendDetectionNote[] = []
   const config: FrontendConfig = { backendBindings: [] }
 
   // 1) Package manager from the lockfile (high confidence when one exists).
   let packageManager: FrontendPackageManager | undefined
   for (const { file, pm } of LOCKFILES) {
-    if (await scanner.exists(joinPath(root, file))) {
+    if (await scanner.exists(joinRepoPath(root, file))) {
       packageManager = pm
       config.packageManager = pm
       config.installCommand = INSTALL_COMMANDS[pm]
@@ -281,10 +299,13 @@ export async function detectFrontendConfig(
   }
 
   // 2) package.json drives the build/serve scripts + the framework guess.
-  const pkgContent = await scanner.getFile(joinPath(root, 'package.json'))
+  const pkgContent = await scanner.getFile(joinRepoPath(root, 'package.json'))
   const pkg = pkgContent ? parsePackageJson(pkgContent) : null
   if (!pkg && !packageManager) {
-    // No package.json AND no lockfile — this doesn't look like a frontend repo (at this root).
+    // No package.json AND no lockfile. If the reads couldn't actually reach the repo (a genuine
+    // fault, not a clean miss), surface that instead of "this doesn't look like a frontend repo".
+    if (scanner.readFault) throw new RepoReadError(scanner.readFault)
+    // Otherwise it genuinely doesn't look like a frontend repo (at this root).
     return emptyRecommendation(
       root
         ? `No package.json or lockfile was found under "${root}" — check the frontend directory, or configure the fields manually.`
@@ -343,47 +364,11 @@ export async function detectFrontendConfig(
   }
 
   // 5) Serve mode: a production-preview script ⇒ command mode, else the static default.
-  if (pkg) {
-    const serveScript = SERVE_SCRIPT_CANDIDATES.find((s) => s in pkg.scripts)
-    if (serveScript) {
-      config.serveMode = 'command'
-      config.serveScript = serveScript
-      notes.push({
-        field: 'serveMode',
-        confidence: 'low',
-        message: `Found a "${serveScript}" script ⇒ proposing Command serve mode. Static (serving the build output) is usually cheaper for a UI test — switch if the build is fully static.`,
-      })
-    } else {
-      config.serveMode = 'static'
-      notes.push({
-        field: 'serveMode',
-        confidence: 'high',
-        message: 'No preview/serve script found ⇒ serving the build output statically.',
-      })
-    }
-  }
+  if (pkg) applyServeMode(pkg, config, notes)
 
   // 6) Backend bindings: env-var NAMES from the dotenv examples + Vite's `import.meta.env` usage
   //    aren't scanned (too broad) — the dotenv examples are the reliable, bounded source.
-  const envNames = new Set<string>()
-  for (const file of ENV_EXAMPLE_FILES) {
-    const content = await scanner.getFile(joinPath(root, file))
-    if (!content) continue
-    for (const key of parseEnvExampleKeys(content)) {
-      if (BACKEND_ENV_PATTERNS.some((re) => re.test(key))) envNames.add(key)
-    }
-  }
-  if (envNames.size > 0) {
-    const bindings: FrontendBackendBinding[] = [...envNames]
-      .slice(0, MAX_BINDINGS)
-      .map((envVar) => ({ envVar, source: { kind: 'mock' } }))
-    config.backendBindings = bindings
-    notes.push({
-      field: 'backendBindings',
-      confidence: 'low',
-      message: `Found ${bindings.length} backend URL env var(s) in a .env example, added as mock bindings. Point any at a service frame (the service under test).${envNames.size > bindings.length ? ` ${envNames.size - bindings.length} more were omitted.` : ''}`,
-    })
-  }
+  await applyBackendBindings(scanner, root, config, notes)
 
   if (scanner.exhausted) {
     notes.push({

@@ -1,4 +1,4 @@
-import { redactSecrets } from './redact.js'
+import { redact } from './redact.js'
 import { log, type Logger } from './logger.js'
 
 // The async job lifecycle for the deploy container. A render+apply+rollout can take
@@ -230,18 +230,16 @@ function describeFailure(
 ): { message: string; cause: DeployFailureCause } {
   if (killReason === 'inactivity') {
     return {
-      message: redactSecrets(
-        `Deploy timed out: no progress for too long (hung in ${phase} phase).`,
-      ),
+      message: redact(`Deploy timed out: no progress for too long (hung in ${phase} phase).`),
       cause: 'inactivity-timeout',
     }
   }
   if (killReason === 'max-duration') {
     return {
-      message: redactSecrets('Deploy exceeded its maximum duration and was stopped.'),
+      message: redact('Deploy exceeded its maximum duration and was stopped.'),
       cause: 'max-duration',
     }
   }
   const raw = error instanceof Error ? error.message : String(error)
-  return { message: redactSecrets(raw), cause: 'deploy' }
+  return { message: redact(raw), cause: 'deploy' }
 }

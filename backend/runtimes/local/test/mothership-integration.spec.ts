@@ -6,8 +6,10 @@ import {
   type DrizzleDb,
   buildNodeContainer,
   createApp as createNodeApp,
+  schema,
 } from '@cat-factory/node-server'
 import { HmacSigner, TOKEN_AUDIENCE } from '@cat-factory/server'
+import { MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
 import type { Account, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type { Pipeline } from '@cat-factory/contracts'
 import { buildLocalContainer } from '../src/container.js'
@@ -84,6 +86,12 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
       email: null,
       aud: TOKEN_AUDIENCE.session,
       exp: Date.now() + 60_000,
+      // The session generation the bearer is valid under. `0` is what a freshly created `users`
+      // row carries, and the mothership's `verifySession` compares the claim against that row —
+      // a token carrying no claim at all is refused, which is what makes a revoked bearer stop
+      // working. The forged-session case below deliberately omits it: that one must fail on the
+      // signature, and it would be a weaker test if the missing claim could be what refused it.
+      gen: 0,
     })
   }
 
@@ -99,26 +107,32 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         ENVIRONMENT: 'test',
         ENCRYPTION_KEY,
         AUTH_SESSION_SECRET: SESSION_SECRET,
+        // Local mode requires HARNESS_SHARED_SECRET (the container inbound-auth secret).
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-shared-secret',
         LOCAL_MOTHERSHIP_URL: mothershipUrl,
         // Omitted (undefined) for the connect-flow test: the node boots inert and acquires its
         // token via `/local/mothership/connect` instead of a static env token.
         LOCAL_MOTHERSHIP_TOKEN: token,
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+        LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
+        LOCAL_MOTHERSHIP_TELEMETRY_DB: ':memory:',
         LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
         LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
-        // Opt the local node into the ephemeral-environment integration so `createCore` builds
-        // the provisioning service — that is what makes `AgentContextBuilder` actually resolve
-        // the block's environment per dispatch (`environmentRegistryRepository.getByBlock`,
-        // which returns null when none is provisioned) over the RPC. Without it the env repos
-        // route remotely but are never reached on the run path, so the remote `getByBlock` read
-        // would be unit-tested only, never exercised end-to-end. The mothership already enables
-        // it (MOTHERSHIP_ENV), so the remote registry actually wires the repo.
-        ENVIRONMENTS_ENABLED: 'true',
+        // The ephemeral-environment integration wires from ENCRYPTION_KEY (always set here),
+        // so `createCore` builds the provisioning service — that is what makes
+        // `AgentContextBuilder` actually resolve the block's environment per dispatch
+        // (`environmentRegistryRepository.getByBlock`, which returns null when none is
+        // provisioned) over the RPC. Without the key the env repos route remotely but are
+        // never reached on the run path, so the remote `getByBlock` read would be unit-tested
+        // only, never exercised end-to-end. The mothership assembles it the same way.
       },
       overrides: { agentExecutor: new FakeAgentExecutor() },
-      // The built-in default model preset routes every kind to a Cloudflare-served model, so the
-      // execution start guard needs that provider available to start a run (parity with the
-      // conformance harness). The FakeAgentExecutor still does the actual "work".
+      // Local mode's PRODUCTION default model preset is Claude (subscription-only, no Cloudflare
+      // flavour), but this test drives runs through the FakeAgentExecutor with only Cloudflare
+      // enabled, so pin the seeded default to Kimi K2.7 — a Cloudflare-served model the execution
+      // start guard accepts (parity with the conformance harness). The FakeAgentExecutor still
+      // does the actual "work"; real local mode keeps Claude.
+      defaultModelPresetId: MODEL_PRESET_SEED_IDS.kimi,
       cloudflareModelsEnabled: true,
     })
     const app = createNodeApp(container, { ...process.env, AUTH_DEV_OPEN: 'true' })
@@ -143,6 +157,20 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     // The mothership backend + its machine API, over real Postgres.
     const mothership = buildNodeContainer({ db, env: MOTHERSHIP_ENV })
     mothershipApp = createNodeApp(mothership, MOTHERSHIP_ENV)
+
+    // The accounts/memberships → users(id) FKs require the org owner (whom the machine token
+    // is signed for) to exist as a real users row. Production mints it at login; this test
+    // bypasses login, so seed it before createOrg. Idempotent.
+    await db
+      .insert(schema.users)
+      .values({
+        id: ORG_OWNER.id,
+        name: ORG_OWNER.name,
+        email: null,
+        avatar_url: null,
+        created_at: Date.now(),
+      })
+      .onConflictDoNothing()
 
     // Seed an ORG-owned workspace with the demo board directly on the mothership (dev-open has
     // no signed-in user, so go through the services, exactly like the conformance org helper).
@@ -212,9 +240,26 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     // A minimal one-step pipeline (created over the RPC: pipelineRepository.insert).
     const pipeline = await local.call<Pipeline>('POST', `/workspaces/${workspaceId}/pipelines`, {
       name: 'Code only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     expect(pipeline.status).toBe(201)
+
+    // Promote it as the board's in-app default (`pipelineRepository.setDefault` over the RPC). The
+    // round-trip is the point: this is the one pipeline write that touches a SECOND row — the
+    // incumbent it demotes — inside a store transaction a node with no `db` cannot run for itself,
+    // so an un-routed method here would throw the moment an operator named a default.
+    const promoted = await local.call<Pipeline>(
+      'PATCH',
+      `/workspaces/${workspaceId}/pipelines/${pipeline.body.id}/organize`,
+      { isDefault: true },
+    )
+    expect(promoted.status).toBe(200)
+    expect(promoted.body.isDefault).toBe(true)
+    const library = await local.call<Pipeline[]>('GET', `/workspaces/${workspaceId}/pipelines`)
+    expect(library.body.filter((row) => row.isDefault).map((row) => row.id)).toEqual([
+      pipeline.body.id,
+    ])
 
     // Start a run on a seeded task (executionRepository.upsert + blockRepository.update over RPC).
     // In mothership mode the durable SqliteWorkRunner drives it immediately, in-process, reading
@@ -278,6 +323,51 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
       `/workspaces/${workspaceId}/agent-runs/ex_does-not-exist/retry`,
     )
     expect(unknown.status).toBe(404)
+  })
+
+  it('serves the guided-review store over the remote persistence RPC', async () => {
+    // Guided review sessions are org state, allow-listed as remote. The registry the mothership
+    // serves reflects `CoreDependencies`, so a facade that left the repository out of its core
+    // deps would answer `unknown_method` here.
+    async function rpc(method: string, args: unknown[]) {
+      const res = await mothershipApp.fetch(
+        new Request('https://mothership.test/internal/persistence', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${machineToken}`,
+          },
+          body: JSON.stringify({ repo: 'guidedReviewRepository', method, args }),
+        }),
+      )
+      return { status: res.status, body: (await res.json()) as { ok: boolean; value?: unknown } }
+    }
+    const opened = await rpc('openSession', [
+      workspaceId,
+      {
+        id: 'grs_rpc',
+        provider: 'github',
+        repoId: '42',
+        owner: 'acme',
+        repo: 'shop',
+        prNumber: 7,
+        prTitle: 'Add checkout',
+        reviewedHeadSha: 'head1',
+        baseRef: 'main',
+        createdBy: ORG_OWNER.id,
+        createdByKind: 'user',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      'node:node_integration-test',
+    ])
+    expect(opened).toMatchObject({ status: 200, body: { ok: true, value: { id: 'grs_rpc' } } })
+    const listed = await rpc('listSessions', [workspaceId, {}])
+    expect(listed.body.ok).toBe(true)
+    expect((listed.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
+    const paged = await rpc('pageSessions', [workspaceId, {}, { limit: 10 }])
+    expect(paged.body.ok).toBe(true)
+    expect((paged.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
   })
 
   it('mints a machine token from a whitelisted session (scoped to the user accounts)', async () => {

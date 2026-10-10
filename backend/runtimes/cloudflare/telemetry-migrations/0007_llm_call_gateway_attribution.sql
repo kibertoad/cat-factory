@@ -1,0 +1,28 @@
+-- Record what a GATEWAY reports about a call, rather than only what we can derive about it.
+--
+-- Every cost figure this platform holds is derived: `(model, token classes) x` the spend price
+-- table. Against a direct vendor that is the best available answer. Against OpenRouter, a
+-- passthrough gateway reselling 300+ models at the underlying vendor's rates, it is a guess with
+-- two failure modes we could not see: a model outside the curated `openrouter:<slug>` rows falls
+-- back to one bare per-provider rate, and nothing anywhere said WHICH upstream served the call, so
+-- a slow or failing one is indistinguishable from the gateway itself.
+--
+-- With usage accounting requested (`usage: { include: true }`, set by `openRouterResolver` and by
+-- the container proxy's gateway params) OpenRouter answers both: its own ledger cost and the
+-- upstream's name.
+--
+-- Both columns are NULLABLE and NULL is the load-bearing value. A derived-cost row and a
+-- reported-cost row are different facts, so a 0 default would turn "this producer reports nothing"
+-- into "this call was free" on every pre-column row and on every direct-vendor row forever. Same
+-- rule for the upstream: absent means the `provider` column already names who served it.
+--
+-- `reported_cost_usd` is the vendor's own USD figure, stored unconverted. The USD→spend-currency
+-- rate is this platform's fixed assumption (`usdRateForSpendCurrency`); the reported figure is
+-- not, and folding one into the other would make the only measured number on the table carry an
+-- estimate inside it.
+--
+-- No backfill (nothing to backfill from) and no index: the table is pruned to
+-- LLM_CALL_METRICS_RETENTION_DAYS and every read of these two rides
+-- idx_llm_call_metrics_execution.
+ALTER TABLE llm_call_metrics ADD COLUMN reported_cost_usd REAL;
+ALTER TABLE llm_call_metrics ADD COLUMN upstream_provider TEXT;

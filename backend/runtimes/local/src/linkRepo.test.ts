@@ -1,33 +1,43 @@
 import { describe, expect, it, vi } from 'vitest'
 import { linkRepo } from './linkRepo.js'
 
-// A fake Drizzle insert chain capturing what `linkRepo` would persist, so the helper's
-// metadata fetch + row shaping are covered without a Postgres. The real inserts are
-// exercised against Postgres by the conformance/integration runs.
+// A fake Drizzle chain capturing what `linkRepo` would persist, so the helper's metadata
+// fetch + row shaping are covered without a Postgres. The real inserts are exercised
+// against Postgres by the conformance/integration runs. Every `select` returns [] so the
+// helper takes the "frame has no service yet" branch (insert a fresh service + mount) and
+// the account lookup falls back to null — the paths a fresh CLI link exercises.
 function fakeDb() {
-  const writes: { table: string; values: Record<string, unknown> }[] = []
+  const writes: { values: Record<string, unknown> }[] = []
   let deletes = 0
+  const insert = (_table: unknown) => ({
+    values(values: Record<string, unknown>) {
+      const record = () => {
+        writes.push({ values })
+        return Promise.resolve()
+      }
+      // Terminal `.values(...)` is awaitable; the conflict variants chain off it.
+      return Object.assign(record(), {
+        onConflictDoUpdate: record,
+        onConflictDoNothing: record,
+      })
+    },
+  })
   const db = {
-    insert(table: { tableName: string } | unknown) {
-      // drizzle pg tables expose their name via a symbol; tests don't need it precisely,
-      // so distinguish by the values' columns instead (installation vs repo).
-      void table
+    insert,
+    select(_cols?: unknown) {
       return {
-        values(values: Record<string, unknown>) {
+        from(_table: unknown) {
           return {
-            onConflictDoUpdate() {
-              writes.push({
-                table: 'installation_id' in values ? 'repo-or-install' : 'unknown',
-                values,
-              })
-              return Promise.resolve()
+            where(_predicate: unknown) {
+              return { limit: (_n: number) => Promise.resolve([] as unknown[]) }
             },
           }
         },
       }
     },
-    // linkRepo clears any stale installation row for the workspace (different id) before
-    // upserting; the fake just records that the delete chain ran.
+    update(_table: unknown) {
+      return { set: (_v: unknown) => ({ where: (_p: unknown) => Promise.resolve() }) }
+    },
     delete(_table: unknown) {
       return {
         where(_predicate: unknown) {
@@ -41,7 +51,7 @@ function fakeDb() {
 }
 
 describe('linkRepo', () => {
-  it('fetches repo metadata with the PAT and seeds installation + repo rows', async () => {
+  it('fetches repo metadata with the PAT and seeds installation + repo + service rows', async () => {
     const { db, writes, deletes } = fakeDb()
     const fetchImpl = vi.fn(
       async (_input: string | URL | Request, _init?: RequestInit) =>
@@ -80,14 +90,22 @@ describe('linkRepo', () => {
     expect(result.defaultBranch).toBe('trunk')
     expect(result.private).toBe(true)
 
-    // Two rows written: a github_installations row and a github_repos row, both keyed to
-    // the same synthetic installation id, with the repo linked to the frame block.
-    expect(writes).toHaveLength(2)
-    const repoRow = writes.map((w) => w.values).find((v) => 'block_id' in v)!
-    expect(repoRow.block_id).toBe('blk_frame')
+    // The repo row: no block_id link (removed), attributed as an `'app'`-reachable repo
+    // (local mode's shared PAT), keyed to the synthetic installation id.
+    const repoRow = writes.map((w) => w.values).find((v) => 'default_branch' in v && 'name' in v)!
+    expect('block_id' in repoRow).toBe(false)
+    expect(repoRow.linked_via).toBe('app')
     expect(repoRow.github_id).toBe(555)
     expect(repoRow.installation_id).toBe(result.installationId)
     expect(repoRow.private).toBe(1)
+
+    // The frame's Service is bound to the repo — the sole repo↔frame linkage.
+    const serviceRow = writes.map((w) => w.values).find((v) => 'frame_block_id' in v)!
+    expect(serviceRow.frame_block_id).toBe('blk_frame')
+    expect(serviceRow.repo_github_id).toBe(555)
+    expect(serviceRow.installation_id).toBe(result.installationId)
+
+    // The installation row.
     const installRow = writes.map((w) => w.values).find((v) => 'account_login' in v)!
     expect(installRow.workspace_id).toBe('ws_1')
     expect(installRow.account_login).toBe('acme')

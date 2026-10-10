@@ -57,6 +57,12 @@ export const brainstormSessionSchema = v.object({
   iteration: v.optional(v.number(), 1),
   /** The agent-pass budget, snapshotted from the task's merge preset when the session started. */
   maxIterations: v.optional(v.number(), 1),
+  /**
+   * Monotonic optimistic-concurrency token — see {@link requirementReviewSchema}'s `rev`. Every
+   * mutation re-reads, re-applies and `compareAndSwap`s on it, so concurrent edits to different
+   * options can't clobber each other. Absent reads as 0.
+   */
+  rev: v.optional(v.number(), 0),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

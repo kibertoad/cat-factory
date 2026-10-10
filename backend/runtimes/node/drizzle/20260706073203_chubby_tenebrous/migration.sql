@@ -1,0 +1,1 @@
+ALTER TABLE "shared_stacks" ADD COLUMN "prerequisites" text DEFAULT '[]' NOT NULL;

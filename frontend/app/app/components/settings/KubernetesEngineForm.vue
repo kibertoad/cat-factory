@@ -8,12 +8,16 @@
 // single-connection backend, which still carries the manifest source inline).
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import SecretInput from '~/components/common/SecretInput.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import type {
   EnvironmentHandlerView,
   InfraEngine,
   InfraHandlerConfig,
 } from '@cat-factory/contracts'
+import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
 // `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
@@ -21,6 +25,10 @@ import type { K3sSetupPrefill } from '~/stores/ui'
 // `as never` cast, so a wrong config shape is caught at the call site instead of server-side.
 type KubeHandlerConfig = Extract<InfraHandlerConfig, { engine: 'local-k3s' | 'remote-kubernetes' }>
 type KubeHandlerPayload = { config: KubeHandlerConfig; secrets: Record<string, string> }
+/** The engine connection block itself, read off the variant so it cannot drift from it. */
+type KubeEngineConfig = KubeHandlerConfig['kubernetes']
+/** How the environment URL is derived: its own discriminated union, keyed by `source`. */
+type KubeUrlSource = KubeEngineConfig['url']
 
 const props = defineProps<{
   /** `local-k3s` or `remote-kubernetes` — the engine this handler is registered under. */
@@ -45,12 +53,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-type UrlSource =
-  | 'ingressTemplate'
-  | 'ingressStatus'
-  | 'serviceStatus'
-  | 'gatewayStatus'
-  | 'httpRouteStatus'
+/** The `source` discriminants, read off the contract union: a source added there makes
+ *  `buildUrl`'s switch non-exhaustive rather than leaving this list quietly short. */
+type UrlSource = KubeUrlSource['source']
 
 const form = reactive({
   label: '',
@@ -61,6 +66,9 @@ const form = reactive({
   imageTemplate: '',
   urlSource: 'ingressTemplate' as UrlSource,
   hostTemplate: '',
+  // The ingress-template port, separate from `servicePort`: each url field belongs to exactly ONE
+  // variant, so a value entered for one source can never populate a config built for another.
+  ingressPort: '',
   ingressName: '',
   serviceName: '',
   servicePort: '',
@@ -72,6 +80,13 @@ const form = reactive({
   urlScheme: 'default' as 'default' | 'http' | 'https',
 })
 const apiToken = ref('')
+// Flag a bad paste ON THE FIELD, before Test is ever clicked. The guided CLI flow ends with
+// "copy this token out of your terminal", and a terminal wraps: a token copied across that wrap
+// carries an invisible newline that survives `.trim()` and can never become an `authorization`
+// header. Left to the probe it comes back as an opaque transport failure minutes later.
+// Destructured at the top level so the template auto-unwraps the refs (a ref nested in a plain
+// object is not unwrapped in a template, only a top-level one is).
+const { blocking: tokenBlocking, message: tokenProblem } = useServiceAccountTokenProblem(apiToken)
 
 const urlSourceItems = computed(() => [
   {
@@ -100,26 +115,43 @@ watch(
   (h) => {
     const cfg = h?.config
     if (!cfg || (cfg.engine !== 'local-k3s' && cfg.engine !== 'remote-kubernetes')) return
-    const k = cfg.kubernetes as Record<string, unknown>
-    form.label = typeof k.label === 'string' ? k.label : ''
-    form.apiServerUrl = typeof k.apiServerUrl === 'string' ? k.apiServerUrl : ''
-    form.caCertPem = typeof k.caCertPem === 'string' ? k.caCertPem : ''
+    // Narrowing `cfg.engine` above types `kubernetes` as the engine config, so these read the
+    // contract directly. They used to widen it to a `Record` and `typeof`-guard every field,
+    // which re-derived at runtime what the discriminated union already states.
+    const k = cfg.kubernetes
+    form.label = k.label
+    form.apiServerUrl = k.apiServerUrl
+    form.caCertPem = k.caCertPem ?? ''
     form.insecureSkipTlsVerify = k.insecureSkipTlsVerify === true
-    form.namespaceTemplate = typeof k.namespaceTemplate === 'string' ? k.namespaceTemplate : ''
-    form.imageTemplate = typeof k.imageTemplate === 'string' ? k.imageTemplate : ''
-    const url = k.url as Record<string, unknown> | undefined
-    const src = typeof url?.source === 'string' ? (url.source as UrlSource) : 'ingressTemplate'
-    form.urlSource = src
-    form.hostTemplate = typeof url?.hostTemplate === 'string' ? url.hostTemplate : ''
-    form.ingressName = typeof url?.ingressName === 'string' ? url.ingressName : ''
-    form.serviceName = typeof url?.serviceName === 'string' ? url.serviceName : ''
-    form.servicePort = typeof url?.port === 'number' ? String(url.port) : ''
-    form.gatewayName = typeof url?.gatewayName === 'string' ? url.gatewayName : ''
-    form.httpRouteName = typeof url?.httpRouteName === 'string' ? url.httpRouteName : ''
-    form.urlScheme = url?.scheme === 'http' || url?.scheme === 'https' ? url.scheme : 'default'
+    form.namespaceTemplate = k.namespaceTemplate ?? ''
+    form.imageTemplate = k.imageTemplate ?? ''
+    applyStoredUrlSource(k.url)
   },
   { immediate: true },
 )
+
+/**
+ * Prefill the URL-derivation fields from a stored config. Each field is read off the ONE variant
+ * that carries it, so a field belonging to a different `source` cannot silently populate the form.
+ *
+ * Typed as present with an on-union `source`, read as neither: both were true when the connect form
+ * admitted this config, and the value has been through storage since, which is exactly why the
+ * backend re-parses a stored `providerConfig` rather than asserting it, and this form is where an
+ * operator REPAIRS one that drifted. An unrecognised source falls back to the form's default,
+ * because `buildUrl` has no branch to build a config out of one.
+ */
+function applyStoredUrlSource(url: KubeUrlSource | undefined): void {
+  const source = url?.source
+  form.urlSource = isKubernetesUrlSource(source) ? source : 'ingressTemplate'
+  form.hostTemplate = url?.source === 'ingressTemplate' ? url.hostTemplate : ''
+  form.ingressPort = url?.source === 'ingressTemplate' && url.port != null ? String(url.port) : ''
+  form.ingressName = url?.source === 'ingressStatus' ? (url.ingressName ?? '') : ''
+  form.serviceName = url?.source === 'serviceStatus' ? url.serviceName : ''
+  form.servicePort = url?.source === 'serviceStatus' && url.port != null ? String(url.port) : ''
+  form.gatewayName = url?.source === 'gatewayStatus' ? (url.gatewayName ?? '') : ''
+  form.httpRouteName = url?.source === 'httpRouteStatus' ? (url.httpRouteName ?? '') : ''
+  form.urlScheme = url?.scheme ?? 'default'
+}
 
 // The local-cluster apiserver address every loopback distro (k3s / k3d / kind / minikube)
 // exposes by default — see `seedForEngine`.
@@ -163,22 +195,33 @@ watch(
     if (prefill.insecureSkipTlsVerify !== undefined)
       form.insecureSkipTlsVerify = prefill.insecureSkipTlsVerify
     if (prefill.namespaceTemplate.trim()) form.namespaceTemplate = prefill.namespaceTemplate.trim()
+    // An EMPTY host template is meaningful, not a gap the link forgot to fill: the CLI withholds
+    // it when it could not establish that the cluster serves an ingress-derived URL, and leaving
+    // the required field blank is what stops a URL nothing answers being saved.
     if (prefill.hostTemplate.trim()) {
       form.urlSource = 'ingressTemplate'
       form.hostTemplate = prefill.hostTemplate.trim()
+      // Carried alongside the template, never inside it: a local cluster publishing its controller
+      // on 18080 needs the port in the URL and NOT in the Ingress host the manifests declare.
+      form.ingressPort = prefill.ingressPort.trim()
     }
+    if (prefill.urlScheme) form.urlScheme = prefill.urlScheme
   },
   { immediate: true },
 )
 
-const servicePortValid = computed(() => {
-  const raw = form.servicePort.trim()
-  if (!raw) return true
-  const port = Number(raw)
+/** A blank port is valid (the scheme's default); anything typed has to be a real port number. */
+function portValid(raw: string): boolean {
+  const trimmed = raw.trim()
+  if (!trimmed) return true
+  const port = Number(trimmed)
   return Number.isInteger(port) && port >= 1 && port <= 65535
-})
+}
+const servicePortValid = computed(() => portValid(form.servicePort))
+const ingressPortValid = computed(() => portValid(form.ingressPort))
 const urlValid = computed(() => {
-  if (form.urlSource === 'ingressTemplate') return !!form.hostTemplate.trim()
+  if (form.urlSource === 'ingressTemplate')
+    return !!form.hostTemplate.trim() && ingressPortValid.value
   if (form.urlSource === 'serviceStatus') return !!form.serviceName.trim() && servicePortValid.value
   return true // ingressStatus / gatewayStatus / httpRouteStatus have no required field
 })
@@ -196,6 +239,7 @@ const canSave = computed(
     !!form.label.trim() &&
     !!form.apiServerUrl.trim() &&
     (tokenStored.value || !!apiToken.value.trim()) &&
+    !tokenBlocking.value &&
     urlValid.value,
 )
 
@@ -218,45 +262,94 @@ const connectBlockedReason = computed(() => {
     missing.push(t('settings.infrastructure.kubernetesEngine.serviceName'))
   if (missing.length)
     return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+  // Repeated from under the token field, so the disabled button is never left unexplained for a
+  // reader whose eye is on it rather than on the field above.
+  if (tokenBlocking.value) return tokenProblem.value
   return t('settings.infrastructure.kubernetesEngine.invalidPort')
 })
 
-function buildUrl(): Record<string, unknown> {
-  const url: Record<string, unknown> = { source: form.urlSource }
-  if (form.urlSource === 'ingressTemplate') {
-    url.hostTemplate = form.hostTemplate.trim()
-  } else if (form.urlSource === 'ingressStatus') {
-    if (form.ingressName.trim()) url.ingressName = form.ingressName.trim()
-  } else if (form.urlSource === 'serviceStatus') {
-    url.serviceName = form.serviceName.trim()
-    const port = Number(form.servicePort)
-    if (form.servicePort.trim() && Number.isInteger(port)) url.port = port
-  } else if (form.urlSource === 'gatewayStatus') {
-    if (form.gatewayName.trim()) url.gatewayName = form.gatewayName.trim()
-  } else {
-    if (form.httpRouteName.trim()) url.httpRouteName = form.httpRouteName.trim()
+/**
+ * The URL-derivation block, built as the contract's discriminated union rather than a `Record`.
+ * Each branch returns its OWN variant, so the fields a source carries are checked against that
+ * source: setting `hostTemplate` on a `serviceStatus` url stops compiling instead of shipping a
+ * config the backend rejects. `urlScheme` is the one field every variant shares, and the
+ * 'default' sentinel means "omit it and let the derivation decide".
+ */
+function buildUrl(): KubeUrlSource {
+  const scheme = form.urlScheme === 'default' ? {} : { scheme: form.urlScheme }
+  switch (form.urlSource) {
+    case 'ingressTemplate': {
+      const port = Number(form.ingressPort)
+      return {
+        source: 'ingressTemplate',
+        hostTemplate: form.hostTemplate.trim(),
+        ...(form.ingressPort.trim() && Number.isInteger(port) ? { port } : {}),
+        ...scheme,
+      }
+    }
+    case 'ingressStatus': {
+      const ingressName = form.ingressName.trim()
+      return { source: 'ingressStatus', ...(ingressName ? { ingressName } : {}), ...scheme }
+    }
+    case 'serviceStatus': {
+      const port = Number(form.servicePort)
+      return {
+        source: 'serviceStatus',
+        serviceName: form.serviceName.trim(),
+        ...(form.servicePort.trim() && Number.isInteger(port) ? { port } : {}),
+        ...scheme,
+      }
+    }
+    case 'gatewayStatus': {
+      const gatewayName = form.gatewayName.trim()
+      return { source: 'gatewayStatus', ...(gatewayName ? { gatewayName } : {}), ...scheme }
+    }
+    case 'httpRouteStatus': {
+      const httpRouteName = form.httpRouteName.trim()
+      return { source: 'httpRouteStatus', ...(httpRouteName ? { httpRouteName } : {}), ...scheme }
+    }
+    default:
+      return refuseUnknownUrlSource(form.urlSource)
   }
-  if (form.urlScheme !== 'default') url.scheme = form.urlScheme
-  return url
+}
+
+/**
+ * A `source` outside the contract union, which the switch above therefore cannot build.
+ *
+ * The parameter is `never`, so this keeps BOTH properties at once: a source added to the contract
+ * without a case above still fails the typecheck (the argument stops being `never`), while a value
+ * the union never had is refused at runtime instead of falling off the end of the switch. That end
+ * is what the `default` exists to close: it returned `undefined`, which `buildPayload` then sent as
+ * the config's `url` for the backend to reject as a missing block.
+ *
+ * Deliberately NOT mapped onto a current source. Nothing here knows which one was meant, and a
+ * guess would silently rewrite the operator's URL derivation to something they never picked.
+ */
+function refuseUnknownUrlSource(source: never): never {
+  throw new Error(`Unsupported Kubernetes URL source '${String(source)}'`)
 }
 
 function buildPayload(): KubeHandlerPayload {
-  const kubernetes: Record<string, unknown> = {
+  // Built as the contract type rather than assembled into a `Record` and asserted: an optional
+  // field is a conditional SPREAD, so a key the config does not declare (or a value of the
+  // wrong type) fails the build here instead of surfacing as a server-side validation refusal.
+  const caCertPem = form.caCertPem.trim()
+  const namespaceTemplate = form.namespaceTemplate.trim()
+  const imageTemplate = form.imageTemplate.trim()
+  const kubernetes: KubeEngineConfig = {
     label: form.label.trim(),
     apiServerUrl: form.apiServerUrl.trim(),
     url: buildUrl(),
+    ...(caCertPem ? { caCertPem } : {}),
+    ...(form.insecureSkipTlsVerify ? { insecureSkipTlsVerify: true } : {}),
+    ...(namespaceTemplate ? { namespaceTemplate } : {}),
+    ...(imageTemplate ? { imageTemplate } : {}),
   }
-  if (form.caCertPem.trim()) kubernetes.caCertPem = form.caCertPem.trim()
-  if (form.insecureSkipTlsVerify) kubernetes.insecureSkipTlsVerify = true
-  if (form.namespaceTemplate.trim()) kubernetes.namespaceTemplate = form.namespaceTemplate.trim()
-  if (form.imageTemplate.trim()) kubernetes.imageTemplate = form.imageTemplate.trim()
-  // One honest assertion at the boundary that actually builds the shape (the reactive form is
-  // dynamically assembled, then validated server-side); the emitted config flows typed onward.
   // OMIT the token when the field is blank so the backend preserves the saved one (a blank
   // secret means "keep it") — only a typed value is sent, and it replaces the stored token.
   const token = apiToken.value.trim()
   return {
-    config: { engine: props.engine, kubernetes } as unknown as KubeHandlerConfig,
+    config: { engine: props.engine, kubernetes },
     secrets: token ? { [KUBERNETES_ENV_TOKEN_SECRET_KEY]: token } : {},
   }
 }
@@ -269,24 +362,25 @@ function optional(label: string): string {
 // example (not prose), so it stays inline rather than in the i18n catalog — mirroring the format
 // examples the i18n rules keep out of message bodies.
 const AUTO_SETUP_COMMAND = 'cat-factory k3s'
+const { copy } = useCopyToClipboard()
 async function copyAutoSetupCommand() {
-  await navigator.clipboard?.writeText(AUTO_SETUP_COMMAND)
+  await copy(AUTO_SETUP_COMMAND)
 }
 </script>
 
 <template>
-  <div class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+  <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+    <SectionLabel as="p">
       {{
         connected
           ? t('settings.providerConnection.form.updateConfiguration')
           : t('settings.providerConnection.form.connect')
       }}
-    </p>
+    </SectionLabel>
 
     <p
       v-if="engine === 'local-k3s'"
-      class="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-[11px] text-sky-200"
+      class="rounded-md border border-app-info-500/30 bg-app-info-500/10 p-2 text-2xs text-app-info-200"
     >
       {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
     </p>
@@ -296,18 +390,18 @@ async function copyAutoSetupCommand() {
          (the token is pasted, never in the link). -->
     <div
       v-if="engine === 'local-k3s'"
-      class="rounded-md border border-slate-700 bg-slate-900/40 p-2 space-y-1.5"
+      class="rounded-md border border-muted bg-default/40 p-2 space-y-1.5"
     >
-      <p class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
-        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5 text-slate-400" />
+      <p class="flex items-center gap-1.5 text-2xs font-semibold text-toned">
+        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5 text-muted" />
         {{ t('settings.infrastructure.kubernetesEngine.autoSetup.title') }}
       </p>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('settings.infrastructure.kubernetesEngine.autoSetup.description') }}
       </p>
       <div class="flex items-center gap-1.5">
         <code
-          class="flex-1 rounded bg-slate-950 px-2 py-1 font-mono text-[11px] text-slate-200 select-all"
+          class="flex-1 rounded-sm bg-app-950 px-2 py-1 font-mono text-2xs text-default select-all"
         >
           {{ AUTO_SETUP_COMMAND }}
         </code>
@@ -345,15 +439,14 @@ async function copyAutoSetupCommand() {
       "
     >
       <template v-if="tokenStored" #hint>
-        <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+        <span class="inline-flex items-center gap-1 text-2xs text-app-success-400">
           <UIcon name="i-lucide-check-circle-2" class="h-3.5 w-3.5" />
           {{ t('settings.infrastructure.kubernetesEngine.tokenSaved') }}
         </span>
       </template>
-      <UInput
+      <SecretInput
         v-model="apiToken"
-        type="password"
-        class="font-mono"
+        class="w-full font-mono"
         autocomplete="off"
         :placeholder="
           tokenStored
@@ -361,6 +454,16 @@ async function copyAutoSetupCommand() {
             : undefined
         "
       />
+      <!-- Rose when the paste is impossible (blocks Test/Save), amber when it is only suspicious
+           and the operator may legitimately overrule it. -->
+      <p
+        v-if="tokenProblem"
+        class="mt-1 text-2xs"
+        :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
+        data-testid="service-account-token-problem"
+      >
+        {{ tokenProblem }}
+      </p>
     </UFormField>
 
     <!-- URL derivation: how the live environment URL is resolved once the service's
@@ -378,6 +481,24 @@ async function copyAutoSetupCommand() {
         v-model="form.hostTemplate"
         class="font-mono"
         placeholder="{{branch}}.preview.example.com"
+      />
+    </UFormField>
+
+    <!-- The host port the controller answers on, when it is not the scheme's default. Separate from
+         the template on purpose: the rendered template is also the Ingress `host` the manifests
+         declare, and Kubernetes rejects a `host` with a port in it. -->
+    <UFormField
+      v-if="form.urlSource === 'ingressTemplate'"
+      :label="optional(t('settings.infrastructure.kubernetesEngine.port'))"
+      :help="t('settings.infrastructure.kubernetesEngine.ingressPortHelp')"
+    >
+      <UInput
+        v-model="form.ingressPort"
+        type="number"
+        :min="1"
+        :max="65535"
+        class="font-mono"
+        placeholder="80"
       />
     </UFormField>
 
@@ -434,7 +555,7 @@ async function copyAutoSetupCommand() {
       <UInput
         v-model="form.namespaceTemplate"
         class="font-mono"
-        placeholder="cf-env-{{pullNumber}}"
+        placeholder="cf-env-pr{{pullNumber}}"
       />
     </UFormField>
 
@@ -464,7 +585,7 @@ async function copyAutoSetupCommand() {
       />
     </UFormField>
 
-    <div v-if="supportsTest" class="flex items-center gap-2">
+    <div v-if="supportsTest" class="space-y-1.5">
       <UButton
         color="neutral"
         variant="soft"
@@ -476,16 +597,11 @@ async function copyAutoSetupCommand() {
       >
         {{ t('settings.providerConnection.test.button') }}
       </UButton>
-      <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-      </span>
-      <span v-else-if="testResult" class="text-xs text-rose-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-      </span>
+      <ConnectionTestVerdict :result="testResult" />
     </div>
 
     <div class="flex items-center justify-end gap-3">
-      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-app-error-400">
         {{ connectBlockedReason }}
       </p>
       <UButton

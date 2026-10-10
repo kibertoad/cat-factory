@@ -5,23 +5,100 @@
 # changesets setup spanning FE + BE.
 # Pin the entire Vue runtime family to one version. Nuxt 4.4.8's transitive deps
 # pin parts of the graph to vue@3.5.38 while the frontend app's direct dependency
-# resolves to 3.5.39, so WITHOUT this two copies of Vue get bundled into the SPA.
+# resolves higher, so WITHOUT this two copies of Vue get bundled into the SPA.
 # Vue's render internals are module-level singletons (e.g. `renderSlot` reads
 # `currentRenderingInstance`), so the second copy sees a null instance and the app
 # crashes on boot with `Cannot read properties of null (reading 'ce')` — a blank
 # 500 page that hangs the whole e2e suite. One version = one singleton. Keep these
 # in lockstep with the `vue` range in frontend/app/package.json.
+# The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
+# family moves up together (3.5.43 today) to keep the single-singleton invariant while
+# satisfying the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
+# vue-router is likewise pinned to one version, for the same singleton reason: two copies
+# mean two route-matcher instances and a `useRoute()` that resolves against the wrong one.
+# Today Nuxt 4.6.0 wants `vue-router@^5.3.1`, `@nuxtjs/i18n` wants `^5.2.0`, and the
+# `@modular-vue/*` packages peer-require `^5.0.0`, so 5.4.0 satisfies every consumer. Keep
+# it in lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
-  vue: 3.5.39
-  '@vue/compiler-core': 3.5.39
-  '@vue/compiler-dom': 3.5.39
-  '@vue/compiler-sfc': 3.5.39
-  '@vue/compiler-ssr': 3.5.39
-  '@vue/reactivity': 3.5.39
-  '@vue/runtime-core': 3.5.39
-  '@vue/runtime-dom': 3.5.39
-  '@vue/server-renderer': 3.5.39
-  '@vue/shared': 3.5.39
+  vue: 3.5.43
+  vue-router: 5.4.0
+  # Single neutral engine: the @modular-vue/* bindings and @modular-frontend/journeys-engine
+  # each depend on @modular-frontend/core across overlapping-but-not-identical ranges, so
+  # without a pin pnpm can resolve more than one core copy into the tree (distinct type
+  # identities for panels/overlays/journey step metadata). 0.6.0 is an additive superset of
+  # the versions those ranges allow (it adds the defineModule literal-inference fix +
+  # JourneyDefinition.steps on top of the slice-4 panels / slice-5 overlays — nothing
+  # removed), so pinning one 0.6.0 keeps every core-owned type a single identity everywhere.
+  # Prune once every consumer's core range is bumped to include ^0.6.0 upstream.
+  '@modular-frontend/core': 0.6.0
+  # `esbuild` is an OPTIONAL PEER of vite (`^0.27.0 || ^0.28.0`) and a loose dep of tsx
+  # (`~0.28.0`) and nitropack (`^0.28.0`), while wrangler and @cloudflare/vitest-plugin
+  # both pin it EXACTLY at 0.28.1. Left to float, a re-resolve gives the peer slot the newer
+  # 0.28.2 and the tree gains a SECOND esbuild beside the exact-pinned one. That copy is not
+  # merely redundant: pnpm resolves an auto-installed peer without its own optionalDependencies,
+  # so the platform binary package (@esbuild/<os>-<arch>) is never installed and esbuild's own
+  # postinstall validation aborts the whole install with `Expected "0.28.2" but got "<other>"`.
+  # Pinning the three loose consumers to the version the Cloudflare toolchain pins keeps one
+  # esbuild across the vite/vitest/wrangler stack. Deliberately SCOPED, not top-level: drizzle-kit
+  # (`^0.25.10`), @intlify/bundle-utils (`^0.25.4`) and fontless (`^0.27.0`) declare narrower
+  # ranges a blanket override would force them out of. Move these in lockstep with whatever
+  # wrangler pins on the next bump.
+  'vite>esbuild': 0.28.1
+  'tsx>esbuild': 0.28.1
+  'nitropack>esbuild': 0.28.1
+  # `@cloudflare/workers-types` is a singleton for the same reason, one layer up: its version IS a
+  # workerd date (`5.20260815.1` <-> `workerd@1.20260815.1`), so a second copy means part of the
+  # tree typechecks against a runtime the rest of it does not run. Two slots float it even with
+  # every workspace declaration pinned exact, both of them OPTIONAL PEERS that `autoInstallPeers`
+  # fills from the newest published version: `drizzle-orm` (peer `>=4`, so anything satisfies it)
+  # and `wrangler` itself wherever a package declares wrangler without the types beside it, as
+  # deploy/frontend does. Left alone that quietly reintroduced 5.20260823.1 beside the pinned
+  # 5.20260815.1, eight days of API ahead of the workerd that runs.
+  #
+  # Top-level here, unlike wrangler below, and the difference is who the authority is. Wrangler's
+  # correct version belongs to `@cloudflare/vitest-plugin` and must be TRACKED, which an
+  # override cannot do. The types' correct version is DERIVED from the workerd we already resolve,
+  # and wrangler states it outright: its own peer range on this package is `^5.20260815.1`. So the
+  # override asserts a fact we own rather than freezing someone else's decision, and
+  # `scripts/check-cloudflare-runtime-pins.mjs` re-derives it from the lockfile every CI run.
+  # Move it with workerd, never on its own.
+  '@cloudflare/workers-types': 5.20261006.1
+  # NO `wrangler` override here, deliberately. The invariant is ONE wrangler (and through it one
+  # workerd + one miniflare) across the stack, because the Worker suite runs inside the pool's
+  # workerd and `wrangler deploy` ships wrangler's: two copies mean the runtime the tests prove is
+  # a different build from the runtime that ships, on top of ~100MB of duplicated platform binary
+  # per arch. A top-level override is the wrong tool for it: it OVERRIDES
+  # `@cloudflare/vitest-plugin`'s exact pin instead of TRACKING it, so the next pool bump is
+  # silently forced back to our number and the pool runs against a wrangler it never pinned. What
+  # holds the invariant instead is an exact `wrangler` version in each package that declares it,
+  # plus `scripts/check-cloudflare-runtime-pins.mjs`, which fails CI the moment the lockfile holds
+  # more than one wrangler/workerd/miniflare. So a pool bump arrives as a red guard naming the
+  # version to move to, rather than as a pin nothing re-examines.
+  # Babel 7 and Babel 8 coexist on purpose: Nuxt's build graph is on `@babel/core@7`, while
+  # Stryker 10's instrumenter moved to `@babel/core@8`. The three plugins below are OPTIONAL
+  # PEERS of the Nuxt packages, so pnpm fills those slots from whatever version of that name is
+  # already in the tree — which, once Stryker pulled the 8.x line in, paired a Babel 8 plugin
+  # with Babel 7 core. That is not merely a peer warning: a Babel 8 plugin's `declare()` asserts
+  # the core major and THROWS when loaded by 7, so the frontend build would break the moment Vue
+  # JSX or decorators are enabled. Scoping the names back to the 7.x line for their Nuxt parents
+  # restores the pairing Nuxt resolved with before Stryker 10 and leaves Stryker's own 8.x copies
+  # untouched. Consequence to know: `@babel/plugin-proposal-decorators` is now only in the tree
+  # on the 8.x line, so the Nuxt slot for it resolves to nothing rather than to 7.29.7. That is
+  # the supported absent-optional-peer path (Nuxt loads it only for `decorators: true`, which
+  # this SPA does not set) and is strictly safer than a cross-major pairing that throws on load.
+  '@nuxt/vite-builder>@babel/plugin-proposal-decorators': 7.29.7
+  '@nuxt/vite-builder>@babel/plugin-syntax-jsx': 7.29.7
+  '@nuxt/nitro-server>@babel/plugin-proposal-decorators': 7.29.7
+  '@nuxt/nitro-server>@babel/plugin-syntax-typescript': 7.29.7
+  '@vue/compiler-core': 3.5.43
+  '@vue/compiler-dom': 3.5.43
+  '@vue/compiler-sfc': 3.5.43
+  '@vue/compiler-ssr': 3.5.43
+  '@vue/reactivity': 3.5.43
+  '@vue/runtime-core': 3.5.43
+  '@vue/runtime-dom': 3.5.43
+  '@vue/server-renderer': 3.5.43
+  '@vue/shared': 3.5.43
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'
@@ -31,6 +108,17 @@ packages:
   - 'deploy/frontend'
   - 'deploy/node'
   - 'deploy/local'
+  - 'deploy/gatekeeper'
+  # The four public-API SDK clients live together under `sdk/`; only the TypeScript one is an
+  # npm package, so it is the only client member here. Python/Go/Java are built and published by
+  # their own toolchains (see sdk/README.md). `sdk/mcp` is not a fifth client: it is the MCP
+  # facade over the published operations, built on the TypeScript one.
+  - 'sdk/typescript'
+  - 'sdk/mcp'
+  - 'sdk/gatekeeper'
+  # Not a projection like its two neighbours: the hand-written Gatekeeper Worker machinery a
+  # deployment installs, beside the generated table it enforces policy with.
+  - 'sdk/gatekeeper-worker'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
@@ -38,11 +126,33 @@ allowBuilds:
   sharp: true
   vue-demi: true
   workerd: true
-# The `minimumReleaseAge` supply-chain gate refuses registry packages younger
-# than the configured window. Only ever list wildcard namespaces WE OWN here —
-# our own freshly-published packages are trusted and must never be age-gated.
-# Do NOT add per-version exceptions for third-party packages: when upgrading,
-# pick the latest version that already satisfies the release-age rule instead.
+# The supply-chain gate: a package published inside this window is refused, so a compromised
+# release has to survive a day of public scrutiny before it can reach an install here. 1440
+# minutes = 24 hours.
+#
+# It MUST be set explicitly. pnpm has no default for it (`maximumPublishedBy` is derived as
+# `opts.minimumReleaseAge ? ... : undefined`), so an unset value is not a shorter window, it is NO
+# window: every version resolves the instant it is published and `minimumReleaseAgeExclude` below
+# governs nothing. That is not hypothetical, it is what this repo shipped until 2026-08-25: the
+# exclude list was maintained, documented and argued over for months while the gate it excludes
+# from was never turned on. Nothing else enforces the window, so do not delete this line to
+# "unblock" an install: the fix for a blocked install is to wait, or to pick an older version.
+minimumReleaseAge: 1440
+# Only ever list packages WE OWN here (wildcard namespaces, or an unscoped package published by
+# the same maintainer as this repo, e.g. layered-loader): our own freshly-published packages are
+# trusted and must never be age-gated. Do NOT add per-version exceptions for third-party packages.
+# When upgrading, pick the latest version that already satisfies the release-age rule instead: an
+# exception buys hours and costs the whole property the gate exists for, on exactly the package
+# someone felt strongly enough about to bypass it.
+#
+# Two prior entries have been pruned, both self-healing exactly as their notes promised: the
+# `nuxt` / `@nuxt/*` exception (Nuxt 4.5.x aged past the window) and `pg-boss@12.28.0`, taken ~20
+# minutes short of the window in the 2026-08-25 refresh. There are now zero third-party entries,
+# which is the only correct number.
 minimumReleaseAgeExclude:
   - '@cat-factory/*'
   - '@toad-contracts/*'
+  - '@modular-vue/*'
+  - '@modular-frontend/*'
+  - layered-loader
+  - toad-scheduler

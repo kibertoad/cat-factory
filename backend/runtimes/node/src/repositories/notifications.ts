@@ -2,6 +2,8 @@ import type {
   Notification,
   NotificationPayload,
   NotificationRepository,
+  NotificationSettingsRecord,
+  NotificationSettingsRepository,
   NotificationType,
 } from '@cat-factory/kernel'
 import {
@@ -10,9 +12,9 @@ import {
   notificationTypeSchema,
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
-import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { notifications } from '../db/schema.js'
+import { notificationSettings, notifications } from '../db/schema.js'
 
 // Drizzle/Postgres implementation of the notifications port (the Postgres mirror of
 // the Worker's `D1NotificationRepository`, migration 0024). Closes the Node parity
@@ -71,6 +73,21 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     return rows.map(rowToNotification)
   }
 
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          eq(notifications.block_id, blockId),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .orderBy(desc(notifications.created_at))
+    return rows.map(rowToNotification)
+  }
+
   async findOpenByBlock(
     workspaceId: string,
     blockId: string,
@@ -90,6 +107,82 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       .orderBy(desc(notifications.created_at))
       .limit(1)
     return rows[0] ? rowToNotification(rows[0]) : null
+  }
+
+  async findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          isNull(notifications.block_id),
+          eq(notifications.type, type),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .orderBy(desc(notifications.created_at))
+      .limit(1)
+    return rows[0] ? rowToNotification(rows[0]) : null
+  }
+
+  async listOpenByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            inArray(notifications.workspace_id, workspaceIds.slice(i, i + 500)),
+            isNull(notifications.block_id),
+            eq(notifications.type, type),
+            eq(notifications.status, 'open'),
+          ),
+        )
+        // Newest-first so the first row per workspace matches `findOpenByType`.
+        .orderBy(desc(notifications.created_at))
+      for (const row of rows) {
+        if (!out.has(row.workspace_id)) out.set(row.workspace_id, rowToNotification(row))
+      }
+    }
+    return out
+  }
+
+  async listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      // `DISTINCT ON` keeps the reduction in SQL: one row per workspace comes back, where
+      // selecting every card and dropping all but the first in JS would read the workspace's
+      // whole `budget_threshold` history on every sweep (a dismissed card is never re-used by
+      // `raise`, so the rows accumulate) to use one of them.
+      const rows = await this.db
+        .selectDistinctOn([notifications.workspace_id])
+        .from(notifications)
+        .where(
+          and(
+            inArray(notifications.workspace_id, workspaceIds.slice(i, i + 500)),
+            isNull(notifications.block_id),
+            eq(notifications.type, type),
+          ),
+        )
+        // Newest-first, with NO status predicate: a dismissed card is still the last thing the
+        // sweep told this workspace, which is exactly what the caller is asking about. `id`
+        // breaks a tie on `created_at`, so two cards minted in the same millisecond resolve to
+        // the same one on every pass and on every replica (an arbitrary winner would make the
+        // caller's "has this already been notified?" answer flap).
+        .orderBy(notifications.workspace_id, desc(notifications.created_at), desc(notifications.id))
+      for (const row of rows) out.set(row.workspace_id, rowToNotification(row))
+    }
+    return out
   }
 
   async upsert(workspaceId: string, notification: Notification): Promise<void> {
@@ -126,6 +219,29 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       })
   }
 
+  async claimForAction(
+    workspaceId: string,
+    id: string,
+    resolvedAt: number,
+  ): Promise<Notification | null> {
+    // Atomic act-claim: flip `open` → `acted` in one conditional UPDATE and return the row.
+    // Only the writer that matched `status = 'open'` gets a row back — a concurrent act finds
+    // the card already non-open and is handed null, so the side effect fires exactly once.
+    // Mirrors the D1 twin.
+    const rows = await this.db
+      .update(notifications)
+      .set({ status: 'acted', resolved_at: resolvedAt })
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          eq(notifications.id, id),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .returning()
+    return rows[0] ? rowToNotification(rows[0]) : null
+  }
+
   async escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]> {
     // One statement flips every overdue open card and returns the rows for re-delivery —
     // the sweep never loops per-row upserts. Mirrors the D1 twin.
@@ -142,6 +258,46 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       )
       .returning()
     return rows.map(rowToNotification)
+  }
+
+  async dismissOpenByType(
+    workspaceId: string,
+    type: NotificationType,
+    resolvedAt: number,
+  ): Promise<Notification[]> {
+    // One statement settles the whole set, so a workspace that raced two open block-less cards
+    // of this type (NULL block_id is exempt from the partial unique index, so `raise`'s
+    // read-before-write can still stack them) leaves none behind. Mirrors the D1 twin.
+    const rows = await this.db
+      .update(notifications)
+      .set({ status: 'dismissed', resolved_at: resolvedAt })
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          isNull(notifications.block_id),
+          eq(notifications.type, type),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .returning()
+    return rows.map(rowToNotification)
+  }
+
+  async deleteResolvedOlderThan(cutoff: number): Promise<number> {
+    // Retention prune: drop terminal (acted/dismissed) cards resolved at or before the
+    // cutoff. Open cards are the actionable inbox and are never eligible; a null
+    // resolved_at can't be windowed, so it's kept. Mirrors the D1 twin.
+    const deleted = await this.db
+      .delete(notifications)
+      .where(
+        and(
+          ne(notifications.status, 'open'),
+          isNotNull(notifications.resolved_at),
+          lte(notifications.resolved_at, cutoff),
+        ),
+      )
+      .returning({ id: notifications.id })
+    return deleted.length
   }
 
   async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {
@@ -182,5 +338,38 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       })
       .returning()
     return rows[0] ? rowToNotification(rows[0]) : notification
+  }
+}
+
+// Drizzle/Postgres mirror of `D1NotificationSettingsRepository` (migration 0088): the
+// notification manager's per-workspace routing overrides. Behaviourally identical to the D1
+// repo so the cross-runtime conformance suite asserts the same routing on both stores.
+export class DrizzleNotificationSettingsRepository implements NotificationSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByWorkspace(workspaceId: string): Promise<NotificationSettingsRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(notificationSettings)
+      .where(eq(notificationSettings.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return { workspaceId: row.workspace_id, matrixJson: row.matrix, updatedAt: row.updated_at }
+  }
+
+  async upsert(record: NotificationSettingsRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      matrix: record.matrixJson,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(notificationSettings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [notificationSettings.workspace_id],
+        set: { matrix: values.matrix, updated_at: values.updated_at },
+      })
   }
 }

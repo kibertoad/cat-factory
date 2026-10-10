@@ -25,6 +25,7 @@
 // a silent degradation back to the base branch is observable in telemetry rather than
 // invisible.
 
+import { describeError } from '@cat-factory/kernel'
 import { logger } from '../observability/logger.js'
 
 export interface EnsureWorkBranchInput {
@@ -81,10 +82,10 @@ export async function ensureWorkBranchViaRest(input: EnsureWorkBranchInput): Pro
     })
     if (probeRes.ok) return true
     if (probeRes.status !== 404) {
-      logger.warn(
-        { branch: input.branch, status: probeRes.status },
-        'ensureWorkBranch: unexpected status probing work branch',
-      )
+      logger.warn('ensureWorkBranch: unexpected status probing work branch', {
+        branch: input.branch,
+        status: probeRes.status,
+      })
     }
 
     // Not present. Read-only callers stop here (a missing branch ⇒ use base); only writers
@@ -96,10 +97,10 @@ export async function ensureWorkBranchViaRest(input: EnsureWorkBranchInput): Pro
       headers: GITHUB_HEADERS(input.token),
     })
     if (!baseRes.ok) {
-      logger.warn(
-        { baseBranch: input.baseBranch, status: baseRes.status },
-        'ensureWorkBranch: could not resolve base branch tip',
-      )
+      logger.warn('ensureWorkBranch: could not resolve base branch tip', {
+        baseBranch: input.baseBranch,
+        status: baseRes.status,
+      })
       return false
     }
     const baseJson = (await baseRes.json().catch(() => null)) as {
@@ -107,7 +108,7 @@ export async function ensureWorkBranchViaRest(input: EnsureWorkBranchInput): Pro
     } | null
     const sha = baseJson?.object?.sha
     if (!sha) {
-      logger.warn({ baseBranch: input.baseBranch }, 'ensureWorkBranch: base ref had no sha')
+      logger.warn('ensureWorkBranch: base ref had no sha', { baseBranch: input.baseBranch })
       return false
     }
 
@@ -118,13 +119,16 @@ export async function ensureWorkBranchViaRest(input: EnsureWorkBranchInput): Pro
     })
     // 201 created, or 422 "Reference already exists" (a race) — both mean it is present.
     if (createRes.ok || createRes.status === 422) return true
-    logger.warn(
-      { branch: input.branch, status: createRes.status },
-      'ensureWorkBranch: failed to create work branch',
-    )
+    logger.warn('ensureWorkBranch: failed to create work branch', {
+      branch: input.branch,
+      status: createRes.status,
+    })
     return false
   } catch (err) {
-    logger.warn({ branch: input.branch, err }, 'ensureWorkBranch: request failed')
+    logger.warn('ensureWorkBranch: request failed', {
+      branch: input.branch,
+      ...describeError(err),
+    })
     return false
   }
 }

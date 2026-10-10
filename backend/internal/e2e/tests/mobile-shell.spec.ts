@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { LIVE_TIMEOUT, taskCard } from './helpers'
+import { LIVE_TIMEOUT, selectTask, taskCard } from './helpers'
 
 // The responsive shell on a phone-sized viewport. The board chrome (sidebar, toolbar,
 // inspector) is desktop-first by default; below `lg` (1024px) the sidebar becomes an
@@ -25,20 +25,31 @@ test.describe('mobile responsive shell', () => {
     // Open the drawer → the backdrop mounts and a nav action inside is reachable.
     await hamburger.click()
     await expect(page.getByTestId('sidebar-backdrop')).toBeVisible()
-    await expect(page.getByTestId('sidebar').getByText('Build a pipeline')).toBeVisible()
+    // A basic-mode destination, so this holds at the shipped default tier. It also proves the
+    // drawer is never RAILED: the collapsed rail is lg-only, so below lg the labels render.
+    await expect(page.getByTestId('sidebar').getByText('Workspace settings')).toBeVisible()
 
-    // Tapping the backdrop closes the drawer (backdrop unmounts).
-    await page.getByTestId('sidebar-backdrop').click()
+    // Tapping the backdrop closes the drawer (backdrop unmounts). Tap the dimmed strip BESIDE the
+    // panel, which is the only part of the backdrop a user can actually reach — and the reason
+    // this needs a position at all: the backdrop is `fixed inset-0`, so Playwright's default click
+    // point is its centre (x≈195 on this 390px viewport), which sits INSIDE the 256px-wide drawer.
+    // The drawer then intercepts the click, and the retry loop can never win, so the test hangs to
+    // its full 60s. It passed at all only when the click happened to land while the 200ms open
+    // transition still had the panel part-way off-screen — a race against an animation, not a
+    // property of the affordance. Derived from the panel's measured width so a restyle can't
+    // silently put the tap point back underneath it.
+    const drawerWidth = (await page.getByTestId('sidebar').boundingBox())?.width ?? 0
+    expect(drawerWidth).toBeGreaterThan(0)
+    await page.getByTestId('sidebar-backdrop').click({ position: { x: drawerWidth + 40, y: 422 } })
     await expect(page.getByTestId('sidebar-backdrop')).toBeHidden()
   })
 
   test('selecting a task opens the inspector as a bottom sheet', async ({ page, seededBoard }) => {
     void seededBoard
 
-    // `taskCard()` resolves by `data-block-id`, which sits on the SAME element as
-    // `data-testid="task-card"` — so click the card directly rather than a (non-existent)
-    // descendant test id.
-    await taskCard(page, 'task_login').first().click()
+    // The subject is the sheet's PLACEMENT, so selection just has to be reliable: `selectTask`
+    // takes the card's title and waits for the panel to name this block.
+    await selectTask(taskCard(page, 'task_login').first())
     const inspector = page.getByTestId('inspector-panel')
     await expect(inspector).toBeVisible({ timeout: LIVE_TIMEOUT })
     // The sheet is pinned to the bottom edge of the viewport on compact widths.

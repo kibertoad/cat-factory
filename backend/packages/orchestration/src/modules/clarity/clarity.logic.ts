@@ -1,4 +1,5 @@
-import type { Block, RequirementReviewItem } from '@cat-factory/kernel'
+import type { Block, OwnServiceContext, RequirementReviewItem } from '@cat-factory/kernel'
+import { renderProductContextLines } from '../review/product-context.js'
 
 // Pure logic for the clarity-review (bug-report triage) agent: assembling the bug
 // report under review (the block description, optionally enriched by an upstream
@@ -17,9 +18,44 @@ export {
   type ReviewDisposition,
 } from '../requirements/requirements.logic.js'
 
+/**
+ * Turn a bug investigator's structured `questions` into clarity-review findings WITHOUT an LLM
+ * pass — the seed the clarity gate parks on when the investigator flagged the report
+ * `needs_clarification`. Each question becomes one blocking (`high`) `question` finding the human
+ * answers/dismisses through the standard clarity window. Empty/blank questions are dropped; an
+ * all-blank list yields no items (so the gate auto-passes as if `clear`).
+ */
+export function buildSeededClarityItems(
+  questions: string[],
+  nextId: () => string,
+  now: number,
+): RequirementReviewItem[] {
+  return questions
+    .map((q) => q.trim())
+    .filter((q) => q.length > 0)
+    .map((q) => ({
+      id: nextId(),
+      category: 'question' as const,
+      severity: 'high' as const,
+      title: q.length > 80 ? `${q.slice(0, 77)}…` : q,
+      detail: q,
+      status: 'open' as const,
+      reply: null,
+      createdAt: now,
+      updatedAt: now,
+    }))
+}
+
 /** Everything the clarity reviewer reasons over: the bug report plus any investigation. */
 export interface ClarityContext {
   block: Pick<Block, 'title' | 'type' | 'description'>
+  /**
+   * Which system the defect is in — the enclosing service frame, or the positive reason there is
+   * none. Triage runs INLINE with no checkout, so this is its only means of knowing what software
+   * the report is about; the unresolved case is stated rather than omitted (see
+   * `review/product-context.ts`). Absent for a caller that resolves nothing (a test fake).
+   */
+  service?: OwnServiceContext
   /**
    * The prose report an upstream `bug-investigator` step produced (enriched bug report +
    * optional working hypothesis). When present it is the primary triage subject — the raw
@@ -43,19 +79,25 @@ export interface ClarityContext {
  * incorporate step rewrites.
  */
 export function renderBugReport(ctx: ClarityContext): string {
+  const heading = [
+    `# ${ctx.block.title} (${ctx.block.type})`,
+    ...renderProductContextLines(ctx.service, 'reason'),
+  ]
+  const reported = ctx.block.description?.trim() || '(no description provided)'
+  // A clarified report is layered ABOVE the original, never in place of it: the reporter's own
+  // words are the only fixed point a later pass can check the clarification against, and dropping
+  // them let one pass's assumption become the permanent subject.
   const lines: string[] = ctx.clarifiedDoc?.trim()
     ? [
-        `# ${ctx.block.title} (${ctx.block.type})`,
+        ...heading,
         '',
         '## Current standardized bug report (under review)',
         ctx.clarifiedDoc.trim(),
-      ]
-    : [
-        `# ${ctx.block.title} (${ctx.block.type})`,
         '',
-        '## Reported bug',
-        ctx.block.description?.trim() || '(no description provided)',
+        '## Originally reported (as written by the reporter)',
+        reported,
       ]
+    : [...heading, '', '## Reported bug', reported]
   if (!ctx.clarifiedDoc?.trim() && ctx.investigation?.trim()) {
     lines.push(
       '',

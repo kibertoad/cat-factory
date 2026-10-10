@@ -1,14 +1,18 @@
 import type {
+  CachedRepoRead,
   DeployCloneTarget,
   GitHubClient,
   GitHubInstallationRepository,
   GitHubRepoRef,
+  GroupCacheHandle,
   RepoFiles,
   RepoProjectionRepository,
   ResolveRepoFiles,
   ResolveRunRepoContext,
   RunRepoContext,
+  VcsProvider,
 } from '@cat-factory/kernel'
+import { repoFilesCacheGroup } from '@cat-factory/kernel'
 import type {
   MintInstallationToken,
   RepoTarget,
@@ -27,21 +31,217 @@ export { runRepoOps } from '@cat-factory/agents'
 // cloning. Each instance is bound to ONE installation + repo, so a repo-op names only
 // paths/branches.
 
-/** Bind a {@link GitHubClient} to one installation + repo as a {@link RepoFiles}. */
+/**
+ * A full 40-hex commit sha — an immutable ref, so its reads skip the head-sha probe. This is a
+ * shape check: a branch literally named as 40 hex chars would be misclassified as immutable and
+ * never revalidated. There is no cheap way to disambiguate a sha from an identically-shaped
+ * branch (it needs a ref lookup), and the actual callers never collide — the engine's pre/post-op
+ * refs are `cat-factory/<blockId>` branch names (always contain `/`) or genuine pinned shas — so
+ * the mismatch is a bounded, accepted edge, not a live hazard.
+ */
+function isPinnedSha(gitRef: string): boolean {
+  return /^[0-9a-f]{40}$/i.test(gitRef)
+}
+
+/**
+ * Bind a {@link GitHubClient} to one installation + repo as a {@link RepoFiles}.
+ *
+ * When `cache` (the app's `repoFiles` cache, slice 4) is supplied, `getFile`/`listDirectory`/
+ * `listTree` against a NAMED ref read through it — grouped per `(installation, owner, repo, ref)` so one
+ * `commitFiles` (or a push webhook) drops exactly the branch it touched, and keyed per path
+ * (`f:`/`d:` prefixes; the whole-tree read is the single `t:` entry of its ref). Each entry remembers the branch head sha it reflects, so an entry
+ * entering its refresh window re-validates with a single cheap `branchHeadSha` compare instead
+ * of re-fetching every file; a sha-pinned read is immutable (no probe). The head sha a cold
+ * batch stamps onto its entries is read ONCE per branch (memoised for this instance's lifetime,
+ * cleared when we commit to that branch), so caching N files on a branch costs one extra head
+ * read, not N. Reads with no `gitRef` (the repo default branch, whose name we don't know here)
+ * bypass the cache. Absent `cache` ⇒ the original direct pass-through.
+ */
 export function makeRepoFiles(
   client: GitHubClient,
   installationId: number,
   ref: GitHubRepoRef,
+  cache?: GroupCacheHandle<CachedRepoRead>,
 ): RepoFiles {
-  return {
+  const headSha = (branch: string) => client.branchHeadSha(installationId, ref, branch)
+  // The direct pass-through facade. When a cache is supplied we override only the four methods
+  // it actually changes (getFile/listDirectory/listTree/commitFiles) and inherit the rest from
+  // here, so the shared bindings can't drift between the cached and uncached paths.
+  const base: RepoFiles = {
     getFile: (path, gitRef) => client.getFileContent(installationId, ref, path, gitRef),
     listDirectory: (path, gitRef) => client.listDirectory(installationId, ref, path, gitRef),
+    // The whole recursive tree, with the provider's truncation flag intact. Bound
+    // unconditionally: `listTree` is a required member of the client, so a caller holding a
+    // `RepoFiles` at all can survey the codebase.
+    listTree: (gitRef) => client.listTree(installationId, ref, gitRef),
     // Exact single-ref lookup — correct even on repos with more branches than one
     // `listBranches` page. Null ⇒ the branch does not exist yet (create-vs-commit).
-    headSha: (branch) => client.branchHeadSha(installationId, ref, branch),
+    headSha,
     createBranch: (branch, fromSha) => client.createBranch(installationId, ref, branch, fromSha),
+    deleteBranch: (branch) => client.deleteBranch(installationId, ref, branch),
     commitFiles: (input) => client.commitFiles(installationId, ref, input),
     openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
+    // Read a PR by number (projection + web url), the existence probe `review`-task creation
+    // validates its target against; present only when the wired client can read a PR (else the
+    // validation passes through and the task is created unchecked, as before).
+    ...(client.getPullRequest
+      ? { getPullRequest: (number: number) => client.getPullRequest!(installationId, ref, number) }
+      : {}),
+    // The PR-deep-review resolutions: present only when the wired client can read a PR head /
+    // post a batched inline review (the deep-review "fix" / "post" resolutions probe for them).
+    ...(client.getPullRequestHeadRef
+      ? {
+          pullRequestHeadRef: (number: number) =>
+            client.getPullRequestHeadRef!(installationId, ref, number),
+        }
+      : {}),
+    // The deep-review drift check reads the PR head sha at review-start + at post time; present
+    // only when the wired client can read it (else the check is skipped).
+    ...(client.getPullRequestHeadSha
+      ? {
+          pullRequestHeadSha: (number: number) =>
+            client.getPullRequestHeadSha!(installationId, ref, number),
+        }
+      : {}),
+    ...(client.createReview
+      ? {
+          createReview: (number: number, input) =>
+            client.createReview!(installationId, ref, number, input),
+        }
+      : {}),
+    // The pr-reviewer preOp reads the PR's changed files + patches to inject the diff up front;
+    // present only when the wired client can enumerate a PR's files (else the preOp passes through).
+    ...(client.listChangedFiles
+      ? {
+          listChangedFiles: (number: number) =>
+            client.listChangedFiles!(installationId, ref, number),
+        }
+      : {}),
+    // The pr-reviewer preOp also reads the PR's existing review threads to inject the
+    // already-raised findings up front (so the reviewer skips re-reporting them); present only
+    // when the wired client can read review threads (else the preOp passes through).
+    ...(client.listReviewThreads
+      ? {
+          listReviewThreads: (number: number) =>
+            client.listReviewThreads!(installationId, ref, number),
+        }
+      : {}),
+    // The read-splice-write of an engine-managed body region (the monorepo bootstrap's settled
+    // adoption decisions). Bound as a PAIR, and unconditionally: both underlying client methods
+    // are required members, so a caller that has a `RepoFiles` at all can publish a region.
+    getPullRequestBody: (number: number) => client.getPullRequestBody(installationId, ref, number),
+    updatePullRequestBody: async (number: number, body: string) => {
+      await client.updatePullRequest(installationId, ref, number, { body })
+    },
+  }
+  if (!cache) return base
+
+  // Dedupe an in-flight `branchHeadSha` read per branch. A REJECTED read is ALWAYS evicted so
+  // one transient head-read blip never sticks for the instance's lifetime; `retainResolved`
+  // then keeps a successful read for the whole batch (the cold-load memo — N files on a branch
+  // share one head read) or drops it on settle (the probe memo — each refresh sweep must read
+  // the CURRENT head afresh, but concurrent probes for the same branch still coalesce to ONE
+  // request instead of one-per-cached-entry).
+  const dedupeHead = (
+    store: Map<string, Promise<string | null>>,
+    branch: string,
+    retainResolved: boolean,
+  ): Promise<string | null> => {
+    let pending = store.get(branch)
+    if (!pending) {
+      pending = headSha(branch)
+      store.set(branch, pending)
+      const evict = () => {
+        if (store.get(branch) === pending) store.delete(branch)
+      }
+      void pending.then(retainResolved ? undefined : evict, evict)
+    }
+    return pending
+  }
+  const loadHeadMemo = new Map<string, Promise<string | null>>()
+  const probeHeadMemo = new Map<string, Promise<string | null>>()
+  const group = (gitRef: string) => repoFilesCacheGroup(installationId, ref.owner, ref.repo, gitRef)
+  // The refresh-window probe: a pinned sha is immutable (always current); a branch entry is
+  // current only while the branch head still matches the sha it was read at. A head-read blip
+  // during the probe reports "stale" (reload) rather than throwing out of the caching layer.
+  const probeFor = (gitRef: string): ((cached: CachedRepoRead) => Promise<boolean>) =>
+    isPinnedSha(gitRef)
+      ? () => Promise.resolve(true)
+      : async (cached) => {
+          try {
+            return (await dedupeHead(probeHeadMemo, gitRef, false)) === cached.headSha
+          } catch {
+            return false
+          }
+        }
+  // The head sha stamped onto a cold entry, for the probe to compare against. A pinned ref is
+  // immutable (null ⇒ never probed). A transient head-read failure degrades to an UNSTAMPED
+  // entry (null ⇒ the probe always reloads) rather than failing the content read — the uncached
+  // path never read the head at all, so a head blip must not make a cached read less robust.
+  const headForLoad = async (gitRef: string): Promise<string | null> => {
+    if (isPinnedSha(gitRef)) return null
+    try {
+      return await dedupeHead(loadHeadMemo, gitRef, true)
+    } catch {
+      return null
+    }
+  }
+
+  return {
+    ...base,
+    getFile: async (path, gitRef) => {
+      if (!gitRef) return client.getFileContent(installationId, ref, path, gitRef)
+      const cached = await cache.get(
+        `f:${path}`,
+        group(gitRef),
+        async () => ({
+          kind: 'file' as const,
+          headSha: await headForLoad(gitRef),
+          content: await client.getFileContent(installationId, ref, path, gitRef),
+        }),
+        probeFor(gitRef),
+      )
+      return cached.kind === 'file' ? cached.content : null
+    },
+    listDirectory: async (path, gitRef) => {
+      if (!gitRef) return client.listDirectory(installationId, ref, path, gitRef)
+      const cached = await cache.get(
+        `d:${path}`,
+        group(gitRef),
+        async () => ({
+          kind: 'dir' as const,
+          headSha: await headForLoad(gitRef),
+          entries: await client.listDirectory(installationId, ref, path, gitRef),
+        }),
+        probeFor(gitRef),
+      )
+      return cached.kind === 'dir' ? cached.entries : []
+    },
+    // One entry per ref (the tree IS the ref's whole content, so there is nothing to key on
+    // below it). This is what makes a bug-fishing expedition's T x A dispatches share ONE tree
+    // read of the branch they all fish, instead of re-reading it per pass.
+    listTree: async (gitRef) => {
+      if (!gitRef) return client.listTree(installationId, ref, gitRef)
+      const cached = await cache.get(
+        't:',
+        group(gitRef),
+        async () => ({
+          kind: 'tree' as const,
+          headSha: await headForLoad(gitRef),
+          listing: await client.listTree(installationId, ref, gitRef),
+        }),
+        probeFor(gitRef),
+      )
+      return cached.kind === 'tree' ? cached.listing : { entries: [], truncated: false }
+    },
+    commitFiles: async (input) => {
+      const result = await client.commitFiles(installationId, ref, input)
+      // The branch moved: drop its cached reads (this replica's, and — when a notification
+      // pair is wired — every peer's) and forget its memoised head so a later read re-stamps.
+      loadHeadMemo.delete(input.branch)
+      await cache.invalidateGroup(group(input.branch))
+      return result
+    },
   }
 }
 
@@ -59,20 +259,34 @@ export function makeResolveRepoFiles(client: GitHubClient): ResolveRepoFiles {
  * no repo (GitHub not connected); a throw from the target resolver (a block under no
  * linked service) propagates so the misconfiguration surfaces — failing the run loudly —
  * rather than guessing a repo, exactly as it does for a container kind at dispatch.
+ *
+ * `cache` (the app's `repoFiles` cache, slice 4) is threaded into the bound {@link RepoFiles}
+ * so a registered kind's pre/post-op idempotency re-reads hit the read-through cache; absent
+ * (tests / the pass-through profile) ⇒ direct reads, unchanged.
  */
 export function makeResolveRunRepoContext(
   client: GitHubClient,
   resolveRepoTarget: ResolveRepoTarget,
+  cache?: GroupCacheHandle<CachedRepoRead>,
 ): ResolveRunRepoContext {
   return async (workspaceId, blockId) => {
     const target = await resolveRepoTarget(workspaceId, blockId)
     if (!target) return null
     return {
-      repo: makeRepoFiles(client, target.installationId, {
-        owner: target.owner,
-        repo: target.name,
-      }),
+      repo: makeRepoFiles(
+        client,
+        target.installationId,
+        { owner: target.owner, repo: target.name },
+        cache,
+      ),
       baseBranch: target.baseBranch,
+      repoId: target.repoId,
+      owner: target.owner,
+      name: target.name,
+      ...(target.provider ? { provider: target.provider } : {}),
+      // The monorepo subtree this service lives in, carried through so a checkout-free reader
+      // scopes to the same root the agent's checkout is rooted at.
+      ...(target.serviceDirectory ? { serviceDirectory: target.serviceDirectory } : {}),
     }
   }
 }
@@ -106,7 +320,14 @@ export function makeResolveDeployCloneTarget(
   return async (workspaceId, blockId, ref) => {
     const target = await resolveRepoTarget(workspaceId, blockId)
     if (!target) return null
-    const token = await mintInstallationToken(target.installationId)
+    // This token rides into a deploy container, so it is a DISPATCH credential under the same
+    // rule as an agent job's: scoped to the one repo the container clones. The deploy has no
+    // execution of its own to name, so the block it renders identifies it on the mint's log line.
+    const token = await mintInstallationToken(target.installationId, {
+      executionId: `deploy-${blockId}`,
+      workspaceId,
+      repoIds: [target.repoId],
+    })
     const cloneUrl = options?.resolveCloneUrl
       ? options.resolveCloneUrl(target)
       : `${webBase}/${target.owner}/${target.name}.git`
@@ -122,16 +343,38 @@ export function makeResolveDeployCloneTarget(
  * Resolve a checkout-free {@link RunRepoContext} from explicit repo COORDINATES (owner +
  * repo), with no block context — the block-less sibling of {@link makeResolveRunRepoContext}
  * the environments module uses to validate/bootstrap a provider's config file in a repo the
- * operator names. Matches the workspace's projected repos by owner+name; returns null when
- * GitHub isn't connected (no installation / no repos) or the named repo isn't projected, so
- * the caller degrades cleanly to "no VCS connection".
+ * operator names. Matches the workspace's projected repos by owner+name; returns null when the
+ * workspace has no VCS connection, the named repo isn't projected, or the caller named a
+ * provider the projection disagrees with, so the caller degrades cleanly to "no VCS connection".
  *
- * VCS-neutrality note: bound over the wired {@link GitHubClient} today; the provider never
- * sees it — it only gets a `readRepoFile`. When GitLab lands, resolve a `VcsClient` via the
- * VCS registry here instead; the provider code is unchanged.
+ * VCS-neutral in the same way the rest of the engine is: the bound {@link GitHubClient} is
+ * whichever the facade wired for the deployment's engine (`engineVcsClient`, so the GitLab-backed
+ * adapter on a GitLab-only deployment), and the provider consuming the result never sees it: it
+ * only gets a `readRepoFile`. This used to refuse ANY caller that named `gitlab`, which was
+ * written when the seam could only be GitHub-backed and outlived that: on a GitLab-only
+ * deployment it refused the one provider the wired client actually serves, so a compose layer
+ * that named its provider (`ComposeSource.provider`, a supported field) reported "no VCS
+ * connection" for a project sitting in the repo list.
+ *
+ * What replaces it is a MISMATCH check against the projection's own answer, which is what the
+ * caller's `provider` was ever a claim about. A row predating the discriminator column reads as
+ * its connection's provider rather than as `github`, so the fallback follows the connection
+ * instead of the historical default.
+ *
+ * Which is why `clientProvider` is stated rather than assumed. It is a fact about the client the
+ * FACADE bound ({@link engineVcsProvider}), and a repo the projection resolves to some OTHER
+ * provider is one this seam cannot read: on a deployment serving BOTH a GitHub App and
+ * per-workspace GitLab connections the App client is what gets bound here, so a GitLab-connected
+ * workspace's row would resolve to a context whose reads mint the wrong credential or hit a
+ * same-named GitHub project. Refusing it keeps the honest "no VCS connection" the caller already
+ * handles, and leaves closing the gap to the per-workspace engine routing slice
+ * (`docs/initiatives/gitlab-ui-parity.md`), which is the only thing that CAN close it: this
+ * function is handed one client and has no workspace-level routing of its own.
  */
 export function makeResolveRepoFilesForCoords(
   client: GitHubClient,
+  /** The provider {@link client} speaks, so a repo it cannot read is refused rather than bound. */
+  clientProvider: VcsProvider,
   installationRepository: Pick<GitHubInstallationRepository, 'getByWorkspace'>,
   repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>,
 ): (
@@ -139,19 +382,29 @@ export function makeResolveRepoFilesForCoords(
   coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
 ) => Promise<RunRepoContext | null> {
   return async (workspaceId, { owner, repo, provider }) => {
-    // Only GitHub is resolvable today. A caller that explicitly asks for another VCS
-    // (e.g. `gitlab`) must NOT be silently bound to the GitHub installation/projection —
-    // that could read the wrong repo or report a misleading match. Bail cleanly until a
-    // VcsClient is resolved here per `provider`.
-    if (provider && provider !== 'github') return null
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
     const repos = await repoProjectionRepository.list(workspaceId)
     const match = repos.find((r) => r.owner === owner && r.name === repo)
     if (!match) return null
+    // The row's own provider, falling back to the connection that projected it (rows predating
+    // the column carry none).
+    const resolved = match.provider ?? installation.provider
+    // Two different questions, both answered by withholding the context. CAN this seam read the
+    // repo at all: the bound client speaks one provider, and one it does not speak is not
+    // reachable from here whatever the caller believes. And is the caller's own claim right: a
+    // caller that NAMED a provider is asserting where the repo lives, so a disagreement is
+    // refused rather than resolved, since binding a GitLab-named layer to a GitHub connection
+    // would read a different repository of the same name and report it as a match.
+    if (resolved !== clientProvider) return null
+    if (provider && provider !== resolved) return null
     return {
       repo: makeRepoFiles(client, installation.installationId, { owner, repo }),
       baseBranch: match.defaultBranch ?? 'main',
+      repoId: String(match.githubId),
+      owner,
+      name: repo,
+      provider: resolved,
     }
   }
 }

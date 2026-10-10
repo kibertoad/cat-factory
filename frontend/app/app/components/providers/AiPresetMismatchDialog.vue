@@ -7,6 +7,7 @@
 // auto-opens once per session (driven from pages/index.vue) and clears once the preset is
 // fixed (or all its models become available).
 import { computed } from 'vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -45,18 +46,18 @@ function go(action: () => void) {
         <i18n-t
           keypath="providers.presetMismatch.intro"
           tag="p"
-          class="text-sm text-slate-300"
+          class="text-sm text-toned"
           scope="global"
         >
           <template #name>
-            <span class="font-medium text-slate-100">{{ presetName }}</span>
+            <span class="font-medium text-app-100">{{ presetName }}</span>
           </template>
         </i18n-t>
 
-        <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-3">
-          <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div class="rounded-lg border border-muted bg-default/50 p-3">
+          <SectionLabel as="p" class="mb-1.5">
             {{ t('providers.presetMismatch.unavailable') }}
-          </p>
+          </SectionLabel>
           <div class="flex flex-wrap gap-1.5">
             <UBadge
               v-for="label in unavailableLabels"
@@ -70,12 +71,21 @@ function go(action: () => void) {
           </div>
         </div>
 
-        <p class="text-[13px] text-slate-400">
+        <p class="text-sm text-muted">
           {{ t('providers.presetMismatch.advice') }}
         </p>
 
         <div class="flex flex-wrap justify-end gap-2">
-          <UButton color="neutral" variant="ghost" size="sm" @click="open = false">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            @click="
+              () => {
+                open = false
+              }
+            "
+          >
             {{ t('providers.presetMismatch.later') }}
           </UButton>
           <UButton

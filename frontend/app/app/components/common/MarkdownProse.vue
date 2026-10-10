@@ -1,0 +1,116 @@
+<script setup lang="ts">
+// Shared inline markdown renderer for agent prose (a rationale, a synthesis, a summary).
+// Routes text through the secure `renderMarkdown` reader (markdown-it, `html: false`, links
+// decorated to open safely in a new tab) instead of the `whitespace-pre-wrap` plain-text
+// dumps several result views used to show (UX-43) — so `**bold**`, lists, code, and links in
+// an agent's output read as formatted prose, consistently with `AgentStepDetail`'s reader.
+import { computed } from 'vue'
+import { renderMarkdown } from '~/utils/agentOutput'
+
+const props = defineProps<{
+  /** The agent's raw markdown text. */
+  text: string | null | undefined
+}>()
+
+const html = computed(() => renderMarkdown(props.text))
+</script>
+
+<template>
+  <!-- eslint-disable-next-line vue/no-v-html (sanitized by renderMarkdown, html: false) -->
+  <div class="cf-prose" v-html="html" />
+</template>
+
+<style scoped>
+/* Prose styling for the sanitized markdown injected via v-html (out of scoped reach
+   without :deep), mirroring the reader's `prose.css` token for token so both flip with the
+   theme and the mode. */
+.cf-prose :deep(p) {
+  margin: 0.5rem 0;
+}
+.cf-prose :deep(p:first-child) {
+  margin-top: 0;
+}
+.cf-prose :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.cf-prose :deep(ul),
+.cf-prose :deep(ol) {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.cf-prose :deep(ul) {
+  list-style: disc;
+}
+.cf-prose :deep(ol) {
+  list-style: decimal;
+}
+.cf-prose :deep(li) {
+  margin: 0.2rem 0;
+}
+.cf-prose :deep(strong) {
+  font-weight: 600;
+  color: var(--ui-text-highlighted);
+}
+.cf-prose :deep(em) {
+  font-style: italic;
+}
+.cf-prose :deep(code) {
+  /* `--ui-radius` rather than `--radius-sm`: Nuxt UI declares the `--radius-*` scale in a
+   * `@theme default inline` block, so Tailwind emits those only when the COMPILED stylesheet
+   * graph references them. This scoped block is not part of that compile, and `--ui-radius` is
+   * an ordinary custom property on `:root`. `--radius-sm` is `var(--ui-radius)` (prose.css). */
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg-elevated);
+  padding: 0.1rem 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--ui-primary);
+}
+.cf-prose :deep(pre) {
+  margin: 0.6rem 0;
+  overflow: auto;
+  /* `--radius-lg` is `calc(var(--ui-radius) * 2)`; see the note on `code` above for why this
+   * block cannot name the scale variable. */
+  border-radius: calc(var(--ui-radius) * 2);
+  background: var(--app-bg-canvas);
+  padding: 0.75rem 0.9rem;
+}
+.cf-prose :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: var(--ui-text-toned);
+}
+.cf-prose :deep(blockquote) {
+  margin: 0.6rem 0;
+  border-left: 3px solid color-mix(in srgb, var(--ui-primary) 50%, transparent);
+  padding-left: 0.75rem;
+  color: var(--ui-text-muted);
+}
+.cf-prose :deep(h1),
+.cf-prose :deep(h2),
+.cf-prose :deep(h3),
+.cf-prose :deep(h4) {
+  margin: 0.7rem 0 0.4rem;
+  font-weight: 600;
+  color: var(--ui-text-highlighted);
+}
+.cf-prose :deep(table) {
+  margin: 0.6rem 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.cf-prose :deep(th),
+.cf-prose :deep(td) {
+  border: 1px solid var(--ui-border-muted);
+  padding: 0.3rem 0.6rem;
+}
+.cf-prose :deep(th) {
+  background: var(--ui-bg-elevated);
+  font-weight: 600;
+}
+.cf-prose :deep(hr) {
+  margin: 1rem 0;
+  border: none;
+  border-top: 1px solid var(--ui-border-muted);
+}
+</style>

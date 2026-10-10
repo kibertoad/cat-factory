@@ -20,12 +20,24 @@ const open = computed({
 <template>
   <UModal v-model:open="open" :title="t('fragments.panel.title')" :ui="{ content: 'max-w-3xl' }">
     <template #body>
-      <FragmentLibraryManager
-        v-if="workspace.workspaceId"
-        kind="workspace"
-        :owner-id="workspace.workspaceId"
-        show-catalog
-      />
+      <!-- The anchor for the tutorial tour about steering agents with standards, which points at
+           the library as a whole. Named HERE rather than inside the manager because that manager
+           is mounted at two scopes (this modal and the account settings' fragment tab), so an id
+           on its root would be one id over two elements, leaving which one the tour highlights to
+           DOM order. A wrapper rather than an attribute passed down to it, because the anchor
+           DRIFT GUARD reads test ids out of the templates that write them: Vue's attribute
+           fallthrough would still satisfy the guard on the day someone adds a second root node to
+           the manager and the anchor stops rendering.
+           The tour requires the library to be enabled, so it never lands on the manager's own
+           unavailable notice. -->
+      <div data-testid="fragment-library">
+        <FragmentLibraryManager
+          v-if="workspace.workspaceId"
+          kind="workspace"
+          :owner-id="workspace.workspaceId"
+          show-catalog
+        />
+      </div>
     </template>
   </UModal>
 </template>

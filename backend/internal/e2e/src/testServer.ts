@@ -6,8 +6,11 @@
 //   - LLMs + per-run agent containers  → the canonical deterministic FakeAgentExecutor
 //     (the same one the cross-runtime conformance suite drives). No LLM HTTP, no Docker.
 //   - repo bootstrap                   → FakeRepoBootstrapper (no GitHub, no container).
-//   - GitHub App / email / Slack / Datadog → left OFF (all opt-in; the server boots and
-//     the board renders without them, and the gates/providers pass through).
+//   - GitHub App                       → faked ON with the canonical FakeGitHubClient + the
+//     real Drizzle projection repos, wired through `overrides` with NO real credentials (see
+//     fakeGitHub.ts). `seedGitHub` (control channel) connects a workspace with a repo + branches.
+//   - email / Slack / Datadog          → left OFF (all opt-in; the server boots and the board
+//     renders without them, and the gates/providers pass through).
 //
 // Everything else is production: the controllers, the auth gate (open in dev), the
 // durable pg-boss execution worker + sweepers, and the per-workspace real-time hub that
@@ -17,10 +20,52 @@
 //
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
-import { createServer } from 'node:http'
-import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
-import { buildNodeContainer, start } from '@cat-factory/node-server'
-import { E2eFakeAgentExecutor, E2eRepoBootstrapper, type FakeProfile } from './fakeProfile.ts'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { AsyncFakeAgentExecutor, makeOnboardingProbe } from '@cat-factory/conformance'
+import {
+  buildNodeContainer,
+  DrizzleBranchProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  type DrizzleDb,
+  DrizzleGitHubInstallationRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleRepoProjectionRepository,
+  NodeRealtimeHub,
+  start,
+} from '@cat-factory/node-server'
+import {
+  createE2eGitHubClient,
+  type GitHubSeed,
+  listReviewAttemptsFor,
+  makeE2eRunRepoResolver,
+  ownRepoFor,
+  seedGitHubForWorkspace,
+} from './fakeGitHub.ts'
+import { E2eInlineModels } from './fakeInlineModel.ts'
+import { E2eJudgeAssessor, registerE2eJudge } from './fakeJudge.ts'
+import {
+  E2eFakeAgentExecutor,
+  E2eGateProviders,
+  E2eRepoBootstrapper,
+  type FakeProfile,
+  FakeProfileRegistry,
+} from './fakeProfile.ts'
+// The app's own process logger, the one the container logs through: the harness composes this layer
+// (`createApp` below is its app factory), so its realtime tee reports on the same destination rather
+// than printing beside it.
+import { logger } from '@cat-factory/server'
+import { fanOutRealtime, serveAuthBackend } from './authBackend.ts'
+import { holdKeepAliveSockets } from './keepAlive.ts'
+import {
+  AUTH_BACKEND_PORT,
+  AUTH_FRONTEND_URL,
+  BACKEND_PORT,
+  CONTROL_PORT,
+  FRONTEND_URL,
+} from './ports.ts'
+import { seedPasswordUser, seedTeamScenario, type TeamScenarioRequest } from './seedTeam.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
  * the kernel `AgentKind` type, which isn't a dependency of this test-only package). */
@@ -66,6 +111,15 @@ const confidence = process.env.E2E_CONFIDENCE ? Number(process.env.E2E_CONFIDENC
 const baseOptions: FakeOptions = {
   confidence,
   decisionOnSteps,
+  // A real code-producing pipeline (coder/build) opens a PR — so the fake reports one by
+  // default. This is not cosmetic: `RunStateMachine.finalizeBlock` finalizes a merger-less
+  // run to `pr_ready` (+ a `pipeline_complete` notification) ONLY when the block has a PR;
+  // a run that produced NO PR takes the read-only/findings terminal path and finalizes
+  // silently `done` (no notification). Without a default PR every run-to-terminal spec
+  // (run/notifications/approval-gate/fork-decision/pipeline-progress/recurring-run) would
+  // hit that no-PR path and never reach `pr_ready`/raise the inbox item they assert on. A
+  // spec that needs a different PR (or the gate specs, which set their own) overrides it.
+  pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
   ...(asyncKinds.length || dispatchThrowKinds.length
     ? {
         // A thrown dispatch is only meaningful for an async (polled) kind.
@@ -76,34 +130,264 @@ const baseOptions: FakeOptions = {
 }
 
 // The per-workspace fake-behaviour registry, mutated by the test-only control server below and
-// read by the two profile-aware wrappers. Keyed by workspace id.
-const profiles = new Map<string, FakeProfile>()
+// read by the profile-aware wrappers. Keyed by workspace id. Each wrapper registers its cache
+// with the registry on construction, so a `/fake-profile` write re-arms every fake derived from
+// that workspace's profile rather than stranding the write in a map nobody reads again.
+const profiles = new FakeProfileRegistry()
 const agentExecutor = new E2eFakeAgentExecutor(baseOptions, profiles)
 const repoBootstrapper = new E2eRepoBootstrapper(profiles)
+// The built-in gates (`ci`/`conflicts`/`post-release-health`) read their data source through a
+// wired provider; unwired they pass through (as today). Wiring these per-workspace fakes lets a
+// spec drive the real gate → helper-agent engine loop (red CI → ci-fixer → green, a conflicted
+// PR → conflict-resolver, a regressed release → on-call). They only run when a pipeline includes
+// the gate step, so the pre-existing specs are unaffected.
+const gateProviders = new E2eGateProviders(profiles)
+// The INLINE LLM path — the requirements-review loop, the initiative/document interviewers —
+// which the agent-executor fake above does not touch (it fakes CONTAINER steps). Per-workspace
+// and dispatched on the prompt's shape; see `fakeInlineModel.ts`.
+const inlineModels = new E2eInlineModels(profiles)
+// The JUDGE verdict producer (the fourth step-taxonomy bucket). Per-workspace verdict script;
+// the judge itself is registered on the built container below. See `fakeJudge.ts`.
+const judgeAssessor = new E2eJudgeAssessor(profiles)
+
+// GitHub App integration, faked ON with NO real credentials (see fakeGitHub.ts). The shared
+// catalogued fake client backs the interactive connect/link flows; per-workspace connection +
+// projection state is seeded directly over the `/github-seed` control route below. `db` is only
+// available inside `buildContainer`, so it's captured there and read by that route (which only
+// fires after boot). Both are consumed by controllers, so one shared client is safe.
+const githubClient = createE2eGitHubClient()
+let seedDb: DrizzleDb | null = null
+
+// Auth-enabled seam for the workspace-RBAC e2e (rbac.spec.ts). The shared backend keeps
+// TESTING_NO_AUTH on — so an ANONYMOUS request stays dev-open and every existing spec is
+// byte-identical — while ALSO configuring a session secret. A request bearing a signed
+// session token then resolves to its user and the workspace-RBAC gate enforces per-user
+// access (the gate keys on the SECRET's presence, not `config.auth.enabled`, which stays
+// false because no OAuth/password provider is configured). The RBAC spec mints tokens over
+// the `/rbac-seed` control route below and injects them into the SPA's persisted `auth`
+// store, exactly as `pinWorkspace` injects the picked workspace id.
+const AUTH_SESSION_SECRET =
+  process.env.AUTH_SESSION_SECRET ?? 'e2e-workspace-rbac-session-secret-0123456789'
+// The built container, captured for the `/rbac-seed` control route (which needs the real
+// user / account / workspace services). Only read AFTER boot, so it is set by the time a
+// spec calls the route.
+let rbacContainer: ReturnType<typeof buildNodeContainer> | null = null
+
+/**
+ * Seed a restricted-board RBAC scenario and mint signed sessions for it, over the control
+ * channel (there is no anonymous REST path to create users / account members). Mirrors the
+ * cross-runtime `defineWorkspaceRbacSuite` fixture: an org owned by admin A, a developer B
+ * enrolled in the account and scoped to the board as a `viewer`, and the board flipped to
+ * `restricted`.
+ *
+ * One call into the generic {@link seedTeamScenario}, whose vocabulary (principals with a role,
+ * or none) covers this pair and the member-admin flow alike; this keeps the RBAC spec's legacy
+ * field names, which are what it reads.
+ */
+async function seedRbacScenario(
+  container: NonNullable<typeof rbacContainer>,
+  db: DrizzleDb,
+  tag: string,
+): Promise<{
+  workspaceId: string
+  accountId: string
+  adminToken: string
+  adminUserId: string
+  viewerToken: string
+  viewerUserId: string
+}> {
+  const scenario = await seedTeamScenario(container, db, AUTH_SESSION_SECRET, {
+    tag: `rbac-${tag}`,
+    restricted: true,
+    principals: [{ key: 'viewer', role: 'viewer', name: 'RBAC Viewer' }],
+  })
+  const viewer = scenario.principals.viewer
+  if (!viewer) throw new Error('[e2e] rbac seed: the viewer principal was not seeded')
+  return {
+    workspaceId: scenario.workspaceId,
+    accountId: scenario.accountId,
+    adminToken: scenario.ownerToken,
+    adminUserId: scenario.ownerUserId,
+    viewerToken: viewer.token,
+    viewerUserId: viewer.userId,
+  }
+}
 
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
 // shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
 // (Playwright's request context — not the browser), keyed to its own freshly-seeded
-// workspace, BEFORE it starts the run. Listens on `PORT + 1` (or `E2E_CONTROL_PORT`) — the
-// SAME derivation the `setFakeProfile` helper uses, so PORT drives both ends. Bound to
-// loopback: it's reached only from the local Playwright process, never publicly.
-const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
-const controlServer = createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/fake-profile') {
+// workspace, BEFORE it starts the run. Its port comes from `ports.ts`, the SAME module the
+// `setFakeProfile` helper reads, so PORT drives both ends. Bound to loopback: it's reached
+// only from the local Playwright process, never publicly.
+//
+// The hub the auth surface registers its WebSocket subscribers on. Created out here so the
+// container build can tee engine events into it (`fanOutRealtime`) before the listener exists.
+const authHub = new NodeRealtimeHub()
+// Reject on a socket error so a caller gets a fast 400 instead of a hung request that only
+// surfaces as a spec timeout.
+const readBody = (req: IncomingMessage): Promise<string> =>
+  new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     req.on('data', (c) => chunks.push(c as Buffer))
-    req.on('end', () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
-          workspaceId: string
-          profile: FakeProfile
-        }
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
+  })
+
+const fail = (res: ServerResponse, status: number, err: unknown): void => {
+  res.writeHead(status).end(err instanceof Error ? err.message : String(err))
+}
+
+const controlServer = createServer((req, res) => {
+  // Close the TCP connection after every control response instead of keeping it alive. Playwright's
+  // Node request context pools keep-alive sockets, and Node's default 5s `keepAliveTimeout` reaps an
+  // idle one server-side; if the client dispatches the next seed onto that socket in the reap window
+  // it gets `socket hang up` (a non-idempotent POST is not auto-retried), which surfaced as a flaky
+  // `github-seed` failure. This control channel handles only a few sequential seeds per spec, so a
+  // fresh connection per request costs nothing and removes the reuse race at its source.
+  res.setHeader('Connection', 'close')
+  if (req.method === 'POST' && req.url === '/fake-profile') {
+    void readBody(req)
+      .then((raw) => {
+        const body = JSON.parse(raw) as { workspaceId: string; profile: FakeProfile }
         profiles.set(body.workspaceId, body.profile ?? {})
         res.writeHead(204).end()
-      } catch (err) {
-        res.writeHead(400).end(err instanceof Error ? err.message : String(err))
-      }
-    })
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed a workspace's GitHub connection + repo/branch projections (see fakeGitHub.ts), so the
+  // SPA loads a connected GitHub with repos + branches. Fired from a spec's Node request context
+  // BEFORE it opens the board.
+  if (req.method === 'POST' && req.url === '/github-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!seedDb) {
+          res.writeHead(503).end('github seed: db not ready')
+          return
+        }
+        const body = JSON.parse(raw) as { workspaceId: string; seed?: GitHubSeed }
+        await seedGitHubForWorkspace(seedDb, body.workspaceId, body.seed ?? {})
+        res.writeHead(204).end()
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed (and return) a repo of the workspace's OWN, so a spec can import it as a service frame
+  // without colliding with another spec: `addServiceFromRepo` dedupes a service by repo ACROSS the
+  // account and mounts the existing frame, which then belongs to another workspace. See
+  // `ownRepoFor`.
+  if (req.method === 'POST' && req.url === '/github-seed-own-repo') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!seedDb) {
+          res.writeHead(503).end('github seed: db not ready')
+          return
+        }
+        const { workspaceId } = JSON.parse(raw) as { workspaceId: string }
+        const repo = ownRepoFor(workspaceId)
+        await seedGitHubForWorkspace(seedDb, workspaceId, {
+          repos: [repo],
+          branches: [{ repoGithubId: repo.githubId, name: repo.defaultBranch, protected: true }],
+        })
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(repo))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Report the PR-review write ATTEMPTS a workspace's runs made (see `listReviewAttemptsFor`).
+  // Read-only: the deep-review spec asserts the at-most-once posting rule on it, which is a fact
+  // about the wire that the window's own report structurally cannot show.
+  if (req.method === 'POST' && req.url === '/github-review-attempts') {
+    void readBody(req)
+      .then((raw) => {
+        const { workspaceId } = JSON.parse(raw) as { workspaceId: string }
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify(listReviewAttemptsFor(githubClient, workspaceId)))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed an ACCOUNT-BACKED board and return its ids. Used by the cross-SDK smoketest
+  // (`@cat-factory/sdk-smoketest`), which needs to mint public-API keys — an account-scoped
+  // feature that is refused for the account-less board an anonymous `POST /workspaces` creates,
+  // and `POST /accounts` requires a signed-in user, so there is no anonymous REST path to one.
+  // Deliberately its OWN route rather than reusing `/rbac-seed`: that one also restricts the
+  // board and enrols a viewer, and a smoketest quietly inheriting an access mode it never asked
+  // for is the kind of coupling that only surfaces as a baffling 404 much later.
+  if (req.method === 'POST' && req.url === '/account-workspace-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer) {
+          res.writeHead(503).end('account-workspace seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw || '{}') as { tag?: string; seed?: boolean }
+        const tag = body.tag ?? `sdk-${Date.now()}`
+        const probe = makeOnboardingProbe(rbacContainer)
+        const { accountId, ownerUserId } = await probe.makeOrgOwner(tag)
+        const snapshot = await rbacContainer.workspaceService.create(
+          { name: `SDK smoketest ${tag}`, seed: body.seed ?? true },
+          ownerUserId,
+          accountId,
+        )
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ workspaceId: snapshot.workspace.id, accountId, ownerUserId }))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed a user who can SIGN IN with a password, plus the account + board they land on (see
+  // `seedPasswordUser`). Only meaningful against the auth-enabled surface, which is the one the
+  // sign-in spec's browser talks to.
+  if (req.method === 'POST' && req.url === '/password-user-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer || !seedDb) {
+          res.writeHead(503).end('password-user seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw) as { tag: string; password: string }
+        const result = await seedPasswordUser(rbacContainer, seedDb, body)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed an org + board + the principals a scenario asks for, each with a signed session (see
+  // `seedTeam.ts`). The general form of `/rbac-seed`: it also admits a principal enrolled in the
+  // ACCOUNT but not scoped to the board, which is what the member-admin flow adds through the
+  // roster, and leaves the board unrestricted unless asked.
+  if (req.method === 'POST' && req.url === '/team-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer || !seedDb) {
+          res.writeHead(503).end('team seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw) as TeamScenarioRequest
+        const result = await seedTeamScenario(rbacContainer, seedDb, AUTH_SESSION_SECRET, body)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed a restricted-board RBAC scenario + mint the principals' sessions (see
+  // `seedRbacScenario`). Returns the board id + a Bearer token per principal, which the RBAC
+  // spec injects into the SPA to drive the board as an authenticated viewer vs admin.
+  if (req.method === 'POST' && req.url === '/rbac-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer || !seedDb) {
+          res.writeHead(503).end('rbac seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw) as { tag: string }
+        const result = await seedRbacScenario(rbacContainer, seedDb, body.tag)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
+      })
+      .catch((err) => fail(res, 400, err))
     return
   }
   res.writeHead(404).end()
@@ -113,10 +397,10 @@ const controlServer = createServer((req, res) => {
 // the process down opaquely — every profile-dependent spec would otherwise silently run on
 // base behaviour.
 controlServer.on('error', (err) => {
-  console.error(`[e2e] fake-profile control channel failed to bind on ${controlPort}:`, err)
+  console.error(`[e2e] fake-profile control channel failed to bind on ${CONTROL_PORT}:`, err)
   process.exit(1)
 })
-controlServer.listen(controlPort, '127.0.0.1')
+controlServer.listen(CONTROL_PORT, '127.0.0.1')
 
 // A non-secret, fixed encryption key (32 zero bytes, base64). The always-on task-source
 // integration makes config load require ENCRYPTION_KEY; a fixed value keeps any encrypted
@@ -130,6 +414,12 @@ const env: NodeJS.ProcessEnv = {
   // screen (a remote facade otherwise has no anonymous tier). Pin a non-production
   // ENVIRONMENT so the flag is honoured. Mirrors the conformance test env.
   TESTING_NO_AUTH: 'true',
+  // Configure a session secret WITHOUT enabling any auth provider: anonymous requests stay
+  // dev-open (existing specs unchanged), but a signed session token still resolves to its
+  // user so the workspace-RBAC gate enforces per-user access for the RBAC spec (see the
+  // `AUTH_SESSION_SECRET` note above). `config.auth.enabled` stays false (no provider), so
+  // the SPA still renders anonymously by default under TESTING_NO_AUTH.
+  AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET ?? AUTH_SESSION_SECRET,
   ENVIRONMENT: 'test',
   // Poll durable async work every second instead of the 15s/30s production cadence: an async
   // agent kind's `awaiting_job` loop, a gate, AND the bootstrap drive (which polls at
@@ -138,16 +428,24 @@ const env: NodeJS.ProcessEnv = {
   // faster cadence changes no outcome.
   JOB_POLL_INTERVAL: process.env.JOB_POLL_INTERVAL ?? '1 second',
   CI_POLL_INTERVAL: process.env.CI_POLL_INTERVAL ?? '1 second',
+  // Tick the initiative-execution loop every second instead of the 60s production backstop, so
+  // an initiative that reaches `executing` spawns its first decorated task within the suite's
+  // RUN_TERMINAL timeout (the planning run's terminal does NOT poke the loop — only the periodic
+  // sweep spawns the first wave, so a slow cadence would time the spec out).
+  INITIATIVE_LOOP_INTERVAL_MS: process.env.INITIATIVE_LOOP_INTERVAL_MS ?? '1000',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,
-  PORT: process.env.PORT ?? '8787',
+  // Wire the release-health module (the observability connection repo + management API), so the
+  // post-release-health spec can connect an observability provider and create a pipeline carrying
+  // the observability-gated `post-release-health` step (rejected otherwise). The gate's runtime
+  // verdict comes from the per-workspace fake ReleaseHealthProvider (E2eGateProviders), not a real
+  // Datadog call — this only unlocks the pipeline-authoring gate + the connection seam.
+  OBSERVABILITY_ENABLED: process.env.OBSERVABILITY_ENABLED ?? 'true',
+  PORT: String(BACKEND_PORT),
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
   // cross-origin REST calls need this allow-listed. The WebSocket upgrade is authorised
-  // by ticket, not CORS. Playwright passes the SPA's exact origin (derived from
-  // E2E_FRONTEND_PORT); the fallback below derives the same default so a standalone
-  // `pnpm serve` stays consistent with the frontend's port.
-  CORS_ALLOWED_ORIGINS:
-    process.env.CORS_ALLOWED_ORIGINS ??
-    `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+  // by ticket, not CORS. Playwright passes the SPA's exact origin; the fallback is the
+  // same `ports.ts` derivation, so a standalone `pnpm serve` stays consistent with it.
+  CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? FRONTEND_URL,
 }
 
 if (!env.DATABASE_URL) {
@@ -156,23 +454,100 @@ if (!env.DATABASE_URL) {
   )
 }
 
-await start({
+const backend = await start({
   env,
   // The composition root: the stock Node container, but with the agent executor + repo
   // bootstrapper swapped for the deterministic fakes. `start()` supplies `db`, the started
   // pg-boss `boss` (so the REAL durable runner drives runs — NOT the Noop runner) and the
-  // `realtimeHub` (so the REAL NodeEventPublisher pushes live events to the browser); we
+  // `realtimeSink` (so the REAL NodeEventPublisher pushes live events to the browser); we
   // only add the overrides, so everything else stays production.
-  buildContainer: (opts) =>
-    buildNodeContainer({
+  buildContainer: (opts) => {
+    // `start()` always supplies the Drizzle `db`; capture it for the `/github-seed` control route
+    // and build the GitHub projection repos over it. Wiring these + the fake client through
+    // `overrides` turns the GitHub module ON with no real App (see fakeGitHub.ts).
+    const db = opts.db
+    if (!db) throw new Error('[e2e] expected start() to supply a Drizzle db')
+    seedDb = db
+    // The same kind of invariant as `db` above, and for the same reason: this is the one place the
+    // auth surface's WebSocket listener can be joined to the engine, so a missing sink has to fail
+    // the boot rather than skip the tee. Absent, the auth stack is deaf and every spec on it hangs
+    // waiting for a live update, naming nothing.
+    const realtimeSink = opts.realtimeSink
+    if (!realtimeSink) throw new Error('[e2e] expected start() to supply a realtimeSink')
+    const container = buildNodeContainer({
       ...opts,
+      // Tee engine events into the auth surface's own WebSocket hub as well as the primary
+      // listener's. `start()` keeps its hub to itself (only the wrapping sink reaches the
+      // container), so this is the one place the second listener can be joined to the same engine,
+      // and it must be, or a board opened on the auth stack paints once and then goes deaf. A
+      // dropped delivery is reported through the same process logger the container itself logs on,
+      // since a deaf auth stack is otherwise indistinguishable in the browser from a quiet run.
+      realtimeSink: fanOutRealtime(realtimeSink, authHub, logger),
       overrides: {
         agentExecutor,
         repoBootstrapper,
+        // Fake the INLINE LLM path too (the agent executor above only fakes CONTAINER steps). The
+        // full-interview `pl_initiative` pipeline runs its interviewer inline through this resolver,
+        // as does the whole requirements-review loop; on the keyless e2e backend the real resolver
+        // would fault them. See `fakeInlineModel.ts` — the reply is chosen by the prompt's shape and
+        // the workspace's profile, so an unscripted workspace gets exactly the prior behaviour.
+        modelProviderResolver: inlineModels.resolver,
+        // The judge verdict producer. Wiring it turns judge steps from a pass-through (`enabled:
+        // false`) into the real evaluate → bounce/park machine, driven by the per-workspace script.
+        judgeAssessor,
+        // GitHub App faked ON via overrides (no GITHUB_APP_ID/private key): the fake client + the
+        // real Drizzle projection repos + a pass-through webhook verifier. The read endpoints serve
+        // from the projections; `seedGitHubForWorkspace` populates them per workspace.
+        githubClient,
+        githubInstallationRepository: new DrizzleGitHubInstallationRepository(db),
+        repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+        branchProjectionRepository: new DrizzleBranchProjectionRepository(db),
+        pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(db),
+        issueProjectionRepository: new DrizzleIssueProjectionRepository(db),
+        commitProjectionRepository: new DrizzleCommitProjectionRepository(db),
+        checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(db),
+        webhookVerifier: { verify: async () => true },
+        // The run↔repository seam, WITHOUT the facade's production resolver. See
+        // `makeE2eRunRepoResolver`: the seeded sample board has no repo-linked service frame, and
+        // the production walk THROWS for a block under none (deliberately — a run must never guess
+        // a repository), so wiring it facade-wide fails the poll of every seeded run whose kind
+        // declares repo hooks. This resolver answers only for a repo a spec explicitly seeded as
+        // its own, and is null elsewhere — exactly what an unwired resolver is for those blocks.
+        resolveRunRepoContext: makeE2eRunRepoResolver(db, githubClient),
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
       // model, so the execution start guard needs that provider marked available to start a
       // run. The fake agent never actually calls a model. Mirrors the conformance harness.
       cloudflareModelsEnabled: true,
-    }),
+      // Wire the per-workspace fake gate providers (applied AFTER the build's
+      // `clearGateProviders()`), so a spec's gate-bearing pipeline drives the real gate loop.
+      gateProviders: {
+        ciStatus: gateProviders.ciStatus,
+        mergeability: gateProviders.mergeability,
+        releaseHealth: gateProviders.releaseHealth,
+      },
+    })
+    // Register the example `scope-adherence` judge on the container's own registry (the engine
+    // and the SPA both read it lazily, so registering here is in time for every run). Without a
+    // registration there is no judge in the product at all: the registry ships empty.
+    registerE2eJudge(container)
+    // Capture the built container for the `/rbac-seed` control route (real user / account /
+    // workspace services). Read only after boot, when a spec fires the route.
+    rbacContainer = container
+    // The AUTH-ENABLED surface, on its own port: the same container with `config.auth` flipped on,
+    // for the specs whose subject is identity (see `authBackend.ts`). Served from here because the
+    // container is what it needs and this is where one exists; the primary listener is unaffected.
+    serveAuthBackend({
+      container,
+      hub: authHub,
+      env,
+      port: AUTH_BACKEND_PORT,
+      corsOrigin: AUTH_FRONTEND_URL,
+    })
+    return container
+  },
 })
+
+// The seeding calls that open every spec land here, so this listener must not reap a socket
+// Playwright's request context is about to reuse. See `keepAlive.ts`.
+holdKeepAliveSockets(backend)

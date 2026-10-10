@@ -6,13 +6,16 @@ import {
   createGitHubRepoContract,
   disconnectGitHubContract,
   getGitHubConnectionContract,
+  getGitHubPatCheckContract,
   getGitHubInstallUrlContract,
   listGitHubAvailableReposContract,
   listGitHubBranchesContract,
   listGitHubInstallationsContract,
   listGitHubIssuesContract,
   listGitHubPullsContract,
+  checkGitHubBranchProtectionContract,
   listGitHubReposContract,
+  listGitHubRepoFilesContract,
   listGitHubRepoTreeContract,
   mergeGitHubPullRequestContract,
   openGitHubPullRequestContract,
@@ -50,6 +53,12 @@ export function githubApi({ send, ws }: ApiContext) {
     getGitHubConnection: (workspaceId: string) =>
       send(getGitHubConnectionContract, { pathPrefix: ws(workspaceId) }),
 
+    // What the personal access token this workspace's runs would authenticate with can actually
+    // do. Answers `not_applicable` (not a 404/503) on a deployment that uses a GitHub App or no
+    // PAT at all, so the caller makes one unconditional call on board load.
+    getGitHubPatCheck: (workspaceId: string) =>
+      send(getGitHubPatCheckContract, { pathPrefix: ws(workspaceId) }),
+
     listGitHubInstallations: (workspaceId: string) =>
       send(listGitHubInstallationsContract, { pathPrefix: ws(workspaceId) }),
 
@@ -64,6 +73,11 @@ export function githubApi({ send, ws }: ApiContext) {
 
     listGitHubRepos: (workspaceId: string) =>
       send(listGitHubReposContract, { pathPrefix: ws(workspaceId) }),
+
+    // The branch-protection preflight: a LIVE probe of each linked repo's default branch, so
+    // it is invoked on demand rather than folded into the projection reads above.
+    checkGitHubBranchProtection: (workspaceId: string) =>
+      send(checkGitHubBranchProtectionContract, { pathPrefix: ws(workspaceId) }),
 
     // Programmatic repo creation (privileged App tier). Only called when the
     // connection reports `canCreateRepos`; otherwise the UI opens GitHub directly.
@@ -90,6 +104,13 @@ export function githubApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { repoGithubId: String(repoGithubId) },
         queryParams: { path },
+      }),
+
+    // List every file in a repo (whole tree, one recursive read) for file-path search.
+    listGitHubRepoFiles: (workspaceId: string, repoGithubId: number) =>
+      send(listGitHubRepoFilesContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { repoGithubId: String(repoGithubId) },
       }),
 
     listGitHubBranches: (workspaceId: string, repoGithubId: number) =>

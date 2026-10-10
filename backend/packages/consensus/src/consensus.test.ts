@@ -7,6 +7,7 @@ import type {
   ModelRef,
   TaskEstimate,
 } from '@cat-factory/kernel'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
 import { parseScoreMap } from './strategies/rankedVoting.js'
 import { ConsensusAgentExecutor } from './ConsensusAgentExecutor.js'
@@ -80,6 +81,15 @@ describe('parseScoreMap', () => {
 // --- Executor: delegate vs run ------------------------------------------------
 
 const fakeProvider: ModelProvider = { resolve: () => ({}) as never }
+
+/** A resolved model declaring the subscription credential it was built on, as the real one does. */
+const attributedModel = (vendor: string) => ({
+  usageAttribution: { billing: 'subscription', vendor },
+})
+/** A provider serving that same declaration for every ref, as a single-credential deployment does. */
+const attributedProvider = (vendor: string): ModelProvider => ({
+  resolve: () => attributedModel(vendor) as never,
+})
 const agentRouting = { default: { ref: { provider: 'fake', model: 'm' } }, byKind: {} }
 
 function makeContext(over: Partial<AgentRunContext> = {}): AgentRunContext {
@@ -112,12 +122,17 @@ const fakeGenerate: GenerateFn = async ({ system, prompt }) => {
   }
 }
 
+// One shared agent-kind registry the executor + the consensus-trait registration share, so the
+// assignments land on the same instance the executor's eligibility check reads.
+const agentKindRegistry = defaultAgentKindRegistry()
+
 const baseDeps = {
   standard,
   modelProvider: fakeProvider,
   agentRouting,
   now: () => 0,
   generate: fakeGenerate,
+  agentKindRegistry,
 }
 
 const twoParticipants = [
@@ -130,7 +145,7 @@ describe('ConsensusAgentExecutor', () => {
   // (the runtime backstop for the builder's eligibility UI). `architect` is in the
   // default-eligible set, so register the traits before exercising the run path.
   beforeAll(() => {
-    registerConsensusTraits()
+    registerConsensusTraits(agentKindRegistry)
   })
 
   it('delegates to the standard executor when no consensus config', async () => {
@@ -216,6 +231,46 @@ describe('ConsensusAgentExecutor', () => {
     expect(last.id).toBe('cns_ex_2')
   })
 
+  it('files a panel on one subscription credential as subscription spend', async () => {
+    // The panel's tokens are the sum across its participants and synthesizer, and every one of
+    // them came back from the same subscription credential, so the ledger's one row says so.
+    // Without this the diverted step filed as metered spend that no card was ever charged for,
+    // exactly the mis-attribution the single-actor inline path had.
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      modelProvider: attributedProvider('claude'),
+    })
+    const res = await exec.run(
+      makeContext({
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+    expect(res.usageBilling).toBe('subscription')
+    expect(res.usageVendor).toBe('claude')
+  })
+
+  it('leaves a panel whose models disagree on the metered default', async () => {
+    // Two credentials, one of them a per-token key: the step really did spend money, and one row
+    // cannot state both. Claiming the subscription half would hide that cost from the budget
+    // gate, so the panel reports nothing and the ledger's `'metered'` default stands.
+    // The executor resolves each participant and then the synthesizer, so answering the first
+    // resolve with a subscription model and the rest with a plain one is a panel straddling two
+    // credentials, whatever refs the participants pinned.
+    let resolved = 0
+    const mixed: ModelProvider = {
+      resolve: () => (resolved++ === 0 ? attributedModel('claude') : {}) as never,
+    }
+    const exec = new ConsensusAgentExecutor({ ...baseDeps, modelProvider: mixed })
+    const res = await exec.run(
+      makeContext({
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+    expect(resolved).toBeGreaterThan(1)
+    expect(res.usageBilling).toBeUndefined()
+    expect(res.usageVendor).toBeUndefined()
+  })
+
   it('keeps a subscription harness base ref when the deployment runs it inline (local ambient)', async () => {
     // A subscription-only participant/base model must NOT degrade to the routing default when
     // local mode can serve the harness inline — otherwise the consensus panel strands on the
@@ -261,6 +316,124 @@ describe('ConsensusAgentExecutor', () => {
     // Inline-harness support ⇒ the ambient-eligible harness ref is kept and served via the CLI.
     const kept = await runWith(() => true)
     expect(kept.every((r) => r.provider === 'anthropic' && r.harness === 'claude-code')).toBe(true)
+  })
+
+  it('states the tool servers the panel withheld, in the participants’ prompt and on the record', async () => {
+    // The finding this closes: `architect` runs in a container in its standard mode, so boot
+    // validation has nothing to warn about, and the container executor (which owns the whole
+    // unavailability vocabulary) is not on this path. Without this the step silently loses the
+    // server AND records nothing, reading exactly like a kind that declared none.
+    const registry = defaultAgentKindRegistry()
+    registerConsensusTraits(registry)
+    registry.registerToolServer({
+      id: 'issues',
+      label: 'Issue tracker',
+      transport: { kind: 'stdio', command: 'npx', args: ['-y', 'issue-mcp'] },
+    })
+    registry.assignToolServers('architect', ['issues'])
+    const systems: string[] = []
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      agentKindRegistry: registry,
+      generate: async (args) => {
+        systems.push(args.system)
+        return fakeGenerate(args)
+      },
+    })
+
+    const context = makeContext({
+      consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+    })
+    await exec.run(context)
+
+    expect(await exec.previewToolServers(context)).toEqual({
+      wired: [],
+      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' }],
+    })
+    // Every PARTICIPANT is told, not just one: each is a separate model call planning its own work
+    // around the tools its instructions name.
+    const participantSystems = systems.filter((s) => !s.startsWith('You are a neutral synthesizer'))
+    expect(participantSystems).toHaveLength(2)
+    expect(participantSystems.every((s) => s.includes('Issue tracker'))).toBe(true)
+    // After the surface statement, which is itself appended after any workspace prompt override.
+    expect(
+      participantSystems.every(
+        (s) => s.indexOf('## Tool servers') > s.indexOf('SURFACE FOR THIS RUN'),
+      ),
+    ).toBe(true)
+  })
+
+  it('reports no tool-server resolution when the diverted kind declared none', async () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    const context = makeContext({
+      consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+    })
+    expect(await exec.previewToolServers(context)).toBeUndefined()
+  })
+
+  // The whole reason the ceiling is a PREVIEW rather than a field on the result: a reader needs to
+  // know what a step could not reach most on the runs that failed, and a failed panel returns no
+  // result to carry it.
+  it('previews the ceiling for a panel that then throws', async () => {
+    const registry = defaultAgentKindRegistry()
+    registerConsensusTraits(registry)
+    registry.registerToolServer({
+      id: 'issues',
+      label: 'Issue tracker',
+      transport: { kind: 'stdio', command: 'npx', args: ['-y', 'issue-mcp'] },
+    })
+    registry.assignToolServers('architect', ['issues'])
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      agentKindRegistry: registry,
+      generate: async () => {
+        throw new Error('participant model unavailable')
+      },
+    })
+    const context = makeContext({
+      consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+    })
+
+    expect(await exec.previewToolServers(context)).toEqual({
+      wired: [],
+      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' }],
+    })
+    await expect(exec.run(context)).rejects.toThrow('participant model unavailable')
+  })
+
+  // A non-diverted step is the delegated path: the ceiling is a fact about the PANEL, so a step the
+  // wrapped executor runs must answer whatever that executor answers (nothing, for the inline one).
+  it('delegates the preview when consensus is not active', async () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    expect(await exec.previewToolServers(makeContext())).toBeUndefined()
+  })
+
+  // The reclaim REPORT is how the engine tells "the external work was stopped" from "we asked and
+  // it is still running". This wrapper is the executor the engine holds whenever
+  // `CONSENSUS_ENABLED` is set, so swallowing the answer here turned every successful delegated
+  // cancel into a step telling its operator to go and chase a run that was already dead.
+  it('answers with the wrapped executor’s reclaim report rather than swallowing it', async () => {
+    const report = { delegations: [{ correlationKey: 'ex-acme:impl', cancelled: true }] }
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      standard: {
+        ...standard,
+        runsAsync: () => true,
+        startJob: vi.fn(),
+        pollJob: vi.fn(),
+        reclaimRun: vi.fn(async () => report),
+      } as unknown as AgentExecutor,
+    })
+    expect(await exec.reclaimRun({ runId: 'ex', jobId: 'ex-acme:impl', agentKinds: [] })).toEqual(
+      report,
+    )
+  })
+
+  it('answers nothing when the wrapped executor reclaims nothing', () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    return expect(
+      exec.reclaimRun({ runId: 'ex', jobId: 'ex-coder', agentKinds: [] }),
+    ).resolves.toBeUndefined()
   })
 
   it('runsAsync is false while consensus is active, delegated otherwise', () => {

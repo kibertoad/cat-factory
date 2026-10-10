@@ -45,10 +45,19 @@ export interface FragmentSelector {
   select(candidates: SelectableFragment[], context: FragmentSelectionContext): Promise<string[]>
 }
 
-/** A fragment resolved for injection: just the id and the body to fold in. */
+/** A fragment resolved for injection: the id, its human title (when it has one), and the body to fold in. */
 export interface ResolvedRunFragment {
   id: string
+  /** The fragment's human title, so the prompt composer can label each standard and a reviewer can cite it. */
+  title?: string
   body: string
+  /**
+   * The condensed variant of {@link body} the prompt composer folds for implementer kinds, when
+   * the tier that WON this id defines one. Resolved alongside the body (never re-looked-up by id
+   * downstream), so a tenant override of a built-in id folds its own full body rather than the
+   * built-in's condensed text.
+   */
+  brief?: string
 }
 
 export interface FragmentResolverInput {

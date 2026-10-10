@@ -1,4 +1,6 @@
+import type { DocumentOrigin } from '../domain/types.js'
 import type { Clock, IdGenerator } from './runtime.js'
+import type { Logger } from './logging.js'
 
 // ---------------------------------------------------------------------------
 // Binary-artifact storage: a runtime-neutral abstraction for storing opaque
@@ -16,16 +18,84 @@ import type { Clock, IdGenerator } from './runtime.js'
 // metadata SQL per backend:
 //   - {@link BinaryArtifactMetadataStore} — per-runtime metadata persistence.
 //   - {@link BinaryBlobBackend} — the pluggable "custom adapter": put/get/delete
-//     bytes by key. R2 / S3 / Postgres-bytea / in-memory all implement it.
+//     bytes by key. R2 / S3 / Postgres-bytea / in-memory all implement it, and so
+//     does a store a DEPLOYMENT defines itself and registers on the app-owned
+//     `BinaryStoreRegistry` (`domain/binary-store-registry.ts`).
 //   - {@link createBinaryArtifactStore} — composes the two into the
 //     {@link BinaryArtifactStore} the rest of the app depends on.
 // ---------------------------------------------------------------------------
 
-/** Where a blob's bytes physically live. The metadata always lives in the DB. */
-export type BinaryArtifactStorageKind = 'db' | 'r2' | 's3' | 'fs' | 'memory'
+/** The blob backends the PLATFORM itself ships. A deployment adds its own; see below. */
+export const BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS = ['db', 'r2', 's3', 'fs', 'memory'] as const
 
-/** What an artifact is — drives actual-vs-reference pairing in the gate UI. */
-export type BinaryArtifactKind = 'screenshot' | 'reference'
+/** One of the platform's own backends: the closed half of {@link BinaryArtifactStorageKind}. */
+export type BuiltinBinaryArtifactStorageKind =
+  (typeof BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS)[number]
+
+/**
+ * Where a blob's bytes physically live. The metadata always lives in the DB.
+ *
+ * OPEN, unlike most of the platform's persisted vocabularies: a deployment registers its own
+ * stores on the app-owned `BinaryStoreRegistry` (`domain/binary-store-registry.ts`) and a
+ * registered store's id is stamped here verbatim. It is stated at the store's grain rather than
+ * a single `custom` tag because the value's whole job is to say WHICH backend holds these bytes,
+ * and a deployment running two custom stores (or migrating between them) would otherwise have
+ * rows that name neither. Nothing branches on it (a read resolves the account's CURRENT store),
+ * so the openness costs no exhaustiveness check anywhere.
+ */
+export type BinaryArtifactStorageKind = BuiltinBinaryArtifactStorageKind | (string & {})
+
+/**
+ * What an artifact is.
+ *
+ * `screenshot` / `reference` are run EVIDENCE and drive actual-vs-reference pairing in the
+ * visual-confirmation gate. `asset` is the odd one out and deliberately so: it is a PRODUCT
+ * deliverable a binary-output step generated and stored through the platform's own asset
+ * storage ({@link PLATFORM_ASSET_STORAGE_SERVICE_ID} in `@cat-factory/contracts`), so it
+ * outlives the run that made it and is EXEMPT from the age-based retention sweep. See
+ * {@link BinaryArtifactStore.pruneOlderThan}.
+ */
+export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset'
+
+/**
+ * The artifact kinds the age-based retention sweep may reclaim, as the ONE statement both
+ * metadata stores build their predicate from.
+ *
+ * Stated as what the sweep KEEPS rather than as what it drops, so a kind added later is swept by
+ * default and has to be named here to be exempted: the opposite reading would silently retain a
+ * new kind forever, which nothing would ever surface. Today the exempt set is `asset` alone.
+ */
+export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['asset']
+
+/**
+ * The document an artifact was rendered FROM, when it came from one.
+ *
+ * A reference image has two possible provenances that must not be confused: a person uploaded it
+ * against a task, or an import downloaded it from a design source. Only the second can be
+ * REPLACED wholesale on a re-import, so it carries the document's own SOURCE identity — never the
+ * linked block (a document is imported before it is attached to anything, and one document can be
+ * attached to a different block later) and never anything it displays.
+ */
+export interface DocumentArtifactRef {
+  source: DocumentOrigin
+  externalId: string
+}
+
+/**
+ * Collapse a document list to the distinct `(source, externalId)` pairs a batch read should ask
+ * about. Shared by both metadata stores so a duplicate ref cannot cost one runtime a repeated OR
+ * clause (and duplicate rows in its result) while the other happens to dedupe.
+ */
+export function dedupeDocumentRefs(
+  documents: readonly DocumentArtifactRef[],
+): DocumentArtifactRef[] {
+  const seen = new Map<string, DocumentArtifactRef>()
+  for (const document of documents) {
+    const key = `${document.source}::${document.externalId}`
+    if (!seen.has(key)) seen.set(key, document)
+  }
+  return [...seen.values()]
+}
 
 /** Metadata describing one stored blob (the bytes live in a {@link BinaryBlobBackend}). */
 export interface BinaryArtifactRecord {
@@ -47,6 +117,11 @@ export interface BinaryArtifactRecord {
   storage: BinaryArtifactStorageKind
   /** Backend-specific locator for the bytes (e.g. the R2/S3 object key). */
   storageKey: string
+  /**
+   * The imported document this artifact was rendered from, or null for one a person uploaded.
+   * See {@link DocumentArtifactRef}.
+   */
+  document: DocumentArtifactRef | null
   createdAt: number
 }
 
@@ -55,7 +130,8 @@ export interface StoreBinaryArtifactInput {
   meta: Pick<
     BinaryArtifactRecord,
     'workspaceId' | 'executionId' | 'blockId' | 'kind' | 'view' | 'contentType'
-  >
+  > &
+    Partial<Pick<BinaryArtifactRecord, 'document'>>
   blob: Uint8Array
 }
 
@@ -87,13 +163,85 @@ export interface BinaryArtifactStore {
    * are attached to the block before any run (so they carry no executionId).
    */
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
+  /**
+   * How many artifacts a board block holds (the per-block upload cap precheck), the sibling of
+   * {@link countByExecution} and, like it, an indexed COUNT that materialises no row.
+   *
+   * A block's set is the one an external caller reads UNPAGED, folded into
+   * `GET /api/v1/runs/{runId}/artifacts` beside the run's own captures. That endpoint is
+   * unpaged because both halves are bounded by construction, so the block half owes the same
+   * standing bound the run half has always had.
+   */
+  countByBlock(workspaceId: string, blockId: string): Promise<number>
+  /**
+   * Artifacts rendered from one imported document — the design renders an import retained, read
+   * back by the surfaces that pair them with a task's screenshots.
+   */
+  listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]>
+  /**
+   * The same renders for a LIST of documents, in one batched read: what a reader with a task's
+   * whole set of linked designs in hand calls, rather than {@link listByDocument} per document.
+   *
+   * The visual-confirmation gate is that reader, and it runs on the driver path of every run whose
+   * pipeline carries the gate, so a point read per attached design is exactly the N+1 the batch
+   * ports exist to prevent. Each record still names its own `document`, so a caller that needs the
+   * per-document split indexes the result rather than asking again.
+   */
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
+  /**
+   * Re-import reclaim: delete every artifact rendered from one document — BOTH the metadata rows
+   * AND their bytes — and return how many were removed.
+   *
+   * Called BEFORE an import stores the new renders, not after, so the document's images are never
+   * a mix of two revisions. The cost of that ordering is a window in which a design carries no
+   * images at all, which is the honest failure: an import that then cannot download will record
+   * `failed` beside an empty set, where the reverse ordering would leave last month's frames
+   * looking like this month's. Same fail-safe blobs-first reclaim as {@link pruneOlderThan}.
+   */
+  pruneByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number>
   /**
    * Retention sweep: delete every artifact in the workspace created before `olderThan`
    * (epoch ms) — BOTH the metadata row AND its bytes — and return how many were removed.
    * Drives the configurable per-workspace retention cleanup (default 14 days).
+   *
+   * EXEMPTS artifacts carrying a {@link DocumentArtifactRef}. Age is the right lifetime for run
+   * debris, which is produced once and never referenced again, and the wrong one for a document's
+   * renders, which are a PROJECTION of a live row: they are replaced wholesale by the next import
+   * that changes the body ({@link pruneByDocument}) and by nothing else. Sweeping them on a clock
+   * would leave `documents.render_status` saying `stored` over an empty set, and nothing would
+   * re-download them, because an unedited design is never re-imported. Their reclaim is the
+   * document's own, not the calendar's.
+   *
+   * It ALSO exempts every kind in {@link RETAINED_BINARY_ARTIFACT_KINDS}, which today means the
+   * `asset` deliverables of a binary-output step. The same argument one axis over: a retention
+   * window sized for run debris is the wrong clock for the thing the run was started to produce,
+   * and a generated asset that vanished two weeks later would take its step's whole report with
+   * it (the report records WHERE each artifact went, so a swept one reads as a broken link with
+   * nothing saying the platform removed it).
    */
   pruneOlderThan(workspaceId: string, olderThan: number): Promise<number>
+  /**
+   * Board-delete reclaim: delete EVERY artifact in the workspace — BOTH the metadata rows
+   * AND their bytes — and return how many were removed. Called from the workspace-delete
+   * path (the retention sweeps only ever see LIVE workspaces via `listVisible`, so a deleted
+   * workspace's artifacts would otherwise leak the heavy blob bytes forever). Same fail-safe
+   * blobs-first ordering as {@link pruneOlderThan}: a blob whose delete throws keeps its
+   * metadata row (the only handle on the key) rather than orphaning the bytes.
+   *
+   * NOTE the asymmetry with {@link pruneOlderThan}'s retry story: the retention sweep revisits
+   * a LIVE workspace hourly, so a row it retains is genuinely retried; but a DELETED workspace
+   * never reappears in `listVisible`, so a row retained here is NOT auto-retried — it needs an
+   * out-of-band reclaim. The composed store therefore logs (via its injected logger) whenever a
+   * blob delete fails so the residual leak is surfaced rather than silent.
+   */
+  deleteByWorkspace(workspaceId: string): Promise<number>
 }
 
 /** Per-runtime metadata persistence (D1 ⇄ Drizzle). Bytes live elsewhere. */
@@ -104,11 +252,55 @@ export interface BinaryArtifactMetadataStore {
   /** Count a run's artifacts without materialising rows (the per-run upload cap precheck). */
   countByExecution(workspaceId: string, executionId: string): Promise<number>
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
+  /** Count a block's artifacts without materialising rows (the per-block upload cap precheck). */
+  countByBlock(workspaceId: string, blockId: string): Promise<number>
+  /** Records rendered from one imported document (the design renders an import retained). */
+  listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]>
+  /**
+   * The same records for a LIST of documents, in ONE chunked statement per call rather than a
+   * read per document. Empty input reads nothing; a document naming no row is simply absent.
+   * Ordered like the single-document read (`createdAt`, then `id`) across the whole result, so
+   * "the newest render for a view wins" holds the same way however many documents were asked for.
+   */
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]>
+  /**
+   * Delete exactly the named metadata rows in ONE chunked statement; returns how many went.
+   *
+   * Every id-scoped reclaim goes through this rather than a predicate, because a predicate
+   * re-evaluates at DELETE time against rows the caller never listed and therefore never
+   * reclaimed the bytes of. The document reclaim is where that bites: two imports of one document
+   * race routinely (a manual re-import beside a dispatch-time refresh), and a `WHERE
+   * document_source = …` delete would drop the row the other import had just inserted, orphaning
+   * its blob with nothing left pointing at the key. Ids name the rows whose bytes are already
+   * gone, so the statement can only ever remove those.
+   *
+   * Empty input is a no-op. Ids naming no row are silently skipped, so a reclaim stays idempotent.
+   */
+  deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number>
   delete(workspaceId: string, id: string): Promise<void>
-  /** Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep. */
+  /**
+   * Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep.
+   * EXCLUDES document-keyed renders, whose lifetime is their document's, and every kind in
+   * {@link RETAINED_BINARY_ARTIFACT_KINDS}; see {@link BinaryArtifactStore.pruneOlderThan} for
+   * why age is the wrong clock for either.
+   */
   listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]>
-  /** Delete metadata rows in the workspace created before `olderThan`; returns the count. */
+  /**
+   * Delete metadata rows in the workspace created before `olderThan`; returns the count. Carries
+   * the SAME exemptions as {@link listOlderThan}: the two predicates are one rule, and a delete
+   * wider than its list would reclaim rows whose bytes nothing had removed.
+   */
   deleteOlderThan(workspaceId: string, olderThan: number): Promise<number>
+  /** Every record in the workspace — for the workspace-delete purge. */
+  listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]>
+  /** Delete every metadata row in the workspace; returns the count. */
+  deleteByWorkspace(workspaceId: string): Promise<number>
 }
 
 /**
@@ -118,6 +310,11 @@ export interface BinaryArtifactMetadataStore {
  * (tests), or your own store.
  * `kind` is stamped onto the metadata `storage` column so a read knows where the
  * bytes live.
+ *
+ * A deployment's OWN implementation reaches the resolver by being registered on the app-owned
+ * `BinaryStoreRegistry` (`domain/binary-store-registry.ts`) and selected per account, where
+ * `kind` is the registered store's id. Implementing this interface with nowhere to register it
+ * is what that registry exists to fix.
  */
 export interface BinaryBlobBackend {
   readonly kind: BinaryArtifactStorageKind
@@ -180,8 +377,60 @@ export function createBinaryArtifactStore(deps: {
   blob: BinaryBlobBackend
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Optional structural logger for best-effort diagnostics. Used only to SURFACE a partial
+   * reclaim (one or more blob deletes failed, so their metadata rows are retained) — otherwise
+   * that residual leak would be silent. See {@link BinaryArtifactStore.deleteByWorkspace} for
+   * why the workspace-delete path in particular has no auto-retry to fall back on.
+   */
+  logger?: Logger
 }): BinaryArtifactStore {
-  const { metadata, blob, idGenerator, clock } = deps
+  const { metadata, blob, idGenerator, clock, logger } = deps
+  // Shared fail-safe reclaim for a batch of records (drives both `pruneOlderThan` and
+  // `deleteByWorkspace`). Delete the BYTES first (best-effort per blob, so one stuck object
+  // doesn't strand the rest), then drop the metadata rows. The invariant in both directions:
+  // NEVER drop a metadata row whose blob is still present-but-failed-to-delete, because that
+  // would orphan the bytes forever (the metadata is the only handle on the key). So a blob
+  // delete that throws keeps its metadata row, leaving the pair intact — and the common
+  // all-succeeded path still collapses to a single bulk delete. We also never keep a metadata
+  // row pointing at already-deleted bytes.
+  //
+  // Whether the retained pair is genuinely retried depends on the caller: `pruneOlderThan` runs
+  // against a LIVE workspace the sweep revisits hourly (real retry), but `deleteByWorkspace`'s
+  // workspace never reappears in `listVisible` (no auto-retry — an out-of-band reclaim is
+  // needed). Either way a non-empty failure set is a leak worth surfacing, so we log it here
+  // rather than swallowing it silently at every call site.
+  async function reclaim(
+    records: BinaryArtifactRecord[],
+    bulkDelete: () => Promise<number>,
+  ): Promise<number> {
+    const failed = new Set<string>()
+    for (const record of records) {
+      try {
+        await blob.delete(record.storageKey)
+      } catch {
+        // Tolerate a backend hiccup on a single object; retain its metadata so a later reclaim
+        // retries the blob delete instead of orphaning the bytes.
+        failed.add(record.id)
+      }
+    }
+    // Fast path: every blob went, so a single range delete reclaims all the metadata.
+    if (failed.size === 0) return bulkDelete()
+    logger?.warn(
+      'binary-artifact reclaim: some blob deletes failed; their metadata rows are retained (bytes not yet reclaimed)',
+      { workspaceId: records[0]?.workspaceId, failed: failed.size, total: records.length },
+    )
+    // Otherwise delete only the rows whose bytes are confirmed gone, leaving the failed pairs
+    // (row + blob) intact for a later reclaim. One chunked id-scoped statement rather than a
+    // delete per record: the survivor set is a list already in hand, and a point delete per row
+    // is the N+1 this port's batch method exists to prevent.
+    const survivors = records.filter((record) => !failed.has(record.id))
+    if (!survivors.length) return 0
+    return metadata.deleteByIds(
+      survivors[0]!.workspaceId,
+      survivors.map((record) => record.id),
+    )
+  }
   return {
     async store(input) {
       const id = idGenerator.next('art')
@@ -201,6 +450,9 @@ export function createBinaryArtifactStore(deps: {
         hash,
         storage: blob.kind,
         storageKey,
+        // Defaulted here rather than required of every caller: an artifact a person uploaded has
+        // no document behind it, and that is the majority case.
+        document: input.meta.document ?? null,
         createdAt: clock.now(),
       }
       await metadata.insert(record)
@@ -225,8 +477,31 @@ export function createBinaryArtifactStore(deps: {
     countByExecution(workspaceId, executionId) {
       return metadata.countByExecution(workspaceId, executionId)
     },
+    countByBlock(workspaceId, blockId) {
+      return metadata.countByBlock(workspaceId, blockId)
+    },
     listByBlock(workspaceId, blockId) {
       return metadata.listByBlock(workspaceId, blockId)
+    },
+    listByDocument(workspaceId, document) {
+      return metadata.listByDocument(workspaceId, document)
+    },
+    listByDocuments(workspaceId, documents) {
+      return metadata.listByDocuments(workspaceId, documents)
+    },
+    async pruneByDocument(workspaceId, document) {
+      const previous = await metadata.listByDocument(workspaceId, document)
+      if (!previous.length) return 0
+      // The bulk delete is scoped to the ids just listed, NOT to the document predicate. A
+      // re-import stores the replacement renders moments after this returns, and a second import
+      // racing the first would have its fresh rows swept by a predicate delete that never
+      // reclaimed their bytes. See `deleteByIds`.
+      return reclaim(previous, () =>
+        metadata.deleteByIds(
+          workspaceId,
+          previous.map((record) => record.id),
+        ),
+      )
     },
     async delete(workspaceId, id) {
       const record = await metadata.get(workspaceId, id)
@@ -234,35 +509,12 @@ export function createBinaryArtifactStore(deps: {
       await metadata.delete(workspaceId, id)
     },
     async pruneOlderThan(workspaceId, olderThan) {
-      // Delete the BYTES first (best-effort per blob, so one stuck object doesn't strand the
-      // rest), then drop the metadata rows. The invariant in both directions: we NEVER drop a
-      // metadata row whose blob is still present-but-failed-to-delete, because that would orphan
-      // the bytes forever (the metadata is the only handle the next sweep has on the key). So a
-      // blob delete that throws keeps its metadata row, leaving the pair intact for the next
-      // sweep to retry — and the common all-succeeded path still collapses to a single bulk
-      // delete. We also never keep a metadata row pointing at already-deleted bytes.
       const expired = await metadata.listOlderThan(workspaceId, olderThan)
-      const failed = new Set<string>()
-      for (const record of expired) {
-        try {
-          await blob.delete(record.storageKey)
-        } catch {
-          // Tolerate a backend hiccup on a single object; retain its metadata so the next sweep
-          // retries the blob delete instead of orphaning the bytes.
-          failed.add(record.id)
-        }
-      }
-      // Fast path: every blob went, so a single range delete reclaims all the metadata.
-      if (failed.size === 0) return metadata.deleteOlderThan(workspaceId, olderThan)
-      // Otherwise delete only the rows whose bytes are confirmed gone, one at a time, leaving
-      // the failed pairs (row + blob) for the next sweep.
-      let removed = 0
-      for (const record of expired) {
-        if (failed.has(record.id)) continue
-        await metadata.delete(workspaceId, record.id)
-        removed += 1
-      }
-      return removed
+      return reclaim(expired, () => metadata.deleteOlderThan(workspaceId, olderThan))
+    },
+    async deleteByWorkspace(workspaceId) {
+      const all = await metadata.listByWorkspace(workspaceId)
+      return reclaim(all, () => metadata.deleteByWorkspace(workspaceId))
     },
   }
 }

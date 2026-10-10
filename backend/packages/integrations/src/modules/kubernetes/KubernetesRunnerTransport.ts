@@ -1,29 +1,52 @@
-import type {
-  ConnectionTestResult,
-  KubernetesRunnerConfig,
-  RunnerDispatchKind,
-  RunnerDispatchOptions,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerTransport,
-  SecretResolver,
+import {
+  composePostMortem,
+  connectionFailureResult,
+  type ConnectionTestResult,
+  CONTAINER_EVICTION_ERROR,
+  containerKeyForRef,
+  getErrorMessage,
+  HARNESS_SHUTDOWN_ERROR,
+  harnessDispatchError,
+  type KubernetesRunnerConfig,
+  readRunnerDispatchAck,
+  type RunnerDispatchAck,
+  type RunnerDispatchKind,
+  type RunnerDispatchOptions,
+  type RunnerJobRef,
+  type RunnerJobStopOutcome,
+  type RunnerJobView,
+  type RunnerTransport,
+  type SecretResolver,
 } from '@cat-factory/kernel'
-import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
+import {
+  KubernetesApiClient,
+  type KubernetesTokenProvider,
+  safeText,
+} from './KubernetesApiClient.js'
 import {
   analyzePodStatus,
   apiBase,
+  apiServerConnectionFailureMessage,
   buildPodManifest,
   classifyPodReadiness,
+  podHostAliases,
+  describePodTermination,
+  KUBERNETES_TOKEN_KEY,
+  podExitedCleanly,
   podName,
   podUrl,
   podsUrl,
   proxyUrl,
 } from './kubernetes.logic.js'
 
-// Native Kubernetes runner transport (target k8s 1.35+). One bare Pod per RUN,
-// named deterministically from `ref.runId`; every step of the run re-attaches to
-// that pod by `ref.jobId` — mirroring CloudflareContainerTransport's per-run model
-// and the harness's per-run-container assumption. The orchestrator reaches the
+// Native Kubernetes runner transport (target k8s 1.35+). One bare Pod per run and IMAGE
+// VARIANT, named deterministically from kernel's `containerKeyForRef`; every step of the run
+// that wants the same image re-attaches to that pod by `ref.jobId`, and a step declaring a
+// different one gets its own pod — mirroring CloudflareContainerTransport's model (a container
+// class per variant) and the harness's per-container assumption. Keying on the run id alone
+// silently sent the second variant's job into the first's pod, because a later `ensurePod`
+// 409s and re-attaches by design: right for two steps that want one image, and a browser-driven
+// tester running on an image with no browser for two that do not. The orchestrator reaches the
 // per-pod executor-harness HTTP server through the kube-apiserver POD-PROXY
 // subresource, so it needs only HTTPS to the apiserver (no in-cluster networking,
 // no per-run Service/Ingress) and the full RunnerJobView fidelity is preserved
@@ -34,12 +57,20 @@ import {
 // the namespace. The pod itself has no Service, so its harness is reachable only
 // via the RBAC-gated proxy — no inbound harness shared secret is required.
 
-// The eviction marker the engine classifies (job.logic `isContainerEvictionError`):
-// a 404 from the proxy means the pod vanished (deleted/crashed/evicted).
-const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+// The eviction marker the engine classifies (job.logic `isContainerEvictionError`): a 404 from
+// the proxy means the pod vanished (deleted/crashed/evicted). A poll returns it alongside the
+// structured `RunnerJobView.evicted: 'crash'` field (the primary signal); this string stays the
+// fallback older consumers match, and it is ALSO the readiness-throw marker in `waitForPodReady`
+// below (a dispatch-time throw carries no view, so it rides the string channel only). The
+// wording is kernel's (`CONTAINER_EVICTION_ERROR`) because it is a cross-transport contract.
+const EVICTION_ERROR = CONTAINER_EVICTION_ERROR
 
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
+// A stop WAITS by design: the harness holds the response until the aborted job has actually
+// settled (up to its own ~6s force-kill window), because the caller's question is whether the
+// agent is still running, not whether a signal was sent.
+const STOP_TIMEOUT_MS = 30_000
 // Bounded readiness wait inside dispatch. The engine treats `dispatch` as blocking
 // until the runner has accepted the job (a plain dispatch throw hard-fails the run as
 // `failureKind: 'dispatch'`), exactly like the Cloudflare container backend, so we
@@ -49,15 +80,33 @@ const POLL_TIMEOUT_MS = 30_000
 // created (ensurePod 409s) and its image is cached, so the re-drive proceeds.
 const READY_WAIT_MS = 120_000
 const READY_POLL_INTERVAL_MS = 1_500
+// How long a replacement pod waits out the terminating one holding its name. A bare Pod deletes
+// gracefully, so the name stays taken for the grace period (30s by default) plus the kubelet's
+// own settle; the window covers a doubled default rather than an arbitrary round number.
+const POD_REPLACE_WAIT_MS = 90_000
+const POD_REPLACE_POLL_MS = 1_500
 
 export class KubernetesRunnerTransport implements RunnerTransport {
+  /** Backend id recorded in run diagnostics (self-hosted runner pool on Kubernetes). */
+  readonly backend = 'runner-pool'
   private readonly client: KubernetesApiClient
 
   constructor(
     private readonly config: KubernetesRunnerConfig,
     resolveSecret: SecretResolver,
+    /**
+     * Optional async token source forwarded to the apiserver client. Omitted for the native
+     * Kubernetes backend (static ServiceAccount token); supplied by the EKS backend so the
+     * SAME transport drives an EKS apiserver behind a minted, short-lived IAM token.
+     */
+    tokenProvider?: KubernetesTokenProvider,
   ) {
-    this.client = new KubernetesApiClient(config, resolveSecret)
+    this.client = new KubernetesApiClient(
+      config,
+      resolveSecret,
+      KUBERNETES_TOKEN_KEY,
+      tokenProvider,
+    )
   }
 
   async dispatch(
@@ -65,18 +114,30 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
-    const name = podName(ref.runId)
+  ): Promise<RunnerDispatchAck | undefined> {
+    const name = podName(containerKeyForRef(ref))
     await this.ensurePod(name, ref.runId, options)
     await this.waitForPodReady(name)
     const res = await this.proxyFetch('POST', name, '/jobs', { ...spec, kind }, DISPATCH_TIMEOUT_MS)
     if (!res.ok) {
-      throw new Error(`Container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+      // Structured DispatchError (carrying the HTTP status) so consumers classify by field, not
+      // regex; a 404 on the harness /jobs route elaborates to the stale-image republish remedy.
+      throw harnessDispatchError({
+        label: 'Container',
+        status: res.status,
+        body: await safeText(res),
+      })
     }
+    // This transport POSTs to the harness ITSELF (through the apiserver pod-proxy), so the
+    // acceptance body it gets back IS the handshake, unlike a manifest-driven pool, which sees
+    // only whatever its own scheduler chose to return. Dropping it here would leave every k8s/EKS
+    // deployment permanently `unknown`: warning on each capability dispatch against an image that
+    // is in fact current, and unable to ever refuse a genuinely blind one.
+    return readRunnerDispatchAck(await safeJson(res))
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
-    const name = podName(ref.runId)
+    const name = podName(containerKeyForRef(ref))
     const res = await this.proxyFetch(
       'GET',
       name,
@@ -87,8 +148,26 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     if (res.status === 404) {
       // The pod-proxy 404s when the pod is gone (deleted/crashed/evicted) — the
       // harness keeps a finished job's view, so a 404 is the pod vanishing, not a
-      // forgotten job. Report it as the eviction the engine recovers from.
-      return { state: 'failed', error: EVICTION_ERROR }
+      // forgotten job. Report it as the eviction the engine recovers from — the structured
+      // `evicted: 'crash'` field is the primary signal; the string suffix is the fallback.
+      //
+      // The pod OBJECT usually outlives the workload (`restartPolicy: Never` leaves a Failed
+      // pod in place until `release` deletes it), so this is the one moment its termination
+      // state is still readable. It never fails the poll: a run that lost its container must
+      // still be failed, cause or no cause.
+      //
+      // That same read decides the VERDICT as well as the detail. A pod whose containers all
+      // ended 0 was not lost: its harness exited cleanly with this job in flight, so something
+      // stopped it and a fresh pod meets that something again. Both readings come from ONE
+      // apiserver call, so they cannot describe two different moments of the pod's death.
+      const { detail, harnessShutdown } = await this.podDeathReport(name)
+      return {
+        state: 'failed',
+        ...(harnessShutdown
+          ? { error: HARNESS_SHUTDOWN_ERROR, harnessShutdown }
+          : { error: EVICTION_ERROR, evicted: 'crash' as const }),
+        ...(detail ? { detail } : {}),
+      }
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
@@ -98,7 +177,7 @@ export class KubernetesRunnerTransport implements RunnerTransport {
 
   /** Reclaim the run's pod (idempotent — a missing pod is a no-op). */
   async release(ref: RunnerJobRef): Promise<void> {
-    const name = podName(ref.runId)
+    const name = podName(containerKeyForRef(ref))
     const res = await this.apiFetch(
       'DELETE',
       podUrl(this.config, name),
@@ -118,6 +197,32 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     }
   }
 
+  /**
+   * Stop ONE job and confirm it. Always answers `stopped`: the graceful path aborts that job at
+   * the harness through the pod-proxy and waits for it to settle, and anything else escalates to
+   * deleting the pod, which stops everything in it.
+   *
+   * The pod holds the rest of the run's steps that share this image, so the escalation costs
+   * them, which is exactly the trade the only caller has already made by failing the run. A bare Pod is not garbage-collected either,
+   * so a stop that gave up here would leak the pod as well as the agent.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const name = podName(containerKeyForRef(ref))
+    const res = await this.proxyFetch(
+      'DELETE',
+      name,
+      `/jobs/${encodeURIComponent(ref.jobId)}`,
+      undefined,
+      STOP_TIMEOUT_MS,
+    )
+    if (res.ok) {
+      const body = (await safeJson(res)) as { state?: unknown } | undefined
+      if (body?.state !== 'running') return 'stopped'
+    }
+    await this.release(ref)
+    return 'stopped'
+  }
+
   /** Probe the apiserver with the configured token (lists pods; nothing created). */
   async testConnection(): Promise<ConnectionTestResult> {
     try {
@@ -135,14 +240,80 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       }
       return {
         ok: false,
-        message: `apiserver responded ${res.status}: ${await safeText(res)}`,
+        message: apiServerConnectionFailureMessage(res.status, await safeText(res), {
+          operation: 'list pods',
+          namespace: this.config.namespace,
+        }),
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // Nothing answered, so there is no status to map. The real cause is buried in the thrown
+      // error's `.cause` chain, which reads as a bare "fetch failed" if taken at face value.
+      return connectionFailureResult(err, {
+        subject: 'the Kubernetes apiserver',
+        target: apiBase(this.config),
+      })
     }
   }
 
   // --- internals ----------------------------------------------------------
+
+  /**
+   * What became of the run's pod: how it ended (the failure `detail`, undefined when nothing can
+   * be said) and whether that ending was a CLEAN EXIT rather than a loss.
+   *
+   * Both come from one read because they are one question asked twice, and a pod being deleted
+   * between two reads would let the verdict and the detail describe different moments.
+   *
+   * The pod is per (run, image variant), so whatever it reports is unambiguously this run's:
+   * none of the shared-backend caution the local warm pool needs applies here.
+   *
+   * Never throws, and never returns silence for a failure to look. Three outcomes are three
+   * different investigations and only one of them is "the container died": a pod that is GONE
+   * from the apiserver was deleted or garbage-collected by something outside this run, and an
+   * apiserver that would not answer means nobody looked at all. Reporting the last two as an
+   * absent detail would make an unreachable control plane read exactly like a clean vanishing.
+   * Neither can say how the workload exited, so neither claims a shutdown: the failure stays the
+   * eviction that costs a fresh pod rather than the run.
+   */
+  private async podDeathReport(name: string): Promise<{ detail?: string; harnessShutdown?: true }> {
+    try {
+      const res = await this.apiFetch('GET', podUrl(this.config, name), undefined, POLL_TIMEOUT_MS)
+      if (res.status === 404) {
+        return {
+          detail: composePostMortem([
+            `Runner pod '${name}' no longer exists: it was deleted or garbage-collected, so the ` +
+              `kubelet's account of how it ended is gone with it.`,
+          ]),
+        }
+      }
+      if (!res.ok) {
+        return {
+          detail: composePostMortem([
+            `Could not read runner pod '${name}' to explain the eviction: the apiserver answered ` +
+              `HTTP ${res.status}. The pod's own termination state was not consulted.`,
+          ]),
+        }
+      }
+      const pod = await res.json()
+      return {
+        // Scrubbed, because a kubelet `message` echoes the container's termination log, which is
+        // agent-authored text landing on a surface a person reads.
+        detail: composePostMortem([describePodTermination(pod)]),
+        ...(podExitedCleanly(pod) ? { harnessShutdown: true as const } : {}),
+      }
+    } catch (error) {
+      // The cause goes into PROSE on the run rather than into log fields, so it is the message
+      // itself that is wanted here, not `describeError`'s field pair; `composePostMortem` applies
+      // the same scrub that helper would have.
+      const cause = getErrorMessage(error)
+      return {
+        detail: composePostMortem([
+          `Could not read runner pod '${name}' to explain the eviction: ${cause}. ` +
+            `The pod's own termination state was not consulted.`,
+        ]),
+      }
+    }
+  }
 
   private async ensurePod(
     name: string,
@@ -151,10 +322,105 @@ export class KubernetesRunnerTransport implements RunnerTransport {
   ): Promise<void> {
     const manifest = buildPodManifest(this.config, runId, name, options)
     const res = await this.apiFetch('POST', podsUrl(this.config), manifest, DISPATCH_TIMEOUT_MS)
+    if (res.ok) return
     // 409 AlreadyExists ⇒ the run's pod is already up (a later step or a replay):
     // idempotent re-attach, exactly like CloudflareContainerTransport.
-    if (res.ok || res.status === 409) return
-    throw new Error(`Failed to create runner pod (HTTP ${res.status}): ${await safeText(res)}`)
+    if (res.status !== 409) {
+      throw new Error(`Failed to create runner pod (HTTP ${res.status}): ${await safeText(res)}`)
+    }
+    if (await this.podMissingHostAliases(name, options)) {
+      await this.deletePodForReplacement(name)
+      await this.recreatePod(name, manifest)
+    }
+  }
+
+  /**
+   * Delete the pod standing in the way of a replacement, and FAIL on a refusal rather than
+   * proceeding to the recreate.
+   *
+   * The result has to be read. A delete the apiserver refuses (a ServiceAccount with `create` but
+   * not `delete`, an admission webhook, a 500) leaves the pod running, and {@link recreatePod}
+   * then spends the whole 90-second replacement window collecting 409s before throwing an error
+   * that names the CREATE: a step burning a minute and a half of the driver's budget, and an
+   * operator sent to the wrong permission. A deployment missing `pods/delete` hits this on every
+   * environment-bearing step, so it is a standing misconfiguration rather than a transient.
+   *
+   * 404 is success: something already removed the pod, which is exactly the state the delete was
+   * asking for.
+   */
+  private async deletePodForReplacement(name: string): Promise<void> {
+    const res = await this.apiFetch(
+      'DELETE',
+      podUrl(this.config, name),
+      undefined,
+      DISPATCH_TIMEOUT_MS,
+    )
+    if (res.ok || res.status === 404) return
+    throw new Error(
+      `Could not delete runner pod '${name}' to give it a host alias it needs (HTTP ` +
+        `${res.status}): ${await safeText(res)}. The pod is still running without the alias, so ` +
+        `the job would not reach its environment.`,
+    )
+  }
+
+  /**
+   * Whether the pod already serving this run was created without a host alias the job now needs.
+   *
+   * `hostAliases` is fixed at pod creation, and a run's pod is created by its FIRST step while the
+   * environment it must reach does not exist until the `deployer` several steps later, so the
+   * ordinary case for a name-to-address bridge is a pod that predates it. Left unchecked, the
+   * re-attach is silent and the tester spends its whole step on connection failures, which is the
+   * misreading the bridge exists to stop.
+   *
+   * Read back off the LIVE pod rather than remembered in this process, which is the one thing this
+   * transport can do that the Docker one cannot (`--add-host` is not readable off a container).
+   * That also makes the check survive a restart with no cache to lose.
+   *
+   * A read that FAILS answers false. The alternative is worse in the direction that matters: a
+   * transient apiserver blip would delete a healthy pod mid-run, where answering false costs at
+   * most the diagnostic the tester was going to produce anyway.
+   */
+  private async podMissingHostAliases(
+    name: string,
+    options?: RunnerDispatchOptions,
+  ): Promise<boolean> {
+    const needed = podHostAliases(options)
+    if (needed.length === 0) return false
+    const res = await this.apiFetch('GET', podUrl(this.config, name), undefined, POLL_TIMEOUT_MS)
+    if (!res.ok) return false
+    const pod = (await res.json()) as { spec?: { hostAliases?: unknown } } | null
+    const present = new Set<string>()
+    for (const alias of Array.isArray(pod?.spec?.hostAliases) ? pod.spec.hostAliases : []) {
+      const entry = alias as { ip?: unknown; hostnames?: unknown }
+      if (typeof entry.ip !== 'string' || !Array.isArray(entry.hostnames)) continue
+      for (const host of entry.hostnames) present.add(`${String(host)}=${entry.ip}`)
+    }
+    return needed.some((alias) =>
+      alias.hostnames.some((host) => !present.has(`${host}=${alias.ip}`)),
+    )
+  }
+
+  /**
+   * Re-create a pod just deleted for a stale host-alias set, tolerating the window in which the
+   * apiserver still holds the terminating one.
+   *
+   * A bare Pod deletes gracefully, so the name stays taken for its termination period and an
+   * immediate POST 409s again. Retried rather than failed because the alternative leaves the run
+   * attached to the very pod that cannot reach its environment; giving up after the window is an
+   * ordinary dispatch failure the engine already recovers by re-driving the step.
+   */
+  private async recreatePod(name: string, manifest: Record<string, unknown>): Promise<void> {
+    const deadline = Date.now() + POD_REPLACE_WAIT_MS
+    for (;;) {
+      const res = await this.apiFetch('POST', podsUrl(this.config), manifest, DISPATCH_TIMEOUT_MS)
+      if (res.ok) return
+      if (res.status !== 409 || Date.now() >= deadline) {
+        throw new Error(
+          `Failed to replace runner pod '${name}' (HTTP ${res.status}): ${await safeText(res)}`,
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, POD_REPLACE_POLL_MS))
+    }
   }
 
   private async waitForPodReady(name: string): Promise<void> {
@@ -221,6 +487,20 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     timeoutMs: number,
   ): Promise<Response> {
     return this.client.fetch(method, url, body, timeoutMs)
+  }
+}
+
+/**
+ * A response body as JSON, or undefined for anything unreadable. Never throws: both callers are
+ * past the point where a parse failure should change the outcome (the job is accepted, or the
+ * stop escalates), so an unreadable body degrades to "nothing reported".
+ */
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json()
+  } catch {
+    // silent-catch-ok: an unreadable body IS the "nothing reported" answer both callers handle.
+    return undefined
   }
 }
 

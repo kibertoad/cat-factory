@@ -1,8 +1,14 @@
 import type {
   ConnectionTestResult,
+  HarnessCallMetric,
   ProviderConfigField,
+  RunnerDispatchAck,
   RunnerDispatchRequest,
   RunnerJobResult,
+  RunnerJobStopOutcome,
+  RunnerValidationReport,
+  RunnerReproductionPhase,
+  RunnerReproductionReport,
   RunnerJobView,
   RunnerPollRequest,
   RunnerPoolAuthScheme,
@@ -10,10 +16,20 @@ import type {
   RunnerPoolManifest,
   RunnerPoolProvider,
   RunnerPoolRequestTemplate,
+  RunnerObservedToolServer,
+  RunnerSliceReview,
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { isToolServerObservedStatus } from '@cat-factory/contracts'
+import {
+  CONTAINER_EVICTION_ERROR,
+  getErrorMessage,
+  isHarnessFailureCause,
+  readRunnerDispatchAck,
+  STRICT_URL_SAFETY_POLICY,
+} from '@cat-factory/kernel'
+import { DOCS } from '../../docs.js'
 import * as environmentsLogic from '../environments/environments.logic.js'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import * as runnersLogic from './runners.logic.js'
@@ -41,13 +57,29 @@ const MAX_RESPONSE_CHARS = 200_000
 const MAX_RESPONSE_BYTES = MAX_RESPONSE_CHARS
 const USER_AGENT = 'cat-factory'
 
-/** Carries the HTTP status so callers can surface a meaningful (redacted) error. */
+/**
+ * UI-first remedy appended to every runner-pool error: a self-hosted pool is registered,
+ * credentialed, and re-tested in the UI, so the primary fix instruction names that click path
+ * (the pool scheduler URL / auth / manifest all live there). Kept self-sufficient without the
+ * doc link. The raw `Runner pool <method> → <status>` / `Missing secret 'X'` first part is
+ * PRESERVED verbatim ahead of it (greppable + surfaced as the connection-test / dispatch detail).
+ */
+const RUNNER_POOL_REMEDY =
+  `Re-test the connection in Settings → Self-hosted runner pool, and update the pool's scheduler ` +
+  `URL, credentials, or manifest there if they changed. See ${DOCS.runnerPool()}.`
+
+/**
+ * Carries the HTTP status so callers can surface a meaningful (redacted) error, and appends the
+ * shared UI-first {@link RUNNER_POOL_REMEDY} so every runner-pool failure (a scheduler non-2xx, a
+ * missing manifest secret, an OAuth-token rejection) names where to fix it — whether it surfaces
+ * as a connection-test message, a dispatch failure, or a log line.
+ */
 export class RunnerPoolApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
   ) {
-    super(message)
+    super(`${message} — ${RUNNER_POOL_REMEDY}`)
     this.name = 'RunnerPoolApiError'
   }
 }
@@ -73,28 +105,80 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     this.urlPolicy = options.urlPolicy ?? STRICT_URL_SAFETY_POLICY
   }
 
-  async dispatch(req: RunnerDispatchRequest): Promise<void> {
-    await this.execute(
+  async dispatch(req: RunnerDispatchRequest): Promise<RunnerDispatchAck | undefined> {
+    const json = await this.execute(
       req.manifest,
       req.manifest.dispatch,
       this.scope(req.jobId, req.spec),
       req.resolveSecret,
     )
+    // The capability handshake, IF the manifest says where in the scheduler's response the
+    // harness's acceptance body lands. Manifest-mapped like every other pool field, and for a
+    // sharper reason than consistency: `capabilities` is an ordinary word, and a scheduler that
+    // answers with its OWN (`["gpu","docker"]`) would be read as a harness reporting a list with
+    // neither `mcpServers` nor `skills` in it: an `unsupported` verdict that HARD-REFUSES every
+    // capability dispatch against a perfectly current image. Guessing cannot tell the two apart;
+    // the operator can, in one line. Unmapped ⇒ unknown, which is the truth about a control plane
+    // this backend knows nothing about. See `domain/harness-capabilities.ts`.
+    const path = req.manifest.response.dispatchCapabilitiesPath
+    if (!path) return undefined
+    return readRunnerDispatchAck({
+      capabilities: environmentsLogic.extractByPath(json, path),
+    })
   }
 
   async poll(req: RunnerPollRequest): Promise<RunnerJobView> {
-    const json = await this.execute(
-      req.manifest,
-      req.manifest.poll,
-      this.scope(req.jobId),
-      req.resolveSecret,
-    )
+    let json: unknown
+    try {
+      json = await this.execute(
+        req.manifest,
+        req.manifest.poll,
+        this.scope(req.jobId),
+        req.resolveSecret,
+      )
+    } catch (error) {
+      // The scheduler no longer knows this job (404 Not Found / 410 Gone): its runner is gone
+      // and the job with it. Report it as an EVICTION rather than letting the throw count
+      // against the poll-failure tolerance, so the engine re-dispatches onto a fresh pool
+      // member instead of spending ~3 minutes of retries and then failing the run. Mirrors the
+      // Cloudflare container and Kubernetes transports, which map their own 404 the same way.
+      //
+      // The status leads the sentinel, and the scheduler's own account rides `detail`, because
+      // a 404 is NOT proof of an eviction: a mistyped `poll` path template (dispatch uses a
+      // different one, so it can be right while this is wrong) and a scheduler that 404s an
+      // unauthorized read both land here. Those are misconfigurations, and an operator handed a
+      // bare "container evicted or crashed" has nothing to work from — the raw status line plus
+      // this provider's fix-it remedy is what names the real problem. `evicted or crashed` stays
+      // a SUBSTRING, which is all `isContainerEvictionError` needs.
+      //
+      // It stays an EVICTION even where a harness shutdown is what actually happened. This
+      // backend sees a scheduler's status vocabulary and nothing underneath it: there is no exit
+      // code anywhere in a 404, and inferring "shut down" from a status word would report every
+      // reclaimed runner as one. Same rule as the Apple `container` runtime locally: an absent
+      // code is not a zero, so the deployment keeps the reading that costs a fresh pool member
+      // rather than the run. The two backends that CAN read an exit code (the local transports,
+      // Kubernetes' `state.terminated`) mint `harnessShutdown` instead.
+      if (error instanceof RunnerPoolApiError && (error.status === 404 || error.status === 410)) {
+        return {
+          state: 'failed',
+          error: `Runner pool poll → ${error.status}: ${CONTAINER_EVICTION_ERROR}`,
+          evicted: 'crash',
+          detail: error.message,
+        }
+      }
+      throw error
+    }
     return this.mapJobView(req.manifest, json)
   }
 
-  async release(req: RunnerPollRequest): Promise<void> {
-    if (!req.manifest.release) return
+  async release(req: RunnerPollRequest): Promise<RunnerJobStopOutcome> {
+    // No template ⇒ nothing happens, and saying so is the point: this same call is a caller's only
+    // way to CANCEL a pool job, so a silent `void` return here reads as a job that was stopped.
+    if (!req.manifest.release) return 'unsupported'
     await this.execute(req.manifest, req.manifest.release, this.scope(req.jobId), req.resolveSecret)
+    // The scheduler accepted the call. Whether its runner actually stopped is behind a control
+    // plane with no read this backend can make, so `requested` is the strongest honest answer.
+    return 'requested'
   }
 
   /** A manifest-driven pool: the config IS the manifest, so describe its secret keys. */
@@ -110,9 +194,11 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     try {
       headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
-    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy, {
+      subject: 'the runner pool API',
+    })
   }
 
   // --- internals ----------------------------------------------------------
@@ -333,13 +419,23 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   private mapJobView(manifest: RunnerPoolManifest, json: unknown): RunnerJobView {
     const r = manifest.response
     const rawStatus = environmentsLogic.extractString(json, r.statusPath)
-    const state = runnersLogic.mapJobState(rawStatus, r.statusMap)
+    const { state, evicted } = runnersLogic.classifyJobStatus(rawStatus, r.statusMap)
     const error = environmentsLogic.extractString(json, r.errorPath)
 
     const view: RunnerJobView = { state }
+    // A scheduler that reports its runner was reclaimed (evicted / preempted / OOM-killed /
+    // node lost) describes INFRASTRUCTURE loss, not the job's own verdict, so it rides the
+    // structured eviction field and the engine retries on a fresh pool member.
+    if (evicted) view.evicted = evicted
 
     const progress = this.mapProgress(manifest, json)
     if (progress) view.progress = progress
+
+    // The harness liveness heartbeat (epoch ms), when the manifest maps it — so a long, quiet phase
+    // on a pool-backed run still refreshes the step's throttled `lastActivityAt`, exactly like a
+    // Cloudflare container. Best-effort: a missing/non-numeric value is simply not forwarded.
+    const heartbeatAt = this.mapHeartbeat(manifest, json)
+    if (heartbeatAt !== undefined) view.heartbeatAt = heartbeatAt
 
     // Forward-looking follow-up items the Coder streamed since the last poll (drain-on-read),
     // when the manifest maps them. Surfaced on every poll (running or done) so a fast final
@@ -347,16 +443,56 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const followUps = this.mapFollowUps(manifest, json)
     if (followUps && followUps.length > 0) view.followUps = followUps
 
+    // Per-model-call telemetry the harness drained on this poll, when the manifest maps it —
+    // so a pool-backed run's calls reach `llm_call_metrics` as they happen, exactly like a
+    // Cloudflare/local container, instead of only from the terminal result (which a run that
+    // dies mid-flight never produces).
+    const callMetrics = this.mapCallMetrics(manifest, json)
+    if (callMetrics) view.callMetrics = callMetrics
+
+    // The latest pre-PR validation attempt, when the manifest maps it — so a pool-backed run
+    // shows the repair loop while it runs, exactly like a Cloudflare/local container. Unlike the
+    // drain channels above this is a latest-value publish, so re-reading it is harmless.
+    const validationReport = this.mapValidationReport(manifest, json)
+    if (validationReport) view.validationReport = validationReport
+
+    // The latest bugfix reproduction-proof attempt, when the manifest maps it — a latest-value
+    // publish like the validation report above, so re-reading it is harmless.
+    const reproductionReport = this.mapReproductionReport(manifest, json)
+    if (reproductionReport) view.reproductionReport = reproductionReport
+
+    // A parallel PR review's per-slice reviews, when the manifest maps them — a latest-value
+    // publish like the two reports above. Forwarded on every poll (running or done): unlike those,
+    // this channel is the ONLY thing that makes a finished slice durable before the reviewer's
+    // terminal output, so a pool-backed review that never gets there has nothing for a manual
+    // resume to work from without it.
+    const sliceReviews = this.mapSliceReviews(manifest, json)
+    if (sliceReviews) view.sliceReviews = sliceReviews
+
+    // What the agent's CLI reported about the tool servers it loaded, when the manifest maps it —
+    // a latest-value publish like the reports above. An unmapped path injects NOTHING rather than
+    // an empty list, which is what keeps "this pool does not proxy the channel" from rendering as
+    // "the CLI loaded no servers" on a run whose servers were all healthy.
+    const toolServers = this.mapToolServers(manifest, json)
+    if (toolServers) view.toolServers = toolServers
+
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
+    // The mapped value is arbitrary scheduler JSON, so it is narrowed to the kernel
+    // {@link HarnessFailureCause} union here — a free-form/unknown value is dropped, which
+    // degrades to the same regex fallback as a pool that maps no cause at all.
     const failureCause = environmentsLogic.extractString(json, r.failureCausePath)
     const detail = environmentsLogic.extractString(json, r.detailPath)
-    if (failureCause) view.failureCause = failureCause
+    if (isHarnessFailureCause(failureCause)) view.failureCause = failureCause
     if (detail) view.detail = detail
 
     if (state === 'failed') {
-      view.error = error ?? 'Runner pool reported the job failed'
+      view.error =
+        error ??
+        (evicted
+          ? `Runner pool reported the runner was reclaimed ('${rawStatus}') — ${CONTAINER_EVICTION_ERROR}`
+          : 'Runner pool reported the job failed')
       return view
     }
 
@@ -386,6 +522,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       view.result = result
     }
     return view
+  }
+
+  /** The harness liveness heartbeat (epoch ms) the manifest maps, coerced to a finite number. */
+  private mapHeartbeat(manifest: RunnerPoolManifest, json: unknown): number | undefined {
+    const raw = environmentsLogic.extractString(json, manifest.response.heartbeatPath)
+    if (raw === undefined) return undefined
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : undefined
   }
 
   private mapProgress(
@@ -430,6 +574,234 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     }
     return items
   }
+
+  /**
+   * Coerce the manifest-mapped per-poll call-telemetry array into the canonical shape. Reuses
+   * the SAME coercion the terminal result envelope goes through, so the live and terminal
+   * channels can't validate a call differently on a pool-backed run.
+   */
+  private mapCallMetrics(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['callMetrics'] | undefined {
+    const path = manifest.response.callMetricsPath
+    if (!path) return undefined
+    const metrics = coerceCallMetrics(environmentsLogic.extractByPath(json, path))
+    return metrics.length > 0 ? metrics : undefined
+  }
+
+  /**
+   * Project the scheduler's live pre-PR validation report onto the canonical view, when the
+   * manifest maps it. Runs the SAME coercion as the terminal result envelope so the live and
+   * terminal channels can't validate a report differently on a pool-backed run.
+   */
+  private mapValidationReport(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['validationReport'] | undefined {
+    const path = manifest.response.validationReportPath
+    if (!path) return undefined
+    return coerceValidationReport(environmentsLogic.extractByPath(json, path))
+  }
+
+  /**
+   * Project the scheduler's live bugfix reproduction proof onto the canonical view, when the
+   * manifest maps it. Runs the SAME coercion as the terminal result envelope so the live and
+   * terminal channels can't validate a verdict differently on a pool-backed run.
+   */
+  private mapReproductionReport(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['reproductionReport'] | undefined {
+    const path = manifest.response.reproductionReportPath
+    if (!path) return undefined
+    return coerceReproductionReport(environmentsLogic.extractByPath(json, path))
+  }
+
+  /**
+   * Project the scheduler's live per-slice PR reviews onto the canonical view, when the manifest
+   * maps them. Coerced per ENTRY — one malformed slice must not discard the good reports beside it,
+   * since discarding them is the exact data loss this channel exists to prevent — and an empty
+   * result injects nothing, so a pool that maps the path but has no slices yet is indistinguishable
+   * from one that maps nothing.
+   */
+  private mapSliceReviews(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['sliceReviews'] | undefined {
+    const path = manifest.response.sliceReviewsPath
+    if (!path) return undefined
+    const reviews = coerceSliceReviews(environmentsLogic.extractByPath(json, path))
+    return reviews.length > 0 ? reviews : undefined
+  }
+
+  /**
+   * Project the scheduler's tool-server startup report onto the canonical view, when the manifest
+   * maps it. Coerced per ENTRY like the slices above — the rows are independent facts about
+   * independent servers — and an empty result injects nothing, so a pool that maps the path for a
+   * job which wired no tool servers is indistinguishable from one that maps nothing. That is the
+   * right collapse here: neither case is evidence that a server failed.
+   */
+  private mapToolServers(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['toolServers'] | undefined {
+    const path = manifest.response.toolServersPath
+    if (!path) return undefined
+    const observed = coerceObservedToolServers(environmentsLogic.extractByPath(json, path))
+    return observed.length > 0 ? observed : undefined
+  }
+}
+
+/**
+ * Coerce a scheduler's `toolServers` envelope into canonical {@link RunnerObservedToolServer}
+ * entries, dropping anything unusable. Mirrors the executor-harness's shape.
+ *
+ * An entry needs a non-empty `id`: it is the only key the engine can pair an observation to the
+ * dispatch's own record by, so an id-less row describes a server nobody can name. It is stored
+ * TRIMMED, because the pairing is an exact string match against the dispatch's declaration: a
+ * scheduler that pads its ids would otherwise clear this guard and then match nothing, rendering a
+ * healthy server as both never-loaded (an amber fault) and unattributed at once.
+ *
+ * `status` is narrowed through the contracts predicate that owns the vocabulary, and anything
+ * unrecognised reads as `unknown` rather than being dropped. That is the safe direction, because
+ * dropping reads as a server the CLI never loaded (a different fault with a different fix), while
+ * `unknown` says exactly what happened: the pool named a state this deployment cannot map.
+ */
+function coerceObservedToolServers(raw: unknown): RunnerObservedToolServer[] {
+  if (!Array.isArray(raw)) return []
+  const observed: RunnerObservedToolServer[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const o = entry as Record<string, unknown>
+    const id = typeof o.id === 'string' ? o.id.trim() : ''
+    if (!id) continue
+    const server: RunnerObservedToolServer = {
+      id,
+      status: isToolServerObservedStatus(o.status) ? o.status : 'unknown',
+    }
+    // `0` is a server that connected and exposed no tools — the most diagnostic count there is,
+    // and the one a truthiness guard would silently turn into "not counted".
+    if (typeof o.toolCount === 'number' && Number.isFinite(o.toolCount) && o.toolCount >= 0) {
+      server.toolCount = o.toolCount
+    }
+    observed.push(server)
+  }
+  return observed
+}
+
+/**
+ * Coerce a scheduler's `sliceReviews` envelope into canonical {@link RunnerSliceReview} entries,
+ * dropping anything unusable. Mirrors the executor-harness's shape.
+ *
+ * An entry needs a non-empty `label`: it is the only key a resume can pair a report to the
+ * reviewer's plan by, so an unlabelled one is noise. `status` is narrowed rather than passed
+ * through, and anything that is not verbatim `completed` reads as `in_progress` — the safe
+ * direction, because over-reporting `completed` would make a resume SKIP a slice nobody reviewed,
+ * while over-reporting `in_progress` only costs re-reviewing one.
+ */
+function coerceSliceReviews(raw: unknown): RunnerSliceReview[] {
+  if (!Array.isArray(raw)) return []
+  const reviews: RunnerSliceReview[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const o = entry as Record<string, unknown>
+    if (typeof o.label !== 'string' || !o.label.trim()) continue
+    const review: RunnerSliceReview = {
+      label: o.label,
+      status: o.status === 'completed' ? 'completed' : 'in_progress',
+    }
+    if (typeof o.report === 'string') review.report = o.report
+    reviews.push(review)
+  }
+  return reviews
+}
+
+/**
+ * Coerce a scheduler's `reproductionReport` envelope into the canonical
+ * {@link RunnerReproductionReport}. Returns undefined for anything that isn't a report-shaped
+ * object, so a malformed/absent envelope injects nothing (and the run behaves as if it carried no
+ * reproduction declaration — which, for a pool that doesn't proxy the field, it effectively did).
+ *
+ * `status` is narrowed to the union rather than passed through: an unrecognised value would reach
+ * the pull-request report as a verdict about a defect, and the safe reading of "I don't know what
+ * this says" is `inconclusive`, never `reproduced`. Mirrors the executor-harness's shape.
+ */
+function coerceReproductionReport(raw: unknown): RunnerReproductionReport | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.command !== 'string') return undefined
+  const status =
+    o.status === 'reproduced' || o.status === 'declared_infeasible' ? o.status : 'inconclusive'
+  const testPaths = Array.isArray(o.testPaths)
+    ? (o.testPaths as unknown[]).filter((p): p is string => typeof p === 'string')
+    : []
+  const report: RunnerReproductionReport = {
+    status,
+    command: o.command,
+    testPaths,
+    attempts: typeof o.attempts === 'number' ? o.attempts : 1,
+    maxAttempts: typeof o.maxAttempts === 'number' ? o.maxAttempts : 1,
+  }
+  if (typeof o.omittedTestPaths === 'number') report.omittedTestPaths = o.omittedTestPaths
+  const base = coerceReproductionPhase(o.base)
+  if (base) report.base = base
+  const final = coerceReproductionPhase(o.final)
+  if (final) report.final = final
+  if (typeof o.reason === 'string') report.reason = o.reason
+  if (typeof o.alternativeVerification === 'string') {
+    report.alternativeVerification = o.alternativeVerification
+  }
+  if (typeof o.note === 'string') report.note = o.note
+  if (typeof o.at === 'number') report.at = o.at
+  return report
+}
+
+/** Coerce one tree's phase outcome; undefined for anything without a usable exit code. */
+function coerceReproductionPhase(raw: unknown): RunnerReproductionPhase | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.exitCode !== 'number') return undefined
+  return {
+    exitCode: o.exitCode,
+    passed: o.passed === true,
+    ...(typeof o.outputTail === 'string' ? { outputTail: o.outputTail } : {}),
+    ...(typeof o.durationMs === 'number' ? { durationMs: o.durationMs } : {}),
+    ...(o.timedOut === true ? { timedOut: true } : {}),
+    ...(o.setupFailed === true ? { setupFailed: true } : {}),
+  }
+}
+
+/**
+ * Coerce a scheduler's pre-PR `validationReport` envelope into the canonical
+ * {@link RunnerValidationReport}, keeping only well-formed per-command outcomes. Returns
+ * undefined for anything that isn't a report-shaped object, so a malformed/absent envelope
+ * injects nothing (and the run behaves as if the service configured no checks — which, for a
+ * pool that doesn't proxy the field, it effectively did). Mirrors the executor-harness's shape.
+ */
+function coerceValidationReport(raw: unknown): RunnerValidationReport | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  if (!Array.isArray(o.outcomes)) return undefined
+  const outcomes = (o.outcomes as unknown[])
+    .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+    .filter((x) => typeof x.label === 'string' && typeof x.exitCode === 'number')
+    .map((x) => ({
+      label: x.label as string,
+      command: typeof x.command === 'string' ? x.command : '',
+      exitCode: x.exitCode as number,
+      passed: x.passed === true,
+      ...(typeof x.outputTail === 'string' ? { outputTail: x.outputTail } : {}),
+      ...(typeof x.durationMs === 'number' ? { durationMs: x.durationMs } : {}),
+      ...(x.timedOut === true ? { timedOut: true } : {}),
+    }))
+  return {
+    passed: o.passed === true,
+    attempts: typeof o.attempts === 'number' ? o.attempts : 1,
+    maxAttempts: typeof o.maxAttempts === 'number' ? o.maxAttempts : outcomes.length > 0 ? 1 : 0,
+    outcomes,
+    ...(typeof o.at === 'number' ? { at: o.at } : {}),
+  }
 }
 
 /**
@@ -454,6 +826,30 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
     if (typeof o[k] === 'string') out[k] = o[k] as string
   }
   if (typeof o.pushed === 'boolean') out.pushed = o.pushed
+  // Multi-repo run's peer PRs (service-connections phase 3): keep only well-formed entries
+  // (a repo + prUrl + branch string), passing the optional frame attribution through. Absent
+  // for a single-repo run — so a pool proxying the executor-harness verbatim carries them
+  // intact, including a monorepo peer's several frames on the ONE PR they share.
+  if (Array.isArray(o.peerPullRequests)) {
+    const peers = (o.peerPullRequests as unknown[])
+      .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+      .filter(
+        (x) =>
+          typeof x.repo === 'string' && typeof x.prUrl === 'string' && typeof x.branch === 'string',
+      )
+      .map((x) => {
+        const frameIds = Array.isArray(x.frameIds)
+          ? x.frameIds.filter((f): f is string => typeof f === 'string' && !!f)
+          : []
+        return {
+          repo: x.repo as string,
+          prUrl: x.prUrl as string,
+          branch: x.branch as string,
+          ...(frameIds.length ? { frameIds } : {}),
+        }
+      })
+    if (peers.length) out.peerPullRequests = peers
+  }
   // The single structured work-product channel (carried as `unknown` on the port — the
   // engine validates). `custom` is what every manifest-driven `agent` kind returns its
   // doc on; it MUST pass through or the engine never coerces the doc.
@@ -469,6 +865,124 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
       inputTokens: (usage as { inputTokens: number }).inputTokens,
       outputTokens: (usage as { outputTokens: number }).outputTokens,
     }
+  }
+  // A subscription harness's per-call telemetry (Claude Code / Codex, whose traffic bypasses
+  // the LLM proxy). A pool proxying the executor-harness verbatim carries these in its result
+  // envelope; dropping them here would silently lose all `llm_call_metrics` rows on a
+  // pool-backed run while the Cloudflare/local transports (which return the harness view
+  // verbatim) record them — a facade-parity divergence.
+  const callMetrics = coerceCallMetrics(o.callMetrics)
+  if (callMetrics.length) out.callMetrics = callMetrics
+  // The agent's effort self-assessment (how hard the work was, what reduced its effectiveness,
+  // the obstacles). A pool proxying the executor-harness verbatim carries it in its result
+  // envelope; keep it so a pool-backed run surfaces effort in run details exactly like the
+  // Cloudflare/local transports (which return the harness view verbatim).
+  const effortReport = coerceEffortReport(o.effortReport)
+  if (effortReport) out.effortReport = effortReport
+  // The pre-PR validation report: on a passing run it is the captured proof the checkout was
+  // green before the PR opened; on a failed one it is the evidence behind the failure. Dropping
+  // it here would leave a pool-backed run with a bare "validation failed" and no output, while
+  // the Cloudflare/local transports (which return the harness view verbatim) show every command.
+  const validationReport = coerceValidationReport(o.validationReport)
+  if (validationReport) out.validationReport = validationReport
+  // The bugfix reproduction proof. Dropping it here would leave a pool-backed bugfix PR with no
+  // reproduction section at all — indistinguishable from a run that never declared one — while
+  // the Cloudflare/local transports (which return the harness view verbatim) publish the verdict.
+  const reproductionReport = coerceReproductionReport(o.reproductionReport)
+  if (reproductionReport) out.reproductionReport = reproductionReport
+  return out
+}
+
+/**
+ * Coerce a scheduler's `effortReport` envelope into the canonical {@link RunnerJobResult.effortReport}
+ * shape, defaulting `difficulty` and keeping only well-formed prose/obstacle fields. Returns
+ * undefined for anything that isn't an object, so a malformed/absent envelope injects nothing.
+ * Mirrors the executor-harness's own `coerceEffort`.
+ */
+function coerceEffortReport(raw: unknown): RunnerJobResult['effortReport'] | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  const hasFiniteDifficulty = typeof o.difficulty === 'number' && Number.isFinite(o.difficulty)
+  const difficulty = hasFiniteDifficulty
+    ? Math.min(10, Math.max(1, Math.round(o.difficulty as number)))
+    : 5
+  const report: NonNullable<RunnerJobResult['effortReport']> = { difficulty }
+  if (typeof o.summary === 'string' && o.summary.trim()) report.summary = o.summary.trim()
+  if (typeof o.reducedEffectiveness === 'string' && o.reducedEffectiveness.trim()) {
+    report.reducedEffectiveness = o.reducedEffectiveness.trim()
+  }
+  if (Array.isArray(o.obstacles)) {
+    const obstacles = o.obstacles.filter(
+      (x): x is string => typeof x === 'string' && x.trim() !== '',
+    )
+    if (obstacles.length) report.obstacles = obstacles
+  }
+  // Mirror the harness's `coerceEffort` drop rule: an envelope carrying only a DEFAULTED difficulty
+  // (no real difficulty, prose, or obstacles) says nothing — drop it so a pool-backed run doesn't
+  // surface a bare "5/10, no detail" card that the Cloudflare/local path suppresses (facade parity).
+  if (
+    !hasFiniteDifficulty &&
+    report.summary === undefined &&
+    report.reducedEffectiveness === undefined &&
+    report.obstacles === undefined
+  ) {
+    return undefined
+  }
+  return report
+}
+
+/**
+ * Coerce a scheduler's `callMetrics` array into the canonical {@link HarnessCallMetric}
+ * shape, keeping only well-formed entries (the required string/number fields), so a
+ * malformed envelope can never inject junk into the telemetry sink. Mirrors the harness's
+ * producer field-for-field; a missing optional `model` is passed through when present.
+ *
+ * The two CACHE-CLASS counts are read leniently (absent ⇒ 0) while every other field stays
+ * strict, because a runner pool runs whatever harness IMAGE its workspace pinned — a version
+ * this backend does not control. Requiring them would make an image predating the fresh/read/
+ * write split fail every entry, i.e. drop ALL of that pool's `llm_call_metrics` silently and
+ * report the run as having made zero model calls. Degrading to "no cache breakdown known" keeps
+ * the call, the tokens and the prompt/response bodies, and loses only the split the older image
+ * genuinely never measured — which is the same answer it gave before the field existed.
+ */
+function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
+  if (!Array.isArray(raw)) return []
+  const out: HarnessCallMetric[] = []
+  const count = (value: unknown): number => (typeof value === 'number' ? value : 0)
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const e = entry as Record<string, unknown>
+    if (
+      typeof e.promptText !== 'string' ||
+      typeof e.responseText !== 'string' ||
+      typeof e.reasoningText !== 'string' ||
+      typeof e.messageCount !== 'number' ||
+      typeof e.inputTokens !== 'number' ||
+      typeof e.outputTokens !== 'number'
+    ) {
+      continue
+    }
+    out.push({
+      ...(typeof e.model === 'string' ? { model: e.model } : {}),
+      promptText: e.promptText,
+      messageCount: e.messageCount,
+      responseText: e.responseText,
+      reasoningText: e.reasoningText,
+      inputTokens: e.inputTokens,
+      cacheReadTokens: count(e.cacheReadTokens),
+      cacheWriteTokens: count(e.cacheWriteTokens),
+      outputTokens: e.outputTokens,
+      finishReason: typeof e.finishReason === 'string' ? e.finishReason : null,
+      // The harness's job-scoped sequence number. It MUST survive coercion: it is what keeps a
+      // call's recorded row id identical across the live poll drain and the terminal list, so
+      // dropping it here would make a pool-backed run store every streamed call twice.
+      ...(typeof e.seq === 'number' ? { seq: e.seq } : {}),
+      // The run phase that spent the call. Passed through as the harness reported it and
+      // normalised at the recorder (kernel's `normalizeCallPhase`), so this boundary neither
+      // invents a phase nor has to know the vocabulary — a pool on a newer image reporting a
+      // phase this backend predates is stored verbatim rather than coerced away.
+      ...(typeof e.phase === 'string' ? { phase: e.phase } : {}),
+    })
   }
   return out
 }

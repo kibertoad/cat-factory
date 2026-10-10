@@ -9,6 +9,7 @@
 export type {
   ScheduleTemplate,
   Recurrence,
+  IssueIntakeConfig,
   PipelineSchedule,
   ScheduleRun,
   CreateScheduleInput,

@@ -1,5 +1,6 @@
 import type {
   Block,
+  DocQualityReport,
   GateContext,
   GateDefinition,
   GateHelperCompletionArgs,
@@ -10,37 +11,44 @@ import type {
   ReleaseSignal,
 } from '@cat-factory/kernel'
 import {
-  aggregateCi,
+  aggregateRepoCi,
   CI_AGENT_KIND,
   CI_FIXER_AGENT_KIND,
   classifyReleaseHealth,
   CONFLICT_RESOLVER_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
-  DEFAULT_MERGE_PRESET,
-  describeFailingChecks,
+  DEFAULT_RISK_POLICY,
+  describeFailingRepos,
   describeRegressedSignals,
+  DOC_FIXER_AGENT_KIND,
+  DOC_QUALITY_AGENT_KIND,
   FIXER_AGENT_KIND,
+  headFields,
   HUMAN_REVIEW_AGENT_KIND,
   isCiGreen,
-  isProviderWired,
-  listFailingChecks,
+  listFailingChecksAcrossRepos,
   ON_CALL_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
+  redactSecrets,
   renderReleaseEvidence,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import type { OnCallAssessment } from '@cat-factory/contracts'
 import { parseOnCallAssessment } from '@cat-factory/contracts'
 import {
   CI_STATUS_PROVIDER,
+  DOC_QUALITY_PROVIDER,
   INCIDENT_ENRICHMENT_PROVIDER,
   MERGEABILITY_PROVIDER,
   PULL_REQUEST_REVIEW_PROVIDER,
   RELEASE_HEALTH_PROVIDER,
 } from './providers.js'
+import { gateConfigNumber } from './gateConfigFields.js'
+import { joinSentences } from './prose.js'
 import {
   classifyHumanReview,
   isApproved,
-  outstandingComments,
+  outstandingConversation,
   outstandingThreads,
   requiredApprovals,
 } from './review.logic.js'
@@ -54,6 +62,13 @@ import {
  */
 const CONFLICT_RESOLVER_MAX_ATTEMPTS = 3
 
+/**
+ * Doc-fixer attempt cap. The gate's checks are deterministic and instant, and a fixer round
+ * pushes a real commit the next probe re-reads, so a small budget is enough — a document that
+ * still fails after two structural-fix rounds needs a human, not more container churn.
+ */
+const DOC_FIXER_MAX_ATTEMPTS = 2
+
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
   return `${Math.round(score * 100)}%`
@@ -66,27 +81,39 @@ function pct(score: number): string {
 export const ciGate = (ctx: GateContext): GateDefinition => ({
   kind: CI_AGENT_KIND,
   helperKind: CI_FIXER_AGENT_KIND,
-  wired: () => isProviderWired(CI_STATUS_PROVIDER),
+  wired: () => ctx.isProviderWired(CI_STATUS_PROVIDER),
   unwiredOutput: 'CI gate skipped (no CI status provider configured).',
+  // The step's own budget wins over the task's merge preset — the preset is a workspace-wide
+  // policy, and "this pipeline's CI gate gets three rounds" is a property of the pipeline.
+  attemptBudget: (preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? preset.ciMaxAttempts,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
+    // Aggregate across EVERY PR the task opened (own-service + peer-service repos on a
+    // multi-repo block): a red check in ANY repo fails the gate, and the ci-fixer runs
+    // once across all sibling checkouts (see the widened peerRepos dispatch).
     const report = await ctx.requireProvider(CI_STATUS_PROVIDER).getStatus(workspaceId, blockId)
-    const verdict = aggregateCi(report.checks)
+    const repos = report.repos
+    const verdict = aggregateRepoCi(repos)
+    const multi = repos.length > 1
+    const totalChecks = repos.reduce((n, r) => n + r.checks.length, 0)
     if (isCiGreen(verdict)) {
       return {
         status: 'pass',
-        headSha: report.headSha,
+        ...headFields(repos),
         passOutput:
           verdict === 'none'
-            ? 'CI gate passed: no checks configured for the PR head.'
-            : `CI gate passed: ${report.checks.length} check(s) green.`,
+            ? 'CI gate passed: no checks configured for the PR head(s).'
+            : multi
+              ? `CI gate passed: ${totalChecks} check(s) green across ${repos.length} repos.`
+              : `CI gate passed: ${totalChecks} check(s) green.`,
       }
     }
-    if (verdict === 'pending') return { status: 'pending', headSha: report.headSha }
+    if (verdict === 'pending') return { status: 'pending', ...headFields(repos) }
     return {
       status: 'fail',
-      headSha: report.headSha,
-      failureSummary: describeFailingChecks(report.checks),
-      failingChecks: listFailingChecks(report.checks),
+      ...headFields(repos),
+      failureSummary: describeFailingRepos(repos),
+      failingChecks: listFailingChecksAcrossRepos(repos),
     }
   },
   // Surface the failing-check summary to the fixer as resolved context.
@@ -98,16 +125,18 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
       blockId: block.id,
       executionId: instance.id,
       title: `CI is still failing for "${block.title}"`,
-      body:
-        `The CI-fixer agent tried ${attempts} time(s) but CI is still red. ${summary ?? ''} ` +
-        `Take a look and retry the run once fixed.`,
+      body: joinSentences(
+        `The CI-fixer agent tried ${attempts} time(s) but CI is still red.`,
+        summary,
+        'Take a look and retry the run once fixed.',
+      ),
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
         pipelineName: instance.pipelineName,
       },
     })
     return {
-      error: `CI did not pass after ${attempts} CI-fixer attempt(s). ${summary ?? ''}`.trim(),
+      error: joinSentences(`CI did not pass after ${attempts} CI-fixer attempt(s).`, summary),
     }
   },
 })
@@ -119,34 +148,147 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
 export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   kind: CONFLICTS_AGENT_KIND,
   helperKind: CONFLICT_RESOLVER_AGENT_KIND,
-  wired: () => isProviderWired(MERGEABILITY_PROVIDER),
+  wired: () => ctx.isProviderWired(MERGEABILITY_PROVIDER),
   unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
-  attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
+  attemptBudget: (_preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? CONFLICT_RESOLVER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
+    // Mergeability is probed PER PR across the task's own + peer repos. Any PR still
+    // computing → keep polling; the FIRST conflicted PR (own-service or a peer) becomes the
+    // conflict-resolver's target — a git conflict is per-repo textual, so the resolver stays
+    // single-repo (unlike the ci-fixer), but it is now pointed AT the conflicted repo (own or
+    // peer) via `conflictTarget`, so a peer conflict escalates like an own-repo one.
     const report = await ctx
       .requireProvider(MERGEABILITY_PROVIDER)
       .getMergeability(workspaceId, blockId)
-    // No PR resolved, or it merges cleanly → nothing to do; advance.
-    if (report.headSha === null || report.verdict === 'mergeable') {
+    const withPr = report.repos.filter((r) => r.headSha !== null)
+    // No PR resolved anywhere → nothing to gate; advance.
+    if (withPr.length === 0) {
+      return {
+        status: 'pass',
+        headSha: null,
+        passOutput: 'Conflict gate passed: no open PR to gate.',
+      }
+    }
+    const multi = report.repos.length > 1
+    const heads = headFields(withPr)
+    // Any PR GitHub is still computing → keep polling.
+    if (withPr.some((r) => r.verdict === 'unknown')) {
+      return { status: 'pending', ...heads }
+    }
+    const conflicted = withPr.find((r) => r.verdict === 'conflicted')
+    if (!conflicted) {
+      return {
+        status: 'pass',
+        ...heads,
+        passOutput: multi
+          ? `Conflict gate passed: all ${withPr.length} PRs merge cleanly with their base.`
+          : 'Conflict gate passed: the PR merges cleanly with its base.',
+      }
+    }
+    // Escalate to the single-repo conflict-resolver, pointed at the conflicted repo. On a
+    // MULTI-repo block we tag which repo conflicted (own-service or a peer, carrying its
+    // `frameId`) so the engine dispatches the resolver AT that repo; a single-repo block has
+    // only the own repo, which the port documents as the implicit (absent) target.
+    return {
+      status: 'fail',
+      ...heads,
+      headSha: conflicted.headSha,
+      ...(multi
+        ? {
+            conflictTarget: {
+              repo: conflicted.repo,
+              ...(conflicted.frameId ? { frameId: conflicted.frameId } : {}),
+            },
+            failureSummary: `${conflicted.repo} conflicts with its base.`,
+          }
+        : {}),
+    }
+  },
+  onExhausted: async ({ step }) => {
+    const target = step.gate?.conflictTarget
+    const which = target?.repo ? `The pull request for ${target.repo}` : 'The pull request'
+    // The probe reports mergeability as one bit, so the resolver's own account of its last round
+    // (which files it left conflicting) is the only detail there is to hand on. It is agent output
+    // reaching the run's public `error.message`, so it is scrubbed first.
+    const lastAttempt = redactSecrets(step.gate?.attemptLog?.at(-1)?.summary ?? null)
+    return {
+      error: joinSentences(
+        `${which} still conflicts with its base after ` +
+          `${step.gate?.attempts ?? 0} conflict-resolver attempt(s): the conflicts could not be ` +
+          'resolved automatically.',
+        lastAttempt ? `Last attempt: ${lastAttempt}` : null,
+        'Resolve the conflict manually, then retry the run.',
+      ),
+    }
+  },
+})
+
+/** Render a doc-quality report's findings into the fixer brief + give-up summary. */
+function renderDocQualityFindings(report: DocQualityReport): string {
+  const head = report.path
+    ? `The document at \`${report.path}\` failed the quality checks:`
+    : 'The document failed the quality checks:'
+  return [head, ...report.findings.map((f) => `- ${f}`)].join('\n')
+}
+
+/**
+ * Document-quality gate: run a DETERMINISTIC structural precheck against the drafted document
+ * on the PR head (required sections present, no leftover placeholders, sane heading hierarchy,
+ * in-repo links resolve) and escalate to a `doc-fixer` on a negative verdict. The checks are
+ * instant, so there is no `pending` state — the gate passes (nothing spun up) or fails. A
+ * pass-through until {@link wireDocQualityProvider} supplies a provider.
+ */
+export const docQualityGate = (ctx: GateContext): GateDefinition => ({
+  kind: DOC_QUALITY_AGENT_KIND,
+  helperKind: DOC_FIXER_AGENT_KIND,
+  wired: () => ctx.isProviderWired(DOC_QUALITY_PROVIDER),
+  unwiredOutput: 'Document-quality gate skipped (no document-quality provider configured).',
+  attemptBudget: (_preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? DOC_FIXER_MAX_ATTEMPTS,
+  probe: async (workspaceId, blockId): Promise<GateProbe> => {
+    const report = await ctx.requireProvider(DOC_QUALITY_PROVIDER).check(workspaceId, blockId)
+    if (report.ok) {
       return {
         status: 'pass',
         headSha: report.headSha,
-        passOutput:
-          report.headSha === null
-            ? 'Conflict gate passed: no open PR to gate.'
-            : 'Conflict gate passed: the PR merges cleanly with its base.',
+        passOutput: report.path
+          ? `Document-quality gate passed: \`${report.path}\` is well-formed.`
+          : 'Document-quality gate passed: no document to check.',
       }
     }
-    // GitHub still computing mergeability → keep polling.
-    if (report.verdict === 'unknown') return { status: 'pending', headSha: report.headSha }
-    return { status: 'fail', headSha: report.headSha }
+    return {
+      status: 'fail',
+      headSha: report.headSha,
+      failureSummary: renderDocQualityFindings(report),
+    }
   },
-  onExhausted: async ({ step }) => ({
-    error:
-      `The pull request still conflicts with its base after ` +
-      `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
-      `manually, then retry the run.`,
-  }),
+  // Hand the structural findings to the doc-fixer as its brief (rendered into its prompt).
+  helperPriorOutput: (summary) => ({ agentKind: DOC_QUALITY_AGENT_KIND, output: summary }),
+  onExhausted: async ({ workspaceId, instance, block, step, summary }) => {
+    const attempts = step.gate?.attempts ?? 0
+    await ctx.raiseNotification(workspaceId, {
+      type: 'decision_required',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Document quality needs attention for "${block.title}"`,
+      body: joinSentences(
+        `The doc-fixer tried ${attempts} time(s) but the document still fails the quality checks.`,
+        summary,
+        'Review the PR and retry the run once fixed.',
+      ),
+      payload: {
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
+    return {
+      error: joinSentences(
+        `The document still fails the quality checks after ${attempts} doc-fixer attempt(s).`,
+        summary,
+      ),
+    }
+  },
 })
 
 /** Raise a `release_regression` notification carrying the on-call assessment + signals. */
@@ -163,8 +305,11 @@ async function raiseReleaseRegression(
     ? `Post-release monitoring flagged a regression after this PR shipped. On-call recommends ` +
       `**${assessment.recommendation}** (culprit confidence ${pct(assessment.culpritConfidence)}). ` +
       `${assessment.rationale}`
-    : `Post-release monitoring flagged a regression after this PR shipped. ${summary} ` +
-      `Investigate before deciding whether to revert.`
+    : joinSentences(
+        'Post-release monitoring flagged a regression after this PR shipped.',
+        summary,
+        'Investigate before deciding whether to revert.',
+      )
   await ctx.raiseNotification(workspaceId, {
     type: 'release_regression',
     blockId: block.id,
@@ -203,14 +348,19 @@ async function enrichIncident(
       : 'cat-factory on-call investigated a post-release regression suspected from this change.',
     ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
   }
-  try {
-    await incidentEnrichment.enrich(
-      { workspaceId, signalIds: signals.map((s) => s.id), since },
-      update,
-    )
-  } catch {
-    // best-effort: a failing enrichment must not block the run or the notification
-  }
+  // Best-effort, and best-effort is the swallow plus the evidence. The bare `catch {}` this
+  // replaces is why a POST to an incident.io endpoint that does not exist went unnoticed: a
+  // capability that has never worked read exactly like a deployment with no incident tool wired.
+  await runBestEffort(
+    ctx.logger,
+    'gate.postReleaseHealth.enrichIncident',
+    () =>
+      incidentEnrichment.enrich(
+        { workspaceId, signalIds: signals.map((s) => s.id), since },
+        update,
+      ),
+    { workspaceId, blockId: block.id },
+  )
 }
 
 /**
@@ -223,12 +373,10 @@ async function enrichIncident(
 export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
   kind: POST_RELEASE_HEALTH_AGENT_KIND,
   helperKind: ON_CALL_AGENT_KIND,
-  wired: () => isProviderWired(RELEASE_HEALTH_PROVIDER),
+  wired: () => ctx.isProviderWired(RELEASE_HEALTH_PROVIDER),
   unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
-  attemptBudget: (preset) => preset.releaseMaxAttempts,
-  // Running out of poll budget while still watching means the window outlasted the driver's
-  // budget with NO regression observed — a healthy pass, not a timeout.
-  pollExhaustion: 'pass',
+  attemptBudget: (preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? preset.releaseMaxAttempts,
   probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
     // Only watch a release that actually SHIPPED. The merger sets the block `done` when it
     // merges for real, but leaves it `pr_ready` when it raises a review without merging — and
@@ -261,8 +409,11 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
     // The watch window is resolved ONCE on first entry and stashed on the gate state (see
     // evaluateGate), so the probe doesn't re-load the block + re-resolve the merge preset on
     // every poll over the window.
+    // The step's own window wins over the one stashed from the merge preset (see gateConfigFields).
     const windowMinutes =
-      gateState.watchWindowMinutes ?? DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes
+      gateConfigNumber(gateState.config, 'watchWindowMinutes') ??
+      gateState.watchWindowMinutes ??
+      DEFAULT_RISK_POLICY.releaseWatchWindowMinutes
     const windowElapsed = ctx.clock.now() - since >= windowMinutes * 60_000
     const verdict = classifyReleaseHealth({ report, windowElapsed })
     if (verdict === 'pass') {
@@ -307,8 +458,10 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
       summary ?? '',
     )
     return {
-      error:
-        `Post-release health regressed and no on-call investigation was configured. ${summary ?? ''}`.trim(),
+      error: joinSentences(
+        'Post-release health regressed and no on-call investigation was configured.',
+        summary,
+      ),
     }
   },
   // The on-call helper INVESTIGATES — it changes nothing the precheck would re-observe — so on
@@ -342,7 +495,10 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
     }
     const baseSummary = step.gate?.lastFailureSummary ?? ''
     const summary = investigationFailed
-      ? `${baseSummary} The automated on-call investigation could not complete, so no culprit assessment is available — investigate manually.`.trim()
+      ? joinSentences(
+          baseSummary,
+          'The automated on-call investigation could not complete, so no culprit assessment is available — investigate manually.',
+        )
       : baseSummary
     await raiseReleaseRegression(
       ctx,
@@ -400,10 +556,10 @@ async function tryResolveThreads(
 export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   kind: HUMAN_REVIEW_AGENT_KIND,
   helperKind: FIXER_AGENT_KIND,
-  wired: () => isProviderWired(PULL_REQUEST_REVIEW_PROVIDER),
+  wired: () => ctx.isProviderWired(PULL_REQUEST_REVIEW_PROVIDER),
   unwiredOutput: 'Human review gate skipped (no PR-review provider configured).',
-  // A human review is unbounded: never time out the wait, and never give up on rounds.
-  pollExhaustion: 'rearm',
+  // A human review is unbounded: never give up on rounds. The other half of that, never timing
+  // the WAIT out, is `pollExhaustion: 'rearm'` on this gate's registration.
   attemptBudget: () => Number.MAX_SAFE_INTEGER,
   probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
     const provider = ctx.requireProvider(PULL_REQUEST_REVIEW_PROVIDER)
@@ -459,7 +615,9 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       gateState.pendingThreadIds = stillOpen.length > 0 ? stillOpen : null
     }
     const graceMinutes =
-      gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
+      gateConfigNumber(gateState.config, 'graceMinutes') ??
+      gateState.humanReviewGraceMinutes ??
+      DEFAULT_RISK_POLICY.humanReviewGraceMinutes
     // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread),
     // and cache the static branch-protection required count so later polls skip re-reading it.
     // The UI derives the displayed "required" count from `requiredApprovingReviewCount` via the
@@ -508,11 +666,22 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
     // escalate it the longer it waits. A grace-window wait (comments present) needs no card.
     const awaitingApproval =
       outstandingThreads(snapshot).length === 0 &&
-      outstandingComments(snapshot, gateState.lastAddressedCommentAt).length === 0 &&
+      outstandingConversation(snapshot, gateState.lastAddressedCommentAt).length === 0 &&
       !isApproved(snapshot)
     if (awaitingApproval) {
       await raiseHumanReviewCard((block) => {
         const title = block?.title ?? 'this task'
+        // A standing CHANGES_REQUESTED with no actionable text (no summary body, no threads, no
+        // comments) can't be auto-fixed — tell the human a review happened and blocks the merge,
+        // rather than the misleading "awaiting review / assign a reviewer" (a review DID happen).
+        if (snapshot.changesRequested) {
+          return {
+            title: `Changes requested on "${title}"`,
+            body:
+              'A reviewer requested changes on the PR but left no actionable comment for the ' +
+              'fixer to address. Review the request on GitHub, or request a fix here.',
+          }
+        }
         // "No reviewer" only when nobody is assigned AND nobody has approved yet — a reviewer who
         // approves is removed from the requested-reviewer list, so `assignedReviewers` alone would
         // wrongly tell the user to assign a reviewer who already signed off (e.g. 1 of 2 approvals

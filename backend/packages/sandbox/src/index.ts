@@ -8,20 +8,26 @@ export {
   type SandboxTaskType,
   type Rubric,
   type RubricDimension,
+  SANDBOX_TASK_TYPES,
+  rubricFor,
+  weightedTotal,
+} from './rubrics.js'
+
+export {
   type ExpectationScore,
   HIGH_IMPACT_THRESHOLD,
   TRICKY_THRESHOLD,
-  rubricFor,
-  weightedTotal,
   scoreExpectations,
   renderExpectationBrief,
-} from './rubrics.js'
+} from './expectations.js'
 
 export {
   type SandboxAgentBucket,
   type SandboxAgentKindMeta,
+  type SandboxRunMode,
   SANDBOX_AGENT_KINDS,
   sandboxKindMeta,
+  statesMissingCheckout,
   baselinePromptText,
   listBaselines,
 } from './baselines.js'
@@ -33,6 +39,14 @@ export {
   versionLabel,
   filterByLabels,
 } from './promptVersions.logic.js'
+
+export {
+  workspacePromptVersionId,
+  workspacePromptLineageId,
+  parseWorkspacePromptVersionId,
+  workspacePromptVersions,
+  sandboxPromptKinds,
+} from './workspacePrompts.js'
 
 export { type ExpandDeps, cellCount, expandMatrix, isRunnableMatrix } from './matrix.logic.js'
 

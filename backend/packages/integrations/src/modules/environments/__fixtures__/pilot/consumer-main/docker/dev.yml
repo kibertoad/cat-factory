@@ -1,0 +1,104 @@
+# Sanitized fixture — a faithful snapshot of the acme-monolith pilot's `docker/dev.yml`,
+# REDUCED to the fields the provisioning detector reads: the `services:` keys (in the
+# repo's real declaration order), the external network it attaches to, the declared
+# `profiles:`, and the one `build:` service. Real image names, env blocks, volumes,
+# ports, and healthchecks are intentionally omitted — the detector never reads them,
+# and keeping them out avoids leaking anything from the source repo. See ../../README.md.
+services:
+  app:
+    image: acme/app:dev
+    networks: [acme-net, forge-network]
+  datadog-agent:
+    image: datadog/agent:latest
+    profiles: [datadog]
+    networks: [acme-net]
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    profiles: [otel]
+    networks: [acme-net]
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    networks: [acme-net]
+  crontab:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-dev:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-symfony:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-group-symfony:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-dev-group:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-thtm-group:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-bg-process-consumer:
+    image: acme/app:dev
+    networks: [acme-net]
+  daemon-dev-events:
+    image: acme/app:dev
+    networks: [acme-net]
+  acme-monolith-nginx:
+    build:
+      context: ..
+      dockerfile: docker/nginx/Dockerfile
+    networks: [acme-net]
+  content-conversion:
+    image: acme/content-conversion:latest
+    networks: [acme-net]
+  node-app:
+    image: node:20
+    networks: [acme-net]
+  maestro:
+    image: acme/maestro:latest
+    networks: [acme-net]
+  webhook-receiver-service:
+    image: acme/webhook-receiver:latest
+    networks: [acme-net]
+  sass:
+    image: acme/app:dev
+    networks: [acme-net]
+  ts:
+    image: node:20
+    networks: [acme-net]
+  ts-ui:
+    image: node:20
+    networks: [acme-net]
+  grunt:
+    image: node:20
+    networks: [acme-net]
+  blackfire:
+    image: blackfire/blackfire:2
+    profiles: [blackfire]
+    networks: [acme-net]
+  mock-saml-idp:
+    image: acme/mock-saml-idp:latest
+    networks: [acme-net]
+  metricbeat:
+    image: elastic/metricbeat:8
+    networks: [acme-net]
+  spectre:
+    image: acme/spectre:latest
+    networks: [acme-net]
+  xerox:
+    image: acme/xerox:latest
+    networks: [acme-net]
+  barker:
+    image: acme/barker:latest
+    networks: [acme-net]
+  expert-search:
+    image: acme/expert-search:latest
+    networks: [acme-net]
+
+networks:
+  # The shared stack (acme-shared-services) creates + owns this; the consumer attaches
+  # to it as an external network — the signal the detector turns into a shared-stack nudge.
+  acme-net:
+    external: true
+  forge-network:
+    driver: bridge

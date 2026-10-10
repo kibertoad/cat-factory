@@ -1,4 +1,4 @@
-import type { CiCheck } from '../ports/ci-status.js'
+import type { CiCheck, RepoCiStatus } from '../ports/ci-status.js'
 import type {
   ReleaseEvidence,
   ReleaseHealthReport,
@@ -70,6 +70,27 @@ export const HUMAN_REVIEW_AGENT_KIND = 'human-review'
  */
 export const FIXER_AGENT_KIND = 'fixer'
 
+/**
+ * The agent kind of the `doc-quality` gate step: a polling gate on the FORWARD
+ * document-authoring pipelines (`pl_document` / `pl_document_quick`) that runs a
+ * DETERMINISTIC structural precheck against the drafted document on the PR head
+ * (required sections present, no leftover placeholders, sane heading hierarchy,
+ * in-repo relative links resolve) and only escalates to the `doc-fixer` helper on a
+ * negative verdict. Like `ci`/`conflicts` it is NOT an LLM agent — it reads files
+ * checkout-free via a {@link DocQualityProvider}. A pass-through when no provider is wired.
+ */
+export const DOC_QUALITY_AGENT_KIND = 'doc-quality'
+
+/**
+ * The agent kind of the container agent the `doc-quality` gate dispatches on a failed
+ * precheck: a `container-coding` agent that clones the document PR branch, addresses the
+ * gate's structural findings on the existing Markdown file, and pushes back onto the same
+ * branch (no new PR) — the doc analogue of `ci-fixer`. Registered through the public
+ * `registerAgentKind` seam in `@cat-factory/agents` (its definition lives beside the other
+ * `doc-*` kinds); named here so the gate suite can reference it without importing agents.
+ */
+export const DOC_FIXER_AGENT_KIND = 'doc-fixer'
+
 // --- CI verdict logic -----------------------------------------------------------------
 
 /**
@@ -130,6 +151,63 @@ export function describeFailingChecks(checks: CiCheck[]): string {
   if (failing.length === 0) return 'CI reported a failure.'
   const names = failing.map((c) => `${c.name} (${c.conclusion ?? 'failure'})`).join(', ')
   return `Failing checks: ${names}`
+}
+
+// --- Multi-repo CI aggregation (service-connections phase 4) ---------------------------
+//
+// A cross-service task opens one PR per changed repo; the CI gate reduces the check runs
+// across ALL of them (own-service + peers) to a single verdict, names each failing repo, and
+// carries a `repo` tag on each failing check so the run-detail UI can group them.
+
+/** Reduce every PR's check runs to one verdict (a red check in ANY repo fails the gate). */
+export function aggregateRepoCi(repos: RepoCiStatus[]): CiVerdict {
+  return aggregateCi(repos.flatMap((r) => r.checks))
+}
+
+/**
+ * The head-commit fields a gate probe records for a per-repo report: the scalar `headSha`
+ * (the own-service PR head — the first entry) plus, for a MULTI-repo block only, the per-repo
+ * `headShas` map keyed by repo full name. Collapses the repeated
+ * `headSha` + `...(multi ? { headShas } : {})` shape both gate probes were open-coding.
+ * A single-repo block (0 or 1 entry) omits `headShas` so callers fall back to the scalar.
+ */
+export function headFields(repos: { repo: string; headSha: string | null }[]): {
+  headSha: string | null
+  headShas?: Record<string, string>
+} {
+  const headSha = repos[0]?.headSha ?? null
+  if (repos.length <= 1) return { headSha }
+  const headShas = Object.fromEntries(
+    repos.filter((r) => r.headSha).map((r) => [r.repo, r.headSha as string]),
+  )
+  return { headSha, headShas }
+}
+
+/** The completed-and-failing checks across every repo, each tagged with its repo full name. */
+export function listFailingChecksAcrossRepos(
+  repos: RepoCiStatus[],
+): { name: string; conclusion: string | null; url: string | null; repo: string }[] {
+  return repos.flatMap((r) => listFailingChecks(r.checks).map((c) => ({ ...c, repo: r.repo })))
+}
+
+/**
+ * A short, human-readable summary of the failing checks grouped by repo. For a single-repo
+ * block it reads exactly like {@link describeFailingChecks}; for a multi-repo block it names
+ * each failing repo so the fixer + notification say WHICH service is red.
+ */
+export function describeFailingRepos(repos: RepoCiStatus[]): string {
+  const groups = repos
+    .map((r) => ({ repo: r.repo, failing: listFailingChecks(r.checks) }))
+    .filter((g) => g.failing.length > 0)
+  if (groups.length === 0) return 'CI reported a failure.'
+  // Single failing repo on a single-repo block: keep the plain "Failing checks: …" shape.
+  if (groups.length === 1 && repos.length === 1) return describeFailingChecks(repos[0]!.checks)
+  return groups
+    .map(
+      (g) =>
+        `${g.repo}: ${g.failing.map((c) => `${c.name} (${c.conclusion ?? 'failure'})`).join(', ')}`,
+    )
+    .join('; ')
 }
 
 // --- Release-health verdict logic -----------------------------------------------------

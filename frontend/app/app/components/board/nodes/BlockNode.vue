@@ -2,15 +2,17 @@
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import DecisionBadge from './DecisionBadge.vue'
-import DraggableTask from './DraggableTask.vue'
-import ModuleFrame from './ModuleFrame.vue'
+import FrameSwimlanes from './FrameSwimlanes.vue'
+import InitiativeCard from './InitiativeCard.vue'
+import ResizeGrips from './ResizeGrips.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
+import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
-import { useFrameResize } from '~/composables/useFrameResize'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
-
+import { laneBodyHeightIn } from '~/utils/laneGeometry'
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
 const props = defineProps<{ id: string }>()
@@ -19,9 +21,13 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const tasks = useTasksStore()
+const documents = useDocumentsStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
+const access = useWorkspaceAccess()
+const uiMode = useUiModeStore()
+const uiRole = useUiRoleStore()
 const { t } = useI18n()
 const { lod } = useSemanticZoom()
 // Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
@@ -29,30 +35,31 @@ const { lod } = useSemanticZoom()
 const { isTouch } = useViewport()
 
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
-/** This service frame is mounted on more than one board in the org. */
+/**
+ * This service frame is mounted on more than one board in the org, which is a fact about the
+ * SERVICE that only its own card can state: nothing else on the board says the work lands in a
+ * repo another board also drives.
+ */
 const isShared = computed(() => services.isSharedFrame(props.id))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // ---- this service's children (tasks + modules) -----------------------------
-const directTasks = computed(() => board.tasksOf(props.id))
+// No `directTasks` here: the swimlanes take EVERY task under the frame, its modules' included,
+// because a module is a grouping inside a lane now rather than a box of its own. `modules` is
+// still read for the composition line's module count.
 const modules = computed(() => board.modulesOf(props.id))
+const initiativeBlocks = computed(() => board.initiativesOf(props.id))
 const allTasks = computed(() => board.allTasksUnder(props.id))
 const taskIds = computed(() => new Set(allTasks.value.map((t) => t.id)))
 const taskCount = computed(() => allTasks.value.length)
-const hasTasks = computed(() => taskCount.value > 0 || modules.value.length > 0)
-// Single pass over the tasks for both rollups (vs. one filter each).
-const taskStats = computed(() => {
-  let merged = 0
-  let prReady = 0
-  for (const t of allTasks.value) {
-    if (t.status === 'done') merged++
-    else if (t.status === 'pr_ready') prReady++
-  }
-  return { merged, prReady }
-})
-const mergedTasks = computed(() => taskStats.value.merged)
-const prTasks = computed(() => taskStats.value.prReady)
+const hasTasks = computed(
+  () => taskCount.value > 0 || modules.value.length > 0 || initiativeBlocks.value.length > 0,
+)
+const prTasks = computed(() => allTasks.value.filter((t) => t.status === 'pr_ready').length)
 const canvas = computed(() => board.containerSize(props.id))
+// A lane's scroll viewport fills whatever the frame's actual size leaves it, so dragging the
+// frame's border gives the reader more of the lane rather than dead canvas beneath it.
+const laneBodyHeight = computed(() => laneBodyHeightIn(canvas.value, initiativeBlocks.value.length))
 
 // Frame status is derived from its tasks — services never reach "done".
 const frameStatus = computed<BlockStatus>(() => board.frameStatus(props.id))
@@ -69,20 +76,40 @@ const FRAME_LABEL_KEYS: Record<BlockStatus, string> = {
   done: 'board.frame.status.done',
 }
 const statusLabel = computed(() => t(FRAME_LABEL_KEYS[frameStatus.value]))
+// The badge is a ROLLUP over the frame's children, not a status anybody set on the service, and
+// the label alone never says which child produced it — "Needs attention" names no task, and
+// "Live" reads as a health check rather than "caught up". So each status gets its own tooltip
+// naming what it is rolled up from. `pr_ready`/`done` are unreachable here (`frameStatus` caps
+// below `done`: a service is long-lived and never finishes) but the Record stays exhaustive over
+// `BlockStatus` for the same reason the label map does, and mirrors that map's aliasing.
+const FRAME_STATUS_HINT_KEYS: Record<BlockStatus, string> = {
+  planned: 'board.frame.statusHint.planned',
+  ready: 'board.frame.statusHint.ready',
+  in_progress: 'board.frame.statusHint.in_progress',
+  blocked: 'board.frame.statusHint.blocked',
+  pr_ready: 'board.frame.statusHint.pr_ready',
+  done: 'board.frame.statusHint.done',
+}
+const statusHint = computed(() => t(FRAME_STATUS_HINT_KEYS[frameStatus.value]))
 
 const selected = computed(() => ui.selectedBlockId === props.id)
-// Services are always expanded to their task canvas, at every zoom level: there is no
-// chip/compact collapse, so panning is a fixed layout and zooming has no expand/collapse
-// transition to snap on. The far-chip and compact-summary branches in the template are
-// kept (gated off) so the prior behaviour is one edit away if we want chips back.
-const showExpanded = computed(() => true)
 
-// Surface a pending decision from this frame OR any of its tasks (O(tasks) map
+// Every child whose parked run the frame badge speaks for: its tasks AND its initiative
+// blocks. An initiative is a frame child like a module and runs an ordinary pipeline (its
+// planner parks on a real approval gate), so leaving it out made a whole class of parked run
+// invisible at frame level — the badge read "nothing needs you" while a plan sat waiting.
+const attentionIds = computed(() => {
+  const ids = new Set(taskIds.value)
+  for (const i of initiativeBlocks.value) ids.add(i.id)
+  return ids
+})
+
+// Surface a pending decision from this frame OR any of its children (O(children) map
 // lookups, not a scan of every open decision per frame).
 const blockDecisions = computed(() => {
   const byBlock = execution.decisionsByBlock
   const out = [...(byBlock.get(props.id) ?? [])]
-  for (const id of taskIds.value) {
+  for (const id of attentionIds.value) {
     const list = byBlock.get(id)
     if (list) out.push(...list)
   }
@@ -94,14 +121,14 @@ function openFirstDecision() {
   if (d) ui.openDecision(d.instanceId, d.decision.id)
 }
 
-// Surface a pending approval gate from this frame OR any of its tasks — but NOT an
+// Surface a pending approval gate from this frame OR any of its children — but NOT an
 // iterative reviewer gate (requirements-review / clarity-review) that's mid-cycle
 // (incorporating / re-reviewing in the driver), which is background work needing no human,
 // so it stays off the frame's "Approval" badge.
 const blockApprovals = computed(() => {
   const byBlock = execution.approvalsByBlock
   const candidates = [...(byBlock.get(props.id) ?? [])]
-  for (const id of taskIds.value) {
+  for (const id of attentionIds.value) {
     const list = byBlock.get(id)
     if (list) candidates.push(...list)
   }
@@ -111,10 +138,6 @@ const blockApprovals = computed(() => {
 function openFirstApproval() {
   const a = blockApprovals.value[0]
   if (a) ui.openApprovalDetail(a.instanceId, a.approval.id)
-}
-
-function toggleExpand() {
-  ui.toggleFrame(props.id)
 }
 
 // Expanded frames are not Vue Flow-draggable (so the pane can pan through them),
@@ -132,28 +155,40 @@ function onFrameHandle(e: PointerEvent) {
 // (see useFrameStacking + BoardCanvas's frameZIndex).
 const { enter: enterFrame, leave: leaveFrame } = useFrameStacking()
 
-// Miro-style frame resizing: drag the right / bottom edges or the corner. Handles
-// live on the expanded card's drop zone (see template); the composable clamps to
-// the frame's content extent and persists the size on release.
-const { startResize } = useFrameResize()
-function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
-  if (block.value) startResize(block.value, e, edge)
-}
-
 function addTask() {
-  ui.expandFrame(props.id)
   ui.openAddTask(props.id)
 }
 
-// Open the tracker-issue modal scoped to THIS service: the create-in target and the
-// repo-scoped issue search are both pinned to this frame (see TaskImportModal).
+// Open the tracker-issue modal scoped to THIS service: the create-in target and the repo-scoped
+// issue search are narrowed to this frame and its modules (see `useContainerTargets`).
 function createTaskFromIssue() {
-  ui.expandFrame(props.id)
   ui.openTaskImport(null, props.id)
 }
 
 function addRecurring() {
   ui.openAddRecurring(props.id)
+}
+
+/**
+ * Start a task from a design link, scoped to THIS service.
+ *
+ * BASIC tier, unlike the recurring/initiative buttons beside it: for a design-led team this is
+ * the everyday delivery loop rather than planning about it, which is the tier bar. It is offered
+ * only where a design source is actually connected, so a board that has none carries no control
+ * whose first click is a dead end.
+ */
+function startFromDesign() {
+  ui.openStartFromDesign(props.id)
+}
+
+// Hunt this service's tracker board for a bug worth picking up. Scoped to THIS frame, so
+// an adopted candidate lands here rather than wherever the board's first frame happens to be.
+function huntBugs() {
+  ui.openBugHunt(null, props.id)
+}
+
+function createInitiative() {
+  ui.openCreateInitiative(props.id)
 }
 
 // A task needs merging → green pulse; a task needs a decision → amber pulse.
@@ -173,6 +208,10 @@ const bootstrapping = computed(
   () => run.value?.kind === 'bootstrap' && run.value.status === 'running',
 )
 const runFailed = computed(() => run.value?.status === 'failed')
+// A monorepo bootstrap parked on its adoption review: the run is waiting on THIS person, so the
+// card says so and offers the review rather than showing a generic "working…" it is not doing.
+const awaitingReview = computed(() => agentRuns.awaitingReview(props.id))
+const reviewOpen = ref(false)
 const bootstrapSubtasks = computed(() =>
   bootstrapping.value ? (run.value?.subtasks ?? null) : null,
 )
@@ -192,8 +231,32 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
+  <!-- ===================== Redacted: repo access denied ===================== -->
+  <!-- This service frame is backed by a repo linked via another member's personal access
+       token that the signed-in user can't reach. The server scrubbed its contents; the SPA
+       shows only the internal id + a "Permission denied" placeholder (never the repo). -->
   <div
-    v-if="block"
+    v-if="block?.accessDenied"
+    class="w-56 overflow-hidden rounded-xl border border-muted bg-default/90 shadow-xl backdrop-blur"
+    :data-block-id="block.id"
+    data-testid="frame-access-denied"
+  >
+    <div class="flex items-center gap-2 border-b border-default px-3 py-2">
+      <span class="i-lucide-lock h-4 w-4 shrink-0 text-muted" />
+      <span class="truncate text-sm font-semibold text-default">{{
+        t('board.frame.accessDenied.title')
+      }}</span>
+    </div>
+    <div class="px-3 py-3">
+      <p class="text-2xs leading-snug text-muted">
+        {{ t('board.frame.accessDenied.hint') }}
+      </p>
+      <code class="mt-2 block truncate font-mono text-2xs text-dimmed">{{ block.id }}</code>
+    </div>
+  </div>
+
+  <div
+    v-else-if="block"
     class="relative"
     :data-block-id="block.id"
     @pointerenter="enterFrame(block.id)"
@@ -220,136 +283,30 @@ const ITEM_ICON: Record<string, string> = {
       />
     </div>
 
-    <!-- ===================== FAR: glanceable chip ===================== -->
-    <!-- Inert while services are always expanded (showExpanded is always true); the
-         compact branch below is reached via v-else-if and is likewise inert. -->
+    <!-- ============= The service card: the initiative band + task swimlanes =============
+         There is no chip or compact variant: a service is always expanded to its task canvas, at
+         every zoom level, so panning is a fixed layout and zooming has no expand/collapse
+         transition to snap on. The two gated-off branches that used to sit here (a far-zoom chip
+         and a collapsed summary) went with the header's collapse control, since between them they
+         held the only render of the "Shared" badge, which now lives in the header below. -->
     <div
-      v-if="!showExpanded && lod === 'far'"
-      class="flex w-44 items-center gap-2 rounded-xl border-2 px-3 py-3 shadow-lg backdrop-blur"
-      :class="[selected ? 'border-white' : '', pulseClass]"
-      :style="{ borderColor: accent, backgroundColor: accent + '26' }"
-    >
-      <span class="h-3 w-3 shrink-0 rounded-full" :style="{ backgroundColor: accent }" />
-      <span class="truncate text-sm font-semibold text-white">{{ block.title }}</span>
-      <UIcon
-        v-if="bootstrapping"
-        name="i-lucide-loader-circle"
-        class="ms-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
-        :title="t('board.frame.bootstrapping')"
-      />
-      <UIcon
-        v-else-if="runFailed"
-        name="i-lucide-alert-triangle"
-        class="ms-auto h-3.5 w-3.5 shrink-0 text-rose-400"
-        :title="t('board.frame.runFailed')"
-      />
-      <span v-else-if="hasTasks" class="ms-auto shrink-0 text-[11px] text-slate-300">
-        {{ mergedTasks }}/{{ taskCount }}
-      </span>
-    </div>
-
-    <!-- ===================== COMPACT: summary (collapsed) ===================== -->
-    <div
-      v-else-if="!showExpanded"
-      class="w-56 overflow-hidden rounded-xl border bg-slate-900/90 shadow-xl backdrop-blur"
-      :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
-    >
-      <div class="h-1.5 w-full" :style="{ backgroundColor: accent }" />
-      <!-- bootstrap-in-progress banner -->
-      <div
-        v-if="bootstrapping"
-        class="border-b border-amber-900/50 bg-amber-950/30 px-3 py-2"
-        data-testid="bootstrap-progress"
-      >
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <UIcon
-            name="i-lucide-loader-circle"
-            class="h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
-          />
-          <span class="text-amber-300">{{ t('board.frame.bootstrapping') }}</span>
-          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
-            {{ bootstrapSubtasks.completed }}/{{ bootstrapSubtasks.total }}
-          </span>
-        </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-amber-900/40">
-          <div
-            class="h-full rounded bg-amber-400 transition-all"
-            :style="{ width: bootstrapPct + '%' }"
-          />
-        </div>
-        <div v-if="run" class="mt-2 flex justify-end">
-          <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
-        </div>
-      </div>
-      <!-- failed run: shared failure banner + retry -->
-      <div v-else-if="runFailed && run" class="p-2">
-        <AgentFailureCard :run="run" variant="compact" />
-      </div>
-      <div class="space-y-2 p-3">
-        <div class="flex items-center gap-2">
-          <UIcon
-            :name="typeMeta!.icon"
-            class="h-4 w-4 shrink-0"
-            :style="{ color: typeMeta!.accent }"
-          />
-          <span class="truncate text-sm font-semibold text-white">{{ block.title }}</span>
-          <UBadge
-            v-if="isShared"
-            color="info"
-            variant="subtle"
-            size="sm"
-            class="shrink-0"
-            :title="t('board.frame.sharedTitle')"
-          >
-            {{ t('board.frame.shared') }}
-          </UBadge>
-        </div>
-        <div class="flex items-center justify-between">
-          <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
-            statusLabel
-          }}</UBadge>
-          <span class="text-[11px] text-slate-400">{{
-            t('board.frame.taskCount', { count: taskCount }, taskCount)
-          }}</span>
-        </div>
-        <button
-          type="button"
-          class="nodrag flex w-full items-center gap-1 rounded-md bg-slate-800/60 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"
-          @click.stop="toggleExpand"
-        >
-          <UIcon name="i-lucide-layers" class="h-3 w-3 text-slate-400" />
-          <span v-if="hasTasks">{{
-            t('board.frame.mergedOfTotal', { merged: mergedTasks, total: taskCount })
-          }}</span>
-          <span v-else>{{ t('board.frame.noTasksYet') }}</span>
-          <span v-if="prTasks" class="text-emerald-400"
-            >· {{ t('board.frame.prCount', { count: prTasks }) }}</span
-          >
-          <UIcon name="i-lucide-chevron-down" class="ms-auto h-3 w-3" />
-        </button>
-      </div>
-    </div>
-
-    <!-- ===================== EXPANDED: 2D canvas of tasks + modules ===================== -->
-    <div
-      v-else
-      class="overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
-      :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
+      class="relative overflow-visible rounded-2xl border bg-default/95 shadow-2xl backdrop-blur"
+      :class="[selected ? 'border-inverted' : 'border-muted', pulseClass]"
     >
       <div class="h-1.5 w-full rounded-t-2xl" :style="{ backgroundColor: accent }" />
       <!-- bootstrap-in-progress banner -->
       <div
         v-if="bootstrapping"
-        class="border-b border-amber-900/50 bg-amber-950/30 px-4 py-2"
+        class="border-b border-app-warning-900/50 bg-app-warning-950/30 px-4 py-2"
         data-testid="bootstrap-progress"
       >
         <div class="flex items-center gap-1.5 text-xs">
           <UIcon
             name="i-lucide-loader-circle"
-            class="h-4 w-4 shrink-0 animate-spin text-amber-400"
+            class="h-4 w-4 shrink-0 animate-spin text-app-warning-400"
           />
-          <span class="text-amber-300">{{ t('board.frame.bootstrappingRepository') }}</span>
-          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
+          <span class="text-app-warning-300">{{ t('board.frame.bootstrappingRepository') }}</span>
+          <span v-if="bootstrapSubtasks" class="ms-auto text-app-warning-200/80">
             {{
               t('board.frame.bootstrapStepsCount', {
                 completed: bootstrapSubtasks.completed,
@@ -358,9 +315,9 @@ const ITEM_ICON: Record<string, string> = {
             }}
           </span>
         </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-amber-900/40">
+        <div class="mt-1.5 h-1 w-full overflow-hidden rounded-sm bg-app-warning-900/40">
           <div
-            class="h-full rounded bg-amber-400 transition-all"
+            class="h-full rounded-sm bg-app-warning-400 transition-all"
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>
@@ -369,28 +326,58 @@ const ITEM_ICON: Record<string, string> = {
           <li
             v-for="(item, i) in bootstrapItems"
             :key="i"
-            class="flex items-start gap-1.5 text-[11px]"
+            class="flex items-start gap-1.5 text-2xs"
             :class="
               item.status === 'completed'
-                ? 'text-amber-200/60 line-through'
+                ? 'text-app-warning-200/60 line-through'
                 : item.status === 'in_progress'
-                  ? 'text-amber-100'
-                  : 'text-amber-200/80'
+                  ? 'text-app-warning-100'
+                  : 'text-app-warning-200/80'
             "
           >
             <UIcon
               :name="ITEM_ICON[item.status]"
               class="mt-px h-3 w-3 shrink-0"
               :class="[
-                item.status === 'in_progress' ? 'animate-spin text-amber-400' : '',
-                item.status === 'completed' ? 'text-emerald-400' : 'text-amber-400/70',
+                item.status === 'in_progress' ? 'animate-spin text-app-warning-400' : '',
+                item.status === 'completed' ? 'text-app-success-400' : 'text-app-warning-400/70',
               ]"
             />
             <span>{{ item.label }}</span>
           </li>
         </ul>
-        <div v-if="run" class="mt-2 flex justify-end">
+        <!-- Which of the run's own steps it is on. A monorepo bootstrap is three moves around a
+             human decision, and the bar above reports only the current container's todo list, so
+             without this the card cannot say whether the survey, the review or the write is what
+             is happening. Renders nothing for a one-step new-repo run. -->
+        <BootstrapRunSteps v-if="run" :run-id="run.runId" class="mt-2" />
+        <div v-if="run" class="mt-2 flex items-center justify-end gap-1.5">
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-activity"
+            @click.stop="ui.openObservability(run.runId)"
+          >
+            {{ t('observability.modelActivity') }}
+          </UButton>
           <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
+        </div>
+      </div>
+      <!-- parked on a human adoption review: the run is waiting on the viewer, not working -->
+      <div
+        v-else-if="awaitingReview"
+        class="m-3 space-y-2 rounded-md border border-app-warning-500/40 bg-app-warning-500/5 p-3"
+      >
+        <div class="flex items-start gap-2">
+          <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+          <p class="text-xs text-app-warning-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
+        </div>
+        <BootstrapRunSteps :run-id="awaitingReview.id" />
+        <div class="flex justify-end">
+          <UButton size="xs" color="warning" variant="subtle" @click.stop="reviewOpen = true">
+            {{ t('bootstrap.adoption.cardAction') }}
+          </UButton>
         </div>
       </div>
       <!-- failed run: shared failure banner + retry -->
@@ -416,7 +403,7 @@ const ITEM_ICON: Record<string, string> = {
             <div class="flex items-center gap-2">
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg"
-                :style="{ backgroundColor: typeMeta!.accent + '22' }"
+                :style="{ backgroundColor: tint(typeMeta!.accent) }"
               >
                 <UIcon
                   :name="typeMeta!.icon"
@@ -425,114 +412,181 @@ const ITEM_ICON: Record<string, string> = {
                 />
               </div>
               <div>
-                <div class="text-sm font-semibold text-white">{{ block.title }}</div>
-                <div class="text-[11px] text-slate-400">{{ typeMeta!.label }}</div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm font-semibold text-highlighted">{{ block.title }}</span>
+                  <!-- Mounted on more than one board in the org. On the title row rather than in
+                       the action strip, because it qualifies the service's NAME: the work lands in
+                       a repo another board also drives. -->
+                  <UBadge
+                    v-if="isShared"
+                    color="info"
+                    variant="subtle"
+                    size="sm"
+                    class="shrink-0"
+                    data-testid="frame-shared"
+                    :title="t('board.frame.sharedTitle')"
+                  >
+                    {{ t('board.frame.shared') }}
+                  </UBadge>
+                </div>
+                <div class="text-2xs text-muted">{{ typeMeta!.label }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
-              <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
+              <UBadge :color="statusMeta.chip" variant="subtle" size="sm" :title="statusHint">{{
                 statusLabel
               }}</UBadge>
-              <UButton
-                class="nodrag"
-                data-testid="frame-add-task"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-plus"
-                :title="t('board.frame.addTaskTitle')"
-                @click.stop="addTask"
-              />
-              <UButton
-                v-if="tasks.anyOffered"
-                class="nodrag"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-ticket"
-                :title="t('board.frame.createTaskFromIssueTitle')"
-                @click.stop="createTaskFromIssue"
-              />
-              <UButton
-                class="nodrag"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-repeat"
-                :title="t('board.frame.addRecurringTitle')"
-                @click.stop="addRecurring"
-              />
-              <UButton
-                class="nodrag"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-chevron-up"
-                :title="t('board.frame.collapseTitle')"
-                @click.stop="toggleExpand"
-              />
+              <!-- Board-authoring buttons (create task / from issue / recurring / initiative)
+                   are `board.write`, hidden for a read-only viewer, who keeps the status badge
+                   (the one view-only affordance here). -->
+              <template v-if="access.canWriteBoard.value">
+                <UButton
+                  class="nodrag"
+                  data-testid="frame-add-task"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-plus"
+                  :title="t('board.frame.addTaskTitle')"
+                  @click.stop="addTask"
+                />
+                <UButton
+                  v-if="tasks.anyOffered"
+                  class="nodrag"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-ticket"
+                  :title="t('board.frame.createTaskFromIssueTitle')"
+                  @click.stop="createTaskFromIssue"
+                />
+                <UButton
+                  v-if="documents.connectedDesignSources.length > 0"
+                  class="nodrag"
+                  data-testid="frame-start-from-design"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-frame"
+                  :title="t('board.frame.startFromDesignTitle')"
+                  @click.stop="startFromDesign"
+                />
+                <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan
+                     work rather than do it (a schedule that fires runs on a cadence, an
+                     initiative that groups tasks under a goal), and the basic frame header is
+                     the most-used control strip on the board. Hiding the CREATE affordance
+                     removes neither's existing state from basic mode — a live schedule still
+                     badges its task card and opens its inspector panel, and an initiative is
+                     still a block on the board with its own inspector — so what a basic-mode
+                     user loses is the ability to author a new one, not sight of one. -->
+                <UButton
+                  v-if="uiMode.isAdvanced"
+                  class="nodrag"
+                  data-testid="frame-add-recurring"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-repeat"
+                  :title="t('board.frame.addRecurringTitle')"
+                  @click.stop="addRecurring"
+                />
+                <UButton
+                  v-if="uiMode.isAdvanced"
+                  class="nodrag"
+                  data-testid="frame-add-initiative"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-milestone"
+                  :title="t('board.frame.createInitiativeTitle')"
+                  @click.stop="createInitiative"
+                />
+                <!-- Hunting a tracker board for a bug worth adopting is TRIAGE, not intake: it
+                     rates open bugs against each other and picks one to take on, which is the
+                     engineer/PM judgement call. So it is dropped for a narrowed role, whose three
+                     routes in (a new task, a task from a named ticket, a task from a design) all
+                     start from work somebody has already decided to do. -->
+                <UButton
+                  v-if="tasks.anyOffered && uiRole.fullSurface"
+                  class="nodrag"
+                  data-testid="frame-hunt-bugs"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-radar"
+                  :title="t('board.frame.huntBugsTitle')"
+                  @click.stop="huntBugs"
+                />
+              </template>
             </div>
           </div>
 
-          <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
-            <span>{{
-              t('board.frame.implemented', { merged: mergedTasks, total: taskCount })
+          <!-- Composition line. It deliberately does NOT carry a done/total tally: the
+               per-task status is already on every card in the canvas below, so the
+               frame-level "N/M implemented" was a second, coarser answer to a question
+               the canvas answers precisely — and the one people misread, since it counts
+               every task ever added to the service rather than the work in flight. What
+               stays is what the canvas can't show at a glance. -->
+          <div
+            v-if="modules.length || prTasks"
+            class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed"
+          >
+            <span v-if="modules.length">{{
+              t('board.frame.moduleCount', { count: modules.length }, modules.length)
             }}</span>
-            <span v-if="modules.length"
-              >· {{ t('board.frame.moduleCount', { count: modules.length }, modules.length) }}</span
-            >
-            <span v-if="prTasks" class="text-emerald-400"
-              >· {{ t('board.frame.prReadyCount', { count: prTasks }) }}</span
-            >
+            <span v-if="modules.length && prTasks" aria-hidden="true">·</span>
+            <span v-if="prTasks" class="text-app-success-400">{{
+              t('board.frame.prReadyCount', { count: prTasks })
+            }}</span>
           </div>
         </div>
 
-        <!-- the 2D drop zone: modules and loose tasks live here, draggable -->
+        <!-- The frame's canvas. Tasks are laid out in status swimlanes rather than at
+             coordinates, so this is a fixed-size viewport (each lane scrolls) instead of the 2D
+             free-drag surface it used to be. `data-drop-zone` stays on the outer box so a drop
+             in the padding between lanes still resolves to this service rather than falling
+             through to nothing; each lane body carries the same zone for drops inside it. -->
         <div
           :data-drop-zone="block.id"
-          class="nodrag relative rounded-xl bg-slate-950/40"
-          :style="{ width: canvas.w + 'px', height: canvas.h + 'px' }"
+          class="nodrag relative rounded-xl bg-app-950/40 p-2"
+          :style="{ width: canvas.w + 'px', minHeight: canvas.h + 'px' }"
         >
-          <ModuleFrame v-for="m in modules" :key="m.id" :module-id="m.id" />
-          <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" />
+          <!-- Initiatives sit in a wrapping band above the lanes: they are containers of work,
+               not units of it, so they belong in no status lane. -->
+          <div v-if="initiativeBlocks.length" class="mb-2 flex flex-wrap gap-2">
+            <InitiativeCard v-for="i in initiativeBlocks" :key="i.id" :block-id="i.id" />
+          </div>
+
+          <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" :lane-body-height="laneBodyHeight" />
+
           <button
-            v-if="!hasTasks"
+            v-if="!hasTasks && access.canWriteBoard.value"
             type="button"
-            data-testid="frame-add-task"
-            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-[11px] text-slate-500 hover:border-slate-500 hover:text-slate-300"
+            data-testid="frame-add-task-empty"
+            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-2xs text-dimmed hover:border-app-500 hover:text-toned"
             @click.stop="addTask"
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}
           </button>
-
-          <!-- resize handles (drag the borders to resize the service, Miro-style).
-               `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
-               same reason as the header handle above. These stay PHYSICAL
-               (`right-0`, not `end-0`): the resize math in useFrameResize grows the
-               right/bottom edge from an unmirrored clientX/clientY delta, so a
-               logical (RTL-flipped) grip would render on the opposite edge from the
-               one the drag actually moves. -->
-          <div
-            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
-            :title="t('board.frame.dragToResize')"
-            @pointerdown="onResize($event, 'e')"
-          />
-          <div
-            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
-            :title="t('board.frame.dragToResize')"
-            @pointerdown="onResize($event, 's')"
-          />
-          <div
-            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
-            :title="t('board.frame.dragToResize')"
-            @pointerdown="onResize($event, 'se')"
-          >
-            <span
-              class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-slate-500"
-            />
-          </div>
         </div>
       </div>
+
+      <!-- Every border and corner of the CARD is a resize grip (see ResizeGrips: the geometry,
+           the hit bands, and why a north/west drag translates the contents). They used to sit on
+           the inner drop zone's edge, 16px of padding inside the visible border and flush against
+           the content, where two thin strips read as scrollbars rather than as the frame's border.
+
+           The grips are PHYSICAL (`right-0`, not `end-0`): the resize math derives the box from an
+           unmirrored clientX/clientY delta, so a logical (RTL-flipped) grip would render on the
+           opposite border from the one the drag actually moves. -->
+      <ResizeGrips :block="block" tone="frame" />
     </div>
+    <!-- Teleported by UModal, so it renders outside the canvas transform; kept inside the node's
+         single root element so the board node stays a one-root component. -->
+    <AdoptionReviewModal
+      v-if="reviewOpen && awaitingReview"
+      :job="awaitingReview"
+      @close="reviewOpen = false"
+    />
   </div>
 </template>

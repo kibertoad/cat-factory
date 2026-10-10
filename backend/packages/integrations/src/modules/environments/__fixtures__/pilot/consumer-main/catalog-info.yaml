@@ -1,0 +1,13 @@
+# Sanitized fixture — a Backstage catalog file the real repo carries at its root.
+# It parses as a `kind` + `apiVersion` document, so the detector's k8s scan treats the
+# repo root as a (raw) manifest location. That is why the docker-compose recommendation
+# carries the low-confidence "Kubernetes manifests also exist" note — a faithful,
+# if incidental, artifact of the pilot's repo shape (documented in ../../README.md).
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: acme-monolith
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team

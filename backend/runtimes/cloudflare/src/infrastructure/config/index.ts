@@ -1,4 +1,9 @@
-import type { AppConfig } from '@cat-factory/server'
+import {
+  type AppConfig,
+  requireEncryptionKey,
+  resolveInfraReachabilityConfig,
+  resolvePlatformAlertConfig,
+} from '@cat-factory/server'
 import {
   ALL_SUBSCRIPTION_VENDORS,
   type ProviderCapabilities,
@@ -6,23 +11,28 @@ import {
 } from '@cat-factory/kernel'
 import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
-import { type AgentsConfig, loadAgentsConfig } from './agents'
-import { type ExecutionConfig, loadExecutionConfig } from './execution'
+import { bedrockModelsCapability } from '../ai/registries'
+import { openRouterRoutingFor } from '../ai/providerEndpoints'
+import { loadAgentsConfig } from './agents'
+import { loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
-import { type GitHubConfig, loadGitHubConfig } from './github'
+import { loadGitHubConfig } from './github'
 import { loadGitLabConfig } from './gitlab'
-import { type AuthConfig, loadAuthConfig } from './auth'
-import { type DocumentsConfig, loadDocumentsConfig } from './documents'
-import { type TasksConfig, loadTasksConfig } from './tasks'
-import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
-import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
-import { type SlackConfig, loadSlackConfig } from './slack'
-import { type ReleaseHealthConfig, loadReleaseHealthConfig } from './releaseHealth'
-import { type EmailConfig, loadEmailConfig } from './email'
-import { type RetentionConfig, loadRetentionConfig } from './retention'
-import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
-import { type ObservabilityConfig, loadObservabilityConfig } from './observability'
+import { loadAuthConfig } from './auth'
+import { loadDocumentsConfig } from './documents'
+import { loadTasksConfig } from './tasks'
+import { loadServiceCatalogConfig } from './serviceCatalog'
+import { loadEnvironmentsConfig } from './environments'
+import { loadRunnerPoolConfig } from './runners'
+import { loadSlackConfig } from './slack'
+import { loadNotificationWebhookConfig } from './notificationWebhooks'
+import { loadReleaseHealthConfig } from './releaseHealth'
+import { loadEmailConfig } from './email'
+import { loadRetentionConfig } from './retention'
+import { loadFragmentLibraryConfig } from './fragmentLibrary'
+import { loadObservabilityConfig } from './observability'
 import { type LangfuseConfig, loadLangfuseConfig } from './langfuse'
+import { type OtelConfig, loadOtelConfig } from './otel'
 
 // Translates the flat, string-typed Worker environment into a structured app
 // config — in particular the agent model routing ("which LLM, with what config,
@@ -30,36 +40,33 @@ import { type LangfuseConfig, loadLangfuseConfig } from './langfuse'
 // Each concern lives in a sibling module; this barrel composes them.
 
 // The config SHAPE (AppConfig + every sub-config) is the shared contract in
-// @cat-factory/server; this module re-exports it and owns the Worker's env-driven
-// loaders that produce it.
-export type {
-  AgentsConfig,
-  AppConfig,
-  ExecutionConfig,
-  GitHubConfig,
-  AuthConfig,
-  DocumentsConfig,
-  TasksConfig,
-  EnvironmentsConfig,
-  RunnerPoolConfig,
-  SlackConfig,
-  ReleaseHealthConfig,
-  EmailConfig,
-  RetentionConfig,
-  FragmentLibraryConfig,
-  ObservabilityConfig,
-  LangfuseConfig,
-}
+// @cat-factory/server; this module owns the Worker's env-driven loaders that produce it and
+// re-exports only the types its own loaders hand back. A sub-config type is imported from
+// @cat-factory/server directly.
+export type { AppConfig, LangfuseConfig, OtelConfig }
 
 export function loadConfig(env: Env): AppConfig {
+  // Validate the system encryption key up front: present, valid base64, and decoding to a full
+  // AES-256 key. It is effectively mandatory (the always-on document/task integrations seal
+  // credentials at rest under it), so a missing/malformed binding fails here with an actionable
+  // message rather than lazily inside the first cipher build. Mirrors the Node loader + local mode.
+  requireEncryptionKey(env.ENCRYPTION_KEY)
+
   // Deployment-level capabilities: direct keys are now per-workspace (resolved at run
   // time from the DB pool), so none are known here; Cloudflare Workers AI is opt-in
   // (the `AI` binding). The per-workspace `/models` endpoint recomputes selectability
   // against each workspace's configured keys + subscriptions.
+  // Bedrock is the exception to "no direct route is known here": it is reached with the
+  // deployment's own AWS credentials, so its per-model allow-list is a deployment fact and the
+  // deployment catalog can state which Bedrock models are selectable. Granted through
+  // `bedrockModelsCapability`, which also requires a registered registry that can serve the
+  // route: on this runtime the env vars alone don't prove the provider package was mixed in.
+  const bedrockModels = bedrockModelsCapability(env)
   const caps: ProviderCapabilities = {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
     cloudflareEnabled: !!env.AI,
+    ...(bedrockModels ? { bedrockModels } : {}),
   }
   const spend = loadSpendPricing(env)
   return {
@@ -73,14 +80,44 @@ export function loadConfig(env: Env): AppConfig {
     auth: loadAuthConfig(env),
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
+    serviceCatalog: loadServiceCatalogConfig(env),
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
     slack: loadSlackConfig(env),
+    notificationWebhooks: loadNotificationWebhookConfig(env),
     releaseHealth: loadReleaseHealthConfig(env),
     email: loadEmailConfig(env),
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),
     observability: loadObservabilityConfig(env),
+    // The CONTAINER-proxy half of the OpenRouter prompt-retention policy; the inline half reads
+    // the same value in `container-model-resolver`. Both go through the shared parse so a
+    // deployment cannot be strict on one path and permissive on the other.
+    openRouterRouting: openRouterRoutingFor(env),
     langfuse: loadLangfuseConfig(env),
+    otel: loadOtelConfig(env),
+    // Platform-health alerting: opt-in (`PLATFORM_ALERTS=true`), independent of the OTel
+    // exporter. The `scheduled` cron drives the sweep; the interval knob is Node-only.
+    platformAlerts: resolvePlatformAlertConfig({
+      enabled: env.PLATFORM_ALERTS?.trim() === 'true',
+      window: env.PLATFORM_ALERTS_WINDOW,
+      intervalMs: env.PLATFORM_ALERTS_INTERVAL_MS,
+      minRuns: env.PLATFORM_ALERTS_MIN_RUNS,
+      maxFailureRate: env.PLATFORM_ALERTS_MAX_FAILURE_RATE,
+      maxP99Minutes: env.PLATFORM_ALERTS_MAX_P99_MINUTES,
+      maxBacklog: env.PLATFORM_ALERTS_MAX_BACKLOG,
+      stalledBuckets: env.PLATFORM_ALERTS_STALLED_BUCKETS,
+      minStalledPriorRuns: env.PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS,
+      maxFailureKindShare: env.PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE,
+      maxSweepFailures: env.PLATFORM_ALERTS_MAX_SWEEP_FAILURES,
+      failureKindRates: env.PLATFORM_ALERTS_FAILURE_KIND_RATES,
+    }),
+    // Infrastructure-reachability watcher: opt-in (`INFRA_REACHABILITY_WATCH=true`). The
+    // `scheduled` cron drives the sweep; the interval knob is Node-only.
+    infraReachability: resolveInfraReachabilityConfig({
+      enabled: env.INFRA_REACHABILITY_WATCH?.trim() === 'true',
+      intervalMs: env.INFRA_REACHABILITY_INTERVAL_MS,
+      probeTimeoutMs: env.INFRA_REACHABILITY_PROBE_TIMEOUT_MS,
+    }),
   }
 }

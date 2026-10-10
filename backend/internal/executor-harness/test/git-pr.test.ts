@@ -1,13 +1,43 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  describePrOpenFailure,
   gitlabApiBaseFromCloneUrl,
   gitlabProjectPath,
   inferVcsProvider,
   openPullRequest,
-} from '../src/git.js'
+} from '../src/vcs-api.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('describePrOpenFailure (F2: PR/MR open remedies)', () => {
+  it('401 → credential-rejected remedy', () => {
+    expect(describePrOpenFailure(401, 'github')).toMatch(/credential was rejected/i)
+  })
+
+  it('403 → scope/permission remedy tailored per provider', () => {
+    expect(describePrOpenFailure(403, 'github')).toMatch(/Pull requests: write/i)
+    expect(describePrOpenFailure(403, 'gitlab')).toMatch(/`api` scope/i)
+  })
+
+  it('404 → repository-not-found remedy', () => {
+    expect(describePrOpenFailure(404, 'github')).toMatch(/could not be found/i)
+  })
+
+  it('422 (GitHub) and 400 (GitLab) → validation remedy naming the branch causes', () => {
+    expect(describePrOpenFailure(422, 'github')).toMatch(/head or base branch/i)
+    expect(describePrOpenFailure(400, 'gitlab')).toMatch(/merge request as invalid/i)
+  })
+
+  it('uses the provider-appropriate noun (pull request vs merge request)', () => {
+    expect(describePrOpenFailure(401, 'github')).toMatch(/pull request/i)
+    expect(describePrOpenFailure(401, 'gitlab')).toMatch(/merge request/i)
+  })
+
+  it('returns undefined for an unmapped status (keeps just the raw HTTP line)', () => {
+    expect(describePrOpenFailure(500, 'github')).toBeUndefined()
+  })
 })
 
 describe('inferVcsProvider', () => {
@@ -302,6 +332,63 @@ describe('openPullRequest (transient retry)', () => {
     const url = await openPullRequest({ ...githubPr })
     expect(url).toBe('https://github.com/o/r/pull/13')
     // Exactly two calls: the POST (not retried) + the lookup GET.
+    expect(seq.count()).toBe(2)
+  })
+
+  // A resumed run's agent briefing would otherwise be read, scrubbed, capped and then dropped on
+  // the floor, because the PR it describes is already open. `refreshExisting` is what lands it.
+  it('refreshes an already-open PR when the caller carries an agent briefing', async () => {
+    const requests: Array<{ method: string; url: string; body: unknown }> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        requests.push({
+          method,
+          url,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        })
+        if (method === 'POST') {
+          return Response.json(
+            { message: 'A pull request already exists for o:feature.' },
+            {
+              status: 422,
+            },
+          )
+        }
+        if (method === 'GET') {
+          return Response.json([
+            {
+              html_url: 'https://github.com/o/r/pull/13',
+              number: 13,
+              body: `stale\n\n<!-- cat-factory:verification-report:start -->\nCI: green\n<!-- cat-factory:verification-report:end -->`,
+            },
+          ])
+        }
+        return Response.json({})
+      }),
+    )
+
+    const url = await openPullRequest({ ...githubPr, refreshExisting: true })
+    expect(url).toBe('https://github.com/o/r/pull/13')
+
+    const patch = requests.find((r) => r.method === 'PATCH')
+    expect(patch?.url).toBe('https://api.github.com/repos/o/r/pulls/13')
+    const patched = patch?.body as { title: string; body: string }
+    expect(patched.title).toBe('T')
+    expect(patched.body).toContain('B')
+    expect(patched.body).not.toContain('stale')
+    // The engine's managed report region survives the rewrite.
+    expect(patched.body).toContain('CI: green')
+  })
+
+  it('leaves an already-open PR alone without refreshExisting (no briefing to land)', async () => {
+    const seq = stubFetchSequence([
+      { status: 422, body: { message: 'A pull request already exists for o:feature.' } },
+      { status: 200, body: [{ html_url: 'https://github.com/o/r/pull/13', number: 13 }] },
+    ])
+    await openPullRequest({ ...githubPr })
+    // POST + lookup only: a generic fallback body must never clobber a human's description.
     expect(seq.count()).toBe(2)
   })
 

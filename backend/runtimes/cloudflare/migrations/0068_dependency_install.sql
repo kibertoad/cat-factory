@@ -1,0 +1,13 @@
+-- DEPENDENCY PREPOPULATION: the install command the executor-harness runs against the
+-- checkout BEFORE the coding agent's first turn, so the agent reads a tree whose dependencies
+-- are present (node_modules, a populated .venv, a warm module cache) rather than inferring
+-- capabilities from a manifest.
+--
+-- Shares the per-service-frame `validation_configs` row because it is resolved by the same
+-- frame-chain read the pre-PR checks are — so prepopulation costs a dispatch no extra round
+-- trip — but it is a separate concern with a separate disposition: setup, never a gate. NULL
+-- (the default) is byte-for-byte the pre-feature behaviour.
+--
+-- Mirrors the Drizzle `validation_configs.dependency_install` column on the Node facade. See
+-- docs/initiatives/agent-dependency-prepopulation.md.
+ALTER TABLE validation_configs ADD COLUMN dependency_install TEXT;

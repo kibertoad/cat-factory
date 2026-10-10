@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app'
 import { githubDeps, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 import { WebCryptoWebhookVerifier } from '../../src/infrastructure/github/WebCryptoWebhookVerifier'
 
 const SECRET = 'test-webhook-secret'
@@ -21,7 +21,6 @@ function seededClient() {
       name: 'web',
       defaultBranch: 'main',
       private: false,
-      blockId: null,
       syncedAt: 0,
     },
   ]

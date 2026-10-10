@@ -1,10 +1,4 @@
-import {
-  DEEPSEEK_BASE_URL,
-  MOONSHOT_BASE_URL,
-  OPENAI_BASE_URL,
-  OPENROUTER_BASE_URL,
-  QWEN_BASE_URL,
-} from '@cat-factory/agents'
+import { isOpenAiCompatibleProvider } from '@cat-factory/agents'
 import {
   type GitHubBackfillScheduler,
   type GitHubWebhookIngest,
@@ -12,11 +6,23 @@ import {
   type LlmUpstreamEndpoint,
   type RealtimeGateway,
   type RuntimeGateways,
+  InlineTrackerWebhookIngest,
 } from '@cat-factory/server'
+import type { PgBoss } from 'pg-boss'
+import {
+  PgBossGitHubBackfillScheduler,
+  PgBossGitHubWebhookIngest,
+} from './execution/githubSyncRunner.js'
+import { PgBossTrackerWebhookIngest } from './execution/trackerSyncRunner.js'
+import { baseUrlForNode, workersAiRestUpstream } from './providerEndpoints.js'
 
-// Node implementations of the runtime gateway seams. Async GitHub ingest still falls
-// back to the "inline / not enabled" paths the shared controllers handle, and the LLM
-// proxy forwards to OpenAI-compatible providers over HTTP (no in-process binding).
+// Node implementations of the runtime gateway seams. Async GitHub ingest is backed by
+// pg-boss when the durable job engine is up (the production/dev path): backfills, webhook
+// deliveries and repo resyncs enqueue on the `github.sync` queue so the request acks fast,
+// draining through `startGitHubSyncWorker` (the analogue of the Worker's `GITHUB_SYNC_QUEUE`
+// consumer + `GitHubBackfillWorkflow`). With no boss (a container built for a pure-logic
+// test) the seams report "not enabled" so the shared controllers run the sync inline. The
+// LLM proxy forwards to OpenAI-compatible providers over HTTP (no in-process binding).
 //
 // Real-time delivery, by contrast, IS implemented — but NOT through this gateway seam.
 // The seam returns a Hono `Response` (the Cloudflare model: a 101 from the per-workspace
@@ -28,7 +34,7 @@ import {
 //
 // Production swap-in for a multi-replica deployment (follow-up): front the in-process
 // `NodeRealtimeHub` with a shared bus (Postgres LISTEN/NOTIFY); single-process Node and
-// local mode need nothing more. Async GitHub ingest: pg-boss `githubBackfill` / `githubWebhook`.
+// local mode need nothing more.
 
 /**
  * No-op: Node handles the WebSocket upgrade at the HTTP-server level (`attachRealtime`),
@@ -41,14 +47,14 @@ class NodeRealtimeGateway implements RealtimeGateway {
   }
 }
 
-/** No async backfill scheduler yet: report "not scheduled" so the caller runs it inline. */
+/** No boss (pure-logic test container): report "not scheduled" so the caller runs it inline. */
 class InlineGitHubBackfillScheduler implements GitHubBackfillScheduler {
   scheduleBackfill(): Promise<boolean> {
     return Promise.resolve(false)
   }
 }
 
-/** No async queue yet: report "not queued" so the caller handles webhooks/resyncs inline. */
+/** No boss (pure-logic test container): report "not queued" so the caller handles it inline. */
 class InlineGitHubWebhookIngest implements GitHubWebhookIngest {
   enqueueWebhook(): Promise<boolean> {
     return Promise.resolve(false)
@@ -57,36 +63,44 @@ class InlineGitHubWebhookIngest implements GitHubWebhookIngest {
   queueRepoResync(): Promise<boolean> {
     return Promise.resolve(false)
   }
-}
 
-// `baseUrl` is the built-in default; LiteLLM has none (operator-hosted), so it relies
-// purely on its env override and resolves to null until LITELLM_BASE_URL is set.
-const OPENAI_COMPATIBLE: Record<string, { baseUrl?: string; baseUrlEnv: string }> = {
-  qwen: { baseUrl: QWEN_BASE_URL, baseUrlEnv: 'QWEN_BASE_URL' },
-  deepseek: { baseUrl: DEEPSEEK_BASE_URL, baseUrlEnv: 'DEEPSEEK_BASE_URL' },
-  moonshot: { baseUrl: MOONSHOT_BASE_URL, baseUrlEnv: 'MOONSHOT_BASE_URL' },
-  openai: { baseUrl: OPENAI_BASE_URL, baseUrlEnv: 'OPENAI_BASE_URL' },
-  openrouter: { baseUrl: OPENROUTER_BASE_URL, baseUrlEnv: 'OPENROUTER_BASE_URL' },
-  litellm: { baseUrlEnv: 'LITELLM_BASE_URL' },
+  queueSkillResync(): Promise<boolean> {
+    return Promise.resolve(false)
+  }
+
+  queueFoundationalResync(): Promise<boolean> {
+    return Promise.resolve(false)
+  }
 }
 
 /**
- * Forwards the container LLM proxy to OpenAI-compatible providers over HTTP. Only the
- * base URL is resolved here (overridable per provider via env); the API key is leased
- * per call from the DB-backed pool by the proxy. There is no in-process path on Node,
- * so `runInProcess` returns null (a `workers-ai`-pinned model is unavailable here; use
- * a direct provider, or enable the Cloudflare REST flavour).
+ * Forwards the container LLM proxy to OpenAI-compatible providers over HTTP. For a pooled vendor
+ * only the base URL is resolved here (overridable per provider via env) and the API key is leased
+ * per call from the DB-backed pool by the proxy.
+ *
+ * There is no Cloudflare `AI` binding on Node, so `runInProcess` returns null; `workers-ai` is
+ * instead FORWARDED to Cloudflare's own OpenAI-compatible REST endpoint, the same route the inline
+ * resolver takes. That is not a nicety: `isProxyableProvider` is runtime-neutral and admits
+ * `workers-ai` at dispatch on every facade, and the catalog offers every Cloudflare model once the
+ * REST credentials are set, so a Node deployment that refused it here would kill a `coder` step
+ * mid-flight on a model its own picker had just called available.
  */
 class HttpLlmUpstream implements LlmUpstream {
   constructor(private readonly env: NodeJS.ProcessEnv) {}
 
   resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null {
-    const entry = OPENAI_COMPATIBLE[provider]
-    if (!entry) return null
-    // `||` not `??`: a set-but-blank base-URL env must fall back to the default, not
-    // collapse to an empty URL the SDK then chokes on. For a provider with no default
-    // (LiteLLM), an unset env yields null so the proxy reports "not available" cleanly.
-    const baseURL = this.env[entry.baseUrlEnv] || entry.baseUrl
+    // Cloudflare's REST endpoint is a function of the ACCOUNT, so it is not a member of the shared
+    // provider table (which maps a provider to a constant) and carries its own bearer: `workers-ai`
+    // is not an `ApiKeyProvider`, so there is no pool to lease from.
+    if (provider === 'workers-ai') return workersAiRestUpstream(this.env) ?? null
+    // Otherwise the membership test and the URL both come from the shared table, NOT a second copy
+    // of it here: a provider `isProxyableProvider` admits at dispatch but a local table omitted got
+    // past the guard and then failed as "upstream not available" (which is what `xai` did). The
+    // predicate is what keeps a non-OpenAI-shaped provider out: `baseUrlForNode` honours an
+    // override for any id, `anthropic` included, and an Anthropic endpoint would be sent an
+    // OpenAI-shaped body it does not accept.
+    if (!isOpenAiCompatibleProvider(provider)) return null
+    const baseURL = baseUrlForNode(provider, this.env)
     return baseURL ? { baseURL } : null
   }
 
@@ -95,12 +109,23 @@ class HttpLlmUpstream implements LlmUpstream {
   }
 }
 
-/** Build the Node runtime gateways from process env. */
-export function createNodeGateways(env: NodeJS.ProcessEnv): RuntimeGateways {
+/**
+ * Build the Node runtime gateways from process env. When the pg-boss durable engine is
+ * wired (the real server), async GitHub ingest enqueues onto the `github.sync` queue;
+ * without a boss (a pure-logic test container) it falls back to the inline seams so the
+ * shared controllers run the sync synchronously.
+ */
+export function createNodeGateways(env: NodeJS.ProcessEnv, boss?: PgBoss): RuntimeGateways {
   return {
     realtime: new NodeRealtimeGateway(),
-    githubBackfill: new InlineGitHubBackfillScheduler(),
-    githubWebhook: new InlineGitHubWebhookIngest(),
+    githubBackfill: boss
+      ? new PgBossGitHubBackfillScheduler(boss)
+      : new InlineGitHubBackfillScheduler(),
+    githubWebhook: boss ? new PgBossGitHubWebhookIngest(boss) : new InlineGitHubWebhookIngest(),
+    // Inbound TRACKER deliveries. The queue-less fallback is the SHARED inline seam rather than a
+    // Node-local class: unlike the GitHub-sync seams there is nothing runtime-specific about doing
+    // nothing, and a second copy is a second place for the boolean to be wrong.
+    trackerWebhook: boss ? new PgBossTrackerWebhookIngest(boss) : new InlineTrackerWebhookIngest(),
     llmUpstream: new HttpLlmUpstream(env),
     // Container web-search upstream is resolved per-account by the proxy controller
     // (keys moved out of env into the per-account settings store), so no boot-time

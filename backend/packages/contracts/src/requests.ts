@@ -1,14 +1,24 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
-import { testerQualityConfigSchema, writebackOverrideSchema } from './entities.js'
+import {
+  aprioriBranchSchema,
+  referenceRepoSchema,
+  stepOptionsSchema,
+  testerQualityConfigSchema,
+  writebackOverrideSchema,
+} from './entities.js'
+import { descriptorFieldValuesSchema } from './form-fields.js'
+import { runModeSchema } from './run-provenance.js'
+import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
-import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
   blockTypeSchema,
+  builtinTaskTypeFieldsSchema,
   createTaskTypeSchema,
   frameRepoTypeSchema,
   positionSchema,
@@ -49,7 +59,17 @@ export type RenameWorkspaceInput = v.InferOutput<typeof renameWorkspaceSchema>
 
 export const addFrameSchema = v.object({
   type: blockTypeSchema,
-  position: positionSchema,
+  /**
+   * Where to drop the frame. OPTIONAL: the board lays one out on its own grid when omitted, the
+   * same fallback {@link addServiceFromRepoSchema} has always had. The app's drag-drop always sends
+   * one (the drop point IS the request); a caller with no canvas, such as the public API's
+   * service creation, deliberately sends none: board coordinates are not part of that surface.
+   */
+  position: v.optional(positionSchema),
+  /** The frame's name. Omitted ⇒ a generated `<Role> <n>` placeholder, as drag-drop has always had. */
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** What the service is, for the agents that read it as context. Omitted ⇒ the generated line. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
 })
 export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 
@@ -63,6 +83,13 @@ export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 export const addServiceFromRepoSchema = v.object({
   repoGithubId: v.number(),
   position: v.optional(positionSchema),
+  /**
+   * The service's name. Omitted ⇒ named after the repository (or, for a monorepo service, after
+   * its subdirectory), which is what the app's import button relies on.
+   */
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** What the service is, for the agents that read it as context. Omitted ⇒ the generated line. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
   /**
    * The repository role for the imported frame (backend service / frontend / library /
    * document repository). Omitted → `service`, so existing callers are unchanged.
@@ -118,7 +145,7 @@ export const addTaskSchema = v.object({
   taskTypeFields: v.optional(taskTypeFieldsSchema),
   // The merge threshold preset governing this task's auto-merge; omitted/empty →
   // the workspace default preset.
-  mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
+  riskPolicyId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // The model preset governing which model each agent step runs on; omitted/empty →
   // the workspace default preset.
   modelPresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
@@ -126,9 +153,20 @@ export const addTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // Task-level agent-contributed config values (e.g. the Tester's environment).
   agentConfig: v.optional(agentConfigValuesSchema),
+  // Best-practice prompt fragments to pin on the task at creation (folded into its
+  // code-/doc-aware agents on top of the service-level standards). Chosen on the create
+  // form from the resolved catalog; capped like the `updateBlock` `fragmentIds`. Omitted/
+  // empty → no task-level fragments (a document task still gets its writing-style defaults).
+  fragmentIds: v.optional(v.array(v.pipe(v.string(), v.maxLength(120)))),
   // Whether this is a purely TECHNICAL task (creation checkbox). Omitted → not yet
   // determined (the engine may infer it from the spec phase). A set value is authoritative.
   technical: v.optional(v.boolean()),
+  // Opt-in review-debt friction (see `backend/docs/review-debt-friction.md`): when the
+  // workspace has crossed its soft warn threshold, creation is refused with a
+  // `review_debt_warn` 409 UNLESS this flag is set. The SPA sets it on the retry after the
+  // human confirms in the friction dialog. It NEVER tunnels through a hard block (that tier
+  // is checked first and ignores the flag). Inert when friction is off.
+  acknowledgeReviewDebt: v.optional(v.boolean()),
 })
 export type AddTaskInput = v.InferOutput<typeof addTaskSchema>
 
@@ -137,6 +175,16 @@ export const addModuleSchema = v.object({
   position: v.optional(positionSchema),
 })
 export type AddModuleInput = v.InferOutput<typeof addModuleSchema>
+
+/**
+ * Cap, in characters, on a service frame's freeform testing context.
+ *
+ * Named and exported because the inspector's textarea counts against the SAME number: the SPA has
+ * to say how much room is left before the request is sent, and a cap restated on each side is one
+ * the two drift on. Sized like the other standing-guidance prose fields (a bootstrap instruction,
+ * an initiative brief) rather than like a description: a model reads it on every tester dispatch.
+ */
+export const TESTING_CONTEXT_MAX_LENGTH = 8000
 
 export const updateBlockSchema = v.partial(
   v.object({
@@ -153,17 +201,45 @@ export const updateBlockSchema = v.partial(
     // The selected model's catalog id; an empty string resets to the default.
     modelId: v.pipe(v.string(), v.maxLength(120)),
     // The merge threshold preset id; an empty string resets to the workspace default.
-    mergePresetId: v.pipe(v.string(), v.maxLength(120)),
+    riskPolicyId: v.pipe(v.string(), v.maxLength(120)),
     // The model preset id; an empty string resets to the workspace default preset.
     modelPresetId: v.pipe(v.string(), v.maxLength(120)),
     // The task's default pipeline id; an empty string clears the selection.
     pipelineId: v.pipe(v.string(), v.maxLength(120)),
     // Task-level agent-contributed config values (id→value map; replaces the map).
     agentConfig: agentConfigValuesSchema,
+    // Task-level: the answers to a CUSTOM task type's own declared create-form fields (the
+    // `taskTypeFields.custom` bag; replaces the bag). Validated server-side through the SAME
+    // door the create form goes through, so a type's declaration is enforced identically
+    // whichever one wrote the values.
+    //
+    // The BUILT-IN half rides `builtinTaskTypeFields` below rather than this key: the two are
+    // validated by different authorities (see `builtinTaskTypeFieldsSchema`), so splitting them
+    // at the request boundary is what lets each be parsed by its own.
+    customTaskTypeFields: descriptorFieldValuesSchema,
+    // Task-level: the BUILT-IN per-type create-form fields (a bug's repro, a spike's success
+    // criteria, a review's target PR); REPLACES the built-in half of the bag and leaves `custom`
+    // alone. Schema-typed here, so a value this key accepts is one creation would also have.
+    //
+    // These were long unpatchable, and the reason was real rather than an oversight: a `review`
+    // task's PR reference is verified against the provider at creation and FOLDED into the
+    // description, so a patch that wrote the field alone would skip both. `BoardService` now
+    // repeats that resolution instead of declining to (see `taskTypeFieldsPatch.ts`), which is
+    // what makes the pre-dispatch input gate's `reproduction_missing` / `review_target_missing` /
+    // `success_criteria_missing` findings fixable at all: each names a field, and until this key
+    // existed the only way to supply one was to delete the task and file it again.
+    builtinTaskTypeFields: builtinTaskTypeFieldsSchema,
     // Service-level (frame): the service-owned provisioning config — the provision type it
     // produces + in-repo specifics (the "what + where"). See
     // docs/initiatives/per-service-provision-types.md.
     provisioning: serviceProvisioningSchema,
+    // Service-level (frame): the operator's freeform testing context, injected verbatim into
+    // every tester prompt for the service; an empty string clears it. Trimmed BEFORE the cap, so
+    // the cap governs the prose that reaches a prompt and, more importantly, so a textarea holding
+    // nothing but whitespace arrives as the empty string the mapper nulls: without that, a row
+    // could hold a third spelling of "no testing context" that every reader trims away while the
+    // inspector shows a filled box.
+    testingContext: v.pipe(v.string(), v.trim(), v.maxLength(TESTING_CONTEXT_MAX_LENGTH)),
     // Service-level (frame): the cloud provider this service's jobs run on.
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.
@@ -179,10 +255,19 @@ export const updateBlockSchema = v.partial(
     // own service; an empty array clears the selection. Capped like `serviceConnections`
     // so the write-gate's per-id cross-home resolve stays a bounded loop, not data-sized.
     involvedServiceIds: v.pipe(v.array(v.pipe(v.string(), v.maxLength(120))), v.maxLength(50)),
+    // Task-level (document tasks): read-only reference repos for the `doc-writer` agent; an
+    // empty array clears them. Capped so a clone fan-out stays bounded, not data-sized.
+    referenceRepos: v.pipe(v.array(referenceRepoSchema), v.maxLength(20)),
+    // Task-level: pre-existing branches of the task's primary target repo handed to the run
+    // (one optional `working` branch + any `reference` branches); an empty array clears them.
+    // The single-working / no-duplicate / mode-disjoint / frozen-after-PR invariants are
+    // enforced in BoardService.updateBlock. Capped so a reference-fetch fan-out stays bounded.
+    aprioriBranches: v.pipe(v.array(aprioriBranchSchema), v.maxLength(20)),
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
     trackerResolveOnMerge: v.nullable(writebackOverrideSchema),
+    trackerQuestionsOnPark: v.nullable(writebackOverrideSchema),
     // Task-level TECHNICAL label (tri-state): true ⇒ technical, false ⇒ business, null ⇒
     // "unset" (let the engine infer it). A human-set value is never overridden.
     technical: v.nullable(v.boolean()),
@@ -199,6 +284,17 @@ export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>
 export const moveBlockSchema = v.object({ position: positionSchema })
 export type MoveBlockInput = v.InferOutput<typeof moveBlockSchema>
 
+/**
+ * The new bounds of a container dragged by one of its borders. Distinct from a `position` patch
+ * plus a `size` patch on purpose: this is the ONE request that may move a container's content
+ * ORIGIN, and the server keeps the contents visually still by translating the direct children by
+ * the inverse delta. Sending the two fields separately would either lose that (two independent
+ * writes, no delta to derive) or force `move` to guess whether a position change came from a
+ * drag of the whole container — where the children are meant to travel with it.
+ */
+export const resizeBlockSchema = v.object({ position: positionSchema, size: sizeSchema })
+export type ResizeBlockInput = v.InferOutput<typeof resizeBlockSchema>
+
 export const reparentSchema = v.object({
   parentId: v.pipe(v.string(), v.minLength(1)),
   position: positionSchema,
@@ -212,6 +308,8 @@ export type ToggleDependencyInput = v.InferOutput<typeof toggleDependencySchema>
 
 export const createPipelineSchema = v.object({
   name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /** Optional prose description shown next to the step list in the pickers/builder. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   agentKinds: v.pipe(v.array(agentKindSchema), v.minLength(1)),
   /**
    * Per-step human approval gates, parallel to {@link agentKinds}. Optional;
@@ -255,8 +353,29 @@ export const createPipelineSchema = v.object({
    * on the task estimate. Optional.
    */
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
+  /**
+   * Per-step options bag, parallel to {@link agentKinds}: the extensible home for new
+   * per-step parameters (see `stepOptionsSchema`). `null`/omitted per entry ⇒ that step's
+   * defaults. Today carries only `autoRecommend` (requirements-review). Optional.
+   */
+  stepOptions: v.optional(v.array(v.nullable(stepOptionsSchema))),
   /** Free-form organizational labels for the library. Optional. */
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  /**
+   * How the pipeline may be launched: `'one-off'` / `'recurring'` / `'both'`. Omitted ⇒
+   * `'both'` (unrestricted). A pipeline carrying a `bug-intake` step must be `'recurring'`.
+   */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
+  /**
+   * The pipeline's use-case classifier (`build` / `document` / `review` / `research` /
+   * `planning`). REQUIRED, like the field it writes: every pipeline says what it exists to do, so
+   * the pickers, the palette and the library never have to guess for the ones that skipped it. The
+   * builder's dial defaults to `build`, so a caller who has not thought about it still states the
+   * classifier it would have behaved as.
+   */
+  purpose: pipelinePurposeSchema,
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -267,6 +386,11 @@ export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
  */
 export const updatePipelineSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  /**
+   * Change the prose description. Sent by the builder as the full value (possibly empty) so it can
+   * be CLEARED — an empty/blank string drops the description, `undefined` leaves it unchanged.
+   */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   agentKinds: v.optional(v.pipe(v.array(agentKindSchema), v.minLength(1))),
   gates: v.optional(v.array(v.boolean())),
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),
@@ -275,7 +399,14 @@ export const updatePipelineSchema = v.object({
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
   followUps: v.optional(v.array(v.nullable(v.boolean()))),
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
+  stepOptions: v.optional(v.array(v.nullable(stepOptionsSchema))),
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  /** Change how the pipeline may be launched (see {@link createPipelineSchema}). Optional. */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
+  /** Change the pipeline's use-case classifier (see {@link createPipelineSchema}). Optional. */
+  purpose: v.optional(pipelinePurposeSchema),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
 
@@ -295,13 +426,46 @@ export type ClonePipelineInput = v.InferOutput<typeof clonePipelineSchema>
 export const organizePipelineSchema = v.object({
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
   archived: v.optional(v.boolean()),
+  /**
+   * Claim (or release) this pipeline as the workspace's default for a run somebody started in the
+   * app. Promoting demotes whichever row held it; `false` releases it, leaving the scope with no
+   * declared default (the interface-mode rung answers again).
+   *
+   * On THIS body rather than {@link createPipelineSchema} / {@link updatePipelineSchema} because
+   * the two rungs a workspace most wants as defaults are BUILT-INS, which reject a structural
+   * edit: a default is selection metadata, exactly like a label or the archive flag. One door for
+   * both scopes, so "which pipeline is the default" is never two writes that can disagree.
+   */
+  isDefault: v.optional(v.boolean()),
+  /** The same claim for a run nothing is watching (see {@link isDefault}). */
+  isUnattendedDefault: v.optional(v.boolean()),
 })
 export type OrganizePipelineInput = v.InferOutput<typeof organizePipelineSchema>
 
 export const startExecutionSchema = v.object({
   pipelineId: v.pipe(v.string(), v.minLength(1)),
+  /**
+   * Ask for a SANDBOXED run ({@link runModeSchema}): the pipeline runs in full and opens its PR,
+   * but nothing merges. Absent ⇒ `live`, the historical behaviour.
+   *
+   * A request, not the last word: the task's merge preset can force the initiator's role into
+   * dry-run regardless (`dryRunRoles`), and asking for `live` never escapes that.
+   */
+  mode: v.optional(runModeSchema),
 })
 export type StartExecutionInput = v.InferOutput<typeof startExecutionSchema>
+
+/**
+ * Start ONE agent kind against a block — a run with no pipeline behind it (the board's "Map
+ * service" action, the environment wizard's deep analysis). A SEPARATE body from
+ * {@link startExecutionSchema} rather than an either/or field on it: the two name different
+ * things to run, and a single endpoint taking whichever of two mutually exclusive keys was
+ * supplied is a shape every client has to get right and no schema can state.
+ */
+export const startAgentKindExecutionSchema = v.object({
+  agentKind: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+})
+export type StartAgentKindExecutionInput = v.InferOutput<typeof startAgentKindExecutionSchema>
 
 // NOTE: the personal password that unlocks a run's individual-usage credential
 // (Claude / GLM / Codex) is NOT a body field on any of the run endpoints below

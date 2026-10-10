@@ -1,18 +1,49 @@
-import {
-  registeredAgentKinds,
-  registeredKindRequiresContainer,
-  registeredStructuredOutput,
-} from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer, surfaceTraits } from '@cat-factory/agents'
+import { checkBinaryGenerators } from './validateBinaryGenerators.js'
+import { inlineUseCaseProblems } from './validateInlineUseCases.js'
+import type {
+  AgentKind,
+  BinaryGeneratorRegistry,
+  DelegatedExecutorRegistry,
+  DeploymentDocumentResolver,
+  FoundationalServiceRegistry,
+  GateRegistry,
+  InitiativePresetRegistry,
+  InlineUseCaseRegistry,
+  Logger,
+  PipelineRegistry,
+  PromptFragmentRegistry,
+  PromptFragmentSource,
+  TaskTypeRegistry,
+} from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
-  registeredGateFactories,
-  registeredPipelines,
+  describeFoundationalProblem,
+  getErrorMessage,
+  seedPipelines,
   stubGateContext,
+  validateFoundationalDefinition,
 } from '@cat-factory/kernel'
-import { RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
+import {
+  type CredentialInjectionClaimant,
+  type CustomTaskType,
+  type DescriptorField,
+  binaryGeneratorDefinitionIssues,
+  credentialInjectionCollisions,
+  descriptorConditionHasPredicate,
+  duplicatedDescriptorSectionCaptions,
+  isDeploymentScopedSource,
+  foundationalServiceDefinitionIssues,
+  isImageVariantName,
+  isNamespacedId,
+  isValidResultViewId,
+  RESULT_VIEW_ID_SET,
+} from '@cat-factory/contracts'
+import { checkKindToolServers, checkToolServerDefinitions } from './validateToolServers.js'
 
 // ---------------------------------------------------------------------------
 // Boot-time validation of the deployment's registered extensions (agent kinds, gates,
@@ -39,15 +70,199 @@ const BUILT_IN_HELPER_KINDS: ReadonlySet<string> = new Set([
   FIXER_AGENT_KIND,
 ])
 
-/** A single problem found during validation. `error` aborts boot; `warn` is logged only. */
-export interface RegistrationProblem {
-  severity: 'error' | 'warn'
+/**
+ * A single problem found during validation. `error` aborts boot; `warn` is logged only, unless a
+ * deployment escalates it ({@link ValidateRegistrationsOptions.escalateWarning}).
+ *
+ * A union rather than one interface with a `'error' | 'warn'` severity, because only the warn half
+ * is ever handed to deployment code and only the warn half therefore owes it a machine-readable
+ * {@link RegistrationWarning.subject}.
+ */
+export type RegistrationProblem = RegistrationErrorProblem | RegistrationWarning
+
+/**
+ * A registration fault fully knowable at boot. Aborts boot; never reaches a deployment predicate.
+ *
+ * Named `…Problem` rather than `RegistrationError` because it is a VALUE this validator collects,
+ * never something thrown. The facades already publish a `BinaryStoreRegistrationError` that IS a
+ * throwable class, so the shorter name invited `catch (e) { if (e instanceof RegistrationError) }`
+ * against an interface with no runtime value at all.
+ */
+export interface RegistrationErrorProblem {
+  severity: 'error'
   code: string
   message: string
 }
 
+/**
+ * Every `warn`-severity code this validator can produce.
+ *
+ * CLOSED, and it is the test that needs it closed: `subject` being required and singular is stated
+ * by the type, but that the id it carries is the id the MESSAGE names is a relation no type can
+ * state, so `extension-registries.warnings.test.ts` provokes each code in this list and asserts the
+ * relation over what comes back. While `code` was a `string`, a warning added later contributed
+ * zero rows to that test and passed it in silence.
+ */
+export const REGISTRATION_WARN_CODES = [
+  'skills_without_container',
+  'postops_without_structured_output',
+  'task_type_unknown_fragment',
+  'tool_servers_without_container',
+  'too_many_tool_servers',
+  'tool_servers_over_byte_budget',
+  'tool_server_unservable',
+  'oauth_header_collision',
+  'unused_credential_env_name',
+] as const
+
+/** One of {@link REGISTRATION_WARN_CODES}. */
+export type RegistrationWarnCode = (typeof REGISTRATION_WARN_CODES)[number]
+
+/**
+ * A registration fault boot can see but not judge, so the platform reports it and a deployment
+ * decides ({@link ValidateRegistrationsOptions.escalateWarning}).
+ *
+ * `subject` is the id of the ONE registered thing this warning is about, and it is REQUIRED and
+ * SINGULAR on purpose. A predicate is called per problem, so the problem is the escalation unit,
+ * and a warning naming several ids in its prose hands a deployment a decision it cannot make: the
+ * `task_type_unknown_fragment` batch covered a code-tier typo and a legitimately late-bound
+ * `src:<sourceId>:<slug>` id together, and the deployment mixing the two (which
+ * `backend/docs/reusable-operations.md` sanctions) could only escalate both or neither. So a
+ * warning about N things is N warnings, one subject each, and the type is what makes the batch
+ * unrepresentable rather than a convention to remember (ADR 0063).
+ *
+ * What the id NAMES is fixed per `code` (an agent kind, a tool-server id, a fragment id), since a
+ * predicate reads `code` before it reads `subject`; each producer says which at its emit site. It
+ * is the same id the `message` interpolates, so a reader loses nothing. It also IDENTIFIES one
+ * registration, which is why neither credential warning carries the credential key it is about: a
+ * key is a store lookup name several servers may share, so it would have made two defects
+ * indistinguishable by the field a predicate reads.
+ *
+ * A subject is never blank, and the producers are what keep it so: a declaration whose id is empty
+ * cannot be a late-bound tenant-tier reference (no tier resolves an empty id), so it is reported as
+ * the ERROR it is rather than as a warning with nothing to name.
+ */
+export interface RegistrationWarning {
+  severity: 'warn'
+  code: RegistrationWarnCode
+  message: string
+  subject: string
+}
+
+/**
+ * Everything this validator reads, as ONE object a facade satisfies by passing its CONTAINER.
+ *
+ * It used to be seven optional fields on the options object, hand-listed at each call site, and
+ * that shape is what put the local MOTHERSHIP boot two registries behind the others: it passed
+ * five of them, its own comment claimed parity with `start()`, and a custom task type naming an
+ * unregistered pipeline booted clean there while failing on the Postgres path. A hand-list has no
+ * failure mode other than being incomplete, and nothing can tell that it is.
+ *
+ * The container carries every one of these as a required field, so `{ registries: container }`
+ * type-checks and cannot be partial. A registry added to the validator therefore reaches all three
+ * facades with no call-site edit at all.
+ */
+interface ValidatedRegistries {
+  /**
+   * The app-owned agent-kind registry to validate (the facade's injected instance). Required:
+   * without it there are no registered kinds to cross-check the gates/pipelines against.
+   */
+  agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned gate registry to validate (the facade's injected instance, the SAME one it
+   * threads through `CoreDependencies.gateRegistry`). Required: the gate-helper + pipeline-kind
+   * cross-checks read the registered gates from it rather than a module global.
+   */
+  gateRegistry: GateRegistry
+  /**
+   * The app-owned pipeline registry to validate (the facade's injected instance, the SAME one it
+   * threads through `CoreDependencies.pipelineRegistry`). Optional: when omitted, no
+   * deployment-registered pipelines are cross-checked (the pipeline-kind check still needs
+   * `knownAgentKinds`). A facade that registers custom pipelines passes it so a pipeline naming a
+   * nonexistent kind fails at boot rather than mid-run.
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
+   * The app-owned custom task-type registry to validate (the facade's injected instance — the
+   * SAME one it threads through `CoreDependencies.taskTypeRegistry`). Optional: when omitted, no
+   * task-type checks run. A facade that registers custom task types passes it so a malformed id,
+   * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry to validate (the facade's injected instance, the
+   * SAME one it threads through `CoreDependencies.delegatedExecutorRegistry`). Optional: when
+   * omitted, a kind's `agent.executor` is still checked for PRESENCE (required on the delegated
+   * surface, refused on every other) but not for resolvability, because this process then has no
+   * set to resolve against and an empty one would report every id as missing. A facade passes it,
+   * so a kind naming an executor nobody registered fails at boot rather than on the first run of
+   * whichever pipeline reaches that step.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
+  /**
+   * The app-owned inline use-case registry to validate (the facade's injected instance, the SAME
+   * one it threads through `CoreDependencies.inlineUseCaseRegistry`). Optional: when omitted, no
+   * use-case checks run. A facade that registers any passes it, so a malformed id, an ambiguous
+   * default model or an unfillable parameter form fails at boot rather than on a content editor's
+   * first generation.
+   */
+  inlineUseCaseRegistry?: InlineUseCaseRegistry
+  /**
+   * The app-owned initiative-preset registry to validate (the facade's injected instance — the SAME
+   * one it threads through `CoreDependencies.initiativePresetRegistry`). Optional: when omitted, no
+   * preset create form is checked. A facade passes it so a preset whose form cannot be filled fails
+   * at boot rather than rendering an empty picker (or an invisible field) in the create modal.
+   */
+  initiativePresetRegistry?: InitiativePresetRegistry
+  /**
+   * The app-owned foundational-service registry to validate (the facade's injected instance —
+   * the SAME one it threads through `CoreDependencies.foundationalServiceRegistry`). Optional:
+   * when omitted, no deployment-registered services are checked. A facade that registers its
+   * estate in code passes it, so a malformed definition or an unparseable contract document
+   * fails at boot rather than reaching an Architect as an empty catalog entry.
+   */
+  foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * The app-owned generative-binary-integration registry to validate (the facade's injected
+   * instance — the SAME one it threads through `CoreDependencies.binaryGeneratorRegistry`).
+   * Optional: when omitted, no registered integration is checked. A facade that registers any
+   * passes it, so a malformed definition, an unusable credential name or a cleartext endpoint
+   * fails boot rather than surfacing as a refused run or an unexplained 401 mid-generation.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * The app-owned prompt-fragment registry (the facade's injected instance, the SAME one it
+   * threads through `CoreDependencies.promptFragmentRegistry`). Optional: when omitted, a task
+   * type's fragment ids are NOT checked, because this process then has no pool to check them
+   * against and an empty one would report every id as unresolvable.
+   */
+  promptFragmentRegistry?: PromptFragmentRegistry
+  /**
+   * The RESOLVED pool source, read for one bit: whether the registry above is the pool a run will
+   * actually fold. On a mothership-mode node it is not, and the id checks stand down rather than
+   * judging the mothership's standards against this build's registry. Optional, and absent means
+   * the registry speaks for itself.
+   *
+   * Named as the CONTAINER names it, like every other member here, because the one call shape is
+   * `registries: container` and a field this type spells differently is a field that silently
+   * never arrives.
+   */
+  promptFragments?: PromptFragmentSource
+  /**
+   * How this deployment reads its OWN documents, or absent when it configured none.
+   *
+   * What turns the `documentRef` check below from a blanket refusal into a real one: a
+   * code-registered fragment may name a living document exactly when the deployment can resolve
+   * it, and only this can say whether it can. Named as the CONTAINER names it, like every other
+   * member here.
+   */
+  deploymentDocumentResolver?: DeploymentDocumentResolver
+}
+
 /** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
 export interface ValidateRegistrationsOptions {
+  /** Every app-owned registry the checks read. A facade passes its container. */
+  registries: ValidatedRegistries
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -64,7 +279,45 @@ export interface ValidateRegistrationsOptions {
    * `console`/a logger directly — the facade passes its logger). Omitted ⇒ warnings are dropped
    * (errors still throw).
    */
-  onWarn?: (problem: RegistrationProblem) => void
+  onWarn?: (problem: RegistrationWarning) => void
+  /**
+   * Raise a `warn` to an ERROR: return `true` and the problem joins the aggregated boot failure
+   * instead of the log.
+   *
+   * The severities here are set by ONE bar: boot ERRORS on what is fully knowable from a
+   * registration and WARNS only where it structurally cannot see the answer (ADR 0040). That bar is
+   * about what the PLATFORM can know, and for one warn in particular the DEPLOYMENT knows more.
+   * `task_type_unknown_fragment` fires for two causes it cannot separate: a typo in a code-owned id,
+   * and an account/workspace-tier id that merges per workspace at run time and is invisible at boot.
+   * A deployment whose operations reference only fragments it registers itself knows the second
+   * cause cannot apply to it, and for that deployment the warn names a real defect: part of an
+   * operation's standing guidance silently never enters a run, and for a `conditionalFragmentIds`
+   * entry it goes missing only for the cases matching the condition.
+   *
+   * So the SEVERITY is platform judgement and the DISPOSITION is deployment policy, which is the
+   * split this hook exists to express. It takes the whole problem rather than a list of codes on
+   * purpose: a deployment can escalate one code, a prefix, or everything, and a warn added later is
+   * covered by a predicate that never mentioned it.
+   *
+   * **It is called once per WARNING, and a warning names one `subject`**, so the predicate can be
+   * finer than the deployment: a mixed `defaultFragmentIds` array (code-registered standards beside
+   * a `src:<sourceId>:<slug>` reference, which the reusable-operations guide sanctions) is
+   * escalated per id, by testing the namespace THIS deployment registers its own standards under:
+   *
+   *     (p) => p.code === 'task_type_unknown_fragment' && p.subject.startsWith('acme.')
+   *
+   * which fails boot on the typo while the late-bound id stays a warn. Test that namespace
+   * POSITIVELY: `!p.subject.startsWith('src:')` reads as the same rule and is not one, because a
+   * hand-authored account-tier row and a repo-sourced file pinning its own frontmatter `id` both
+   * carry a plain slug, so it escalates exactly the tenant-tier references it means to spare.
+   * While a warning could name several ids none of this was expressible, and the only two
+   * dispositions available were both wrong (ADR 0063).
+   *
+   * Escalated problems are collected and thrown TOGETHER with the genuine errors, so a boot failure
+   * still names every problem at once. A predicate that throws is a bug in the predicate and
+   * propagates unchanged, rather than being swallowed into a warn about warnings.
+   */
+  escalateWarning?: (problem: RegistrationWarning) => boolean
 }
 
 /**
@@ -72,20 +325,22 @@ export interface ValidateRegistrationsOptions {
  * want to log warnings without aborting. {@link validateRegistrations} throws on any `error`.
  */
 export function collectRegistrationProblems(
-  opts: ValidateRegistrationsOptions = {},
+  opts: ValidateRegistrationsOptions,
 ): RegistrationProblem[] {
   const knownResultViewIds = opts.knownResultViewIds ?? RESULT_VIEW_ID_SET
   const builtInHelperKinds = opts.builtInHelperKinds ?? BUILT_IN_HELPER_KINDS
+  const registry = opts.registries.agentKindRegistry
   const problems: RegistrationProblem[] = []
 
-  const agentKinds = registeredAgentKinds()
+  const agentKinds = registry.all()
   const registeredKindIds = new Set(agentKinds.map((d) => d.kind))
-  const gateKinds = new Set(registeredGateFactories().map((g) => g.kind))
+  const gateFactories = opts.registries.gateRegistry.factories()
+  const gateKinds = new Set(gateFactories.map((g) => g.kind))
 
   // 1. Every gate's helperKind must resolve to a registered container-capable kind or a
   //    built-in helper. The factory is a pure constructor, so we build it with a stub context
   //    just to read its declared helperKind.
-  for (const { kind, factory } of registeredGateFactories()) {
+  for (const { kind, factory } of gateFactories) {
     let helperKind: string
     try {
       helperKind = factory(stubGateContext()).helperKind
@@ -93,13 +348,13 @@ export function collectRegistrationProblems(
       problems.push({
         severity: 'error',
         code: 'gate_factory_threw',
-        message: `Gate "${kind}" factory threw while validating: ${(err as Error).message}`,
+        message: `Gate "${kind}" factory threw while validating: ${getErrorMessage(err)}`,
       })
       continue
     }
     const helperOk =
       builtInHelperKinds.has(helperKind) ||
-      (registeredKindIds.has(helperKind) && registeredKindRequiresContainer(helperKind))
+      (registeredKindIds.has(helperKind) && registry.requiresContainer(helperKind))
     if (!helperOk) {
       problems.push({
         severity: 'error',
@@ -112,31 +367,549 @@ export function collectRegistrationProblems(
     }
   }
 
-  // 2. Every registered kind's presentation.resultView must be a known view id (else the SPA
-  //    silently falls back to prose).
+  // 2. Every registered kind's presentation.resultView must be a known BUILT-IN view id or a
+  //    consumer-namespaced id (`<ns>:<name>`, paired to a deployment-registered component on
+  //    the SPA). A bare unknown id is a typo → error (the SPA would silently fall back to prose).
   for (const def of agentKinds) {
     const resultView = def.presentation?.resultView
-    if (resultView !== undefined && !knownResultViewIds.has(resultView)) {
+    if (resultView !== undefined && !isValidResultViewId(resultView, knownResultViewIds)) {
       problems.push({
         severity: 'error',
         code: 'unknown_result_view',
         message:
-          `Agent kind "${def.kind}" declares resultView "${resultView}", which is not a known ` +
-          `result view. Use one of: ${[...knownResultViewIds].join(', ')}.`,
+          `Agent kind "${def.kind}" declares resultView "${resultView}", which is neither a known ` +
+          `built-in result view nor a namespaced consumer id (<ns>:<name>). Use one of: ` +
+          `${[...knownResultViewIds].join(', ')} — or a namespaced id paired with a frontend component.`,
       })
     }
   }
 
   // 3. Coherence (warn): a kind with postOps that has an agent step which is NOT structured
   //    output likely can't feed those post-ops from `result.custom`. Heuristic, so a warning.
+  problems.push(...checkPostOpsStructuredOutput(agentKinds, registry))
+
+  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc), and pipeline
+  //    RETIREMENTS that name a still-live pipeline (an inert `retire()` call).
+  problems.push(...checkPipelineKinds(opts, registeredKindIds, gateKinds, builtInHelperKinds))
+  problems.push(...checkPipelineRetirements(opts))
+
+  // 5. Custom task types (only when a task-type registry is supplied).
+  problems.push(...checkCustomTaskTypes(opts))
+
+  // 5b/5c. The OTHER two surfaces that declare a form over the same vocabulary, held to the same
+  //        bar by the same checker: an initiative preset's create form, and a registered gate's
+  //        per-step config form.
+  problems.push(...checkInitiativePresetForms(opts))
+  problems.push(...checkGateConfigForms(opts))
+
+  // 6. Agent capabilities: the skills + tool servers declared for each kind.
+  problems.push(...checkAgentCapabilities(registry))
+
+  //  7b. A kind's declared IMAGE VARIANT: a slug, and never a platform name it may not claim.
+  problems.push(...checkAgentImageVariants(registry))
+
+  //  7c. A kind's declared DELEGATED EXECUTOR: required on that surface, refused on every other,
+  //       and resolvable in this build.
+  problems.push(...checkDelegatedExecutors(opts, registry))
+
+  // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
+  problems.push(...checkAgentKindVariants(opts, registeredKindIds))
+
+  // 8. Deployment-registered FOUNDATIONAL SERVICES (only when a registry is supplied).
+  problems.push(...checkFoundationalServices(opts))
+
+  // 9. Deployment-registered GENERATIVE BINARY INTEGRATIONS (only when a registry is supplied).
+  problems.push(...checkBinaryGenerators(opts.registries.binaryGeneratorRegistry))
+
+  // 10. Deployment-registered PROMPT FRAGMENTS (only when a registry is supplied).
+  problems.push(...checkPromptFragments(opts))
+
+  // 10b. Deployment-registered INLINE USE CASES (only when a registry is supplied).
+  problems.push(...checkInlineUseCases(opts))
+
+  // 11. CREDENTIAL injection-name collisions, over every capability registry at once: two
+  //     capabilities claiming one environment variable for different lookup keys.
+  problems.push(...checkCredentialInjectionNames(opts))
+
+  return problems
+}
+
+/**
+ * Section 10 of {@link collectRegistrationProblems}: a code-registered prompt fragment whose
+ * `documentRef` THIS deployment cannot resolve.
+ *
+ * A code registration lands on the `builtin` tier, whose documents are read with credentials the
+ * DEPLOYMENT configures (`DOC_SOURCE_<SOURCE>_*`), not with any tenant's connection. So the
+ * question boot has to answer is not "is a builtin documentRef allowed" but "can this deployment
+ * serve it", and there are exactly two ways it cannot:
+ *
+ * - **The source can never be deployment-scoped.** `github` docs authenticate with a WORKSPACE's
+ *   App installation, so there is no deployment-wide credential to configure and picking a
+ *   tenant's would be the cross-tenant fetch the trait refuses. No configuration fixes it.
+ * - **The deployment configured nothing for that source.** Fixable, and the message says how.
+ *
+ * An ERROR in both cases rather than a warning, and the reason has not changed: the ref is carried
+ * through the catalog merge, put on the wire, and rendered by the library UI with a
+ * `fragments.catalog.live` badge NAMING the source, while `resolveDocumentBody` serves the
+ * registered body. Accepted everywhere it is visible and honoured nowhere, with the surface most
+ * confident about it telling a human the body is live. Unlike an unresolvable fragment ID this is
+ * FULLY knowable from the registration plus this process's own configuration, which is the bar
+ * every severity here is set by.
+ *
+ * A MOTHERSHIP-mode node is judged the same way and correctly: its resolver is the remote one,
+ * whose `configured` answers for the mothership's environment rather than the laptop's.
+ */
+function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const registry = opts.registries.promptFragmentRegistry
+  if (!registry) return []
+  const resolver = opts.registries.deploymentDocumentResolver
+  const problems: RegistrationProblem[] = []
+  for (const fragment of registry.all()) {
+    const ref = fragment.documentRef
+    if (!ref) continue
+    // The TRAIT is asked first and independently of the resolver, because the two answer different
+    // questions: whether this source CAN be deployment-scoped is a fact about the source, and
+    // whether it IS configured is a fact about this process. Asking the resolver first would let a
+    // resolver that answers `configured` too generously admit a registration no configuration can
+    // make work, and the trait is the only thing that can refuse it.
+    const scopable = isDeploymentScopedSource(ref.source)
+    if (scopable && resolver?.configured(ref.source)) continue
+    // Two causes, two remedies, so two messages. Reporting them as one would send an operator who
+    // chose an impossible source hunting for a variable that does not exist.
+    const cause = scopable
+      ? `this deployment has configured no ${ref.source} credentials, so it cannot read the ` +
+        `document. Set the DOC_SOURCE_${ref.source.toUpperCase()}_* variables ` +
+        `(docs/environment-variables.md)`
+      : `document source "${ref.source}" cannot be configured deployment-wide at all: its ` +
+        `credential is a WORKSPACE's, not the deployment's, so serving one document to every ` +
+        `workspace would mean spending one tenant's credential on all of them`
+    problems.push({
+      severity: 'error',
+      code: 'fragment_document_ref_unsupported',
+      message:
+        `Prompt fragment "${fragment.id}" is registered in code with a documentRef, but ${cause}. ` +
+        `Left as is the reference is carried through the catalog and rendered as a live source ` +
+        `while every run folds the registered body instead. Fix the configuration, register the ` +
+        `body inline, or create the fragment at the ACCOUNT tier (POST it with its documentRef and ` +
+        `a fetch-via workspace).`,
+    })
+  }
+  return problems
+}
+
+/**
+ * Section 8 of {@link collectRegistrationProblems}: every foundational service a deployment
+ * registers in code must be a definition the platform would have accepted over its own write
+ * boundary.
+ *
+ * Boot is the whole point of registering in code rather than provisioning over REST. A stored
+ * row was refused at the moment someone wrote it; a code definition has no such moment, and its
+ * failures are the quiet kind — an OpenAPI document that does not parse becomes a catalog entry
+ * listing no operations while looking perfectly registered, and a capability tag that misses
+ * `asset-storage` by an underscore surfaces hours later as a refused run. Validating the SAME
+ * shape and the SAME rules the REST boundary applies (`createFoundationalServiceSchema` +
+ * `validateFoundationalDefinition`) means a deployment cannot register something it could not
+ * have uploaded.
+ */
+function checkFoundationalServices(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (!opts.registries.foundationalServiceRegistry) return problems
+  for (const definition of opts.registries.foundationalServiceRegistry.all()) {
+    const issues = foundationalServiceDefinitionIssues(definition)
+    if (issues.length > 0) {
+      problems.push({
+        severity: 'error',
+        code: 'foundational_service_invalid',
+        message: `Foundational service "${definition.id}" is not a valid definition: ${issues.join('; ')}`,
+      })
+      // The document checks below read fields this parse just called malformed, so reporting
+      // them too would restate one fault as several.
+      continue
+    }
+    for (const problem of validateFoundationalDefinition(definition)) {
+      problems.push({
+        severity: 'error',
+        code: 'foundational_service_invalid',
+        message: `Foundational service "${definition.id}": ${describeFoundationalProblem(problem)}`,
+      })
+    }
+  }
+  return problems
+}
+
+/**
+ * Section 11 of {@link collectRegistrationProblems}: two registered capabilities that want one
+ * environment variable to hold different values.
+ *
+ * The ONE place that fault is graded, over EVERY capability registry at once. It used to be graded
+ * per registry as well, and that is the trap the shape avoids: a generative integration and a
+ * foundational service are registered independently and neither can see the other, so a rule scoped
+ * to one registry answers a question narrower than the fault. Running both meant a
+ * generator-vs-generator pair was reported twice, under two codes, with two remediations for one
+ * variable; running only the per-registry ones meant a cross-registry pair was reported nowhere.
+ *
+ * Dispatch already handles the collision safely by withholding the variable from BOTH claimants,
+ * the one disposition the briefs describe truthfully, but safely is not the same as visibly. Left to
+ * the runtime the symptom is two capabilities reported unavailable on every run of one step, with a
+ * warning in the log and nothing at the boundary where the declaration was written.
+ *
+ * The RULE is contracts' `credentialInjectionCollisions`, beside the injection-name fallback it is
+ * about; what stays here is the boot taxonomy (severity + code) and WHICH claimants are graded.
+ */
+function checkCredentialInjectionNames(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const { binaryGeneratorRegistry, foundationalServiceRegistry } = opts.registries
+  const claimants: CredentialInjectionClaimant[] = []
+  // Only definitions that PARSED are compared, in both registries: a malformed one is already
+  // reported by its own section, and reading its credentials here would restate that fault as a
+  // second, more confusing one.
+  for (const definition of binaryGeneratorRegistry?.all() ?? []) {
+    if (binaryGeneratorDefinitionIssues(definition).length === 0) {
+      claimants.push({
+        owner: `integration "${definition.id}"`,
+        credentials: definition.credentials,
+      })
+    }
+  }
+  for (const definition of foundationalServiceRegistry?.all() ?? []) {
+    if (foundationalServiceDefinitionIssues(definition).length === 0) {
+      claimants.push({ owner: `service "${definition.id}"`, credentials: definition.credentials })
+    }
+  }
+  return credentialInjectionCollisions(claimants).map((collision) => ({
+    severity: 'error' as const,
+    code: 'capability_injection_name_collision',
+    message: collision.message,
+  }))
+}
+
+/**
+ * A registered kind's declared executor IMAGE VARIANT (`AgentStepSpec.image`).
+ *
+ * The name is open so a deployment can point a kind at its own image, and open is exactly why
+ * boot has to grade it: nothing downstream can tell a typo from a variant this backend has not
+ * been configured for, and both surface as the same refused dispatch, hours later, on whichever
+ * pipeline happens to reach that step first.
+ *
+ * Two names are refused outright rather than merely warned about:
+ *
+ * - `deploy` is the environment provisioner's image, dispatched through its own transport. A kind
+ *   naming it is asking for `kubectl` in an agent container through a door built for something
+ *   else, and on the Cloudflare agent path it is refused at dispatch anyway, so boot is where the
+ *   registration itself should fail.
+ * - `default` is spelled by OMISSION. Accepting it as a value would make two spellings of one
+ *   state, and only one of them keys the run's shared container (`containerKeyForRef` treats them
+ *   the same, which is right, and is a coincidence a reader should not have to verify).
+ *
+ * `ui` is deliberately allowed: it is the platform's image, and a deployment's own browser-driven
+ * kind should run on it rather than publish a second copy.
+ */
+function checkAgentImageVariants(registry: AgentKindRegistry): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const definition of registry.all()) {
+    const variant = definition.agent?.image
+    if (!variant) continue
+    if (variant === 'default' || variant === 'deploy') {
+      problems.push({
+        severity: 'error',
+        code: 'agent_image_variant_reserved',
+        message:
+          `Agent kind "${definition.kind}" declares the "${variant}" executor image, which a kind ` +
+          (variant === 'default'
+            ? 'may not name: the default image is what a kind with no `image` declaration runs on.'
+            : "may not use: it is the environment provisioner's image, dispatched through its own transport."),
+      })
+      continue
+    }
+    if (!isImageVariantName(variant)) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_image_variant_invalid',
+        message:
+          `Agent kind "${definition.kind}" declares the executor image "${variant}", which is not a ` +
+          `lower-kebab slug. The name is a key in a runner backend's image map and a container's ` +
+          `identity, so it is held to the shape every other registered id is.`,
+      })
+    }
+  }
+  return problems
+}
+
+/**
+ * A registered kind's DELEGATED EXECUTOR (`AgentStepSpec.executor`): the declaration that says the
+ * step's work leaves the platform.
+ *
+ * Three faults, and all three are silent at run time in different ways, which is why boot grades
+ * each rather than letting the dispatch discover them:
+ *
+ * - a `delegated` kind with NO executor has nowhere to dispatch. The dispatch throws, hours into
+ *   whichever pipeline reached the step first, with a message about a registration nobody was
+ *   looking at.
+ * - a NON-delegated kind carrying one is the opposite error and the more dangerous: the
+ *   declaration is read by nothing, so the deployment believes a step runs on its own CI while
+ *   every run of it quietly goes through the platform's harness. Refused rather than warned,
+ *   because there is no reading of it under which it does something.
+ * - an executor id this build does not register can never be resolved. Graded only when the
+ *   facade supplied its registry, for the reason every other cross-registry check is: an absent
+ *   registry is "we cannot see the set", not "the set is empty".
+ */
+function checkDelegatedExecutors(
+  opts: ValidateRegistrationsOptions,
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  const executors = opts.registries.delegatedExecutorRegistry
+  const problems: RegistrationProblem[] = []
+  for (const definition of registry.all()) {
+    const step = definition.agent
+    if (!step) continue
+    // Through the accessor, never the table directly. `SURFACE_TRAITS` is total over the surfaces
+    // THIS build knows, and a registration can name one it does not: a mothership-mode node
+    // resolves kinds from a process that may be a build ahead, and nothing boot-validates them
+    // there. Indexed bare, that is a `TypeError` thrown INSIDE the function whose whole job is to
+    // report a bad registration, so the boot that was meant to name the offending kind dies
+    // instead, naming nothing.
+    const traits = surfaceTraits(step.surface)
+    if (!traits) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_surface_unknown',
+        message:
+          `Agent kind "${definition.kind}" declares the agent surface "${step.surface}", which ` +
+          `this build does not recognise, so nothing can be concluded about how it runs: whether ` +
+          `it needs a checkout, whether its reply is its product, or whether its work leaves the ` +
+          `platform. Name a surface this build ships, or upgrade the deployment that defines it.`,
+      })
+      continue
+    }
+    const delegated = traits.delegated
+    if (!delegated) {
+      if (step.executor !== undefined) {
+        problems.push({
+          severity: 'error',
+          code: 'agent_executor_on_non_delegated_surface',
+          message:
+            `Agent kind "${definition.kind}" declares the delegated executor ` +
+            `"${step.executor}" on the "${step.surface}" surface, where nothing reads it. ` +
+            `A kind whose work runs on an external executor declares \`surface: 'delegated'\`; ` +
+            `otherwise remove the executor, because leaving it reads as a step that leaves the ` +
+            `platform when every run of it goes through the harness.`,
+        })
+      }
+      continue
+    }
+    if (!step.executor) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_executor_missing',
+        message:
+          `Agent kind "${definition.kind}" declares the "delegated" surface and names no ` +
+          `executor, so a dispatch of it has nowhere to go. Name a registered ` +
+          `DelegatedExecutorDefinition id on \`agent.executor\`.`,
+      })
+      continue
+    }
+    if (!executors) continue
+    if (!executors.get(step.executor)) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_executor_unknown',
+        message:
+          `Agent kind "${definition.kind}" runs on the delegated executor ` +
+          `"${step.executor}", which this deployment does not register` +
+          (executors.size > 0 ? ` (registered: ${executors.ids().join(', ')}).` : '.'),
+      })
+    }
+  }
+  return problems
+}
+
+/**
+ * Section 7 of {@link collectRegistrationProblems}: every registered agent-kind VARIANT must vary
+ * a kind that exists and must change something.
+ *
+ * Both failures are invisible at run time, which is why boot is the place to be loud. A variant of
+ * a kind nobody registers can never be selected by a step that passes pipeline validation, so it
+ * is simply dead configuration — the deployment believes a variation is available and no pipeline
+ * can use it. A variant that sets NEITHER prompt field is worse than dead: it validates, it is
+ * selectable, and the step runs exactly as if it were never configured, so the only symptom is
+ * that a deliberately varied step behaves like the stock one.
+ *
+ * The base-kind check needs the built-in catalog (`knownAgentKinds`) for the same reason the
+ * pipeline-kind check does — the backend has no runtime catalog of built-in kinds, so without it
+ * a variant of `coder` would false-positive. The empty-prompt check needs nothing and always runs.
+ */
+function checkAgentKindVariants(
+  opts: ValidateRegistrationsOptions,
+  registeredKindIds: ReadonlySet<string>,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const variant of opts.registries.agentKindRegistry.variants()) {
+    if (!variant.systemPrompt?.trim() && !variant.promptAddition?.trim()) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_changes_nothing',
+        message:
+          `Agent variant "${variant.id}" sets neither systemPrompt nor promptAddition, so a step ` +
+          `selecting it runs exactly the shipped "${variant.baseKind}" prompt. Give it one, or ` +
+          `drop the registration.`,
+      })
+    }
+    // A kind whose prompt `IterativeReviewService` composes from (workspace, kind) with no step in
+    // hand: the variant could be selected on the step and would never reach the model. Refused at
+    // pipeline save too (`assertValidAgentVariants`), but a deployment that registers one should
+    // hear it at BOOT rather than the first time somebody tries to use it.
+    if (variant.baseKind in INLINE_ENGINE_SYSTEM_PROMPTS) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_inline_engine_kind',
+        message:
+          `Agent variant "${variant.id}" varies "${variant.baseKind}", which runs inline in the ` +
+          `engine and composes its prompt without a step, so no step could ever apply the ` +
+          `variant. Vary a dispatched kind, or edit that agent's prompt per workspace instead.`,
+      })
+    }
+    if (registeredKindIds.has(variant.baseKind)) continue
+    if (opts.knownAgentKinds && !opts.knownAgentKinds.has(variant.baseKind)) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_unknown_base_kind',
+        message:
+          `Agent variant "${variant.id}" varies agent kind "${variant.baseKind}", which is ` +
+          `neither a known built-in nor a registered kind. No pipeline step can select it.`,
+      })
+    }
+  }
+  problems.push(...checkPipelineVariantSelections(opts))
+  return problems
+}
+
+/**
+ * A registered PIPELINE selecting a variant on one of its steps must select one that exists and
+ * that varies THAT step's kind — the same rule `assertValidAgentVariants` applies at pipeline save
+ * and run start, applied at BOOT for the pipelines a deployment ships in code, which reach neither
+ * of those boundaries until somebody starts a run.
+ *
+ * "The same rule" is load-bearing: a DISABLED step never runs, so it imposes no requirement here
+ * either. Refusing one at boot while the builder saves it happily would make a shape valid or
+ * invalid depending on which door it came through.
+ */
+function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const pipeline of opts.registries.pipelineRegistry?.registered() ?? []) {
+    pipeline.stepOptions?.forEach((options, i) => {
+      const variantId = options?.agentVariantId
+      if (!variantId || pipeline.enabled?.[i] === false) return
+      const variant = opts.registries.agentKindRegistry.variant(variantId)
+      const problem = !variant
+        ? 'which this deployment does not register'
+        : variant.baseKind !== pipeline.agentKinds[i]
+          ? `which varies "${variant.baseKind}", not this step's kind`
+          : undefined
+      if (!problem) return
+      problems.push({
+        severity: 'error',
+        code: 'pipeline_variant_unresolved',
+        message:
+          `Pipeline "${pipeline.id}" step ${i} ("${pipeline.agentKinds[i]}") selects agent ` +
+          `variant "${variantId}", ${problem}.`,
+      })
+    })
+  }
+  return problems
+}
+
+/**
+ * Section 6 of {@link collectRegistrationProblems}: a kind's declared capabilities must be
+ * REACHABLE and COHERENT. Every check here covers something that otherwise fails invisibly at run
+ * time — the agent just quietly works without the playbook or the tool it was supposed to have,
+ * which is why boot is the right place to be loud. Split per capability; see each helper.
+ *
+ * Enumerated through `kindsWithCapabilities()` rather than `all()`, so the checks reach capabilities
+ * attached BY ASSIGNMENT to a kind that is not a registry entry. That is the recommended path and
+ * the heavily-used one (`assignToolServers('coder', …)`, `ci-fixer`, `tester-api`, `merger`,
+ * `conflict-resolver`), and walking `all()` skipped every one of them: a cleartext endpoint or a
+ * reserved credential key declared that way booted clean, and only the dispatch-time floors caught
+ * it, which is a floor holding rather than the "refused at declaration" layer doing its job.
+ */
+function checkAgentCapabilities(registry: AgentKindRegistry): RegistrationProblem[] {
+  const kinds = registry.kindsWithCapabilities()
+  return [
+    ...kinds.flatMap((kind) => [
+      ...checkKindSkills(kind, registry),
+      ...checkKindToolServers(kind, registry),
+    ]),
+    // What a DEFINITION says, once for the whole registry rather than once per kind that declares
+    // it. A shared tool server is one registration and one edit, so reporting it per kind reported
+    // one defect as several, all carrying the same `subject`.
+    ...checkToolServerDefinitions(kinds, registry),
+  ]
+}
+
+/**
+ * A kind's declared SKILLS:
+ *
+ * - an id with no registration (a typo, or a `registerSkill` call that never ran) is an ERROR;
+ * - skills on a NON-container kind is a WARNING, exactly as for tool servers below. Only the
+ *   container executor renders `AgentRunContext.skills` into a dispatch, so an inline kind's
+ *   declaration can never take effect — and a non-optional `{ catalogSkillId }` there is worse
+ *   than inert, since it fails EVERY dispatch of that kind on a deployment with no skill library
+ *   while never being able to reach the model.
+ *
+ * The container question goes through `runsInContainer`, never `registry.requiresContainer`, and
+ * that is load-bearing now that assigned capabilities are checked: `requiresContainer` answers false
+ * for a kind it has no registration for, so every built-in (`coder` above all) would be warned about
+ * as an inline kind the moment a deployment assigned it a playbook.
+ */
+function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const skills = registry.skillsFor(kind)
+  for (const id of skills.unknown) {
+    problems.push({
+      severity: 'error',
+      code: 'unknown_bundled_skill',
+      message:
+        `Agent kind "${kind}" declares skill "${id}", which is not registered. Call ` +
+        `registry.registerSkill({ id: '${id}', … }) before registering the kind, declare the ` +
+        `skill inline, or use { catalogSkillId } for a repo-synced skill.`,
+    })
+  }
+  const declared = skills.bundled.length + skills.catalog.length
+  if (declared && !runsInContainer(kind, registry)) {
+    problems.push({
+      severity: 'warn',
+      code: 'skills_without_container',
+      // The AGENT KIND whose surface and skill list disagree.
+      subject: kind,
+      message:
+        `Agent kind "${kind}" declares skills but does not run in a container — only a container ` +
+        `dispatch installs a skill and folds its instructions into the prompt, so an inline LLM ` +
+        `step will never apply them. Give the kind a container surface (agent.surface: ` +
+        `'container-explore' / 'container-coding') or drop the skills.`,
+    })
+  }
+  return problems
+}
+
+/**
+ * Section 3 of {@link collectRegistrationProblems}: a coherence WARNING for a kind that declares
+ * postOps but whose agent step is not structured output — those post-ops read `result.custom` and
+ * would see nothing. Heuristic, hence a warning. Split out to keep the collector under the
+ * complexity ceiling.
+ */
+function checkPostOpsStructuredOutput(
+  agentKinds: ReturnType<AgentKindRegistry['all']>,
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
   for (const def of agentKinds) {
     const hasPostOps = (def.postOps?.length ?? 0) > 0
     const declaresStructured =
-      def.agent?.output?.kind === 'structured' || registeredStructuredOutput(def.kind) !== undefined
+      def.agent?.output?.kind === 'structured' || registry.structuredOutput(def.kind) !== undefined
     if (hasPostOps && def.agent && !declaresStructured) {
       problems.push({
         severity: 'warn',
         code: 'postops_without_structured_output',
+        // The AGENT KIND whose postOps would read nothing.
+        subject: def.kind,
         message:
           `Agent kind "${def.kind}" declares postOps but its agent step has no structured ` +
           `output — postOps that read result.custom will see nothing. Declare structuredOutput ` +
@@ -144,44 +917,514 @@ export function collectRegistrationProblems(
       })
     }
   }
+  return problems
+}
 
-  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
-  if (opts.knownAgentKinds) {
-    const known = opts.knownAgentKinds
-    for (const pipeline of registeredPipelines()) {
-      for (const agentKind of pipeline.agentKinds) {
-        const ok =
-          known.has(agentKind) ||
-          registeredKindIds.has(agentKind) ||
-          gateKinds.has(agentKind) ||
-          builtInHelperKinds.has(agentKind)
-        if (!ok) {
-          problems.push({
-            severity: 'error',
-            code: 'pipeline_unknown_kind',
-            message:
-              `Pipeline "${pipeline.id}" references agent kind "${agentKind}", which is not a ` +
-              `known built-in, a registered kind, or a registered gate.`,
-          })
-        }
+/**
+ * Section 4 of {@link collectRegistrationProblems}: every kind a registered pipeline names must
+ * resolve to a known built-in, a registered kind, a registered gate, or a built-in helper. Only
+ * run when a built-in catalog (`knownAgentKinds`) is supplied. Split out to keep the collector
+ * under the complexity ceiling.
+ */
+function checkPipelineKinds(
+  opts: ValidateRegistrationsOptions,
+  registeredKindIds: ReadonlySet<string>,
+  gateKinds: ReadonlySet<string>,
+  builtInHelperKinds: ReadonlySet<string>,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (!opts.knownAgentKinds) return problems
+  const known = opts.knownAgentKinds
+  for (const pipeline of opts.registries.pipelineRegistry?.registered() ?? []) {
+    for (const agentKind of pipeline.agentKinds) {
+      const ok =
+        known.has(agentKind) ||
+        registeredKindIds.has(agentKind) ||
+        gateKinds.has(agentKind) ||
+        builtInHelperKinds.has(agentKind)
+      if (!ok) {
+        problems.push({
+          severity: 'error',
+          code: 'pipeline_unknown_kind',
+          message:
+            `Pipeline "${pipeline.id}" references agent kind "${agentKind}", which is not a ` +
+            `known built-in, a registered kind, or a registered gate.`,
+        })
       }
     }
   }
-
   return problems
+}
+
+/**
+ * Section 4b of {@link collectRegistrationProblems}: a registry RETIREMENT that names a pipeline the
+ * live catalog still ships. `retiredPipelines()` keeps a live pipeline over a tombstone for it —
+ * deliberately, or a deployment could empty the curated built-in palette one `retire()` call at a
+ * time — so such a call does exactly nothing. That is the failure this check exists for: the
+ * deployment believes it withdrew a pipeline, every workspace keeps offering it, and nothing
+ * anywhere says why. An ERROR rather than a warning because there is no forward state in which the
+ * call starts working (unlike `skills_without_container`, which a container surface would fix); it
+ * is the same shape as a typo'd id, and boot is where the author can still act on it.
+ *
+ * Retiring an id that resolves to NOTHING is not a problem and must not be reported: a tombstone for
+ * a pipeline an older version of the deployment's own package shipped is the intended use — the
+ * definition is long gone from their code, and the whole point is to reach the boards that still
+ * store the row.
+ */
+function checkPipelineRetirements(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const registry = opts.registries.pipelineRegistry
+  if (!registry) return []
+  const retired = registry.retired()
+  if (retired.length === 0) return []
+  // Resolve the live catalog THROUGH the registry, so a deployment that both registers and retires
+  // is judged on its own merged catalog rather than kernel's built-ins alone.
+  const live = new Set(seedPipelines(registry).map((p) => p.id))
+  return retired
+    .filter((pipeline) => live.has(pipeline.id))
+    .map((pipeline) => ({
+      severity: 'error' as const,
+      code: 'retirement_of_live_pipeline',
+      message:
+        `Pipeline "${pipeline.id}" is retired on the pipeline registry but the live catalog still ` +
+        `ships it, so the retirement has no effect. A deployment can only withdraw its OWN ` +
+        `registered pipelines; withdrawing a BUILT-IN means deleting its definition from kernel's ` +
+        `seed builders and naming it in buildRetiredPipelines(). Drop the retire() call or remove ` +
+        `the definition that keeps it live.`,
+    }))
+}
+
+/**
+ * A registered task type's `defaultFragmentIds` that the CODE pool cannot resolve, reported as a
+ * WARN rather than an error, and the severity is the whole point. The pool visible at boot is the
+ * injected registry (the shipped catalog plus the deployment's own `registerAll`); an account- or
+ * workspace-tier
+ * fragment row merges per WORKSPACE at run time, so boot structurally cannot see one and refusing
+ * would reject a legitimate tenant-tier reference. The message therefore names both causes rather
+ * than asserting the typo it cannot distinguish. Run-time behaviour is unchanged either way: an
+ * id that resolves against nothing is skipped when bodies are composed.
+ *
+ * ONE warning PER DISTINCT ID, which is what lets a deployment act on it at all. The platform
+ * cannot tell the two causes apart, but the deployment can, per id: a declaration mixing three
+ * code-registered standards with one `src:<sourceId>:<slug>` reference is exactly what the
+ * reusable-operations guide sanctions, and while these arrived as one batched problem such a
+ * deployment could only escalate the whole batch (failing boot on its legitimate late-bound id) or
+ * none of it (leaving the typo at warn forever). The cost is that the two-cause paragraph repeats
+ * per id in the log, which is the granularity `fragments.dropped_from_run` already reports at RUN
+ * time, per fragment, for the same reason: five short standards are five defects, not one (ADR
+ * 0063).
+ *
+ * DISTINCT, because the escalation unit is the id and a repeated id is one defect mentioned twice.
+ * Naming one standard in several conditional rules is ordinary authoring and the caller hands them
+ * here as one flattened list, so without this a shared id called the deployment's predicate once
+ * per mention and the boot failure counted mentions. The dedupe is per CALL, which is per
+ * DECLARATION: an id named in both `defaultFragmentIds` and `conditionalFragmentIds` is two entries
+ * to go edit, and each warning names the key it lives under.
+ */
+function checkTaskTypeFragments(
+  taskType: CustomTaskType,
+  pool: Set<string>,
+  /** The ids to check; defaults to the type's unconditional `defaultFragmentIds`. */
+  ids: readonly string[] = taskType.defaultFragmentIds ?? [],
+  /** Which declaration the ids came from, so the message names the key the reader must go edit. */
+  declaredBy: 'defaultFragmentIds' | 'conditionalFragmentIds' = 'defaultFragmentIds',
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const id of new Set(ids)) {
+    if (pool.has(id)) continue
+    // A BLANK entry is the one unresolved id boot can judge, so it is an error rather than a
+    // warning: no tier resolves an empty id, which removes the tenant-tier cause the warning below
+    // exists for. It is also the only way a warning could ever carry an empty `subject`, which is a
+    // predicate handed nothing to test and a log field with nothing in it.
+    if (id.trim() === '') {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_blank_fragment_id',
+        message:
+          `Custom task type "${taskType.taskType}" declares a blank ${declaredBy} entry. Unlike ` +
+          `an id the pool does not resolve, this one cannot be an account/workspace-tier reference ` +
+          `that merges at run time: no fragment has a blank id at any tier. Remove the entry, or ` +
+          `give it the id it was meant to carry.`,
+      })
+      continue
+    }
+    problems.push({
+      severity: 'warn',
+      code: 'task_type_unknown_fragment',
+      // The unresolved FRAGMENT ID: what a deployment's predicate tests the tier of.
+      subject: id,
+      message:
+        `Custom task type "${taskType.taskType}" declares ${declaredBy} "${id}", which this ` +
+        `deployment's registered fragment pool does not resolve. Either the id is a typo (a task ` +
+        `of this type would then be seeded with a fragment that folds nothing), or it names an ` +
+        `account/workspace-tier fragment, which merges per workspace at run time and is invisible ` +
+        `here. Check the id against what the deployment passes to ` +
+        `promptFragmentRegistry.registerAll().`,
+    })
+  }
+  return problems
+}
+
+/**
+ * The fragment ids boot can HONESTLY check a declaration against, or `undefined` when there is no
+ * such pool in this process and the id checks must not run at all.
+ *
+ * Two ways that happens, and they are the same fact: no registry was supplied (an embedder or a
+ * test constructing the checker directly), or the deployment resolves its pool REMOTELY, which is
+ * every mothership-mode node. There the local registry holds the shipped catalog and nothing else,
+ * because the deployment is told to register its standards on the mothership's entry point, so
+ * judging `defaultFragmentIds` against it would warn about every org standard at every boot for a
+ * configuration that resolves correctly at run time. Silence is right here rather than a warn of
+ * its own: the operator already gets one line naming exactly this at the mothership boot path, and
+ * a per-task-type repeat of it would bury the checks that CAN speak.
+ */
+function visibleFragmentPool(registries: ValidatedRegistries): Set<string> | undefined {
+  if (!registries.promptFragmentRegistry) return undefined
+  if (registries.promptFragments && !registries.promptFragments.inProcess) return undefined
+  return new Set(registries.promptFragmentRegistry.all().map((fragment) => fragment.id))
+}
+
+/**
+ * A registered task type's CONDITIONAL standing context: the entries whose fragment ids join
+ * `defaultFragmentIds` when their condition holds against the values a creation collected.
+ *
+ * Two checks, at deliberately different severities:
+ *
+ * - a `when.key` naming a field the type does not DECLARE is an ERROR, the same class as
+ *   `task_type_field_unknown_condition` on a field's own `showWhen` and for the same reason: every
+ *   input is fully known from the registration, the condition can never hold, and the only symptom
+ *   is guidance that silently never seeds. There is no forward state in which it starts working.
+ * - an unresolvable fragment ID is the same WARN `defaultFragmentIds` gets, through the same
+ *   checker, because the reason is identical: an account/workspace-tier id merges per workspace at
+ *   run time and is structurally invisible at boot, so refusing here would reject the tenant-tier
+ *   reference deployments are told to use.
+ *
+ * A rule whose condition names a field gated by its OWN `showWhen` is deliberately NOT reported.
+ * It is coherent (the outer gate simply has to hold too) and it reduces to false when the value was
+ * dropped by sanitisation, which is the behaviour documented on the contract.
+ */
+function checkConditionalFragments(
+  taskType: CustomTaskType,
+  pool: Set<string> | undefined,
+): RegistrationProblem[] {
+  const rules = taskType.conditionalFragmentIds ?? []
+  if (rules.length === 0) return []
+  const problems: RegistrationProblem[] = []
+  for (const rule of rules) {
+    if (!descriptorConditionHasPredicate(rule.when)) {
+      // A `when` carrying neither `equals` nor `includes` is accepted by the schema (both are
+      // optional, so a dropped `equals: 'graphql'` still validates) and reads as SATISFIED at run
+      // time, because the shared evaluator defaults a predicate-less condition to `true`: right
+      // for field visibility, where the alternative is hiding a field forever, and exactly wrong
+      // here, where it seeds every case with guidance meant for one. Which is the silent
+      // misseeding conditional fragments exist to remove, so it is an error rather than a warn.
+      problems.push({
+        severity: 'error',
+        code: 'task_type_conditional_no_predicate',
+        message:
+          `Custom task type "${taskType.taskType}" gates conditional fragments ` +
+          `${rule.fragmentIds.map((id) => `"${id}"`).join(', ')} on field "${rule.when.key}" ` +
+          `with neither an "equals" nor an "includes" predicate, so the condition always holds ` +
+          `and those fragments would be seeded onto EVERY task of this type. Give the condition ` +
+          `a predicate, or move the ids to defaultFragmentIds if that is what you meant.`,
+      })
+    }
+  }
+  // A type with a bespoke `formPanel` collects its values through a component rather than a
+  // descriptor form, so it legitimately declares no `fields` and there is nothing here to check a
+  // `when.key` against. Skipping is not a hole: the panel is the deployment's own code, and the
+  // alternative was refusing BOOT for the one shape the feature is built to support.
+  const declared = new Set((taskType.fields ?? []).map((field) => field.key))
+  if (taskType.formPanel === undefined || (taskType.fields?.length ?? 0) > 0) {
+    for (const rule of rules) {
+      if (!declared.has(rule.when.key)) {
+        problems.push({
+          severity: 'error',
+          code: 'task_type_field_unknown_condition',
+          message:
+            `Custom task type "${taskType.taskType}" gates conditional fragments ` +
+            `${rule.fragmentIds.map((id) => `"${id}"`).join(', ')} on field "${rule.when.key}", ` +
+            `which it does not declare, so the condition can never hold and those fragments ` +
+            `would never be seeded.`,
+        })
+      }
+    }
+  }
+  if (!pool) return problems
+  // Flattened across the rules and then checked PER ID by the shared checker, which is where the
+  // escalation granularity comes from: the tier of a conditional id is as much a per-id fact as an
+  // unconditional one's, and a typo here is less visible still, folding nothing only for the
+  // subset of cases whose answers match the rule.
+  const conditionalIds = rules.flatMap((rule) => rule.fragmentIds)
+  return [
+    ...problems,
+    ...checkTaskTypeFragments(taskType, pool, conditionalIds, 'conditionalFragmentIds'),
+  ]
+}
+
+/**
+ * The surfaces that declare a descriptor-driven form, as the prefix their boot-error codes carry.
+ *
+ * A UNION rather than a `string`, so adding the next such surface has to come here and be named,
+ * which is the moment to ask whether {@link descriptorFormProblems} is wired for it at all. That
+ * question went unasked for the gate config form, which rendered through the same component for a
+ * release with none of these checks behind it.
+ */
+type DescriptorFormSurface = 'task_type' | 'initiative_preset' | 'gate' | 'use_case'
+
+/**
+ * A descriptor-driven FORM that structurally cannot be filled, plus the one grouping fault that has
+ * no honest rendering. Each of these is a typo in the deployment's own descriptor with no run-time
+ * recovery, and each fails SILENTLY without this check: a duplicate key means the later declaration
+ * wins wherever the fields are indexed, an optionless picker renders an empty control (and, if
+ * required, makes the subject un-creatable), and a `showWhen` naming no declared field hides its own
+ * field forever, so the value can never be collected.
+ *
+ * Errors rather than warnings, because unlike a `defaultFragmentIds` id (which may legitimately name
+ * a tenant-tier fragment invisible at boot) every input here is fully known from the registration.
+ *
+ * Takes a plain FIELD LIST, because every surface that declares a form draws on one vocabulary
+ * (`contracts/src/form-fields.ts`) and renders through one component: a custom task type's per-case
+ * form, an initiative preset's create form and a registered gate's per-step config form fail these
+ * ways identically, so they are checked by one function under their own {@link DescriptorFormSurface}
+ * prefixes rather than by a copy each. A surface reaching that component without reaching this
+ * checker is the gap to look for.
+ */
+function descriptorFormProblems(
+  fields: readonly DescriptorField[],
+  codePrefix: DescriptorFormSurface,
+  /**
+   * How the message OPENS, e.g. `Gate "ci"`. Prose, deliberately not called a subject: a
+   * `RegistrationWarning.subject` is a machine-readable ID, and while both fields carried the same
+   * name the nearest value in scope for a new warn-severity check added here was this label.
+   */
+  label: string,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const seen = new Set<string>()
+  const declared = new Set(fields.map((field) => field.key))
+  const bad = (code: string, message: string): void => {
+    problems.push({
+      severity: 'error',
+      code: `${codePrefix}_${code}`,
+      message: `${label} ${message}`,
+    })
+  }
+  for (const field of fields) {
+    if (seen.has(field.key)) bad('field_duplicate', `declares field "${field.key}" twice.`)
+    seen.add(field.key)
+    if ((field.type === 'select' || field.type === 'checkbox-group') && !field.options?.length) {
+      bad(
+        'field_no_options',
+        `declares "${field.key}" as a ${field.type} with no options, so the form renders an empty picker.`,
+      )
+    }
+    if (field.showWhen && !declared.has(field.showWhen.key)) {
+      bad(
+        'field_unknown_condition',
+        `gates field "${field.key}" on "${field.showWhen.key}", which it does not declare, so the field never shows.`,
+      )
+    }
+    problems.push(...defaultOutsideOptions(field, codePrefix, label))
+  }
+  // A `section` a filled form can be made to caption TWICE. Presentation rather than fillability,
+  // and an error all the same: the renderer preserves declaration order, so the caption renders
+  // twice (reading as a platform fault rather than as the declaration it is), and the only
+  // alternative would be moving a field away from where its author wrote it. Fully knowable from the
+  // registration, so boot is where it can still be fixed.
+  //
+  // Reachability, not contiguity: interleaving a section with a MUTUALLY EXCLUSIVE branch is how a
+  // form keeps each branch's fields beside the picker they qualify, and it prints one caption in
+  // every state. Refusing it would fail boot over a form nobody can break.
+  for (const caption of duplicatedDescriptorSectionCaptions(fields)) {
+    bad(
+      'field_section_interleaved',
+      `declares section "${caption}" in two places with a field between them that shows at the ` +
+        `same time, so its caption renders twice. Declare a section's fields consecutively ` +
+        `(matching on case and spacing, which the renderer folds), or gate the field between them ` +
+        `so it cannot show alongside both.`,
+    )
+  }
+  return problems
+}
+
+/**
+ * A declared DEFAULT that is not one of the field's own options: an error for the same reason the
+ * three above are: fully known from the registration, and silently broken at run time.
+ *
+ * It became reachable when the creation door started folding defaults in
+ * (`withDescriptorFieldDefaults`), which is what makes a default mean the same thing to a form and
+ * to a headless caller. The consequence is that a default outside the picklist is no longer merely
+ * a form that opens on an odd value: it is an answer the validator refuses, so EVERY creation of
+ * the subject fails with "has a value outside its options" naming a value the caller never sent.
+ */
+function defaultOutsideOptions(
+  field: DescriptorField,
+  codePrefix: DescriptorFormSurface,
+  /** The message's opening prose, as in {@link descriptorFormProblems}. */
+  label: string,
+): RegistrationProblem[] {
+  const options = new Set((field.options ?? []).map((option) => option.value))
+  if (options.size === 0) return []
+  const declared =
+    field.type === 'checkbox-group'
+      ? (field.defaultValues ?? [])
+      : field.type === 'select' && field.default !== undefined
+        ? [field.default]
+        : []
+  return declared
+    .filter((value) => !options.has(value))
+    .map((value) => ({
+      severity: 'error' as const,
+      code: `${codePrefix}_field_default_outside_options`,
+      message:
+        `${label} defaults field "${field.key}" to "${value}", which is not one of its ` +
+        `options, so every creation of it is refused for a value the caller never sent.`,
+    }))
+}
+
+/**
+ * Section 5b of {@link collectRegistrationProblems}: every registered initiative PRESET's create
+ * form must be fillable, on the same bar and through the same checker as a custom task type's (see
+ * {@link descriptorFormProblems}). Only run when a preset registry is supplied.
+ *
+ * The built-in presets ride along rather than being exempted: they are registrations like any
+ * other, and a shipped descriptor that broke its own form should fail this deployment's boot
+ * exactly as a deployment-authored one does.
+ */
+function checkInitiativePresetForms(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  if (!opts.registries.initiativePresetRegistry) return []
+  return opts.registries.initiativePresetRegistry
+    .descriptors()
+    .flatMap((descriptor) =>
+      descriptorFormProblems(
+        descriptor.fields,
+        'initiative_preset',
+        `Initiative preset "${descriptor.id}"`,
+      ),
+    )
+}
+
+/**
+ * Section 5c of {@link collectRegistrationProblems}: every registered GATE's per-step config form
+ * must be fillable and renderable, on the same bar and through the same checker as the two other
+ * surfaces that declare a form ({@link descriptorFormProblems}).
+ *
+ * It is the third such surface and the one easiest to forget, because a gate declares its form as
+ * an OPTION on `GateRegistry.register` rather than as a field of a descriptor type, so nothing about
+ * the registration call says "this is a descriptor form". It renders through the very same
+ * `DescriptorFields` component the other two do, which is exactly why it fails the same ways: a gate
+ * that declared a duplicate key, an optionless picker, a `showWhen` naming nothing, a default
+ * outside its options, or a section its form captions twice would boot clean and break where a
+ * pipeline author authors, with nothing naming the registration that did it.
+ *
+ * Reads `configForms()`, so a gate declaring no fields is not a subject here rather than a subject
+ * with an empty form.
+ */
+function checkGateConfigForms(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  return opts.registries.gateRegistry
+    .configForms()
+    .flatMap(({ kind, fields }) => descriptorFormProblems(fields, 'gate', `Gate "${kind}"`))
+}
+
+/**
+ * Section 5 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
+ * id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel` id; a `defaultPipelineId`
+ * must resolve against the built-in + registered pipeline catalog (else the created task would
+ * silently fall back to the positional default); its `defaultFragmentIds` are checked against the
+ * code fragment pool (see {@link checkTaskTypeFragments}); and its create form must be fillable (see
+ * {@link descriptorFormProblems}). Only run when a task-type registry is supplied. Split out to keep
+ * the collector under the complexity ceiling.
+ */
+function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (!opts.registries.taskTypeRegistry) return problems
+  const knownPipelineIds = new Set(seedPipelines(opts.registries.pipelineRegistry).map((p) => p.id))
+  const fragmentPool = visibleFragmentPool(opts.registries)
+  for (const taskType of opts.registries.taskTypeRegistry.all()) {
+    if (fragmentPool) problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
+    problems.push(
+      ...descriptorFormProblems(
+        taskType.fields ?? [],
+        'task_type',
+        `Custom task type "${taskType.taskType}"`,
+      ),
+    )
+    problems.push(...checkConditionalFragments(taskType, fragmentPool))
+    if (!isNamespacedId(taskType.taskType)) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_not_namespaced',
+        message:
+          `Custom task type "${taskType.taskType}" is not a namespaced id (<ns>:<name>, ` +
+          `lowercase a-z0-9, dash-separated). A bare id collides with the built-in picklist.`,
+      })
+    }
+    if (taskType.formPanel !== undefined && !isNamespacedId(taskType.formPanel)) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_form_panel_invalid',
+        message:
+          `Custom task type "${taskType.taskType}" declares formPanel "${taskType.formPanel}", ` +
+          `which is not a namespaced id (<ns>:<name>). Pair it with a frontend component in the ` +
+          `taskTypeFormPanels slot under that id.`,
+      })
+    }
+    if (
+      taskType.defaultPipelineId !== undefined &&
+      !knownPipelineIds.has(taskType.defaultPipelineId)
+    ) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_unknown_pipeline',
+        message:
+          `Custom task type "${taskType.taskType}" declares defaultPipelineId ` +
+          `"${taskType.defaultPipelineId}", which is neither a built-in nor a registered ` +
+          `pipeline. Register the pipeline (PipelineRegistry) or fix the id.`,
+      })
+    }
+  }
+  return problems
+}
+
+/**
+ * The {@link ValidateRegistrationsOptions.onWarn} sink every facade passes: one `warn` line per
+ * warning, with `code` and `subject` as structured FIELDS so an operator can group a boot log by
+ * either rather than reading the ids back out of prose.
+ *
+ * Shared rather than re-spelled per facade for the reason `ValidatedRegistries` is one object: this
+ * was three identical arrow functions, and adding `subject` to two of them left the Worker logging
+ * the coarser line, which is exactly the asymmetry a facade-parity gap looks like from the outside.
+ */
+export function logRegistrationWarning(logger: Logger): (problem: RegistrationWarning) => void {
+  return (problem) => logger.warn(problem.message, { code: problem.code, subject: problem.subject })
 }
 
 /**
  * Validate the registered extensions, throwing an aggregated error on any `error`-severity
  * problem and logging `warn`-severity ones. Call once at facade boot, after every `register*`
  * import side effect + provider wiring, before serving requests.
+ *
+ * A deployment may raise selected warnings to errors with
+ * {@link ValidateRegistrationsOptions.escalateWarning}; an escalated problem is thrown with the
+ * errors and is NOT also logged, so one problem produces one report.
  */
-export function validateRegistrations(opts: ValidateRegistrationsOptions = {}): void {
+export function validateRegistrations(opts: ValidateRegistrationsOptions): void {
   const problems = collectRegistrationProblems(opts)
-  if (opts.onWarn) {
-    for (const w of problems.filter((p) => p.severity === 'warn')) opts.onWarn(w)
+  const escalate = opts.escalateWarning
+  // Partition in ONE pass, before either half acts, so an escalated warn is reported exactly once
+  // and lands in the same aggregated failure as the genuine errors rather than a second one after
+  // them. The predicate is called once per warning for the same reason: it is deployment code, and
+  // calling it twice would make an impure one disagree with itself between the log and the throw.
+  const errors: RegistrationProblem[] = []
+  const warnings: RegistrationWarning[] = []
+  for (const problem of problems) {
+    if (problem.severity === 'error') errors.push(problem)
+    else if (escalate?.(problem)) errors.push(problem)
+    else warnings.push(problem)
   }
-  const errors = problems.filter((p) => p.severity === 'error')
+  if (opts.onWarn) {
+    for (const warning of warnings) opts.onWarn(warning)
+  }
   if (errors.length > 0) {
     throw new Error(
       `Invalid extension registrations (${errors.length}):\n` +
@@ -196,7 +1439,7 @@ export function validateRegistrations(opts: ValidateRegistrationsOptions = {}): 
 let validated = false
 
 /** Run {@link validateRegistrations} at most once per process. Safe to call from a per-request build. */
-export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions = {}): void {
+export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions): void {
   if (validated) return
   // Flip the guard only AFTER a clean validation. Setting it first would poison the guard on a
   // throw: on the Worker (where this runs inside `fetch` on the first request) a misconfigured
@@ -210,4 +1453,28 @@ export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions = {
 /** Reset the once-guard. Intended for tests that exercise the boot path repeatedly. */
 export function resetRegistrationValidationGuard(): void {
   validated = false
+}
+
+/**
+ * Deployment-registered INLINE USE CASES: the registration's own faults, plus its parameter form
+ * held to the same bar every other descriptor-driven form is.
+ *
+ * The registration half lives in {@link inlineUseCaseProblems} (its own module, like the
+ * binary-generator section); the form half stays here because it is the SHARED descriptor checker
+ * every other registered form goes through, and one place owning that call is what keeps a new
+ * form-bearing registry from quietly skipping it.
+ */
+function checkInlineUseCases(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const registry = opts.registries.inlineUseCaseRegistry
+  if (!registry) return []
+  return registry
+    .all()
+    .flatMap((useCase) => [
+      ...inlineUseCaseProblems(useCase),
+      ...descriptorFormProblems(
+        [...(useCase.parameters ?? [])],
+        'use_case',
+        `Inline use case "${useCase.useCaseId}"`,
+      ),
+    ])
 }

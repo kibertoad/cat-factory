@@ -34,8 +34,13 @@ const belowMinChars = computed(() => repoQueryRaw.value.length < MIN_SEARCH_LEN)
 const selectedRepo = ref<GitHubAvailableRepo | undefined>(undefined)
 
 function toRepoItem(r: GitHubAvailableRepo) {
-  const suffix = r.private ? t('github.addService.repoLabel.private') : ''
-  return { label: `${r.owner}/${r.name}${suffix}`, value: r.githubId }
+  const priv = r.private ? t('github.addService.repoLabel.private') : ''
+  // A repo surfaced only through the signed-in user's PAT (the workspace App can't reach it):
+  // badge it so the user knows this pick rides their personal token. On hosted, a doc/fragment
+  // linked from it resolves through the App at run time, so a personal-only repo will fail the
+  // link with a clear error — the badge sets that expectation up front.
+  const personal = r.personal ? t('github.addService.repoLabel.personal') : ''
+  return { label: `${r.owner}/${r.name}${priv}${personal}`, value: r.githubId }
 }
 
 const repoItems = computed(() => github.availableRepos.map(toRepoItem))

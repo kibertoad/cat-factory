@@ -6,10 +6,11 @@ import type {
 } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import {
-  ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
-  ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
-  REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
-  REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_REWORK_PROMPT,
+  type BespokeSystemPrompt,
+  REQUIREMENTS_BRAINSTORM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_REWORK_PROMPT,
 } from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
@@ -70,8 +71,9 @@ export class BrainstormService extends IterativeReviewService<
     this.repository = {
       getByBlock: (ws, blockId) => repo.getByBlockStage(ws, blockId, stage),
       get: (ws, id) => repo.get(ws, id),
-      upsert: (ws, session) => repo.upsert(ws, session),
-      deleteByBlock: (ws, blockId) => repo.deleteByBlockStage(ws, blockId, stage),
+      compareAndSwap: (ws, session) => repo.compareAndSwap(ws, session),
+      // The stage rides the session itself, so the atomic replace needs no pinned stage here.
+      replaceForBlock: (ws, session) => repo.replaceForBlockStage(ws, session),
     }
   }
 
@@ -91,15 +93,15 @@ export class BrainstormService extends IterativeReviewService<
       ? 'architecture-brainstorm-rework'
       : 'requirements-brainstorm-rework'
   }
-  protected get reviewSystemPrompt(): string {
+  protected get reviewPrompt(): BespokeSystemPrompt {
     return this.stage === 'architecture'
-      ? ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT
-      : REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT
+      ? ARCHITECTURE_BRAINSTORM_PROMPT
+      : REQUIREMENTS_BRAINSTORM_PROMPT
   }
-  protected get reworkSystemPrompt(): string {
+  protected get reworkPrompt(): BespokeSystemPrompt {
     return this.stage === 'architecture'
-      ? ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT
-      : REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT
+      ? ARCHITECTURE_BRAINSTORM_REWORK_PROMPT
+      : REQUIREMENTS_BRAINSTORM_REWORK_PROMPT
   }
   protected get reviewIdPrefix(): string {
     return this.stage === 'architecture' ? 'abs' : 'rbs'
@@ -159,13 +161,16 @@ export class BrainstormService extends IterativeReviewService<
 
   /** Assemble the brainstorm subject for this stage (+ the refined requirements for architecture). */
   protected async gatherContext(workspaceId: string, block: Block): Promise<BrainstormContext> {
-    const refinedRequirements =
+    const [refinedRequirements, service] = await Promise.all([
       this.stage === 'architecture'
-        ? await this.resolveRefinedRequirements?.(workspaceId, block.id)
-        : undefined
+        ? this.resolveRefinedRequirements?.(workspaceId, block.id)
+        : undefined,
+      this.resolveOwnService(workspaceId, block),
+    ])
     return {
       block: { title: block.title, type: block.type, description: block.description },
       stage: this.stage,
+      service,
       ...(refinedRequirements ? { refinedRequirements } : {}),
     }
   }

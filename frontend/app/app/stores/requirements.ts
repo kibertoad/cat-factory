@@ -6,6 +6,20 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
+// The settlement derivations over one review's findings (`stores/requirements/settlement.ts`):
+// pure, memoised per review object, and re-exported below so every caller keeps reading them off
+// the store.
+import {
+  allSettled,
+  answeredCount,
+  canIncorporate,
+  canProceed,
+  openCount,
+} from '~/stores/requirements/settlement'
+import {
+  awaitsRecommendations,
+  createRecommendationCommands,
+} from '~/stores/requirements/recommendations'
 
 /**
  * Requirements-review state. On the pipeline path the reviewer runs as the first gate
@@ -44,11 +58,16 @@ export const useRequirementsStore = defineStore('requirements', () => {
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
   }
-  /** Whether the Requirement Writer is still producing recommendations for a block (a `pending`
-   * placeholder exists). Server-derived, so the "Recommending…" state survives the window closing
-   * and a page reload — the client-local `recommending` set only covers the request round-trip. */
+  /**
+   * Whether the Requirement Writer is still producing recommendations for a block. Reads ONE key
+   * and answers off the review object itself ({@link awaitsRecommendations} memoises the scan on
+   * that object), so a card asking about its own block depends only on its own block. A `computed`
+   * over the whole record would be the fan-out again: it tracks every key, so one review event
+   * would re-evaluate the stage of every card on the board.
+   */
   function hasPendingRecommendations(blockId: string): boolean {
-    return (reviews.value[blockId]?.recommendations ?? []).some((r) => r.status === 'pending')
+    const review = reviews.value[blockId]
+    return review ? awaitsRecommendations(review) : false
   }
   /**
    * The async background stage a block's review is in, or null. While the driver folds the
@@ -72,29 +91,16 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return incorporating.value.has(reviewId)
   }
 
-  /** Findings still needing a human (status `open`). */
-  function openCount(review: RequirementReview): number {
-    return review.items.filter((i) => i.status === 'open').length
-  }
-  /** Findings the human answered (a reply recorded), which the companion folds in. */
-  function answeredCount(review: RequirementReview): number {
-    return review.items.filter((i) => i.status === 'answered' || i.status === 'resolved').length
-  }
-  /** Every finding is settled (answered or dismissed) — none still open. */
-  function allSettled(review: RequirementReview): boolean {
-    return openCount(review) === 0
-  }
-  /** Incorporation is possible: all findings settled AND at least one was answered. */
-  function canIncorporate(review: RequirementReview): boolean {
-    return allSettled(review) && answeredCount(review) > 0
-  }
-  /** Proceed (skip the companion) is possible: all findings settled but none answered. */
-  function canProceed(review: RequirementReview): boolean {
-    return allSettled(review) && answeredCount(review) === 0
-  }
-
+  /**
+   * Write one block's review into the cache, IN PLACE.
+   *
+   * Per-key, never a whole-record clone: `reviews` is a deep reactive ref, so a consumer reading
+   * `reviews[someBlockId]` depends on THAT key. Replacing the record retriggered every one of
+   * them (a card, a badge, an inspector panel for an untouched block) on every event; assigning
+   * the key retriggers only the consumers of the block that actually changed.
+   */
   function store(review: RequirementReview) {
-    reviews.value = { ...reviews.value, [review.blockId]: review }
+    reviews.value[review.blockId] = review
   }
 
   /** Patch the cache from a live `requirements` stream event (newest wins per block). */
@@ -136,7 +142,9 @@ export const useRequirementsStore = defineStore('requirements', () => {
       try {
         const review = await api.getRequirementReview(workspace.requireId(), blockId)
         available.value = true
-        reviews.value = { ...reviews.value, [blockId]: review }
+        // Written by key like `store()`, and directly because a load resolving to "none exists"
+        // caches a null the getter reads as "fetched, absent".
+        reviews.value[blockId] = review
       } catch {
         // 503 (feature off) or any error → hide the UI entry points.
         available.value = false
@@ -203,53 +211,22 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return updated
   }
 
-  function isRecommending(blockId: string): boolean {
-    return recommending.value.has(blockId) || hasPendingRecommendations(blockId)
-  }
-
-  /**
-   * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
-   * ASYNCHRONOUS: returns at once with `pending` placeholder recommendations (the Writer runs
-   * per finding in the durable driver), which fill in (`ready`) via live `requirements` stream
-   * events; a notification calls the user back when the batch is ready. The board shows the
-   * `recommending` background stage while any placeholder is pending. Optional `note` steers the
-   * whole batch.
-   */
-  async function requestRecommendations(blockId: string, itemIds: string[], note?: string) {
-    withFlag(recommending, blockId, true)
-    try {
-      const updated = await api.requestRecommendations(
-        workspace.requireId(),
-        blockId,
-        itemIds,
-        note,
-      )
-      if (updated) store(updated)
-      return updated
-    } finally {
-      withFlag(recommending, blockId, false)
-    }
-  }
-
-  /** Accept a recommendation (becomes the finding's answer, folded into the next incorporation). */
-  async function acceptRecommendation(review: RequirementReview, recId: string) {
-    store(await api.acceptRecommendation(workspace.requireId(), review.id, recId))
-  }
-
-  /** Reject a recommendation (the human then dismisses / answers manually / re-requests). */
-  async function rejectRecommendation(review: RequirementReview, recId: string) {
-    store(await api.rejectRecommendation(workspace.requireId(), review.id, recId))
-  }
-
-  /** Re-request a recommendation with a "do it differently" note. */
-  async function reRequestRecommendation(review: RequirementReview, recId: string, note: string) {
-    withFlag(recommending, review.blockId, true)
-    try {
-      store(await api.reRequestRecommendation(workspace.requireId(), review.id, recId, note))
-    } finally {
-      withFlag(recommending, review.blockId, false)
-    }
-  }
+  // The Requirement Writer recommendation slice (request / accept / reject / re-request),
+  // extracted into a cohesive factory over the state above — a size-only split.
+  const {
+    isRecommending,
+    requestRecommendations,
+    acceptRecommendation,
+    rejectRecommendation,
+    reRequestRecommendation,
+  } = createRecommendationCommands({
+    api,
+    workspace,
+    recommending,
+    withFlag,
+    store,
+    hasPendingRecommendations,
+  })
 
   /** Resolve a capped review: extra-round / proceed / stop-reset. */
   async function resolveExceeded(

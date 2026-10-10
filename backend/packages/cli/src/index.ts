@@ -9,35 +9,81 @@ export {
   parseArgs,
   ArgError,
 } from './args.js'
-export { bootstrap, type BootstrapDeps, type FileSystem, BootstrapError } from './bootstrap.js'
+export { bootstrap, type BootstrapDeps, BootstrapError } from './bootstrap.js'
+export { type EnvCommandDeps, EnvCommandError, generateEnv } from './envCommand.js'
+export { type FileSystem } from './fs.js'
 export {
+  type Command,
   COMMAND_NOT_FOUND,
   COMMAND_TIMED_OUT,
   createNodeShell,
   DEFAULT_COMMAND_TIMEOUT_MS,
   type HostShell,
+  renderCommandLine,
+  runCommand,
   type ShellResult,
 } from './host-shell.js'
 export { K3S_INSTALL_COMMAND, type K3sDeps, type K3sResult, setupK3s } from './k3s.js'
 export {
   buildK3sHandler,
   buildK3sSetupUrl,
-  DEFAULT_INGRESS_HOST_TEMPLATE,
   DEFAULT_NAMESPACE_TEMPLATE,
   handlerLabel,
   type K3sHandlerInput,
   KUBERNETES_ENV_TOKEN_SECRET_KEY,
 } from './k3s-handler.js'
+// The cluster READS plus the normalisation they owe, exported so other in-repo tooling asks the
+// same questions of a kubeconfig that `cat-factory k3s` does: the acceptance suite's `configure`
+// command resolves its apiserver URL and ServiceAccount token through these rather than restating
+// the namespace and secret name, which would drift the moment the guided setup moved either.
+//
+// `normalizeApiServerUrl` travels WITH `readApiServerCommand` because the raw read is not usable:
+// k3d writes the wildcard bind address `https://0.0.0.0:6443` into the kubeconfig, and a consumer
+// that skipped the rewrite would write an undialable URL and fail against an address nothing
+// listens on. Exporting the read without it is what made that omission easy to make.
+export {
+  decodeToken,
+  normalizeApiServerUrl,
+  readApiServerCommand,
+  readTokenCommand,
+} from './k3s-provision.js'
+// The PROBE as well as its constants, because `cat-factory k3s` is no longer the only caller that
+// has to know whether a cluster can serve an ingress-derived URL: the acceptance suite's preflight
+// asks the same two questions (`clusterIngress.ts`), and a second implementation of them is how one
+// of the two would come to disagree with the setup command that provisions the cluster.
+export {
+  classifyIngress,
+  createNodeTcpProbe,
+  DEFAULT_INGRESS_PORT,
+  INGRESS_HOST_TEMPLATE,
+  type IngressFacts,
+  type IngressGap,
+  type IngressProbeCluster,
+  type IngressReadiness,
+  ingressHostTemplate,
+  ingressRemedies,
+  ingressUrlPort,
+  probeIngress,
+  type TcpProbe,
+} from './k3s-ingress.js'
+// `isLocalMachineHost` travels with them: the acceptance preflight reads the current kubectl
+// context, which nothing ties to the apiserver URL it was configured with, so it must decide
+// whether that URL names THIS machine before it may grade the answer as being about that cluster.
+export { isLocalMachineHost } from './localHost.js'
 export {
   classifyHost,
   hasServerVersion,
   type HostDetections,
   type HostState,
+  isRecreateOffer,
   type Offer,
   type OfferId,
   parseK3dClusters,
   parseKindClusters,
   probeHost,
+  RECREATE_OFFERS,
+  recreateOfferFor,
+  recreateTargetForContext,
   type ToolDetection,
 } from './k3s-probe.js'
 export {
@@ -48,17 +94,36 @@ export {
   type LocalEnvInput,
   renderEnvFile,
 } from './env.js'
+// The MERGE half of writing a `.env`, beside the render half it completes. Exported for the same
+// reason the k3s reads are: other in-repo tooling (the acceptance suite's `configure`) writes a
+// `.env` a person may already have edited, and the five ways to get that subtly wrong are each a
+// silent failure. See the module header for what they are.
+export {
+  CARRIED_OVER_HEADER,
+  describeEntries,
+  describeMerge,
+  type EnvMerge,
+  mergeEnvFile,
+  quoteEnvValue,
+  readAssignments,
+} from './envMerge.js'
 export { buildGitignore, mergeGitignore, REQUIRED_GITIGNORE_RULES } from './gitignore.js'
 export { type Io, createConsoleIo } from './io.js'
 export { type BootstrapInput, buildPlan, type PlannedFile } from './plan.js'
 export { generateSecrets, type GeneratedSecrets, type RandomBytes } from './secrets.js'
 export { slugifyProjectName } from './slug.js'
+// Travels with `buildPlan`: `BootstrapInput.composeProjectName` is what keeps two deployments out
+// of one Compose project, so a programmatic caller needs the same derivation `bootstrap()` uses
+// rather than a name of its own invention.
+export { composeProjectNameFor } from './composeProject.js'
 export {
   CONTAINER_RUNTIMES,
   type ContainerRuntime,
-  DEFAULT_HARNESS_IMAGE,
   EXECUTION_MODES,
   type ExecutionMode,
+  HARNESS_IMAGE_EXAMPLE,
+  HARNESS_IMAGE_GUIDANCE,
+  harnessImageEnvLines,
   NATIVE_HARNESSES,
   type NativeHarness,
 } from './templates.js'

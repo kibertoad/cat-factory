@@ -20,6 +20,8 @@ function token(
     inputTokens: 0,
     outputTokens: 0,
     requestCount: 0,
+    enabled: true,
+    isDefault: false,
     deletedAt: null,
     ...over,
   }
@@ -62,6 +64,42 @@ describe('chooseToken', () => {
     const used = token('used', { lastUsedAt: 100 })
     const fresh = token('fresh', { lastUsedAt: null })
     expect(chooseToken([used, fresh], 2000, WINDOW)?.id).toBe('fresh')
+  })
+
+  it('never chooses a disabled token, even if it is the least-loaded', () => {
+    const idleDisabled = token('idle', {
+      windowStartedAt: 1000,
+      inputTokens: 0,
+      outputTokens: 0,
+      enabled: false,
+    })
+    const busyEnabled = token('busy', {
+      windowStartedAt: 1000,
+      inputTokens: 900,
+      outputTokens: 100,
+    })
+    expect(chooseToken([idleDisabled, busyEnabled], 2000, WINDOW)?.id).toBe('busy')
+  })
+
+  it('returns null when every token is disabled', () => {
+    expect(chooseToken([token('a', { enabled: false })], 2000, WINDOW)).toBeNull()
+  })
+
+  it('prefers a pinned default over the least-loaded token', () => {
+    const idle = token('idle', { windowStartedAt: 1000, inputTokens: 0, outputTokens: 0 })
+    const busyDefault = token('busy', {
+      windowStartedAt: 1000,
+      inputTokens: 900,
+      outputTokens: 100,
+      isDefault: true,
+    })
+    expect(chooseToken([idle, busyDefault], 2000, WINDOW)?.id).toBe('busy')
+  })
+
+  it('ignores a default that is disabled and falls back to rotation', () => {
+    const disabledDefault = token('def', { isDefault: true, enabled: false })
+    const idle = token('idle', { windowStartedAt: 1000, inputTokens: 1, outputTokens: 0 })
+    expect(chooseToken([disabledDefault, idle], 2000, WINDOW)?.id).toBe('idle')
   })
 
   it('ignores stale-window usage so an aged-out busy token is eligible again', () => {

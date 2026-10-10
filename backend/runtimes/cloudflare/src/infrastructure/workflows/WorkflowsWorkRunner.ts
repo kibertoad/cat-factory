@@ -1,6 +1,7 @@
-import type { WorkRunner } from '@cat-factory/kernel'
+import { describeError, type WorkRunner } from '@cat-factory/kernel'
 import type { Queue, Workflow } from '@cloudflare/workers-types'
 import type { ExecutionStartMessage } from '../env'
+import { logger } from '../observability/logger'
 
 /** Params passed to a Workflows instance; also the queue message shape. */
 export interface ExecutionWorkflowParams {
@@ -24,6 +25,15 @@ export interface WorkflowsWorkRunnerDeps {
 export class WorkflowsWorkRunner implements WorkRunner {
   private readonly workflow: Workflow
   private readonly queue?: Queue<ExecutionStartMessage>
+  // Every method below swallows by design — the DB write is authoritative in each case and a
+  // throw here would fail a caller that has already committed. But each `catch` covers TWO
+  // populations: the expected one (an instance that already exists / is already finished) and
+  // an infrastructure fault (a quota rejection, an unbound Workflows namespace). Only the
+  // second is actionable, and until now nothing distinguished them — `runtime.ts`'s own
+  // docstring records a decision silently discarded through exactly this gap. `debug`, not
+  // `warn`: on the healthy path these fire constantly, so they belong in the verbose tier an
+  // operator turns on during an incident.
+  private readonly log = logger.child({ runner: 'workflows' })
 
   constructor({ workflow, queue }: WorkflowsWorkRunnerDeps) {
     this.workflow = workflow
@@ -45,9 +55,14 @@ export class WorkflowsWorkRunner implements WorkRunner {
         id: executionId,
         params: { workspaceId, executionId } satisfies ExecutionWorkflowParams,
       })
-    } catch {
-      // An instance with this id already exists (a duplicate start or a sweeper
-      // re-drive racing a live instance). The existing instance is authoritative.
+    } catch (error) {
+      // Usually: an instance with this id already exists (a duplicate start or a sweeper
+      // re-drive racing a live instance), and the existing instance is authoritative.
+      this.log.debug('workflow create swallowed', {
+        workspaceId,
+        executionId,
+        ...describeError(error),
+      })
     }
   }
 
@@ -60,9 +75,15 @@ export class WorkflowsWorkRunner implements WorkRunner {
     try {
       const instance = await this.workflow.get(executionId)
       await instance.sendEvent({ type: `decision-${decisionId}`, payload: { choice } })
-    } catch {
-      // No live instance to signal (tick fallback / already finished). The DB
-      // write in resolveDecision remains the source of truth.
+    } catch (error) {
+      // Usually: no live instance to signal (tick fallback / already finished). The DB write
+      // in resolveDecision remains the source of truth.
+      this.log.debug('workflow decision signal swallowed', {
+        executionId,
+        decisionId,
+        choice,
+        ...describeError(error),
+      })
     }
   }
 
@@ -72,9 +93,14 @@ export class WorkflowsWorkRunner implements WorkRunner {
       // Wake the paused run's `waitForEvent('spend-resume-*')` so it re-advances now instead of
       // waiting out the periodic budget re-check. The event type is fixed (one pause per run).
       await instance.sendEvent({ type: 'spend-resume', payload: {} })
-    } catch {
-      // No live instance to wake (already resumed / finished). The DB flip to `running` in
-      // resumePaused is the source of truth; the instance picks it up on its next re-check.
+    } catch (error) {
+      // Usually: no live instance to wake (already resumed / finished). The DB flip to
+      // `running` in resumePaused is the source of truth; the instance picks it up on its
+      // next re-check.
+      this.log.debug('workflow resume signal swallowed', {
+        executionId,
+        ...describeError(error),
+      })
     }
   }
 
@@ -82,8 +108,9 @@ export class WorkflowsWorkRunner implements WorkRunner {
     try {
       const instance = await this.workflow.get(executionId)
       await instance.terminate()
-    } catch {
-      // Nothing live to cancel.
+    } catch (error) {
+      // Usually: nothing live to cancel.
+      this.log.debug('workflow cancel swallowed', { executionId, ...describeError(error) })
     }
   }
 }

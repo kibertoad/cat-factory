@@ -81,6 +81,40 @@ export const testScreenshotSchema = v.object({
 export type TestScreenshot = v.InferOutput<typeof testScreenshotSchema>
 
 /**
+ * How a spec requirement fared when the Tester went looking for it. THREE-VALUED on purpose:
+ * "we didn't check" and "it's broken" must never render the same, which is the entire point of
+ * keeping the list — a reviewer reading a two-valued list cannot tell a requirement that was
+ * verified from one nobody looked at.
+ *
+ *  - `met`         — its acceptance criteria were exercised and observed to hold.
+ *  - `not_met`     — exercised and observed NOT to hold.
+ *  - `not_covered` — not exercised this run (out of the change's blast radius, unreachable in
+ *                    this setup, or simply not yet built — an `aspirational` requirement is
+ *                    EXPECTED to land here and must never be reported as `not_met`).
+ */
+export const requirementVerdictStatusSchema = v.picklist(['met', 'not_met', 'not_covered'])
+export type RequirementVerdictStatus = v.InferOutput<typeof requirementVerdictStatusSchema>
+
+/**
+ * One requirement-level verdict, keyed by the **spec requirement id** (`spec/modules/<m>/<g>.json`
+ * → `requirements[].id`, surfaced to the Tester as the `# requirement: <id>` comment above each
+ * Gherkin scenario). Deliberately the SAME id space as the spec — a second id space would make
+ * the join to `spec/` guesswork, which is what sank the withdrawn per-service store.
+ *
+ * Two consumers read this, and they must agree: the promotion post-op flips a `met` requirement
+ * from `aspirational` to `established` in the in-repo spec, and the PR verification report joins
+ * it back to the spec to render criterion → evidence.
+ */
+export const requirementVerdictSchema = v.object({
+  /** The spec requirement's stable id (e.g. `req-login-rate-limit`). */
+  requirementId: v.string(),
+  status: requirementVerdictStatusSchema,
+  /** What was actually observed — the evidence behind the verdict. */
+  detail: v.optional(v.string()),
+})
+export type RequirementVerdict = v.InferOutput<typeof requirementVerdictSchema>
+
+/**
  * A Tester's structured report. `greenlight` is the gate's verdict: true means the
  * change is safe to release (no blocking concerns); false routes the run through
  * the `fixer`. `tested` lists what the Tester decided to cover (this task's
@@ -102,6 +136,12 @@ const testReportObjectSchema = v.object({
    * their own, withhold the greenlight. The engine re-applies this rule defensively.
    */
   concerns: v.array(testConcernSchema),
+  /**
+   * Per-spec-requirement verdicts, keyed by the requirement id the Gherkin scenarios carry.
+   * Optional: absent on a run whose service has no `spec/`, and on every report produced before
+   * this contract existed — both read as "no requirement was ruled on", never as a failure.
+   */
+  requirementVerdicts: v.optional(v.array(requirementVerdictSchema)),
   /** Which environment the suite ran in, echoed back for the UI. */
   environment: v.optional(testEnvironmentSchema),
   /**
@@ -152,6 +192,35 @@ export function parseTestReport(value: unknown): TestReport {
 export const testerInfraSetupSchema = v.object({
   /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
   started: v.boolean(),
+  /**
+   * Whether the executor container had a Docker daemon to talk to, when it knows. The
+   * distinction `started` alone cannot make: a compose stack that failed to come up and an
+   * executor with no daemon are the same `started: false` and opposite fixes (the service's
+   * compose file, versus the image or the sandbox running it). Absent/null means the container
+   * reached no verdict — an image predating the probe, or the native host transport, which runs
+   * the harness with no entrypoint to probe. Never read absence as `false`.
+   */
+  dockerAvailable: v.optional(v.nullable(v.boolean())),
+  /**
+   * What a real container DID on that daemon, when the platform measured it. The third
+   * diagnosis, and the one `dockerAvailable` structurally cannot carry: a rootless daemon nested
+   * in a sandbox answers throughout while unable to mount any image layer, so it is reachable and
+   * no stack can come up on it. Reporting that as an absent daemon sends a human to restart one
+   * that is already up. `undetermined` is a check that ran and could not tell; absent/null means
+   * nothing was measured at all (an older image, or the native host transport).
+   */
+  dockerWorkload: v.optional(v.nullable(v.picklist(['usable', 'unusable', 'undetermined']))),
+  /**
+   * What a container started ON that daemon could REACH, when the platform measured it.
+   *
+   * The fourth diagnosis, and the one `dockerWorkload: 'usable'` structurally cannot carry: a
+   * rootless daemon started with `--iptables=false` runs containers perfectly and installs no
+   * MASQUERADE rule for its bridge, so none of them has a route out. The stack comes up and every
+   * `docker build` that fetches a dependency fails, slowly, which reads on the step as a stack
+   * that is fine. Present only alongside `usable`, the one verdict with an egress half;
+   * absent/null means nothing measured it.
+   */
+  dockerEgress: v.optional(v.nullable(v.picklist(['reachable', 'blocked', 'undetermined']))),
   /** The repo-relative compose file that was stood up, when known. */
   composePath: v.optional(v.nullable(v.string())),
   /** Epoch ms the stand-up attempt finished. */

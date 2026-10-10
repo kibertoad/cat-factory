@@ -5,17 +5,22 @@ import type { WebhookVerifier } from '../ports/webhook-verifier.js'
 import type { VcsWebhookMapper } from '../ports/vcs-webhook.js'
 
 // ---------------------------------------------------------------------------
-// A process-wide registry of VCS providers, keyed by the {@link VcsProvider}
-// discriminator. It mirrors the gate / pipeline / agent-kind registries: a
-// deployment registers each provider it supports as a startup import side effect
-// (`@cat-factory/server` registers `github`; `@cat-factory/gitlab` registers
-// `gitlab`), and any caller holding a {@link VcsConnectionRef} resolves the
-// concrete adapter bundle via {@link resolveVcsProvider}.
+// An app-owned registry of VCS providers, keyed by the {@link VcsProvider}
+// discriminator. It mirrors the gate / agent-kind / backend registries: the
+// composition root news ONE instance ({@link defaultVcsRegistry}), threads it
+// through `CoreDependencies`, and surfaces it on the `ServerContainer`, so the
+// neutral webhook receiver + any caller holding a {@link VcsConnectionRef}
+// resolves the concrete adapter bundle through that injected instance.
 //
-// Living in kernel (alongside the other registries) keeps integrations / gates /
-// server able to read it without depending on a concrete adapter package, and lets
-// an adapter package register itself without depending on the heavy orchestration
-// package — exactly the way `registerGate` / `registerPipeline` already work.
+// This replaces the previous module-global `Map`. That module global was
+// exactly the "brittle for externally-published adapter packages" hazard the
+// registry-DI migration targets: `@cat-factory/gitlab` is a separate published
+// package, so a deployment that bundled its own copy of `@cat-factory/kernel`
+// would have registered into a phantom `Map` invisible to the server. With the
+// instance owned by the facade and passed by reference, module identity stops
+// mattering: an adapter registers on the instance it is handed
+// (`registry.register(bundle)`), and tests build a fresh registry instead of
+// calling a `clear*()`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -37,53 +42,65 @@ export interface VcsProviderBundle {
   readonly provisioning?: VcsProvisioningClient
 }
 
-// Process-wide map, keyed by provider discriminator. Registration is a startup side
-// effect, read whenever a caller resolves a provider from a connection ref.
-const registry = new Map<VcsProvider, VcsProviderBundle>()
-
 /**
- * Register a VCS provider bundle. A later registration of the same provider replaces the
- * earlier one (so a deployment can override a built-in adapter). Register at startup,
- * before serving.
+ * App-owned registry of VCS provider bundles, keyed by the {@link VcsProvider} discriminator.
+ * The composition root news ONE instance and threads it through the container; a deployment
+ * (or an adapter package like `@cat-factory/gitlab`) registers each provider it supports on
+ * that instance by reference, and any caller holding a {@link VcsConnectionRef} resolves the
+ * concrete adapter through it. Mirrors {@link GateRegistry} / the backend registries — there
+ * is no module-global `Map` and no `clear*()` test cruft.
  */
-export function registerVcsProvider(bundle: VcsProviderBundle): void {
-  registry.set(bundle.provider, bundle)
-}
+export class VcsProviderRegistry {
+  private readonly registry = new Map<VcsProvider, VcsProviderBundle>()
 
-/** The registered bundle for a provider, or `undefined` when nothing is registered. */
-export function getVcsProvider(provider: VcsProvider): VcsProviderBundle | undefined {
-  return registry.get(provider)
-}
-
-/** Whether a bundle is registered for a provider. */
-export function isVcsProviderRegistered(provider: VcsProvider): boolean {
-  return registry.has(provider)
-}
-
-/**
- * The registered bundle for a provider, or throw. Use when a {@link VcsConnectionRef} in
- * hand means a provider MUST be wired (a connection can only exist for a registered
- * provider) — the throw then surfaces a wiring bug rather than failing deep in a call.
- */
-export function requireVcsProvider(provider: VcsProvider): VcsProviderBundle {
-  const bundle = registry.get(provider)
-  if (!bundle) {
-    throw new Error(`VCS provider "${provider}" is not registered.`)
+  /**
+   * Register a VCS provider bundle. A later registration of the same provider replaces the
+   * earlier one (so a deployment can override a built-in adapter). Register at startup,
+   * before serving.
+   */
+  register(bundle: VcsProviderBundle): void {
+    this.registry.set(bundle.provider, bundle)
   }
-  return bundle
+
+  /** The registered bundle for a provider, or `undefined` when nothing is registered. */
+  get(provider: VcsProvider): VcsProviderBundle | undefined {
+    return this.registry.get(provider)
+  }
+
+  /** Whether a bundle is registered for a provider. */
+  has(provider: VcsProvider): boolean {
+    return this.registry.has(provider)
+  }
+
+  /**
+   * The registered bundle for a provider, or throw. Use when a {@link VcsConnectionRef} in
+   * hand means a provider MUST be wired (a connection can only exist for a registered
+   * provider) — the throw then surfaces a wiring bug rather than failing deep in a call.
+   */
+  require(provider: VcsProvider): VcsProviderBundle {
+    const bundle = this.registry.get(provider)
+    if (!bundle) {
+      throw new Error(`VCS provider "${provider}" is not registered.`)
+    }
+    return bundle
+  }
+
+  /** Convenience: resolve the bundle for a connection ref (throws if unregistered). */
+  resolve(connection: VcsConnectionRef): VcsProviderBundle {
+    return this.require(connection.provider)
+  }
+
+  /** Every registered provider discriminator (registration order). */
+  providers(): VcsProvider[] {
+    return [...this.registry.keys()]
+  }
 }
 
-/** Convenience: resolve the bundle for a connection ref (throws if unregistered). */
-export function resolveVcsProvider(connection: VcsConnectionRef): VcsProviderBundle {
-  return requireVcsProvider(connection.provider)
-}
-
-/** Every registered provider discriminator (registration order). */
-export function registeredVcsProviders(): VcsProvider[] {
-  return [...registry.keys()]
-}
-
-/** Drop all registered providers. Intended for tests that exercise registration. */
-export function clearVcsProviders(): void {
-  registry.clear()
+/**
+ * A fresh, empty VCS provider registry. A facade news one, registers the providers its
+ * configuration enables (e.g. `@cat-factory/gitlab`'s `registerGitLab(registry, …)`), and
+ * threads the SAME instance through the container.
+ */
+export function defaultVcsRegistry(): VcsProviderRegistry {
+  return new VcsProviderRegistry()
 }

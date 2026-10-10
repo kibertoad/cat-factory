@@ -19,6 +19,7 @@ import {
   assertFound,
   ConflictError,
   getErrorMessage,
+  isDispatchFailure,
   requireWorkspace,
   sameSubtasks,
 } from '@cat-factory/kernel'
@@ -167,7 +168,9 @@ export class EnvConfigRepairService {
       })
     } catch (error) {
       const message = getErrorMessage(error)
-      const kind: AgentFailureKind = /dispatch failed/i.test(message) ? 'dispatch' : 'preflight'
+      // A transport dispatch rejection is `dispatch`; anything else is a pre-flight rejection.
+      // Classified by the structured DispatchError (legacy message shape as fallback), not regex.
+      const kind: AgentFailureKind = isDispatchFailure(error) ? 'dispatch' : 'preflight'
       const patch = {
         status: 'failed' as const,
         error: message,

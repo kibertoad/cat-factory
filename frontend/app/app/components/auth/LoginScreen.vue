@@ -1,34 +1,46 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import SecretInput from '~/components/common/SecretInput.vue'
+import type { VcsProvider } from '~/types/domain'
+import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, vcsTokenCreateUrl } from '~/utils/vcs'
+import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
+import { postSignInUrl } from '~/utils/postSignIn'
 
 const auth = useAuthStore()
 const { t } = useI18n()
 
-// Local-mode source-control PAT login. The PAT lives server-side in env (GITHUB_PAT /
-// GITLAB_PAT); the login screen only SELECTS a configured provider — no token is ever typed
-// into or shown in the browser. GitHub/GitLab are brand names (kept verbatim across locales),
-// as are the token-settings URLs, so they're inline constants rather than catalog keys — same
-// convention as the provider descriptors in ApiKeysSection. The "create a token" link prefers
-// the server's scopes-preselected deep link (`patLogin.setupUrls`); these are the fallback.
-type PatProvider = 'github' | 'gitlab'
+// Local-mode source-control PAT login. A configured token lives server-side and is selected by
+// PROVIDER (no token is typed into the browser); a deployment that holds none can be handed one
+// here, and it becomes both this sign-in and the credential the deployment operates with. The
+// brand labels / icons / token-settings URLs are the shared provider descriptors in `~/utils/vcs`
+// (brand names stay verbatim across locales, so they are constants rather than catalog keys — the
+// same convention as ApiKeysSection). The "create a token" link prefers the server's
+// scopes-preselected deep link (`patLogin.setupUrls`); the descriptor's URL is the fallback.
+type PatProvider = VcsProvider
+/** Every provider a token page exists for — the fallback link set when none can be installed. */
 const ALL_PROVIDERS: PatProvider[] = ['github', 'gitlab']
-const PROVIDER_LABELS: Record<PatProvider, string> = { github: 'GitHub', gitlab: 'GitLab' }
-const PROVIDER_ICONS: Record<PatProvider, string> = {
-  github: 'i-lucide-github',
-  gitlab: 'i-lucide-gitlab',
-}
-// Fallback token-creation pages, used only if the server didn't advertise a deep link.
+const PROVIDER_LABELS = VCS_PROVIDER_LABELS
+const PROVIDER_ICONS = VCS_PROVIDER_ICONS
+// Sign-in happens before any workspace is connected, so there is no host to read: these fall
+// back to the provider's public instance. The server's scopes-preselected `setupUrls` win when
+// the deployment supplies them.
 const PROVIDER_TOKEN_URLS: Record<PatProvider, string> = {
-  github: 'https://github.com/settings/tokens/new',
-  gitlab: 'https://gitlab.com/-/user_settings/personal_access_tokens',
+  github: vcsTokenCreateUrl('github'),
+  gitlab: vcsTokenCreateUrl('gitlab'),
 }
 
 const patLoginCfg = computed(() => auth.localMode?.patLogin)
-// Only providers whose PAT is configured in env can sign in (the token is the operational
-// credential too). A provider without one gets no button — see the no-PAT notice instead.
+// Providers whose token the deployment already holds: one-click sign-in. A provider without one
+// gets no button — it is offered in the paste form below instead.
 const configuredProviders = computed<PatProvider[]>(
   () => (patLoginCfg.value?.configured ?? []) as PatProvider[],
+)
+// Providers the server will ACCEPT a token for from here. Empty when `.env` owns the credential
+// (it wins, so a pasted token would be ignored) or nothing can seal one — the notice then falls
+// back to telling the developer where the token actually has to go.
+const installableProviders = computed<PatProvider[]>(
+  () => (patLoginCfg.value?.installable ?? []) as PatProvider[],
 )
 const isLocalMode = computed(() => auth.localMode?.enabled === true)
 const hasConfiguredPat = computed(() => configuredProviders.value.length > 0)
@@ -51,7 +63,7 @@ async function submitPat(provider: PatProvider) {
   patBusy.value = true
   try {
     await auth.patLogin({ provider })
-    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
   } catch (e) {
     patError.value = apiErrorEnvelope(e)?.message ?? t('auth.localMode.failed')
   } finally {
@@ -94,7 +106,7 @@ async function submitPassword() {
       await auth.passwordLogin({ email: email.value, password: password.value })
     }
     // Reload so the app boots with the new session.
-    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
   } catch (e) {
     error.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
@@ -127,13 +139,27 @@ const showOAuthDivider = computed(
   () => auth.providers.password && (auth.providers.github || auth.providers.google),
 )
 
-// Hosted (remote node) PAT login: the user pastes their OWN source-control PAT, which the
-// server resolves to an account and holds to its login/org/domain allowlist. The available
-// providers come from the server (`auth.patProviders`) — GitHub always, GitLab when configured,
-// on both hosted facades (Node + Worker); empty in local mode (which uses the configured-token
-// flow above).
+// Enterprise SSO. Led with, above the consumer providers, because on a deployment that configures
+// it that is the intended way in — a person arriving at an org's board should not have to find
+// their company's button under two they must not use. The label is the operator's own wording
+// (it names their IdP), so it is rendered verbatim rather than through the catalog.
+const ssoLabel = computed(() => auth.sso?.label ?? '')
+// Translated copy for a refused round-trip, keyed off the machine-readable reason the backend
+// handed back. Each reason has its own wording because the remedies differ: a missing directory
+// group is something the user takes to IT, a failed code exchange is the operator's own config.
+const ssoErrorMessage = computed(() =>
+  auth.ssoError ? t(SSO_ERROR_MESSAGE_KEYS[auth.ssoError]) : null,
+)
+
+// Paste-a-token sign-in. The user supplies a source-control PAT and the server resolves it to an
+// account. What it MEANS differs per facade, which is why the providers come from two places:
+//  - hosted (remote node): the user's OWN token, held to the login/org/domain allowlist. GitHub
+//    always, GitLab when configured, on both hosted facades (Node + Worker).
+//  - local: the token also becomes the DEPLOYMENT's credential, so the server names the providers
+//    it will accept one for (`installable`) — empty once `.env` owns it.
+// One form serves both; the local-only hint below says what the token is additionally used for.
 const remotePatProviders = computed<PatProvider[]>(() =>
-  isLocalMode.value ? [] : (auth.patProviders as PatProvider[]),
+  isLocalMode.value ? installableProviders.value : (auth.patProviders as PatProvider[]),
 )
 const remotePatProvider = ref<PatProvider>('github')
 watch(
@@ -152,13 +178,23 @@ async function submitRemotePat() {
   remotePatBusy.value = true
   try {
     await auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() })
-    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
   } catch (e) {
     remotePatError.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
     remotePatBusy.value = false
   }
 }
+
+// Only divide SSO from what follows when something actually follows it.
+const showSsoDivider = computed(
+  () =>
+    auth.providers.sso &&
+    (auth.providers.github ||
+      auth.providers.google ||
+      auth.providers.password ||
+      remotePatProviders.value.length > 0),
+)
 
 // A remote deployment (node service / Worker) that advertises no sign-in method at all:
 // no OAuth, no password, no PAT, and not local mode. The auth gate still routes here (a
@@ -170,19 +206,21 @@ const noSignInMethod = computed(
     !auth.providers.github &&
     !auth.providers.google &&
     !auth.providers.password &&
+    !auth.providers.sso &&
     remotePatProviders.value.length === 0,
 )
 </script>
 
 <template>
-  <div class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100">
-    <div
-      class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
-    >
+  <div
+    class="flex h-screen w-screen items-center justify-center bg-app-950 text-app-100"
+    data-testid="login-screen"
+  >
+    <div class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <div class="mb-6 text-center">
-        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('auth.login.appTitle') }}</h1>
-        <p class="text-sm text-slate-400">
+        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-primary" />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ t('auth.login.appTitle') }}</h1>
+        <p class="text-sm text-muted">
           <template v-if="mode === 'forgot'">{{ t('auth.login.forgotSubtitle') }}</template>
           <template v-else>{{
             invite ? t('auth.login.inviteSubtitle') : t('auth.login.subtitle')
@@ -203,10 +241,10 @@ const noSignInMethod = computed(
         >
           {{ t('auth.mothership.signIn') }}
         </UButton>
-        <p class="px-1 text-xs text-slate-400">{{ t('auth.mothership.hint') }}</p>
+        <p class="px-1 text-xs text-muted">{{ t('auth.mothership.hint') }}</p>
         <p
           v-if="auth.mothershipError"
-          class="px-1 text-xs text-rose-400"
+          class="px-1 text-xs text-app-error-400"
           data-testid="mothership-error"
         >
           {{ t('auth.mothership.error') }}
@@ -230,38 +268,81 @@ const noSignInMethod = computed(
           {{ t('auth.localMode.continueWithConfigured', { provider: PROVIDER_LABELS[p] }) }}
         </UButton>
 
-        <!-- Neither GITHUB_PAT nor GITLAB_PAT is set: tell the developer how to configure one -->
+        <!-- The deployment holds no token. When one can be installed from here the notice says
+             so and the create-token links feed the form below; when it can't (`.env` owns the
+             credential, or nothing can seal one) it names where the token has to go instead. -->
         <template v-if="!hasConfiguredPat">
           <UAlert
             color="warning"
             variant="subtle"
             icon="i-lucide-key-round"
             :title="t('auth.localMode.noPatTitle')"
-            :description="t('auth.localMode.noPatBody')"
+            :description="
+              installableProviders.length > 0
+                ? t('auth.localMode.setupBody')
+                : t('auth.localMode.noPatBody')
+            "
           />
-          <div class="flex flex-wrap gap-3 px-1">
+          <!-- Only when nothing can be installed here: the paste form below carries its own
+               per-provider link, so showing these too would offer the same thing twice. -->
+          <div v-if="installableProviders.length === 0" class="flex flex-wrap gap-3 px-1">
             <a
               v-for="p in ALL_PROVIDERS"
               :key="p"
               :href="tokenCreateUrl(p)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-indigo-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[p] }) }}
             </a>
           </div>
         </template>
 
-        <p v-if="patError" class="text-sm text-rose-400">{{ patError }}</p>
+        <p v-if="patError" class="text-sm text-app-error-400">{{ patError }}</p>
       </div>
 
       <div
         v-if="isLocalMode && auth.providers.password && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.localMode.orDivider') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.localMode.orDivider') }}
+        <span class="h-px flex-1 bg-elevated" />
+      </div>
+
+      <!-- A refused SSO round-trip: name the rule that refused, don't return the user to an
+           unchanged sign-in button. -->
+      <UAlert
+        v-if="ssoErrorMessage && mode !== 'forgot'"
+        class="mb-4"
+        color="error"
+        variant="subtle"
+        icon="i-lucide-shield-x"
+        :title="t('auth.sso.failedTitle')"
+        :description="ssoErrorMessage"
+        data-testid="sso-error"
+      />
+
+      <!-- Enterprise SSO: the deployment's OWN identity provider, led with where configured. -->
+      <div v-if="auth.providers.sso && mode !== 'forgot'" class="mb-2 space-y-2">
+        <UButton
+          block
+          size="lg"
+          color="primary"
+          icon="i-lucide-building-2"
+          data-testid="sso-signin"
+          @click="auth.loginWithSso(invite)"
+        >
+          {{ t('auth.sso.continueWith', { provider: ssoLabel }) }}
+        </UButton>
+      </div>
+
+      <div
+        v-if="showSsoDivider && mode !== 'forgot'"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
+      >
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- OAuth providers -->
@@ -291,10 +372,10 @@ const noSignInMethod = computed(
 
       <div
         v-if="showOAuthDivider && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- Email / password -->
@@ -319,27 +400,35 @@ const noSignInMethod = computed(
           icon="i-lucide-at-sign"
           size="lg"
           class="w-full"
+          data-testid="login-email"
         />
-        <UInput
+        <SecretInput
           v-model="password"
-          type="password"
           required
           :placeholder="t('auth.login.passwordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
+          data-testid="login-password"
         />
-        <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
-        <UButton block size="lg" color="primary" type="submit" :loading="busy">
+        <p v-if="error" class="text-sm text-app-error-400" data-testid="login-error">{{ error }}</p>
+        <UButton
+          block
+          size="lg"
+          color="primary"
+          type="submit"
+          :loading="busy"
+          data-testid="login-submit"
+        >
           {{ mode === 'signup' ? t('auth.login.createAccount') : t('auth.login.signIn') }}
         </UButton>
-        <p class="text-center text-xs text-slate-400">
+        <p class="text-center text-xs text-muted">
           <template v-if="mode === 'login'">
             <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
               <template #signUp>
                 <button
                   type="button"
-                  class="text-indigo-400 hover:underline"
+                  class="text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
@@ -352,7 +441,7 @@ const noSignInMethod = computed(
               <template #signIn>
                 <button
                   type="button"
-                  class="text-indigo-400 hover:underline"
+                  class="text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
@@ -361,21 +450,27 @@ const noSignInMethod = computed(
             </i18n-t>
           </template>
         </p>
-        <p v-if="mode === 'login'" class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="setMode('forgot')">
+        <p v-if="mode === 'login'" class="text-center text-xs text-muted">
+          <button type="button" class="text-primary hover:underline" @click="setMode('forgot')">
             {{ t('auth.login.forgotPassword') }}
           </button>
         </p>
       </form>
 
-      <!-- Hosted (remote node) PAT login: paste your own source-control PAT -->
+      <!-- Paste-a-token sign-in: your own PAT on a hosted node; on local mode the token this
+           deployment will operate with (see `remotePatProviders`). -->
       <template v-if="remotePatProviders.length > 0 && mode !== 'forgot'">
         <div
-          v-if="auth.providers.github || auth.providers.google || auth.providers.password"
-          class="my-4 flex items-center gap-3 text-xs text-slate-500"
+          v-if="
+            auth.providers.github ||
+            auth.providers.google ||
+            auth.providers.password ||
+            hasConfiguredPat
+          "
+          class="my-4 flex items-center gap-3 text-xs text-dimmed"
         >
-          <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-          <span class="h-px flex-1 bg-slate-800" />
+          <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+          <span class="h-px flex-1 bg-elevated" />
         </div>
         <form class="space-y-3" @submit.prevent="submitRemotePat">
           <div v-if="remotePatProviders.length > 1" class="flex gap-2">
@@ -386,14 +481,17 @@ const noSignInMethod = computed(
               :variant="p === remotePatProvider ? 'solid' : 'subtle'"
               :icon="PROVIDER_ICONS[p]"
               size="sm"
-              @click="remotePatProvider = p"
+              @click="
+                () => {
+                  remotePatProvider = p
+                }
+              "
             >
               {{ PROVIDER_LABELS[p] }}
             </UButton>
           </div>
-          <UInput
+          <SecretInput
             v-model="remotePatToken"
-            type="password"
             required
             :placeholder="
               t('auth.login.patPlaceholder', { provider: PROVIDER_LABELS[remotePatProvider] })
@@ -402,7 +500,7 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="remotePatError" class="text-sm text-rose-400">{{ remotePatError }}</p>
+          <p v-if="remotePatError" class="text-sm text-app-error-400">{{ remotePatError }}</p>
           <UButton
             block
             size="lg"
@@ -413,12 +511,17 @@ const noSignInMethod = computed(
           >
             {{ t('auth.login.signInWithPat', { provider: PROVIDER_LABELS[remotePatProvider] }) }}
           </UButton>
+          <!-- Local mode only: say what else the token is for BEFORE it is handed over, since it
+               becomes the credential every agent step on this machine clones and pushes with. -->
+          <p v-if="isLocalMode" class="px-1 text-xs text-muted">
+            {{ t('auth.localMode.tokenBecomesCredential') }}
+          </p>
           <p class="px-1 text-center">
             <a
               :href="tokenCreateUrl(remotePatProvider)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-indigo-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{
                 t('auth.localMode.createToken', { provider: PROVIDER_LABELS[remotePatProvider] })
@@ -445,7 +548,7 @@ const noSignInMethod = computed(
         @submit.prevent="submitForgot"
       >
         <template v-if="forgotSent">
-          <p class="text-sm text-slate-300">
+          <p class="text-sm text-toned">
             {{ t('auth.login.forgotSent') }}
           </p>
         </template>
@@ -459,13 +562,13 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
+          <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
           <UButton block size="lg" color="primary" type="submit" :loading="busy">
             {{ t('auth.login.sendResetLink') }}
           </UButton>
         </template>
-        <p class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="setMode('login')">
+        <p class="text-center text-xs text-muted">
+          <button type="button" class="text-primary hover:underline" @click="setMode('login')">
             {{ t('auth.login.backToSignIn') }}
           </button>
         </p>

@@ -1,0 +1,11 @@
+-- Shared-stack preflight prerequisites (stack-recipes-and-shared-stacks initiative — see
+-- docs/initiatives/stack-recipes-and-shared-stacks.md, slice 6 follow-up).
+--
+-- A shared stack now declares its own machine-prerequisite checks (mkcert CA / hosts entries /
+-- ECR login — the acme-shared-services M-rows), re-run at the START of every bring-up so a stale
+-- ECR token or a missing hosts entry fails fast with copy-paste remediation instead of a mystery
+-- deep inside a 40-image pull. Same `PreflightRef[]` vocabulary a consumer recipe declares,
+-- stored as text JSON (mirroring the existing recipe-shaped JSON columns on this table). The
+-- probes are runtime-bound to the local facade's host Docker daemon, but the declaration is
+-- fully symmetric across D1 ⇄ Drizzle (asserted by the cross-runtime conformance suite).
+ALTER TABLE shared_stacks ADD COLUMN prerequisites TEXT NOT NULL DEFAULT '[]';

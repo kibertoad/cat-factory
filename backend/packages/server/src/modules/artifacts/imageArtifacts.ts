@@ -1,3 +1,5 @@
+import { INLINE_IMAGE_MEDIA_TYPES } from '@cat-factory/contracts'
+
 // Shared validation + safe-serving helpers for binary-artifact images (UI screenshots +
 // reference design images). Used by BOTH the workspace-scoped upload/serve controller and
 // the container-token-authed harness ingest route, so the security posture can't drift
@@ -8,13 +10,13 @@
  * designs are uploaded images; anything else (HTML, SVG — which can carry script and would
  * execute when served inline same-origin) is rejected at the write boundary so the blob
  * endpoint can never become a stored-XSS vector. SVG is deliberately excluded.
+ *
+ * The MEMBERS come from `@cat-factory/contracts`, because the SPA has to make the same
+ * judgement about the same bytes (does this row render as a picture, or as a download?) and two
+ * copies of it disagree silently in both directions. What stays here is the second USE of that
+ * list (the upload gate), which is this package's alone.
  */
-export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'image/gif',
-])
+export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set(INLINE_IMAGE_MEDIA_TYPES)
 
 /** A hard ceiling on a single artifact's bytes, enforced at every ingest point. */
 export const MAX_UPLOAD_BYTES = 16 * 1024 * 1024
@@ -73,4 +75,17 @@ export function blobResponseHeaders(storedContentType: string): Record<string, s
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'private, max-age=86400',
       }
+}
+
+/**
+ * A stored blob's bytes as a `Response` body.
+ *
+ * A `Uint8Array` IS a valid body on both runtimes the package serves (workerd and Node/undici),
+ * but the ambient `BodyInit` this package compiles against is narrower than either, so the
+ * assignment needs an assertion. It lives here, once, rather than at each of the three routes
+ * that serve stored bytes: the assertion is about the lib typings, not about the value, and
+ * three copies of that reasoning is three places to get it wrong.
+ */
+export function blobResponseBody(bytes: Uint8Array): BodyInit {
+  return bytes as unknown as BodyInit
 }

@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
+import { queryOne } from './db.js'
 
 // The mothership-mode LOCAL machine-token cache.
 //
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS machine_token (
 `
 
 /** The cached machine token plus the metadata the SPA / boot path reads for staleness + display. */
-export interface MachineTokenRecord {
+interface MachineTokenRecord {
   token: string
   nodeId: string
   userId: string
@@ -48,7 +49,7 @@ interface MachineTokenRow {
 }
 
 /** Open (creating if absent) the local machine-token SQLite database and ensure its schema. */
-export function openMachineTokenDb(path: string): DatabaseSync {
+function openMachineTokenDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path)
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA busy_timeout = 5000')
@@ -67,15 +68,14 @@ export interface LocalMachineTokenStore {
   close(): void
 }
 
-export class SqliteMachineTokenStore implements LocalMachineTokenStore {
+class SqliteMachineTokenStore implements LocalMachineTokenStore {
   constructor(private readonly db: DatabaseSync) {}
 
   read(): MachineTokenRecord | null {
-    const row = this.db
-      .prepare(
-        'SELECT token, node_id, user_id, account_ids, exp, created_at FROM machine_token WHERE id = 1',
-      )
-      .get() as MachineTokenRow | undefined
+    const row = queryOne<MachineTokenRow>(
+      this.db,
+      'SELECT token, node_id, user_id, account_ids, exp, created_at FROM machine_token WHERE id = 1',
+    )
     if (!row) return null
     return {
       token: row.token,

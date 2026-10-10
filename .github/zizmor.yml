@@ -1,0 +1,38 @@
+# zizmor configuration. See https://docs.zizmor.sh/configuration/.
+#
+# Everything zizmor reports is otherwise fixed rather than suppressed: the inline
+# `# zizmor: ignore[cache-poisoning]` comments in the workflows are the per-site
+# exceptions, and this file exists for the one audit that has to be answered
+# repo-wide.
+rules:
+  # `self-repository` asks every `uses: ./.github/actions/...` to become
+  # `uses: $/.github/actions/...`, GitHub's self-repository syntax (shipped
+  # 2026-07-30, runner 2.336.0+). The audit is RIGHT: that form resolves at the
+  # running commit instead of through the workspace, so an action cloned during the
+  # run cannot be loaded in its place, and it counts as pinned for policy purposes.
+  #
+  # It is disabled anyway because this repository cannot adopt it yet, and the
+  # blocker is in the very job that runs this audit. `actionlint` runs immediately
+  # before zizmor in CI's workflow-security job, and it rejects the syntax outright:
+  #
+  #   specifying action "$/.github/actions/setup" in invalid format because ref is
+  #   missing. available formats are "{owner}/{repo}@{ref}" or
+  #   "{owner}/{repo}/{path}@{ref}"
+  #
+  # That is not a stale pin to bump past. 1.7.12 is actionlint's newest release and
+  # its HEAD carries no handling for the form either, so taking zizmor's advice would
+  # trade twenty LOW findings for twenty hard actionlint failures. The alternative,
+  # teaching actionlint to skip the message with `-ignore`, buys the same twenty
+  # findings by blinding a linter whose job is to catch exactly this class of typo in
+  # every OTHER `uses:` in the tree.
+  #
+  # `disable` rather than a per-file `ignore` list, and deliberately: the blocker is a
+  # property of the toolchain, not of these six files, so an ignore list would let a
+  # seventh workflow reintroduce the failure while changing nothing about whether the
+  # advice can be followed. The cost is the documented one, that a disabled rule drops
+  # out of the finding counts.
+  #
+  # Re-enable and convert every `uses: ./...` in one pass once actionlint ships
+  # support; nothing else stands in the way.
+  self-repository:
+    disable: true

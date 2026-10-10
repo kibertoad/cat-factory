@@ -1,5 +1,5 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
-import { executionInstanceSchema } from '../entities.js'
+import { executionInstanceSchema } from '../execution.js'
 import { requestHumanTestFixSchema } from '../human-test.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 

@@ -1,5 +1,5 @@
 /**
- * i18n drift guard (tier 3) — see CLAUDE.md → Internationalization.
+ * i18n drift guard (tier 3) — see AGENTS.md → Internationalization.
  *
  * Tiers 1 (typed message keys) and 2 (exhaustive `Record<Enum,string>` maps) only catch
  * keys that are either written as static `t('literal')` calls or enumerated in a typed

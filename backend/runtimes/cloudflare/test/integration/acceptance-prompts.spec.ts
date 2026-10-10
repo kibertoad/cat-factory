@@ -5,9 +5,18 @@ import {
   composeSystemPrompt,
   isAcceptanceKind,
   phaseForKind,
-  systemPromptFor,
-  userPromptFor,
+  STANDARDS_SECTION_OPENER,
+  systemPromptFor as _systemPromptFor,
+  defaultAgentKindRegistry,
+  userPromptFor as _userPromptFor,
 } from '@cat-factory/agents'
+
+// App-owned DI: a fresh registry (built-ins pre-loaded) injected into the prompt fns so
+// every existing call site keeps its original arity.
+const _agentKindRegistry = defaultAgentKindRegistry()
+const systemPromptFor = (kind: string) => _systemPromptFor(kind, _agentKindRegistry)
+const userPromptFor = (ctx: AgentRunContext, opts?: { materialized?: boolean }) =>
+  _userPromptFor(ctx, _agentKindRegistry, opts)
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 
@@ -69,9 +78,14 @@ describe('acceptance-testing agent prompts', () => {
       expect(systemPromptFor('playwright')).toContain('spec/features/*.feature')
     })
 
-    it('defers to the appended best-practice standards', () => {
+    it('leaves the best-practice-standards imperative to the FOLD, not the role text', () => {
+      // The imperative used to close each role prompt, while the fold appends nothing when a
+      // block resolved no standards — so it pointed at a section that was never injected. The
+      // fold owns it now, which is why the assertion is at that seam.
       for (const kind of ACCEPTANCE_AGENT_KINDS) {
-        expect(systemPromptFor(kind)).toContain('best-practice standard')
+        const bare = systemPromptFor(kind)
+        expect(bare).not.toContain(STANDARDS_SECTION_OPENER)
+        expect(composeSystemPrompt(bare, [FRAGMENTS[0]!.id])).toContain(STANDARDS_SECTION_OPENER)
       }
     })
 
@@ -120,6 +134,7 @@ describe('acceptance-testing agent prompts', () => {
               {
                 title: 'Auth PRD',
                 url: 'https://example.test/prd',
+                origin: 'confluence' as const,
                 excerpt: 'Users sign in with email + password.',
                 summary: 'Users sign in with email + password.',
                 body: 'Users sign in with email + password.',

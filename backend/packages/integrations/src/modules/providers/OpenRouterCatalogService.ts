@@ -11,6 +11,7 @@ import type {
   UpsertOpenRouterCatalogInput,
 } from '@cat-factory/contracts'
 import type { ApiKeyService } from './ApiKeyService.js'
+import { parseOpenRouterModels } from './openRouterModels.js'
 
 // OpenRouterCatalogService: owns each WORKSPACE's enabled OpenRouter models — the
 // workspace-scoped analogue of the per-user local-runner catalog, but for the
@@ -152,47 +153,12 @@ export class OpenRouterCatalogService {
         return { reachable: false, models: [], error: `OpenRouter returned HTTP ${res.status}` }
       }
       const body = (await res.json()) as { data?: unknown }
-      const models = parseModels(body.data, rate)
+      const models = parseOpenRouterModels(body.data, rate)
       return { reachable: true, models }
     } catch (err) {
       return { reachable: false, models: [], error: getErrorMessage(err) }
     }
   }
-}
-
-interface RawModel {
-  id?: unknown
-  name?: unknown
-  context_length?: unknown
-  pricing?: { prompt?: unknown; completion?: unknown }
-}
-
-/** Map OpenRouter's `/models` payload to our metadata, converting USD/token → currency/1M. */
-function parseModels(data: unknown, rate: number): OpenRouterModelMeta[] {
-  if (!Array.isArray(data)) return []
-  const out: OpenRouterModelMeta[] = []
-  for (const raw of data as RawModel[]) {
-    const id = typeof raw?.id === 'string' ? raw.id.trim() : ''
-    if (!id) continue
-    const prompt = perMillion(raw?.pricing?.prompt, rate)
-    const completion = perMillion(raw?.pricing?.completion, rate)
-    const contextLength = typeof raw?.context_length === 'number' ? raw.context_length : undefined
-    out.push({
-      id,
-      name: typeof raw?.name === 'string' ? raw.name : id,
-      ...(contextLength ? { contextLength } : {}),
-      inputPerMillion: prompt,
-      outputPerMillion: completion,
-    })
-  }
-  return out
-}
-
-/** USD-per-token (a string or number) → currency-per-1M-token, rounded to 4 dp. */
-function perMillion(usdPerToken: unknown, rate: number): number {
-  const n = typeof usdPerToken === 'number' ? usdPerToken : Number(usdPerToken)
-  if (!Number.isFinite(n) || n <= 0) return 0
-  return Math.round(n * 1_000_000 * rate * 10_000) / 10_000
 }
 
 function dedupe(models: OpenRouterModelMeta[]): OpenRouterModelMeta[] {

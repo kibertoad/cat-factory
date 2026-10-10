@@ -1,5 +1,5 @@
 import type { Block } from '@cat-factory/contracts'
-import { blockSchema, executionInstanceSchema } from '@cat-factory/contracts'
+import { executionInstanceSchema } from '@cat-factory/contracts'
 import type { BlockPatch } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
@@ -11,8 +11,10 @@ import {
   executionToDetail,
   rowToBlock,
   rowToExecution,
+  parseProviderPreferenceColumn,
   rowToPipeline,
   rowToWorkspace,
+  serializeProviderPreferenceColumn,
 } from '../src/persistence/mappers.js'
 import { DataIntegrityError } from '../src/persistence/decode.js'
 
@@ -29,6 +31,10 @@ function fullBlock(): Block {
     description: 'do the thing',
     position: { x: 12, y: 34 },
     status: 'in_progress',
+    // The repository DERIVES this on a status patch rather than accepting it from a caller, so
+    // it is absent from `BlockPatch` — but it is a real column that has to survive
+    // insert → row → domain like any other, which is what this fixture is for.
+    completedAt: 1_770_000_000_000,
     progress: 0.5,
     dependsOn: ['blk_0'],
     executionId: 'exec_1',
@@ -39,10 +45,11 @@ function fullBlock(): Block {
     fragmentIds: ['frag_a', 'frag_b'],
     modelId: 'gpt',
     pullRequest: { number: 7, url: 'https://gh/pr/7', branch: 'feat/x' },
-    mergePresetId: 'mp_1',
+    riskPolicyId: 'mp_1',
     pipelineId: 'pl_1',
     agentConfig: { 'playwright.e2eTarget': 'ci' },
     provisioning: { type: 'docker-compose', composePath: 'docker-compose.yml', localDevOnly: true },
+    testingContext: 'Sign in as $DEMO_USER; the seeded tenant is Acme.',
     cloudProvider: 'aws',
     instanceSize: 'large',
   } as Block
@@ -102,10 +109,10 @@ describe('blockPatchToColumns', () => {
     expect(blockPatchToColumns({ position: { x: 1, y: 2 } })).toEqual({ pos_x: 1, pos_y: 2 })
   })
 
-  it('treats an empty string as "clear the selection" for modelId/mergePresetId/pipelineId', () => {
+  it('treats an empty string as "clear the selection" for modelId/riskPolicyId/pipelineId', () => {
     expect(blockPatchToColumns({ modelId: '' }).model_id).toBeNull()
     expect(blockPatchToColumns({ modelId: 'gpt' }).model_id).toBe('gpt')
-    expect(blockPatchToColumns({ mergePresetId: '' }).merge_preset_id).toBeNull()
+    expect(blockPatchToColumns({ riskPolicyId: '' }).merge_preset_id).toBeNull()
     expect(blockPatchToColumns({ pipelineId: '' }).pipeline_id).toBeNull()
   })
 
@@ -125,6 +132,15 @@ describe('blockPatchToColumns', () => {
   it('treats an empty serviceFragmentIds array as "clear it" on patch', () => {
     expect(blockPatchToColumns({ serviceFragmentIds: [] }).service_fragment_ids).toBeNull()
     expect(blockPatchToColumns({ serviceFragmentIds: ['f'] }).service_fragment_ids).toBe('["f"]')
+  })
+
+  it('treats an empty testingContext as "clear it" on patch', () => {
+    // The inspector's textarea sends '' for "I emptied this", and two spellings of "no testing
+    // context" (NULL and '') would leave every reader to remember both.
+    expect(blockPatchToColumns({ testingContext: '' }).testing_context).toBeNull()
+    expect(blockPatchToColumns({ testingContext: 'how to test' }).testing_context).toBe(
+      'how to test',
+    )
   })
 
   it('clears an empty agentConfig map on patch', () => {
@@ -179,112 +195,10 @@ describe('block insert/read of the less-common columns', () => {
     }
   })
 
-  it('never patches createdBy (insert-only)', () => {
+  it('reads createdBy back, and never patches it (insert-only)', () => {
+    const row = blockInsertValues({ ...fullBlock(), createdBy: 'usr_real' }) as unknown as BlockRow
+    expect(rowToBlock(row).createdBy).toBe('usr_real')
     expect('created_by' in blockPatchToColumns({ createdBy: 'usr_x' } as BlockPatch)).toBe(false)
-  })
-})
-
-// LEGACY USER-ID REPAIR — these guard the temporary coercion in mappers.ts and would have
-// caught the original bug (a pre-#94 numeric `created_by` brought down the whole board load
-// because the server ships rows unvalidated and only the SPA validates the snapshot). Delete
-// alongside the repair after 2026-07-15.
-describe('legacy numeric user ids (pre-#94, repaired on read)', () => {
-  function rowWith(overrides: Partial<BlockRow>): BlockRow {
-    const minimal: Block = {
-      id: 'blk_legacy',
-      title: 'Legacy task',
-      type: 'service',
-      description: '',
-      position: { x: 0, y: 0 },
-      status: 'done',
-      progress: 1,
-      dependsOn: [],
-      executionId: null,
-      level: 'task',
-      parentId: null,
-      createdBy: 'usr_real',
-    } as Block
-    return { ...(blockInsertValues(minimal) as unknown as BlockRow), ...overrides }
-  }
-
-  it('drops a numeric created_by to absent and keeps the mapped block contract-valid', () => {
-    // The exact shape from the field report: a leftover GitHub numeric id in created_by.
-    const mapped = rowToBlock(rowWith({ created_by: 1847934 as unknown as string }))
-    expect('createdBy' in mapped).toBe(false)
-    // The whole point: the mapped block must satisfy the wire contract the SPA validates,
-    // so one stale row can no longer reject the entire workspace snapshot.
-    expect(() => v.parse(blockSchema, mapped)).not.toThrow()
-  })
-
-  it('passes a real string created_by through unchanged', () => {
-    expect(rowToBlock(rowWith({ created_by: 'usr_real' })).createdBy).toBe('usr_real')
-  })
-
-  it('drops a numeric execution initiatedBy to null and stays contract-valid', () => {
-    const row: ExecutionRow = {
-      id: 'exec_legacy',
-      block_id: 'blk_1',
-      status: 'running',
-      detail: JSON.stringify({
-        pipelineId: 'pl_1',
-        pipelineName: 'Quick',
-        steps: [],
-        currentStep: 0,
-        initiatedBy: 1847934,
-      }),
-      error: null,
-      failure: null,
-      updated_at: 1,
-      workflow_instance_id: null,
-    }
-    const mapped = rowToExecution(row)
-    expect(mapped.initiatedBy).toBeNull()
-    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
-  })
-
-  it('drops a failure carrying a removed kind (decision_timeout) and stays contract-valid', () => {
-    const row: ExecutionRow = {
-      id: 'exec_legacy_fail',
-      block_id: 'blk_1',
-      status: 'failed',
-      detail: JSON.stringify({ pipelineId: 'pl_1', pipelineName: 'Q', steps: [], currentStep: 0 }),
-      error: 'decision timed out',
-      // Pre-cutoff failure with a kind that is no longer in the contract picklist.
-      failure: JSON.stringify({
-        kind: 'decision_timeout',
-        message: 'decision timed out',
-        detail: null,
-        hint: null,
-        occurredAt: 1,
-        lastSubtasks: null,
-      }),
-      updated_at: 1,
-      workflow_instance_id: null,
-    }
-    const mapped = rowToExecution(row)
-    expect(mapped.failure).toBeNull()
-    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
-  })
-
-  it('keeps a failure whose kind is still part of the contract', () => {
-    const row: ExecutionRow = {
-      id: 'exec_ok_fail',
-      block_id: 'blk_1',
-      status: 'failed',
-      detail: JSON.stringify({ pipelineId: 'pl_1', pipelineName: 'Q', steps: [], currentStep: 0 }),
-      error: 'boom',
-      failure: JSON.stringify({
-        kind: 'agent',
-        message: 'boom',
-        detail: null,
-        hint: null,
-        occurredAt: 1,
-        lastSubtasks: null,
-      }),
-      updated_at: 1,
-      workflow_instance_id: null,
-    }
-    expect(rowToExecution(row).failure?.kind).toBe('agent')
   })
 })
 
@@ -301,6 +215,7 @@ describe('rowToExecution', () => {
     }),
     error: null,
     failure: null,
+    created_at: 100,
     updated_at: 123,
     workflow_instance_id: 'exec_1',
   }
@@ -328,6 +243,33 @@ describe('rowToExecution', () => {
 
   it('rejects a null block_id as corrupt instead of coercing it', () => {
     expect(() => rowToExecution({ ...base, block_id: null })).toThrow(DataIntegrityError)
+  })
+
+  // The WRITE side of the same rule. A blockless run row is not just unreadable, it is
+  // un-disposable (every settle path re-reads it on the way in), and by the time the read guard
+  // above trips, the write that produced it is long gone. Refusing at compose time is what makes
+  // the offending writer, rather than a sweeper hours later, the thing that reports the fault.
+  // Both facades' `upsert`/`insertLive`/`compareAndSwap` compose their detail JSON here, which is
+  // what makes this the one place a new write path cannot forget to pass through.
+  it('refuses to compose the stored detail for a run carrying no blockId', () => {
+    const instance = rowToExecution(base)
+    expect(() => executionToDetail({ ...instance, blockId: '' })).toThrow(DataIntegrityError)
+    expect(() => executionToDetail(instance)).not.toThrow()
+  })
+
+  it('refuses to compose the stored detail for an out-of-bounds cursor too', () => {
+    // The write guard has to assert EVERY invariant the read refuses, not just the one that
+    // motivated it: a writer that truncated `steps` while leaving the cursor where it was composes
+    // cleanly under a blockId-only guard, and the row it stores is exactly as un-loadable. The
+    // upper bound is the legitimate "ran off the end" cursor, so it must still be accepted.
+    const instance = rowToExecution(base)
+    expect(() => executionToDetail({ ...instance, steps: [], currentStep: 1 })).toThrow(
+      DataIntegrityError,
+    )
+    expect(() => executionToDetail({ ...instance, currentStep: -1 })).toThrow(DataIntegrityError)
+    expect(() =>
+      executionToDetail({ ...instance, currentStep: instance.steps.length }),
+    ).not.toThrow()
   })
 
   it('rejects an out-of-bounds currentStep', () => {
@@ -362,6 +304,13 @@ describe('rowToExecution', () => {
     expect(
       rowToExecution({ ...base, failure: JSON.stringify({ kind: 'agent' }) }).failure,
     ).toBeNull()
+    // A STRUCTURALLY COMPLETE record whose kind has since left the picklist is dropped too —
+    // the distinct case from the incomplete shapes above. The run's `status` + `error` still
+    // describe what happened; surfacing the unknown kind would fail the SPA's re-validation.
+    expect(
+      rowToExecution({ ...base, failure: JSON.stringify({ ...complete, kind: 'no_such_kind' }) })
+        .failure,
+    ).toBeNull()
   })
 
   it('defaults the prior-attempts failureHistory to an empty array when absent', () => {
@@ -376,6 +325,8 @@ describe('rowToExecution', () => {
       hint: null,
       occurredAt: 1,
       lastSubtasks: null,
+      // The step the attempt failed at rides through unchanged (attributes the trail per step).
+      stepIndex: 2,
     }
     const detail = JSON.stringify({
       pipelineId: 'pl_1',
@@ -384,8 +335,8 @@ describe('rowToExecution', () => {
       currentStep: 0,
       failureHistory: [
         good,
-        // A pre-cutoff entry with a removed kind is dropped, not surfaced.
-        { kind: 'decision_timeout', message: 'stale', occurredAt: 2 },
+        // An entry whose kind is outside the picklist is dropped, not surfaced.
+        { kind: 'no_such_kind', message: 'stale', occurredAt: 2 },
         // A structurally-broken entry is dropped too.
         { message: 'no kind' },
         // A known-kind but incomplete record (missing occurredAt/detail/hint/lastSubtasks)
@@ -417,10 +368,124 @@ describe('rowToExecution', () => {
     const empty = executionToDetail({ ...rowToExecution(base), failureHistory: [] })
     expect(JSON.parse(empty).failureHistory).toBeUndefined()
   })
+
+  it('defaults the prior-attempts outputHistory to an empty array when absent', () => {
+    expect(rowToExecution(base).outputHistory).toEqual([])
+  })
+
+  it('round-trips a successful-output trail through detail and drops garbage entries', () => {
+    const good = { stepIndex: 1, occurredAt: 5, output: 'the superseded spec', truncated: true }
+    const detail = JSON.stringify({
+      pipelineId: 'pl_1',
+      pipelineName: 'Quick',
+      steps: [],
+      currentStep: 0,
+      outputHistory: [
+        good,
+        // Structurally-broken entries are dropped, not surfaced (they'd fail the SPA re-validation).
+        { stepIndex: 2 },
+        { occurredAt: 3, output: 'no index' },
+        'nonsense',
+      ],
+    })
+    const mapped = rowToExecution({ ...base, detail })
+    expect(mapped.outputHistory).toEqual([good])
+    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
+
+    // executionToDetail persists a non-empty trail and omits an empty one.
+    const persisted = executionToDetail({ ...rowToExecution(base), outputHistory: [good] })
+    expect(rowToExecution({ ...base, detail: persisted }).outputHistory).toEqual([good])
+    expect(JSON.parse(executionToDetail(rowToExecution(base))).outputHistory).toBeUndefined()
+  })
+
+  it('reads createdAt from the ROW COLUMN, never from the detail JSON', () => {
+    // The column is what every chronological read orders by, so it is what a keyset cursor must
+    // name. A stale `createdAt` left in an older row's detail must not win over it — a cursor
+    // minted from the detail value would point at a position the query never resumes at, and the
+    // rows in between would be skipped for good.
+    const stale = JSON.stringify({ ...JSON.parse(base.detail), createdAt: 999_999 })
+    expect(rowToExecution({ ...base, detail: stale }).createdAt).toBe(base.created_at)
+    // …and it is never written back out, so the redundant copy dies with the next write.
+    expect(JSON.parse(executionToDetail(rowToExecution(base))).createdAt).toBeUndefined()
+  })
+
+  // -------------------------------------------------------------------------
+  // The merge-policy pair the run PINS at admission. Both are read back on the durable path,
+  // which rebuilds the run from this JSON and nothing else — so a field that fails to round-trip
+  // here is not a degraded feature, it is a merge policy that silently never applies. These
+  // shipped absent from `executionToDetail`'s allow-list once, and every behavioural test for
+  // the feature passed anyway: they all hand-build the instance in memory.
+  // -------------------------------------------------------------------------
+
+  it('round-trips the pinned initiator role and sandboxed mode through detail', () => {
+    const pinned = { ...rowToExecution(base), initiatedByRole: 'member', mode: 'dry_run' } as const
+    const back = rowToExecution({ ...base, detail: executionToDetail(pinned) })
+    expect(back.initiatedByRole).toBe('member')
+    expect(back.mode).toBe('dry_run')
+  })
+
+  it('stores neither for an unattributed live run, the way every legacy run reads', () => {
+    // `live` and "no role" are the read-time defaults, so an ordinary run carries no extra key
+    // and a run written before either field existed decodes to exactly the same entity.
+    const stored = JSON.parse(executionToDetail(rowToExecution(base))) as Record<string, unknown>
+    expect(stored.mode).toBeUndefined()
+    expect(stored.initiatedByRole).toBeUndefined()
+    const back = rowToExecution(base)
+    expect(back.mode).toBeUndefined()
+    expect(back.initiatedByRole).toBeUndefined()
+  })
+
+  it('drops an unrecognised role onto the base policy rather than guessing a tier', () => {
+    // The role layer is subtractive, so losing it returns the run to the preset's own rules —
+    // a policy an operator authored, never past it. Guessing is what the design forbids.
+    const detail = JSON.stringify({ ...JSON.parse(base.detail), initiatedByRole: 'superuser' })
+    expect(rowToExecution({ ...base, detail }).initiatedByRole).toBeUndefined()
+  })
+
+  it('round-trips who the run was started for, and stores nothing when nobody was named', () => {
+    // Pinned at admission from the starting key, read back on every projection of the run. It
+    // rides the same JSON as the pair above and would fail the same silent way: a run that could
+    // not say who it was for reads exactly like one an anonymous integration started.
+    const pinned = { ...rowToExecution(base), initiatedByExternalIdentity: 'os-user:ada' }
+    const back = rowToExecution({ ...base, detail: executionToDetail(pinned) })
+    expect(back.initiatedByExternalIdentity).toBe('os-user:ada')
+
+    const stored = JSON.parse(executionToDetail(rowToExecution(base))) as Record<string, unknown>
+    expect(stored.initiatedByExternalIdentity).toBeUndefined()
+    expect(rowToExecution(base).initiatedByExternalIdentity).toBeUndefined()
+  })
+
+  it('reads an unusable stored identity as nobody rather than as a name', () => {
+    // Opaque, so the only decode rule is "a non-empty string". Unlike `mode` there is nothing to
+    // fail closed about: the platform never acts on this value, so an unreadable one names nobody
+    // and the empty string must not become an identity that renders as blank.
+    for (const bad of ['', 0, null, {}, []]) {
+      const detail = JSON.stringify({
+        ...JSON.parse(base.detail),
+        initiatedByExternalIdentity: bad,
+      })
+      expect(rowToExecution({ ...base, detail }).initiatedByExternalIdentity).toBeUndefined()
+    }
+  })
+
+  it('FAILS CLOSED on an unreadable mode instead of dropping it to live', () => {
+    // The asymmetry with the role above is deliberate. A mode that is present-but-unreadable
+    // means one was settled and we cannot tell which; reading it as `live` would hand the run
+    // merge authority it may never have had. Held-back is one human tap from merging; merged is
+    // not recoverable.
+    for (const bad of ['LIVE', 'sandbox', '', 0, null, {}]) {
+      const detail = JSON.stringify({ ...JSON.parse(base.detail), mode: bad })
+      expect(rowToExecution({ ...base, detail }).mode).toBe('dry_run')
+    }
+    // An explicitly-stored `live` still reads as live, and absent still means live.
+    const live = JSON.stringify({ ...JSON.parse(base.detail), mode: 'live' })
+    expect(rowToExecution({ ...base, detail: live }).mode).toBe('live')
+    expect(rowToExecution(base).mode).toBeUndefined()
+  })
 })
 
 describe('rowToWorkspace / rowToPipeline', () => {
-  it('maps a workspace, defaulting account_id to null', () => {
+  it('maps a workspace, defaulting account_id to null and omitting an absent access_mode', () => {
     expect(rowToWorkspace({ id: 'ws_1', name: 'W', created_at: 5, account_id: null })).toEqual({
       id: 'ws_1',
       name: 'W',
@@ -430,11 +495,35 @@ describe('rowToWorkspace / rowToPipeline', () => {
     })
   })
 
+  it('surfaces access_mode only when the column carries a value (workspace RBAC)', () => {
+    expect(
+      rowToWorkspace({
+        id: 'ws_2',
+        name: 'W',
+        created_at: 5,
+        account_id: 'acc_1',
+        access_mode: 'restricted',
+      }).accessMode,
+    ).toBe('restricted')
+    // Empty/null column ⇒ absent (a pre-RBAC row), not a spurious value.
+    expect(
+      'accessMode' in
+        rowToWorkspace({
+          id: 'ws_3',
+          name: 'W',
+          created_at: 5,
+          account_id: null,
+          access_mode: null,
+        }),
+    ).toBe(false)
+  })
+
   it('includes gates only when present', () => {
     expect(rowToPipeline({ id: 'pl_1', name: 'P', agent_kinds: '["coder"]', gates: null })).toEqual(
       {
         id: 'pl_1',
         name: 'P',
+        purpose: 'build',
         agentKinds: ['coder'],
       },
     )
@@ -442,5 +531,167 @@ describe('rowToWorkspace / rowToPipeline', () => {
       rowToPipeline({ id: 'pl_2', name: 'P', agent_kinds: '["coder"]', gates: '[true,false]' })
         .gates,
     ).toEqual([true, false])
+  })
+
+  it('reads the mandatory purpose totally, telling an empty column from an unnameable member', () => {
+    // The two states the column can hold that the required `Pipeline.purpose` cannot, and they get
+    // OPPOSITE dispositions. An empty column is a row written before the classifier was mandatory,
+    // and `build` is what such a row has always behaved as, so resolving it changes nothing. A
+    // value this build cannot name is a member it does not have, so it passes through untouched:
+    // dropping it would erase a deployment's own classifier on the next write, and folding it onto
+    // `build` would state a classification nobody chose. The narrowing predicates handle it.
+    const base = { id: 'pl_p', name: 'P', agent_kinds: '["coder"]', gates: null }
+    expect(rowToPipeline(base).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: null }).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: '' }).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: 'review' }).purpose).toBe('review')
+    expect(rowToPipeline({ ...base, purpose: 'acme-migration' }).purpose).toBe('acme-migration')
+  })
+
+  it('surfaces the truthy flag columns as literal true, omitting them otherwise', () => {
+    const on = rowToPipeline({
+      id: 'pl_3',
+      name: 'P',
+      agent_kinds: '["coder"]',
+      gates: null,
+      archived: 1,
+      builtin: true,
+      public: 1,
+    })
+    expect(on.archived).toBe(true)
+    expect(on.builtin).toBe(true)
+    expect(on.public).toBe(true)
+
+    const off = rowToPipeline({
+      id: 'pl_4',
+      name: 'P',
+      agent_kinds: '["coder"]',
+      gates: null,
+      archived: null,
+      builtin: 0,
+      public: null,
+    })
+    expect('archived' in off).toBe(false)
+    expect('builtin' in off).toBe(false)
+    expect('public' in off).toBe(false)
+  })
+
+  it('keeps a version (including 0) but omits null; passes availability through when set', () => {
+    expect(
+      rowToPipeline({ id: 'pl_5', name: 'P', agent_kinds: '["coder"]', gates: null, version: 0 })
+        .version,
+    ).toBe(0)
+    expect(
+      'version' in
+        rowToPipeline({
+          id: 'pl_6',
+          name: 'P',
+          agent_kinds: '["coder"]',
+          gates: null,
+          version: null,
+        }),
+    ).toBe(false)
+    expect(
+      rowToPipeline({
+        id: 'pl_7',
+        name: 'P',
+        agent_kinds: '["coder"]',
+        gates: null,
+        availability: 'recurring',
+      }).availability,
+    ).toBe('recurring')
+    expect(
+      'availability' in
+        rowToPipeline({ id: 'pl_8', name: 'P', agent_kinds: '["coder"]', gates: null }),
+    ).toBe(false)
+  })
+
+  it('parses the many optional JSON columns only when present (snake_case → camelCase)', () => {
+    const full = rowToPipeline({
+      id: 'pl_9',
+      name: 'P',
+      agent_kinds: '["coder","tester"]',
+      gates: null,
+      thresholds: '[0.5]',
+      enabled: '[true]',
+      follow_ups: '[true]',
+      tester_quality: '[{"enabled":true}]',
+      step_options: '[{"foo":1}]',
+      labels: '["a","b"]',
+    })
+    expect(full.agentKinds).toEqual(['coder', 'tester'])
+    expect(full.thresholds).toEqual([0.5])
+    expect(full.enabled).toEqual([true])
+    expect(full.followUps).toEqual([true])
+    expect(full.testerQuality).toEqual([{ enabled: true }])
+    expect(full.stepOptions).toEqual([{ foo: 1 }])
+    expect(full.labels).toEqual(['a', 'b'])
+    // The absent ones stay off the object entirely.
+    const bare = rowToPipeline({ id: 'pl_10', name: 'P', agent_kinds: '[]', gates: null })
+    expect('thresholds' in bare).toBe(false)
+    expect('followUps' in bare).toBe(false)
+    expect('labels' in bare).toBe(false)
+  })
+})
+
+// `model_presets.provider_preference` (D1 migration 0078 ⇄ the Drizzle column). Shared by both
+// runtimes' repos, so a bug here mis-reads a preset's route order on Postgres AND D1 identically —
+// and the failure mode is silent, since a dropped order simply resolves on the deployment default.
+describe('parseProviderPreferenceColumn', () => {
+  it('round-trips a stored order', () => {
+    expect(parseProviderPreferenceColumn('["bedrock","direct"]')).toEqual(['bedrock', 'direct'])
+  })
+
+  it('reads NULL / empty / a stored empty list as UNDEFINED, never as an empty order', () => {
+    // `undefined` is what `ModelPreset.providerPreference` uses for "the deployment default order".
+    // An empty array would read as an order over NO routes, which is a different (and impossible)
+    // statement — and would make `orderedModelFlavorPreference` answer a different question.
+    expect(parseProviderPreferenceColumn(null)).toBeUndefined()
+    expect(parseProviderPreferenceColumn(undefined)).toBeUndefined()
+    expect(parseProviderPreferenceColumn('')).toBeUndefined()
+    expect(parseProviderPreferenceColumn('[]')).toBeUndefined()
+  })
+
+  it('DROPS a retired route and keeps the survivors in their relative order', () => {
+    // The deliberate opposite of `isBinaryModality`'s "name it": the value names a ROUTE, so once
+    // the route is gone there is no current member a human could re-pick it as. What it must never
+    // do is reach a `Record<ModelFlavor, …>` lookup, which is what the narrowing prevents.
+    expect(parseProviderPreferenceColumn('["vertex","bedrock","direct"]')).toEqual([
+      'bedrock',
+      'direct',
+    ])
+  })
+
+  it('reads a row whose every entry is retired as UNDEFINED (nothing left to reorder)', () => {
+    expect(parseProviderPreferenceColumn('["vertex","azure"]')).toBeUndefined()
+  })
+
+  it('degrades malformed or non-array JSON to undefined rather than throwing', () => {
+    // A run must not fail to start because one preset row is corrupt; it resolves on the default
+    // order, which is exactly what a preset stating nothing does.
+    expect(parseProviderPreferenceColumn('{')).toBeUndefined()
+    expect(parseProviderPreferenceColumn('"bedrock"')).toBeUndefined()
+    expect(parseProviderPreferenceColumn('{"0":"bedrock"}')).toBeUndefined()
+  })
+
+  it('drops non-string entries without taking the whole list down', () => {
+    expect(parseProviderPreferenceColumn('["bedrock",7,null,{"a":1},"direct"]')).toEqual([
+      'bedrock',
+      'direct',
+    ])
+  })
+})
+
+describe('serializeProviderPreferenceColumn', () => {
+  it('writes NULL for absent or empty (the column value meaning "the default order")', () => {
+    expect(serializeProviderPreferenceColumn(undefined)).toBeNull()
+    expect(serializeProviderPreferenceColumn([])).toBeNull()
+  })
+
+  it('round-trips through the parser', () => {
+    const order = ['cloudflare', 'direct'] as const
+    expect(parseProviderPreferenceColumn(serializeProviderPreferenceColumn(order))).toEqual([
+      ...order,
+    ])
   })
 })

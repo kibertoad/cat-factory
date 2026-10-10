@@ -6,20 +6,18 @@ import type {
   SecretCipher,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import { SUBSCRIPTION_VENDORS, isIndividualVendor } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS, chooseToken } from './providers.logic.js'
 
-// Every vendor whose subscription harness we support that is ALSO poolable — i.e.
-// excluding the individual-usage vendors (Claude), which are stored per-user by the
-// PersonalSubscriptionService and never shared in a workspace pool. The single source
-// of truth is the SUBSCRIPTION_VENDORS map in the kernel, so adding a poolable vendor
-// there automatically widens the unfiltered `listTokens` sweep below.
-const ALL_VENDORS = (Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]).filter(
-  (v) => !isIndividualVendor(v),
-)
+// The individual-usage vendors (Claude, Codex, GLM) are stored per-user by the
+// PersonalSubscriptionService and never shared in a workspace pool, so every unfiltered read here
+// drops them. `isIndividualVendor` is asked per ROW rather than pre-computed into a vendor list,
+// because the reads are now one statement over the whole workspace: the single source of truth
+// stays the kernel's SUBSCRIPTION_VENDORS map either way, and a newly poolable vendor needs no
+// edit here at all.
 
 // Upper bound on live tokens per workspace+vendor. The rotation pool is meant to hold
 // a handful of subscriptions for quota headroom; a generous ceiling keeps the feature
@@ -33,6 +31,14 @@ const MAX_TOKENS_PER_VENDOR = 25
 // `codex`); only metadata + rolling-window usage is exposed back to clients.
 // Leasing is usage-aware (see providers.logic): least-loaded token wins, with
 // round-robin by lastUsedAt as the tiebreaker. Mirrors RunnerPoolConnectionService.
+
+/**
+ * HKDF domain tag separating the sealed subscription tokens from every other cipher (mirrors
+ * {@link TEST_SECRETS_CIPHER_INFO} et al). Both facades build their `WebCryptoSecretCipher` from
+ * this constant: the tag derives the key, so a facade spelling it differently seals credentials
+ * its sibling cannot unseal.
+ */
+export const PROVIDER_SUBSCRIPTIONS_CIPHER_INFO = 'cat-factory:provider-subscriptions'
 
 export interface ProviderSubscriptionServiceDependencies {
   providerSubscriptionTokenRepository: ProviderSubscriptionTokenRepository
@@ -54,6 +60,8 @@ export interface VendorCredentialSummary {
   inputTokens: number
   outputTokens: number
   requestCount: number
+  enabled: boolean
+  isDefault: boolean
 }
 
 /** A leased credential: the decrypted secret plus the row id (for usage attribution). */
@@ -115,29 +123,56 @@ export class ProviderSubscriptionService {
       inputTokens: 0,
       outputTokens: 0,
       requestCount: 0,
+      enabled: true,
+      isDefault: false,
       deletedAt: null,
     }
     await this.deps.providerSubscriptionTokenRepository.add(record)
     return toSummary(record)
   }
 
-  /** All live tokens for a workspace (optionally filtered by vendor), metadata only. */
+  /**
+   * All live tokens for a workspace (optionally filtered by vendor), metadata only.
+   *
+   * The unfiltered read goes to the repository ONCE and drops the individual-usage vendors here.
+   * Filtering in memory rather than issuing one statement per poolable vendor keeps a closed
+   * vocabulary from becoming a per-member round trip, and the pool is small by construction
+   * (`MAX_TOKENS_PER_VENDOR` per group), so there is nothing to page.
+   */
   async listTokens(
     workspaceId: string,
     vendor?: SubscriptionVendor,
   ): Promise<VendorCredentialSummary[]> {
-    const vendors: SubscriptionVendor[] = vendor ? [vendor] : ALL_VENDORS
-    const out: VendorCredentialSummary[] = []
-    for (const v of vendors) {
-      const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(workspaceId, v)
-      for (const row of rows) out.push(toSummary(row))
-    }
-    return out
+    const rows = vendor
+      ? await this.deps.providerSubscriptionTokenRepository.listByVendor(workspaceId, vendor)
+      : (await this.deps.providerSubscriptionTokenRepository.listByWorkspace(workspaceId)).filter(
+          (row) => !isIndividualVendor(row.vendor),
+        )
+    return rows.map(toSummary)
+  }
+
+  /**
+   * Every vendor the workspace has at least one ENABLED pooled token for, in ONE read.
+   *
+   * The batch sibling of {@link hasToken}, for the caller that asks about the whole vocabulary at
+   * once: the capability resolver folds it into a workspace's catalog, which both the model picker
+   * and every run start resolve through. Asking per vendor there was one statement per poolable
+   * vendor for an answer a single `listByWorkspace` carries whole.
+   *
+   * Individual-usage vendors are filtered out for the same reason {@link hasToken} refuses them:
+   * they are never pooled, so a row for one could only be stale data and reporting it would offer
+   * the executor a credential the personal store owns.
+   */
+  async liveVendors(workspaceId: string): Promise<Set<SubscriptionVendor>> {
+    const rows = await this.deps.providerSubscriptionTokenRepository.listByWorkspace(workspaceId)
+    return new Set(
+      rows.filter((row) => row.enabled && !isIndividualVendor(row.vendor)).map((row) => row.vendor),
+    )
   }
 
   /**
    * Whether the workspace has at least one live token for a vendor. Individual-usage
-   * vendors are never pooled, so this is always false for them — the executor routes
+   * vendors are never pooled, so this is always false for them: the executor routes
    * those through the per-user PersonalSubscriptionService instead.
    */
   async hasToken(workspaceId: string, vendor: SubscriptionVendor): Promise<boolean> {
@@ -146,7 +181,37 @@ export class ProviderSubscriptionService {
       workspaceId,
       vendor,
     )
-    return rows.length > 0
+    // Only ENABLED tokens make a vendor "configured": an all-disabled pool would fail
+    // the lease, so it must not report as available to the executor's routing.
+    return rows.some((r) => r.enabled)
+  }
+
+  /**
+   * Enable/disable and/or (un)pin the default of a pool token. Both flags are optional;
+   * pinning a default clears any prior default of the same vendor, and un-pinning clears
+   * it only when THIS token was the default (so toggling an unrelated token off never
+   * disturbs the group's default). Returns the updated metadata.
+   */
+  async updateToken(
+    workspaceId: string,
+    id: string,
+    patch: { enabled?: boolean; isDefault?: boolean },
+  ): Promise<VendorCredentialSummary> {
+    const repo = this.deps.providerSubscriptionTokenRepository
+    const existing = await repo.getById(workspaceId, id)
+    if (!existing) {
+      throw new NotFoundError('Subscription token', id)
+    }
+    if (patch.enabled !== undefined) {
+      await repo.setEnabled(workspaceId, id, patch.enabled)
+    }
+    if (patch.isDefault === true) {
+      await repo.setDefault(workspaceId, existing.vendor, id)
+    } else if (patch.isDefault === false && existing.isDefault) {
+      await repo.setDefault(workspaceId, existing.vendor, null)
+    }
+    const updated = await repo.getById(workspaceId, id)
+    return toSummary(updated ?? existing)
   }
 
   /** Remove a token from the pool. */
@@ -221,5 +286,7 @@ function toSummary(record: ProviderSubscriptionTokenRecord): VendorCredentialSum
     inputTokens: record.inputTokens,
     outputTokens: record.outputTokens,
     requestCount: record.requestCount,
+    enabled: record.enabled,
+    isDefault: record.isDefault,
   }
 }

@@ -34,8 +34,11 @@ async function seedZeroBudget(workspaceId: string) {
   })
 }
 
-function chatRequest(token: string | null, model = 'whatever') {
-  return new Request(`${BASE}/v1/chat/completions`, {
+function chatRequest(token: string | null, model = 'whatever', phase?: string) {
+  // The phase-tagged path the harness points Pi at for the pass it is running; the plain path
+  // is the same handler with nothing to attribute.
+  const path = phase ? `/v1/phase/${phase}/chat/completions` : '/v1/chat/completions'
+  return new Request(`${BASE}${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -136,6 +139,149 @@ describe('llm proxy /v1/chat/completions', () => {
     })
   })
 
+  // The CONTAINER half of gateway attribution: what the proxy ASKS for. The inline path asks for
+  // the same two things through `openRouterResolver`, and a path that stopped asking keeps working
+  // and simply records nothing, which downstream is indistinguishable from a gateway that reports
+  // nothing. What is done with the ANSWER is pinned next door (`gateway-attribution` unit tests
+  // for the read, the conformance suite for the column mapping), for the reason the cached-classes
+  // test below records: both sinks are composed from one pass, so what can drift is the
+  // derivation, not the write.
+  it('asks OpenRouter for usage accounting and parameter-aware routing', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({
+      workspaceId,
+      provider: 'openrouter',
+      model: 'anthropic/claude-opus-5',
+    })
+    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    await c.apiKeys!.addKey('workspace', workspaceId, {
+      provider: 'openrouter',
+      label: 'gateway',
+      key: 'sk-or',
+    })
+
+    let forwarded: Record<string, unknown> = {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        forwarded = JSON.parse(init.body) as Record<string, unknown>
+        return new Response(
+          JSON.stringify({
+            provider: 'anthropic',
+            choices: [{ message: { role: 'assistant', content: 'ok' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.0421 },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(200)
+
+    expect(forwarded.usage).toEqual({ include: true })
+    expect(forwarded.provider).toMatchObject({ require_parameters: true, data_collection: 'deny' })
+    // The locked model still wins over whatever the container asked for, gateway params or not.
+    expect(forwarded.model).toBe('anthropic/claude-opus-5')
+  })
+
+  // The other side of asking: a constraint that empties the routing pool turns a model everyone
+  // else can reach into a 404 for this deployment alone, and the gateway's own body cannot say
+  // which allow-list excluded what, because only the sender knows what it applied. Relayed
+  // verbatim to the container either way; what gains the explanation is the RECORDED failure,
+  // which is where an operator looks.
+  it('reports which routing constraint can have caused a gateway refusal', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({
+      workspaceId,
+      provider: 'openrouter',
+      model: 'z-ai/glm-5.2',
+    })
+    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    await c.apiKeys!.addKey('workspace', workspaceId, {
+      provider: 'openrouter',
+      label: 'gateway',
+      key: 'sk-or',
+    })
+
+    const upstreamBody = JSON.stringify({
+      error: { message: 'No allowed providers are available for the selected model.', code: 404 },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(upstreamBody, {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const res = await app.fetch(chatRequest(token), testEnv())
+    expect(res.status).toBe(404)
+    // The container agent still reads exactly what the gateway said, byte for byte.
+    expect(await res.text()).toBe(upstreamBody)
+
+    const activity = recorder.llmCalls[0]!
+    expect(activity.ok).toBe(false)
+    expect(activity.httpStatus).toBe(404)
+    expect(activity.errorMessage).toContain('OPENROUTER_DATA_COLLECTION=allow')
+    expect(activity.errorMessage).toContain('OPENROUTER_REQUIRE_PARAMETERS=false')
+  })
+
+  it('relays an unrelated upstream failure without inventing a remedy', async () => {
+    // A 429 from the same gateway is not ours to explain, and naming a setting that cannot have
+    // caused it would send an operator after a change that changes nothing.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId })
+    await seedQwenKey(workspaceId)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"slow down"}', { status: 429 })),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(429)
+    expect(recorder.llmCalls[0]!.errorMessage).toBe('Upstream returned 429')
+  })
+
+  it('sends no gateway params to a provider that has none', async () => {
+    // An unknown key in the body of a strict endpoint buys nothing and can be refused, so the
+    // params are gateway-only rather than merged for everyone.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId })
+    await seedQwenKey(workspaceId)
+
+    let forwarded: Record<string, unknown> = {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        forwarded = JSON.parse(init.body) as Record<string, unknown>
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'ok' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(200)
+
+    expect(forwarded.usage).toBeUndefined()
+    expect(forwarded.provider).toBeUndefined()
+  })
+
   it('pushes a compact llmCall activity event per proxied call (no prompt/response bodies)', async () => {
     const workspaceId = `ws-${crypto.randomUUID()}`
     const executionId = `ex-${crypto.randomUUID()}`
@@ -184,6 +330,96 @@ describe('llm proxy /v1/chat/completions', () => {
     expect(activity).not.toHaveProperty('promptText')
     expect(activity).not.toHaveProperty('responseText')
     expect(activity).not.toHaveProperty('reasoningText')
+  })
+
+  it('records a cached upstream call as its three orthogonal input classes', async () => {
+    // The proxy is where an upstream's usage payload becomes the recorded input split, and a
+    // wrong sign here quietly halves or doubles every number downstream. The upstream shape is
+    // INCLUSIVE (the OpenAI wire): `prompt_tokens` is the whole prompt, with the cached share
+    // inside it — so the recorded fresh figure is the difference, and the three classes must
+    // still add back up to what the vendor said it billed.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const executionId = `ex-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId, executionId })
+    await seedQwenKey(workspaceId)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+              usage: {
+                prompt_tokens: 5_000,
+                prompt_tokens_details: { cached_tokens: 4_400 },
+                completion_tokens: 5,
+              },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const res = await app.fetch(chatRequest(token, 'cheap-model'), testEnv())
+    expect(res.status).toBe(200)
+
+    const activity = recorder.llmCalls[0]!
+    expect(activity.promptTokens).toBe(600)
+    expect(activity.cacheReadTokens).toBe(4_400)
+    // Qwen exposes no write class: 0, never guessed into existence.
+    expect(activity.cacheWriteTokens).toBe(0)
+    expect(activity.completionTokens).toBe(5)
+    // The classes are additive, so the total is their sum plus the output — and its input half
+    // still equals the vendor's own `prompt_tokens`.
+    expect(activity.totalTokens).toBe(5_005)
+    // The live event is asserted rather than the persisted row because both sinks are composed
+    // from the SAME values in one pass: what could drift is the derivation, which this pins,
+    // not the two writes. The row's own column mapping is pinned by the conformance suite.
+  })
+
+  it('attributes a call to the run phase on its path, and refuses a bogus one', async () => {
+    // The phase axis (docs/initiatives/token-burn-instrumentation.md): the harness re-points Pi
+    // at a phase-tagged URL per pass, so the proxy — which otherwise sees only an HTTP request —
+    // can say WHICH slice of the run spent a call. The segment is untrusted (a session token is
+    // all it takes to write one), so anything outside the phase alphabet must fall back to the
+    // unattributed slice rather than become a grouping key of its own.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    await seedQwenKey(workspaceId)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 5 },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const call = async (phase?: string) => {
+      const token = await mint({ workspaceId, executionId: `ex-${crypto.randomUUID()}` })
+      const res = await app.fetch(chatRequest(token, 'cheap-model', phase), testEnv())
+      expect(res.status).toBe(200)
+      return recorder.llmCalls[recorder.llmCalls.length - 1]!
+    }
+
+    expect((await call('validation-repair')).phase).toBe('validation-repair')
+    // The unphased path still serves the same handler — that is what keeps an older harness
+    // image working — and its calls are honestly unattributed.
+    expect((await call()).phase).toBe('')
+    expect((await call('Not A Phase!')).phase).toBe('')
   })
 
   it('returns 502 when the locked provider has no configured key', async () => {

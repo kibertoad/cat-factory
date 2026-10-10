@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS, DELEGATED_USAGE_PROVIDER } from '@cat-factory/kernel'
 import type {
   Clock,
   IdGenerator,
@@ -7,13 +7,18 @@ import type {
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmGenerationEvent,
+  LlmCallMetricPage,
   LlmPromptChainTip,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmTraceSink,
 } from '@cat-factory/kernel'
-import type { HarnessCallMetric } from '@cat-factory/kernel'
+import type { ExecutionInstance } from '@cat-factory/contracts'
+import type { HarnessCallMetric, InlineLlmCall } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
   makeHarnessCallRecorder,
+  makeInlineCallRecorder,
   MAX_BODY_CHARS,
   type RecordLlmCallInput,
 } from './LlmObservabilityService.js'
@@ -24,6 +29,9 @@ class MemoryRepo implements LlmCallMetricRepository {
   chainTipReads = 0
   async record(metric: LlmCallMetric): Promise<void> {
     this.recorded.push(metric)
+  }
+  async recordMany(metrics: LlmCallMetric[]): Promise<void> {
+    this.recorded.push(...metrics)
   }
   async listByExecution(
     workspaceId: string,
@@ -61,6 +69,17 @@ class MemoryRepo implements LlmCallMetricRepository {
   async summarizeByExecution(): Promise<LlmCallMetricSummary[]> {
     return []
   }
+  // The bounded debug-page reads are exercised against the real stores by the conformance
+  // suite (they are pure SQL projections); this double only needs to satisfy the port.
+  async listPage(): Promise<LlmCallMetricPage[]> {
+    return []
+  }
+  async listRunPage(): Promise<LlmCallMetric[]> {
+    return []
+  }
+  async get(): Promise<LlmCallMetricPage | null> {
+    return null
+  }
   async deleteOlderThan(): Promise<number> {
     return 0
   }
@@ -85,7 +104,8 @@ function input(overrides: Partial<RecordLlmCallInput> = {}): RecordLlmCallInput 
     toolCount: 0,
     requestMaxTokens: 1000,
     promptTokens: 100,
-    cachedPromptTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',
@@ -322,6 +342,65 @@ describe('LlmObservabilityService trace-sink fan-out', () => {
   })
 })
 
+describe('LlmObservabilityService.recordRunTrace', () => {
+  const settledRun = {
+    id: 'exec',
+    blockId: 'blk',
+    pipelineId: 'pl_bugfix',
+    pipelineName: 'Bugfix',
+    currentStep: 1,
+    status: 'done',
+    createdAt: 1_000,
+    steps: [
+      { agentKind: 'coder', state: 'done', progress: 1, startedAt: 1_100, finishedAt: 2_000 },
+    ],
+  } as unknown as ExecutionInstance
+
+  function service(traceSink: LlmTraceSink) {
+    return new LlmObservabilityService({
+      llmCallMetricRepository: new MemoryRepo(),
+      idGenerator,
+      clock,
+      traceSink,
+    })
+  }
+
+  it('emits the settled run root + step spans', async () => {
+    const calls: { run: LlmRunSpan; steps: LlmStepSpan[] }[] = []
+    await service({
+      recordGeneration() {},
+      recordRunSpans(run, steps) {
+        calls.push({ run, steps })
+      },
+    }).recordRunTrace('ws_1', settledRun)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.run.executionId).toBe('exec')
+    // The last step's finish, not a wall-clock read: the hook fires again for a settled run.
+    expect(calls[0]!.run.endedAt).toBe(2_000)
+    expect(calls[0]!.steps.map((s) => s.agentKind)).toEqual(['coder'])
+  })
+
+  it('is a no-op for a sink that groups by something other than span parentage', async () => {
+    // Langfuse omits the method: its trace is a first-class object generations attach to by id,
+    // so there are no parents to synthesise. That must cost nothing, not throw.
+    await expect(
+      service({ recordGeneration() {} }).recordRunTrace('ws_1', settledRun),
+    ).resolves.toBeUndefined()
+  })
+
+  it('never propagates a sink failure into the settling run', async () => {
+    await expect(
+      service({
+        recordGeneration() {},
+        recordRunSpans() {
+          throw new Error('collector down')
+        },
+      }).recordRunTrace('ws_1', settledRun),
+    ).resolves.toBeUndefined()
+  })
+})
+
 /** A settings repo returning a fixed storeAgentContext value for every workspace. */
 function settingsRepo(storeAgentContext: boolean) {
   return {
@@ -330,6 +409,9 @@ function settingsRepo(storeAgentContext: boolean) {
         ...DEFAULT_WORKSPACE_SETTINGS,
         storeAgentContext,
       }
+    },
+    async listByWorkspaceIds() {
+      return new Map()
     },
     async upsert() {},
   }
@@ -404,9 +486,64 @@ describe('LlmObservabilityService storeAgentContext gating', () => {
     expect(sink.events[0]!.input).toBe('')
     expect(sink.events[0]!.output).toBe('')
   })
+
+  // A body may be handed over as a THUNK, so that a producer which would have to BUILD the
+  // string (the inline feeder JSON-serialises the whole AI-SDK prompt) pays nothing when the
+  // gate is going to drop it anyway. That only holds if the gate is resolved BEFORE any body
+  // is touched — an easy thing to undo by moving the scrub back to the top of `record`.
+  it('never resolves a lazy body the gate is about to drop', async () => {
+    const repo = new MemoryRepo()
+    let resolved = 0
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      workspaceSettingsRepository: settingsRepo(false),
+    })
+    await service.record(
+      input({
+        promptText: () => {
+          resolved += 1
+          return '[{"role":"user"}]'
+        },
+      }),
+    )
+
+    expect(resolved).toBe(0)
+    expect(repo.recorded[0]!.promptText).toBe('')
+    expect(repo.recorded[0]!.promptTokens).toBe(100)
+  })
+
+  it('resolves a lazy body exactly once when it IS kept', async () => {
+    const repo = new MemoryRepo()
+    let resolved = 0
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+    })
+    await service.record(
+      input({
+        promptText: () => {
+          resolved += 1
+          return '[{"role":"user"}]'
+        },
+      }),
+    )
+
+    expect(resolved).toBe(1)
+    expect(JSON.parse(repo.recorded[0]!.promptText)).toHaveLength(1)
+  })
 })
 
 describe('LlmObservabilityService.exportForExecution', () => {
+  const rates = () => ({
+    inputPerMillion: 1_000_000,
+    cacheReadPerMillion: 100_000,
+    cacheWritePerMillion: 1_250_000,
+    outputPerMillion: 5_000_000,
+  })
+
   it('builds an export stamped with the service clock', async () => {
     const repo = new MemoryRepo()
     const service = new LlmObservabilityService({
@@ -419,6 +556,95 @@ describe('LlmObservabilityService.exportForExecution', () => {
     expect(out.executionId).toBe('exec')
     expect(out.generatedAt).toBe(1700)
     expect(out.totals.calls).toBe(1)
+    // A run that fits under the cap is a COMPLETE bundle, and says so.
+    expect(out.truncated).toBe(false)
+  })
+
+  it('prices a complete bundle from the same table the rollups use', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      modelRates: rates,
+    })
+    await service.record(input())
+    const out = await service.exportForExecution('ws', 'exec')
+    expect(out.totals.costEstimate).not.toBeNull()
+    expect(out.insights[0]?.costEstimate).not.toBeNull()
+  })
+
+  it('never prices a delegated executor’s reported usage', async () => {
+    // The table would answer its fallback rate for a model nobody here knows, and the tokens were
+    // billed to the executor's own account.
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      modelRates: rates,
+    })
+    await service.record(input({ provider: DELEGATED_USAGE_PROVIDER, model: 'delegated:gha' }))
+    const out = await service.exportForExecution('ws', 'exec')
+    expect(out.totals.promptTokens).toBe(100)
+    expect(out.totals.costEstimate).toBeNull()
+  })
+
+  it('declines to price a TRUNCATED bundle rather than costing the slice as the run', async () => {
+    // A run longer than the export's row cap. Pricing the newest 1000 calls would produce a
+    // smaller number that still reads as the run's total — exactly the partial-sum failure the
+    // null rule exists to prevent, and the one a model handed this bundle would quote.
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      modelRates: rates,
+    })
+    await service.record(input())
+    const seed = repo.recorded[0]!
+    for (let i = 1; i <= 1000; i++) {
+      repo.recorded.push({ ...seed, id: `call_${i}`, createdAt: seed.createdAt + i })
+    }
+
+    const out = await service.exportForExecution('ws', 'exec')
+    expect(out.truncated).toBe(true)
+    expect(out.calls).toHaveLength(1000)
+    expect(out.totals.costEstimate).toBeNull()
+    expect(out.insights.every((i) => i.costEstimate === null)).toBe(true)
+    // The token counts stay the partial sums they always were — now LABELLED as partial
+    // rather than silently passing for the whole run.
+    expect(out.totals.calls).toBe(1000)
+  })
+})
+
+// The currency is what a surface LABELS its money with, so "which currency" and "is anything
+// priced at all" have to be answered by the same object that does the pricing. A deployment
+// that wired rates but no currency code is a real state, and it is not EUR by default.
+describe('LlmObservabilityService.rollupCurrency', () => {
+  const rates = () => null
+  function service(deps: { modelRates?: typeof rates; costCurrency?: string }) {
+    return new LlmObservabilityService({
+      llmCallMetricRepository: new MemoryRepo(),
+      idGenerator,
+      clock,
+      ...deps,
+    })
+  }
+
+  it('is the configured currency when rates are wired', () => {
+    expect(service({ modelRates: rates, costCurrency: 'USD' }).rollupCurrency).toBe('USD')
+  })
+
+  it('is null when rates are wired but no currency was configured', () => {
+    // Never a guessed default: a right number under a wrong symbol is a wrong number.
+    expect(service({ modelRates: rates }).rollupCurrency).toBeNull()
+  })
+
+  it('is null when the deployment prices nothing, even if a currency is configured', () => {
+    // There is no amount for the code to denominate, so stating one would announce money
+    // that is not there.
+    expect(service({ costCurrency: 'EUR' }).rollupCurrency).toBeNull()
   })
 })
 
@@ -431,7 +657,8 @@ describe('makeHarnessCallRecorder', () => {
       responseText: 'hi',
       reasoningText: '',
       inputTokens: 120,
-      cachedInputTokens: 20,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 10,
       outputTokens: 30,
       finishReason: 'end_turn',
       ...overrides,
@@ -461,10 +688,14 @@ describe('makeHarnessCallRecorder', () => {
     expect(m.provider).toBe('claude')
     // The call's own model wins over the dispatch `provider:model`.
     expect(m.model).toBe('claude-opus-4-8')
+    // The harness reports the three input classes ORTHOGONALLY, so they map across one-for-one
+    // and the recorded total is their sum plus the output — re-lumping the two cache classes
+    // here is what made a repair loop indistinguishable from a warm-cache one.
     expect(m.promptTokens).toBe(120)
-    expect(m.cachedPromptTokens).toBe(20)
+    expect(m.cacheReadTokens).toBe(20)
+    expect(m.cacheWriteTokens).toBe(10)
     expect(m.completionTokens).toBe(30)
-    expect(m.totalTokens).toBe(150)
+    expect(m.totalTokens).toBe(180)
     expect(m.finishReason).toBe('end_turn')
     expect(m.responseText).toBe('hi')
     // The CLIs expose no per-HTTP timing, so both are zero (overhead derives zero).
@@ -531,5 +762,242 @@ describe('makeHarnessCallRecorder', () => {
     // Ids are derived from the job id + call index, so a durable-driver replay of the
     // same job produces the SAME ids (a duplicate insert the store then rejects).
     expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
+  })
+
+  it('files a job-level remainder row with NO turn index, keeping its id from `seq`', async () => {
+    // The harness reports what its CLI's terminal cumulative attributed to no turn as one metric
+    // flagged `standsForJob`. It is not a position in the loop, and a reader ordering a step's calls
+    // by turn must not be handed one it never occupied — the same split the inline CLI model makes
+    // between its per-call rows and its single step-level row. The ID still comes from `seq`, so the
+    // terminal repeat of an already-drained row stays a no-op rather than a second row.
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [
+        metric({ seq: 0, responseText: 'a' }),
+        metric({
+          seq: 1,
+          standsForJob: true,
+          spendOnly: true,
+          promptText: '',
+          messageCount: 0,
+          responseText: '',
+        }),
+      ],
+    })
+
+    expect(repo.recorded.map((m) => m.turnIndex)).toEqual([0, null])
+    expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
+    expect(repo.recorded.map((m) => m.spendOnly)).toEqual([false, true])
+  })
+
+  it('records a remainder row the producer did NOT flag spend-only as a call', async () => {
+    // The batch is exactly what the terminal write of a CLI that narrated no turns delivers: one
+    // remainder row and nothing else. `standsForJob` is true (it occupies no turn), but the
+    // producer says it is the job's only record, so it counts as the call it is — deriving the
+    // answer from the batch instead would read every such job as zero calls with real spend.
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [
+        metric({
+          seq: 0,
+          standsForJob: true,
+          spendOnly: false,
+          promptText: '',
+          messageCount: 0,
+          responseText: '',
+        }),
+      ],
+    })
+
+    expect(repo.recorded.map((m) => [m.turnIndex, m.spendOnly])).toEqual([[null, false]])
+  })
+
+  it('does not read the spend-only answer off the BATCH it was handed', async () => {
+    // The live drain splits a job's calls across polls, so the terminal batch routinely holds the
+    // remainder row alone even on a run whose turns were all narrated and recorded earlier. A
+    // reader deriving "were there measured turns?" from this batch would flip that row to a call
+    // and report one phantom call per dispatch. It follows the producer instead.
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [
+        metric({
+          seq: 7,
+          standsForJob: true,
+          spendOnly: true,
+          promptText: '',
+          messageCount: 0,
+          responseText: '',
+        }),
+      ],
+    })
+
+    expect(repo.recorded.map((m) => m.spendOnly)).toEqual([true])
+  })
+})
+
+describe('makeInlineCallRecorder', () => {
+  function call(overrides: Partial<InlineLlmCall> = {}): InlineLlmCall {
+    return {
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'doc-researcher',
+      provider: 'anthropic',
+      model: 'claude-opus-4-8',
+      streaming: false,
+      messageCount: 2,
+      toolCount: 0,
+      requestMaxTokens: 4096,
+      promptTokens: 300,
+      cacheReadTokens: 40,
+      cacheWriteTokens: 10,
+      completionTokens: 60,
+      totalTokens: 410,
+      finishReason: 'stop',
+      durationMs: 1200,
+      ok: true,
+      errorMessage: null,
+      // Bodies are THUNKS: the service resolves one only after its gate says it is kept.
+      promptText: () => '[{"role":"system","content":"s"}]',
+      responseText: () => 'brief',
+      reasoningText: () => '',
+      ...overrides,
+    }
+  }
+
+  it('maps an inline call onto a row, stating what it does NOT know rather than guessing', async () => {
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record(call())
+
+    const row = repo.recorded[0]!
+    expect(row.agentKind).toBe('doc-researcher')
+    expect(row.provider).toBe('anthropic')
+    expect(row.promptTokens).toBe(300)
+    expect(row.cacheReadTokens).toBe(40)
+    expect(row.cacheWriteTokens).toBe(10)
+    expect(row.completionTokens).toBe(60)
+    expect(row.requestMaxTokens).toBe(4096)
+    expect(row.responseText).toBe('brief')
+    expect(row.streaming).toBe(false)
+    // The duration IS the upstream time — there is no proxy hop to split out — so the
+    // derived overhead is a real 0 rather than a fabricated transport slice.
+    expect(row.totalMs).toBe(1200)
+    expect(row.upstreamMs).toBe(1200)
+    expect(row.overheadMs).toBe(0)
+    // Phases are boundaries the container harness owns; an inline call sits outside all of
+    // them, so it files under the unattributed slice instead of borrowing one.
+    expect(row.phase).toBe('')
+    // No job-scoped counter (like the proxy) and no HTTP status (the SDK owns the transport).
+    expect(row.turnIndex).toBeNull()
+    expect(row.httpStatus).toBeNull()
+  })
+
+  it('files a STREAMED inline call as streamed', async () => {
+    // The flag is the producer's to state and this mapping's to carry. It was a constant `false`
+    // here while nothing inline could stream, so a streamed call now has to arrive as one: a
+    // constant would report every streamed inline call as buffered and nothing would fail.
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+
+    await record(call({ streaming: true }))
+
+    expect(repo.recorded[0]!.streaming).toBe(true)
+  })
+
+  it('chains consecutive calls of one inline conversation as a prompt delta', async () => {
+    // An inline agent kind's steps re-send a growing history exactly as a container agent's
+    // turns do, so they must earn the same delta compression rather than storing it whole.
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record(call({ promptText: () => '[{"role":"system","content":"s"}]', messageCount: 1 }))
+    await record(
+      call({
+        promptText: () => '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
+        messageCount: 2,
+        responseText: () => 'second',
+      }),
+    )
+
+    expect(repo.recorded[1]!.promptPrefixCount).toBe(1)
+  })
+
+  it('records a failed call with its scrubbed cause', async () => {
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record(
+      call({
+        ok: false,
+        finishReason: null,
+        responseText: () => '',
+        errorMessage: 'upstream refused (Authorization: Bearer sk-ant-supersecretvalue1234)',
+      }),
+    )
+
+    const row = repo.recorded[0]!
+    expect(row.ok).toBe(false)
+    expect(row.errorMessage).not.toContain('sk-ant-supersecretvalue1234')
   })
 })

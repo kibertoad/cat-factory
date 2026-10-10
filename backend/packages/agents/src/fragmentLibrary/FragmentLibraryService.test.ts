@@ -4,28 +4,58 @@ import type {
   DocumentContentResolver,
   DocumentSourceKind,
   FragmentOwnerKind,
+  GroupCacheHandle,
   PromptFragmentRecord,
   PromptFragmentRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  clearRegisteredPromptFragments,
-  registerPromptFragment,
-} from '@cat-factory/prompt-fragments'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  DEFAULT_DOCUMENT_FRAGMENT_TTL_MS,
-  FragmentLibraryService,
-} from './FragmentLibraryService.js'
+import { registryPromptFragmentSource } from '@cat-factory/kernel'
+import type { PromptFragmentRegistry } from '@cat-factory/kernel'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { FragmentLibraryService } from './FragmentLibraryService.js'
 
 // Unit coverage for the document-backed ("living") fragment path: createFromDocument
-// seeds a catalog entry from the source, and resolveBodiesForRun re-resolves it at
-// run time TTL-gated, persisting the refresh and falling back to the cached body when
-// the source is unreachable. The cross-runtime conformance suite separately asserts a
-// managed (DB) fragment reaches a run on both stores; here the focus is the pure logic.
+// seeds a catalog entry from the source, and resolveBodiesForRun re-resolves it at run
+// time through the document-body cache (docs/initiatives/caching-layer.md slice 2) —
+// fetching on a miss, keeping the cached body while the source's version probe reports
+// unchanged, re-fetching when it moves, and falling back to the persisted body when the
+// source is unreachable. The generic loader/probe mechanics are covered in
+// @cat-factory/caching; here the focus is the service's use of the seam.
 
 function key(kind: FragmentOwnerKind, id: string, fragmentId: string): string {
   return `${kind}|${id}|${fragmentId}`
+}
+
+/**
+ * A minimal in-memory {@link GroupCacheHandle} for {@link DocumentContent}, modelling
+ * an entry ALWAYS in the refresh window: a hit with a probe runs the probe (serve the
+ * cached value when current, reload when stale); a hit without a probe is served
+ * as-is; a load error is propagated and never cached. Enough to exercise the service's
+ * cache usage without the real loader's timers.
+ */
+function fakeBodyCache(): GroupCacheHandle<DocumentContent> {
+  const store = new Map<string, DocumentContent>()
+  const at = (k: string, g: string) => `${g}::${k}`
+  return {
+    async get(k, group, load, isStillCurrent) {
+      const id = at(k, group)
+      const cached = store.get(id)
+      if (cached && (!isStillCurrent || (await isStillCurrent(cached)))) return cached
+      const loaded = await load()
+      store.set(id, loaded)
+      return loaded
+    },
+    async invalidate(k, group) {
+      store.delete(at(k, group))
+    },
+    async invalidateGroup(group) {
+      for (const id of store.keys()) if (id.startsWith(`${group}::`)) store.delete(id)
+    },
+    async invalidateAll() {
+      store.clear()
+    },
+  }
 }
 
 /** Minimal in-memory PromptFragmentRepository for the service under test. */
@@ -49,6 +79,9 @@ class FakeFragmentRepo implements PromptFragmentRepository {
   async listBySource(sourceId: string) {
     return [...this.rows.values()].filter((r) => r.sourceId === sourceId)
   }
+  async softDeleteBySource(sourceId: string, at: number) {
+    for (const r of this.rows.values()) if (r.sourceId === sourceId) r.deletedAt = at
+  }
 }
 
 const workspaces = {
@@ -61,23 +94,38 @@ function fakeClock(start = 1_000_000): Clock & { set(n: number): void } {
   return { now: () => t, set: (n: number) => (t = n) }
 }
 
-/** A resolver returning a configurable body, or throwing to simulate an outage. */
+/**
+ * A resolver returning a configurable body + version (both closures so a test can
+ * change them mid-run), or throwing to simulate an outage. Records fetch/probe counts
+ * and the workspaces each was called through.
+ */
 function fakeResolver(
   body: () => string,
-  opts: { throws?: boolean } = {},
-): DocumentContentResolver & { calls: number; vias: string[] } {
+  opts: { throws?: boolean; version?: () => string } = {},
+): DocumentContentResolver & { calls: number; probes: number; vias: string[] } {
+  const version = opts.version ?? (() => 'v1')
   const r = {
     calls: 0,
+    probes: 0,
     vias: [] as string[],
     async fetch(
       ws: string,
-      source: DocumentSourceKind,
+      _source: DocumentSourceKind,
       externalId: string,
     ): Promise<DocumentContent> {
       r.calls++
       r.vias.push(ws)
       if (opts.throws) throw new Error('source unreachable')
-      return { externalId, title: 'Doc', url: 'https://x/doc', body: body() }
+      return { externalId, title: 'Doc', url: 'https://x/doc', body: body(), version: version() }
+    },
+    async probeVersion(
+      _ws: string,
+      _source: DocumentSourceKind,
+      _externalId: string,
+    ): Promise<string> {
+      r.probes++
+      if (opts.throws) throw new Error('source unreachable')
+      return version()
     },
   }
   return r
@@ -130,6 +178,7 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       workspaceRepository: accountWorkspaces,
       clock,
       documentContentResolver: resolver,
+      documentBodyCache: fakeBodyCache(),
     })
     // Linked at the account tier, fetched through workspace 'wsA'.
     const created = await svc.createFromDocument(
@@ -138,50 +187,53 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       { source: 'confluence', ref: 'page-9' },
       'wsA',
     )
-    clock.set(clock.now() + DEFAULT_DOCUMENT_FRAGMENT_TTL_MS + 1)
     resolver.calls = 0
     resolver.vias = []
 
     // A run in workspace 'wsB' (no connection of its own) resolves the fragment.
     const bodies = await svc.resolveBodiesForRun('wsB', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'ACCOUNT-V2' }])
+    expect(bodies).toEqual([{ id: created.id, title: 'Doc', body: 'ACCOUNT-V2' }])
     // Re-read through the linked 'wsA', NOT the run's 'wsB'.
     expect(resolver.vias).toEqual(['wsA'])
   })
 
-  it('re-resolves a stale body at run time and persists the refresh', async () => {
-    const resolver = fakeResolver(() => 'BODY-V2')
+  it('serves the live body through the cache and keeps it while the version is unchanged', async () => {
+    const resolver = fakeResolver(() => 'BODY-V2') // version fixed at 'v1'
     const svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock,
       documentContentResolver: resolver,
+      documentBodyCache: fakeBodyCache(),
     })
-    // Seed a document-backed row resolved long ago (stale).
     const created = await svc.createFromDocument(
       'workspace',
       'ws1',
       { source: 'notion', ref: 'p1' },
       'ws1',
     )
-    clock.set(clock.now() + DEFAULT_DOCUMENT_FRAGMENT_TTL_MS + 1)
     resolver.calls = 0
 
-    const bodies = await svc.resolveBodiesForRun('ws1', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'BODY-V2' }])
+    const first = await svc.resolveBodiesForRun('ws1', [created.id])
+    expect(first).toEqual([{ id: created.id, title: 'Doc', body: 'BODY-V2' }])
+    const second = await svc.resolveBodiesForRun('ws1', [created.id])
+    expect(second).toEqual([{ id: created.id, title: 'Doc', body: 'BODY-V2' }])
+    // Fetched once on the miss; the second read probed the version (unchanged) and
+    // reused the cached body instead of re-fetching the whole page.
     expect(resolver.calls).toBe(1)
-    const stored = await repo.get('workspace', 'ws1', created.id)
-    expect(stored?.body).toBe('BODY-V2')
-    expect(stored?.resolvedAt).toBe(clock.now())
+    expect(resolver.probes).toBe(1)
   })
 
-  it('does NOT re-fetch a fresh body (within the TTL)', async () => {
-    const resolver = fakeResolver(() => 'FRESH-BODY')
+  it('re-fetches when the source version moves (probe reports stale)', async () => {
+    let body = 'A'
+    let ver = 'v1'
+    const resolver = fakeResolver(() => body, { version: () => ver })
     const svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock,
       documentContentResolver: resolver,
+      documentBodyCache: fakeBodyCache(),
     })
     const created = await svc.createFromDocument(
       'workspace',
@@ -189,14 +241,68 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       { source: 'notion', ref: 'p1' },
       'ws1',
     )
-    resolver.calls = 0 // still fresh: resolvedAt === now, so no re-fetch
+    resolver.calls = 0
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('A')
+
+    body = 'B'
+    ver = 'v2' // the page moved upstream
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('B')
+    expect(resolver.calls).toBe(2)
+  })
+
+  it('re-fetches a versionless source instead of pinning its body forever', async () => {
+    // A source that exposes no version token always returns '' from the probe, so a
+    // naive `probe === cached.version` check ('' === '') would report "unchanged" every
+    // refresh window and never reload. The empty token must be treated as unverifiable so
+    // the body stays TTL-bounded rather than immortal.
+    let body = 'A'
+    const resolver = fakeResolver(() => body, { version: () => '' })
+    const svc = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock,
+      documentContentResolver: resolver,
+      documentBodyCache: fakeBodyCache(),
+    })
+    const created = await svc.createFromDocument(
+      'workspace',
+      'ws1',
+      { source: 'notion', ref: 'p1' },
+      'ws1',
+    )
+    resolver.calls = 0
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('A')
+
+    body = 'B' // the page moved, but the source has no version to prove it
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('B')
+    expect(resolver.calls).toBe(2)
+  })
+
+  it('without a body cache wired, a run serves the persisted body (no live re-resolve)', async () => {
+    let body = 'PERSISTED'
+    const resolver = fakeResolver(() => body)
+    const svc = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock,
+      documentContentResolver: resolver,
+      // no documentBodyCache
+    })
+    const created = await svc.createFromDocument(
+      'workspace',
+      'ws1',
+      { source: 'notion', ref: 'p1' },
+      'ws1',
+    )
+    body = 'CHANGED' // the source moves, but there is no cache seam to re-resolve through
+    resolver.calls = 0
     const bodies = await svc.resolveBodiesForRun('ws1', [created.id])
-    expect(bodies[0]?.body).toBe('FRESH-BODY') // the cached create-time body
+    expect(bodies[0]?.body).toBe('PERSISTED') // the durable create-time body, not 'CHANGED'
     expect(resolver.calls).toBe(0)
   })
 
   it('falls back to the last-resolved body when the source is unreachable', async () => {
-    // Seed with a working resolver, then swap to a throwing one and go stale.
+    // Seed with a working resolver, then resolve through a throwing one.
     const live = fakeResolver(() => 'CACHED')
     const svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
@@ -210,28 +316,29 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       { source: 'confluence', ref: 'c1' },
       'ws1',
     )
-    // A new service instance whose resolver always throws.
+    // A new service instance whose resolver always throws, with a body cache wired.
     const down = fakeResolver(() => 'NEVER', { throws: true })
     const svc2 = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock,
       documentContentResolver: down,
+      documentBodyCache: fakeBodyCache(),
     })
-    clock.set(clock.now() + DEFAULT_DOCUMENT_FRAGMENT_TTL_MS + 1)
     const bodies = await svc2.resolveBodiesForRun('ws1', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'CACHED' }])
-    expect(down.calls).toBe(1) // it tried, then degraded
+    expect(bodies).toEqual([{ id: created.id, title: 'Doc', body: 'CACHED' }])
+    expect(down.calls).toBe(1) // it tried the live fetch, then degraded
   })
 
-  it('refresh() force-re-resolves regardless of the TTL', async () => {
-    let v = 'A'
-    const resolver = fakeResolver(() => v)
+  it('refresh() re-resolves and invalidates the cached run-time body', async () => {
+    let body = 'A'
+    const resolver = fakeResolver(() => body) // version fixed at 'v1' throughout
     const svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock,
       documentContentResolver: resolver,
+      documentBodyCache: fakeBodyCache(),
     })
     const created = await svc.createFromDocument(
       'workspace',
@@ -239,9 +346,15 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       { source: 'github', ref: 'g1' },
       'ws1',
     )
-    v = 'B' // still within TTL, but a manual refresh must re-fetch
+    // Warm the run-time body cache with the current body.
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('A')
+
+    body = 'B'
     const refreshed = await svc.refresh('workspace', 'ws1', created.id, 'ws1')
     expect(refreshed.body).toBe('B')
+    // The version never moved, so only refresh()'s cache invalidation makes the run
+    // see 'B' — a bare probe would have reported the cached 'A' still current.
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('B')
   })
 
   it('rejects creating a document fragment when no resolver is wired', async () => {
@@ -259,17 +372,21 @@ describe('FragmentLibraryService — document-backed fragments', () => {
 describe('FragmentLibraryService — built-in tier, suppression and registered fragments', () => {
   let repo: FakeFragmentRepo
   let svc: FragmentLibraryService
+  let registry: PromptFragmentRegistry
 
   beforeEach(() => {
     repo = new FakeFragmentRepo()
+    // A FRESH registry per test, carrying the shipped catalog. What was a module global cleared in
+    // an `afterEach` is now an instance that cannot outlive its test, so a registration leaking
+    // into a sibling is not a thing that can happen.
+    registry = promptFragmentRegistryWithBuiltins()
     svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock: fakeClock(),
+      promptFragmentSource: registryPromptFragmentSource(registry),
     })
   })
-
-  afterEach(() => clearRegisteredPromptFragments())
 
   it('drops a tier-tombstoned built-in from a run resolution (suppression sticks)', async () => {
     // Pinned before the workspace suppressed it — the stale selection must NOT
@@ -284,7 +401,7 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   })
 
   it('serves a deployment-registered OVERRIDE of a built-in id to runs and the catalog', async () => {
-    registerPromptFragment({
+    registry.register({
       id: 'node.performance',
       version: '2.0.0',
       title: 'Our perf rules',
@@ -293,7 +410,9 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
       body: 'OVERRIDDEN-PERF-BODY',
     })
     const bodies = await svc.resolveBodiesForRun('ws1', ['node.performance'])
-    expect(bodies).toEqual([{ id: 'node.performance', body: 'OVERRIDDEN-PERF-BODY' }])
+    expect(bodies).toEqual([
+      { id: 'node.performance', title: 'Our perf rules', body: 'OVERRIDDEN-PERF-BODY' },
+    ])
 
     const catalog = await svc.resolvedCatalog('ws1')
     const entry = catalog.find((f) => f.id === 'node.performance')
@@ -302,7 +421,7 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   })
 
   it('folds a registered EXTRA fragment into the catalog, tier-shadowable and tombstonable', async () => {
-    registerPromptFragment({
+    registry.register({
       id: 'org.review-standard',
       version: '1.0.0',
       title: 'Org review standard',
@@ -311,7 +430,9 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
       body: 'ORG-BODY',
     })
     const bodies = await svc.resolveBodiesForRun('ws1', ['org.review-standard'])
-    expect(bodies).toEqual([{ id: 'org.review-standard', body: 'ORG-BODY' }])
+    expect(bodies).toEqual([
+      { id: 'org.review-standard', title: 'Org review standard', body: 'ORG-BODY' },
+    ])
     const catalog = await svc.resolvedCatalog('ws1')
     expect(catalog.find((f) => f.id === 'org.review-standard')?.tier).toBe('builtin')
 
@@ -320,7 +441,60 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
     expect(await svc.resolveBodiesForRun('ws1', ['org.review-standard'])).toEqual([])
   })
 
+  // The prompt composer folds a fragment's condensed `brief` for implementer kinds. The brief must
+  // therefore be resolved ALONGSIDE the winning body, never re-looked-up by id downstream: a
+  // workspace/account row overriding a built-in id supplies no brief (managed rows have no such
+  // column), so the override's own full body is what gets folded. Re-resolving by id would paste
+  // the built-in's condensed text over the tenant's standard for exactly the kinds it targets.
+  it('resolves the built-in brief, and NO brief for a tenant row overriding that id', async () => {
+    const builtin = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(builtin[0]?.brief).toBeTruthy()
+
+    await svc.create('workspace', 'ws1', {
+      id: 'node.performance',
+      title: 'Our perf rules',
+      summary: 'House performance guidance.',
+      body: 'TENANT-PERF-BODY',
+    })
+
+    const overridden = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(overridden[0]?.body).toBe('TENANT-PERF-BODY')
+    expect(overridden[0]?.brief).toBeUndefined()
+  })
+
   it('drops an id the catalog does not know at all', async () => {
     expect(await svc.resolveBodiesForRun('ws1', ['gone.stale-id'])).toEqual([])
+  })
+
+  it('passes the RUN through to the brief service, and only on a brief dispatch', async () => {
+    // A generated brief is a model call on the run path, and its attribution rides this hop:
+    // AgentContextBuilder → here → FragmentBriefService → the generator's `ModelScope`. Dropping
+    // the id anywhere along it files the call under a null execution id — present in the store,
+    // absent from the step's rollup — so each hop is asserted rather than assumed.
+    const calls: { workspaceId: string; executionId?: string }[] = []
+    const briefService = {
+      resolveBriefs: (workspaceId: string, _c: unknown, opts?: { executionId?: string }) => {
+        calls.push({ workspaceId, ...(opts?.executionId ? { executionId: opts.executionId } : {}) })
+        return Promise.resolve(new Map<string, string>())
+      },
+    } as unknown as ConstructorParameters<typeof FragmentLibraryService>[0]['briefService']
+    const withBriefs = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock: fakeClock(),
+      ...(briefService ? { briefService } : {}),
+    })
+
+    await withBriefs.resolveBodiesForRun('ws1', ['node.performance'], {
+      verbosity: 'brief',
+      executionId: 'exec_1',
+    })
+    // `full` verbosity discards a condensation, so it must not pay for one at all.
+    await withBriefs.resolveBodiesForRun('ws1', ['node.performance'], {
+      verbosity: 'full',
+      executionId: 'exec_2',
+    })
+
+    expect(calls).toEqual([{ workspaceId: 'ws1', executionId: 'exec_1' }])
   })
 })

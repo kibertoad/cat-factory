@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { useBoardFlow } from '~/composables/useBoardFlow'
+import { useBoardFlow, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useBoardFlow'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import LaneViewControl from '~/components/board/LaneViewControl.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
+// Toolbar contributions from the shared nav manifest (backend/docs/adr/0049-modular-vue-adoption.md,
+// slice 1). First-party contributes none — this is the reactive extension point a consumer
+// deployment uses to add a board-toolbar action via `registerAppModule`, gated + rendered like
+// the sidebar/command entries with zero edits here.
+const { toolbarItems, invoke: invokeNav } = useNavContributions()
 const execution = useExecutionStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
+const access = useWorkspaceAccess()
 const { t, n } = useI18n()
-const { fitView, zoomIn, zoomOut } = useBoardFlow()
+const { fitView, zoomIn, zoomOut, resetZoom } = useBoardFlow()
 
 async function mountService(serviceId: string, title: string) {
   try {
@@ -21,11 +30,7 @@ async function mountService(serviceId: string, title: string) {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('board.toolbar.serviceAddFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'board.toolbar.serviceAddFailed')
   }
 }
 
@@ -43,7 +48,35 @@ const mountableItems = computed(() =>
   }),
 )
 
+async function restoreService(id: string, title: string) {
+  try {
+    await board.restoreService(id)
+    toast.add({
+      title: t('board.toast.restored', { name: title }),
+      icon: 'i-lucide-archive-restore',
+      color: 'neutral',
+    })
+  } catch (e) {
+    present(e, 'board.toast.restoreFailed')
+  }
+}
+
+// Archived services — hidden from the board but restorable here with no expiry.
+const archivedItems = computed(() =>
+  board.archived.map((b) => ({
+    label: b.title,
+    icon: 'i-lucide-box',
+    onSelect: () => {
+      void restoreService(b.id, b.title)
+    },
+  })),
+)
+
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
+// Disable the zoom buttons once the camera hits a clamp (Vue Flow pins the zoom exactly
+// at the limit, so a small epsilon guards against float drift). UX-16.
+const atMinZoom = computed(() => ui.zoom <= BOARD_MIN_ZOOM + 0.001)
+const atMaxZoom = computed(() => ui.zoom >= BOARD_MAX_ZOOM - 0.001)
 // Exhaustive (tier-2) map from level-of-detail → its label key, so adding an LOD
 // without a label fails the typecheck rather than leaking a raw key.
 const LOD_LABEL_KEYS = {
@@ -95,38 +128,72 @@ const decisionItems = computed(() =>
 </script>
 
 <template>
+  <!-- Positioning and stacking are owned by `BoardTopOverlays`, the one component that lays out
+       the board's top overlay region; this renders only the pill and re-enables pointer events
+       on it. Self-anchoring here is what let a banner cover the toolbar outright. -->
   <div
-    class="absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
+    class="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-muted bg-default/90 px-2 py-1.5 shadow-xl backdrop-blur"
   >
     <!-- zoom controls -->
-    <UButton
+    <IconButton
+      :label="t('board.toolbar.zoomOut')"
       icon="i-lucide-zoom-out"
       color="neutral"
       variant="ghost"
       size="sm"
+      :disabled="atMinZoom"
       data-testid="board-zoom-out"
-      @click="zoomOut()"
+      @click="
+        () => {
+          zoomOut()
+        }
+      "
     />
-    <!-- The zoom %/LOD readout is the first thing to drop on narrow viewports. -->
-    <div class="hidden w-20 text-center text-xs tabular-nums text-slate-300 sm:block">
+    <!-- Click the readout to snap back to 100%. Always visible (only the LOD sub-label
+         drops on narrow viewports) so the zoom level is never a mystery. -->
+    <button
+      type="button"
+      class="w-16 rounded-sm text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
+      :title="t('board.toolbar.resetZoom')"
+      :aria-label="t('board.toolbar.resetZoom')"
+      data-testid="board-zoom-reset"
+      @click="resetZoom()"
+    >
       {{ zoomPct }}%
-      <div class="text-[9px] uppercase tracking-wide text-slate-500">{{ lodLabel }}</div>
-    </div>
-    <UButton
+      <!-- The zoom band this readout is currently in, under the percentage: a second VALUE
+           annotating the first, not a heading over what follows, so it is not a
+           `common/SectionLabel.vue`. It stays a step smaller and unweighted so it does not compete
+           with the percentage inside a `w-20` button. -->
+      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
+        lodLabel
+      }}</span>
+    </button>
+    <IconButton
+      :label="t('board.toolbar.zoomIn')"
       icon="i-lucide-zoom-in"
       color="neutral"
       variant="ghost"
       size="sm"
+      :disabled="atMaxZoom"
       data-testid="board-zoom-in"
-      @click="zoomIn()"
+      @click="
+        () => {
+          zoomIn()
+        }
+      "
     />
-    <UButton
+    <IconButton
+      :label="t('board.toolbar.fitView')"
       icon="i-lucide-maximize"
       color="neutral"
       variant="ghost"
       size="sm"
       data-testid="board-fit-view"
-      @click="fitView({ padding: 0.2 })"
+      @click="
+        () => {
+          fitView({ padding: 0.2 })
+        }
+      "
     />
 
     <USeparator orientation="vertical" class="mx-1 h-6" />
@@ -147,12 +214,46 @@ const decisionItems = computed(() =>
       </UButton>
     </UDropdownMenu>
 
-    <!-- in-org sharing: add an existing org service to this board -->
-    <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
+    <!-- how every frame's swimlanes are ordered + grouped (an override; advanced tier) -->
+    <LaneViewControl />
+
+    <!-- in-org sharing: add an existing org service to this board (mount = board.write) -->
+    <UDropdownMenu
+      v-if="mountableItems.length && access.canWriteBoard.value"
+      :items="mountableItems"
+    >
       <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
         <span class="hidden sm:inline">{{ t('board.toolbar.addService') }}</span>
       </UButton>
     </UDropdownMenu>
+
+    <!-- archived services: hidden from the board, restorable with no expiry (board.write) -->
+    <UDropdownMenu v-if="archivedItems.length && access.canWriteBoard.value" :items="archivedItems">
+      <UButton
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        icon="i-lucide-archive"
+        :title="t('board.toolbar.archivedServices')"
+        data-testid="board-archived-services"
+      >
+        <span class="hidden sm:inline">{{ t('board.toolbar.archivedServices') }}</span>
+        <span>{{ n(archivedItems.length) }}</span>
+      </UButton>
+    </UDropdownMenu>
+
+    <!-- consumer-contributed toolbar actions from the nav manifest (none first-party) -->
+    <IconButton
+      v-for="item in toolbarItems"
+      :key="item.id"
+      :label="item.label ?? t(item.labelKey)"
+      :icon="item.icon"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      :data-testid="item.testId"
+      @click="invokeNav(item)"
+    />
 
     <!-- human-actionable notifications (merge review, pipeline complete, CI failed) -->
     <NotificationsInbox />

@@ -1,7 +1,8 @@
-import type { Clock } from '@cat-factory/kernel'
+import { type Clock, NotFoundError, describeError } from '@cat-factory/kernel'
 import type { MessageBatch } from '@cloudflare/workers-types'
-import type { GitHubModule } from '@cat-factory/orchestration'
-import type { Env, GitHubSyncMessage } from '../env'
+import { reconcileStaleRepos as reconcileStaleReposCore } from '@cat-factory/server'
+import type { Container } from '../container'
+import type { Env, GitHubSyncMessage, TrackerSyncMessage } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { D1RepoProjectionRepository } from '../repositories/D1RepoProjectionRepository'
@@ -13,15 +14,48 @@ import { logger } from '../observability/logger'
 // orchestration over the GitHub module + its ports, so it is unit-testable with
 // fakes (mirroring the execution sweeper's style).
 
-/** Apply one queued message to the projections via the GitHub module. */
-export async function applyGitHubSyncMessage(
-  github: GitHubModule,
+/**
+ * Apply one queued message. Each kind resolves its own optional module and skips gracefully
+ * when unwired: `webhook`/`resync-repo` need the GitHub module, the two `*-source-resync` kinds their own
+ * repo-sourced library (the push-webhook freshness fan-out, slice 4) — each can be absent
+ * independently. A source unlinked between enqueue and processing is a terminal `NotFoundError`
+ * (swallowed, not retried); any other error propagates so the batch retries.
+ */
+async function applyGitHubSyncMessage(
+  container: Container,
   message: GitHubSyncMessage,
 ): Promise<void> {
-  if (message.kind === 'webhook') {
-    await github.webhookService.handle(message.eventName, message.payload)
-  } else {
-    await github.syncService.syncRepoById(message.workspaceId, message.repoGithubId)
+  switch (message.kind) {
+    case 'webhook':
+      await container.github?.webhookService.handle(message.eventName, message.payload)
+      return
+    case 'resync-repo':
+      await container.github?.syncService.syncRepoById(message.workspaceId, message.repoGithubId)
+      return
+    case 'skill-source-resync': {
+      const sourceService = container.skillLibrary?.sourceService
+      if (!sourceService) return
+      try {
+        await sourceService.sync(message.accountId, message.sourceId)
+      } catch (error) {
+        if (error instanceof NotFoundError) return
+        throw error
+      }
+      return
+    }
+    case 'foundational-source-resync': {
+      // Resolved by SOURCE ID alone: `syncById` reads the owning tier off the stored row, so an
+      // owner that rode the queue could only ever disagree with it.
+      const sourceService = container.foundationalServices?.sourceService
+      if (!sourceService) return
+      try {
+        await sourceService.syncById(message.sourceId)
+      } catch (error) {
+        if (error instanceof NotFoundError) return
+        throw error
+      }
+      return
+    }
   }
 }
 
@@ -30,16 +64,19 @@ export async function handleGitHubSyncBatch(
   batch: MessageBatch<GitHubSyncMessage>,
   env: Env,
 ): Promise<void> {
-  const github = buildContainer(env).github
+  const container = buildContainer(env)
   for (const message of batch.messages) {
-    if (!github) {
-      message.ack() // GitHub not configured here; drop rather than retry forever.
-      continue
-    }
     try {
-      await applyGitHubSyncMessage(github, message.body)
+      await applyGitHubSyncMessage(container, message.body)
       message.ack()
-    } catch {
+    } catch (error) {
+      // Retrying blind used to be the whole handling: a permanently-failing delivery burned its
+      // retries with no evidence it ever arrived. Copied from the tracker-sync sibling below.
+      logger.warn('github sync message failed; retrying', {
+        messageKind: message.body.kind,
+        attempts: message.attempts,
+        ...describeError(error),
+      })
       message.retry()
     }
   }
@@ -49,7 +86,9 @@ export async function handleGitHubSyncBatch(
  * Reconciliation pass for the cron sweeper: enqueue an incremental resync for
  * every tracked repo whose projection has gone stale (webhooks can be missed).
  * Returns the number of repos scheduled. Falls back to a direct sync when no
- * queue is bound.
+ * queue is bound. Thin Worker driver over the shared `@cat-factory/server`
+ * `reconcileStaleRepos` core — it supplies only the D1 repos + the enqueue-or-sync
+ * driver, so the classification/tombstone behaviour can't drift from the Node facade.
  */
 export async function reconcileStaleRepos(
   env: Env,
@@ -57,90 +96,65 @@ export async function reconcileStaleRepos(
   staleMs: number,
 ): Promise<number> {
   if (!loadConfig(env).github.enabled) return 0
-  const repoRepo = new D1RepoProjectionRepository({ db: env.DB })
-  const installationRepo = new D1GitHubInstallationRepository({ db: env.DB })
-  // `listStale` already excludes repos whose installation is tombstoned, so a dead
-  // installation stops being swept once it is known-gone; the handling below tombstones
-  // one the webhook never told us about (a missed uninstall), so it stops next pass.
-  const stale = await repoRepo.listStale(clock.now() - staleMs)
-  let scheduled = 0
-  for (const repo of stale) {
-    try {
-      if (env.GITHUB_SYNC_QUEUE) {
-        await env.GITHUB_SYNC_QUEUE.send({
-          kind: 'resync-repo',
-          workspaceId: repo.workspaceId,
-          repoGithubId: repo.githubId,
-        })
-      } else {
-        const github = buildContainer(env).github
-        if (github) await github.syncService.syncRepoById(repo.workspaceId, repo.githubId)
-      }
-      scheduled += 1
-    } catch (error) {
-      // Best-effort pass (webhooks are the primary path): one repo failing must not
-      // abort the rest or spam the error log every cron tick. A gone/forbidden GitHub
-      // App installation (uninstalled or revoked → 401/404 when minting its token) is
-      // an expected operational state for a stale projection, so log it at warn; any
-      // other fault is a real error. Either way, continue with the next repo.
-      const gone = isInstallationGoneError(error)
-      // A token-mint 404/410 means the installation itself is gone — uninstalled or
-      // revoked without us receiving the webhook (the cron's most common stuck state).
-      // Tombstone it so this and every future pass skip ALL its repos until it is
-      // reinstalled (the `unsuspend`/reinstall webhook clears the tombstone). Scoped to
-      // the mint error (not a repo-level 404, which means a single deleted repo) and to
-      // 404/410 (never 401, which can be a transient app-JWT fault hitting everything).
-      if (isInstallationTokenGoneError(error)) {
-        try {
-          await installationRepo.softDelete(repo.installationId, clock.now())
-        } catch {
-          // Best-effort: a failed tombstone just means we retry (and warn) next pass.
+  // Resolve the direct-sync fallback once per pass, not per stale repo — building the
+  // whole DI container inside the loop is wasted work. The queue-bound production
+  // configuration never needs it.
+  const github = env.GITHUB_SYNC_QUEUE ? undefined : buildContainer(env).github
+  return reconcileStaleReposCore(
+    {
+      repoProjectionRepository: new D1RepoProjectionRepository({ db: env.DB }),
+      installationRepository: new D1GitHubInstallationRepository({ db: env.DB }),
+      syncRepoById: async (workspaceId, repoGithubId) => {
+        // Enqueue on the sync queue when bound (the async consumer applies it), else
+        // fall back to an inline direct sync — the Worker's local/dev configuration.
+        if (env.GITHUB_SYNC_QUEUE) {
+          await env.GITHUB_SYNC_QUEUE.send({ kind: 'resync-repo', workspaceId, repoGithubId })
+        } else if (github) {
+          await github.syncService.syncRepoById(workspaceId, repoGithubId)
         }
-      }
-      logger[gone ? 'warn' : 'error'](
-        {
-          cron: 'github-reconcile',
-          workspaceId: repo.workspaceId,
-          repoGithubId: repo.githubId,
-          installationId: repo.installationId,
-          err: errInfo(error),
-        },
-        gone
-          ? 'skipping stale repo whose GitHub App installation is gone (uninstalled/revoked); reinstall the app to re-enable it'
-          : 'repo resync failed',
-      )
+      },
+    },
+    clock,
+    staleMs,
+    logger,
+  )
+}
+
+/**
+ * Queue consumer for `cat-factory-tracker-sync`: apply one verified, parsed tracker delivery
+ * (push-driven intake / a ticket reply to a parked review); ack on success, retry on error.
+ *
+ * A retry is safe because the apply is idempotent by the ingest CLAIM — a comment already applied
+ * is skipped, an abandoned claim is retaken — which is exactly why that claim had to exist before
+ * this queue did. With the tracker-webhook module unwired the message is ACKED (dropped) rather
+ * than retried forever, mirroring the GitHub consumer's stance for an unwired module.
+ *
+ * It lives beside `handleGitHubSyncBatch` because it is the same shape at the same layer; the
+ * queues, message types and modules are entirely separate.
+ */
+export async function handleTrackerSyncBatch(
+  batch: MessageBatch<TrackerSyncMessage>,
+  env: Env,
+): Promise<void> {
+  const container = buildContainer(env)
+  const service = container.trackerWebhook?.service
+  for (const message of batch.messages) {
+    if (!service) {
+      message.ack()
+      continue
+    }
+    try {
+      await service.handle(message.body.workspaceId, message.body.event)
+      message.ack()
+    } catch (error) {
+      logger.warn('tracker webhook message failed; retrying', {
+        workspaceId: message.body.workspaceId,
+        source: message.body.event.source,
+        kind: message.body.event.kind,
+        attempts: message.attempts,
+        ...describeError(error),
+      })
+      message.retry()
     }
   }
-  return scheduled
-}
-
-/** Minimal error → log payload (mirrors the worker entry's `errInfo`). */
-function errInfo(error: unknown): { message: string; stack?: string } {
-  if (error instanceof Error) {
-    return { message: error.message, ...(error.stack ? { stack: error.stack } : {}) }
-  }
-  return { message: String(error) }
-}
-
-/**
- * Whether a sync error is a *gone/forbidden GitHub App installation* rather than a
- * transient fault: minting an installation token for an uninstalled or revoked
- * installation returns 401/404 (and a deleted repo 404/410). These are not worth
- * an error-level log or a retry storm — the connection needs human action.
- */
-function isInstallationGoneError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return /\(HTTP (401|404|410)\)/.test(message)
-}
-
-/**
- * Whether the error is specifically a *token mint* returning 404/410 — i.e. the
- * installation itself is gone (uninstalled/revoked), not merely a single repo
- * being inaccessible. Matches {@link GitHubAppAuth.mintInstallationToken}'s
- * message. Excludes 401 (a transient app-JWT/clock fault would mint-fail for every
- * installation, and must not tombstone a healthy connection).
- */
-function isInstallationTokenGoneError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return /Failed to mint installation token .*\(HTTP (404|410)\)/i.test(message)
 }

@@ -1,7 +1,41 @@
 import { loadNodeConfig } from '@cat-factory/node-server'
-import type { AppConfig } from '@cat-factory/server'
-import { base64urlToBytes } from '@cat-factory/server'
+import type { AppConfig, ConfigProblem } from '@cat-factory/server'
+import { ENV_HELP, configProblem, requireEncryptionKey, requireEnv } from '@cat-factory/server'
+import { isOffValue } from './envFlags.js'
 import { resolveHostAlias } from './runtimes/index.js'
+
+// The one-shot fix we advertise whenever local mode can't boot for a missing/invalid mandatory
+// value: the bootstrap CLI's `env` subcommand generates a ready-to-run local-mode `.env` with ALL
+// required values (the three crypto secrets in the server's formats, DATABASE_URL, a minted VCS
+// PAT) in a single step, so a developer never has to satisfy each variable below by hand. It is a
+// genuinely local-only differentiator (it writes a LOCAL `.env`), so the shared Node/Worker
+// remedies deliberately do NOT mention it.
+const LOCAL_ENV_CLI_COMMAND = 'npx @cat-factory/cli env'
+
+/**
+ * The synthetic "generate the whole .env" problem prepended to a local-mode misconfiguration list,
+ * advertising the {@link LOCAL_ENV_CLI_COMMAND} one-shot fix ahead of the per-variable remedies
+ * (which stay as the manual fallback). Its `key` reads as a filename rather than an env-var name on
+ * purpose — it is not one variable but the file that carries them all.
+ */
+export const LOCAL_ENV_CLI_PROBLEM: ConfigProblem = {
+  key: '.env',
+  summary:
+    'Local mode needs a few crypto secrets and a Postgres DATABASE_URL. You can generate them all at once instead of setting each variable below by hand.',
+  remedy: `Run \`${LOCAL_ENV_CLI_COMMAND}\` to write a ready-to-run local-mode .env (every required value, gitignored) into the current directory, then restart.`,
+}
+
+/**
+ * Prepend the {@link LOCAL_ENV_CLI_PROBLEM} advertisement to a local-mode misconfiguration list so
+ * the one-step `.env` generator is offered above the individual per-variable remedies. Applied at
+ * every point local mode surfaces a {@link ConfigValidationError} — both the secrets validated here
+ * (via `applyLocalDefaults`) and DATABASE_URL validated in the reused Node boot. Idempotent: never
+ * adds a second copy when the advertisement is already present.
+ */
+export function withLocalEnvCliAdvice(problems: ConfigProblem[]): ConfigProblem[] {
+  if (problems.some((p) => p.key === LOCAL_ENV_CLI_PROBLEM.key)) return problems
+  return [LOCAL_ENV_CLI_PROBLEM, ...problems]
+}
 
 // Local mode defaults the auth gate OPEN and can be exposed on a LAN, so a weak
 // AUTH_SESSION_SECRET would leave sessions / machine / proxy tokens forgeable. The
@@ -9,8 +43,9 @@ import { resolveHostAlias } from './runtimes/index.js'
 // mode must enforce it on the raw secret too. 32 chars matches MIN_SESSION_SECRET_LENGTH
 // in the Node loader.
 const MIN_SESSION_SECRET_LENGTH = 32
-/** The system encryption key must decode to at least this many bytes (AES-256). */
-const MIN_ENCRYPTION_KEY_BYTES = 32
+// The harness inbound-auth secret gates every call between this service and its agent
+// containers, and local mode may be reachable on a LAN — so reject a trivially-guessable value.
+const MIN_HARNESS_SECRET_LENGTH = 16
 
 // Local mode is a single developer running the whole product on their own machine.
 // It reuses the Node facade's config loader verbatim and only changes the defaults
@@ -25,53 +60,71 @@ const MIN_ENCRYPTION_KEY_BYTES = 32
 
 const DEFAULT_PORT = '8787'
 
+// The self-hosted SearXNG the local docker-compose runs, reached by THIS host process (the
+// orchestrator runs on the host and hits the compose-published port; agent containers never
+// touch it — they go through the backend web-search proxy). The Node facade builds a TRUSTED
+// upstream from `WEB_SEARCH_SEARXNG_URL`, so a loopback URL is permitted (it bypasses the
+// account-URL SSRF guard). See `createDefaultWebSearchUpstream` in @cat-factory/server.
+const DEFAULT_LOCAL_SEARXNG_URL = 'http://localhost:8080'
+
 /**
  * Resolve a mandatory local-mode secret from env, throwing a clear, actionable error when it
- * isn't set. These secrets must be STABLE across restarts — the session secret signs the
- * session JWT (a fresh value each boot invalidates the persisted session and forces a
- * re-login) and the encryption key seals credentials at rest (a fresh value orphans them) — so
- * local mode requires them explicitly rather than auto-generating an unstable per-process
- * value that silently breaks on the next restart. The hosted Node facade requires them too, so
- * this also keeps the facades aligned. `pnpm secrets` (deploy/local) prints both in the right
- * format.
+ * isn't set. These secrets must be STABLE across restarts:
+ *   - the session secret signs the session JWT (a fresh value each boot invalidates the
+ *     persisted session and forces a re-login);
+ *   - the encryption key seals credentials at rest (a fresh value orphans them);
+ *   - the harness shared secret authenticates every call between this service and its agent
+ *     containers (a fresh per-process value fails auth against a container still running from
+ *     before a restart, so re-attach breaks and in-flight runs flap).
+ * So local mode requires them explicitly rather than auto-generating an unstable per-process
+ * value that silently breaks on the next restart. `pnpm secrets` (deploy/local) prints all
+ * three in the right format.
  */
 function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
-  const value = env[name]?.trim()
-  if (!value) {
-    throw new Error(
-      `${name} is required in local mode but is not set. It must stay stable across restarts (a ` +
-        `fresh value each boot forces a re-login and orphans encrypted credentials). Generate ` +
-        `both secrets with \`pnpm secrets\` in deploy/local and add them to your .env.`,
-    )
+  // The encryption key's presence + base64 + AES-256-length validation is the shared, facade-wide
+  // invariant, so delegate it verbatim (identical message on Node, local, and the Worker) rather
+  // than re-implementing it here. The two length-only secrets below are local-mode-specific.
+  if (name === 'ENCRYPTION_KEY') {
+    return requireEncryptionKey(env.ENCRYPTION_KEY)
   }
+  // Presence + trim + the ENV_HELP meaning/remedy come from the shared `requireEnv` (both these
+  // vars have an ENV_HELP entry whose remedy already points at `pnpm secrets` in deploy/local), so
+  // a missing/blank secret reports identically across the Node, local, and Worker facades. Local
+  // mode then layers its extra length invariant below.
+  const value = requireEnv(env, name)
   // Local mode leaves the auth gate open by default, so a short session secret is a real
   // token-forgery risk if the box is reachable on a LAN — reject it up front rather than
   // running with a guessable HMAC key.
   if (name === 'AUTH_SESSION_SECRET' && value.length < MIN_SESSION_SECRET_LENGTH) {
-    throw new Error(
-      `AUTH_SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters (it signs the ` +
-        `session/proxy/machine tokens). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
-    )
+    throw configProblem({
+      key: 'AUTH_SESSION_SECRET',
+      summary: ENV_HELP.AUTH_SESSION_SECRET.summary,
+      remedy: `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters (got ${value.length}). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
+      docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
+    })
   }
-  // Validate the encryption key decodes to a full AES-256 key at config load, so a too-short
-  // key fails with a clear message here rather than deep inside the first cipher build.
-  if (name === 'ENCRYPTION_KEY') {
-    let bytes: Uint8Array
-    try {
-      bytes = base64urlToBytes(value)
-    } catch {
-      throw new Error(
-        'ENCRYPTION_KEY must be a valid base64-encoded key. Generate one with `pnpm secrets`.',
-      )
-    }
-    if (bytes.length < MIN_ENCRYPTION_KEY_BYTES) {
-      throw new Error(
-        `ENCRYPTION_KEY must decode to at least ${MIN_ENCRYPTION_KEY_BYTES} bytes (it seals ` +
-          `credentials at rest). Generate one with \`pnpm secrets\` in deploy/local.`,
-      )
-    }
+  // Reject a too-short harness secret: local mode may be reachable on a LAN and this value is
+  // the only auth between the service and its agent containers.
+  if (name === 'HARNESS_SHARED_SECRET' && value.length < MIN_HARNESS_SECRET_LENGTH) {
+    throw configProblem({
+      key: 'HARNESS_SHARED_SECRET',
+      summary: ENV_HELP.HARNESS_SHARED_SECRET.summary,
+      remedy: `Must be at least ${MIN_HARNESS_SECRET_LENGTH} characters (got ${value.length}). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
+      docsUrl: ENV_HELP.HARNESS_SHARED_SECRET.docsUrl,
+    })
   }
   return value
+}
+
+/**
+ * Read + validate the mandatory {@link HARNESS_SHARED_SECRET}, throwing the same loud config
+ * error as the other required secrets when it's missing/blank/too-short. The runner transport
+ * factories call this so the secret is a genuinely REQUIRED constructor argument — the transports
+ * never invent a random per-process value (which would break re-attach across a restart). Safe to
+ * call on env already run through {@link applyLocalDefaults} (idempotent revalidation).
+ */
+export function requireHarnessSharedSecret(env: NodeJS.ProcessEnv): string {
+  return requireStableSecret(env, 'HARNESS_SHARED_SECRET')
 }
 
 /**
@@ -84,8 +137,29 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   // `host.docker.internal` (Docker/Podman/OrbStack), `host.lima.internal` (Colima), or
   // the vmnet gateway (Apple). An explicit LOCAL_HARNESS_HOST_ALIAS / PUBLIC_URL wins.
   const hostAlias = resolveHostAlias(env)
+  // On by default: point the backend web-search proxy at the local docker-compose SearXNG so
+  // agents get web search with zero per-account key entry. `LOCAL_WEB_SEARCH=off` skips this
+  // auto-default (with no explicit URL set, WEB_SEARCH_SEARXNG_URL is then absent → the Node
+  // facade builds no upstream → the tool isn't advertised and the proxy degrades to empty). Per
+  // this loader's "explicit env always wins" contract, an operator-set WEB_SEARCH_SEARXNG_URL is
+  // preserved regardless (via `...env`).
+  const webSearchDisabled = isOffValue(env.LOCAL_WEB_SEARCH)
   return {
     ...env,
+    ...(webSearchDisabled
+      ? {}
+      : {
+          WEB_SEARCH_SEARXNG_URL: env.WEB_SEARCH_SEARXNG_URL?.trim() || DEFAULT_LOCAL_SEARXNG_URL,
+        }),
+    // Label this deployment as the `local` environment. It stays non-production (so the
+    // auth gate may default open, below), and it makes `@cat-factory/server`'s CORS policy
+    // REFLECT the requesting origin when `CORS_ALLOWED_ORIGINS` is unset (`local` is a
+    // recognised development value in `corsReflectsWhenUnset`). Without this the server
+    // default-DENIES CORS on an unset allow-list, so the SPA on :3000 fails with "blocked by
+    // CORS policy / can't reach backend" — a no-brainer for a single-developer local box.
+    // Auth is a bearer header (credentials mode off), so reflecting any origin here is safe.
+    // Set `CORS_ALLOWED_ORIGINS` to pin specific origins, or `ENVIRONMENT` to override.
+    ENVIRONMENT: env.ENVIRONMENT?.trim() || 'local',
     // `|| 'true'` (not `??`) so an explicit empty `AUTH_DEV_OPEN=` still defaults open,
     // consistent with the other fields here; set `AUTH_DEV_OPEN=false` to close the gate.
     // devOpen keeps the API open for unauthenticated reads (and the test harness), but a
@@ -109,16 +183,21 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // boot orphans every credential sealed under the previous one. Generate with `pnpm secrets`
     // in deploy/local.
     ENCRYPTION_KEY: requireStableSecret(env, 'ENCRYPTION_KEY'),
+    // Inbound-auth secret injected into every agent container and sent on each harness call.
+    // REQUIRED and must be stable: the local runner transports otherwise mint a RANDOM
+    // per-process value, so after a restart polls against a container still running from before
+    // fail auth — the run flaps instead of re-attaching (docs/internal/race-condition-audit-2026-07.md).
+    // Generate with `pnpm secrets` in deploy/local.
+    HARNESS_SHARED_SECRET: requireStableSecret(env, 'HARNESS_SHARED_SECRET'),
     // The harness (inside the container) posts to `${PUBLIC_URL}/v1`; the runtime's host
     // alias routes back to this service on the host. The docker-family transport
     // publishes that alias on Linux via `--add-host=<alias>:host-gateway`.
     PUBLIC_URL: env.PUBLIC_URL?.trim() || `http://${hostAlias}:${port}`,
-    // Assemble the ephemeral-environment module by default so the Tester's "delegate test
-    // environments to a provider" opt-in works once a developer registers a provider — the
-    // module is inert (and the local default stays host DinD) until they connect one AND
-    // flip the toggle, so defaulting it on has no behavioural cost. Set ENVIRONMENTS_ENABLED
-    // explicitly to override.
-    ENVIRONMENTS_ENABLED: env.ENVIRONMENTS_ENABLED?.trim() || 'true',
+    // The ephemeral-environment module assembles from the shared ENCRYPTION_KEY (always set
+    // in local mode), so the Tester's "delegate test environments to a provider" opt-in is
+    // available once a developer registers a provider. The module is inert (and the local
+    // default stays host DinD) until they connect one, so its always-on assembly has no
+    // behavioural cost.
     // A local k3s preview environment is reached over http at a loopback/LAN host (a
     // localhost NodePort, or a Traefik ingress host like `app.127.0.0.1.nip.io` /
     // `myapp.localhost`). The strict public-https URL guard would reject the URL the
@@ -129,6 +208,12 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ENVIRONMENTS_ALLOW_URL_HOSTS:
       env.ENVIRONMENTS_ALLOW_URL_HOSTS?.trim() ||
       'localhost,127.0.0.1,host.docker.internal,.localhost,.local,.nip.io,.sslip.io',
+    // Local mode is single-tenant by definition, so a locally-run model on the
+    // developer's own LAN (an LM Studio box, a homelab Ollama host) is the intended
+    // reach: default the runner-host policy's LAN opt-in ON. Hosted facades keep the
+    // strict loopback-only default, where the LAN allow-list would be an
+    // internal-network SSRF grant on a shared deployment (SEC-3).
+    LOCAL_MODELS_ALLOW_LAN: env.LOCAL_MODELS_ALLOW_LAN?.trim() || 'true',
   }
 }
 

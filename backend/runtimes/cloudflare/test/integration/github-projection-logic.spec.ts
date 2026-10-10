@@ -22,7 +22,6 @@ describe('projection.logic mappers', () => {
       installationId: 42,
       private: false,
       defaultBranch: null,
-      blockId: null,
       syncedAt: 1000,
     })
   })

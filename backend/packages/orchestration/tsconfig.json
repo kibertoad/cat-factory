@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // DOM libs supply `AbortSignal`, the Web-standard deadline the synchronous inline use-case
+    // call bounds itself with (`LlmInlineUseCaseGenerator`). Available on both workerd and Node, so
+    // type against it rather than casting through `globalThis`, the same call this package's
+    // siblings made (@cat-factory/integrations, @cat-factory/agents, @cat-factory/server).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.ts"]
 }

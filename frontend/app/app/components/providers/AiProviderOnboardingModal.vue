@@ -27,10 +27,23 @@ interface Route {
   title: string
   body: string
   cta: string
+  badge?: string
   onSelect: () => void
 }
 
+// The personal-subscription route leads: using an individual coding-plan subscription the
+// developer already pays for (Claude / ChatGPT-Codex / GLM) is the most common setup, and
+// it used to hide behind the generic "LLM vendors" route as the last tab, where new users
+// missed it. It deep-links straight onto the vendor modal's `personal` tab.
 const routes = computed<Route[]>(() => [
+  {
+    icon: 'i-lucide-user',
+    title: t('providers.onboarding.routes.personal.title'),
+    body: t('providers.onboarding.routes.personal.body'),
+    cta: t('providers.onboarding.routes.personal.cta'),
+    badge: t('providers.onboarding.routes.personal.badge'),
+    onSelect: () => go(() => ui.openVendorCredentials('personal')),
+  },
   {
     icon: 'i-lucide-key-round',
     title: t('providers.onboarding.routes.keys.title'),
@@ -64,11 +77,11 @@ const routes = computed<Route[]>(() => [
     <template #body>
       <div class="space-y-5">
         <div
-          class="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-950/40 p-4"
+          class="flex items-start gap-3 rounded-lg border border-app-warning-500/40 bg-app-warning-950/40 p-4"
         >
-          <UIcon name="i-lucide-cpu" class="mt-0.5 h-6 w-6 shrink-0 text-amber-400" />
-          <div class="min-w-0 text-sm text-amber-100/90">
-            <p class="font-medium text-amber-100">
+          <UIcon name="i-lucide-cpu" class="mt-0.5 h-6 w-6 shrink-0 text-app-warning-400" />
+          <div class="min-w-0 text-sm text-app-warning-100/90">
+            <p class="font-medium text-app-warning-100">
               {{ t('providers.onboarding.noModelTitle') }}
             </p>
             <p class="mt-1">
@@ -81,12 +94,17 @@ const routes = computed<Route[]>(() => [
           <div
             v-for="r in routes"
             :key="r.title"
-            class="flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900/50 p-4"
+            class="flex items-start gap-3 rounded-xl border border-muted bg-default/50 p-4"
           >
-            <UIcon :name="r.icon" class="mt-0.5 h-5 w-5 shrink-0 text-indigo-300" />
+            <UIcon :name="r.icon" class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-slate-100">{{ r.title }}</p>
-              <p class="mt-0.5 text-[13px] leading-relaxed text-slate-400">{{ r.body }}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-app-100">{{ r.title }}</p>
+                <UBadge v-if="r.badge" color="primary" variant="subtle" size="sm">
+                  {{ r.badge }}
+                </UBadge>
+              </div>
+              <p class="mt-0.5 text-sm leading-relaxed text-muted">{{ r.body }}</p>
             </div>
             <UButton
               size="sm"
@@ -100,7 +118,7 @@ const routes = computed<Route[]>(() => [
           </div>
         </div>
 
-        <p class="text-[11px] leading-relaxed text-slate-500">
+        <p class="text-2xs leading-relaxed text-dimmed">
           {{ t('providers.onboarding.operatorNote') }}
         </p>
       </div>

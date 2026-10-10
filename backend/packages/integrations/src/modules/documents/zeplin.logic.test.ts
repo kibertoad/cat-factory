@@ -3,10 +3,13 @@ import { renderDesignContext } from './design.logic.js'
 import {
   assertSafeZeplinUrl,
   buildZeplinDesignContext,
+  MAX_SCREENS,
   parseZeplinRef,
+  SCREEN_FETCH_LIMIT,
   splitZeplinExternalId,
   unwrapArray,
   unwrapObject,
+  zeplinDroppedScreenId,
   zeplinTokens,
   zeplinUrlFor,
 } from './zeplin.logic.js'
@@ -45,6 +48,29 @@ describe('parseZeplinRef', () => {
     const pasted = 'https://app.zeplin.io/project/abc123/screen/def456?foo=bar'
     expect(parseZeplinRef(pasted)).toBe(externalId)
     expect(parseZeplinRef(zeplinUrlFor(externalId))).toBe(externalId)
+  })
+})
+
+describe('zeplinDroppedScreenId', () => {
+  it('names the screen qualifier the ref fell back from, and nothing when it survived', () => {
+    // Same two-level grammar and same silent widening as Figma's: a screen id the parser refuses
+    // leaves the reference on the whole project, which imports perfectly well and covers far more
+    // than the screen someone linked.
+    const kept = 'https://app.zeplin.io/project/abc123/screen/def456'
+    expect(zeplinDroppedScreenId(kept, parseZeplinRef(kept)!)).toBeNull()
+    const dropped = 'https://app.zeplin.io/project/abc123/screen/not a screen'
+    expect(zeplinDroppedScreenId(dropped, parseZeplinRef(dropped)!)).toBe('not a screen')
+    expect(zeplinDroppedScreenId('abc123:not!valid', 'abc123')).toBe('not!valid')
+    // A whole-project link named no screen, so there is nothing to report.
+    expect(zeplinDroppedScreenId('https://app.zeplin.io/project/abc123', 'abc123')).toBeNull()
+  })
+
+  it('validates the WHOLE screen segment rather than an alphanumeric prefix of it', () => {
+    // A prefix match minted a truncated id that looked resolved and 404s on import. Falling back to
+    // the project at least reaches a real page, and the drop is now stated instead of guessed.
+    const url = 'https://app.zeplin.io/project/abc123/screen/def456;instance'
+    expect(parseZeplinRef(url)).toBe('abc123')
+    expect(zeplinDroppedScreenId(url, 'abc123')).toBe('def456;instance')
   })
 })
 
@@ -107,6 +133,37 @@ describe('buildZeplinDesignContext + renderDesignContext', () => {
     expect(md).toContain('### Design tokens')
     expect(md).toContain('- Colors › brand/primary = #ff0000')
     expect(md).toContain('- Spacing › space/sm = 8')
+  })
+
+  it('states the screen cap when the fetch probe came back over it', () => {
+    // The provider asks for SCREEN_FETCH_LIMIT (= MAX_SCREENS + 1) precisely so this is
+    // detectable; asking for exactly MAX_SCREENS makes a full page and a truncated one
+    // identical, which silently drops this note in the only case it exists for.
+    const ctx = buildZeplinDesignContext({
+      externalId: 'proj1',
+      projectName: 'Big',
+      screens: Array.from({ length: SCREEN_FETCH_LIMIT }, (_, i) => ({
+        id: `s${i}`,
+        name: `Screen ${i}`,
+      })),
+      components: [],
+    })
+    // The extra row is a PROBE: it is never rendered.
+    expect(ctx.blocks).toHaveLength(MAX_SCREENS)
+    // And the total is unknown, so the note must not invent one.
+    expect(ctx.notes?.join('\n')).toContain(`more than ${MAX_SCREENS} screens`)
+    expect(ctx.notes?.join('\n')).not.toContain(String(SCREEN_FETCH_LIMIT))
+  })
+
+  it('says nothing about the screen cap when the project fits under it', () => {
+    const ctx = buildZeplinDesignContext({
+      externalId: 'proj1',
+      projectName: 'Small',
+      screens: Array.from({ length: MAX_SCREENS }, (_, i) => ({ id: `s${i}`, name: `S${i}` })),
+      components: [],
+    })
+    expect(ctx.blocks).toHaveLength(MAX_SCREENS)
+    expect(ctx.notes ?? []).toEqual([])
   })
 
   it('uses the project name when no screen is referenced and omits empty sections', () => {

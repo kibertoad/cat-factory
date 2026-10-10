@@ -1,0 +1,592 @@
+// The Node composition root's THIRD layer, between `container-foundation.ts` (env/config,
+// repositories, registries) and `container-core-deps.ts` (the finalize bundle): everything the
+// engine needs to actually RUN a block — repo resolution, the runner transport + deploy seams, the
+// per-run services, the agent executor, the GitHub-client-dependent integration slice, and the repo
+// bootstrapper.
+//
+// Lifted out of `buildNodeContainer` so that root stays within the per-function line budget. The
+// order of every statement here is unchanged from when it lived inline, which matters: the
+// `selectNodeGitHubDeps` call registers gate providers onto `providerRegistry` as a side effect and
+// must stay BEFORE `applyGateProviders` in the finalize step.
+import {
+  type AppCaches,
+  type AgentExecutor,
+  type BlockRepository,
+  type Clock,
+  type GitHubInstallationRepository,
+  type Logger,
+  type RepoProjectionRepository,
+  type ServiceRepository,
+  type UrlSafetyPolicy,
+  type WorkspaceMountRepository,
+  createInitiatorPatGate,
+} from '@cat-factory/kernel'
+import {
+  type AppConfig,
+  buildDelegatedAgentExecutor,
+  CompositeAgentExecutor,
+  GitHubAppAuth,
+  GitHubAppRegistry,
+  buildListWorkspaceRunRepos,
+  buildResolveRepoTarget,
+  buildResolveRepoTargets,
+  type ResolveRepoOrigin,
+  type ResolveRepoTarget,
+  type ToolSecretChain,
+  buildToolSecretChain,
+  mcpOAuthExecutorDeps,
+  toolSecretContainerFields,
+  createResolveRunInitiatorToken,
+  logger,
+  resolveUrlSafetyPolicy,
+} from '@cat-factory/server'
+
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { NodeContainerOptions } from './container-options.js'
+import type { resolveNodeContainerFoundation } from './container-foundation.js'
+import type { buildNodeModelDeps } from './container-model-deps.js'
+import { selectNodeGitHubDeps } from './container-github-deps.js'
+import type { DrizzleDb } from './db/client.js'
+import { buildNodeRunServices } from './container-run-services-deps.js'
+import {
+  bootstrapObservabilityFrom,
+  buildNodeBootstrapper,
+  buildNodeTransportDeploy,
+} from './container-transport-deps.js'
+import {
+  type NodeContainerExecutorDeps,
+  buildNodeContainerExecutor,
+} from './container-executor-deps.js'
+import {
+  DrizzleGitHubInstallationRepository,
+  DrizzleRunnerPoolConnectionRepository,
+} from './repositories/containerExecution.js'
+import {
+  DrizzleBranchProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleRepoProjectionRepository,
+} from './repositories/github.js'
+
+/**
+ * The workspace-spanning GitHub App registry, built once and shared by everything that
+ * needs an App credential: the container executor's push-token mint, the tech-debt
+ * issue filer, and the CI / merge / mergeability gate client. Returns undefined when
+ * the App isn't configured (`github.enabled` + `GITHUB_APP_PRIVATE_KEY`), so each
+ * caller degrades the way it always has.
+ */
+export function buildNodeAppRegistry(
+  env: NodeJS.ProcessEnv,
+  config: AppConfig,
+  clock: Clock,
+  installationRepository: GitHubInstallationRepository,
+): GitHubAppRegistry | undefined {
+  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
+  if (!config.github.enabled || !privateKeyPem) return undefined
+  const makeAuth = (appId: string, key: string) =>
+    new GitHubAppAuth({
+      appId,
+      privateKeyPem: key,
+      installationRepository,
+      clock,
+      apiBase: config.github.apiBase,
+    })
+  // Privileged App tier (ADR 0005): the second App carries `Administration: write`
+  // for repo provisioning. Activates only when both its config id and key are
+  // present, mirroring the Worker's `buildAppRegistry`.
+  const privilegedKey = env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()
+  const privileged =
+    config.github.privilegedApp && privilegedKey
+      ? {
+          appId: config.github.privilegedApp.appId,
+          auth: makeAuth(config.github.privilegedApp.appId, privilegedKey),
+        }
+      : undefined
+  return new GitHubAppRegistry({
+    default: {
+      appId: config.github.appId,
+      auth: makeAuth(config.github.appId, privateKeyPem),
+    },
+    privileged,
+    installationRepository,
+  })
+}
+
+export interface NodeRunPlatformInput {
+  options: NodeContainerOptions
+  foundation: ReturnType<typeof resolveNodeContainerFoundation>
+  models: ReturnType<typeof buildNodeModelDeps>
+}
+
+/**
+ * Assemble the run platform. Every field of the returned bundle is consumed by the finalize step,
+ * so the root spreads it wholesale rather than re-listing it — the same reason the per-run
+ * `runServices` bundle (spread in here) is kept as one value.
+ */
+
+/**
+ * The four VCS entity projections + the check-run one, sourced through the same remote ⇄ Drizzle
+ * seam as their repo/installation siblings.
+ *
+ * Sourced HERE rather than inside the GitHub module because the mothership reflects them on its
+ * persistence registry whether or not it wires a GitHub App of its own: a mothership-mode node
+ * projects what its OWN delegated client just wrote, so the module's "only when configured" gate
+ * would leave that node's sync answering `... is not wired`.
+ */
+function sourceEntityProjections(sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T) {
+  return {
+    branchProjectionRepository: sourced(
+      'branchProjectionRepository',
+      (d) => new DrizzleBranchProjectionRepository(d),
+    ),
+    pullRequestProjectionRepository: sourced(
+      'pullRequestProjectionRepository',
+      (d) => new DrizzlePullRequestProjectionRepository(d),
+    ),
+    issueProjectionRepository: sourced(
+      'issueProjectionRepository',
+      (d) => new DrizzleIssueProjectionRepository(d),
+    ),
+    commitProjectionRepository: sourced(
+      'commitProjectionRepository',
+      (d) => new DrizzleCommitProjectionRepository(d),
+    ),
+    checkRunProjectionRepository: sourced(
+      'checkRunProjectionRepository',
+      (d) => new DrizzleCheckRunProjectionRepository(d),
+    ),
+  }
+}
+
+/**
+ * The three repo resolvers, built together off the ONE dependency set they share.
+ *
+ * They answer the same question at three arities — which repo does this block's work target,
+ * which repos does a cross-service run touch, and which repos does this board reach at all —
+ * and read the same installation, projection, mount, block and service repositories to do it.
+ * Built side by side so a change to that shared set (a new cache, a re-sourced repository)
+ * cannot reach one and miss another, which is how they would come to disagree about a repo.
+ */
+function buildNodeRepoResolvers(deps: {
+  installationRepository: GitHubInstallationRepository
+  repoProjectionRepository: RepoProjectionRepository
+  blockRepository: BlockRepository
+  serviceRepository: ServiceRepository
+  workspaceMountRepository: WorkspaceMountRepository
+  repoProjectionCache?: AppCaches['repoProjection']
+}) {
+  // ALL of them get the projection cache. They read the same whole-workspace list, on the same
+  // hot paths, and it is invalidated by the same projection writes (slice 3; the GitHub
+  // sync/webhook module + bootstrapper invalidate the bag after every write). Handing it to one
+  // of them is how the cheap resolver and the expensive one end up looking alike at the call
+  // site while costing an order of magnitude apart.
+  return {
+    // The repo a running block targets (installation + owner/name), resolved from the
+    // github_repos projection. Built once and shared by the container executor, the
+    // GitHub-issue tracker filer, and the CI / merge providers.
+    resolveRepoTarget: buildResolveRepoTarget(deps),
+    // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
+    // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
+    // resolves the involved frames in one query). Fed to the container executor so the
+    // implementer can fan a cross-service change out across sibling checkouts, and to the PR
+    // verification report so it reaches the peer PRs that fan-out opened.
+    resolveRepoTargets: buildResolveRepoTargets(deps),
+    // The BOARD-WIDE set: every repo some mounted service targets. Surfaced on the container
+    // for the board-load credential check, which has to know whether this workspace's runs
+    // reach GitHub at all before it judges a stored GitHub token.
+    listWorkspaceRunRepos: buildListWorkspaceRunRepos(deps),
+  }
+}
+
+/**
+ * How this facade resolves the agent executor: the inline / container / DELEGATED selection, as one
+ * composite. The twin of the Worker's `selectWorkerAgentExecutor`, and its own function for the
+ * same reason: it is the one entry in the platform bundle that RESOLVES rather than names a
+ * collaborator, and keeping the two facades' selections the same shape is what stops the seam being
+ * wired differently on one of them.
+ *
+ * It is called AFTER the GitHub deps, and that ordering is load-bearing: the delegated arm shares
+ * their checkout-free repo binding, so an executor that stages its own context layer writes through
+ * the SAME `RepoFiles` a registered kind's pre-ops do (one cache, one head memo) rather than a
+ * second binding of its own.
+ *
+ * Consensus wraps this LATER (in the finalize step, once the event publisher exists), so live panel
+ * pushes ride the same hub.
+ */
+function selectNodeAgentExecutor(input: {
+  inline: AgentExecutor
+  container: AgentExecutor | null
+  registries: NodeRunPlatformInput['foundation']['registries']
+  agentKindRegistry: AgentKindRegistry
+  resolveRepoTarget: ResolveRepoTarget
+  resolveRepoOrigin: ResolveRepoOrigin
+  githubGateDeps: Partial<CoreDependencies>
+  tasks: { deps: Partial<CoreDependencies> }
+  toolSecretChain: ToolSecretChain
+  runServices: ReturnType<typeof buildNodeRunServices>
+  /**
+   * The outbound guard a registered executor answers to, resolved from the SAME config slice the
+   * notification-webhook sender uses. An executor is an outbound HTTP surface the deployment
+   * configured, and a second set of SSRF rules is a set nobody maintains. Symmetric with the
+   * Worker facade.
+   */
+  urlSafetyPolicy: UrlSafetyPolicy | undefined
+  clock: Clock
+}): CompositeAgentExecutor {
+  const delegated = buildDelegatedAgentExecutor({
+    delegatedExecutorRegistry: input.registries.delegatedExecutorRegistry,
+    agentKindRegistry: input.agentKindRegistry,
+    resolveRepoTarget: input.resolveRepoTarget,
+    resolveRepoOrigin: input.resolveRepoOrigin,
+    urlSafetyPolicy: input.urlSafetyPolicy,
+    ...(input.githubGateDeps.resolveRunRepoContext
+      ? { resolveRunRepoContext: input.githubGateDeps.resolveRunRepoContext }
+      : {}),
+    ...(input.tasks.deps.taskRepository ? { taskRepository: input.tasks.deps.taskRepository } : {}),
+    resolveToolSecrets: input.toolSecretChain.resolver,
+    agentContextObservability: input.runServices.agentContextObservability,
+    // The SAME recorder the container executor files a subscription harness's calls through, so
+    // a delegated step's reported usage lands where the step's metrics are read. Symmetric with
+    // the Worker facade.
+    recordHarnessCalls: input.runServices.executorTelemetry.recordHarnessCalls,
+    logger,
+    clock: input.clock,
+  })
+  // Inline kinds run as one-shot LLM calls; repo-operating kinds route to the container (and fail
+  // loudly when its prerequisites are unconfigured); delegated kinds route to the deployment's own
+  // external executor.
+  return new CompositeAgentExecutor(
+    input.inline,
+    input.container,
+    input.agentKindRegistry,
+    delegated,
+    logger,
+  )
+}
+
+/**
+ * The persistence the container-execution path needs, built from the same db.
+ *
+ * One group rather than four lines in the platform builder, because every member is SHARED by at
+ * least two of the collaborators below it and constructing one twice would give them different
+ * instances: the runner-pool repo also backs the `runners` Core module (so a pool registered
+ * through the API is the one a dispatch resolves), the installation repo backs both token minting
+ * and repo resolution, and the repositories projection is read by `buildResolveRepoTarget` and by
+ * the GitHub sync/webhook module.
+ */
+function selectNodeRunRepositories(
+  options: NodeContainerOptions,
+  sourced: NodeRunPlatformInput['foundation']['sourced'],
+) {
+  return {
+    runnerPoolConnectionRepository: sourced(
+      'runnerPoolConnectionRepository',
+      (d) => new DrizzleRunnerPoolConnectionRepository(d),
+    ),
+    githubInstallationRepository:
+      options.githubInstallationRepository ??
+      sourced('githubInstallationRepository', (d) => new DrizzleGitHubInstallationRepository(d)),
+    repoProjectionRepository: sourced(
+      'repoProjectionRepository',
+      (d) => new DrizzleRepoProjectionRepository(d),
+    ),
+    entityProjectionRepositories: sourceEntityProjections(sourced),
+  }
+}
+
+export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPlatformInput) {
+  const {
+    env,
+    config,
+    clock,
+    idGenerator,
+    repos,
+    db,
+    remoteRepos,
+    sourced,
+    registries,
+    gitlabEngineClient,
+    resolveRepoOrigin,
+    resolveWorkspaceModelDefault,
+  } = foundation
+  const { runnerBackendRegistry, agentKindRegistry, providerRegistry } = registries
+  const { subscriptions, personalSubscriptions, resolveUserGitHubToken, inline } = models
+
+  const {
+    runnerPoolConnectionRepository,
+    githubInstallationRepository,
+    repoProjectionRepository,
+    entityProjectionRepositories,
+  } = selectNodeRunRepositories(options, sourced)
+
+  const appRegistry = buildNodeAppRegistry(env, config, clock, githubInstallationRepository)
+
+  // "Does THIS run act with its initiator's own GitHub token?" — built ONCE here and shared by
+  // the container push-token mint and the engine's GitHub client (CI gate / mergeability /
+  // merge), so the workspace's `allowInitiatorPat` switch cannot bind one path and miss the
+  // other. Undefined when no per-user secret store is wired (no `ENCRYPTION_KEY`), which is
+  // the same condition that already made the preference inert.
+  const resolveRunInitiatorToken = resolveUserGitHubToken
+    ? createResolveRunInitiatorToken({
+        resolveUserGitHubToken,
+        initiatorPatGate: createInitiatorPatGate({
+          repository: repos.workspaceSettingsRepository,
+          ...(options.caches?.workspaceSettings ? { cache: options.caches.workspaceSettings } : {}),
+          // The account-wide floor. Read off the REPOSITORY rather than
+          // `AccountSettingsService`, deliberately: the service needs an `ENCRYPTION_KEY` to
+          // open the account's secrets, which a mothership node does not have — so building
+          // the floor from the service would have made it silently inert on exactly the
+          // deployment shape where an operator scoped things centrally. The repo's
+          // config-only read needs no key and is proxied.
+          account: {
+            resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+            readAllowInitiatorPat: async (accountId) =>
+              (await repos.accountSettingsRepository.getConfigByAccount(accountId))
+                .allowInitiatorPat,
+          },
+        }),
+        logger,
+      })
+    : undefined
+
+  // Block → repo(s) resolution, singular and multi-repo, off one shared dependency set.
+  const { resolveRepoTarget, resolveRepoTargets, listWorkspaceRunRepos } = buildNodeRepoResolvers({
+    installationRepository: githubInstallationRepository,
+    repoProjectionRepository,
+    blockRepository: repos.blockRepository,
+    // The board's mounted services, which is what turns "every repo the connection can see"
+    // into "every repo a run here could target".
+    workspaceMountRepository: repos.workspaceMountRepository,
+    // The org service repo (its `getByFrameBlock` is all `buildResolveRepoTarget` needs); already
+    // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
+    // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
+    serviceRepository: repos.serviceRepository,
+    repoProjectionCache: options.caches?.repoProjection,
+  })
+
+  // The runner-transport resolver + the container-backed deploy lifecycle seams (resolve the
+  // workspace's transport, wrap it with the provisioning-log decorator, build the deploy job
+  // client + clone-target resolver), lifted into `container-transport-deps.ts`.
+  const { resolveTransport, baseDeployMint, deployDeps } = buildNodeTransportDeploy({
+    config,
+    repos,
+    idGenerator,
+    clock,
+    runnerPoolConnectionRepository,
+    runnerBackendRegistry,
+    appRegistry,
+    resolveRepoTarget,
+    workspaceRepository: repos.workspaceRepository,
+    resolveTransportOverride: options.resolveTransport,
+    runnerPoolProvider: options.runnerPoolProvider,
+    skipProvisioningLogWrap: options.skipProvisioningLogWrap,
+    mintInstallationToken: options.mintInstallationToken,
+    deployJobClientOverride: options.deployJobClient,
+    disableDefaultDeployJobClient: options.disableDefaultDeployJobClient,
+    resolveDeployCloneTargetOverride: options.resolveDeployCloneTarget,
+    resolveRepoOrigin,
+  })
+  // The per-run agent-observability + web-search + sealed-secret services (agent-context /
+  // search-query / harness-call telemetry sinks, the web-search upstream + availability
+  // resolver, the package-registry + test-secret dispatch resolvers, the subscription-quota
+  // provider), lifted into `container-run-services-deps.ts`. Kept as ONE value and SPREAD into
+  // the returned bundle rather than destructured field-by-field: every field is either forwarded
+  // verbatim or read at a single call site, so the destructure was ~13 lines of pure re-listing
+  // that had to be edited twice per new run service.
+  const runServices = buildNodeRunServices({
+    env,
+    config,
+    repos,
+    idGenerator,
+    clock,
+    caches: options.caches,
+    logger,
+  })
+
+  const { toolSecretChain, executorCapabilityDeps } = buildNodeCapabilityCredentials({
+    env,
+    options,
+    runServices,
+    logger,
+  })
+
+  const container = buildNodeContainerExecutor({
+    env,
+    config,
+    appRegistry,
+    resolveRepoTarget,
+    resolveRepoTargets,
+    resolveTransport,
+    resolveWorkspaceModelDefault,
+    agentKindRegistry,
+    mintInstallationTokenOverride: options.mintInstallationToken,
+    subscriptions,
+    personalSubscriptions,
+    resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
+    agentContextObservability: runServices.agentContextObservability,
+    resolveWebSearchAvailability: runServices.resolveWebSearchAvailability,
+    resolveRepoOrigin,
+    resolvePackageRegistries: runServices.resolvePackageRegistries,
+    resolveTestSecrets: runServices.resolveTestSecrets,
+    ...executorCapabilityDeps,
+    ...runServices.executorTelemetry,
+    recordSubscriptionQuotaUsage: (target, usage) =>
+      runServices.subscriptionQuotaProvider.recordUsage(target, usage),
+  })
+
+  // The GitHub-client-dependent slice of the composition root: the engine's GitHub client, the
+  // CI / mergeability / review / doc-quality gate-provider wiring (registered onto
+  // `providerRegistry` as a side effect — kept BEFORE `applyGateProviders` in finalize), the
+  // task-source deps, issue writeback, and the GitHub gate + projection/sync module deps. Lifted
+  // into `container-github-deps.ts`, mirroring the Worker's `selectGitHubDeps`.
+  const {
+    githubClient,
+    tasks,
+    fileGitHubIssue,
+    issueWritebackProvider,
+    githubGateDeps,
+    githubModuleDeps,
+  } = selectNodeGitHubDeps({
+    config,
+    db,
+    remoteRepos,
+    sourced,
+    ...(options.secretDelegate ? { secretDelegate: options.secretDelegate } : {}),
+    idGenerator,
+    clock,
+    appRegistry,
+    githubClientOverride: options.githubClient,
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
+    gitlabEngineClient,
+    providerRegistry,
+    resolveRepoTarget,
+    resolveRepoTargets,
+    resolveRepoOrigin,
+    githubInstallationRepository,
+    repoProjectionRepository,
+    entityProjectionRepositories,
+    blockRepository: repos.blockRepository,
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    workspaceRepository: repos.workspaceRepository,
+    caches: options.caches,
+  })
+
+  const standardAgentExecutor = selectNodeAgentExecutor({
+    inline,
+    container,
+    registries,
+    agentKindRegistry,
+    resolveRepoTarget,
+    resolveRepoOrigin,
+    githubGateDeps,
+    tasks,
+    toolSecretChain,
+    runServices,
+    urlSafetyPolicy: resolveUrlSafetyPolicy(config.notificationWebhooks),
+    clock,
+  })
+
+  // Repo-bootstrap: the reference-architecture library + the container-dispatching
+  // `repoBootstrapper`, lifted into `container-transport-deps.ts`.
+  const { bootstrapJobRepository, bootstrapMintInstallationToken, repoBootstrapper } =
+    buildNodeBootstrapper({
+      env,
+      config,
+      sourced,
+      resolveTransport,
+      githubInstallationRepository,
+      repoProjectionRepository,
+      appRegistry,
+      githubClient,
+      mintInstallationToken: options.mintInstallationToken,
+      resolvePackageRegistries: runServices.resolvePackageRegistries,
+      caches: options.caches,
+      // The same sinks the container executor records through, so a bootstrap run's provided
+      // context and tool-call trajectory answer the observability panel like any other run's.
+      observability: bootstrapObservabilityFrom(runServices, config),
+    })
+
+  return {
+    ...runServices,
+    runnerPoolConnectionRepository,
+    githubInstallationRepository,
+    repoProjectionRepository,
+    entityProjectionRepositories,
+    appRegistry,
+    resolveRepoTarget,
+    listWorkspaceRunRepos,
+    resolveTransport,
+    // Returned so the CONTAINER can surface it too: besides the dispatch mint and the engine's
+    // GitHub client, the board-load credential check asks the same question to judge the token a
+    // run would actually use. Undefined here means no per-user secret store, which is already
+    // what makes the preference inert.
+    resolveRunInitiatorToken,
+    baseDeployMint,
+    deployDeps,
+    standardAgentExecutor,
+    // The composed capability-credential chain: the resolver the tool-server probe resolves through
+    // (a probe must resolve exactly as a dispatch would) plus the description the credential
+    // checklist renders. One shared projection, so the facades cannot drift about the pair.
+    ...toolSecretContainerFields(toolSecretChain),
+    githubClient,
+    tasks,
+    fileGitHubIssue,
+    issueWritebackProvider,
+    githubGateDeps,
+    githubModuleDeps,
+    bootstrapJobRepository,
+    bootstrapMintInstallationToken,
+    repoBootstrapper,
+  }
+}
+
+/**
+ * How a registered capability's credentials are resolved at dispatch, both halves: the composed
+ * `ToolSecretResolver` chain (the per-workspace store in front of this node's environment, or a
+ * deployment's own resolver, which replaces it) and the OAuth token source that mints a remote
+ * server's access token from the sealed grant store.
+ *
+ * Composed HERE rather than inside the executor builder because the credential CHECKLIST has to
+ * describe the chain the deployment actually got, and an executor cannot say what it was handed —
+ * so the chain travels with its own description. The two halves are returned together because the
+ * OAuth source resolves its CLIENT SECRET through that same chain: building them apart is what
+ * would let a deployment's own resolver serve one and not the other.
+ */
+function buildNodeCapabilityCredentials(input: {
+  env: NodeJS.ProcessEnv
+  options: NodeContainerOptions
+  runServices: ReturnType<typeof buildNodeRunServices>
+  logger: Logger
+}): {
+  toolSecretChain: ToolSecretChain
+  executorCapabilityDeps: Pick<
+    NodeContainerExecutorDeps,
+    'resolveToolSecrets' | 'resolveToolServerOAuth'
+  >
+} {
+  const { env, options, runServices, logger } = input
+  const toolSecretChain = buildToolSecretChain({
+    custom: options.createToolSecretResolver?.(env),
+    credentials: runServices.capabilityCredentialsService,
+    env,
+    environmentFallback: options.capabilityCredentialEnvironmentFallback,
+    logger,
+  })
+  return {
+    toolSecretChain,
+    executorCapabilityDeps: {
+      resolveToolSecrets: toolSecretChain.resolver,
+      // Absent when this deployment has no ENCRYPTION_KEY, which is what makes a dispatch state an
+      // OAuth server as `oauth_not_connected` rather than send a request with no token.
+      ...mcpOAuthExecutorDeps({
+        oauth: runServices.mcpOAuthService,
+        resolveToolSecrets: toolSecretChain.resolver,
+        logger,
+      }),
+    },
+  }
+}

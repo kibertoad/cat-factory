@@ -11,7 +11,7 @@ import {
   parseLinearIssueCreateResponse,
 } from './linear.create.logic.js'
 import { linearAuthFromCredentials, postLinearGraphql } from '../shared/linear.client.js'
-import { toBase64 } from './base64.js'
+import { toBase64 } from '../shared/base64.js'
 
 // TicketTrackerService: the runtime-neutral `TicketTrackerProvider` the tech-debt
 // pipeline's `tracker` step uses to file a ticket. It resolves the workspace's

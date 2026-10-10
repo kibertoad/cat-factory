@@ -45,3 +45,16 @@ export function deriveWorkerDatabase(
   parsed.pathname = `/${dbName}`
   return { dbName, url: parsed.toString() }
 }
+
+/**
+ * The admin connection URL for `CREATE DATABASE` / `pg_database` probes: `baseUrl` with its
+ * path swapped to the `postgres` maintenance database (which always exists). `CREATE DATABASE`
+ * needs a connection to SOME existing database; using the maintenance DB rather than the app's
+ * base database keeps a test run from ever opening a pool on — let alone mutating — the
+ * developer's `DATABASE_URL` database.
+ */
+export function adminDatabaseUrl(baseUrl: string): string {
+  const parsed = new URL(baseUrl)
+  parsed.pathname = '/postgres'
+  return parsed.toString()
+}

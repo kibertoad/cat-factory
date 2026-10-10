@@ -1,17 +1,25 @@
 <script setup lang="ts">
 // One tab of the Infrastructure window — the connect surface for a single provider kind
 // (container agents → runner pool, or test environments → environment provider). Both
-// self-describe via a ProviderDescriptor, so this renders either without hard-coding them:
-//   - a NATIVE provider (ships a `manifestTemplate`) → the friendly flat field form, whose
-//     values are overlaid back onto the manifest before saving (the single storage path).
+// self-describe via a ProviderDescriptor, so this renders every backend WITHOUT hard-coding
+// which optional kinds (Kubernetes, EKS, a custom kind) exist:
+//   - a NATIVE MANIFEST provider (ships a `manifestTemplate`) → the flat field form, whose
+//     values are overlaid back onto the manifest before saving.
+//   - a NATIVE CONFIG backend (ships a `configTemplate` — the runner backends Kubernetes/EKS
+//     and any custom native kind) → the SAME flat field form, whose values are overlaid onto
+//     the discriminated `{ kind, <payload> }` config the backend described. The SPA never
+//     names a backend; it reads the single payload key off the skeleton.
 //   - a MANIFEST-driven provider (no template) → the full JSON manifest editor
 //     (ProviderManifestEditor), which replaces the old "use the API" disclaimer.
 import { computed, ref, toRaw, watch } from 'vue'
-import type { ProviderConnectionKind } from '~/types/providerConnections'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
+import type { ProviderConfigField, ProviderConnectionKind } from '~/types/providerConnections'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
-import KubernetesRunnerForm from '~/components/settings/KubernetesRunnerForm.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   kind: ProviderConnectionKind
@@ -29,6 +37,7 @@ const emit = defineEmits<{ connected: [] }>()
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const descriptor = computed(() => store.descriptorFor(props.kind))
@@ -52,21 +61,32 @@ const showLogs = ref(false)
 
 // --- Shared state -------------------------------------------------------------------
 const values = ref<Record<string, string>>({})
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<ConnectionTestResult | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
-/** A native provider ships a manifest scaffold ⇒ render the friendly flat field form. */
-const isNative = computed(() => !!descriptor.value?.manifestTemplate)
+// A native provider renders the friendly flat field form. Two flavours self-describe it:
+// `manifestTemplate` (overlay onto a manifest) and `configTemplate` (overlay onto a
+// discriminated backend config — the Kubernetes/EKS/custom runner backends).
+const isNativeManifest = computed(() => !!descriptor.value?.manifestTemplate)
+const isNativeConfig = computed(() => !!descriptor.value?.configTemplate)
+const isNative = computed(() => isNativeManifest.value || isNativeConfig.value)
 const secretFieldCount = computed(
   () => (descriptor.value?.configFields ?? []).filter((f) => f.secret).length,
 )
 const hasSecretFields = computed(() => secretFieldCount.value > 0)
 
-// Seed the flat-form draft from the saved manifest so an edit starts from the CURRENT
-// non-secret config (baseUrl + providerConfig). Secret fields are never prefilled.
+// Seed the flat-form draft from the CURRENT non-secret config so an edit starts populated.
+// Secret fields are never prefilled. A `configTemplate` backend gets its flat values straight
+// from `descriptor.values`; a `manifestTemplate` backend reads them off the saved manifest
+// (baseUrl + providerConfig). On a fresh Kubernetes connect a `k3s` preset prefills local defaults.
 function resetDraft() {
   testResult.value = null
+  if (isNativeConfig.value) {
+    values.value = { ...descriptor.value?.values }
+    applyPresetDefaults()
+    return
+  }
   const saved = descriptor.value?.savedManifest
   const cfg = (saved?.providerConfig as Record<string, unknown> | undefined) ?? {}
   const next: Record<string, string> = {}
@@ -80,6 +100,24 @@ function resetDraft() {
     }
   }
   values.value = next
+}
+
+// The low-config `k3s` preset (an execution-axis radio the picker synthesises) prefills the
+// local-cluster defaults into the generic Kubernetes runner form. Only on a FRESH connect —
+// never clobbering a stored connection's values. Kept SPA-local because the preset is a UI
+// affordance of the picker, not a backend concept.
+function applyPresetDefaults() {
+  if (props.preset !== 'k3s' || connection.value) return
+  const seed: Record<string, string> = {
+    label: 'Local k3s',
+    apiServerUrl: 'https://127.0.0.1:6443',
+    namespace: 'cat-factory',
+    insecureSkipTlsVerify: 'true',
+  }
+  if (props.suggestedImage) seed.image = props.suggestedImage
+  for (const [k, val] of Object.entries(seed)) {
+    if (!(values.value[k] ?? '').trim()) values.value[k] = val
+  }
 }
 
 /** A flat-form field is satisfied when filled now, or already stored, or it has a default. */
@@ -124,13 +162,49 @@ function buildManifestPayload(): {
   return { manifest, secrets, backendKind: props.backendKind }
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
+/** Coerce a flat string form value to the JSON type the backend config expects for its field. */
+function coerceFieldValue(field: ProviderConfigField, raw: string): unknown {
+  if (field.type === 'number') return Number(raw)
+  if (field.type === 'checkbox') return raw === 'true'
+  return raw
+}
+
+/**
+ * Overlay the flat field values onto a NATIVE backend's discriminated `configTemplate`. The
+ * skeleton is `{ kind, <payload> }`, so every non-secret field is written to the single
+ * non-`kind` payload key (typed via the field's `type`), each secret to the write-only bundle,
+ * and a cleared field is dropped so it reverts to absent. Because the template is the STORED
+ * config on an edit, advanced API-only keys the flat form never renders are preserved.
+ */
+function buildConfigPayload(): {
+  config: Record<string, unknown>
+  secrets: Record<string, string>
+} | null {
+  const template = descriptor.value?.configTemplate
+  if (!template) return null
+  const config: Record<string, unknown> = structuredClone(toRaw(template))
+  const payloadKey = Object.keys(config).find((k) => k !== 'kind')
+  if (!payloadKey) return null
+  const payload: Record<string, unknown> = {
+    ...(config[payloadKey] as Record<string, unknown> | undefined),
+  }
+  const secrets: Record<string, string> = {}
+  for (const f of descriptor.value?.configFields ?? []) {
+    const raw = (values.value[f.key] ?? '').trim()
+    if (f.secret) {
+      if (raw) secrets[f.key] = raw
+      continue
+    }
+    if (!raw) delete payload[f.key]
+    else payload[f.key] = coerceFieldValue(f, raw)
+  }
+  config[payloadKey] = payload
+  return { config, secrets }
+}
+
+/** The payload for the active native flavour (discriminated config or manifest overlay). */
+function buildFlatPayload() {
+  return isNativeConfig.value ? buildConfigPayload() : buildManifestPayload()
 }
 
 function toastSaved() {
@@ -141,9 +215,9 @@ function toastSaved() {
   })
 }
 
-// --- Native flat-form actions -------------------------------------------------------
+// --- Native flat-form actions (both manifest-overlay and config-overlay flavours) ---
 async function testNative() {
-  const payload = buildManifestPayload()
+  const payload = buildFlatPayload()
   if (!payload) return
   testing.value = true
   testResult.value = null
@@ -159,13 +233,13 @@ async function testNative() {
 async function saveNative() {
   busy.value = true
   try {
-    const payload = buildManifestPayload()
+    const payload = buildFlatPayload()
     if (payload) await store.register(props.kind, payload)
     emit('connected')
     resetDraft()
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -199,7 +273,7 @@ async function saveManifest(payload: {
     emit('connected')
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -244,7 +318,7 @@ async function saveConfig(payload: {
     emit('connected')
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -258,7 +332,7 @@ async function remove() {
     resetDraft()
     toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.removeFailed'), e)
+    present(e, 'settings.providerConnection.toast.removeFailed')
   } finally {
     busy.value = false
   }
@@ -280,13 +354,17 @@ function fieldHelp(key: string): string | undefined {
 <template>
   <div v-if="descriptor" class="space-y-4">
     <div class="flex items-start justify-between gap-3">
-      <p class="text-xs text-slate-400">{{ blurb }}</p>
+      <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
         size="xs"
         class="shrink-0"
-        @click="showLogs = !showLogs"
+        @click="
+          () => {
+            showLogs = !showLogs
+          }
+        "
       >
         {{
           showLogs
@@ -302,11 +380,11 @@ function fieldHelp(key: string): string | undefined {
     <!-- Saved connection summary -->
     <div
       v-if="connection"
-      class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+      class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
     >
       <div>
-        <span class="font-medium text-slate-200">{{ connection.label }}</span>
-        <div class="text-[11px] text-emerald-400">
+        <span class="font-medium text-default">{{ connection.label }}</span>
+        <div class="text-2xs text-app-success-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
       </div>
@@ -323,7 +401,7 @@ function fieldHelp(key: string): string | undefined {
     <!-- Mandatory-fields warning (mirrors the banner) -->
     <div
       v-if="descriptor.missingRequired.length"
-      class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+      class="rounded-md border border-app-warning-500/40 bg-app-warning-950/40 px-3 py-2 text-xs text-app-warning-200"
     >
       {{
         t('settings.providerConnection.missingConfig', {
@@ -332,23 +410,12 @@ function fieldHelp(key: string): string | undefined {
       }}
     </div>
 
-    <!-- Native Kubernetes runner backend (runner-pool). -->
-    <KubernetesRunnerForm
-      v-if="kind === 'runner-pool' && backendKind === 'kubernetes'"
-      :connection="connection"
-      :preset="preset"
-      :suggested-image="suggestedImage"
-      :supports-test="descriptor.supportsTest"
-      :testing="testing"
-      :busy="busy"
-      :test-result="testResult"
-      @test="testConfig"
-      @save="saveConfig"
-    />
-
-    <!-- Native Kubernetes ephemeral-environment backend (environment). -->
+    <!-- Native Kubernetes ephemeral-environment backend (environment). The runner-pool
+         Kubernetes/EKS backends now self-describe via `configTemplate` and render through the
+         generic flat form below — no per-kind component. The env axis keeps its bespoke form
+         until it, too, is descriptor-driven (see docs/initiatives/descriptor-driven-infra-forms.md). -->
     <KubernetesEnvironmentForm
-      v-else-if="kind === 'environment' && backendKind === 'kubernetes'"
+      v-if="kind === 'environment' && backendKind === 'kubernetes'"
       :connection="connection"
       :supports-test="descriptor.supportsTest"
       :testing="testing"
@@ -359,18 +426,15 @@ function fieldHelp(key: string): string | undefined {
     />
 
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
-    <div
-      v-else-if="isNative"
-      class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-    >
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+      <SectionLabel as="p">
         {{
           connection
             ? t('settings.providerConnection.form.updateConfiguration')
             : t('settings.providerConnection.form.connect')
         }}
-      </p>
-      <p v-if="connection && hasSecretFields" class="text-[11px] text-amber-300/80">
+      </SectionLabel>
+      <p v-if="connection && hasSecretFields" class="text-2xs text-app-warning-300/80">
         {{
           t(
             'settings.providerConnection.form.reenterSecrets',
@@ -396,6 +460,26 @@ function fieldHelp(key: string): string | undefined {
           :items="(field.options ?? []).map((o) => ({ label: o.label, value: o.value }))"
           :placeholder="field.default ?? field.placeholder"
         />
+        <USwitch
+          v-else-if="field.type === 'checkbox'"
+          :model-value="values[field.key] === 'true'"
+          @update:model-value="values[field.key] = $event ? 'true' : 'false'"
+        />
+        <UTextarea
+          v-else-if="field.type === 'textarea'"
+          v-model="values[field.key]"
+          :rows="4"
+          class="w-full font-mono"
+          :placeholder="field.default ?? field.placeholder"
+        />
+        <UInput
+          v-else-if="field.type === 'number'"
+          :model-value="values[field.key] ?? ''"
+          type="number"
+          class="font-mono"
+          :placeholder="field.default ?? field.placeholder"
+          @update:model-value="values[field.key] = String($event ?? '')"
+        />
         <UInput
           v-else
           v-model="values[field.key]"
@@ -405,7 +489,7 @@ function fieldHelp(key: string): string | undefined {
         />
       </UFormField>
 
-      <div v-if="descriptor.supportsTest" class="flex items-center gap-2">
+      <div v-if="descriptor.supportsTest" class="space-y-1.5">
         <UButton
           color="neutral"
           variant="soft"
@@ -416,13 +500,10 @@ function fieldHelp(key: string): string | undefined {
         >
           {{ t('settings.providerConnection.test.button') }}
         </UButton>
-        <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-        </span>
-        <span v-else-if="testResult" class="text-xs text-rose-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-        </span>
+        <ConnectionTestVerdict :result="testResult" />
       </div>
+
+      <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
         <UButton

@@ -5,6 +5,7 @@ import type {
   VcsConnectionRef,
   VcsProvisioningClient,
 } from '@cat-factory/kernel'
+import { describeVcsApiError } from '@cat-factory/kernel'
 import type { GitLabTokenSource } from './tokenSource.js'
 import { GitLabApiError } from './FetchGitLabClient.js'
 
@@ -102,7 +103,13 @@ export class GitLabProvisioningClient implements VcsProvisioningClient {
       const text = await res.text().catch(() => '')
       throw new GitLabApiError(
         res.status,
-        `GitLab ${method} ${path} → ${res.status}: ${text.slice(0, 300)}`,
+        describeVcsApiError({
+          provider: 'gitlab',
+          status: res.status,
+          method,
+          url: `${apiBase}${path}`,
+          body: text.slice(0, 300),
+        }),
       )
     }
     return res.status === 204 ? null : await res.json().catch(() => null)

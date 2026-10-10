@@ -1,4 +1,4 @@
-# Model support — selection, fallbacks, harnesses & provisioning
+# Model support: selection, fallbacks, harnesses & provisioning
 
 How Cat Factory decides **which model runs a step, where it runs, and what it
 costs**. The behaviour is spread across the catalog (kernel), the routing/resolution
@@ -6,9 +6,17 @@ logic (agents), the executor (server), and each runtime facade's provisioning. T
 page is the single place that ties it together; it links back to the source so the
 details stay verifiable.
 
+> **Configuring and using models is documented on the website**:
+> [Model Providers & Subscriptions](https://www.catfactory.ai/guide/model-providers.html) owns
+> connecting a key, a subscription or a local runner, presets and route order, and the model access
+> policy; [Budgets](https://www.catfactory.ai/guide/budgets.html) owns what spend does to a run.
+> This page is the INTERNAL account: the resolution order, the seams, and the invariants a change
+> here has to keep. Do not restate usage here, and do not answer a usage question by editing this
+> file.
+
 > The domain only ever names a model by a provider-agnostic
 > [`ModelRef`](../packages/kernel/src/ports/model-provider.ts) (`{ provider, model,
-harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
+> harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
 > `ModelProvider` port in each facade, never in the core.
 
 ---
@@ -17,13 +25,13 @@ harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
 
 A model selection answers three independent questions:
 
-1. **Which catalog model?** — what the user picked on the block, or the default for
+1. **Which catalog model?**: what the user picked on the block, or the default for
    the step's agent kind. (§3 _Model resolution_.)
-2. **Which flavour of it?** — the same model can run on Cloudflare Workers AI, on its
+2. **Which flavour of it?**: the same model can run on Cloudflare Workers AI, on its
    vendor's direct API, or on a subscription harness. The flavour is chosen
    automatically from what's configured. (§2 _Catalog & flavours_, §4 _Flavour
    precedence_.)
-3. **Where does it run?** — inline (a single `generateText` call) or inside a per-run
+3. **Where does it run?**: inline (a single `generateText` call) or inside a per-run
    container, and through which **harness** (`pi` / `claude-code` / `codex`). (§5
    _Harnesses_.)
 
@@ -34,54 +42,281 @@ Cloudflare Workers AI.
 
 ---
 
-## 2. The catalog & its three flavours
+## 2. The catalog & its flavours
 
 The curated picker catalog is
 [`MODEL_CATALOG`](../packages/kernel/src/domain/models.ts) (`SelectableModel[]`). Each
-entry has a stable `id` (persisted on `Block.modelId`) and up to three flavours:
+entry has a stable `id` (persisted on `Block.modelId`) and one flavour per route it can be
+reached on. The vocabulary is `MODEL_FLAVORS`, listed here in the order
+`DEFAULT_PROVIDER_PREFERENCE` prefers them:
 
-| Flavour          | Field on the model              | When it's used                                                                       |
-| ---------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
-| **Cloudflare**   | `cloudflare: ModelRef`          | Always available (the `AI` Workers-AI binding / Cloudflare-over-REST). The fallback. |
-| **Direct**       | `direct: { ref, keyEnv }`       | Transparently replaces Cloudflare **when `keyEnv`'s API key is set**.                |
-| **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.              |
+| Flavour          | Field on the model              | When it's used                                                                         |
+| ---------------- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| **Direct**       | `direct: { ref, keyEnv }`       | The model's own provider API, **when a key for it is configured**.                     |
+| **Bedrock**      | `bedrock: { baseModelId }`      | AWS Bedrock, when the deployment's `BEDROCK_MODELS` allow-list carries the model (§8). |
+| **OpenRouter**   | `openrouter: { ref, keyEnv }`   | The same model through the gateway, when an OpenRouter key is set.                     |
+| **Cloudflare**   | `cloudflare: ModelRef`          | Always available (the `AI` Workers-AI binding / Cloudflare-over-REST). The floor.      |
+| **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.                |
 
-Three shapes of catalog entry fall out of this:
+Two rules set that order: a **first-party route wins over an aggregator that resells it**
+(`direct`/`bedrock` before `openrouter`), and Cloudflare is the always-available floor
+below every route a key or account grant unlocks. `subscription` sits last **only because
+the "subscriptions always win" rule is applied separately, one layer up**; see §4, which
+also explains why moving it is its own piece of work.
 
-- **Cloudflare-only** — e.g. `cloudflare-llama`, `kimi-k2.7`, `deepseek-v4-pro`. One
+### OpenRouter is reached through its OWN client, not the generic OpenAI-compatible one
+
+Every other member of `OPENAI_COMPATIBLE_PROVIDERS` resolves through `openAiCompatibleResolver`;
+`openrouter` resolves through `openRouterResolver` (`@openrouter/ai-sdk-provider`), because a
+gateway can answer three things the generic client cannot ask. It reports **what the call actually
+cost** and **which upstream served it** (`usage: { include: true }` → `reported_cost_usd` /
+`upstream_provider`; see [`llm-telemetry.md`](./llm-telemetry.md)), which matters because every
+other cost figure here is derived from a price table and against a passthrough gateway that is a
+guess. And it routes per request, under two constraints a deployment sets:
+`OPENROUTER_REQUIRE_PARAMETERS` (default on) keeps the call off an upstream that would silently
+ignore a tool definition or a response schema, and `OPENROUTER_DATA_COLLECTION` (default `deny`,
+stricter than the vendor's own) keeps it off one that retains prompts, because an agent prompt is
+the customer's checkout.
+
+Both constraints NARROW the pool of upstreams, and a pool narrowed to nothing is a refused call
+(HTTP 404, `No allowed providers are available for the selected model`) rather than a degraded
+one. That is why each has an override and why the proxy recognises that refusal and records which
+constraint could have caused it: the gateway cannot say, since our request is the only place both
+are stated.
+
+Both entry points that build a direct provider from a leased key go through
+`directOpenAiCompatibleResolver`, which is where that dispatch is made once. A call site choosing
+for itself is silent when wrong: OpenRouter still answers, it just stops reporting.
+
+The generic client is told `supportsStructuredOutputs: true` for the cloud VENDORS, and that flag
+is load-bearing in both directions. Without it `@ai-sdk/openai-compatible` rewrites a
+schema-carrying request to `{ type: 'json_object' }`, DROPS the schema and records an SDK warning
+nothing here reads, so a caller gets free-form JSON against a shape nobody enforced. With it
+against an upstream that does not serve `json_schema`, the call fails outright. So it is withheld
+from the two upstream classes nobody here can vouch for: a per-user LOCAL runner (Ollama, LM
+Studio), and the operator-hosted gateways `bifrost` and `litellm`, whose model ids are the
+operator's own aliases and routinely point at exactly such a runner. That set is derived from the
+endpoint table's `null` entries rather than re-listed, so a gateway added there cannot be
+forgotten here.
+
+`openRouterResolver` sets no `structuredOutputs.strict`, deliberately: that client already
+defaults it to true, and the option exists to opt OUT for a model whose upstream does not
+advertise strict mode. Writing the default in would read as an opt-in nobody may remove.
+
+`effectiveVariant` walks that order twice: first over what the capabilities make USABLE,
+then over what the entry merely DECLARES, so a caller always gets a ref to display even
+when nothing is configured (`available: false` is what says it can't run). Both walks
+follow the same order, or the picker would name one route and the run would take another.
+Each flavour supplies its `declared`/`usable`/`build` arms through an exhaustive
+`Record<ModelFlavor, …>`, so **adding a route fails to compile until every arm is
+handled**.
+
+### Two per-flavour facts, both declared and never inferred
+
+A `ModelRef` carries `contextTokens` and `acceptsImages` beside the provider/model pair, and both
+are per FLAVOUR rather than per entry: what a serving provider does with a model is a fact about
+where it runs, not only about the model. The same catalog model can be served with a smaller window
+on one route than another, and can be served with image input on one and without on another.
+
+**Absent is a third answer for both, and `acceptsImages` is the one where it does work.** A flavour
+whose modality this catalog has not declared does NOT get a run's design pictures, and the refusal
+is reported under its own reason (`unknown_model_image_input`) rather than as "this model is
+text-only": the two send a reader to opposite places, and collapsing them would let an undeclared
+multimodal model read as a text-only one forever with nothing saying the platform never asked. So
+`acceptsImages: true` is set only where the serving provider documents image input for that model
+id; everything else is left absent, which is honest and self-correcting. The pairing with the
+harness (a CLI that cannot read an image refuses first, whatever the model does) lives in kernel's
+`resolveDesignImageDelivery`.
+
+### The order is a per-preset choice
+
+That table is the DEFAULT order. A **model preset** can state its own
+(`ModelPreset.providerPreference`), which is what lets one workspace run a compliance preset
+pinned to a residency-guaranteed route (AWS Bedrock) and an everyday preset riding a flat-rate
+subscription. It is per preset rather than per deployment because it is a per-workload choice,
+and it needs no new env var: the knob is the preset row.
+
+Three rules make it safe:
+
+- **A preference REORDERS, it never filters.** Routes a preset omits are appended in default
+  order and tried last, so a preset naming three routes cannot make a model whose only route is
+  the fourth unresolvable. `orderedModelFlavorPreference` (contracts) returns a total order over
+  every route, which is what makes that structural rather than a rule to remember, and it is why
+  the editor offers no way to remove a route. The write boundary refuses a REPEATED route (an
+  order can't say two things about one route) but accepts a partial list.
+- **It rides `ProviderCapabilities`, not a resolution parameter.** Every site that resolves a
+  model already threads a capability set, so a new call site cannot silently resolve under a
+  different order than the picker displayed. The facades fold it ONTO the deployment
+  capabilities rather than replacing them: which routes exist is a deployment fact, and the
+  preset only reorders how they are preferred.
+- **It is resolved ONCE per dispatch by the engine**, onto `AgentRunContext.providerPreference`
+  (`resolveDispatchProviderPreference`, beside the prompt override and the output budget), so
+  the container, inline and consensus paths cannot disagree about which provider a step ran on.
+  Inline callers that run OUTSIDE a dispatch (the judge, the fork chat, the iterative reviewers,
+  the interviewers, the tester QC companion, the bug-hunt assessor) resolve it themselves
+  through the one shared `resolveInlineBlockModelRef`; the start guard resolves capabilities
+  under the block's own preset for the same reason.
+
+### A registration may pin its own model (judges)
+
+A registered **judge** names the catalog model its rubric was authored for
+(`JudgeDefinition.modelId`), and every judge resolves under its OWN agent kind, so each rubric
+is its own row in the model defaults. That adds one layer inside step 2 of §3, resolved by
+`resolveInlineBlockModel`: the task's pin, then a preset override NAMING the kind, then the
+registration's pin, then the preset's base model. It sits between the two halves of the preset
+because a base model is a blanket statement (a pin under it is unreachable) and a named override
+is a specific one (a pin over it is a deployment constant no workspace can relax), which is why
+`PresetRouting` reports `pinnedForKind` alongside the id it resolved. A pin this deployment
+cannot serve is recorded on `step.judge.modelPin` as `unavailable` rather than silently swapped.
+
+The default order itself lives in ONE place, `DEFAULT_MODEL_FLAVOR_ORDER` in
+`@cat-factory/contracts` (the picklist order IS that order), because the preset editor renders
+the same fold the resolver walks — a copy in the SPA would let the picker display an order the
+run does not take.
+
+Several shapes of entry fall out of this:
+
+- **Cloudflare-only**, e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
   flavour, always on the binding.
-- **Dual-mode** — `qwen`, `kimi`, `deepseek`, `glm`. A Cloudflare base **plus** a
-  direct and/or subscription flavour. Note the **context window** usually differs:
-  the Cloudflare variant runs a cut context (e.g. GLM-5.2 24K) while the
-  direct/subscription variant gets the full window (GLM-5.2 200K). `contextTokens` on
-  the `ModelRef` surfaces this in the picker.
-- **Subscription-only** — `claude-opus`, `claude-sonnet`, `gpt-5.5`, `gpt-5.4`. No
-  Cloudflare/direct base; the subscription harness is the _only_ way to run them, so
-  they require a connected vendor token (§6) and there is **no inline fallback** (§5).
-- **Local (per-user)** — locally-run models on a user's own runner (Ollama / LM Studio /
+- **Dual-mode**: `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`, `glm-5.3`,
+  `glm-5.3-flash`. A Cloudflare base **plus** a direct, OpenRouter and/or subscription flavour.
+  Note the **context window** usually differs: the Cloudflare variant runs a cut context (e.g.
+  DeepSeek V4 Pro 131K) while the direct/subscription variant gets the full window (1M).
+  `contextTokens` on the `ModelRef` surfaces this in the picker. `glm-5.3` joined this shape
+  once Z.ai published the weights and Workers AI picked the model up; it shipped
+  subscription-only, which is the usual path into this list.
+- **No Cloudflare floor**: `gemini`, `gemini-flash`, `gemini-3.8-flash`, `kimi-k3`,
+  `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-max-prime`, `qwen3.8-flash`, `glm-5.3-prime`,
+  `glm-5.3-flashx`, `grok`, `grok-4.7`, `muse-spark`, `muse-spark-contributor`.
+  Nothing serves these on the binding, so each stays unavailable until a key is pooled: the
+  Gemini, Muse Spark and speed-tier (`-prime`, `-flashx`) entries through OpenRouter alone;
+  `grok` and `grok-4.7` direct (xAI) or through OpenRouter; `kimi-k3`, `qwen3.8-max-0902` and
+  `qwen3.8-flash` direct (Moonshot / DashScope) or through OpenRouter; and `qwen3.8-max` on
+  DashScope alone, because OpenRouter withdrew the undated Qwen alias in favour of the dated
+  snapshot. A vendor's newest flagship lands here first, because Workers AI serves the open
+  weights and a closed flagship has none to serve.
+- **Two entries for one model, split by TERMS**: `muse-spark` and `muse-spark-contributor` are
+  the same Meta model on the same route. The contributor tier costs a twelfth on input in
+  exchange for Meta training on the prompts and completions, so the choice is a per-block one
+  an operator has to make with the price in front of them, and one entry could only make it
+  silently. The SPA's "enable recommended" OpenRouter set deliberately omits the contributor
+  slug for the same reason.
+- **Two entries for one model, split by SPEED**: `qwen3.8-max-prime`, `glm-5.3-prime` and
+  `glm-5.3-flashx` are faster serving of a model the catalog already carries, at roughly twice
+  its price. Same reasoning as the terms split: the rate-against-latency trade is a per-block
+  choice made with the price in view. A variant at the SAME price (OpenRouter's `-pro` GPT-6
+  slugs, which only set a reasoning mode) gets no entry.
+- **Operator-hosted-gateway entries**: `bifrost-default`, `litellm-default`. One generic entry
+  each for the two self-hosted gateways (Bifrost, LiteLLM), because what such a gateway serves
+  is its operator's configuration and no catalog here can enumerate it. Both are `direct`-flavour
+  entries with **no** Cloudflare floor, so each goes unavailable until its key is pooled AND its
+  base URL is set (§8), and neither declares a `family`, so an account model-family policy treats
+  them as UNCLASSIFIED. Bifrost names models by their canonical `provider/model` pair
+  (`openai/gpt-4o`); LiteLLM by the operator's own `config.yaml` aliases.
+- **Bedrock-only**: `claude-opus-4-8`. Reachable only in an AWS account whose allow-list
+  carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
+  because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
+  to Opus 5. Any entry whose model Bedrock serves at the SAME generation (`gpt-5.5`,
+  `gpt-oss-120b`, `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5`,
+  `claude-haiku-5-5`) does carry the flavour directly.
+  Fable 5.1 is the case where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
+  day, which is why it is the first Claude entry here to carry subscription, OpenRouter and
+  Bedrock arms at once. It is also now the most expensive model this catalog can select on
+  Bedrock, so the bare `bedrock` price row (which cannot match per model, because a Bedrock ref
+  carries the account's geo prefix) moved up to its tier. `gpt-6-astra` is the counter-case and
+  the reason this bullet is a rule rather than a habit: OpenAI named Bedrock among its launch-day
+  routes, but no published card names the Bedrock **id**, so the entry declares no `bedrock` arm.
+  An announcement is not a verified route, and a declared-but-absent one is selected by
+  `effectiveVariant` and then fails at dispatch.
+- **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
+  subscription harness is the _only_ way to run it, so it requires a connected vendor
+  token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-fable-5-1`,
+  `claude-opus`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` and the GPT-6.1 /
+  GPT-6 / GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an OpenRouter
+  pay-as-you-go base, so they are dual-mode rather than subscription-only. `claude-sonnet` stays subscription-only beside
+  `claude-sonnet-5-5`, so a block pinned to Sonnet 5 keeps running Sonnet 5.
+  `gpt-6-astra` carries one more constraint the others do not: Codex resolves that slug only
+  from CLI 0.153.0 onward, so a deployment running an older executor image gets `Unknown model`
+  rather than a fallback. `gpt-6-sol` and `gpt-6-luna` carry the same trap with a 0.156.1 floor,
+  and `gpt-6.1-sol` with a 0.159.0 floor.
+- **Local (per-user)**: locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in
   `local_model_endpoints`), and their enabled models are appended to `GET /models`
   dynamically (id `"<provider>:<model>"`, e.g. `ollama:gemma3`). They present as the
-  `direct` flavour but need **no API key** — gated by the new `localModels` capability (the
+  `direct` flavour but need **no API key**: gated by the new `localModels` capability (the
   set of model ids the user has _enabled_, so usability is model-granular), not a `keyEnv`.
+  **Their per-flavour facts have nowhere else to come from, so they are resolved in TWO
+  tiers** (§2.1 below), because no catalog entry exists to declare them and the runner's
+  `/models` probe returns ids and nothing else.
   At run time the LLM proxy + inline provider resolve the **run initiator's** endpoint (base
   URL + optional bearer key) and skip the DB key lease, mirroring the personal-subscription
-  initiator model. The base URL is constrained to a loopback/LAN allow-list
-  (`localRunnerUrlError`) since it's forwarded server-side. `parseLocalModelId` turns the
+  initiator model. The base URL is forwarded server-side, so it is constrained to a
+  loopback-only allow-list (`localRunnerUrlError`); private-LAN hosts (RFC1918 / ULA /
+  mDNS `.local`) need the operator opt-in `LOCAL_MODELS_ALLOW_LAN=true`, which
+  single-tenant local mode defaults on. On a shared deployment the LAN grant is an
+  internal-network SSRF surface, which is why it is not the baseline. The policy is
+  enforced at the write boundary, on the test probe, and on every redirect hop of every
+  run-time forward (`LocalModelEndpointService.fetchRunner`), so a row persisted under a
+  wider policy is refused loudly after the operator narrows it. `parseLocalModelId` turns the
   dynamic id into a `ModelRef` so `resolveModelRef`/`resolveBlockModel` resolve it even at
   config time (when per-user capabilities aren't known).
 
 The effective, display-ready projection (which flavour is actually active, plus
 informational cost and context window) is computed by `effectiveCatalog()` and served
-read-only at **`GET /models`** — labels and provider/model ids only, never keys.
+read-only at **`GET /models`**: labels and provider/model ids only, never keys.
+
+### 2.1 A local model's modality: recognised family, else the user's own declaration
+
+`acceptsImages` is the one per-flavour fact whose absence COSTS a capability (a run withholds its
+design renders), and a local model has no catalog row to carry it. Two tiers answer, and
+`resolveLocalModelModality` (kernel) is the ONE place their precedence lives:
+
+1. **The user's declaration**, per enabled model on their endpoint row
+   (`LocalModelDeclaration.acceptsImages`, three-state exactly like the `ModelRef` field). It wins,
+   because the person who pulled the weights is the one who knows which build they run: a text-only
+   quant of a multimodal family, a fine-tune, a re-tagged local copy.
+2. **`KNOWN_LOCAL_MODELS`** (`@cat-factory/contracts`), a small table of popular open-weights
+   families matched by squashed id substring, so ticking Gemma 4 or Muse Glimmer needs no second
+   step. It lives in contracts because the settings panel labels its "not set" option with what the
+   table will do and the engine folds the same answer: a copy would let the panel promise a picture
+   the run withholds. **An entry earns its place only where SILENCE costs something**, so every
+   member is image-capable (a text-only entry behaves identically to an absent one), and a family
+   whose modality depends on the SIZE is left OUT rather than approximated (Gemma 3: its 1B is
+   text-only, its 4B and up are not).
+
+Neither tier answering leaves the ref undeclared, which is reported as `unknown_model_image_input`
+rather than as a text-only model. The run path gets the declarations from
+`AgentRunContext.localModelDeclarations`, resolved once per dispatch by the engine from the RUN
+INITIATOR's endpoints and folded in `resolveStepModelRef`, the one function the container, inline
+and consensus paths all resolve through. It cannot ride `ProviderCapabilities` or the boot-time
+`resolveBlockModel` closure: those answer whether a model may run and know no user. **No
+declarations at all is the undeclared answer too, and the family table is NOT consulted for it**:
+"the initiator said nothing" and "nobody resolved any declarations for this dispatch" are different
+facts, and letting the table answer over the second would attach pictures to a build whose owner
+declared it text-only.
+
+**Which path can act on the answer is the HARNESS's question, and it is asked first.** A local ref
+names no harness, so a container dispatch runs it on Pi, and `HARNESS_IMAGE_INPUT.pi` is `false`:
+that dispatch reports `harness_no_image_input` without consulting the ref. So the delivery this
+buys today happens on the INLINE path, and the container path becomes a reader the day an
+image-carrying harness serves a local model, which is a `HARNESS_IMAGE_INPUT` edit rather than new
+plumbing. The declaration is resolved for every path regardless, because the winning model is not
+known until `resolveStepModelRef` has walked its sources.
+
+**`contextTokens` is deliberately NOT declared for a local model.** The window a runner actually
+serves is a fact about its CONFIG, not about the weights: Ollama's `num_ctx` default is far below
+what a 128K-window model can do, so a declared window would be a number the platform states and the
+runner silently ignores, and nothing enforces it either way (the proxy's output cap is
+Workers-AI-only). A long agent loop on an under-configured runner therefore truncates silently, and
+raising `num_ctx` is the operator-side fix.
 
 ---
 
-## 3. Model resolution — which model runs a step
+## 3. Model resolution, which model runs a step
 
 Resolved by `resolveStepModelRef` /
-[`agent-routing.ts`](../packages/agents/src/agents/agent-routing.ts), in precedence
+[`runtime/routing.ts`](../packages/agents/src/agents/runtime/routing.ts), in precedence
 order:
 
 1. **The block's pinned model** (`Block.modelId`) → `resolveBlockModel(modelId)` →
@@ -103,12 +338,12 @@ Node: [`config.ts`](../runtimes/node/src/config.ts)) are deliberately tiered:
 | `coder`                                  | **Kimi K2.7** on Workers AI                          | Holds up on the longest, tool-heaviest loop. |
 
 Operators override any kind via `AGENT_MODELS` (JSON). The **ultimate fallback** is
-always Workers AI (`@cf/qwen/qwen3-30b-a3b-fp8`) — so an unconfigured deployment still
+always Workers AI (`@cf/qwen/qwen3-30b-a3b-fp8`), so an unconfigured deployment still
 runs real work with no provider key.
 
 ---
 
-## 4. Flavour precedence — "subscriptions always win"
+## 4. Flavour precedence: "subscriptions always win"
 
 Given a resolved catalog model, which flavour actually runs?
 
@@ -116,9 +351,13 @@ Given a resolved catalog model, which flavour actually runs?
 subscription  >  direct  >  cloudflare
 ```
 
-- **Base flavour** (`effectiveVariant`, kernel `models.ts`): `direct` when its
-  `keyEnv` key is configured, else `cloudflare`. This is what `GET /models` shows as
-  the model's active flavour for the deployment.
+- **Base flavour** (`effectiveVariant`, kernel `models.ts`): the first route the capabilities
+  make usable, walking the preset's own order when it states one and
+  `DEFAULT_PROVIDER_PREFERENCE` otherwise: `direct` when a key for its provider is in the pool,
+  else `bedrock` when the allow-list carries the model, else `openrouter`, else `cloudflare`
+  (§2). This is what `GET /models` shows as the model's active flavour, under the workspace
+  DEFAULT preset's order (a task that selected another preset resolves under it at dispatch,
+  where the block is in hand).
 - **Subscription override** (`subscriptionOptionFor` + the executor's
   `resolveEffectiveRef`, [`ContainerAgentExecutor.ts`](../packages/server/src/agents/ContainerAgentExecutor.ts)):
   a subscription-only model carries its harness already; a **dual-mode** model is
@@ -126,26 +365,56 @@ subscription  >  direct  >  cloudflare
   the vendor** (`hasSubscriptionToken`). So connecting a poolable coding-plan
   subscription (Kimi/DeepSeek) silently upgrades those models to the full-context,
   flat-rate harness path for that workspace. The `individualOnly` vendors (GLM, Codex,
-  Claude) are never pooled — their dual-mode flavour upgrades per-user via the personal
+  Claude) are never pooled: their dual-mode flavour upgrades per-user via the personal
   subscription a run's initiator unlocks (see §6), not via a workspace token.
 
-`DirectKeyAvailable` (`(keyEnv) => boolean`) is built per facade from the env
-(Cloudflare `config/utils.ts`, Node `config.ts`); it's what gates the direct flavour.
+**Why the two layers live apart.** `subscription` is LAST in the kernel preference tuple
+and FIRST in effect, which reads like a contradiction until you see what each layer knows.
+The override needs per-workspace / per-run-initiator token state
+(`hasSubscriptionToken` / `hasPersonalSubscription`), and the kernel resolver is ALSO called
+with deployment-level capabilities that assert every vendor (`resolveBlockModel` is built
+once at boot, before any workspace is in hand) and from inline paths that cannot drive a CLI
+harness at all (which is why each degrades through `inlineModelRef`). Promoting
+`subscription` in the tuple alone would therefore dispatch subscription runs for workspaces
+holding no token, and degrade a dual-mode pin to the _routing default_ at every inline call
+site rather than to the model's own base. Unifying them is the right end state and is
+tracked as its own slice in
+[`model-provider-preference.md`](../../docs/initiatives/model-provider-preference.md).
+
+Note what the per-preset order (§2) does and does not change here: it decides which route the
+BASE flavour walk picks, and the subscription override still sits on top of it. So a preset that
+puts `subscription` first does not yet bypass that override, and a workspace holding no token is
+unaffected by such an order — which is exactly the separation the outstanding slice removes.
+
+The consequence runs the other way too, and it is the one a user can hit: on a workspace WITH a
+token, a preset promoting a residency-guaranteed route is overruled for every dual-mode model,
+because the override is applied after the walk rather than inside it. The preset editor therefore
+warns whenever a stated order does not itself put `subscription` first
+(`ProviderPreferenceEditor.logic.ts`), rather than letting the copy promise a route a connected
+plan quietly takes back. That warning is deleted by the same slice that moves the override into
+the order.
 
 ---
 
-## 5. Harnesses — where a model runs
+## 5. Harnesses, where a model runs
 
 The `harness` on a `ModelRef` (`pi` | `claude-code` | `codex`, default `pi`) decides
 how a container step authenticates and reaches the model:
 
-- **`pi`** (default) — the repo-operating agent kinds (`coder`, `mocker`,
+- **`pi`** (default): the repo-operating agent kinds (`coder`, `mocker`,
   `playwright`, `blueprints`, `ci-fixer`, `conflict-resolver`, `merger`) run inside a
   per-run container and reach models through the **LLM proxy**. The proxy can only
-  serve **proxyable providers** — `workers-ai`, `qwen`, `deepseek`, `moonshot`,
-  `openai` (`isProxyableProvider`). A Pi step pinned to a non-proxyable provider fails
+  serve **proxyable providers**: `workers-ai`, every OpenAI-compatible provider
+  (`OPENAI_COMPATIBLE_PROVIDERS`), and the per-user local runners
+  (`isProxyableProvider`). A Pi step pinned to a non-proxyable provider fails
   loudly at dispatch ("…needs a model the LLM proxy can serve…").
-- **`claude-code` / `codex`** (subscription harnesses) — talk **direct to the vendor**
+  That predicate is runtime-NEUTRAL, so **every facade owes a route for each member**:
+  `workers-ai` runs in-process through the Worker's `AI` binding and is forwarded to
+  Cloudflare's own OpenAI-compatible REST endpoint on Node/local (the same
+  `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` pair the inline path uses, carried on the
+  endpoint because `workers-ai` owns no pooled key). A facade admitting a provider at dispatch
+  and refusing it at the proxy kills the run mid-flight on a model its own picker offered.
+- **`claude-code` / `codex`** (subscription harnesses): talk **direct to the vendor**
   with a leased token (no proxy session): a pooled workspace token for the poolable
   vendors (Kimi/DeepSeek), or the run-initiator's per-user personal credential for the
   `individualOnly` vendors (Claude/GLM/Codex). The proxyable guard does not apply.
@@ -159,7 +428,7 @@ needs a real provider key.
 
 Because a model is shared by _every_ step of a block, a block pinned to a
 **subscription-only / container-only** model would break the inline steps (the vendor
-has no provider key — the credential is a container-only pooled token). The single
+has no provider key: the credential is a container-only pooled token). The single
 seam that prevents this is
 [`inlineModelRef(ref, fallback)`](../packages/kernel/src/ports/model-provider.ts):
 
@@ -167,62 +436,57 @@ seam that prevents this is
 > (`resolveInlineModelRef`); a `pi`/absent harness passes through unchanged.
 
 So the container steps keep the subscription harness while the inline steps fall back
-to a provider model — used by both the inline agent executor and the requirements
+to a provider model: used by both the inline agent executor and the requirements
 reviewer/rework so the two paths can't drift.
 
 ---
 
 ## 6. Subscriptions (the vendor token pool)
 
-A workspace can connect one or more **subscription credentials per vendor** for the
-**poolable, organization-permitted coding-plan vendors** (`kimi`, `deepseek`) so agent
-steps run on the Claude Code harness instead of an API key. See
-[`SUBSCRIPTION_VENDORS`](../packages/kernel/src/domain/models.ts) for the
-vendor→harness map and base URLs. **Claude, GLM and ChatGPT/Codex are NOT in this
-pool** — each is licensed for individual use only and stored per-user (see below).
+What a user connects, which vendors are poolable and why, and how the personal-password unlock
+behaves are all on the website
+([Connecting a subscription](https://www.catfactory.ai/guide/model-providers.html#connecting-a-subscription)).
+What the engine needs from this layer:
 
-- **Storage**: a per-workspace pool (`provider_subscription_tokens`, D1 + Postgres),
-  **encrypted at rest** under an `ENCRYPTION_KEY`-derived key; tokens are write-only
-  (only metadata + rolling usage is returned). Managed by `ProviderSubscriptionService`
+- **The vendor→harness map and base URLs are one table**,
+  [`SUBSCRIPTION_VENDORS`](../packages/kernel/src/domain/models.ts). A vendor's `individualOnly`
+  flag is the single switch deciding pooled vs per-user; nothing else branches on the vendor name.
+- **The pool is per workspace** (`provider_subscription_tokens`, D1 + Postgres), sealed under an
+  `ENCRYPTION_KEY`-derived key and write-only (reads return metadata + rolling usage, never the
+  token). Owned by `ProviderSubscriptionService`
   ([integrations](../packages/integrations/src/modules/providers/ProviderSubscriptionService.ts)),
-  exposed at `GET|POST|DELETE /workspaces/:ws/vendor-credentials` and the
-  **LLM Vendors** navbar UI.
-- **Rotation**: leasing is usage-aware (least-loaded token wins, round-robin by
-  `lastUsedAt`); the pool is capped per vendor.
-- **What each vendor is**: `kimi`/`deepseek` — a coding-plan API key driven by Claude
-  Code against the vendor's Anthropic-compatible endpoint (Moonshot / DeepSeek).
-- `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly`
-  vendor (Claude/GLM/Codex) — those never enter the pool.
+  served at `GET|POST|PATCH|DELETE /workspaces/:ws/vendor-credentials`.
+- **Leasing is usage-aware** (least-loaded wins, round-robin by `lastUsedAt`) unless one token is
+  pinned `isDefault`. A `enabled: false` token stays listed and re-enablable but is never leased
+  and does not make its vendor count as configured, and a disabled default falls back to rotation
+  rather than to nothing.
+- `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly` vendor, so
+  the pool cannot acquire one by a caller taking a different route in.
 
 ### Individual-usage subscriptions: per-user, not pooled
 
-`claude`, `glm` (Z.ai Coding Plan) and `codex` (ChatGPT) are each licensed for
-**individual use only** by their own terms, so none is ever pooled or shared. Instead
-each user stores their **own** credential and only that user's runs may use it. The
-behaviour is gated by the `individualOnly` flag on the vendor config and implemented as a
-separate, per-user **individual-usage restricted mode**:
+`claude`, `glm` and `codex` are stored per user, double-encrypted (a personal-password layer
+inside the system layer), and unlocked at task start or retry; a short-lived per-run activation
+lets the asynchronous container steps run with nobody present. A recurring schedule therefore
+cannot resolve to one, which the start guard refuses rather than discovering mid-run.
 
-- Stored per-user, **double-encrypted** (a personal-password layer inside the system
-  layer) and unlocked with the user's password at task start/retry; a short-lived
-  per-run activation lets the async container steps run without the user present.
-- **Recurring schedules** can't use them (no unattended unlock).
-- Organizations that need shared, programmatic access use a **direct provider API key**
-  instead — that path is unaffected by `individualOnly`.
-
-The full model, the safeguards, and the request flow are documented in
+The full model, the safeguards, and the request flow are in
 **[individual-subscription-usage.md](./individual-subscription-usage.md)**.
 
 ---
 
 ## 7. Spend budget vs non-metered runs (subscription + local)
 
-The per-workspace **monetary** spend budget (Workspace settings → Budget) meters and gates
-runs that cost the deployment money. Two kinds of run incur **no** metered cost and so are
-**never** blocked by it:
+What a budget does to a user's run is on the website
+([Budgets](https://www.catfactory.ai/guide/budgets.html)). What matters here is which runs the
+gate must not touch, and where that judgement is made.
+
+The per-workspace **monetary** spend budget meters and gates runs that cost the deployment money.
+Two kinds of run incur **no** metered cost and so are **never** blocked by it:
 
 - **Subscription** runs are **flat-rate quota** (a fixed-price plan), not billed per token.
   The picker marks them `quotaBased: true` (kernel `models.ts`); `ContainerAgentExecutor.
-isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
+  isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
   (shared with dispatch so the two agree).
 - **Local-runner** models (Ollama / LM Studio / llama.cpp / vLLM / custom) are **keyless**
   and run on the _user's own_ endpoint, so they cost the deployment nothing. Detected off
@@ -235,18 +499,17 @@ How the gate behaves (`ExecutionService`):
 - **Mid-run:** `currentStepIsNonMetered` exempts subscription **and** local steps, so an
   over-budget run pauses **only** on a metered step; a non-metered step keeps running.
 - **Up-front:** `assertBudgetAllowsPipeline` refuses `start()`/`retry()` with a clear
-  `409` when the budget is reached **and** the pipeline has a metered step — rather than a
+  `409` when the budget is reached **and** the pipeline has a metered step, rather than a
   silent mid-run pause. A pipeline whose every step is local/subscription starts normally.
 
 ### A `0` budget is intentional ("local-/subscription-only")
 
 `spendMonthlyLimit: 0` is a **valid, deliberate** setting, not a footgun: it means "no PAID
-spend". A workspace at `0` refuses metered runs (clear up-front error) but **keeps running
-local-runner models and connected subscriptions**, since those incur no metered cost. It is
-reversible from the UI and safer than an unbounded "unlimited" that can run up a real bill.
-(Web search costs money on metered providers, so a `0` budget also blocks paid searches —
-the local model itself still runs.) The budget lives on the `workspace_settings` row; there
-are no longer `SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` env vars.
+spend", so a workspace at `0` refuses metered runs and keeps running local-runner models and
+connected subscriptions. Treat it as a value to preserve rather than a missing configuration: the
+temptation in any new gate is to read `0` as unset and fall back to a default limit, which would
+silently start billing a workspace that opted out. The budget lives on the `workspace_settings`
+row; there are no `SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` env vars.
 
 ---
 
@@ -256,29 +519,69 @@ Both facades compose a model registry from `@cat-factory/agents`'
 **`CompositeModelProvider`** (single-provider resolvers, each registered only when its
 credentials exist). An **unconfigured provider isn't registered**, so `resolve()`
 throws a clear `Unsupported model provider: <provider>` instead of failing deep in the
-SDK. Base URLs are the single source of truth in
-[`providers/endpoints.ts`](../packages/agents/src/providers/endpoints.ts).
+SDK.
 
-|                   | **Cloudflare Worker**     | **Node / local**                                                                               |
-| ----------------- | ------------------------- | ---------------------------------------------------------------------------------------------- |
-| Cloudflare models | `AI` binding              | over REST (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, optional `CLOUDFLARE_AI_GATEWAY`) |
-| Direct vendors    | `*_API_KEY` secrets       | `*_API_KEY` env                                                                                |
-| Subscriptions     | requires `ENCRYPTION_KEY` | requires `ENCRYPTION_KEY`                                                                      |
-| Bedrock           | opt-in (`BEDROCK_*`)      | opt-in (`BEDROCK_*`)                                                                           |
+**One table names every OpenAI-compatible provider and the endpoint it defaults to**,
+`OPENAI_COMPATIBLE_ENDPOINTS` in
+[`providers/endpoints.ts`](../packages/agents/src/providers/endpoints.ts), and everything else
+about such a provider is DERIVED from it: the built-in base URLs, the UI-configurable key-pool
+vendors, whether the LLM proxy can serve it, and each facade's env plumbing. A `null` entry marks
+an **operator-hosted** gateway (`bifrost`, `litellm`): self-hosted software with no public instance,
+so it is proxyable and key-poolable but resolves only once the deployment sets its
+`${PROVIDER}_BASE_URL`. That is what the derived `OperatorHostedGateway` union is, and the
+base-URL remedy names each member through an exhaustive `Record` over it, so **adding a gateway is
+one table entry and the compiler finds the rest**: the Worker's typed env map and that remedy both
+fail to compile until they answer for it. Before this was one table, `XAI_BASE_URL` was documented
+but consumed by neither facade, and `xai` was admitted by the dispatch guard while the Node proxy's
+own copy of the list had no upstream for it.
+
+**A facade's env map is total over the DIRECT providers, not just the OpenAI-compatible ones.**
+`anthropic` is not OpenAI-shaped (its own SDK dialect, so the container proxy must never forward to
+it) and it is still a key-pooled provider whose SDK takes a base URL, so a deployment fronting
+Anthropic with a proxy repoints it through `ANTHROPIC_BASE_URL`. Node reads env by NAME and always
+honoured that; the Worker's map omitted it, which made one deployment config mean two things. The
+shared `DirectProvider` union is what both facades are now total over, and
+`resolveOpenAiCompatibleUpstream` narrows with the table's own predicate rather than treating "a
+base URL resolved" as the membership test, since those two answers differ for exactly `anthropic`.
+
+|                      | **Cloudflare Worker**                                  | **Node / local**                                                                                        |
+| -------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Cloudflare models    | `AI` binding (inline and container proxy alike)        | over REST (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, optional `CLOUDFLARE_AI_GATEWAY`), on both |
+| Direct vendors       | `*_API_KEY` secrets                                    | `*_API_KEY` env                                                                                         |
+| Base-URL overrides   | typed `Env` fields, total over `DirectProvider`        | `${PROVIDER}_BASE_URL` read by name                                                                     |
+| Subscriptions        | requires `ENCRYPTION_KEY`                              | requires `ENCRYPTION_KEY`                                                                               |
+| Bedrock              | opt-in (`BEDROCK_*`)                                   | opt-in (`BEDROCK_*`)                                                                                    |
+| Self-hosted gateways | `BIFROST_BASE_URL` / `LITELLM_BASE_URL` + a pooled key | same                                                                                                    |
 
 ### Config / env reference
 
-| Knob                                                                                                       | Effect                                                                                                                                       |
-| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`                                                     | Upgrade the dual-mode model to its **direct** (OpenAI-compatible) flavour.                                                                   |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                      | First-party providers (used by `AGENT_MODELS` routing overrides).                                                                            |
-| `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (Node)                                                    | Serve Cloudflare Workers AI models over REST (no binding off-Cloudflare).                                                                    |
-| `AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL` / `AGENT_DEFAULT_TEMPERATURE` / `AGENT_MAX_OUTPUT_TOKENS` | The unpinned routing default.                                                                                                                |
-| `AGENT_MODELS` (JSON)                                                                                      | Per-agent-kind routing overrides.                                                                                                            |
-| `BEDROCK_REGION`                                                                                           | Registers the opt-in Bedrock resolver (see below).                                                                                           |
-| `BEDROCK_MODELS` (comma-separated)                                                                         | The Bedrock **allow-list**.                                                                                                                  |
-| `ENCRYPTION_KEY` (base64, ≥32 bytes)                                                                       | Master key sealing the subscription token pool (and other integration credentials). Without it the vendor-credential endpoints return `503`. |
-| Workspace budget (UI → Workspace settings → Budget)                                                        | Monetary budget gate (per workspace; does not apply to quota runs).                                                                          |
+The variables themselves live in the canonical list,
+[`docs/environment-variables.md`](../../docs/environment-variables.md) → Model providers, which the
+website renders for operators. What is worth stating HERE is which of them changes a resolution
+outcome, because that is what a change to this layer can break:
+
+- **A provider key does not select a model; it makes a route USABLE.** `QWEN_API_KEY`,
+  `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY` and `XAI_API_KEY` upgrade a dual-mode entry to its
+  `direct` flavour by entering the capability set, not by being read at resolution time.
+- **`AGENT_DEFAULT_*` and `AGENT_MODELS` are the LAST step of §3**, reached only when neither a
+  block pin nor a workspace default answered.
+- **`BEDROCK_REGION` registers the resolver; `BEDROCK_MODELS` is both its allow-list and the
+  picker's enablement**, parsed once (below).
+- **`ENCRYPTION_KEY` gates the subscription pool existing at all**: without it the
+  vendor-credential endpoints answer `503`, so `hasSubscriptionToken` is structurally false and
+  §4's override never fires.
+- **`BIFROST_BASE_URL` / `LITELLM_BASE_URL` are the ENABLEMENT of their gateway**, not an
+  override: with no URL the provider is dropped from the capability set (`baseUrlFor` in
+  `resolveWorkspaceCapabilities`), so a pooled key for it stays inert and its catalog entry reads
+  `available: false` rather than passing the start guard and failing at dispatch.
+- **`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` is ONE decision read in ONE place**
+  (`cloudflareRestCredentials`, Node): the boot warning about a half-set pair, the catalog's
+  `cloudflareModelsEnabled` gate, the inline registry and the container proxy's REST upstream all
+  conclude from it. Both halves are required and a whitespace-only value counts as unset, or the
+  picker offers Cloudflare models a dispatch then refuses.
+- **`${VENDOR}_BASE_URL` is an override, never an enablement** (the inverse of the gateway pair
+  above): every vendor in that family has a built-in default, so a BLANK value falls back to it
+  rather than disabling the vendor.
 
 ### AWS Bedrock (opt-in)
 
@@ -288,9 +591,59 @@ enforces a **supported-model allow-list** (`BEDROCK_MODELS`): a model id outside
 list throws `Unsupported Bedrock model: <model>` rather than forwarding an
 unvetted id.
 
+**`BEDROCK_MODELS` is also the per-model picker enablement.** A catalog entry carrying a
+`bedrock` flavour (§2) becomes selectable exactly when this list holds its model, which is
+what makes the account policy's `trustedProviders: ['bedrock']` reachable per task: a user
+can pin one block to a residency-guaranteed route instead of repointing the whole
+deployment's routing default. The list is parsed ONCE, by
+`bedrockAllowListFromEnv` (`@cat-factory/server`), and that one value feeds both the
+resolver's allow-list and the capability set. Parsed twice, the picker could offer an id
+the resolver throws on.
+
+Two consequences worth knowing:
+
+- **`BEDROCK_REGION` with no `BEDROCK_MODELS`** leaves the resolver UNCONSTRAINED (any id
+  is forwarded to AWS) and contributes **no picker flavour**. Bedrock access is granted per
+  account and per Region, so with nothing enumerated the platform cannot know which entries
+  are callable, and offering them would surface models AWS rejects at call time. Bedrock
+  stays reachable as a routing default (`AGENT_DEFAULT_PROVIDER` + `AGENT_DEFAULT_MODEL`, or
+  a per-kind `AGENT_MODELS` entry); naming a model here is how you opt it into the picker.
+- **The Worker does not bundle the Bedrock package** (a deployment mixes it in via the
+  `registerModelRegistry` extension point in `infrastructure/ai/registries.ts`). It reads the
+  same two env vars, but grants the capability only when a registered registry can actually
+  serve `bedrock` (`bedrockModelsCapability`): on Node the env that enables the flavour also
+  registers the resolver, whereas here the vars alone don't prove the mix-in happened, and
+  offering the flavour on them would put rows in the picker whose dispatch fails on an
+  unregistered provider. Set-but-unregistered logs a warning naming the missing call.
+
+Bedrock ids are `provider.model`, optionally carrying a **geo/global inference prefix**
+(`us.` / `eu.` / `jp.` / `au.` / `global.`): several models are reachable ONLY through a
+cross-Region profile in a given Region, so the prefixed form is usually what you want.
+**The catalog therefore declares only the UNPREFIXED base id** (`baseModelId`) and
+`resolveBedrockModelId` matches an allow-list entry that IS the base or ends in `.<base>`,
+running that entry verbatim. That is what lets one catalog be correct in every Region, and
+it means the prefix set is never enumerated in code (a prefix AWS adds later just works).
+Where you list two profiles for one model, **the first one wins**, so ordering the var is
+how you choose between a regional and a global profile.
+
+Example `BEDROCK_MODELS` for a US account (verified Aug 2026):
+
+```
+BEDROCK_MODELS=us.anthropic.claude-opus-4-8,global.anthropic.claude-opus-4-8,openai.gpt-5.5
+```
+
+**Bedrock lags the vendors' own APIs**, unevenly and per vendor: Fable 5.1 landed there on
+Anthropic's launch day while Opus 5 / Sonnet 5 are still subscription and OpenRouter only, and
+its OpenAI ids remain `openai.gpt-5.5` / `openai.gpt-5.4` rather than the GPT-5.6 tiers or
+GPT-6 Astra. Don't copy a catalog
+model id into `BEDROCK_MODELS`. The catalog spans 18 providers and 110+ variants and
+access is granted per account, so confirm each id against
+`aws bedrock list-foundation-models` / `list-inference-profiles` for YOUR region: an id
+that is real but not granted fails at call time, not at boot.
+
 ---
 
-## 9. Quick reference — the resolution pipeline
+## 9. Quick reference: the resolution pipeline
 
 ```
 Block.modelId ──► resolveStepModelRef
@@ -310,8 +663,10 @@ Block.modelId ──► resolveStepModelRef
 
 ## See also
 
+- Using and configuring models (the user-facing authority):
+  [catfactory.ai → Model Providers](https://www.catfactory.ai/guide/model-providers.html).
 - Runtime flows (execution, merge lifecycle, requirements review):
-  [`CLAUDE.md`](../../CLAUDE.md).
+  [`AGENTS.md`](../../AGENTS.md).
 - Backend layering & the `GET /models` endpoint: [`backend/README.md`](../README.md).
 - Spend safeguard: `@cat-factory/spend`.
 - Self-hosted runner pool (where container steps dispatch off-Cloudflare):

@@ -1,4 +1,5 @@
 import type { RetentionConfig } from '@cat-factory/server'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { type RetentionRepos, sweepRetention } from '../src/retention.js'
 
@@ -16,16 +17,39 @@ function fakeRepos(): {
     tokenUsage: number | null
     llmCallMetrics: number | null
     agentContextSnapshots: number | null
+    agentSearchQueries: number | null
+    agentToolCalls: number | null
+    subscriptionQuotaCycles: number | null
     provisioningLog: number | null
     commits: number | null
+    notifications: number | null
+    gateOutcomes: number | null
+    runDays: number | null
+    auditEvents: number | null
+    rollup: [number, number] | null
+    spendRollup: [number, number] | null
+    /** Every pass in the order it ran, so ordering constraints can be asserted. */
+    order: string[]
   }
 } {
   const cutoffs = {
     tokenUsage: null as number | null,
     llmCallMetrics: null as number | null,
     agentContextSnapshots: null as number | null,
+    agentSearchQueries: null as number | null,
+    agentToolCalls: null as number | null,
+    subscriptionQuotaCycles: null as number | null,
     provisioningLog: null as number | null,
     commits: null as number | null,
+    notifications: null as number | null,
+    gateOutcomes: null as number | null,
+    runDays: null as number | null,
+    auditEvents: null as number | null,
+    /** The [from, to) window the rollup pass recomputed. */
+    rollup: null as [number, number] | null,
+    /** The [from, to) window the durable spend rollup materialised. */
+    spendRollup: null as [number, number] | null,
+    order: [] as string[],
   }
   return {
     cutoffs,
@@ -33,6 +57,7 @@ function fakeRepos(): {
       tokenUsageRepository: {
         deleteOlderThan: async (c) => {
           cutoffs.tokenUsage = c
+          cutoffs.order.push('token_usage')
           return 3
         },
       },
@@ -49,11 +74,31 @@ function fakeRepos(): {
           return 5
         },
       },
+      // Agent-search queries ride the same window as llmCallMetrics.
+      agentSearchQueryRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.agentSearchQueries = c
+          return 6
+        },
+      },
+      agentToolCallRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.agentToolCalls = c
+          return 9
+        },
+      },
       // Recurring-pipeline run history prune (fixed ~1-week window). Returns 0 here;
       // its real behaviour is covered against Postgres by the conformance suite.
       pipelineScheduleRepository: { pruneRunsBefore: async () => 0 },
       // Expired personal-credential activations (deleted by `now`, not a window).
       subscriptionActivationRepository: { deleteExpired: async () => 2 },
+      // Idle quota cycles pruned to the fixed 30-day window.
+      subscriptionQuotaCycleRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.subscriptionQuotaCycles = c
+          return 8
+        },
+      },
       provisioningLogRepository: {
         deleteOlderThan: async (c) => {
           cutoffs.provisioningLog = c
@@ -62,11 +107,54 @@ function fakeRepos(): {
       },
       // Expired password-reset tokens (deleted by `now`, not a window).
       passwordResetTokenRepository: { deleteExpired: async () => 1 },
+      // Machine-node roster rows past their latest signed exp (deleted by `now`).
+      machineNodeRepository: { deleteExpired: async () => 2 },
+      // Password-throttle attempts, pruned to a fixed 1-hour window.
+      authAttemptRepository: { deleteOlderThan: async () => 4 },
       // GitHub commit projection, pruned to the `commitMs` window (Worker parity).
       commitRepository: {
         deleteOlderThan: async (c) => {
           cutoffs.commits = c
           return 4
+        },
+      },
+      // Resolved notifications, pruned to the `notificationsMs` window (Worker parity).
+      notificationRepository: {
+        deleteResolvedOlderThan: async (c) => {
+          cutoffs.notifications = c
+          return 9
+        },
+      },
+      gateOutcomeRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.gateOutcomes = c
+          return 2
+        },
+      },
+      platformMetricsRepository: {
+        rollupRunDays: async (from, to) => {
+          cutoffs.rollup = [from, to]
+          return 11
+        },
+        deleteRunDaysOlderThan: async (c) => {
+          cutoffs.runDays = c
+          return 1
+        },
+      },
+      auditEventRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.auditEvents = c
+          return 2
+        },
+      },
+      // The durable cost-attribution rollup: a watermark read plus a materialise, and no
+      // prune to fake, since the port has none.
+      spendRollupRepository: {
+        spendRollupWatermark: async () => null,
+        rollupSpendDays: async (from, to) => {
+          cutoffs.spendRollup = [from, to]
+          cutoffs.order.push('spend_days')
+          return 13
         },
       },
     },
@@ -80,6 +168,10 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     commitMs: 90 * DAY,
     llmCallMetricsMs: 3 * DAY,
     provisioningLogMs: 14 * DAY,
+    notificationsMs: 90 * DAY,
+    gateOutcomesMs: 90 * DAY,
+    runDaysMs: 400 * DAY,
+    auditEventsMs: 730 * DAY,
     ...overrides,
   }
 }
@@ -94,18 +186,86 @@ describe('sweepRetention', () => {
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY)
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
     expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY) // same window as llmCallMetrics
+    expect(cutoffs.agentSearchQueries).toBe(now - 3 * DAY) // same window as llmCallMetrics
     expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
     expect(cutoffs.commits).toBe(now - 90 * DAY)
+    expect(cutoffs.subscriptionQuotaCycles).toBe(now - 30 * DAY) // fixed 30-day window
+    expect(cutoffs.notifications).toBe(now - 90 * DAY)
+    expect(cutoffs.gateOutcomes).toBe(now - 90 * DAY)
+    expect(cutoffs.runDays).toBe(now - 400 * DAY)
+    // The longest window of the lot, and the one with its own env knob: audit retention answers a
+    // compliance question, so it must never be shortened as a side effect of tuning a telemetry
+    // window.
+    expect(cutoffs.auditEvents).toBe(now - 730 * DAY)
+    // The rollup recomputes a short trailing lookback, so a missed pass self-heals instead of
+    // leaving a day permanently half-counted.
+    expect(cutoffs.rollup).toEqual([now - 3 * DAY, now])
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
       agentContextSnapshots: 5,
+      agentSearchQueries: 6,
+      agentToolCalls: 9,
       scheduleRuns: 0,
       activations: 2,
+      subscriptionQuotaCycles: 8,
       provisioningLog: 5,
       passwordResetTokens: 1,
+      machineNodes: 2,
+      authAttempts: 4,
       commits: 4,
+      notifications: 9,
+      gateOutcomes: 2,
+      runDays: 1,
+      auditEvents: 2,
+      runDaysRolledUp: 11,
+      spendDaysRolledUp: 13,
+      failedTables: [],
     })
+  })
+
+  it('materialises the durable spend rollup BEFORE pruning the ledger it folds', async () => {
+    // Ordering is the correctness property, not a style preference: the rollup reads
+    // `token_usage`, so a pass that pruned first would drop spend that had never been rolled
+    // up, and `spend_days` is the only durable record of it.
+    const { repos, cutoffs } = fakeRepos()
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.order.indexOf('spend_days')).toBeLessThan(cutoffs.order.indexOf('token_usage'))
+  })
+
+  it('resumes the durable spend rollup from the sweep watermark, not a fixed lookback', async () => {
+    // A day this rollup misses is missing from the only durable record of it, permanently, so
+    // it walks forward from where the last pass stopped rather than recomputing a fixed
+    // trailing window like the run rollup does.
+    const { repos, cutoffs } = fakeRepos()
+    repos.spendRollupRepository.spendRollupWatermark = async () => now - 10 * DAY
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.spendRollup).toEqual([now - 10 * DAY, now])
+  })
+
+  it('bounds the spend-rollup catch-up by the SAME ledger window this pass prunes to', async () => {
+    // The catch-up horizon and the ledger prune have to be the same number, or the sweep
+    // steps over days its own next statement is about to delete. Asserted at the facade
+    // because this is the wiring: the walk is pure and cannot know the deployment's window,
+    // so a facade that forgot to thread it would silently fall back to a fixed 90 days and
+    // lose every day between there and the retention edge.
+    const { repos, cutoffs } = fakeRepos()
+    repos.spendRollupRepository.spendRollupWatermark = async () => now - 300 * DAY
+    await sweepRetention(repos, policy({ tokenUsageMs: 395 * DAY }), now)
+
+    expect(cutoffs.spendRollup?.[0]).toBe(now - 300 * DAY)
+    expect(cutoffs.tokenUsage).toBe(now - 395 * DAY)
+  })
+
+  it('backfills the durable spend rollup on a deployment that has never run one', async () => {
+    // 90 days, the longest report window it serves: starting at "today" would under-report
+    // that window for a quarter while looking complete, and the per-pass span caps the query.
+    const { repos, cutoffs } = fakeRepos()
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.spendRollup).toEqual([now - 90 * DAY, now - 60 * DAY])
   })
 
   it('treats a non-positive window as disabled — no delete, zero reclaimed', async () => {
@@ -115,15 +275,32 @@ describe('sweepRetention', () => {
     expect(cutoffs.tokenUsage).toBe(now - 30 * DAY) // still pruned
     expect(cutoffs.llmCallMetrics).toBeNull() // disabled → never called
     expect(cutoffs.agentContextSnapshots).toBeNull() // same disabled window → never called
+    expect(cutoffs.agentSearchQueries).toBeNull() // same disabled window → never called
+    expect(cutoffs.agentToolCalls).toBeNull() // same disabled window → never called
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 0,
       agentContextSnapshots: 0,
+      agentSearchQueries: 0,
+      agentToolCalls: 0,
       scheduleRuns: 0,
       activations: 2,
+      subscriptionQuotaCycles: 8,
       provisioningLog: 5,
       passwordResetTokens: 1,
+      machineNodes: 2,
+      authAttempts: 4,
       commits: 4,
+      notifications: 9,
+      gateOutcomes: 2,
+      runDays: 1,
+      auditEvents: 2,
+      // The rollups are WRITES, not prunes: disabling a RETENTION window says "never delete",
+      // never "stop materialising", so they still run. `spend_days` has no window to disable
+      // in the first place.
+      runDaysRolledUp: 11,
+      spendDaysRolledUp: 13,
+      failedTables: [],
     })
   })
 
@@ -133,5 +310,29 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.commits).toBeNull()
     expect(result.commits).toBe(0)
+  })
+
+  it('isolates a failing table: the rest of the pass still prunes, and the failure is named', async () => {
+    // The regression this exists for: the passes used to be a chain of bare `await`s, so the
+    // FIRST failing prune aborted every later one — and did so on every pass thereafter, which
+    // silently stopped all telemetry pruning behind one generic "sweep failed" line.
+    const { repos, cutoffs } = fakeRepos()
+    repos.llmCallMetricRepository.deleteOlderThan = async () => {
+      throw new Error('relation is locked')
+    }
+    const logger = createRecordingLogger()
+
+    const result = await sweepRetention(repos, policy(), now, logger)
+
+    // The tables AFTER the failing one still ran — that is the whole fix.
+    expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY)
+    expect(cutoffs.notifications).toBe(now - 90 * DAY)
+    expect(result.notifications).toBe(9)
+    // …and the failure is REPORTED rather than reading as an empty table: 0 reclaimed is what a
+    // clean prune of an empty table also returns, so only `failedTables` tells them apart.
+    expect(result.llmCallMetrics).toBe(0)
+    expect(result.failedTables).toEqual(['llm_call_metrics'])
+    const warned = logger.lines.find((line) => line.msg.includes('pruning one table failed'))
+    expect(warned?.fields?.table).toBe('llm_call_metrics')
   })
 })

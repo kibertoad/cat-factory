@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 // Standalone full-screen reset form reached from the emailed link
 // (`/reset-password?token=…`). It is a public route (see AuthGate), so a recipient who
@@ -47,18 +48,18 @@ function goToLogin() {
 </script>
 
 <template>
-  <div class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100">
-    <div
-      class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
-    >
+  <div class="flex h-screen w-screen items-center justify-center bg-app-950 text-app-100">
+    <div class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <div class="mb-6 text-center">
-        <UIcon name="i-lucide-key-round" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('auth.resetPassword.title') }}</h1>
-        <p class="text-sm text-slate-400">{{ t('auth.resetPassword.subtitle') }}</p>
+        <UIcon name="i-lucide-key-round" class="mx-auto mb-3 h-10 w-10 text-primary" />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">
+          {{ t('auth.resetPassword.title') }}
+        </h1>
+        <p class="text-sm text-muted">{{ t('auth.resetPassword.subtitle') }}</p>
       </div>
 
       <template v-if="done">
-        <p class="mb-4 text-sm text-slate-300">
+        <p class="mb-4 text-sm text-toned">
           {{ t('auth.resetPassword.doneBody') }}
         </p>
         <UButton block size="lg" color="primary" @click="goToLogin">{{
@@ -67,7 +68,7 @@ function goToLogin() {
       </template>
 
       <template v-else-if="!token">
-        <p class="mb-4 text-sm text-rose-400">
+        <p class="mb-4 text-sm text-app-error-400">
           {{ t('auth.resetPassword.missingToken') }}
         </p>
         <UButton block size="lg" color="neutral" variant="subtle" @click="goToLogin">
@@ -76,30 +77,28 @@ function goToLogin() {
       </template>
 
       <form v-else class="space-y-3" @submit.prevent="submit">
-        <UInput
+        <SecretInput
           v-model="password"
-          type="password"
           required
           :placeholder="t('auth.resetPassword.newPasswordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
         />
-        <UInput
+        <SecretInput
           v-model="confirm"
-          type="password"
           required
           :placeholder="t('auth.resetPassword.confirmPasswordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
         />
-        <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
+        <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
         <UButton block size="lg" color="primary" type="submit" :loading="busy">
           {{ t('auth.resetPassword.submit') }}
         </UButton>
-        <p class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="goToLogin">
+        <p class="text-center text-xs text-muted">
+          <button type="button" class="text-primary hover:underline" @click="goToLogin">
             {{ t('auth.resetPassword.backToSignIn') }}
           </button>
         </p>

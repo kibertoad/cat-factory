@@ -1,4 +1,5 @@
-import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import { createRequire } from 'node:module'
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 import { defineConfig } from 'vitest/config'
 
 // Integration tests run inside the real Workers runtime (workerd, the same
@@ -10,9 +11,11 @@ export default defineConfig(async () => {
   const telemetryMigrations = await readD1Migrations('./telemetry-migrations')
   const sandboxMigrations = await readD1Migrations('./sandbox-migrations')
   const provisioningMigrations = await readD1Migrations('./migrations-provisioning')
+  // The audit log's dedicated database, its own lineage too.
+  const auditMigrations = await readD1Migrations('./audit-migrations')
 
   return {
-    // vitest-pool-workers v4 wires the Workers pool through a Vite plugin
+    // `@cloudflare/vitest-plugin` wires the Workers pool through a Vite plugin
     // (`cloudflareTest`) instead of the old `test.poolOptions.workers` block.
     plugins: [
       cloudflareTest({
@@ -20,6 +23,8 @@ export default defineConfig(async () => {
         // wrangler v4 would try to open an authenticated remote proxy session
         // for it on startup. Tests inject a FakeAgentExecutor and never touch
         // env.AI, so opt out of remote bindings to keep the suite fully local.
+        // `test/helpers.ts` goes one step further and unbinds `AI` for the app it
+        // builds, so an inline call cannot reach a binding that can only reject.
         remoteBindings: false,
         // NOTE: the v3 `isolatedStorage`/`singleWorker` pool options no longer
         // exist on the v4 `cloudflareTest` plugin schema (it strips unknown
@@ -40,10 +45,17 @@ export default defineConfig(async () => {
             // the Sandbox feature is exercised against its true schema.
             TEST_SANDBOX_MIGRATIONS: sandboxMigrations,
             TEST_MIGRATIONS_PROVISIONING: provisioningMigrations,
+            // Audit-log D1 migrations, applied to the AUDIT_DB binding per test file.
+            TEST_MIGRATIONS_AUDIT: auditMigrations,
             // The auth gate fails closed when unconfigured; tests send no
             // credentials, so opt into the local/dev-open path (mirrors
             // `.dev.vars` for `wrangler dev`). Production never sets this.
             AUTH_DEV_OPEN: 'true',
+            // A session secret so the workspace-RBAC conformance suite can drive requests as real
+            // signed sessions (a dev-open harness resolves no access and passes RBAC assertions
+            // vacuously). With no OAuth/password provider set, `enabled` stays false and dev-open
+            // still passes token-less requests through unchanged for every other suite.
+            AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
             // A non-empty secret so the GitHub connect-state HMAC signer works
             // in tests. GITHUB_APP_ID stays unset, so the integration is still
             // "disabled" by config and tests wire the module via overrides.
@@ -55,15 +67,20 @@ export default defineConfig(async () => {
             // and `documentsDeps()`/`tasksDeps()` build their ciphers from it.
             // Production sets this as a secret.
             ENCRYPTION_KEY: 'c2hhcmVkLW1hc3Rlci1rZXktMDEyMzQ1Njc4OWFiY2RlZg==',
-            // Enable the opt-in environment + runner-pool integrations so their real
-            // services wire up; their specs stub global `fetch` to act as the
-            // provider/scheduler.
-            ENVIRONMENTS_ENABLED: 'true',
+            // Enable the opt-in runner-pool integration so its real service wires up; its
+            // specs stub global `fetch` to act as the scheduler. (The environment
+            // integration assembles from ENCRYPTION_KEY above — no flag.)
             RUNNERS_ENABLED: 'true',
             // Enable the Slack notification transport so its module + channel wire up;
             // the conformance Slack CRUD asserts persistence parity with Node, and the
             // channel bails (best-effort) when a workspace has no Slack connection.
             SLACK_ENABLED: 'true',
+            // Enable the observability integration (release-health module + connection API) so
+            // the post-release-health gate conformance can connect a provider and create a
+            // pipeline carrying the observability-gated `post-release-health` step. Parity with
+            // the Node test env; the gate's runtime verdict comes from a faked
+            // ReleaseHealthProvider, not a real Datadog call.
+            OBSERVABILITY_ENABLED: 'true',
             // Force the deterministic heading planner for the env-wired documents
             // module (now always on): spawn specs assert exact board structure and
             // must not reach an LLM. Specs that exercise the LLM planner inject a
@@ -77,7 +94,7 @@ export default defineConfig(async () => {
       }),
     ],
     test: {
-      setupFiles: ['./test/apply-migrations.ts'],
+      setupFiles: ['./test/setup/silenceLogs.ts', './test/apply-migrations.ts'],
       // These run inside real workerd against a real local D1, and the heaviest
       // engine specs drive a run to a standstill TWICE (park on a decision / the
       // spend gate, resolve it, then drive again) — each round is real store I/O.
@@ -86,10 +103,53 @@ export default defineConfig(async () => {
       // tips over into a spurious timeout. The driver is budget-bounded
       // (`maxRounds`/`jobMaxPolls`), so a genuinely stuck run fails fast via a
       // wrong-status assertion, never a hang — meaning a timeout here only ever
-      // means "slow", not "broken". 10s roughly doubles the observed worst case:
-      // enough to absorb CI variance without letting a real stall sit for long.
-      testTimeout: 10_000,
-      hookTimeout: 10_000,
+      // means "slow", not "broken".
+      //
+      // 10s was set as "roughly double the observed worst case" from a local run, and CI
+      // then disproved it: the heaviest double-drive spec — the spend-gate budget_paused
+      // card — tipped into a spurious 10s timeout while every other shard stayed green.
+      //
+      // So this now matches the NODE runtime's 30s (`runtimes/node/vitest.config.ts`), which
+      // is the real fix rather than a nudge: both facades run the SAME conformance groups,
+      // so holding the shared suite to a 3x tighter budget on the
+      // slower runtime (workerd + real D1) was a harness parity gap — the identical spec
+      // passes on the Postgres shards and only ever failed here. Given the budget-bounded
+      // driver above, the headroom cannot hide a stall; it only stops "slow" from reading as
+      // "broken".
+      testTimeout: 30_000,
+      hookTimeout: 30_000,
+      // NOTE: `dangerouslyIgnoreUnhandledErrors` is deliberately NOT set. It used to be, to
+      // absorb the `[ai]`-binding rejection storm (the pool cannot run that binding, so every
+      // inline Tester-QC call rejected after the AI SDK's retries), and the cost of the blanket
+      // ignore was that it absorbed everything ELSE too: a genuine leak sat in the middle of 96
+      // expected ones, counted in `Errors` and ignored, for as long as it took someone to read
+      // the number. The storm is gone at the source — `test/helpers.ts` runs the pool with the
+      // binding unbound, which is Node's posture — so an unhandled rejection is once again a
+      // fact worth failing on. Do not reintroduce this to quiet a new one; find its owner.
+    },
+    resolve: {
+      // Pin `toad-cache` to its CommonJS build inside the Workers test pool.
+      //
+      // `toad-cache` is dual-published (`"type": "module"` with `require` →
+      // `.cjs`, `import` → `.mjs`), and `layered-loader` (our AppCaches backend)
+      // consumes it from compiled CJS via `require("toad-cache")`. The
+      // `@cloudflare/vitest-plugin` module-fallback resolves a `require()`
+      // by asking Vite for the `require` export condition (it threads
+      // `custom["node-resolve"].isRequire` into `resolveId`), then shims the CJS
+      // module's named exports via `cjs-module-lexer`. Under Vite 8 that
+      // `isRequire` hint is no longer honoured for a dual package, so the pool
+      // resolves `toad-cache` to its ESM `.mjs`; `cjs-module-lexer` can't parse
+      // ESM, the shim produces no exports, and `require("toad-cache")` comes back
+      // `undefined` — so every `new InMemoryGroupCache()` throws
+      // `Cannot read properties of undefined (reading 'LruObject')` and the whole
+      // request path 500s (this is what reddened the worker suite on the Nuxt 4.5
+      // / Vite 7→8 bump). Aliasing straight to the resolved `.cjs` file bypasses
+      // the exports-condition ambiguity and restores the Vite-7 behaviour. This
+      // is test-pool-only (the production Worker bundle is built by wrangler/
+      // esbuild, unaffected); drop it once the pool honours `isRequire` on Vite 8.
+      alias: {
+        'toad-cache': createRequire(import.meta.url).resolve('toad-cache'),
+      },
     },
   }
 })

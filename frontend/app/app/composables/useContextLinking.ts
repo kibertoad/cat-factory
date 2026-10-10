@@ -1,4 +1,5 @@
 import type { DocumentSourceKind, TaskSourceKind } from '~/types/domain'
+import { apiErrorEnvelope, apiErrorStatus } from './api/errors'
 
 // Shared model + orchestration for attaching external context (imported docs and
 // tracker issues) to a board block. A "pending" item is something the user has
@@ -28,6 +29,42 @@ export interface PendingContext {
   description?: string
   /** True when the item must be imported before it can be linked. */
   needsImport: boolean
+  /**
+   * Why this item could not be FETCHED, when an attempt has already failed (the server's own
+   * message). Set by {@link useContextLinking.resolvePending} and by the add-task form's body
+   * pre-fetch; cleared the moment a later attempt succeeds.
+   *
+   * It exists because the fetch moved ahead of the create: a failure now costs the user the
+   * create, so the item that caused it has to be identifiable ON the form they are still looking
+   * at, not only in the toast that named it. A tracker issue has no pre-flight of its own, so this
+   * is the whole of its warning.
+   */
+  unreadable?: string
+}
+
+/**
+ * A single pending attachment that failed to import or link, captured with its
+ * actual cause instead of swallowed. The message is the server's own explanation
+ * (e.g. "GitHub denied access to …" / "… was not found on the default branch"),
+ * the status is the HTTP code, and the code is the backend error code
+ * (`conflict` / `validation` / …) — enough to both display a specific reason and
+ * assemble a copy-pasteable diagnostic report.
+ */
+export interface LinkFailure {
+  item: PendingContext
+  /** The server's message (or a network-fault message) explaining why it failed. */
+  message: string
+  /** HTTP status of the failed request, when the error carried one. */
+  status?: number
+  /** Backend error code (`conflict` / `validation` / …), when present. */
+  code?: string
+  /**
+   * The backend error envelope's `details` bag, when present — for a GitHub doc read
+   * this carries the repo coordinates + the UPSTREAM GitHub status (e.g. `status: 403`),
+   * which differs from the HTTP `status` above (the mapped response code, e.g. 409). Kept
+   * so the diagnostic report shows the real GitHub status, not just the mapped one.
+   */
+  details?: Record<string, unknown>
 }
 
 /** Stable key for a pending item, used for dedupe + selection toggles. */
@@ -35,17 +72,130 @@ export function contextKey(c: Pick<PendingContext, 'kind' | 'source' | 'external
   return `${c.kind}:${c.source}:${c.externalId}`
 }
 
+/**
+ * Render a batch of {@link LinkFailure}s into a single plain-text diagnostic block
+ * for the clipboard — the exact context a bug report needs (the item coordinates,
+ * the HTTP status + backend code, the backend `details` bag, and the server's message)
+ * so the user does not have to retype any of it. Deliberately English/technical (a log
+ * dump, not UI prose), mirroring how format/code examples stay out of the i18n catalog.
+ */
+export function buildLinkFailureReport(
+  failures: LinkFailure[],
+  context: { workspaceId?: string | null; blockId?: string; when?: string } = {},
+): string {
+  const lines: string[] = []
+  lines.push(`Context link failures: ${failures.length}`)
+  if (context.when) lines.push(`when: ${context.when}`)
+  if (context.workspaceId) lines.push(`workspace: ${context.workspaceId}`)
+  if (context.blockId) lines.push(`block: ${context.blockId}`)
+  for (const f of failures) {
+    lines.push('')
+    lines.push(`- ${f.item.kind}/${f.item.source}: ${f.item.externalId}`)
+    lines.push(`  title: ${f.item.title}`)
+    if (f.status !== undefined) lines.push(`  status: ${f.status}`)
+    if (f.code) lines.push(`  code: ${f.code}`)
+    // Dump the backend `details` (repo coordinates + upstream status), each key namespaced
+    // so its `status` reads clearly as the GitHub status, distinct from the HTTP `status`.
+    for (const [key, value] of Object.entries(f.details ?? {})) {
+      lines.push(`  details.${key}: ${formatDetailValue(value)}`)
+    }
+    lines.push(`  error: ${f.message}`)
+  }
+  return lines.join('\n')
+}
+
+/** One-line rendering of a `details` value for the diagnostic dump (objects → JSON). */
+function formatDetailValue(value: unknown): string {
+  if (value === null || value === undefined) return String(value)
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
 export function useContextLinking() {
   const documents = useDocumentsStore()
   const tasks = useTasksStore()
+  const workspace = useWorkspaceStore()
+  const toast = useToast()
+  const { t } = useI18n()
+  const { copyAction } = useCopyToClipboard()
+
+  /**
+   * Import every pending item that still needs it, BEFORE the block exists.
+   *
+   * The fetch against the external source is the half of attaching that actually fails (a page
+   * that moved, a token without access, a source that is down), and it needs no block id. Running
+   * it after the block was created therefore bought nothing and cost the user their chance to fix
+   * it: the task existed, carrying context it had not got. Run here, a failure is a correction
+   * the host can ask for with the form still open and the reference still editable.
+   *
+   * Returns the items with what succeeded folded in (`needsImport: false`, so the later
+   * {@link linkPending} links them directly), alongside the failures. The batch is NOT aborted on
+   * the first failure: one unreachable page must not hide a second one, or the user fixes them
+   * one round-trip at a time.
+   *
+   * What "folded in" covers is the whole point of running this before the create, so it is more
+   * than the id: a tracker issue's own DESCRIPTION arrives with the import, and the add-task form
+   * composes the saved description from exactly these items on the next statement. Keeping only
+   * the id dropped a body the platform had in hand at the one moment it was needed.
+   */
+  async function resolvePending(
+    items: PendingContext[],
+  ): Promise<{ resolved: PendingContext[]; failures: LinkFailure[] }> {
+    const failures: LinkFailure[] = []
+    const resolved: PendingContext[] = []
+    for (const item of items) {
+      if (!item.needsImport) {
+        resolved.push(item)
+        continue
+      }
+      try {
+        resolved.push(await importPending(item))
+      } catch (e) {
+        const failure = describeLinkFailure(item, e)
+        failures.push(failure)
+        // Kept in the list, still unresolved: the host aborts on any failure, and dropping the
+        // item here would silently discard an attachment the user asked for while they fix it.
+        // Marked, so the form the user is still looking at names WHICH attachment refused.
+        resolved.push({ ...item, unreadable: failure.message })
+      }
+    }
+    return { resolved, failures }
+  }
+
+  /** Fetch one pending item, folding everything the import answers back onto it. */
+  async function importPending(item: PendingContext): Promise<PendingContext> {
+    // `unreadable` is dropped rather than preserved: a prior failure is not a standing verdict, and
+    // leaving the mark on a page that has just been fetched would accuse a good attachment.
+    const { unreadable: _cleared, ...rest } = item
+    if (item.kind === 'document') {
+      const doc = await documents.importDocument(item.source as DocumentSourceKind, item.externalId)
+      return { ...rest, externalId: doc.externalId, needsImport: false }
+    }
+    const task = await tasks.importTask(item.source as TaskSourceKind, item.externalId)
+    return {
+      ...rest,
+      externalId: task.externalId,
+      needsImport: false,
+      // The body reaches the created task through the host's description composition, which reads
+      // `description` off these items: an import that fetched it and did not carry it forward is a
+      // task silently missing the issue text it was created from.
+      ...(task.description.trim() ? { description: task.description } : {}),
+    }
+  }
 
   /**
    * Import (when needed) then link every pending item to `blockId`. Each failure
-   * is counted rather than aborting the batch, so one bad attachment doesn't sink
-   * the rest; returns how many failed.
+   * is captured with its actual cause rather than aborting the batch, so one bad
+   * attachment doesn't sink the rest; returns the failures (empty ⇒ all linked).
    */
-  async function linkPending(blockId: string, items: PendingContext[]): Promise<number> {
-    let failed = 0
+  async function linkPending(blockId: string, items: PendingContext[]): Promise<LinkFailure[]> {
+    const failures: LinkFailure[] = []
     for (const item of items) {
       try {
         if (item.kind === 'document') {
@@ -61,12 +211,84 @@ export function useContextLinking() {
             : item.externalId
           await tasks.linkToBlock(blockId, source, externalId)
         }
-      } catch {
-        failed++
+      } catch (e) {
+        failures.push(describeLinkFailure(item, e))
       }
     }
-    return failed
+    return failures
   }
 
-  return { linkPending }
+  /**
+   * Never swallow the cause: capture the server's own message + status/code/details so the toast
+   * can name the specific reason and the copy affordance can carry the full context (incl. the
+   * upstream GitHub status the backend puts on `details`).
+   */
+  function describeLinkFailure(item: PendingContext, e: unknown): LinkFailure {
+    const envelope = apiErrorEnvelope(e)
+    return {
+      item,
+      message: e instanceof Error ? e.message : String(e),
+      status: apiErrorStatus(e),
+      code: envelope?.code,
+      details:
+        envelope?.details && typeof envelope.details === 'object'
+          ? (envelope.details as Record<string, unknown>)
+          : undefined,
+    }
+  }
+
+  /**
+   * Surface link failures as a single actionable toast: the specific per-item
+   * reasons as the body, and a "Copy details" action that puts the full diagnostic
+   * report ({@link buildLinkFailureReport}) on the clipboard. Sticky (`duration: 0`)
+   * so the cause stays readable long enough to act on. No-op when nothing failed.
+   *
+   * `opts.title` names what WAS created, which differs per host ("Task added, but …" vs
+   * "Initiative created, but …"). It is a resolver over the count rather than a message key, so
+   * each caller keeps a literal key at its own translation call site — passing the key through
+   * would make it a variable, which defeats both the typed-message-key check and the extractor's
+   * static scan — and the plural choice has to be made against the same count.
+   */
+  /**
+   * A failure's line in the toast: TRANSLATED copy where the backend named a reason we have a
+   * key for, else the server's own prose.
+   *
+   * The backend does not localize (it emits `details.reason`), so a refusal a user routinely
+   * hits — attaching a document another task already holds — would otherwise reach them as
+   * English prose in every locale. The full diagnostic dump keeps the raw message regardless,
+   * so nothing is lost for support.
+   */
+  function describeFailure(failure: LinkFailure): string {
+    const reason = failure.details?.reason
+    if (reason === 'document_already_linked') {
+      return t('errors.conflict.description.document_already_linked')
+    }
+    return failure.message
+  }
+
+  function presentLinkFailures(
+    failures: LinkFailure[],
+    blockId?: string,
+    opts: { title?: (count: number) => string } = {},
+  ): void {
+    if (failures.length === 0) return
+    const description = failures.map((f) => `${f.item.title}: ${describeFailure(f)}`).join('\n')
+    const report = buildLinkFailureReport(failures, {
+      workspaceId: workspace.workspaceId,
+      blockId,
+      when: new Date().toISOString(),
+    })
+    toast.add({
+      title:
+        opts.title?.(failures.length) ??
+        t('board.addTask.linkFailed', { count: failures.length }, failures.length),
+      description,
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+      duration: 0,
+      actions: [copyAction(report)],
+    })
+  }
+
+  return { resolvePending, linkPending, presentLinkFailures }
 }

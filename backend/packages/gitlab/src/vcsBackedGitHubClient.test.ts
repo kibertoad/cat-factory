@@ -102,9 +102,15 @@ describe('asGitHubClient (VcsClient → GitHubClient)', () => {
       },
     })
     const hits = await client.searchInstallationRepos(123, 'gateway')
-    expect(hits.map((r) => r.githubId)).toEqual([1])
-    // A blank query short-circuits to no results (no listing round-trip needed).
-    expect(await client.searchInstallationRepos(123, '   ')).toEqual([])
+    expect(hits.items.map((r) => r.githubId)).toEqual([1])
+    // The listing it filtered was complete, so the result is not a prefix of anything.
+    expect(hits.truncated).toBe(false)
+    // A blank query short-circuits to no results (no listing round-trip needed), and omitted
+    // nothing in doing so: an empty answer and a capped one are different facts.
+    expect(await client.searchInstallationRepos(123, '   ')).toEqual({
+      items: [],
+      truncated: false,
+    })
   })
 
   it('resolves a repo by id against the accessible-projects listing', async () => {
@@ -118,6 +124,18 @@ describe('asGitHubClient (VcsClient → GitHubClient)', () => {
       'GET /projects?membership=true&per_page=100': { body: [] },
     })
     expect(await missing.getRepoById(123, 7)).toBeNull()
+  })
+
+  // The task source reads through the adapted client, so the project-scoped issue search has
+  // to survive the bridge — an unforwarded optional would look to a capability check exactly
+  // like a provider that cannot scope a search at all.
+  it('forwards the project-scoped issue search, resolving the ref to the project path', async () => {
+    const { client, calls } = adapted({
+      [`GET /projects/${PROJECT}/issues?per_page=20&search=crash`]: { body: [] },
+    })
+    expect(client.searchProjectIssues).toBeDefined()
+    await client.searchProjectIssues!(123, ref, { limit: 20, text: 'crash' })
+    expect(calls.at(-1)?.url).toBe(`/projects/${PROJECT}/issues?per_page=20&search=crash`)
   })
 
   it('throws for App-installation discovery (no single-token equivalent)', async () => {

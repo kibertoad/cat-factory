@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
+import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
+import { makeWaitUntil } from '../../http/waitUntil.js'
 import { logger } from '../../observability/logger.js'
 import { createWebSearchUpstream } from './upstreams.js'
 
@@ -28,12 +30,21 @@ export function webSearchProxyController(): Hono<AppEnv> {
   // SearXNG's search endpoint shape: `/search?q=...&format=json`. We always answer
   // JSON regardless of the `format` param (the container only ever asks for json).
   app.get('/v1/web-search/search', async (c) => {
-    const { config, spendService, accountSettings } = c.get('container')
+    const {
+      config,
+      spendService,
+      accountSettings,
+      defaultWebSearchUpstream,
+      searchQueryObservability,
+    } = c.get('container')
 
     const secret = config.auth.sessionSecret
     if (!secret) {
-      logger.error({ scope: 'webSearchProxy' }, 'web-search proxy: session secret not configured')
-      return c.json({ error: { message: 'Web search proxy is not configured' } }, 503)
+      logger.error('web-search proxy: session secret not configured', { scope: 'webSearchProxy' })
+      return c.json(
+        { error: { code: 'unavailable', message: 'Web search proxy is not configured' } },
+        503,
+      )
     }
 
     // Same model-locked container token the LLM proxy verifies: only our own per-run
@@ -41,33 +52,44 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const sessions = new ContainerSessionService({ secret })
     const session = await sessions.verify(bearer(c.req.header('authorization')))
     if (!session) {
-      logger.warn({ scope: 'webSearchProxy' }, 'web-search proxy: invalid or expired session token')
-      return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
+      logger.warn('web-search proxy: invalid or expired session token', { scope: 'webSearchProxy' })
+      return c.json(
+        { error: { code: 'unauthorized', message: 'Invalid or expired session token' } },
+        401,
+      )
     }
 
     // Resolve the search upstream from the run's account settings (web-search keys live in
-    // the per-account store). None configured ⇒ degrade gracefully with an empty result set
-    // (a 200, like a search that found nothing) rather than hard-erroring mid-run — and the
-    // executor only advertises `web_search` when the account has keys, so a well-formed run
-    // rarely reaches this branch.
-    const upstream =
+    // the per-account store); the account URL is untrusted, so it stays SSRF-guarded. When the
+    // account has none, fall back to the deployment-configured trusted default (local mode's
+    // self-hosted SearXNG, else undefined). None configured either way ⇒ degrade gracefully
+    // with an empty result set (a 200, like a search that found nothing) rather than
+    // hard-erroring mid-run — and the executor only advertises `web_search` when a usable
+    // upstream exists, so a well-formed run rarely reaches this branch.
+    const accountUpstream =
       accountSettings && session.accountId
         ? createWebSearchUpstream(
             (await accountSettings.service.resolve(session.accountId)).webSearch ?? {},
           )
         : undefined
+    const upstream = accountUpstream ?? defaultWebSearchUpstream
     if (!upstream) {
       return c.json({ query: '', number_of_results: 0, results: [] })
     }
 
     // Budget gate: a run that has exhausted its workspace's spend budget can't keep
     // spending on searches either (searches cost money on metered providers).
-    if (await spendService.isOverBudget(session.workspaceId)) {
-      logger.warn(
-        { scope: 'webSearchProxy', workspaceId: session.workspaceId },
-        'web-search proxy: spend budget exhausted — refusing search',
-      )
-      return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
+    if (
+      await spendService.isOverBudget(session.workspaceId, {
+        accountId: session.accountId,
+        userId: session.userId,
+      })
+    ) {
+      logger.warn('web-search proxy: spend budget exhausted — refusing search', {
+        scope: 'webSearchProxy',
+        workspaceId: session.workspaceId,
+      })
+      return c.json({ error: { code: 'spend_exhausted', message: 'Spend budget exhausted' } }, 402)
     }
 
     const query = (c.req.query('q') ?? '').trim()
@@ -81,15 +103,50 @@ export function webSearchProxyController(): Hono<AppEnv> {
       agentKind: session.agentKind,
     })
 
+    // Record the performed query for observability (best-effort, gated inside the recorder
+    // on LLM_RECORD_PROMPTS + the workspace `storeAgentContext` setting). Attributed to the
+    // run + agent kind carried on the session token, tagged with the provider that served it.
+    // Scheduled through `waitUntil` so the write survives past the response on the Worker (a
+    // bare fire-and-forget is dropped when the isolate is frozen); a no-op passthrough on Node.
+    const waitUntil = makeWaitUntil(c)
+    const recordSearch = (resultCount: number): void => {
+      if (!searchQueryObservability) return
+      // Swallowed: observability never breaks a search — but a sink that rejects every write
+      // leaves the run's search history simply absent, which reads as "the agent searched for
+      // nothing" rather than "we failed to record it".
+      waitUntil(
+        runBestEffort(
+          log,
+          'webSearch.recordQuery',
+          () =>
+            searchQueryObservability.record({
+              workspaceId: session.workspaceId,
+              executionId: session.executionId,
+              agentKind: session.agentKind,
+              provider: upstream.provider,
+              query,
+              resultCount,
+            }),
+          {
+            workspaceId: session.workspaceId,
+            executionId: session.executionId,
+            provider: upstream.provider,
+          },
+        ),
+      )
+    }
+
     try {
       const { results } = await upstream.search(query)
-      log.info({ resultCount: results.length }, 'web-search proxy: served search')
+      log.info('web-search proxy: served search', { resultCount: results.length })
+      recordSearch(results.length)
       // Shape the response as SearXNG's `format=json` payload so the extension reads
       // `results[].{url,title,content}` unchanged.
       return c.json({ query, number_of_results: results.length, results })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      log.error({ err: message }, 'web-search proxy: upstream search failed')
+      const message = getErrorMessage(err)
+      log.error('web-search proxy: upstream search failed', { err: message })
+      recordSearch(0)
       // SearXNG-shaped empty result on failure so the agent degrades gracefully
       // (no results) instead of the tool hard-erroring mid-run.
       return c.json({ query, number_of_results: 0, results: [] }, 502)

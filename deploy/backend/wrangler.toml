@@ -5,8 +5,10 @@
 # file is all the per-deployment configuration. Copy this package, set the values
 # below to your own resources, and run `pnpm deploy`.
 #
-# Every value here is per-deployment. The IDs/origins shown are the maintainer's
-# own deployment (kept so the repo is also a working deployment); change them.
+# It is a TEMPLATE, not a live deployment. Every account id, resource id and
+# origin below is a `REPLACE_WITH_*` placeholder or an `example.com` hostname, so
+# `wrangler deploy` fails loudly against it until you have filled them in, rather
+# than silently landing on somebody else's account.
 name = "cat-factory-backend"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
@@ -32,7 +34,7 @@ head_sampling_rate = 1
 [[d1_databases]]
 binding = "DB"
 database_name = "cat_factory"
-database_id = "30748a59-c500-4f31-804f-e48f1588d4ac"
+database_id = "REPLACE_WITH_cat_factory_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/migrations"
 
 # Dedicated telemetry database (llm_call_metrics + agent_context_snapshots) — required.
@@ -41,7 +43,7 @@ migrations_dir = "node_modules/@cat-factory/worker/migrations"
 [[d1_databases]]
 binding = "TELEMETRY_DB"
 database_name = "cat_factory_telemetry"
-database_id = "bd8a599d-04f0-4cdf-b9c6-5e27f78012c9"
+database_id = "REPLACE_WITH_cat_factory_telemetry_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
 
 # OPTIONAL: dedicated D1 for the Sandbox (the parallel prompt/model testing surface).
@@ -54,8 +56,27 @@ migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
 [[d1_databases]]
 binding = "SANDBOX_DB"
 database_name = "cat_factory_sandbox"
-database_id = "3f228c93-535e-4d30-a221-e73615cf0ad2"
+database_id = "REPLACE_WITH_cat_factory_sandbox_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
+
+# REQUIRED: dedicated D1 database for the account audit log (who did what, when, for
+# privileged account actions). Separate from the main DB not for write churn (audit is
+# low-volume) but for RETENTION: it is the one table retained for years while growing with run
+# volume, and D1 caps each database at 10 GB, so a years-deep trail must not compete with live
+# transactional state for that budget. Its schema ships with the worker package under
+# audit-migrations/.
+#
+# Provision it once with `wrangler d1 create cat_factory_audit` and paste its id here;
+# `db:migrate:remote` then applies its lineage along with the other databases'.
+#
+# Required means required: a Worker that shipped with this binding ABSENT would not degrade to
+# "unaudited", it would fail to build the container, so every request answers the misconfiguration
+# screen (`/ready` names which binding it is).
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "cat_factory_audit"
+database_id = "REPLACE_WITH_cat_factory_audit_DATABASE_ID"
+migrations_dir = "node_modules/@cat-factory/worker/audit-migrations"
 
 # OPTIONAL: SEPARATE D1 database for the high-churn provisioning event log (its own binding
 # + migrations dir, shipped with the library). Omit this binding to run with the
@@ -117,6 +138,23 @@ binding = "ENV_CONFIG_REPAIR_WORKFLOW"
 name = "cat-factory-env-config-repair"
 class_name = "EnvConfigRepairWorkflow"
 
+# Durable driver for the ephemeral-environment self-test diagnostic
+# (EnvironmentTestWorkflow). Each run becomes one instance whose id is the run id; it
+# advances the create-branch → provision → tear-down → delete-branch stage machine,
+# streaming live stage events. Only used when the environments module is configured.
+[[workflows]]
+binding = "ENV_TEST_WORKFLOW"
+name = "cat-factory-env-test"
+class_name = "EnvironmentTestWorkflow"
+
+# Durable driver for guided PR review jobs (GuidedReviewWorkflow): the PR overview and each
+# answer or comment-drafting request in an exploration thread. One instance per delivery; the
+# job's claim makes a duplicate a no-op, and the cron re-drives a job whose claim lapsed.
+[[workflows]]
+binding = "GUIDED_REVIEW_WORKFLOW"
+name = "cat-factory-guided-review"
+class_name = "GuidedReviewWorkflow"
+
 # Per-run code-implementation containers (the @cat-factory/executor-harness
 # Pi coding-agent image). Each run addresses its own instance. Container-based
 # implementation is always on — this binding (or a registered runner pool) is a
@@ -134,10 +172,10 @@ class_name = "EnvConfigRepairWorkflow"
 # Publish/refresh the managed-registry image before deploying:
 #   pnpm image:publish          # = wrangler containers build ... --push
 # It prints the exact registry.cloudflare.com/<account_id>/<image>:<tag> ref;
-# pin that tag here (the account id below is THIS deployment's — change it).
+# pin that tag here, with your own account id in place of the placeholder below.
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.34.2"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor:1.163.4"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -157,12 +195,12 @@ class_name = "ExecutionContainer"
 # Containers can PULL from (registry.cloudflare.com / Docker Hub / ECR — NOT GHCR).
 # Publish/refresh it before deploying:
 #   pnpm image:publish:deploy   # = wrangler containers build ../../backend/internal/deploy-harness ...
-# Then pin that managed-registry tag here (the account id is THIS deployment's). Omit
+# Then pin that managed-registry tag here, with your own account id. Omit
 # this binding to leave container-backed Kubernetes provisioning off (the synchronous
 # raw-manifest REST path still works); a render-needing config then fails loudly.
 [[containers]]
 class_name = "DeployContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-deploy:0.2.5"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-deploy:0.8.4"
 max_instances = 10
 # kustomize/helm rendering + kubectl apply/rollout is light vs a coding run, but the
 # slim base still wants real headroom for a large manifest tree; standard-1 matches the
@@ -173,12 +211,48 @@ instance_type = "standard-1"
 name = "DEPLOY_CONTAINER"
 class_name = "DeployContainer"
 
+# Per-run UI-TESTER containers (the @cat-factory/executor-harness image built from
+# `Dockerfile.ui`: the executor harness plus Playwright + Chromium, pnpm/yarn, `serve`, and a
+# headless JRE + WireMock). The `image: 'ui'` dispatch variant routes here, which today means the
+# browser-driven `tester-ui` step feeding the visual-confirmation gate. A run holds one of these
+# ALONGSIDE its ExecutionContainer, because a per-run container cannot change image mid-run, and
+# ordinary agent steps stay on the slim image so the browser never bloats their cold start.
+#
+# Like the other two, it must live in a registry Cloudflare Containers can PULL from
+# (registry.cloudflare.com / Docker Hub / ECR, NOT GHCR). Publish/refresh it before deploying:
+#   pnpm image:publish:ui
+# Then pin that managed-registry tag here, with your own account id.
+#
+# Omit this binding to leave browser-driven testing off. A pipeline carrying a `tester-ui` step
+# then FAILS that step at dispatch, naming this binding, rather than running it on the slim image
+# with no browser; the visual-confirmation gate itself still works on screenshots a person
+# uploads by hand.
+[[containers]]
+class_name = "UiTesterContainer"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor-ui:1.163.4"
+max_instances = 10
+# A browser, a JRE and a frontend build in one box: the same tier the coding runs get, for the
+# same reason (the `dev` tier thrashes under an install + build + Chromium).
+instance_type = "standard-1"
+
+[[durable_objects.bindings]]
+name = "UI_CONTAINER"
+class_name = "UiTesterContainer"
+
 # Per-workspace WebSocket fan-out hub (WorkspaceEventsHub). One instance per
 # workspace, addressed by idFromName(workspaceId); it holds subscribers' sockets
 # (hibernatable) and broadcasts execution/board events pushed by the engine.
 [[durable_objects.bindings]]
 name = "WORKSPACE_EVENTS"
 class_name = "WorkspaceEventsHub"
+
+# Cross-isolate cache-coherency directory (CacheGenerationDirectory). One tiny shard per
+# group (workspace/account/user id), holding a generation counter per cache name; its
+# presence is what turns on the COHERENT app-cache profile, so removing this binding
+# safely reverts the Worker to the pass-through stance for caches of mutable state.
+[[durable_objects.bindings]]
+name = "CACHE_GENERATIONS"
+class_name = "CacheGenerationDirectory"
 
 [[migrations]]
 tag = "v1"
@@ -195,6 +269,27 @@ renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer"
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["DeployContainer"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["CacheGenerationDirectory"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["UiTesterContainer"]
+
+# Dead-letter queues (docs/initiatives/observability-logging-gaps.md, B5). Every consumer
+# below names one, so a delivery that exhausts `max_retries` is COPIED there instead of
+# vanishing. A DLQ needs no consumer of its own — it is a holding queue an operator inspects
+# (`wrangler queues consumer ...` / the dashboard) and replays deliberately. Do NOT wire an
+# automatic replay: a message that failed every retry will fail again, which turns a bounded
+# loss into an unbounded loop.
+#
+# The Node facade gets the same policy in code (`runtimes/node/src/execution/deadLetter.ts`,
+# which appends `.dlq` to every pg-boss queue) and reports what lands there on an hourly sweep.
+# There is no equivalent sweep here: a Worker cannot read a Cloudflare Queue it does not
+# consume, so the DLQ depth is visible in the dashboard rather than in our own metrics — which
+# is also why this facade emits no `queue.depth` gauge at all rather than a zero.
 
 # GitHub sync queue: the webhook endpoint verifies + acks fast, enqueuing each
 # delivery here for async projection. The consumer also handles targeted repo
@@ -214,6 +309,26 @@ new_sqlite_classes = ["DeployContainer"]
 # max_concurrency = 5           # bounds concurrent GitHub API usage per batch
 # max_retries = 5
 # dead_letter_queue = "cat-factory-github-dlq"
+
+# Tracker webhook queue: the tracker receiver verifies + acks fast, enqueuing each
+# verified, parsed delivery here so push-driven intake (firing a matching bug-intake
+# schedule) and ticket replies (answering a parked requirements review) run out of
+# band. When the binding is absent (as below) the receiver applies each delivery
+# inline — fine for local dev, but it blocks the tracker's HTTP request on the whole
+# handle, which can include an LLM incorporation call. To enable the fast-ack async
+# path in production, create the queues and uncomment both blocks:
+#   wrangler queues create cat-factory-tracker-sync
+#   wrangler queues create cat-factory-tracker-dlq
+# [[queues.producers]]
+# binding = "TRACKER_SYNC_QUEUE"
+# queue = "cat-factory-tracker-sync"
+#
+# [[queues.consumers]]
+# queue = "cat-factory-tracker-sync"
+# max_batch_size = 10
+# max_concurrency = 5           # bounds concurrent tracker API usage per batch
+# max_retries = 5
+# dead_letter_queue = "cat-factory-tracker-dlq"
 
 # Optional admission queue. By default runs are created directly by
 # WorkflowsWorkRunner and bounded by Workflows' own concurrency. To instead cap
@@ -273,7 +388,7 @@ DECISION_TIMEOUT = "24 hours"
 # WAF/Bot-Fight rules block its POSTs to the proxy with "403 ... blocked." before
 # the Worker ever runs (browsers pass the bot checks, so the SPA is unaffected).
 # workers.dev is not in that zone, so the container reaches the proxy unblocked.
-WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
+WORKER_PUBLIC_URL = "https://cat-factory-backend.REPLACE_WITH_WORKERS_SUBDOMAIN.workers.dev"
 # Container coding jobs run asynchronously: the driver dispatches the job and
 # then polls it on this cadence between durable sleeps. JOB_MAX_POLLS is a
 # backstop in case a container never reports a terminal state.
@@ -302,12 +417,23 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 #   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek → DeepSeek API
 #   wrangler secret put MOONSHOT_API_KEY   # Kimi → Moonshot AI
 #
-# OpenRouter + LiteLLM (OpenAI-compatible gateways): their API keys are added per
-# workspace/user via the UI (Settings → Direct provider API keys), NOT as secrets here.
+# OpenRouter + Bifrost + LiteLLM (OpenAI-compatible gateways): their API keys are added
+# per workspace/user via the UI (Settings → Direct provider API keys), NOT as secrets here.
 # Only the base URLs are deployment config — OpenRouter defaults to the public gateway,
-# LiteLLM is operator-hosted so LITELLM_BASE_URL is REQUIRED to enable it.
+# while Bifrost and LiteLLM are self-hosted, so their base URL is REQUIRED to enable them.
 # OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# BIFROST_BASE_URL = "https://bifrost.internal.example.com/v1"
 # LITELLM_BASE_URL = "https://litellm.internal.example.com/v1"
+#
+# Per-vendor base-URL overrides (a regional endpoint, a self-hosted proxy). Each defaults to
+# the vendor's public API, and a blank value falls back to that default rather than disabling
+# the vendor. ANTHROPIC_BASE_URL is honoured here and on Node alike.
+# OPENAI_BASE_URL = "https://api.openai.com/v1"
+# ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+# QWEN_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+# DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+# MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1"
+# XAI_BASE_URL = "https://api.x.ai/v1"
 
 # Storage retention. The cron sweeper prunes the tables that don't self-limit to
 # these age windows (in days); 0 disables a table's pass. Defaults are applied
@@ -315,6 +441,12 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # TOKEN_USAGE_RETENTION_DAYS = "395"
 # GITHUB_RATE_LIMIT_RETENTION_DAYS = "7"
 # GITHUB_COMMIT_RETENTION_DAYS = "90"
+# NOTIFICATION_RETENTION_DAYS = "90"  # resolved (acted/dismissed) cards; open ones never pruned
+
+# Emit threshold for the structured (pino) logger: "debug" | "info" | "warn" | "error".
+# "debug" is deliberately chatty — turn it on during an incident, then turn it back. An
+# unrecognised value falls back to "info". See backend/docs/logging.md.
+# LOG_LEVEL = "info"
 
 # LLM observability. The proxy records one metric per container-agent model call.
 # By default each metric keeps the complete prompt sent to the model; set this to
@@ -336,11 +468,11 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # and the private key (PKCS#8 PEM) + webhook secret as secrets:
 #   wrangler secret put GITHUB_APP_PRIVATE_KEY
 #   wrangler secret put GITHUB_WEBHOOK_SECRET
-GITHUB_APP_ID = "4067384"
-GITHUB_APP_SLUG = "cat-factory-app"
+GITHUB_APP_ID = "REPLACE_WITH_GITHUB_APP_ID"
+GITHUB_APP_SLUG = "REPLACE_WITH_GITHUB_APP_SLUG"
 GITHUB_API_BASE = "https://api.github.com"
 # Where to send the browser after a successful install:
-GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
+GITHUB_SETUP_REDIRECT_URL = "https://board.example.com"
 
 # "Login with GitHub". REQUIRED in production: the auth gate fails closed, so
 # until an OAuth app is configured the protected API returns 503. Set the client
@@ -349,9 +481,9 @@ GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
 #   wrangler secret put AUTH_SESSION_SECRET   # any high-entropy random string
 # Register the callback URL as <worker-origin>/auth/callback. (Local dev/tests
 # run open via AUTH_DEV_OPEN=true in .dev.vars — NEVER set that here.)
-GITHUB_OAUTH_CLIENT_ID = "Iv23liSy37MggMK0afZL"
+GITHUB_OAUTH_CLIENT_ID = "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID"
 # Fixed SPA landing URL after login (strongly recommended in production):
-AUTH_SUCCESS_REDIRECT_URL = "https://catfactory.kiberion.com"
+AUTH_SUCCESS_REDIRECT_URL = "https://board.example.com"
 # Deployment-environment marker. When production-like, the worker REFUSES the
 # AUTH_DEV_OPEN escape hatch even if it leaks in — belt-and-braces so a stray dev
 # flag can't re-open a live deployment. Always set this in a real deployment.
@@ -363,14 +495,14 @@ ENVIRONMENT = "production"
 # in AUTH_ALLOWED_LOGINS OR the members of the organizations named in
 # AUTH_ALLOWED_ORGS — the two lists combine as an OR. Both empty => NOBODY can
 # sign in. At least one MUST be set or the deployment locks everyone out.
-AUTH_ALLOWED_LOGINS = "kibertoad"
+AUTH_ALLOWED_LOGINS = "REPLACE_WITH_GITHUB_LOGIN"
 # AUTH_ALLOWED_ORGS = "my-org,another-org"
 
 # CORS allowlist. Comma-separated browser Origins the API answers cross-origin —
 # set this to YOUR frontend origin(s) when provisioning. Unset or "*" allows any
 # origin, which is safe because every route is bearer-gated and fails closed;
 # pinning is defense-in-depth. No trailing slash.
-CORS_ALLOWED_ORIGINS = "https://catfactory.kiberion.com"
+CORS_ALLOWED_ORIGINS = "https://board.example.com"
 
 # Credential encryption. ONE shared master key (a secret) encrypts every integration's
 # per-workspace credentials at rest — documents, tasks, environments and runner pools.
@@ -390,11 +522,12 @@ DOCUMENT_PLANNER = "llm"
 # deployment-level source allow-list). Per-workspace credentials are stored ENCRYPTED in
 # D1. REQUIRES the ENCRYPTION_KEY above; the worker fails to boot without it.
 
-# Ephemeral environment provider integration. Off by default. Turn it on to let a
-# workspace register its own self-rolled environment management API so a
-# `deployer` agent can provision ephemeral environments a `tester` then runs
-# against. Its secrets are sealed with the shared ENCRYPTION_KEY above.
-ENVIRONMENTS_ENABLED = "false"
+# Ephemeral environment provider integration. It is always available (assembled from the
+# shared ENCRYPTION_KEY above, which seals its secrets); a workspace registers its own
+# self-rolled environment management API so a `deployer` agent can provision ephemeral
+# environments a `tester` then runs against. Nothing provisions until a workspace connects
+# a provider and its pipeline includes a `deployer`/`tester` step — to keep environments out
+# of a pipeline entirely, just omit those steps.
 # Trusted-operator escape hatch: let the env management API / returned env URL live on
 # an internal/VPN host (otherwise the strict public-https SSRF guard rejects it). Each
 # host matches exactly or as a dot suffix when it starts with `.` (`.internal`). Leave

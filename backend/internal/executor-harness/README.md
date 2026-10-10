@@ -1,10 +1,10 @@
 # @cat-factory/executor-harness
 
 The payload that runs **inside** a per-run Cloudflare Container (or a
-[self-hosted runner](../../docs/runner-pool-integration.md)) to perform real
+[self-hosted runner](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md)) to perform real
 repo work with the [Pi coding agent](https://github.com/earendil-works/pi).
 
-It is a thin TypeScript wrapper — a `node:http` server on `:8080` — that the
+It is a thin TypeScript wrapper (a `node:http` server on `:27182`) that the
 Worker drives over a small **job protocol**. Jobs run **asynchronously**: a `POST`
 accepts the job and returns immediately with a `jobId`; the driver then polls
 `GET /jobs/{id}` for live progress and the terminal result.
@@ -14,6 +14,7 @@ accepts the job and returns immediately with a `jobId`; the driver then polls
 - [Job protocol](#job-protocol)
 - [What a job does](#what-a-job-does)
 - [No secrets in the image](#no-secrets-in-the-image)
+- [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon)
 - [Layout](#layout)
 - [Runner lifecycle knobs](#runner-lifecycle-knobs)
 - [Build / test](#build--test)
@@ -22,7 +23,7 @@ accepts the job and returns immediately with a `jobId`; the driver then polls
 
 | Method & path     | Purpose                                                                                                                |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`     | Liveness — `{ "status": "ok" }`.                                                                                       |
+| `GET /health`     | Liveness: `{ "status": "ok" }`.                                                                                       |
 | `POST /run`       | Start (or re-attach to) an **implementation** job (`coder` / `mocker` / `playwright`). Returns `202 { jobId, state }`. |
 | `POST /bootstrap` | Start a **repo-bootstrap** job (adapt a reference architecture → force-push a new repo).                               |
 | `POST /blueprint` | Start a **blueprint** job (decompose a repo → write the in-repo `blueprints/` map, commit on a branch).                |
@@ -33,7 +34,20 @@ replayed `POST` **re-attaches** to the running job rather than starting a
 duplicate (the durable driver's retries/replays are safe). Pi's todo-tool counts
 are surfaced as `progress` while a job runs. The exact request/response shapes
 cat-factory sends are documented in
-[`docs/runner-pool-integration.md`](../../docs/runner-pool-integration.md).
+[`docs/runner-pool-integration.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md).
+
+`GET /jobs/{id}` is also the harness's observability channel: `spans`, `followUps`
+and `callMetrics` are **drain-on-read**; each poll returns what accumulated since
+the previous one and clears the buffer. That is deliberate. A job that dies before
+it can return a terminal result (an evicted container, an OOM-killed process) has
+still reported the tool spans it ran and the model calls it paid for. Each drained
+`callMetrics` entry carries a job-scoped `seq`, and the terminal result repeats the
+complete list, so the backend can take both channels without double-counting a call.
+
+Because the backend records a call as soon as it drains it (and ignores the terminal
+repeat), a drained call is FINAL. A call whose tokens are still open (a CLI that reports
+only a cumulative total, costed at the end) is withheld from the drain until it is
+complete; see `createCallMetricPublisher` in `src/pi.ts`.
 
 ## What a job does
 
@@ -41,39 +55,502 @@ The implementation job (`POST /run`) is the canonical sequence:
 
 1. **clone** the target repo (shallow) with a short-lived GitHub installation token,
 2. write the composed system prompt (role + the block's best-practice fragments)
-   to Pi's **global** context file `~/.pi/agent/AGENTS.md` (outside the checkout,
-   so it never lands in a commit and never clobbers a repo's own `AGENTS.md` —
-   Pi reads and concatenates both), and point Pi at the Worker's LLM proxy via
-   `~/.pi/agent/models.json` (provider `proxy`, `api: openai-completions`),
-3. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
-4. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }`.
+   to the `AGENTS.md` of a Pi config directory made for this pass (`PI_CODING_AGENT_DIR`,
+   outside the checkout, so it never lands in a commit and never clobbers a repo's own
+   `AGENTS.md`: Pi reads and concatenates both), and point Pi at the Worker's LLM proxy via
+   that directory's `models.json` (provider `proxy`, `api: openai-completions`): at the
+   phase-tagged completions path for the pass about to run (`.../phase/<phase>`) when the job
+   body's `proxyPhasePath` says the backend serves it, which is how a repair round's model spend
+   stays distinguishable from the first pass's in telemetry; without that flag the plain path is
+   used and the calls are recorded as unattributed
+   (see [token-burn instrumentation](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/token-burn-instrumentation.md)),
+3. **prepopulate dependencies**, when the job body carries `dependencyInstall`: the
+   service's install command is run with `sh -c` in the checkout BEFORE the agent starts, so
+   it reads real installed packages instead of inferring a library's capabilities from a
+   manifest entry. Best-effort and never a gate: the outcome (success or the captured
+   failure) is folded into the agent's prompt (on EVERY pass, including the repair passes of
+   steps 6 and 7, which start a fresh agent) and the run continues either way. Whatever the
+   install materialises is excluded from git first, so no later `git add -A` can sweep a
+   dependency tree into the pull request (see
+   [dependency prepopulation](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/agent-dependency-prepopulation.md)),
+4. **resolve the repo's pull-request template**, when this dispatch opens a PR (`src/pr-template.ts`):
+  `.github/PULL_REQUEST_TEMPLATE.md` and its root/`docs/`/multi-template-directory variants, or
+   GitLab's `.gitlab/merge_request_templates/`, read straight off the checkout (a symlinked template
+   is followed only while it resolves INSIDE the checkout: this is the one repo-chosen path the
+   harness reads unprompted). Found, it is folded into the agent's prompt (on EVERY pass, as with
+   the install above) asking it to write its briefing AS that template, filled in. This exists
+   because neither host applies a template to an API-created pull request, so nothing else would:
+   the template only reaches the web form a human opens. A directory of several templates with no
+   `default` is left alone deliberately: it exists so a human can choose per pull request,
+5. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --no-approve`; the
+   checkout's own `.pi/` resources, its `mcp.json` included, are untrusted and never loaded),
+6. **validate** the checkout, when the job body carries `validationChecks`: the service's
+   configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
+   while they fail and the attempt budget remains the agent is re-run with the captured output
+   as its instruction (see [pre-PR validation](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/pre-pr-validation.md)),
+7. **prove the reproduction**, when the job body carries `reproduction`: the declared check is
+   run against the pre-fix tree and the tree the PR will open from, in two freshly-created
+   symmetric `git worktree` checkouts, and only red-then-green is reported as proof (see
+   [bugfix reproduction proof](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0033-bugfix-reproduction-proof.md)). Unlike
+   step 6 this NEVER gates the PR: a failed verification is fed back to the agent while budget
+   remains, then recorded as `inconclusive`. It runs BEFORE step 6 so validation stays the last
+   thing to touch the tree,
+8. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }`, but
+   ONLY if step 6 ended green. A spent budget returns an error result with the validation report
+   and opens no PR. Absent `validationChecks` / `reproduction`, steps 6 and 7 do not happen at
+   all. The PR's description prefers the agent-authored reviewer briefing over the generic
+   dispatch-time text the job body carries: a PR-opening agent is prompted to write one to the
+   `.cat-pr-description.md` sentinel at the checkout root (one per sibling repo in a multi-repo
+   run; an optional leading `# <title>` line, when it is the file's only `#` heading, sets the PR
+   title), and `src/pr-description.ts` lifts it; secret-scrubbed, size-capped with a visible
+   note, made inert for the host by `src/host-markdown.ts`, kept out of the commit like the
+   effort/follow-ups sentinels; onto `openPullRequest`. Absent or unusable ⇒ the fallback text,
+   unchanged. When the repo ships a template (step 4) that briefing IS the filled template: it
+   crosses the same scrub/cap/inert boundary on the way out, but the leading-`#` title rule is
+   switched OFF for it (`titleFromHeading: false`), because those headings are the repo's and
+   lifting the template's top heading would retitle the PR after it and drop it from the body. On a
+   RESUMED run the PR already exists, so an agent briefing additionally refreshes its
+   title/description in place (carrying the engine's managed report region across); the generic
+   fallback never does, so a human's edit is safe.
 
-Bootstrap differs at the ends — it may start from an empty dir, and **resets
+Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
+
+### The environment is probed once, not by the agent
+
+Before any mode branches, `handleAgent` probes the machine it is about to run on and appends an
+`ENVIRONMENT INVENTORY` block to the job's system prompt (`src/environment-inventory.ts`). It names
+the toolchain that answered and its versions, the curated list of tools that did not, and whether a
+Docker DAEMON is actually reachable.
+
+It exists because the platform used to ask every agent to find this out for itself, and every agent
+did: in one measured run an architect ran `for c in docker kubectl helm kustomize; …` and then
+`docker info`, and the coder it handed off to rediscovered both answers thirty calls later. Four
+calls out of a forty-call budget for facts this process holds before the agent's first turn. The
+backend cannot hold them (it composes its prompt before a transport is chosen, and the same body
+reaches this image, a deployment's own image variant and, under `LOCAL_NATIVE_AGENTS`, the
+developer's own machine), so it states the POLICY and names no tooling at all.
+
+Three rules bind anything added to it:
+
+- **A failed probe is not an absence.** Only `ENOENT` means "not installed"; a timeout or a refused
+  spawn renders on its own line as could-not-be-determined, because the two lead an agent to
+  opposite next moves.
+- **An unlisted tool is unknown too**, which the block's last line says. The probe list is curated,
+  so silence about `terraform` must not read as its absence.
+- **The Docker daemon is answered by running `docker info`**, never by finding the CLI. The CLI is
+  installed in this image unconditionally, `entrypoint.sh` starts the rootless daemon best-effort
+  and execs the server without waiting for it, so at job start this probe is the only thing that
+  knows how that went.
+- **A daemon that ANSWERS is not a daemon that WORKS**, which is the same mistake one level in and
+  the one this block used to make. A rootless daemon nested inside a sandbox serves throughout
+  while its snapshotter cannot mount an image layer, so `docker info` succeeds and `docker build`,
+  `docker run` and `docker pull` of anything multi-layer all fail on one EINVAL. Issue #2120 is
+  three agents in a single run each paying to disprove the claim, against a block that also tells
+  them not to re-check it. Only a container that RAN settles it, so the reachable case is split by
+  a real workload (`src/docker-capability.ts`) into `usable`, `unusable` and a daemon that answered
+  while the check could not be carried out. **Only `usable` may say the commands work**, and the
+  asymmetry runs the other way too: a failure of the platform's own machinery reports that it
+  could not tell, never that the daemon is broken. That covers every step before the run (no probe
+  payload on this machine, a daemon whose architecture the payload is not built for, `docker load`
+  refusing the archive) AND the halves of a failed run that are ours rather than the daemon's,
+  which is what docker's exit 126/127, a tag that did not resolve and an unexecutable payload are.
+- **A daemon that runs containers is not a daemon whose containers have a NETWORK**, which is the
+  same mistake one level in again. Loading and running a local image needs no network at all, so the
+  workload check above passes identically on a daemon whose nested containers are cut off: every
+  published image ran its rootless daemon with `--iptables=false`, which drops the MASQUERADE rule
+  for its bridge, and the harness reported `usable` while every `docker build` that fetched a
+  dependency was guaranteed to fail (issue #2174). So `usable` carries its own egress verdict,
+  measured from INSIDE a nested container (a TCP connect to a raw address, and a name to resolve),
+  and the rendered line says something different for each. The `blocked` wording is precise about
+  which commands break, because "docker has no network" is false and would have an agent skip work
+  it could do: the daemon pulls base images and `docker compose up` of pre-built images works, while
+  every `RUN` line that fetches anything fails, SLOWLY, since npm reports `EAI_AGAIN` only once its
+  retry backoff gives up and the build reads as a hang. `reachable` needs the connect AND the
+  lookup, since nothing an agent installs is fetched by address; a resolved name with a refused
+  connect is undetermined rather than blocked, because the resolution proves a path out exists and
+  the likelier cause is a deployment that filters the address the check was pointed at.
+- **A daemon that is STARTING is not a daemon that is absent.** Because the entrypoint does not
+  wait, the backend dispatches seconds before there is a socket, and `docker info` is then refused
+  at once rather than slowly. So a refusal is read against `DOCKER_HOST`, which the entrypoint sets
+  whenever something is meant to serve a daemon here: unset means nothing was coming and the
+  absence is stated definitively, set means one short retry and then could-not-be-determined. The
+  absent wording tells an agent `docker compose up` "will fail here whatever the CLI reports", which
+  is a prohibition, so it may only be reached where nothing is going to answer.
+- **A tool the platform did not provide is not installable system-wide either**, since the job runs
+  unprivileged. The line says that instead of banning installation outright: `pnpm` is absent from
+  this image (only the UI variant carries it), so it is routinely the package manager the job's own
+  repository declares, and a flat prohibition pushed agents onto `npm install` against a pnpm
+  lockfile. Reaching a project's own manager for that project alone is allowed and named.
+
+Composed at exactly ONE point, onto the job's own `systemPrompt`, which every mode already forwards
+and all three CLIs already carry (claude-code's `--append-system-prompt` and its oversized-argv
+fallback, Codex's fold, Pi's `AGENTS.md`). `test/environment-inventory.coverage.test.ts` pins that:
+a mode that folded its own copy would state the machine twice, and one that folded none would leave
+its agent probing, with nothing failing either way.
+
+### The work-branch push is CHECKPOINTED, so it is lease-guarded
+
+Step 8's push is not the run's first: every `JOB_CHECKPOINT_INTERVAL_MS` (60s) the harness pushes
+whatever the agent has committed and NOT yet published, so an evicted container's work survives on
+the branch and a retry resumes on top of it. The interval is a **loss window**, not a push rate:
+`unpublishedWorkBranchTip` skips a tick whose branch tip is already published, so a long run pushes
+once per commit the agent makes rather than once a minute, and nothing here needs tuning per model.
+
+That makes the harness its own competing writer. A commit is published within a minute of being
+made, the agent cannot observe that from inside the container, and amending or resetting it
+afterwards is ordinary git hygiene, so the final push used to be refused as a non-fast-forward and
+failed the whole run with its work already on the branch.
+
+Every push after the first therefore carries `--force-with-lease` against **the sha this pass
+itself published**, never a tip it merely cloned. Two rules make that bound real, and both are
+easy to get wrong:
+
+- **The published sha comes from the push itself** (`pushBranch` names an explicit
+  `<sha>:refs/heads/<branch>` source and returns it), not from `refs/remotes/origin/<branch>`. A
+  fresh coding run clones a single branch, so `git push` creates no tracking ref for the work
+  branch and a lease read back from one never arms at all.
+- **The lease is withheld unless the branch still contains the tip this pass started from**
+  (`workBranchLease`). Once a checkpoint has landed, a rewrite reaching below that tip would lease
+  successfully against our own commit and carry an earlier run's work away with it.
+
+The run's own rewrite lands; a SECOND writer's commits, and a rewrite this pass cannot claim, still
+refuse the push. A refused push is not reported as a generic `git` fault but as the
+`branch-contended` failure cause, which the engine recovers from by re-dispatching the step onto
+the branch as it now stands (bounded by `MAX_BRANCH_CONTENTION_RECOVERIES`, counted as
+`container.branch_contended` and recorded on the step for the debug API). The agents are told the
+matching half of the rule: add commits, never rewrite them (`PLATFORM_DELIVERY_CONTRACT`).
+
+### Reference designs
+
+A job body for a kind that CAPTURES views (the UI tester, or a deployment's own browser-driven kind)
+may carry `referenceScreenshots`: the reference images the platform holds for the task, as
+`{ url, token, files: [{ artifactId, fileName, view }], omitted: [view] }`. The harness downloads
+each into `.cat-context/reference-screenshots/` before the agent's first turn and lists them, by view
+name, at the end of the agent's context.
+
+Only identities travel in the body (a design frame is a full-page PNG), and the bytes come back
+from the backend over the SAME container session token the run already holds for the LLM proxy, so
+this needs no extra credential. The FILE NAMES are the backend's, never derived here: the name is
+how the agent learns the view name, and the platform pairs its capture against that name later.
+
+A job for a kind that BUILDS a screen carries the same wire shape under `designImages`, downloaded
+into `.cat-context/design-renders/` instead. Same transfer, opposite instruction: those are the
+design to build, not the views to capture, which is why they get their own directory (a tester
+reading the builder's handful would take it for the complete list of views to capture). The prompt
+naming them is composed by the BACKEND, since only it knows whether this harness/model pair can be
+shown an image at all and which views the run was not sent, so the harness speaks up only to
+CORRECT that list when a picture did not land.
+
+`omitted` carries the views the backend's cap dropped. They are stated to the agent beside the
+transfers that failed, since from where it stands both are a view to capture with nothing to compare
+against. This parser keeps a higher backstop of its own against a body claiming more files than any
+real set has, and an entry past it joins `omitted` rather than vanishing: a cap that shortened the
+list and said nothing would be indistinguishable, on disk and in the prompt, from a design that has
+no such screen.
+
+The pass is IDEMPOTENT over the checkout, which matters because a coding flow re-enters its
+workspace once per repair round: a non-empty file already on disk is counted and never re-fetched,
+and only a view that MISSED is retried. The per-image ceiling is enforced against the declared
+length and against the stream as it arrives, so an oversized body is refused rather than buffered.
+
+### Uploading what a job PRODUCES
+
+The return leg of the same seam. A job body for a kind the backend gave a browser image to carries
+`artifactUpload: { url, token }`, which the harness surfaces to the agent as `ARTIFACT_UPLOAD_URL`
+/ `ARTIFACT_UPLOAD_TOKEN` — the variables the capturing prompt already names. The token is the run's
+EXISTING container session token, so this grants no reach the job did not already have, and it is
+registered for redaction before it can reach a log.
+
+Which kinds get it is the BACKEND's decision (it keys off the kind's declared `ui` image), so the
+harness passes it through for every mode rather than testing the agent kind: a container-side kind
+list would be the same decision made twice, in the half that cannot see the registry. An unusable
+spec drops the WHOLE seam — a URL with no token is an endpoint nothing can call — and the prompt
+branches on the variable being unset, which is what makes an absent capability visible as manual
+mode rather than as an upload that 401s.
+
+### Generating binaries with the CLI's own tool
+
+Codex ships an `image_gen` tool that works only on ChatGPT subscription auth (an `OPENAI_API_KEY`
+session is routed elsewhere and never offered it). A job body carrying `generateImages: true`
+enables it in the per-run `CODEX_HOME/config.toml` and redirects what it writes.
+
+The redirect is the point. Codex writes to `$CODEX_HOME/generated_images/` and tells the model no
+path for it, and `$CODEX_HOME` is where the run's decrypted subscription credential lives — so
+neither "ask the agent where it saved the file" nor "send the agent to look there" is available.
+Instead `generated_images` is created as a symlink into `.cat-context/binary-output/generated/`
+before the CLI starts, so the file is where the agent was told to look the moment the tool returns,
+with no polling and no race, and `$CODEX_HOME` stays unread. A post-run sweep moves anything a
+failed redirect left behind and NAMES it, because an image that arrived too late to be stored is a
+different fact from a run that generated none.
+
+Opt-in per job because the tool bills the leased ChatGPT plan at several times an ordinary turn.
+
+Unavailable under `ambientAuth`: there is no per-run home to configure or redirect, and
+reconfiguring the developer's own `~/.codex` is the HOME-global mutation this harness never makes.
+Unavailable is not silent — the backend has already composed a brief naming the staging directory,
+so `createCodexHome` reports the gap and one sentence is folded into the prompt saying the tool
+could not be enabled and nothing will appear there. A refused redirect gets its own wording (the
+tool IS on, its output is only unreachable until the post-run sweep), and the teardown report reads
+the same outcome, so a rescued file is never reported as a late arrival when the redirect never
+existed at all.
+
+`generateImages` is also a `/health` capability, so a runner pool on an image that predates it is
+refused rather than run blind: the brief names the staging directory whatever the image does with
+the flag.
+
+### Skills and tool servers
+
+A job body may carry `skills[]` (procedural playbooks) and `mcpServers[]` (MCP tool servers): the
+harness MATERIALISES both and decides nothing about them; the backend has already resolved which
+apply and dropped what this harness cannot serve (see
+[`backend/docs/adr/0029-agent-kind-capabilities.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0029-agent-kind-capabilities.md)).
+
+- **Skills** install natively under `CLAUDE_CONFIG_DIR/skills/<name>/` for a leased-credential
+  claude-code run (the CLI discovers and invokes them), and under
+  `.cat-context/skill/<name>/` in the checkout for Pi, Codex, and an AMBIENT claude-code run:
+  whose prompt carries the instructions instead, because there is no isolated config home to
+  install into and the runner refuses to write into the developer's own `~/.claude`.
+- **Tool servers** become a per-run `--mcp-config` file plus `--strict-mcp-config` for claude-code
+  (so an ambient run never picks up the developer's personal servers), and `[mcp_servers.*]` blocks
+  in the per-run `CODEX_HOME/config.toml` for Codex: stdio only, and skipped entirely under
+  ambient auth, which has no per-run home to write into. Both stdio-only skips are now BACKSTOPS
+  rather than decisions: the backend knows which transports each harness reaches and drops an
+  `http` server from a Codex dispatch with a stated reason, so the prompt names the gap instead of
+  advertising a tool this side then silently omitted. `--allowedTools` is passed ONLY when a
+  server actually narrows its tools, and then carries the CLI's built-in tool names alongside the
+  `mcp__*` patterns: an allow-list is whole-session, not MCP-scoped, so a bare list of MCP
+  patterns would leave the agent unable to read, edit or build anything. Whether the CLI gates on
+  that list at all is permission-mode dependent, so treat the narrowing as scoping rather than
+  enforcement; the prompt states it either way. An `allowedTools` entry that is not a single tool
+  name is DROPPED at the boundary, the comma above all: the list is joined into one argument with
+  commas, so `search_issues,get_issue` in one entry would become a pattern matching nothing.
+- **For Pi, tool servers become the `mcp.json` of the pass's own config directory** (Pi 0.99.0
+  onward). Every `env`/`headers` value is written escaped with Pi's own `$$` / `$!` escapes: Pi
+  runs a value starting with `!` as a shell command and interpolates `$NAME`, and a vendor
+  credential may contain either. The values stay in the file, never in Pi's env, because Pi starts
+  a stdio server with its own whole environment, so an env-borne credential would reach the agent's
+  shell, every repo script and every other server. A narrowed server is `hidden` with each
+  permitted tool re-exposed by name, so `allowedTools` is enforced on Pi. The image reports
+  `piMcpServers` in its body capabilities only when the installed Pi is 0.99.0 or newer (checked
+  with `pi --version` at startup); see `writePiMcpConfig` and `reportedBodyCapabilities`.
+- **An `mcp__*` call is exempt from the no-edit progress bound**, like a read or a subagent
+  dispatch: reaching a wired tool server is what the prompt tells the agent to do, so counting it
+  would abort an edits-expected run for following its own instructions. It is neutral rather than
+  edit-satisfying, and bounded by its own consecutive-call cap
+  (`JOB_MAX_CONSECUTIVE_MCP_CALLS`) for the same reason the web cap exists. Every exempt family
+  ALSO shares one backstop (`JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS`), because each per-family cap
+  resets on any call outside its own family: a run alternating a web search with a tool-server
+  lookup trips neither, and having made no action call it never reaches the no-edit bound either.
+- **An `http` tool server must be `https`, or loopback.** Its headers carry a resolved credential,
+  so the job boundary refuses a cleartext off-box URL (the backend refuses the same at
+  registration). `secretKeys` names which `env`/`headers` entries are credentials, so exactly those
+  values are registered for redaction: scrubbing the whole map would turn ordinary config strings
+  into `***` in every later log line.
+
+The claude-code, Codex and Pi config files carry this job's resolved credentials, so they are
+written to a per-job directory (mode `0600`) and never into the checkout or a HOME-global path: see
+the next section.
+
+## Per-job state: never a process- or HOME-global
+
+A job's staging state (the tester's secrets, private-registry auth, a repo-sourced Claude
+Skill) must be scoped to that job, not written into `process.env` or the home directory.
+
+In a container those two ARE per-job (one job per process, and `HOME` belongs to that
+container) so a global was a safe place to stage. The **local native transport** breaks both
+assumptions: one long-lived host process serves every concurrent `ambientAuth` job, on the
+**developer's own home**. A global there is shared mutable state across siblings, and writing
+(or clearing) a dotfile destroys a file the developer owns.
+
+So per-job values ride explicit **child env** (`RunOptions.agentEnv` →
+`SubscriptionRunOptions.extraEnv`, merged over the inherited env at spawn) and per-job files go
+under a per-job directory:
+
+| State                | Container                                    | Native (`ambientAuth`)                                                    |
+| -------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| Tester secrets       | child env                                    | child env (same path: the old `process.env` set/restore is gone)         |
+| Private-registry auth | `~/.npmrc`; cleared when a job has no entries | per-job `.npmrc` + `npm_config_userconfig`, seeded from the developer's; theirs is never written or removed |
+| Repo-sourced Claude Skill | installed into the isolated `CLAUDE_CONFIG_DIR` | not installed: read from the checkout's `.cat-context/skill/`, like codex |
+| Codex image output | redirected out of the per-run `CODEX_HOME` into the checkout | not redirected: no per-run home exists, so the capability is reported unavailable rather than pointed at the developer's own `~/.codex` |
+| Pi config (`AGENTS.md`, `models.json`, `mcp.json`) | a per-pass `PI_CODING_AGENT_DIR` seeded with the image's installed extensions (`createPiAgentDir`) | n/a: Pi never runs natively |
+
+Two consequences worth knowing:
+
+- **The skill's PROMPT follows the same split.** A native install gets a short pointer; every
+  checkout-reading case (Pi, codex, ambient claude-code) gets the instructions folded in plus a
+  pointer to `.cat-context/skill/`. That decision is the backend's `renderSkillForHarness`, which
+  keys off `ambientAuth` as well as the harness: rendering an ambient run as an install would
+  point the agent at a skill that is nowhere on disk.
+- **`npm_config_userconfig` reaches less than `~/.npmrc` did.** npm and pnpm honour it; yarn does
+  not. And it only reaches processes that are handed the job env, so anything the HARNESS itself
+  spawns (the frontend stand-up's install/build, a ralph validation command) is passed
+  `RunOptions.agentEnv` explicitly rather than relying on inheritance.
+
+When you add per-job state, put it in one of those two places. `~/.pi/agent` is only READ (the
+seed a per-pass directory takes the image's extensions from), and `~/.config/rpiv-web-tools`
+(the provider NAME only, a deployment-level fact) remains HOME-global, which is fine only because
+the Pi harness never runs natively (the native router sends `ambientAuth` jobs (Claude/Codex only) to the host
+process and everything else to a container).
 
 ## No secrets in the image
 
 The image (built from the `Dockerfile`, base `node:26-trixie-slim`) contains
-only `git` + the Pi CLI + this compiled wrapper — **no API keys, no GitHub
+only `git` + the Pi CLI + this compiled wrapper: **no API keys, no GitHub
 credentials**. Per job, the Worker passes a short-lived GitHub token and a
 signed, model-locked LLM-proxy **session token** in the request body. Pi reaches
 models only through the Worker proxy, which injects the real provider key (qwen /
 Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 
+## Local infra: the container's Docker daemon
+
+The Tester's local-mode infra stand-up runs `docker compose up --wait` INSIDE this container, so
+the container needs a daemon of its own. It runs rootless, as the unprivileged `harness` user:
+Cloudflare Containers (and most managed runners) give no root and no privileged mode, and a host
+Docker socket would hand the container root on the host.
+
+`entrypoint.sh` starts it, waits for it in the background, and RECORDS the verdict
+(`src/docker-status.ts`). Two things consume that record and nothing else does:
+
+- `GET /health` reports it, so an operator (and a boot-time probe) can see what the container
+  concluded about itself.
+- The compose stand-up REFUSES on a decided negative and says why, instead of running compose
+  against nothing and handing the agent a connection error to interpret. The refusal rides back on
+  the Tester step as the cause plus the three facts that decide where a human should look:
+  `infraSetup.dockerAvailable` (was anything answering), `infraSetup.dockerWorkload` (what a
+  container did on it) and `infraSetup.dockerEgress` (what that container could REACH). Three
+  fields rather than one, because the daemon has three ways to stop the work: nothing to talk to, a
+  daemon that answers and cannot run a container, and a daemon that runs containers and gives them
+  no network. Flattening the second onto `dockerAvailable: false` renders as "no Docker daemon in
+  the executor" and sends an operator to restart a daemon that is already up; flattening the third
+  onto `dockerWorkload: 'usable'` renders as a sandbox where the stack works, which is the reading
+  that let every `docker build` in a `--iptables=false` container fail unexplained for months.
+
+**What the entrypoint probes for is a SOCKET, and serving is not usable.** That is the whole of
+what a boot record can know, and it is weaker than what either consumer wants: a rootless daemon in
+a sandbox answers `docker version` while being unable to mount an image, so compose ran and died on
+a mount error inside the one mechanism whose job is to explain why the dependencies did not come up
+(issue #2120). The live half of the verdict is therefore a real workload (load a one-layer image
+and run a container from it, `src/docker-capability.ts`), and `resolveDockerVerdict` consults it in
+BOTH directions: a recorded absence a working daemon contradicts, and a recorded presence that
+cannot run anything. `GET /health` reports the last measurement beside the boot record under
+`docker.workload` and never takes one itself, since it is polled; `unmeasured` is one of its answers.
+
+**The weaker fact did not stop mattering, though, and it is what a stale record is read against.**
+A workload check can come back undeterminable for reasons that have nothing to do with whether a
+daemon is up (no probe payload in a deployment's own image variant, an architecture it is not built
+for, a `docker load` the engine refuses, a timeout), so falling straight back to the boot record
+there would re-latch the very refusal the paragraph below rules out. The check therefore reports
+`daemonAnswered` alongside its `unknown`, established on its way past at no extra cost, and a
+daemon that merely ANSWERED overrules a recorded absence exactly as the old `docker version` probe
+did. Only a check that never reached a daemon at all leaves the record to decide.
+
+The workload check is memoised per container for a POSITIVE answer only. A daemon that has run a
+container proved something that does not stop being true; a negative is re-measured for the same
+reason a recorded absence is, and it fails fast anyway.
+
+The verdict is three-valued, and that is the point. `false` is a decided absence. `undefined` is
+"nothing decided" — the probe is still in flight, or nothing recorded anything at all, which is the
+normal state under the native host transport (`LOCAL_NATIVE_AGENTS`) where the harness runs on a
+developer's machine with no entrypoint. Undecided attempts the stand-up, and nothing probes it into
+a refusal; only a decided negative refuses.
+
+What is recorded describes BOOT, and a container outlives its boot: a warm pool serves many jobs
+from one, and a sidecar daemon that took longer to come up than the entrypoint's bounded wait
+allows is serving perfectly well by the second job. So a recorded verdict is a hypothesis, not the
+refusal: `resolveDockerVerdict` re-checks it against a live daemon at the moment a stand-up is
+about to run, and the record supplies what only the record holds, the cause and the daemon's own
+log tail. `GET /health` deliberately keeps reporting the boot record rather than probing per poll,
+since it is not the surface that acts on the answer.
+
+**Which daemon the container ends up with is a choice made on evidence.** `--iptables=false`
+arrived because the daemon could not start at all without it: a sandbox like Cloudflare Containers
+gives it no way to install its firewall rules, and it refuses to start. What went unnoticed is what
+the flag costs once the daemon DOES start. The rule it drops is the MASQUERADE for the bridge, so a
+nested container is never NATed and has no egress whatsoever, no DNS and no raw IP either. The
+daemon's own `docker pull` keeps working, which is most of why it stayed hidden for so long, and the
+cost lands on a `docker build` whose `RUN npm ci` sits in npm's retry backoff for some seven minutes
+before failing (issue #2173). So the entrypoint starts the daemon that manages its own rules first
+and falls back to `--iptables=false` only when that one EXITS without serving.
+
+The death, and not a clock, is what decides. A sandbox with no iptables binary and no NAT module
+does not make the daemon slow, it makes `dockerd` exit at once with the reason on its log, so an
+exit is the one observation here that is actually about the flags. A first arm still starting when
+the budget runs out is a cold sandbox as often as a wedged one, and swapping there would take a
+capable daemon away for the container's whole life on a guess; it is recorded as undecided and LEFT
+RUNNING instead, so `resolveDockerVerdict`'s live re-probe can still find it with its NAT intact. A
+sandbox that genuinely cannot do iptables ends up exactly where it was; a privileged Docker or
+Podman host, which is what local mode runs on, gets working nested networking.
+
+Each arm gets its OWN rootlesskit state directory, image store and pid file, and the abandon path
+waits for the process to be gone after `kill -9`. SIGKILL is not propagated, so a launcher that had
+already forked the real `dockerd` dies while its child holds an exclusive lock on the data root and
+a live pid file: sharing either would make the fallback fail with `pid file found` for a reason that
+has nothing to do with why it was started, which is the worst outcome available here (both arms
+record `failed` and the container ends up with no daemon at all). The socket is the one thing that
+cannot be per-arm, since `DOCKER_HOST` names it, and dockerd unlinks and rebinds it.
+
+The two arms record different `reason` words (`serving` and `serving-without-nat`) with a detail
+that names the CONSEQUENCE, which the workload check measures from inside a nested container without
+ever learning why. What the detail does NOT do is name a cause: "iptables is unavailable here" is
+not something the entrypoint measures, and the real cause is the daemon's own log tail, which rides
+the stderr line announcing the switch.
+
+Why it is written down at all: the image shipped for months with `docker-ce-rootless-extras` (the
+wrappers that START a daemon) and no `docker-ce` (the daemon itself), and no `iproute2` for the
+network rootlesskit builds. The entrypoint backgrounded the start in a subshell where its exit
+status could not be observed, so every local-infra Tester run degraded silently to a no-infra run
+whose only trace was a compose error in a prompt note. A capability that reports itself present and
+then degrades in silence is worse than one that is absent, so the daemon is installed AND the
+verdict is stated.
+
 ## Layout
 
 | File               | Responsibility                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `src/server.ts`    | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`.                   |
-| `src/runner.ts`    | `JobRegistry` — async job lifecycle, idempotent on `jobId`, progress tracking.                          |
+| `src/harness-server.ts` | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`. Its file name and the `cat-factory-harness` process title it sets are both deliberate: this process is PID 1 beside an agent that runs arbitrary shell as the same user, so it must not answer to a pattern kill aimed at the service the agent just built. |
+| `src/runner.ts`    | `JobRegistry`: async job lifecycle, idempotent on `jobId`, progress tracking, and the three per-job watchdogs (max-duration, inactivity, tool-silence).                          |
+| `src/jsonl-stream.ts` | The BOUNDS on a child CLI's streams, shared by both runners: `JsonlLineReader` frames its JSONL stdout while refusing to buffer a runaway record, `BoundedTail` keeps a capped tail of raw output for failure quoting. Both watchdog timers and the poll endpoints share one event loop with this parsing, so an unbounded buffer here is how a container stops answering polls with no watchdog having fired. |
 | `src/job.ts`       | Request types + validators for the job specs.                                                           |
+| `src/context-manifests.ts` | The two manifests of FILES the backend stages into the checkout: the linked-context documents and the reference design images. Their shapes plus the defensive parse of each, sharing the basename rule that keeps a body-supplied name from escaping the directory or clobbering a repo file. Both stay job body fields, so `job.ts` remains the import site. |
 | `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, global `AGENTS.md` guidance. |
-| `src/git.ts`       | clone / branch / commit / push + GitHub PR creation; bootstrap history reset + force-push.              |
+| `src/pi-reduction.ts` | Reducing a Pi event stream to what the run PRODUCED (summary, stats, diagnostics, terminal failure), FOLDED as records stream rather than over a retained array — memory is O(largest record), not O(records). The array-taking entry points offline tooling uses are defined in terms of the same reducer. |
+| `src/tool-silence.ts` | The tool-silence watchdog (F13) and the `ToolProgressWindow` an agent stream opens, beats and closes. Separate from the phase marker on purpose: a window is only meaningful while something able to reset it is running. |
+| `src/git.ts`       | clone / branch / commit / push (lease-guarded: [The work-branch push is CHECKPOINTED, so it is lease-guarded](#the-work-branch-push-is-checkpointed-so-it-is-lease-guarded)) + GitHub PR creation; bootstrap history reset + force-push. |
+| `src/progress-guard.ts` | The live anti-rabbithole bounds every agent run is held to, plus the tool-name vocabulary they classify calls with. PURE and SYNCHRONOUS: it spawns nothing and reads nothing off disk, so it can be driven over a fixed event sequence in a unit test. Shared by both runners, because two copies of a bound are two bounds. |
+| `src/workspace-probe.ts` | The working-tree answer to "has this run actually changed the repository": a dirty tree, or HEAD moved off the sha the pass began at. What the no-edit bound decides on, since the tool names it can see are a fact about which tool the model picked and not about the repo (an agent writing everything through `bash` heredocs read as making no edits at all). Gitignored paths are excluded by git, which is what keeps a dependency install from reading as progress. Order carries the "is this a repository at all" question: the status runs first and is never caught, while a missing HEAD is the from-scratch case rather than a failure. A run whose cwd is a workspace of sibling checkouts composes one probe over them, where a checkout that could not be probed makes the answer inconclusive rather than clean. |
+| `src/guard-driver.ts` | The bridge between the synchronous guard and the async evidence one of its bounds needs. Both runners feed the guard from a sync stream handler, so the driver owns the probe's lifetime: at most one probe per run, a positive answer satisfying the bound permanently, a negative one aborting with the evidence quoted, and a THROWN one inconclusive (re-arm and warn, never kill). Also hosts the claude-code stream's tool_use/tool_result pairing. |
+| `src/salvage.ts` | Committing the new, untracked files an agent left behind, under a dependency/build deny-list and file-count + byte bounds that refuse ALL-or-nothing rather than truncating. Coding modes only. A credential-bearing name (`.env`, a private key, `.npmrc`) is a THIRD disposition, not a fourth junk entry: it is withheld like the rest but NAMED on the outcome, because for a secret the deny-list's usual trade inverts (a missed file is recoverable, a leaked key is not) and someone has to decide whether to rotate it. Every message here states the salvage's own provenance: a commit arriving with no explanation is indistinguishable from work someone chose to keep, and nobody chose this. |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |
+| `src/package-registries.ts` | Private-registry (npm) auth: renders the job's allowlisted entries into an npmrc; the user `~/.npmrc` in a container, a per-job file pointed at by `npm_config_userconfig` for a native job. |
+| `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`): talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
+| `src/claude-cli.ts` | The claude-code CLI's INVOCATION surface: the built-in tools a run DECLARES with `--tools` (the CLI's headless default has no `Grep`/`Glob` and no plan tools, and does carry a dozen an ephemeral container can act on none of), the argv that declares them, and the read-back of the CLI's `init` event that warns when a required capability was granted no tool. The list is over-inclusive on purpose, which `--tools` makes safe: an unknown name is dropped silently and a RETIRED one is an alias onto its successor, so one pinned image can face several CLI versions. The web tools are unconditional, being served by the vendor the leased subscription pays rather than by this deployment's search proxy. The same list also rides the `--allowedTools` re-grant, which is ADDITIVE rather than inert, so the two are one value threaded rather than two lists. |
+| `src/claude-home.ts` | The PER-RUN claude-code config home (`codex-home.ts`'s sibling): the isolated `CLAUDE_CONFIG_DIR` outside the checkout, its onboarding pre-seed, the run's natively-installed skills, its `--mcp-config`, the child env carrying the leased credential, and the teardown that lifts the session transcripts out before deleting it. |
+| `src/claude-call-aggregator.ts` | Folds Claude Code's per-CONTENT-BLOCK `stream-json` envelopes back into the model calls they belong to (by `message.id`), reconstructs each call's request transcript, and routes subagent turns off the parent's chain. **Exported as the `./claude-call-aggregator` subpath and driven by the BACKEND too** (`runtimes/local`, for an inline step running on the developer's host `claude`), so it stays the ONE implementation: the per-envelope over-count it fixes inflated a measured 1.47M tokens to 5.53M, and both drivers have to learn that only once. That second driver is why the transcript is retained only to `MAX_TRANSCRIPT_CHARS` (stating what it stopped retaining) and why assembling bodies at all is a `bodies` switch: in a container the reconstruction is one job's memory in a box sized for it, in the backend it is per concurrent inline step in the orchestrator process. Unlike the compile-only `./embed`, this subpath is a `dist` import, which is why the package emits declarations, and why a consumer's typecheck depends on Turbo's `^build` edge having built this package first (see `tsconfig.json`'s `comment:buildOrder`). |
+| `src/usage-attribution.ts` | Reconciles a subscription CLI's TWO token channels: the per-turn usage its stream narrates and the cumulative total its terminal event reports. They disagree routinely and in one direction (Claude Code's per-turn `output_tokens` is the message-START snapshot, single digits), so whatever the turns did not account for becomes ONE extra metric standing for the job (`standsForJob`, filed with a null turn index) rather than tokens grafted onto a real turn, which would make a derived number read as a measured one. Reconciled against the PARENT loop's calls alone, since the terminal cumulative covers only that conversation. |
+| `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
+| `src/captured-command.ts` | The one way the harness runs a declared shell command on its own behalf: `sh -c` with a per-command watchdog, abort handling, conventional exit codes (124/127/130) and a scrub-then-bound output capture. Shared by both pre-PR verification phases so a fix to one cannot miss the other. |
+| `src/dependency-install.ts` | Dependency prepopulation: `prepopulateDependencies` is the ONE seam every checkout-having mode calls; it runs the service's install command before the agent's first turn, excludes what the install materialised from git so no `git add -A` can sweep a dependency tree into the PR, and builds the prompt note describing the outcome. Best-effort: every failure shape becomes a note, never a failed job. Generic: keyed off the job body, never the agent kind. |
+| `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic: keyed off the job body, never the agent kind. |
+| `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic: keyed off the job body, never the agent kind. |
+| `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries: the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers): with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
+| `src/context-images.ts` | The TRANSFER half of both image manifests: downloads a manifest's images into a subdirectory of `.cat-context/` on the run's own container session token, bounded per image and per pass, and reports what did not land. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. Shared, because the transfer is identical for both; what differs is what the files MEAN, which is each caller's own module below. |
+| `src/design-images.ts` | The task's DESIGN PICTURES: downloads the manifest a building job body carries into `.cat-context/design-renders/`, for an agent CLI that can read an image into its turn. Says NOTHING on success (the backend's prompt already names every file and its view) and speaks only to correct that list when a picture is not here, because an agent told to open a file that is absent goes looking for the design rather than for the transfer. |
+| `src/reference-screenshots.ts` | The task's REFERENCE DESIGN images: downloads the manifest a capturing job body carries into `.cat-context/reference-screenshots/` (on the run's own container session token) and composes the prompt block naming each file's view. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. A reference that is not on disk is NAMED to the agent, whether a transfer failed or the backend's cap dropped the view, because on disk an absent file and a screen the design does not have are the same thing. Backend-authored throughout, including the file names. |
+| `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
+| `src/artifact-upload.ts` | The OUTBOUND half of the artifact seam: parses the body's `artifactUpload` and projects it onto the agent's env as `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, registering the token for redaction first. Passes through what the body carries and decides nothing: which kinds get the seam is the backend's call. |
+| `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown — a failed unlink is REPORTED, because that unlink is what stops the recursive delete reaching the checkout. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
+| `src/environment-inventory.ts` | What the MACHINE holds, probed once per job and appended to the agent's system prompt as an ENVIRONMENT INVENTORY block. The only layer that can state it: the backend composes its prompt before a transport is chosen, and the same body serves this image, a deployment's own variant and the developer's laptop under `LOCAL_NATIVE_AGENTS`. Three-valued on purpose, so a probe that failed renders as unknown rather than as an absence; Docker gets FIVE, because a daemon that answers `docker info` is not a daemon that can run a container. See [The environment is probed once, not by the agent](#the-environment-is-probed-once-not-by-the-agent). |
+| `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
+| `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED negative refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
+| `src/docker-capability.ts` | Whether the daemon can RUN A CONTAINER, which is the fact every caller wanted and `docker info` does not answer. Loads a one-layer image built in-process and runs it; `usable` / `unusable` / `unknown`, and only the container RUN may produce the middle one, AND only where the daemon is what refused it (docker's 126/127, a tag that did not resolve and an unexecutable payload are the platform's own machinery, so they say "could not tell"). `usable` then carries what a SECOND container, on the default network, could reach: `reachable` / `blocked` / `undetermined`, on the same asymmetry (a missing busybox applet is the platform's gap, never an absent network). Total: it answers even if it throws. One budget for the whole pass plus a separate one for the egress container, cancelled when the last caller abandons it, memoised per container once SETTLED: any positive, plus every negative whose cause cannot change under a running container (a rejected target, a payload with no `nc`, a filtered address). Only a genuinely transient failure is re-measured, because re-measuring is two container starts and an image load per job on the critical path. |
+| `src/docker-probe-image.ts` | The one-layer docker-archive that check loads, assembled here from a statically linked binary already in the image, so the whole thing is local: no registry, no network, no second image. Pure, byte-stable, and it names the architecture the DAEMON reported rather than this process's. Also builds the egress container's argv, and validates the address it aims at (an IPv4 literal, never a name: a connect that has to resolve first cannot separate a broken route from broken DNS). The connect uses busybox `nc -z` where the payload has it and no `-w` where it does not, both under `busybox timeout`, because `-w` covers the FINAL NET READ: on a TLS port, a connect that succeeded then exits non-zero and reads as a route that is not there. |
+| `src/docker-command.ts` | How the harness runs one `docker …` command on its own behalf: an argv (no shell), a stdin body, stdout kept apart from stderr, one required timeout, the job's signal, and `killChildProcess` for the kill. Not a second `captured-command.ts`, which stays the one way a DECLARED shell command runs; the header says which of its choices this needs to differ on and why. |
+| `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` (the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it) and `PORT` (the port this harness is listening on, so a service that reads it would bind the one address in the container's network namespace that is already taken). |
 
 ## Runner lifecycle knobs
 
@@ -82,9 +559,26 @@ runner):
 
 | Env var               | Default         | Effect                                                      |
 | --------------------- | --------------- | ----------------------------------------------------------- |
-| `PORT`                | `8080`          | HTTP port the harness listens on.                           |
+| `PORT`                | `27182`         | HTTP port the harness listens on. Deliberately not a port a service under test would pick: the harness shares the container's network namespace with the agent's own processes, and on `8080` it answered their health checks (see `src/harness-port.ts`). |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `JOB_TOOL_SILENCE_MS` | half `JOB_MAX_DURATION_MS` (30m at its default) | Kills an agent that keeps producing output but completes no tool call for this long: the "chatty hang" neither watchdog above can see, since streamed output resets the inactivity timer on every chunk while nothing gets done (stuck-run audit F13). Armed ONLY while an agent CLI that reports completed tool calls is running (each runner opens its own window and closes it on exit), so clone / dependency install / push / a validation loop's check commands sit outside it — they are activity-silent by nature and bounded by their own per-command timeouts — and each repair pass opens a fresh window. Derived from the job ceiling rather than fixed. It fires only when output arrived during the window that elapsed, which is what leaves a genuinely quiet run to `JOB_INACTIVITY_MS` and its clearer diagnostic. `0` disables it. |
+| `JOB_MAX_CONSECUTIVE_MCP_CALLS` | `40` | Consecutive tool-server (`mcp__*`) calls with no other tool call between before the run counts as a lookup loop. The counter-bound the no-edit exemption above owes; a per-kind `tuning.guardLimits` entry can only RAISE it. |
+| `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` | `200` | Consecutive calls of ANY no-edit-exempt family (reads, searches, web, tool servers, subagent dispatches) with no action call between them. The backstop above the per-family caps, since each of those resets on a call outside its own family; sized as a backstop rather than a research judgement, and reset by any `bash`/edit. |
+| `JOB_COLD_START_MS`   | `120000` (2m)   | First-output window (ADR 0026 D4). A job that has produced nothing this long records a cold-start diagnostic (a likely onboarding/auth wedge) WITHOUT being killed: logged, exposed on `GET /jobs/{id}`, and folded into the failure `detail` if the job goes on to fail. `0` disables it. |
+| `DEPENDENCY_INSTALL_TIMEOUT_MS` | a third of `JOB_MAX_DURATION_MS` (20m at its default) | Watchdog for the pre-agent dependency install; a timeout is reported as a failed install (exit 124), never a failed job. Derived from the job ceiling rather than fixed, and an explicit value is clamped by the same share: the agent is what waits on this, so setup can never consume the run it is preparing for. |
+| `DEPENDENCY_INSTALL_HEARTBEAT_MS` | `30000` (30s) | How often the dependency install feeds the job inactivity watchdog. A cold install is activity-silent and `JOB_INACTIVITY_MS` is tighter than its own watchdog, so without this a healthy install aborts the run as "likely hung". |
+| `VALIDATION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a pre-PR validation check; a timeout counts as a failure (exit 124) so one hung command can't wedge the loop. |
+| `REPRODUCTION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a reproduction-proof setup or check command; a timeout counts as a failure (exit 124). |
+| `REPRODUCTION_HEARTBEAT_MS` | `30000` (30s) | How often the reproduction proof feeds the job inactivity watchdog while it runs commands the agent is not producing output for. |
+| `REPRODUCTION_TOTAL_BUDGET_MS` | `2700000` (45m) | Wall-clock ceiling on the WHOLE proof phase (every attempt, both trees, setup included). Attempts multiply two full tree runs each and the heartbeat above deliberately stops the inactivity watchdog from firing, so this is what bounds the phase. Checked at phase boundaries; exceeding it settles `inconclusive`, never a run failure. |
+| `HARNESS_TRANSCRIPT_TTL_MS` | `259200000` (3d) | How long lifted subscription-CLI session transcripts are kept before the retention sweep prunes them. |
+| `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. The TTL sweep deletes only dirs it created (each carries a `.cf-retained` marker), so pointing this at a shared directory never touches unrelated content, though a dedicated dir is still recommended. An override on a different filesystem than the config home falls back to copy-then-remove. |
+| `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` | `60` | How long `entrypoint.sh` spends GETTING a Docker daemon to answer, in total, before recording it unavailable. One budget for the whole sequence, not one per arm: the rootless path may start a second daemon after the first exits, and the fallback gets what is left of this (floored at 10s, the only thing that can push the sequence past it, and only when a daemon took the whole window to die). Only a HUNG daemon pays it in full: the wait ends early both when the socket answers and when the daemon process is gone. It runs in the BACKGROUND, so it never delays the container's boot. |
+| `HARNESS_DOCKER_STATUS_FILE` | `/tmp/harness-docker-status.json` | Where that verdict is recorded. `entrypoint.sh` writes it and the harness reads it, so an override must be set for BOTH (they share one process env). |
+| `HARNESS_DOCKER_EGRESS_TARGET` | `1.1.1.1:443` | Where the egress check connects FROM INSIDE a nested container, to find out whether this daemon's containers have a route out. An `IPv4:port`, never a name (a connect that has to resolve first cannot separate a broken route from broken DNS). The default aims at the PUBLIC internet: a deployment that deliberately has none should point this, and the DNS name below, at what it does run, or the verdict is an honest `blocked` about two addresses that were never the ones that matter. A value that is not an address is REPORTED as a check that could not be carried out, never silently replaced. |
+| `HARNESS_DOCKER_EGRESS_DNS_NAME` | `registry.npmjs.org` | The name that same container resolves, which is the other half of egress: nothing an agent installs is fetched by address, so a working route with broken DNS is still reported as blocked, with the detail naming DNS as the half to fix. |
+| `HARNESS_DOCKER_PROBE_BINARY` | `/bin/busybox` | The statically linked binary the platform builds its one-layer probe image from, for the check that answers whether this daemon can RUN a container. Only an image variant that ships it elsewhere needs this. Absent is a supported answer, not a failure: the check then reports that it could not be carried out, which is what the native host transport gets on a developer laptop. |
 
 ## Build / test
 
@@ -99,8 +593,8 @@ self-contained.
 
 ## Published image (GHCR + Docker Hub)
 
-This package is published to npm (its zero-dependency `dist/server.js` is the
-entry `@cat-factory/local-server` spawns in local native mode). In addition, its
+This package is published to npm (its zero-dependency `dist/harness-server.js` is
+the entry `@cat-factory/local-server` spawns in local native mode). In addition, its
 **Docker image** is published publicly, multi-arch (`linux/amd64` +
 `linux/arm64`), to **both GHCR and Docker Hub** so anyone can pull it without
 building from source:
@@ -113,7 +607,7 @@ docker.io/<org>/cat-factory-executor:<version>
 Each is tagged with the package `version`, the commit `sha-…`, and `latest`.
 
 **CI** does this automatically:
-[`.github/workflows/docker-publish.yml`](../../../.github/workflows/docker-publish.yml)
+[`.github/workflows/docker-publish.yml`](https://github.com/kibertoad/cat-factory/blob/main/.github/workflows/docker-publish.yml)
 republishes on every push to `main` that touches image content (`src/**`,
 `Dockerfile`, `tsconfig.json`, `package.json`). Docker Hub is gated on the
 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets; without them it publishes
@@ -132,14 +626,14 @@ pnpm --filter @cat-factory/executor-harness run image:publish
 The script ([`scripts/publish-image.sh`](./scripts/publish-image.sh)) builds the
 multi-arch image once and pushes it to the selected registries. Override defaults
 via env vars (`REGISTRIES`, `GHCR_OWNER`, `DOCKERHUB_ORG`, `TAG`, `PUSH_LATEST`,
-`PLATFORMS`, `EXTRA_CA`) — see the header of the script. Example: GHCR only —
+`PLATFORMS`, `EXTRA_CA`): see the header of the script. Example: GHCR only;
 `REGISTRIES=ghcr pnpm --filter @cat-factory/executor-harness run image:publish`.
 
 A backend deployment references the image from `wrangler.toml`
-(`[[containers]] image = "ghcr.io/<owner>/cat-factory-executor:<version>"` — see
-[`deploy/backend`](../../../deploy/backend)); a self-hosted runner pool pulls the
-same image (see [`docs/runner-pool-integration.md`](../../docs/runner-pool-integration.md)).
+(`[[containers]] image = "ghcr.io/<owner>/cat-factory-executor:<version>"`: see
+[`deploy/backend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/backend)); a self-hosted runner pool pulls the
+same image (see [`docs/runner-pool-integration.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md)).
 The worker library's own test/dev `wrangler.toml` still references this
 `Dockerfile` by local path so the acceptance suite can build it. Because the
 version is the image tag, **bump this package via a changeset whenever you change
-image content** (see [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)).
+image content** (see [`CONTRIBUTING.md`](https://github.com/kibertoad/cat-factory/blob/main/CONTRIBUTING.md)).

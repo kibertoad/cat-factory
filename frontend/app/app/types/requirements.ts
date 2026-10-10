@@ -15,7 +15,9 @@ export type {
   RequirementReviewItem,
   RequirementReviewStatus,
   ResolveRequirementsExceededChoice,
+  RecommendationSource,
   RecommendationStatus,
   RequirementRecommendation,
   RequirementReview,
+  RequestRecommendationItem,
 } from '@cat-factory/contracts'

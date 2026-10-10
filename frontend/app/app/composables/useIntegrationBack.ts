@@ -10,8 +10,9 @@ import type { Ref, WritableComputedRef } from 'vue'
  * resort to an obscure comma-operator expression. A named handler reads clearly instead.
  *
  * Returns to whichever hub the panel was reached from: the user-scoped "My setup" hub when
- * `cameFromPersonal` is set, else the workspace Integrations hub. A shared panel (e.g. the
- * vendor-credentials modal, reachable from both) thus lands the user back where they were.
+ * `cameFromPersonal` is set, the Model providers hub when `cameFromModelProviders` is set,
+ * else the workspace Integrations hub. A shared panel (e.g. the vendor-credentials modal,
+ * reachable from all three) thus lands the user back where they were.
  *
  * Pass the panel's `open` model (the writable ref/computed bound to its `UModal`).
  */
@@ -19,8 +20,10 @@ export function useIntegrationBack(open: Ref<boolean> | WritableComputedRef<bool
   const ui = useUiStore()
   return () => {
     const toPersonal = ui.cameFromPersonal
+    const toModelProviders = ui.cameFromModelProviders
     open.value = false
     if (toPersonal) ui.openPersonalSetup()
+    else if (toModelProviders) ui.openModelProviders()
     else ui.openIntegrations()
   }
 }

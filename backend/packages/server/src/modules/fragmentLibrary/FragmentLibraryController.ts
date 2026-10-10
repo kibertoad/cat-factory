@@ -3,6 +3,7 @@ import {
   createPromptFragmentContract,
   deletePromptFragmentContract,
   fragmentSourceStatusContract,
+  generatePromptFragmentTitleContract,
   linkFragmentSourceContract,
   listFragmentSourcesContract,
   listPromptFragmentsContract,
@@ -12,49 +13,54 @@ import {
   unlinkFragmentSourceContract,
   updatePromptFragmentContract,
 } from '@cat-factory/contracts'
-import { ValidationError, type FragmentOwnerKind } from '@cat-factory/kernel'
+import {
+  NotFoundError,
+  ValidationError,
+  type FragmentOwnerKind,
+  UnavailableError,
+} from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../http/env.js'
+import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { mountAccountMembership } from '../../http/accountAccess.js'
+import { loadWorkspaceAccess, mountWorkspacePermission } from '../../http/workspaceAccess.js'
+import { assertCapability, requireCapability } from '../../http/guards.js'
 
 type Scope = 'account' | 'workspace'
 
 /** Resolve the fragment-library module or send a 503 when unconfigured. */
-function requireLibrary<E extends AppEnv>(c: Context<E>): FragmentLibraryModule | null {
-  return c.get('container').fragmentLibrary ?? null
+function requireLibrary<E extends AppEnv>(c: Context<E>): FragmentLibraryModule {
+  return requireCapability(
+    c.get('container').fragmentLibrary,
+    'Prompt-fragment library is not configured',
+  )
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Prompt-fragment library is not configured' } },
-    503,
+/**
+ * The repo-source service, wired only when the GitHub integration is too — so it is a SECOND
+ * capability behind the same module, and gets its own accessor rather than a guard restated at
+ * each of the five source routes.
+ */
+function requireSources<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    requireLibrary(c).sourceService,
+    'Repo-sourced fragments require the GitHub integration to be configured',
   )
+}
 
-const sourcesUnavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'Repo-sourced fragments require the GitHub integration to be configured',
-      },
-    },
-    503,
+/** The document-source integration, which these routes need WIRED but read nothing off. */
+function assertDocumentsWired<E extends AppEnv>(c: Context<E>): void {
+  assertCapability(
+    c.get('container').documents,
+    'Document-backed fragments require the document-source integration to be configured',
   )
+}
 
-const documentsUnavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message:
-          'Document-backed fragments require the document-source integration to be configured',
-      },
-    },
-    503,
-  )
+/** Every TOP-LEVEL path this controller serves, gated at whichever tier owns the scope. */
+const GUARDED_RESOURCES = ['/prompt-fragments', '/document-fragments', '/fragment-sources'] as const
 
 /**
  * The prompt-fragment library API (ADR 0006 §8), mounted twice — once under
@@ -73,32 +79,35 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   // Account-scoped routes are an authenticated concept: require sign-in and
   // membership in the addressed account (404 hides existence, mirroring boards).
+  //
+  // Workspace-scoped fragment WRITES are an admin-tier action (`settings.manage` — the
+  // prompt-fragment library is workspace configuration); reads stay open to any resolved role.
+  // The global gate already resolved the caller's access.
+  //
+  // Both mounts name this controller's OWN paths, from one list so neither can name a subset the
+  // other doesn't: each shared mount prefix carries sibling controllers, and a `use('*')` inside a
+  // sub-app lands on `<prefix>/*` and would authorize their routes too.
   if (scope === 'account') {
-    app.use('/prompt-fragments', accountGuard)
-    app.use('/prompt-fragments/*', accountGuard)
-    app.use('/document-fragments', accountGuard)
-    app.use('/fragment-sources', accountGuard)
-    app.use('/fragment-sources/*', accountGuard)
+    mountAccountMembership(app, GUARDED_RESOURCES, 'Sign in to manage the library')
+  } else {
+    mountWorkspacePermission(app, 'settings.manage', GUARDED_RESOURCES)
   }
 
   // ---- fragments (this tier, raw — not merged) ----------------------------
 
   buildHonoRoute(app, listPromptFragmentsContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     return c.json(await lib.libraryService.listTier(ownerKind, ownerId(c)), 200)
   })
 
   buildHonoRoute(app, createPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     const fragment = await lib.libraryService.create(ownerKind, ownerId(c), c.req.valid('json'))
     return c.json(fragment, 201)
   })
 
   buildHonoRoute(app, updatePromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     const fragment = await lib.libraryService.update(
       ownerKind,
       ownerId(c),
@@ -110,9 +119,39 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   buildHonoRoute(app, deletePromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     await lib.libraryService.remove(ownerKind, ownerId(c), c.req.valid('param').fragmentId)
     return c.body(null, 204)
+  })
+
+  // Auto-generate a title for a hand-authored fragment from its content (an inline LLM call).
+  // The model resolves against a workspace's credential scope: the addressed workspace at the
+  // workspace scope, else the `viaWorkspaceId` query param at the account scope (re-authorized,
+  // exactly like a document fragment's fetch). 503 when no model is wired for the deployment.
+  buildHonoRoute(app, generatePromptFragmentTitleContract, async (c) => {
+    const lib = requireLibrary(c)
+    if (!lib.titleService?.enabled) {
+      throw new UnavailableError(
+        'Fragment-title generation requires a model provider to be configured',
+      )
+    }
+    const viaWorkspaceId =
+      scope === 'workspace' ? param(c, 'workspaceId') : (c.req.valid('query').viaWorkspaceId ?? '')
+    if (!viaWorkspaceId) {
+      throw new ValidationError(
+        'An account-tier title generation needs a `viaWorkspaceId` query param (the workspace whose model scope to use)',
+      )
+    }
+    // SEC-RBAC-0: re-authorize the query-supplied `viaWorkspaceId` (see createDocumentFragment).
+    if (scope === 'account') {
+      await requireViaWorkspaceAccess(
+        c.get('container'),
+        c.get('user')?.id,
+        ownerId(c),
+        viaWorkspaceId,
+      )
+    }
+    const { title } = await lib.titleService.generate(viaWorkspaceId, c.req.valid('json'))
+    return c.json({ title }, 200)
   })
 
   // ---- document-backed fragments (living source of truth) -----------------
@@ -123,14 +162,23 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // body's `viaWorkspaceId` at the account scope (credentials are per-workspace).
   buildHonoRoute(app, createDocumentFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!c.get('container').documents) return documentsUnavailable(c)
+    assertDocumentsWired(c)
     const input = c.req.valid('json')
     const viaWorkspaceId =
       scope === 'workspace' ? param(c, 'workspaceId') : (input.viaWorkspaceId ?? '')
     if (!viaWorkspaceId) {
       throw new ValidationError(
         'An account-tier document fragment needs `viaWorkspaceId` (the workspace whose connection to fetch through)',
+      )
+    }
+    // SEC-RBAC-0: the account guard authorized only the PATH account; re-authorize the
+    // body-supplied `viaWorkspaceId` before its credentials are used to fetch a document.
+    if (scope === 'account') {
+      await requireViaWorkspaceAccess(
+        c.get('container'),
+        c.get('user')?.id,
+        ownerId(c),
+        viaWorkspaceId,
       )
     }
     const fragment = await lib.libraryService.createFromDocument(
@@ -145,13 +193,21 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // Force an immediate live re-resolve of a document-backed fragment.
   buildHonoRoute(app, refreshPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!c.get('container').documents) return documentsUnavailable(c)
+    assertDocumentsWired(c)
     const viaWorkspaceId =
       scope === 'workspace' ? param(c, 'workspaceId') : (c.req.valid('query').viaWorkspaceId ?? '')
     if (!viaWorkspaceId) {
       throw new ValidationError(
         'An account-tier refresh needs a `viaWorkspaceId` query param (the workspace whose connection to fetch through)',
+      )
+    }
+    // SEC-RBAC-0: re-authorize the query-supplied `viaWorkspaceId` (see createDocumentFragment).
+    if (scope === 'account') {
+      await requireViaWorkspaceAccess(
+        c.get('container'),
+        c.get('user')?.id,
+        ownerId(c),
+        viaWorkspaceId,
       )
     }
     const fragment = await lib.libraryService.refresh(
@@ -166,43 +222,30 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // ---- repo sources -------------------------------------------------------
 
   buildHonoRoute(app, listFragmentSourcesContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.list(ownerKind, ownerId(c)), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.list(ownerKind, ownerId(c)), 200)
   })
 
   buildHonoRoute(app, linkFragmentSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
-    const source = await lib.sourceService.link(ownerKind, ownerId(c), c.req.valid('json'))
+    const sources = requireSources(c)
+    const source = await sources.link(ownerKind, ownerId(c), c.req.valid('json'))
     return c.json(source, 201)
   })
 
   buildHonoRoute(app, unlinkFragmentSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
-    await lib.sourceService.unlink(ownerKind, ownerId(c), c.req.valid('param').id)
+    const sources = requireSources(c)
+    await sources.unlink(ownerKind, ownerId(c), c.req.valid('param').id)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, fragmentSourceStatusContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(
-      await lib.sourceService.status(ownerKind, ownerId(c), c.req.valid('param').id),
-      200,
-    )
+    const sources = requireSources(c)
+    return c.json(await sources.status(ownerKind, ownerId(c), c.req.valid('param').id), 200)
   })
 
   buildHonoRoute(app, syncFragmentSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.sync(ownerKind, ownerId(c), c.req.valid('param').id), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.sync(ownerKind, ownerId(c), c.req.valid('param').id), 200)
   })
 
   // ---- resolved (workspace only) — the merged catalog an agent sees -------
@@ -210,7 +253,6 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   if (scope === 'workspace') {
     buildHonoRoute(app, resolvedFragmentsContract, async (c) => {
       const lib = requireLibrary(c)
-      if (!lib) return unavailable(c)
       return c.json(await lib.libraryService.resolvedCatalog(param(c, 'workspaceId')), 200)
     })
   }
@@ -218,16 +260,32 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   return app
 }
 
-/** Guard an account-scoped request: require sign-in + membership (404 otherwise). */
-async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
-  const user = c.get('user')
-  if (!user) {
-    return c.json(
-      { error: { code: 'unauthorized', message: 'Sign in to manage the library' } },
-      401,
-    )
-  }
-  // requireMember throws NotFoundError (→ 404) when the user isn't a member.
-  await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)
-  await next()
+/**
+ * Re-authorize a BODY/QUERY-supplied `viaWorkspaceId` before it is used to fetch through that
+ * workspace's stored document-source credentials (SEC-RBAC-0). The account guard only authorized
+ * the account in the URL PATH; a `viaWorkspaceId` taken from the request is an unauthorized
+ * secondary id until proven to (a) belong to the SAME account and (b) be accessible to the caller.
+ * Without this an account-A member could point `viaWorkspaceId` at workspace B (any account) and
+ * drive B's stored Confluence/Notion/GitHub secret as a cross-tenant fetch oracle, exfiltrating any
+ * document B's token can read into A's own library. Fails closed with the existence-hiding 404 the
+ * workspace gate uses (never revealing whether the workspace exists / is in another account).
+ *
+ * `mountAccountMembership` is the sign-in floor for EVERY account-tier route (it 401s a request with
+ * no user), so a signed-in caller is always present here — including under dev-open, where the
+ * account routes still require a real session (unlike the workspace gate, this tier never passes
+ * through anonymously). A missing user is therefore a hard denial, never an allow-all: rejecting it
+ * up front keeps the check fail-closed even if this helper is ever reused off an unguarded mount.
+ */
+async function requireViaWorkspaceAccess(
+  container: ServerContainer,
+  userId: string | undefined,
+  accountId: string,
+  viaWorkspaceId: string,
+): Promise<void> {
+  if (!userId) throw new NotFoundError('Workspace', viaWorkspaceId) // fail closed: no session ⇒ deny
+  const account = await container.workspaceService.accountOf(viaWorkspaceId)
+  // Not in the addressed account (or nonexistent) ⇒ 404, exactly as the gate hides a foreign board.
+  if (account !== accountId) throw new NotFoundError('Workspace', viaWorkspaceId)
+  const access = await loadWorkspaceAccess(container, viaWorkspaceId, userId)
+  if (!access?.allowed) throw new NotFoundError('Workspace', viaWorkspaceId)
 }

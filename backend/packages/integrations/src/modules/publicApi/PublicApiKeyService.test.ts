@@ -1,0 +1,257 @@
+import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+import { PublicApiKeyService, scopeSatisfies } from './PublicApiKeyService.js'
+
+// In-memory repository — the service's hashing/auth logic is what's under test, not persistence.
+class FakeRepo implements PublicApiKeyRepository {
+  rows = new Map<string, PublicApiKeyRecord>()
+  add(r: PublicApiKeyRecord) {
+    this.rows.set(r.id, { ...r })
+    return Promise.resolve()
+  }
+  getById(id: string) {
+    const r = this.rows.get(id)
+    return Promise.resolve(r ? { ...r } : null)
+  }
+  listByWorkspace(workspaceId: string) {
+    return Promise.resolve(
+      [...this.rows.values()].filter((r) => r.workspaceId === workspaceId && r.revokedAt === null),
+    )
+  }
+  markUsedCalls = 0
+  markUsed(id: string, at: number) {
+    this.markUsedCalls++
+    const r = this.rows.get(id)
+    if (r) r.lastUsedAt = at
+    return Promise.resolve()
+  }
+  revoke(workspaceId: string, id: string, at: number) {
+    const r = this.rows.get(id)
+    if (r && r.workspaceId === workspaceId && r.revokedAt === null) r.revokedAt = at
+    return Promise.resolve()
+  }
+  revokeMintedBy(workspaceId: string, minterId: string, at: number) {
+    for (const r of this.rows.values()) {
+      if (r.createdByKeyId === minterId && r.workspaceId === workspaceId && r.revokedAt === null) {
+        r.revokedAt = at
+      }
+    }
+    return Promise.resolve()
+  }
+}
+
+function makeService(now = { t: 1000 }) {
+  const repo = new FakeRepo()
+  let n = 0
+  const service = new PublicApiKeyService({
+    repository: repo,
+    pepper: 'a-test-pepper',
+    idGenerator: { next: (prefix?: string) => `${prefix ?? 'id'}_${(n++).toString(16)}` },
+    clock: { now: () => now.t },
+  })
+  return { service, repo, now }
+}
+
+describe('PublicApiKeyService', () => {
+  it('issues a key that authenticates back to its scope, and stores only a hash', async () => {
+    const { service, repo } = makeService()
+    const { record, secret } = await service.issue(
+      { accountId: 'acc_1', workspaceId: 'ws_1' },
+      'external system',
+    )
+    expect(secret).toMatch(/^cf_live_pak_[0-9a-f]+\.[0-9a-f]+$/)
+    // The stored secret is a hash, never the raw secret.
+    const stored = repo.rows.get(record.id)!
+    expect(stored.secretHash).not.toContain(secret)
+    expect(secret).not.toContain(stored.secretHash)
+
+    const auth = await service.authenticate(secret)
+    // A key defaults to `write` scope when none is requested. `label`/`createdAt`/
+    // `externalIdentity` ride along because the row is already in hand here — that is what lets
+    // `GET /api/v1/me` describe the calling key without a read of its own, and what lets a run
+    // pin the identity at admission without one either. Asserted EXHAUSTIVELY (`toEqual`, not
+    // `toMatchObject`) on purpose: this shape is what the whole surface reads a key's facts off,
+    // so a field arriving here silently is a field arriving on `/me` and on every run projection.
+    expect(auth).toEqual({
+      keyId: record.id,
+      accountId: 'acc_1',
+      workspaceId: 'ws_1',
+      scope: 'write',
+      label: 'external system',
+      externalIdentity: null,
+      actsAsUserId: null,
+      createdByUserId: null,
+      createdAt: record.createdAt,
+    })
+  })
+
+  it('carries the MINTER through authentication too, for a key bound to nobody', async () => {
+    const { service } = makeService()
+    const { secret } = await service.issue(
+      { accountId: 'acc_1', workspaceId: 'ws_1', createdByUserId: 'usr_7' },
+      'system token',
+    )
+    const auth = await service.authenticate(secret)
+    // Provenance, and it stays provenance: the key acts for nobody, so nothing it does may reach
+    // that person's credentials. What the minter buys is DESCRIPTION: `GET /api/v1/models` can
+    // say a model this key cannot dispatch to is nonetheless wired, as their own subscription.
+    expect(auth?.createdByUserId).toBe('usr_7')
+    expect(auth?.actsAsUserId).toBeNull()
+  })
+
+  it('carries the bound user through authentication, so a run can pin it at admission', async () => {
+    const { service } = makeService()
+    const { secret } = await service.issue(
+      { accountId: 'acc_1', workspaceId: 'ws_1', actsAsUserId: 'usr_7' },
+      'my own runs',
+    )
+    // The binding is what lets a headless start unlock the minter's personal subscription; it has
+    // to survive `authenticate`, because that is the only place the run paths ever see the row.
+    expect((await service.authenticate(secret))?.actsAsUserId).toBe('usr_7')
+  })
+
+  it('records the minting user (audit), defaulting to null when none is supplied', async () => {
+    const { service } = makeService()
+    const attributed = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByUserId: 'usr_7' },
+      'k',
+    )
+    expect(attributed.record.createdByUserId).toBe('usr_7')
+    // A mint with no session (dev-open) stores null rather than an empty string.
+    const anon = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k2')
+    expect(anon.record.createdByUserId).toBeNull()
+  })
+
+  it('records the minting KEY for a headless mint, and null for a mint a person made', async () => {
+    const { service } = makeService()
+    const minted = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByKeyId: 'pak_parent' },
+      'per-tenant',
+    )
+    expect(minted.record.createdByKeyId).toBe('pak_parent')
+    // The two attributions are independent: a headless mint has no user, and a person's mint has
+    // no key. Neither is inferred from the other.
+    expect(minted.record.createdByUserId).toBeNull()
+    const byPerson = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByUserId: 'usr_7' },
+      'in-app',
+    )
+    expect(byPerson.record.createdByKeyId).toBeNull()
+  })
+
+  it('revokes the keys a revoked key minted, so a leaked minter leaves nothing behind', async () => {
+    const { service, repo } = makeService()
+    const minter = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'provisioner', 'admin')
+    const child = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByKeyId: minter.record.id },
+      'child',
+    )
+    const unrelated = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'unrelated')
+
+    await service.revoke('w', minter.record.id)
+
+    expect(await service.authenticate(minter.secret)).toBeNull()
+    // The whole point: the credential the operator could not see dies with the one they could.
+    expect(await service.authenticate(child.secret)).toBeNull()
+    // And nothing else does.
+    expect(await service.authenticate(unrelated.secret)).not.toBeNull()
+    expect(repo.rows.get(child.record.id)?.revokedAt).toBe(1000)
+  })
+
+  it('does not cascade across workspaces', async () => {
+    const { service } = makeService()
+    const minter = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'provisioner', 'admin')
+    // A row claiming this minter in ANOTHER workspace cannot be reached by the cascade: the
+    // revoke is workspace-scoped on both statements, not only the first.
+    const foreign = await service.issue(
+      { accountId: 'a', workspaceId: 'other', createdByKeyId: minter.record.id },
+      'foreign',
+    )
+    await service.revoke('w', minter.record.id)
+    expect(await service.authenticate(foreign.secret)).not.toBeNull()
+  })
+
+  it('persists the requested scope and authenticates back with it', async () => {
+    const { service } = makeService()
+    const readKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'monitor', 'read')
+    const adminKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'ops', 'admin')
+    expect(readKey.record.scope).toBe('read')
+    expect(adminKey.record.scope).toBe('admin')
+    expect((await service.authenticate(readKey.secret))?.scope).toBe('read')
+    expect((await service.authenticate(adminKey.secret))?.scope).toBe('admin')
+  })
+
+  it('rejects a wrong secret, a malformed key, and an unknown id', async () => {
+    const { service } = makeService()
+    const { record, secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    const goodSuffix = secret.split('.')[1]
+
+    expect(await service.authenticate(undefined)).toBeNull()
+    expect(await service.authenticate('nonsense')).toBeNull()
+    expect(await service.authenticate('cf_live_')).toBeNull()
+    expect(await service.authenticate(`cf_live_${record.id}`)).toBeNull() // no secret part
+    expect(await service.authenticate(`cf_live_${record.id}.deadbeef`)).toBeNull() // wrong secret
+    expect(await service.authenticate(`cf_live_pak_unknown.${goodSuffix}`)).toBeNull() // unknown id
+  })
+
+  it('stops authenticating once revoked, and revocation is workspace-scoped', async () => {
+    const { service } = makeService()
+    const { record, secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    expect(await service.authenticate(secret)).not.toBeNull()
+
+    // A revoke scoped to a different workspace is a no-op.
+    await service.revoke('other-ws', record.id)
+    expect(await service.authenticate(secret)).not.toBeNull()
+
+    await service.revoke('w', record.id)
+    expect(await service.authenticate(secret)).toBeNull()
+    // A revoked key drops out of the management list.
+    expect(await service.list('w')).toHaveLength(0)
+  })
+
+  it('throttles the lastUsedAt write so a polling caller does not drive one UPDATE per call', async () => {
+    const { service, repo, now } = makeService()
+    const { secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+
+    // First auth stamps (was never used).
+    expect(await service.authenticate(secret)).not.toBeNull()
+    expect(repo.markUsedCalls).toBe(1)
+
+    // A burst of auths within the throttle window writes nothing further.
+    now.t += 1000
+    expect(await service.authenticate(secret)).not.toBeNull()
+    now.t += 1000
+    expect(await service.authenticate(secret)).not.toBeNull()
+    expect(repo.markUsedCalls).toBe(1)
+
+    // Past the throttle window, the stamp refreshes exactly once more.
+    now.t += 60_000
+    expect(await service.authenticate(secret)).not.toBeNull()
+    expect(repo.markUsedCalls).toBe(2)
+  })
+
+  it('isActive reflects existence + revocation (the cheap re-check for live streams)', async () => {
+    const { service } = makeService()
+    const { record } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    expect(await service.isActive(record.id)).toBe(true)
+    expect(await service.isActive('pak_unknown')).toBe(false)
+    await service.revoke('w', record.id)
+    expect(await service.isActive(record.id)).toBe(false)
+  })
+})
+
+describe('scopeSatisfies (the /api/v1 scope ladder)', () => {
+  it('treats the ladder as inclusive: admin ⊃ write ⊃ read', () => {
+    // A key satisfies any requirement at or below its own level.
+    expect(scopeSatisfies('read', 'read')).toBe(true)
+    expect(scopeSatisfies('write', 'read')).toBe(true)
+    expect(scopeSatisfies('write', 'write')).toBe(true)
+    expect(scopeSatisfies('admin', 'read')).toBe(true)
+    expect(scopeSatisfies('admin', 'write')).toBe(true)
+    expect(scopeSatisfies('admin', 'admin')).toBe(true)
+    // But never above it.
+    expect(scopeSatisfies('read', 'write')).toBe(false)
+    expect(scopeSatisfies('read', 'admin')).toBe(false)
+    expect(scopeSatisfies('write', 'admin')).toBe(false)
+  })
+})

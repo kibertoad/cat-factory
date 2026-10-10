@@ -1,13 +1,14 @@
 import {
   ConflictError,
-  ValidationError,
   type DocumentContent,
   type DocumentCredentials,
   type DocumentSearchResult,
   type DocumentSourceProvider,
   type GitHubClient,
   type GitHubInstallationRepository,
+  type Logger,
   type NormalizedConnection,
+  ValidationError,
 } from '@cat-factory/kernel'
 import { GITHUB_DOCS_DESCRIPTOR } from './github-docs.logic.js'
 import * as githubDocsLogic from './github-docs.logic.js'
@@ -27,6 +28,13 @@ export interface GitHubDocsProviderDependencies {
   githubClient: GitHubClient
   /** Resolves which installation owns a given repo owner (by account login). */
   installations: GitHubInstallationRepository
+  /**
+   * Optional structured logger. A failed doc read is logged with full coordinates
+   * (workspace / owner / repo / path / HTTP status) so a "could not be linked"
+   * report is diagnosable server-side — a domain error (409/422) is NOT otherwise
+   * logged by the HTTP error handler (only unexpected 500s are).
+   */
+  logger?: Logger
 }
 
 export class GitHubDocsProvider implements DocumentSourceProvider {
@@ -44,33 +52,101 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     return { credentials: {}, label: 'GitHub' }
   }
 
+  /**
+   * GitHub docs ride the workspace's installed GitHub App, so the workspace is
+   * connected to this source as soon as the App is installed — no separate connect
+   * step or stored marker row. Resolve the workspace's installation to decide; absent
+   * ⇒ null (the App isn't installed, so GitHub docs aren't reachable yet). Mirrors the
+   * GitHub-issues task source's App-presence availability check.
+   */
+  async resolveImplicitConnection(workspaceId: string): Promise<NormalizedConnection | null> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    return installation ? { credentials: {}, label: 'GitHub' } : null
+  }
+
   parseRef(input: string): string | null {
     return githubDocsLogic.parseGitHubDocRef(input)
   }
 
+  // No `canonicalUrl`: an `owner/repo:path` id carries everything a link needs EXCEPT the host, and
+  // the host is a deployment fact rather than a property of this source. GitLab deployments reach
+  // this same source through the VCS adapter, so a `github.com` URL built from the id alone would
+  // name the wrong host for them and the pre-flight would present it as the supported form their
+  // paste was trimmed to (`ResolveRepoOrigin` is where a host is resolved, and it needs a workspace
+  // this pure method does not get). The id itself is the canonical form here; the picker renders it.
+
   async fetchDocument(
     _credentials: DocumentCredentials,
     externalId: string,
+    scope: string | null,
   ): Promise<DocumentContent> {
+    const workspaceId = this.requireWorkspaceScope(scope)
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
-    const installationId = await this.resolveInstallationId(id.owner)
-    const file = await this.deps.githubClient.getFileContent(
-      installationId,
-      { owner: id.owner, repo: id.repo },
-      id.path,
-    )
+    const installationId = await this.resolveInstallationId(workspaceId)
+    const ref = { owner: id.owner, repo: id.repo }
+    // Read the file's head commit sha FIRST (the version token), then read the body
+    // pinned to that exact sha, so the (body, version) pair is consistent: two unpinned
+    // parallel reads could straddle a commit and cache a stale body under a fresh
+    // version the probe would then treat as current and never reload. The sha is
+    // best-effort — a transient commits-API error (403 rate-limit, 5xx) must not fail
+    // the whole fetch when the body reads fine, so it degrades to an empty version token
+    // (which the cache treats as unverifiable ⇒ a TTL-bounded reload).
+    const commitSha = await this.deps.githubClient
+      .latestCommitSha(installationId, ref, id.path)
+      .catch(() => null)
+    let file: Awaited<ReturnType<GitHubClient['getFileContent']>>
+    try {
+      file = await this.deps.githubClient.getFileContent(
+        installationId,
+        ref,
+        id.path,
+        commitSha ?? undefined,
+      )
+    } catch (err) {
+      // A raw GitHub API error (403 no-access, 429 rate-limit, 5xx) would otherwise
+      // bubble up as an opaque 500 with the cause discarded. Classify it into a specific,
+      // logged domain error so the failure names its remediation and carries context.
+      throw this.fetchFailure(workspaceId, id, err)
+    }
     if (!file) {
-      throw new ConflictError(`GitHub file "${id.path}" was not found in ${id.owner}/${id.repo}`)
+      // The read resolved to no file (the client maps a 404 to null): the doc is missing
+      // on the default branch, or the installation/PAT can't see the repo at all.
+      throw this.fetchFailure(workspaceId, id, null, true)
     }
     return {
       externalId: githubDocsLogic.githubDocExternalId(id),
       title: githubDocsLogic.githubDocTitle(id.path),
       url: githubDocsLogic.githubDocUrl(id),
       body: file.content,
+      version: commitSha ?? '',
     }
+  }
+
+  /**
+   * The cheap version probe: the head commit sha touching the file's path — one
+   * commit-list read, no file body. Any commit to the file advances it, so an
+   * unchanged sha means the doc body is still current.
+   */
+  async probeVersion(
+    _credentials: DocumentCredentials,
+    externalId: string,
+    scope: string | null,
+  ): Promise<string> {
+    const workspaceId = this.requireWorkspaceScope(scope)
+    const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
+    if (!id) {
+      throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
+    }
+    const installationId = await this.resolveInstallationId(workspaceId)
+    const commitSha = await this.deps.githubClient.latestCommitSha(
+      installationId,
+      { owner: id.owner, repo: id.repo },
+      id.path,
+    )
+    return commitSha ?? ''
   }
 
   async search(
@@ -114,18 +190,92 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   }
 
   /**
-   * Find the GitHub App installation whose account owns `owner`. The
-   * installation token for that account is what can read the repo's contents,
-   * regardless of which workspace triggered the import.
+   * Narrow a read's scope to a WORKSPACE, refusing the deployment scope (`null`).
+   *
+   * This is the whole reason this source's `deploymentScoped` trait is false. Its credential IS a
+   * workspace's App installation, so serving a deployment-wide read would mean picking one
+   * tenant's installation to fetch on every tenant's behalf. Boot validation refuses such a
+   * registration before a run can reach here; this is the second door, for a caller that resolved
+   * a source some other way. It refuses rather than substituting, which is why the port spells the
+   * deployment scope `null` instead of a sentinel id this method could not tell from a real one.
    */
-  private async resolveInstallationId(owner: string): Promise<number> {
-    const active = await this.deps.installations.listActive()
-    const match = active.find((i) => i.accountLogin.toLowerCase() === owner.toLowerCase())
-    if (!match) {
-      throw new ConflictError(
-        `No GitHub App installation found for "${owner}". Install the GitHub App on that account to link its docs.`,
+  private requireWorkspaceScope(workspaceId: string | null): string {
+    if (workspaceId === null) {
+      throw new ValidationError(
+        "GitHub docs cannot serve a deployment-scoped read: its credential is a WORKSPACE's " +
+          'App installation, not a value a deployment configures centrally. Use a source whose ' +
+          'credentials are self-contained (Confluence, Notion, Linear, Figma, Zeplin), or create ' +
+          'the fragment at the account tier with a fetch-via workspace.',
       )
     }
-    return match.installationId
+    return workspaceId
+  }
+
+  /**
+   * Resolve the installation whose token this workspace reads GitHub docs with, scoped to
+   * THIS workspace via `getByWorkspace` (never a deployment-wide `listActive` scan). That
+   * scoping is what enforces tenant isolation: a crafted `externalId` can only ever ride
+   * the caller's OWN installation token, which GitHub limits to what it may read: its
+   * account's granted repos plus public repos. So a foreign OR crafted `owner/repo:path`
+   * for another tenant's PRIVATE repo simply 404s at the read (classified by
+   * {@link fetchFailure}); there is no need to precheck the owner against the installation
+   * account. Dropping that precheck is deliberate, because it used to reject a repo the token
+   * can genuinely reach (a PAT that spans accounts in local mode, or a PUBLIC guidelines repo
+   * owned by someone else that a hosted App can still read), which is a legitimate thing to
+   * link. Reachability is decided by the token, not by matching the owner string.
+   */
+  private async resolveInstallationId(workspaceId: string): Promise<number> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) {
+      throw new ConflictError(
+        `Workspace '${workspaceId}' has no GitHub installation. Install the GitHub App (or set a PAT in local mode) to link its docs.`,
+      )
+    }
+    return installation.installationId
+  }
+
+  /**
+   * Turn a failed file read into a specific, logged {@link ConflictError}. Reads the GitHub
+   * HTTP status structurally (no dependency on the concrete client error class), picks a
+   * remediation-naming message, logs the full coordinates for server-side debugging, and
+   * carries the coordinates + status on `details` so the client can surface/copy them.
+   */
+  private fetchFailure(
+    workspaceId: string,
+    id: githubDocsLogic.GitHubDocExternalId,
+    err: unknown,
+    notFound = false,
+  ): ConflictError {
+    const status = err !== null ? githubDocsLogic.githubErrorStatus(err) : undefined
+    const rateLimited = err !== null ? githubDocsLogic.githubErrorRateLimited(err) : false
+    const underlying =
+      err instanceof Error
+        ? err.message
+        : err !== null && err !== undefined
+          ? String(err)
+          : undefined
+    const message = githubDocsLogic.describeGitHubDocFetchFailure(id, {
+      status,
+      notFound,
+      rateLimited,
+      underlying,
+    })
+    this.deps.logger?.warn('github doc fetch failed', {
+      source: 'github',
+      workspaceId,
+      owner: id.owner,
+      repo: id.repo,
+      path: id.path,
+      status,
+      notFound,
+      rateLimited,
+      err: underlying,
+    })
+    return new ConflictError(message, undefined, {
+      owner: id.owner,
+      repo: id.repo,
+      path: id.path,
+      ...(status !== undefined ? { status } : {}),
+    })
   }
 }

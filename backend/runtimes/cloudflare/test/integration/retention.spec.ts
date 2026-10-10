@@ -3,9 +3,19 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { CryptoIdGenerator } from '../../src/infrastructure/runtime'
 import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repositories/D1AgentContextSnapshotRepository'
+import { D1AgentToolCallRepository } from '../../src/infrastructure/repositories/D1AgentToolCallRepository'
+import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
+import { D1AuthAttemptRepository } from '../../src/infrastructure/repositories/D1AuthAttemptRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1GateOutcomeRepository } from '../../src/infrastructure/repositories/D1GateOutcomeRepository'
+import { D1MachineNodeRepository } from '../../src/infrastructure/repositories/D1MachineNodeRepository'
+import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
+import { D1AuditEventRepository } from '../../src/infrastructure/repositories/D1AuditEventRepository'
+import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
+import { D1SpendRollupRepository } from '../../src/infrastructure/repositories/D1SpendRollupRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
+import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
 import { sweepRetention } from '../../src/infrastructure/workflows/retention'
 
@@ -24,6 +34,10 @@ const POLICY = {
   commitMs: 90 * DAY,
   llmCallMetricsMs: 3 * DAY,
   provisioningLogMs: 14 * DAY,
+  notificationsMs: 90 * DAY,
+  gateOutcomesMs: 90 * DAY,
+  runDaysMs: 400 * DAY,
+  auditEventsMs: 730 * DAY,
 }
 
 function deps() {
@@ -37,6 +51,25 @@ function deps() {
     commitRepository: new D1CommitProjectionRepository({ db }),
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
     agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    agentToolCallRepository: new D1AgentToolCallRepository({ db: telemetryDb }),
+    // Subscription quota-cycle counters live in the main DB (migration 0047).
+    subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
+    // Machine-node roster tombstones live in the main DB (migration 0077).
+    machineNodeRepository: new D1MachineNodeRepository({ db }),
+    // Password-throttle attempts live in the main DB (migration 0078).
+    authAttemptRepository: new D1AuthAttemptRepository({
+      db,
+      idGenerator: new CryptoIdGenerator(),
+    }),
+    notificationRepository: new D1NotificationRepository({ db }),
+    // Both operator-observability projections live in the main DB beside `agent_runs`.
+    gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // The account audit log lives in its OWN database (AUDIT_DB), not the main one.
+    auditEventRepository: new D1AuditEventRepository({ db: env.AUDIT_DB }),
+    // The durable cost-attribution rollup: written by this sweep, never pruned by it.
+    spendRollupRepository: new D1SpendRollupRepository({ db }),
     clock,
     policy: POLICY,
   }
@@ -52,11 +85,15 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     model: 'm',
     createdAt,
     streaming: false,
+    phase: 'agent',
+    turnIndex: 0,
+    spendOnly: false,
     messageCount: 1,
     toolCount: 0,
     requestMaxTokens: 1000,
     promptTokens: 10,
-    cachedPromptTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     completionTokens: 5,
     totalTokens: 15,
     finishReason: 'stop',
@@ -71,6 +108,8 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     promptHash: '',
     responseText: 'ok',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
   }
 }
 
@@ -99,6 +138,8 @@ describe('storage retention sweep', () => {
     const repo = new D1TokenUsageRepository({ db: env.DB })
     const base = {
       workspaceId: ws,
+      accountId: null,
+      userId: null,
       executionId: null,
       agentKind: 'architect',
       provider: 'openai',
@@ -106,6 +147,8 @@ describe('storage retention sweep', () => {
       inputTokens: 1,
       outputTokens: 1,
       costEstimate: 0,
+      billing: 'metered' as const,
+      vendor: null,
     }
     await repo.record({ ...base, id: 'tok_old', createdAt: NOW - 400 * DAY })
     await repo.record({ ...base, id: 'tok_fresh', createdAt: NOW - 1 * DAY })
@@ -207,6 +250,8 @@ describe('storage retention sweep', () => {
     await repo.record({
       id: 'tok_disabled',
       workspaceId: ws,
+      accountId: null,
+      userId: null,
       executionId: null,
       agentKind: 'architect',
       provider: 'openai',
@@ -214,6 +259,8 @@ describe('storage retention sweep', () => {
       inputTokens: 1,
       outputTokens: 1,
       costEstimate: 0,
+      billing: 'metered',
+      vendor: null,
       createdAt: NOW - 1000 * DAY,
     })
 
@@ -225,6 +272,10 @@ describe('storage retention sweep', () => {
         commitMs: 0,
         llmCallMetricsMs: 0,
         provisioningLogMs: 0,
+        notificationsMs: 0,
+        gateOutcomesMs: 0,
+        runDaysMs: 0,
+        auditEventsMs: 0,
       },
     })
 
@@ -234,11 +285,102 @@ describe('storage retention sweep', () => {
       commits: 0,
       llmCallMetrics: 0,
       agentContextSnapshots: 0,
+      agentSearchQueries: 0,
+      agentToolCalls: 0,
+      // The quota-cycle prune uses a FIXED 30-day window, not the policy — but no
+      // quota rows are seeded here, so it reclaims nothing.
+      subscriptionQuotaCycles: 0,
       scheduleRuns: 0,
       provisioningLog: 0,
       passwordResetTokens: 0,
+      // Machine-node rows expire by their own `expires_at`, not the policy; none seeded here.
+      machineNodes: 0,
+      // Auth attempts prune on a FIXED 1-hour window, not the policy; none seeded here.
+      authAttempts: 0,
+      notifications: 0,
+      gateOutcomes: 0,
+      runDays: 0,
+      auditEvents: 0,
+      // The rollups are WRITES with every window disabled around them, so they still run: a
+      // disabled RETENTION window means "never delete", not "stop materialising". The
+      // durable spend rollup has no window to disable in the first place.
+      runDaysRolledUp: expect.any(Number),
+      spendDaysRolledUp: expect.any(Number),
+      // A clean pass names no failed table. This list is what distinguishes a prune that
+      // reclaimed nothing from one that could not run — both report 0 rows.
+      failedTables: [],
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
+  })
+
+  it('prunes idle subscription_quota_cycles past the fixed 30-day window but keeps fresh ones', async () => {
+    const repo = new D1SubscriptionQuotaCycleRepository({ db: env.DB })
+    const FIVE_H = 5 * 60 * 60 * 1000
+    // An idle cycle anchored 40 days ago (well past the 30-day prune window)...
+    await repo.recordUsage(
+      { id: 'sqc_old', scope: 'user', scopeId: 'u_ret_old', vendor: 'claude', windowKind: '5h' },
+      { inputTokens: 1, outputTokens: 1 },
+      NOW - 40 * DAY,
+      FIVE_H,
+    )
+    // ...and a fresh one anchored 2 days ago (inside the window).
+    await repo.recordUsage(
+      { id: 'sqc_new', scope: 'user', scopeId: 'u_ret_new', vendor: 'claude', windowKind: '5h' },
+      { inputTokens: 1, outputTokens: 1 },
+      NOW - 2 * DAY,
+      FIVE_H,
+    )
+
+    const result = await sweepRetention(deps())
+
+    expect(result.subscriptionQuotaCycles).toBeGreaterThanOrEqual(1)
+    expect(await countRows('subscription_quota_cycles', 'id = ?', 'sqc_old')).toBe(0)
+    expect(await countRows('subscription_quota_cycles', 'id = ?', 'sqc_new')).toBe(1)
+  })
+
+  it('prunes resolved notifications past the window, keeping open + fresh-resolved ones', async () => {
+    const ws = 'ws_retention_notif'
+    const repo = new D1NotificationRepository({ db: env.DB })
+    const base = {
+      type: 'ci_failed' as const,
+      severity: 'normal' as const,
+      blockId: null,
+      executionId: null,
+      title: 't',
+      body: 'b',
+      payload: null,
+    }
+    // Resolved 100 days ago — past the 90-day window, should be pruned.
+    await repo.upsert(ws, {
+      ...base,
+      id: 'notif_old',
+      status: 'acted',
+      createdAt: NOW - 120 * DAY,
+      resolvedAt: NOW - 100 * DAY,
+    })
+    // Resolved 2 days ago — inside the window, kept.
+    await repo.upsert(ws, {
+      ...base,
+      id: 'notif_fresh',
+      status: 'dismissed',
+      createdAt: NOW - 5 * DAY,
+      resolvedAt: NOW - 2 * DAY,
+    })
+    // Still open (never resolved) though ancient — the actionable inbox, never pruned.
+    await repo.upsert(ws, {
+      ...base,
+      id: 'notif_open',
+      status: 'open',
+      createdAt: NOW - 200 * DAY,
+      resolvedAt: null,
+    })
+
+    const result = await sweepRetention(deps())
+
+    expect(result.notifications).toBeGreaterThanOrEqual(1)
+    expect(await countRows('notifications', 'id = ?', 'notif_old')).toBe(0)
+    expect(await countRows('notifications', 'id = ?', 'notif_fresh')).toBe(1)
+    expect(await countRows('notifications', 'id = ?', 'notif_open')).toBe(1)
   })
 })
 

@@ -5,15 +5,36 @@
  * instead of dumping the raw message — and, for `providers_unconfigured`, surface the
  * SAME guidance + "Configure AI" jump as the no-AI-provider startup banner.
  *
- * i18n boundary (see CLAUDE.md / the i18n plan): user-facing titles are resolved from
- * `errors.conflict.*` message keys by the machine-readable `reason`. The raw backend
- * `message` is shown only as the description fallback and stays untranslated — the
- * contract is "if a server message must be localizable, the backend emits a code and the
- * frontend maps it", not "translate arbitrary server prose on the client".
+ * i18n boundary (see AGENTS.md / the i18n plan): user-facing title AND description are both
+ * resolved from `errors.conflict.*` message keys by the machine-readable `reason` (G1). The raw
+ * backend `message` is shown only as the last-resort description fallback (an unmapped reason, or a
+ * locale missing the key) and stays untranslated — the contract is "if a server message must be
+ * localizable, the backend emits a code and the frontend maps it", not "translate arbitrary server
+ * prose on the client".
+ *
+ * G2 closes the same gap for everything that is NOT a 409: this composable is the funnel every
+ * other failure drains into, and it used to show the backend's prose verbatim as the description —
+ * so a non-English user read English, and an internal 500's fixed `Internal server error` was the
+ * whole of what they were told. Those now resolve translated copy from the envelope's STATUS CLASS
+ * (`error.code`, the `ApiErrorCode` union) and keep the untranslated detail — the prose, a
+ * validation 400's `issues`, and the `requestId` an operator can grep — one click away behind
+ * "Show details". Two rules follow from that split: the description says what a user can act on,
+ * the disclosure carries what a user quotes to someone else; and a raw string is never the FIRST
+ * thing shown, however good it is (many of them are — the elaborate remedies this initiative
+ * added — which is exactly why the detail stays reachable rather than being dropped).
  */
 
-import type { ConflictReason } from '@cat-factory/contracts'
-import { apiErrorEnvelope } from './api/errors'
+import { createBespokeConflictToasts } from '~/composables/pipelineErrorToast/bespokeConflicts'
+// Imported by path rather than left to Nuxt's auto-import: this module is also loaded directly by
+// unit tests (and from store setup), where the auto-import globals are not installed.
+import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
+import type {
+  ApiErrorCode,
+  BootstrapReferenceReason,
+  ConflictReason,
+  UnavailableReason,
+} from '@cat-factory/contracts'
+import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
 interface ConflictDetails {
@@ -22,32 +43,354 @@ interface ConflictDetails {
   [key: string]: unknown
 }
 
+/** An optional one-click "jump to the panel that fixes it" affordance on a conflict toast. */
+interface ConflictAction {
+  /** i18n message key for the button label (a static literal so tier-1 typed keys see it). */
+  labelKey: string
+  icon: string
+  /** Where the button navigates — a `ui` store deep-link; run with the store passed in. */
+  run: (ui: ReturnType<typeof useUiStore>) => void
+}
+
+/** Per-reason toast copy: a translated title + description, and optionally a jump action. */
+interface ConflictInfo {
+  titleKey: string
+  descriptionKey: string
+  action?: ConflictAction
+}
+
 /**
- * Per-reason toast title KEYS, keyed off the kernel/contracts `ConflictReason`. Being an
- * EXHAUSTIVE `Record` over the union is the real drift guard: a new backend conflict reason
- * fails THIS typecheck until it is mapped here. (The typed-message-keys feature can't see the
- * `t()` lookup because the key is resolved at runtime via this map, not written as a literal —
- * so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build error.)
- * `providers_unconfigured` and `binary_storage_unconfigured` are excluded: each has bespoke
- * handling (a "configure X" action) + its own key namespace, so neither reaches the generic
- * lookup below.
+ * Per-reason toast copy, keyed off the kernel/contracts `ConflictReason`. Being an EXHAUSTIVE
+ * `Record` over the union is the real drift guard: a new backend conflict reason fails THIS
+ * typecheck until it is mapped here (title + description). (The typed-message-keys feature can't
+ * see the `t()` lookup because the key is resolved at runtime via this map, not written as a
+ * literal — so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build
+ * error.) The reasons with BESPOKE handling above (a runtime-interpolated body + a "configure X"
+ * action + their own key namespace) are excluded, since none reaches this generic lookup:
+ * `providers_unconfigured`, `binary_storage_unconfigured`, and the deployment-environment trio
+ * `provision_type_unhandled` / `deployer_service_provisioning_incomplete` /
+ * `deployer_connection_test_failed`.
+ *
+ * G1 (error-message coverage): before this, only a title was mapped and the description fell back
+ * to the raw, untranslated backend `message`. Every reason now carries a translated `description`
+ * (remedy prose), and the ones a UI panel can fix carry a `run` deep-link — the same shape as the
+ * bespoke conflicts above, but data-driven instead of one `if` per reason.
  */
-const CONFLICT_TITLE_KEYS: Record<
-  Exclude<ConflictReason, 'providers_unconfigured' | 'binary_storage_unconfigured'>,
-  string
-> = {
-  dependencies_unmet: 'errors.conflict.title.dependencies_unmet',
-  task_limit_reached: 'errors.conflict.title.task_limit_reached',
-  tester_infra_unsupported: 'errors.conflict.title.tester_infra_unsupported',
-  agent_backend_unconfigured: 'errors.conflict.title.agent_backend_unconfigured',
-  run_not_retryable: 'errors.conflict.title.run_not_retryable',
-  no_pr_to_merge: 'errors.conflict.title.no_pr_to_merge',
-  github_not_connected: 'errors.conflict.title.github_not_connected',
-  bootstrap_not_retryable: 'errors.conflict.title.bootstrap_not_retryable',
-  bootstrap_reference_missing: 'errors.conflict.title.bootstrap_reference_missing',
-  provision_type_unhandled: 'errors.conflict.title.provision_type_unhandled',
-  preset_unsatisfiable: 'errors.conflict.title.preset_unsatisfiable',
-  visual_pipeline_no_frontend: 'errors.conflict.title.visual_pipeline_no_frontend',
+type BespokeConflictReason =
+  | 'providers_unconfigured'
+  | 'binary_storage_unconfigured'
+  | 'provision_type_unhandled'
+  | 'deployer_service_provisioning_incomplete'
+  | 'deployer_connection_test_failed'
+
+const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, ConflictInfo> = {
+  dependencies_unmet: {
+    titleKey: 'errors.conflict.title.dependencies_unmet',
+    descriptionKey: 'errors.conflict.description.dependencies_unmet',
+  },
+  // A monorepo bootstrap's review was submitted for a run that has since moved on: the fix is
+  // to look at where the run actually is, not to retry.
+  bootstrap_not_awaiting_review: {
+    titleKey: 'errors.conflict.title.bootstrap_not_awaiting_review',
+    descriptionKey: 'errors.conflict.description.bootstrap_not_awaiting_review',
+  },
+  adoption_plan_unavailable: {
+    titleKey: 'errors.conflict.title.adoption_plan_unavailable',
+    descriptionKey: 'errors.conflict.description.adoption_plan_unavailable',
+  },
+  // The remedy is a different DIRECTORY, not a different repository or a retry.
+  monorepo_directory_taken: {
+    titleKey: 'errors.conflict.title.monorepo_directory_taken',
+    descriptionKey: 'errors.conflict.description.monorepo_directory_taken',
+  },
+  input_gate_not_parked: {
+    titleKey: 'errors.conflict.title.input_gate_not_parked',
+    descriptionKey: 'errors.conflict.description.input_gate_not_parked',
+  },
+  input_gate_parked: {
+    titleKey: 'errors.conflict.title.input_gate_parked',
+    descriptionKey: 'errors.conflict.description.input_gate_parked',
+  },
+  // The two halves of "this policy is not yours to change" (ADR 0055). They get opposite copy on
+  // purpose: the first sends the reader to the clone action, the second to the delete, and one
+  // shared string could only describe whichever case the reader was not in.
+  risk_policy_inherited: {
+    titleKey: 'errors.conflict.title.risk_policy_inherited',
+    descriptionKey: 'errors.conflict.description.risk_policy_inherited',
+  },
+  risk_policy_not_inherited: {
+    titleKey: 'errors.conflict.title.risk_policy_not_inherited',
+    descriptionKey: 'errors.conflict.description.risk_policy_not_inherited',
+  },
+  // Raised only by the public `/api/v1/kaizen/entries/:id/acknowledge` route today, so no SPA
+  // action reaches it. Mapped all the same, because the map is exhaustive over the wire
+  // vocabulary rather than over the subset this app happens to trigger: the day a Kaizen screen
+  // grows an acknowledge button, the copy is already here rather than an untranslated fallback.
+  kaizen_entry_not_settled: {
+    titleKey: 'errors.conflict.title.kaizen_entry_not_settled',
+    descriptionKey: 'errors.conflict.description.kaizen_entry_not_settled',
+  },
+  // The five bug-fishing-expedition refusals. `no_expedition` / `expedition_settled` /
+  // `not_awaiting_triage` are the three "you are not where you think you are" causes, and they
+  // take different fixes: the run never had an expedition, the run has moved past the one it had,
+  // or the expedition is alive but not parked (so a triage cannot be finished yet).
+  // `already_addressed` names findings that already have a fix task, so a second request cannot
+  // double-spawn; `no_host_frame` is a board-shape problem the operator fixes by putting the
+  // expedition under a service.
+  no_expedition: {
+    titleKey: 'errors.conflict.title.no_expedition',
+    descriptionKey: 'errors.conflict.description.no_expedition',
+  },
+  expedition_settled: {
+    titleKey: 'errors.conflict.title.expedition_settled',
+    descriptionKey: 'errors.conflict.description.expedition_settled',
+  },
+  not_awaiting_triage: {
+    titleKey: 'errors.conflict.title.not_awaiting_triage',
+    descriptionKey: 'errors.conflict.description.not_awaiting_triage',
+  },
+  already_addressed: {
+    titleKey: 'errors.conflict.title.already_addressed',
+    descriptionKey: 'errors.conflict.description.already_addressed',
+  },
+  no_host_frame: {
+    titleKey: 'errors.conflict.title.no_host_frame',
+    descriptionKey: 'errors.conflict.description.no_host_frame',
+  },
+  delegated_executor_unwired: {
+    titleKey: 'errors.conflict.title.delegated_executor_unwired',
+    descriptionKey: 'errors.conflict.description.delegated_executor_unwired',
+  },
+  // The two conditions that are NOT about a missing registration. They had borrowed the reason
+  // above, whose copy sends an operator to register an executor that is registered and fine.
+  delegated_step_async_only: {
+    titleKey: 'errors.conflict.title.delegated_step_async_only',
+    descriptionKey: 'errors.conflict.description.delegated_step_async_only',
+  },
+  delegated_claim_missing: {
+    titleKey: 'errors.conflict.title.delegated_claim_missing',
+    descriptionKey: 'errors.conflict.description.delegated_claim_missing',
+  },
+  thread_busy: {
+    titleKey: 'errors.conflict.title.thread_busy',
+    descriptionKey: 'errors.conflict.description.thread_busy',
+  },
+  draft_conflict: {
+    titleKey: 'errors.conflict.title.draft_conflict',
+    descriptionKey: 'errors.conflict.description.draft_conflict',
+  },
+  session_stale: {
+    titleKey: 'errors.conflict.title.session_stale',
+    descriptionKey: 'errors.conflict.description.session_stale',
+  },
+  task_limit_reached: {
+    titleKey: 'errors.conflict.title.task_limit_reached',
+    descriptionKey: 'errors.conflict.description.task_limit_reached',
+  },
+  webhook_limit_reached: {
+    titleKey: 'errors.conflict.title.webhook_limit_reached',
+    descriptionKey: 'errors.conflict.description.webhook_limit_reached',
+  },
+  tester_infra_unsupported: {
+    titleKey: 'errors.conflict.title.tester_infra_unsupported',
+    descriptionKey: 'errors.conflict.description.tester_infra_unsupported',
+  },
+  agent_backend_unconfigured: {
+    titleKey: 'errors.conflict.title.agent_backend_unconfigured',
+    descriptionKey: 'errors.conflict.description.agent_backend_unconfigured',
+    action: {
+      labelKey: 'errors.conflict.action.configureRunnerPool',
+      icon: 'i-lucide-server',
+      run: (ui) => ui.openInfrastructure('runner-pool'),
+    },
+  },
+  run_not_retryable: {
+    titleKey: 'errors.conflict.title.run_not_retryable',
+    descriptionKey: 'errors.conflict.description.run_not_retryable',
+  },
+  no_pr_to_merge: {
+    titleKey: 'errors.conflict.title.no_pr_to_merge',
+    descriptionKey: 'errors.conflict.description.no_pr_to_merge',
+  },
+  dry_run_not_mergeable: {
+    titleKey: 'errors.conflict.title.dry_run_not_mergeable',
+    descriptionKey: 'errors.conflict.description.dry_run_not_mergeable',
+  },
+  submission_not_allowed: {
+    titleKey: 'errors.conflict.title.submission_not_allowed',
+    descriptionKey: 'errors.conflict.description.submission_not_allowed',
+  },
+  github_not_connected: {
+    titleKey: 'errors.conflict.title.github_not_connected',
+    descriptionKey: 'errors.conflict.description.github_not_connected',
+    action: {
+      labelKey: 'errors.conflict.action.connectGitHub',
+      icon: 'i-lucide-github',
+      run: (ui) => ui.openGitHub(),
+    },
+  },
+  bootstrap_not_retryable: {
+    titleKey: 'errors.conflict.title.bootstrap_not_retryable',
+    descriptionKey: 'errors.conflict.description.bootstrap_not_retryable',
+  },
+  bootstrap_reference_missing: {
+    titleKey: 'errors.conflict.title.bootstrap_reference_missing',
+    descriptionKey: 'errors.conflict.description.bootstrap_reference_missing',
+  },
+  preset_unsatisfiable: {
+    titleKey: 'errors.conflict.title.preset_unsatisfiable',
+    descriptionKey: 'errors.conflict.description.preset_unsatisfiable',
+    action: {
+      labelKey: 'errors.conflict.action.chooseModel',
+      icon: 'i-lucide-cpu',
+      run: (ui) => ui.openModelConfig(),
+    },
+  },
+  visual_pipeline_no_frontend: {
+    titleKey: 'errors.conflict.title.visual_pipeline_no_frontend',
+    descriptionKey: 'errors.conflict.description.visual_pipeline_no_frontend',
+  },
+  model_policy_blocked: {
+    titleKey: 'errors.conflict.title.model_policy_blocked',
+    descriptionKey: 'errors.conflict.description.model_policy_blocked',
+    action: {
+      labelKey: 'errors.conflict.action.chooseModel',
+      icon: 'i-lucide-cpu',
+      run: (ui) => ui.openModelConfig(),
+    },
+  },
+  model_policy_unsupported: {
+    titleKey: 'errors.conflict.title.model_policy_unsupported',
+    descriptionKey: 'errors.conflict.description.model_policy_unsupported',
+  },
+  deployer_required_before_tester: {
+    titleKey: 'errors.conflict.title.deployer_required_before_tester',
+    descriptionKey: 'errors.conflict.description.deployer_required_before_tester',
+  },
+  env_test_not_a_frame: {
+    titleKey: 'errors.conflict.title.env_test_not_a_frame',
+    descriptionKey: 'errors.conflict.description.env_test_not_a_frame',
+  },
+  env_test_infraless: {
+    titleKey: 'errors.conflict.title.env_test_infraless',
+    descriptionKey: 'errors.conflict.description.env_test_infraless',
+  },
+  env_test_not_provisionable: {
+    titleKey: 'errors.conflict.title.env_test_not_provisionable',
+    descriptionKey: 'errors.conflict.description.env_test_not_provisionable',
+    action: {
+      labelKey: 'errors.conflict.action.configureInfrastructure',
+      icon: 'i-lucide-settings',
+      run: (ui) => ui.openProviderConnection('environment'),
+    },
+  },
+  env_test_no_vcs: {
+    titleKey: 'errors.conflict.title.env_test_no_vcs',
+    descriptionKey: 'errors.conflict.description.env_test_no_vcs',
+    action: {
+      labelKey: 'errors.conflict.action.connectGitHub',
+      icon: 'i-lucide-github',
+      run: (ui) => ui.openGitHub(),
+    },
+  },
+  env_test_connection_failed: {
+    titleKey: 'errors.conflict.title.env_test_connection_failed',
+    descriptionKey: 'errors.conflict.description.env_test_connection_failed',
+    action: {
+      labelKey: 'errors.conflict.action.configureInfrastructure',
+      icon: 'i-lucide-settings',
+      run: (ui) => ui.openProviderConnection('environment'),
+    },
+  },
+  // An agent dry run on a deployment that cannot drive one. No ACTION: the gap is a container
+  // runner, a proxyable model or a repository seam, none of which a user can wire from the SPA.
+  // Offering a settings jump here would send them somewhere that cannot fix it.
+  env_test_probe_unavailable: {
+    titleKey: 'errors.conflict.title.env_test_probe_unavailable',
+    descriptionKey: 'errors.conflict.description.env_test_probe_unavailable',
+  },
+  // The frame's RESOLVED model cannot be dispatched: a provider the LLM proxy cannot serve, or a
+  // subscription-only model with no connected credential. Distinct from the reason above, whose
+  // gap is a container prerequisite: this deployment is wired and the workspace's own model preset
+  // names something unrunnable, so the remedy is in the model settings and the jump is worth
+  // offering. The specific cause rides `details.modelIssue`, which the funnel surfaces as detail.
+  env_test_probe_model_unavailable: {
+    titleKey: 'errors.conflict.title.env_test_probe_model_unavailable',
+    descriptionKey: 'errors.conflict.description.env_test_probe_model_unavailable',
+  },
+  // A second self-test on a frame that already has one running. No ACTION: the remedy is to wait
+  // for the run showing in the same panel, or to stop it with the button beside it.
+  env_test_already_running: {
+    titleKey: 'errors.conflict.title.env_test_already_running',
+    descriptionKey: 'errors.conflict.description.env_test_already_running',
+  },
+  // The workspace is over a spend budget and a dry run is a billable call. No ACTION here either:
+  // budgets are an account-level setting, and the provisioning self-test beside it still runs.
+  env_test_over_budget: {
+    titleKey: 'errors.conflict.title.env_test_over_budget',
+    descriptionKey: 'errors.conflict.description.env_test_over_budget',
+  },
+  // Opt-in review-debt friction. In the normal task-create flow AddTaskModal intercepts these
+  // 409s and opens the friction dialog (which can retry with an acknowledgement), so these entries
+  // are the last-resort toast fallback for any OTHER caller — a generic, param-free title +
+  // description reusing the dialog's own `errors.reviewFriction.*` namespace.
+  review_debt_warn: {
+    titleKey: 'errors.reviewFriction.warnTitle',
+    descriptionKey: 'errors.reviewFriction.warnToast',
+  },
+  review_debt_blocked: {
+    titleKey: 'errors.reviewFriction.blockedTitle',
+    descriptionKey: 'errors.reviewFriction.blockedToast',
+  },
+  // Reachable from this generic lookup only if a prompt save is ever driven from a run-start
+  // path; the prompt editor words it itself (it also has to re-seed its textarea from what
+  // landed). Mapped regardless — the exhaustive Record is the drift guard, not a hint that
+  // every reason arrives here.
+  prompt_revision_conflict: {
+    titleKey: 'errors.conflict.title.prompt_revision_conflict',
+    descriptionKey: 'errors.conflict.description.prompt_revision_conflict',
+  },
+  // The three ways a recurring SCHEDULE blocks a pipeline edit (delete / make one-off / enable
+  // bug-intake). No jump action: a schedule is reached through its own frame's inspector, not from
+  // a workspace-level route, so there is no single target to deep-link to — the description names
+  // the remedy instead. What each one must convey is that the fix is on the SCHEDULE and not on the
+  // pipeline the user is looking at, which is the part the refusal alone doesn't make obvious.
+  pipeline_schedule_attached: {
+    titleKey: 'errors.conflict.title.pipeline_schedule_attached',
+    descriptionKey: 'errors.conflict.description.pipeline_schedule_attached',
+  },
+  pipeline_schedule_requires_recurring: {
+    titleKey: 'errors.conflict.title.pipeline_schedule_requires_recurring',
+    descriptionKey: 'errors.conflict.description.pipeline_schedule_requires_recurring',
+  },
+  foundational_service_exists: {
+    titleKey: 'errors.conflict.title.foundational_service_exists',
+    descriptionKey: 'errors.conflict.description.foundational_service_exists',
+  },
+  binary_output_service_invalid: {
+    titleKey: 'errors.conflict.title.binary_output_service_invalid',
+    descriptionKey: 'errors.conflict.description.binary_output_service_invalid',
+  },
+  binary_output_generator_invalid: {
+    titleKey: 'errors.conflict.title.binary_output_generator_invalid',
+    descriptionKey: 'errors.conflict.description.binary_output_generator_invalid',
+  },
+  foundational_service_not_inherited: {
+    titleKey: 'errors.conflict.title.foundational_service_not_inherited',
+    descriptionKey: 'errors.conflict.description.foundational_service_not_inherited',
+  },
+  pipeline_schedule_intake_unconfigured: {
+    titleKey: 'errors.conflict.title.pipeline_schedule_intake_unconfigured',
+    descriptionKey: 'errors.conflict.description.pipeline_schedule_intake_unconfigured',
+  },
+  ticket_already_linked: {
+    titleKey: 'errors.conflict.title.ticket_already_linked',
+    descriptionKey: 'errors.conflict.description.ticket_already_linked',
+  },
+  document_already_linked: {
+    titleKey: 'errors.conflict.title.document_already_linked',
+    descriptionKey: 'errors.conflict.description.document_already_linked',
+  },
 }
 
 /**
@@ -68,93 +411,325 @@ export function parseConflict(
   }
 }
 
+/** The non-null parsed shape of a backend conflict, as returned by {@link parseConflict}. */
+export type ParsedConflict = NonNullable<ReturnType<typeof parseConflict>>
+
+/**
+ * Generic translated description per STATUS CLASS, for a failure no `reason` code narrows.
+ *
+ * Exhaustive over the wire union (minus `conflict`, which structurally cannot arrive here —
+ * {@link parseConflict} intercepts every envelope carrying that code, so a mapping for it would be
+ * dead copy in ten locales), which makes the `Record` the drift guard: a new `ApiErrorCode` fails
+ * this typecheck until it has wording. The copy is deliberately about the STATUS CLASS and nothing
+ * else — it is what we can say truthfully without having read the specific failure, so it names
+ * the shape of the remedy ("sign in again", "your deployment hasn't wired this", "wait and retry")
+ * and leaves the specifics to the detail disclosure.
+ */
+const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string> = {
+  not_found: 'errors.generic.description.not_found',
+  validation: 'errors.generic.description.validation',
+  credential_required: 'errors.generic.description.credential_required',
+  forbidden: 'errors.generic.description.forbidden',
+  unavailable: 'errors.generic.description.unavailable',
+  unauthorized: 'errors.generic.description.unauthorized',
+  rate_limited: 'errors.generic.description.rate_limited',
+  internal: 'errors.generic.description.internal',
+}
+
+/**
+ * Translated description per REASON, for the non-conflict failures whose status class alone would
+ * describe them wrongly. Checked before {@link GENERIC_DESCRIPTION_KEYS} and falling through to
+ * it for every reason not listed, so this stays a short list of exceptions rather than a second
+ * vocabulary to keep in sync.
+ *
+ * It exists because the generic 503 copy has to commit to something, and what it commits to is
+ * "this deployment has not configured the capability this action needs". That is right for the
+ * common 503 (a module nobody wired) and exactly wrong for an outage: it tells an operator their
+ * build is missing a registration when the truth is that a set could not be read right now. On a
+ * mothership-mode node that is the misattribution this whole seam exists to remove, reappearing
+ * one layer up — with the honest wording demoted to untranslated detail behind a disclosure. So
+ * the reasons in {@link UNAVAILABLE_REASONS} carry their own copy, and the exhaustive `Record`
+ * over that union is the drift guard: a new user-reachable 503 reason fails this typecheck until
+ * it has wording.
+ *
+ * `BootstrapReferenceReason` joins it because the same argument reaches one 422: a bootstrap
+ * refused for its reference architecture is not "the request was malformed", it names a specific
+ * entry a specific person can go and fix. The launch dialog handles that one itself, since it can
+ * open the entry. This is what every OTHER caller of the funnel is told instead of the status
+ * class's generic wording, above all a retry driven from the run card.
+ */
+const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReason, string> = {
+  reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
+  reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
+  binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
+  foundational_builtins_unreachable:
+    'errors.unavailable.description.foundational_builtins_unreachable',
+  connection_credentials_unreadable:
+    'errors.unavailable.description.connection_credentials_unreadable',
+  vcs_capability_unsupported: 'errors.unavailable.description.vcs_capability_unsupported',
+  service_catalog_unreachable: 'errors.unavailable.description.service_catalog_unreachable',
+  service_catalog_unauthorized: 'errors.unavailable.description.service_catalog_unauthorized',
+  service_catalog_filter_missing: 'errors.unavailable.description.service_catalog_filter_missing',
+  service_catalog_response_too_large:
+    'errors.unavailable.description.service_catalog_response_too_large',
+  assistant_generation_failed: 'errors.unavailable.description.assistant_generation_failed',
+  assistant_reply_unreadable: 'errors.unavailable.description.assistant_reply_unreadable',
+  delegated_executor_failed: 'errors.unavailable.description.delegated_executor_failed',
+  delegated_work_branch_unprepared:
+    'errors.unavailable.description.delegated_work_branch_unprepared',
+  attached_pr_provider_unreachable:
+    'errors.unavailable.description.attached_pr_provider_unreachable',
+}
+
+/**
+ * The request never reached a server that answered in our envelope shape — offline, DNS, a dropped
+ * connection, CORS. Distinct from {@link UNEXPECTED_DESCRIPTION_KEY} on purpose: this one's remedy
+ * is on the USER's side (check the connection), which is the opposite of "the server is broken".
+ */
+const NETWORK_DESCRIPTION_KEY = 'errors.generic.description.network'
+
+/**
+ * Something answered with an HTTP status but not one of our envelopes (an edge/proxy 502 page, a
+ * gateway timeout), or answered with a `code` this build doesn't know. Reported as an unexpected
+ * SERVER-side failure rather than folded into the network case.
+ */
+const UNEXPECTED_DESCRIPTION_KEY = 'errors.generic.description.unexpected'
+
+/**
+ * A non-conflict failure, split into the part that gets TRANSLATED and the parts that stay raw.
+ * Pure (no i18n, no store) so the classification is unit-testable on its own; the composable
+ * turns it into a toast.
+ */
+export interface GenericFailure {
+  /** i18n key for the translated description shown up front. */
+  descriptionKey: string
+  /** The backend's untranslated prose, when it sent any (absent for a bare network fault). */
+  message: string | null
+  /** `path: message` entries from a request-validation 400, in wire order. */
+  issues: string[]
+  /** The envelope's correlation id, so the user can quote it at whoever reads the logs. */
+  requestId: string | null
+}
+
+/**
+ * Classify a NON-conflict failure for presentation. Never throws and never returns an empty
+ * `descriptionKey`: an error this function cannot recognise at all still gets the network or
+ * unexpected-failure wording, because a toast with no description reads as a successful action.
+ */
+export function describeGenericFailure(error: unknown): GenericFailure {
+  const envelope = apiErrorEnvelope(error)
+  // Read through a widened alias rather than casting the wire string to the union: a `code` we
+  // don't know must resolve to `undefined`, which is exactly what the alias's index signature
+  // says and what a cast would have hidden. The narrow Record above stays the drift guard.
+  const byCode: Readonly<Record<string, string | undefined>> = GENERIC_DESCRIPTION_KEYS
+  // A REASON that has its own copy wins over the status class's, through the same widened-alias
+  // read and for the same reason: a `reason` this build doesn't know must resolve to `undefined`
+  // and fall through, never narrow the wire string to the union by casting.
+  const byReason: Readonly<Record<string, string | undefined>> = REASON_DESCRIPTION_KEYS
+  const reason = apiErrorReason(error)
+  const mapped =
+    (reason ? byReason[reason] : undefined) ?? (envelope?.code ? byCode[envelope.code] : undefined)
+  // No envelope at all AND no status ⇒ nothing answered; with a status, something did.
+  const unrecognised =
+    !envelope && apiErrorStatus(error) === undefined
+      ? NETWORK_DESCRIPTION_KEY
+      : UNEXPECTED_DESCRIPTION_KEY
+  return {
+    descriptionKey: mapped ?? unrecognised,
+    // `ApiError.message` is the envelope's prose, or a synthesised `Request failed (HTTP n)`; for
+    // a non-API throw it is the JS error text. Either way it is detail, never the headline.
+    message: error instanceof Error ? error.message : error == null ? null : String(error),
+    issues: (envelope?.issues ?? []).map((issue) =>
+      issue.path ? `${issue.path}: ${issue.message}` : issue.message,
+    ),
+    requestId: typeof envelope?.requestId === 'string' ? envelope.requestId : null,
+  }
+}
+
 export function usePipelineErrorToast() {
   const toast = useToast()
   const ui = useUiStore()
-  const { t, te } = useI18n()
+  // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which
+  // requires an active component instance — the same pattern (and the same reason) as the
+  // board / recurring-pipelines stores.
+  //
+  // This composable is called from STORE SETUP (`stores/execution.ts`, `stores/agentRuns.ts`),
+  // and a Pinia setup store runs its body on the FIRST `useStore()` anywhere. That used to be
+  // a component, so `useI18n()` happened to be legal; the moment anything instantiated one of
+  // those stores earlier — `createNavGates()` does, from the `enforce: 'post'` modular plugin —
+  // vue-i18n threw `MUST_BE_CALL_SETUP_TOP`, the plugin threw, and Nuxt's error boundary
+  // replaced the entire app with its 500 page. Every single e2e spec failed on a blank board.
+  // A store must be instantiable outside a component, so the i18n handle it reaches for has
+  // to be too.
+  //
+  // Typed as `useI18n`'s own return (`$i18n` IS that global Composer in composition mode), so
+  // `t`/`te` keep their real signatures. No typed-message-key coverage is lost by the switch:
+  // tier 1 only sees literal keys written in a `<script setup>`, never in a `.ts` composable —
+  // the drift guard here is the exhaustive `CONFLICT_INFO` / `ApiErrorCode` records above.
+  const { t, te } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
+  // The shared clipboard seam (feedback toast included), so "Copy details" behaves like every other
+  // copy affordance in the product instead of silently failing where the API is unavailable.
+  const { copyAction } = useCopyToClipboard()
+
+  // The five bespoke conflict reasons (a runtime-interpolated body + a "configure X" jump each)
+  // live in a sibling factory over the same toast/ui/i18n handles, so this composable stays
+  // within the per-function line budget.
+  const presentBespokeConflict = createBespokeConflictToasts({ toast, ui, t, te })
+
+  /**
+   * Per-reason copy from the exhaustive map: a translated title + description, and a jump
+   * action for the reasons a UI panel can fix. `te` (translation-exists) guards every lookup,
+   * so a key missing from the active locale falls back rather than leaking a raw key: the
+   * title falls to the caller's key, the description to the generic conflict line.
+   *
+   * A conflict is a FAILURE, so it carries the two properties `presentGenericFailure` documents
+   * below and for the same reasons: it does not auto-dismiss, and its detail is copyable. The
+   * backend's own prose is DETAIL here rather than the headline, which matters most on the
+   * unknown-reason path: that is where a reason this SPA build has never heard of lands, so
+   * leaving it as the description meant the newest failures were the ones shown untranslated,
+   * uncopyable, and gone in five seconds.
+   */
+  function presentMappedConflict(
+    conflict: ParsedConflict,
+    fallbackTitleKey: string,
+    titleParams?: Record<string, unknown>,
+  ): void {
+    const info = conflict.reason
+      ? CONFLICT_INFO[conflict.reason as Exclude<ConflictReason, BespokeConflictReason>]
+      : undefined
+    const title =
+      info && te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey, titleParams ?? {})
+    const description =
+      info && te(info.descriptionKey)
+        ? t(info.descriptionKey)
+        : t('errors.conflict.fallbackMessage')
+    // The backend's prose, kept only when it adds something the translated line doesn't already say.
+    const detail = conflict.message && conflict.message !== description ? conflict.message : ''
+    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
+    const added = toast.add({
+      title,
+      description,
+      color: 'warning',
+      icon: 'i-lucide-triangle-alert',
+      duration: 0,
+      ui: { description: 'select-text' },
+      actions: [
+        // A reason with a jump action leads with its one-click remedy; the detail reveal and the
+        // copy follow it, so the primary affordance stays first in the row.
+        ...(info?.action
+          ? [
+              {
+                label: t(info.action.labelKey),
+                icon: info.action.icon,
+                onClick: () => info.action?.run(ui),
+              },
+            ]
+          : []),
+        ...(detail
+          ? [
+              {
+                label: t('errors.generic.showDetail'),
+                icon: 'i-lucide-info',
+                onClick: () =>
+                  toast.update(added.id, { description: detail, actions: [copyAction(report)] }),
+              },
+            ]
+          : []),
+        copyAction(report),
+      ],
+    })
+  }
+
+  /**
+   * Everything that is NOT a 409: a translated status-class description, with the raw detail
+   * behind a "Show details" button that swaps it into the same toast (G2).
+   *
+   * The reveal is an UPDATE rather than a second toast so the two readings can't sit on screen
+   * disagreeing. `actions: []` is passed explicitly on the reveal: `update` merges over the
+   * existing toast, so an omitted `actions` would leave a "Show details" button that is now a
+   * no-op. The COPY action is re-passed, because it is still the point after the reveal.
+   *
+   * Two properties of this toast are the whole reason a failure goes through this funnel rather
+   * than a hand-built `toast.add`, and both were learned from someone trying to report a bug:
+   *
+   * - It does NOT auto-dismiss. A failure is the one toast a user needs to finish reading, quote,
+   *   or act on, and a ~5s dismissal took the detail away mid-sentence. It carries a close button
+   *   like every other toast, so staying is a decision the reader makes.
+   * - The detail is COPYABLE with one click, through the shared clipboard seam (so the copy's own
+   *   success/failure is reported rather than silently no-op'ing in an insecure context). Selecting
+   *   text inside a toast is fiddly at the best of times and impossible once it has gone, and what
+   *   the person needs to paste is the whole of it: the failed action, the class of failure, the
+   *   backend's prose, and above all the `requestId` that joins it to the one server log line
+   *   explaining it. Retyping that id off a screenshot is how a report arrives without it.
+   *
+   * No detail worth showing (a network fault with an unhelpful `message` and no correlation id)
+   * ⇒ no disclosure and nothing to copy beyond the two translated lines, which the copy action
+   * still carries.
+   */
+  function presentGenericFailure(
+    error: unknown,
+    fallbackTitleKey: string,
+    titleParams?: Record<string, unknown>,
+  ): void {
+    const failure = describeGenericFailure(error)
+    const detail = [
+      failure.message,
+      failure.issues.join(', '),
+      failure.requestId ? t('errors.generic.requestId', { id: failure.requestId }) : '',
+    ]
+      .filter((part) => part && part.trim().length > 0)
+      .join(' · ')
+    // No `te` guard: the key comes from a Record exhaustive over the wire union and every entry
+    // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
+    // (better than the raw prose this replaced) and a bare key can never leak.
+    const title = t(fallbackTitleKey, titleParams ?? {})
+    const description = t(failure.descriptionKey)
+    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
+    const added = toast.add({
+      title,
+      description,
+      color: 'error',
+      icon: 'i-lucide-triangle-alert',
+      duration: 0,
+      // Selectable in place too: the copy button is the reliable path, but a reader who only wants
+      // the request id should be able to drag over it.
+      ui: { description: 'select-text' },
+      actions: [
+        ...(detail
+          ? [
+              {
+                label: t('errors.generic.showDetail'),
+                icon: 'i-lucide-info',
+                onClick: () =>
+                  toast.update(added.id, {
+                    description: detail,
+                    actions: [copyAction(report)],
+                  }),
+              },
+            ]
+          : []),
+        copyAction(report),
+      ],
+    })
+  }
 
   /**
    * Present `error` as a toast. `fallbackTitleKey` is an i18n message key used for
-   * non-conflict failures and any conflict reason without a dedicated title.
+   * non-conflict failures and any conflict reason without a dedicated title; `titleParams` carries
+   * that key's interpolation when it takes any (a title naming the thing that failed).
    */
-  function present(error: unknown, fallbackTitleKey = 'common.actionFailed'): void {
+  function present(
+    error: unknown,
+    fallbackTitleKey = 'common.actionFailed',
+    titleParams?: Record<string, unknown>,
+  ): void {
     const conflict = parseConflict(error)
-
-    // The headline case: a pipeline step's model has no usable provider. Name the
-    // offending model(s), explain no provider is available, and offer the one-click jump
-    // to the AI setup — the same remedy the startup "No AI model configured" banner gives.
-    if (conflict?.reason === 'providers_unconfigured') {
-      const models = Array.isArray(conflict.details.models) ? conflict.details.models : []
-      const list = models.join(', ')
-      toast.add({
-        title: t('errors.conflict.providersUnconfigured.title'),
-        description: list
-          ? t('errors.conflict.providersUnconfigured.body', { models: list })
-          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-        color: 'error',
-        icon: 'i-lucide-cpu',
-        actions: [
-          {
-            label: t('errors.conflict.providersUnconfigured.action'),
-            icon: 'i-lucide-settings',
-            onClick: () => ui.openAiProviderSetup(),
-          },
-        ],
-      })
-      return
-    }
-
-    // A pipeline step relies on binary-artifact storage (the UI Tester uploads screenshots)
-    // but the account has none configured. Explain it and offer the jump to the content-storage
-    // settings — the same shape as the providers-unconfigured case above. Prefer the localized
-    // body (it carries no runtime interpolation) so non-English users see translated copy; the
-    // raw backend prose is only the last-resort fallback when the locale lacks the key.
-    if (conflict?.reason === 'binary_storage_unconfigured') {
-      toast.add({
-        title: t('errors.conflict.binaryStorageUnconfigured.title'),
-        description: te('errors.conflict.binaryStorageUnconfigured.body')
-          ? t('errors.conflict.binaryStorageUnconfigured.body')
-          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-        color: 'error',
-        icon: 'i-lucide-image',
-        actions: [
-          {
-            label: t('errors.conflict.binaryStorageUnconfigured.action'),
-            icon: 'i-lucide-settings',
-            onClick: () => ui.openContentStorageSettings(),
-          },
-        ],
-      })
-      return
-    }
-
     if (conflict) {
-      // Per-reason title key from the exhaustive map; fall back to the caller's title key when
-      // this reason has no mapped/translated copy (`te` = translation-exists, so a key missing
-      // in the active locale never leaks as raw text). An unknown reason isn't in the map.
-      const reasonKey =
-        CONFLICT_TITLE_KEYS[
-          conflict.reason as Exclude<
-            ConflictReason,
-            'providers_unconfigured' | 'binary_storage_unconfigured'
-          >
-        ]
-      toast.add({
-        title: reasonKey && te(reasonKey) ? t(reasonKey) : t(fallbackTitleKey),
-        description: conflict.message ?? t('errors.conflict.fallbackMessage'),
-        color: 'warning',
-        icon: 'i-lucide-triangle-alert',
-      })
+      if (presentBespokeConflict(conflict)) return
+      presentMappedConflict(conflict, fallbackTitleKey, titleParams)
       return
     }
-
-    // Not a conflict (a 4xx/5xx or a network fault) — surface its message plainly.
-    toast.add({
-      title: t(fallbackTitleKey),
-      description: error instanceof Error ? error.message : String(error),
-      color: 'error',
-      icon: 'i-lucide-triangle-alert',
-    })
+    presentGenericFailure(error, fallbackTitleKey, titleParams)
   }
 
   return { present }

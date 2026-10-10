@@ -19,9 +19,20 @@ export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
   'merge_review',
   'pipeline_complete',
   'ci_failed',
+  // Routable for the same reason `ci_failed` is: the machine gave up on a branch somebody owns.
+  'deploy_blocked',
   'requirement_review',
   'release_regression',
   'human_test_ready',
+  // Deployment-level operational alert — an operator wants it in their ops channel.
+  'platform_health',
+  // An infrastructure outage is the same shape of alert: routable, so it reaches the ops channel
+  // rather than only an in-app banner someone has to be looking at the board to see.
+  'infra_unreachable',
+  // A budget warning is routable for the same reason, and more sharply: its whole value is
+  // arriving BEFORE runs start pausing, which an in-app card only manages if somebody happens to
+  // have the board open. `budget_paused` stays in-app-only because by then the damage is done.
+  'budget_threshold',
 ]
 
 /** A mapping entry's role, defaulting to `engineering` when unset (legacy entries). */
@@ -48,8 +59,15 @@ export interface MentionAudience {
 const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   merge_review: { roles: [], includeCreator: true },
   pipeline_complete: { roles: [], includeCreator: true },
+  // A post-hoc "how much review did that need?" nudge for a PR that already merged: the
+  // creator is the only person who can answer, and nobody else needs paging over it.
+  merge_tag_request: { roles: [], includeCreator: true },
   ci_failed: { roles: [], includeCreator: true },
   test_failed: { roles: [], includeCreator: true },
+  // The creator's, exactly as `ci_failed` is. Classification keeps every cause outside the
+  // repository out of this loop, so what is left when the fixer gives up is a defect in the
+  // deployment files on their own branch, not something an infrastructure role would take.
+  deploy_blocked: { roles: [], includeCreator: true },
   requirement_review: { roles: ['product'], includeCreator: true },
   clarity_review: { roles: ['product'], includeCreator: true },
   // A post-release regression is an operational event: tell the on-call engineers and
@@ -66,10 +84,40 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // The Coder surfaced follow-ups/questions to triage: tell the task's creator (who decides
   // file / send back / answer / dismiss).
   followup_pending: { roles: [], includeCreator: true },
+  // The fork-decision phase surfaced materially different implementation approaches: tell the
+  // task's creator (who picks the approach before the Coder starts).
+  fork_decision_pending: { roles: [], includeCreator: true },
+  // A rubric verdict the run parked on: the task's creator decides whether to proceed, send
+  // it back, or stop — the engineers are who a rework round lands on, so mention both.
+  judge_review: { roles: ['engineering'], includeCreator: true },
+  // The PR reviewer surfaced findings to triage: tell the task's creator (who selects which
+  // findings to act on) and the engineers.
+  pr_review_ready: { roles: ['engineering'], includeCreator: true },
+  // A bug-fishing expedition finished its angles: tell the task's creator (who triages what it
+  // caught and marks the findings worth fixing) and the engineers.
+  bug_fishing_triage: { roles: ['engineering'], includeCreator: true },
+  // An initiative needs attention (a blocked task, or completion): tell the creator (who owns
+  // the initiative) and the engineers driving its work.
+  initiative: { roles: ['engineering'], includeCreator: true },
+  // A platform-health alert is an operational, deployment-wide event with no task creator
+  // (block-less): mention the engineers (the operators who watch the deployment).
+  platform_health: { roles: ['engineering'], includeCreator: false },
+  // A workspace-wide spend pause: no task creator (block-less), so it @-mentions no one. It is
+  // in-app-only (absent from SLACK_ROUTABLE_TYPES) — this entry only satisfies the exhaustive map.
+  budget_paused: { roles: [], includeCreator: false },
+  // The PROACTIVE spend warning, also block-less (no task creator): it goes to the engineers, who
+  // are the people who can raise the budget or stop what is burning it.
+  budget_threshold: { roles: ['engineering'], includeCreator: false },
+  // An ENCRYPTION_KEY-drift alert (ADR 0026 D6.2): an operational, deployment-wide credential
+  // issue for the operators who watch the deployment; in-app-only (absent from SLACK_ROUTABLE_TYPES).
+  key_drift: { roles: ['engineering'], includeCreator: false },
+  // A configured infrastructure connection stopped answering: operational and block-less (no task
+  // creator), so it goes to the engineers who can restart the thing, like `platform_health`.
+  infra_unreachable: { roles: ['engineering'], includeCreator: false },
 }
 
 /** The mention audience for a notification type. */
-export function mentionAudience(type: NotificationType): MentionAudience {
+function mentionAudience(type: NotificationType): MentionAudience {
   return MENTION_AUDIENCE[type]
 }
 
@@ -140,8 +188,10 @@ export function resolveRoute(
 const TYPE_LABEL: Record<NotificationType, string> = {
   merge_review: ':eyes: Merge review',
   pipeline_complete: ':white_check_mark: Pipeline complete',
+  merge_tag_request: ':label: Tag review effort',
   ci_failed: ':rotating_light: CI failed',
   test_failed: ':rotating_light: Tests failed',
+  deploy_blocked: ':construction: Deployment blocked',
   requirement_review: ':memo: Requirement review',
   clarity_review: ':mag: Bug-report triage',
   release_regression: ':rotating_light: Release regression',
@@ -150,6 +200,16 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   visual_confirmation_ready: ':camera: Ready for visual confirmation',
   human_review: ':bust_in_silhouette: Awaiting code review',
   followup_pending: ':compass: Follow-ups to decide',
+  fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
+  judge_review: ':balance_scale: Review verdict needs a decision',
+  pr_review_ready: ':clipboard: PR review findings',
+  bug_fishing_triage: ':fishing_pole_and_fish: Bug-fishing findings to triage',
+  initiative: ':world_map: Initiative update',
+  platform_health: ':bar_chart: Platform health alert',
+  budget_paused: ':moneybag: Runs paused — spend budget reached',
+  budget_threshold: ':chart_with_upwards_trend: Spend budget warning',
+  key_drift: ':key: Encryption-key drift — credentials need re-entry',
+  infra_unreachable: ':electric_plug: Infrastructure unreachable',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */
@@ -157,7 +217,12 @@ function pct(score: number): string {
   return `${Math.round(score * 100)}%`
 }
 
-export interface SlackMessageBody {
+/**
+ * A rendered `chat.postMessage` body. A type alias rather than an `interface` so it keeps the
+ * implicit index signature `postJson`'s `Record<string, unknown>` parameter needs. As an
+ * interface the client had to assert it through `unknown` to post it.
+ */
+export type SlackMessageBody = {
   channel: string
   text: string
   blocks: unknown[]

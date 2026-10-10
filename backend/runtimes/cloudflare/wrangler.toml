@@ -47,6 +47,16 @@ binding = "PROVISIONING_DB"
 database_name = "cat_factory_provisioning"
 migrations_dir = "migrations-provisioning"
 
+# Dedicated database for the account audit log. Separate not for write profile (it is
+# low-volume) but for RETENTION: it is the only table that grows with run volume AND wants a
+# multi-year window, so on a 10 GB-per-database store it must not share the transactional
+# budget. REQUIRED, like TELEMETRY_DB — an unbound binding would mean "no audit", which is
+# indistinguishable from "nothing privileged happened".
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "cat_factory_audit"
+migrations_dir = "audit-migrations"
+
 # Workers AI binding. Tests inject a FakeAgentExecutor and never touch env.AI
 # (vitest.config.ts sets remoteBindings:false); declared so the binding shape
 # matches production.
@@ -86,6 +96,18 @@ binding = "ENV_CONFIG_REPAIR_WORKFLOW"
 name = "cat-factory-env-config-repair"
 class_name = "EnvConfigRepairWorkflow"
 
+# Durable driver for the ephemeral-environment self-test diagnostic.
+[[workflows]]
+binding = "ENV_TEST_WORKFLOW"
+name = "cat-factory-env-test"
+class_name = "EnvironmentTestWorkflow"
+
+# Durable driver for guided PR review jobs (an overview, or one answer in a thread).
+[[workflows]]
+binding = "GUIDED_REVIEW_WORKFLOW"
+name = "cat-factory-guided-review"
+class_name = "GuidedReviewWorkflow"
+
 # Per-run implementation container. The acceptance suite builds this image from
 # the internal harness package's Dockerfile, so dev/test reference it by local
 # path; the production deployment instead references the published GHCR image
@@ -112,10 +134,31 @@ instance_type = "standard-1"
 name = "DEPLOY_CONTAINER"
 class_name = "DeployContainer"
 
+# Per-run UI-TESTER container (the heavier browser image: Playwright + Chromium, pnpm/yarn,
+# `serve`, and a headless JRE + WireMock, layered on the executor harness). The `image: 'ui'`
+# dispatch variant routes here; a run gets one ALONGSIDE its ExecutionContainer instance,
+# because a per-run container cannot change image mid-run.
+[[containers]]
+class_name = "UiTesterContainer"
+image = "../../internal/executor-harness/Dockerfile.ui"
+max_instances = 10
+instance_type = "standard-1"
+
+[[durable_objects.bindings]]
+name = "UI_CONTAINER"
+class_name = "UiTesterContainer"
+
 # Per-workspace WebSocket fan-out hub.
 [[durable_objects.bindings]]
 name = "WORKSPACE_EVENTS"
 class_name = "WorkspaceEventsHub"
+
+# Cross-isolate cache-coherency directory (per-group generation counters). Its presence
+# selects the COHERENT app-cache profile; without it the Worker keeps the pass-through
+# stance for caches of mutable state (see src/infrastructure/appCachesHost.ts).
+[[durable_objects.bindings]]
+name = "CACHE_GENERATIONS"
+class_name = "CacheGenerationDirectory"
 
 [[migrations]]
 tag = "v1"
@@ -132,3 +175,11 @@ renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer"
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["DeployContainer"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["CacheGenerationDirectory"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["UiTesterContainer"]

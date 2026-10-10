@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentFailure, AgentKind, PipelineStep } from '@cat-factory/kernel'
+import type { AgentFailure, AgentKind, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import {
+  buildResumedInstance,
   carryForwardFailures,
+  carryForwardOutputs,
   MAX_FAILURE_HISTORY,
+  MAX_HISTORY_OUTPUT_CHARS,
+  MAX_OUTPUT_HISTORY,
   planResumedSteps,
   planRestartFromStep,
 } from './retry.logic.js'
@@ -151,6 +155,45 @@ describe('planRestartFromStep', () => {
     const { currentStep } = planRestartFromStep({ steps: fullSteps('done') }, 99)
     expect(currentStep).toBe(5) // last step
   })
+
+  // A ralph step is the one kind whose reset must PRESERVE something: its completion command is
+  // read at DISPATCH time to build the job's validation block, so a reset that drops the loop
+  // state leaves the re-run dispatching an ungated one-shot coding pass that reports no verdict
+  // — the loop silently stops existing. Zeroing the counters while keeping the frozen config is
+  // the only reset that is right for both a retry and a restart.
+  it('re-arms a ralph step: frozen config kept, iteration counters back at zero', () => {
+    const ralphSteps = [
+      step('architect', 'done', { output: 'a', startedAt: 1, finishedAt: 2 }),
+      step('ralph', 'done', {
+        jobId: 'j',
+        output: 'Ralph loop gave up after 6 iteration(s)',
+        ralph: {
+          phase: 'iterating',
+          attempts: 6,
+          maxIterations: 6,
+          validationCommand: 'pnpm test',
+          progressPath: '.cat-factory/ralph-progress.md',
+          noProgressStreak: 2,
+          lastExitCode: 1,
+          lastValidationTail: 'still red',
+          attemptLog: [{ attempt: 6, at: 4, validationPassed: false }],
+        },
+      }),
+    ]
+    const { steps } = planRestartFromStep({ steps: ralphSteps }, 1)
+    const ralph = steps[1]!.ralph
+    expect(ralph?.validationCommand).toBe('pnpm test')
+    expect(ralph?.maxIterations).toBe(6)
+    expect(ralph?.attempts).toBe(0)
+    expect(ralph?.attemptLog).toEqual([])
+    expect(ralph?.noProgressStreak).toBeUndefined()
+    expect(ralph?.lastValidationTail).toBeUndefined()
+  })
+
+  it('leaves a non-ralph step with no loop state', () => {
+    const { steps } = planRestartFromStep({ steps: fullSteps('done') }, 3)
+    expect(steps[3]!.ralph).toBeUndefined()
+  })
 })
 
 describe('carryForwardFailures', () => {
@@ -208,5 +251,168 @@ describe('carryForwardFailures', () => {
     // The oldest is evicted; the newest is retained at the tail.
     expect(trail[0]).toEqual(full[1])
     expect(trail.at(-1)).toEqual(newest)
+  })
+})
+
+describe('carryForwardOutputs', () => {
+  it('records the successful outputs a restart discards, attributed to their step', () => {
+    // A fully-done run restarted from the architect (index 1): the architect + researcher +
+    // coder outputs are about to be dropped, so they're preserved with their step index.
+    const { steps, currentStep } = planRestartFromStep({ steps: fullSteps('done') }, 1)
+    const trail = carryForwardOutputs({ steps: fullSteps('done') }, currentStep, 999)
+    expect(currentStep).toBe(1)
+    // The preserved-before-the-restart step 0 is NOT recorded (it keeps its output on the step).
+    expect(trail.map((o) => o.stepIndex)).toEqual([1, 2, 3])
+    expect(trail[0]).toMatchObject({ stepIndex: 1, output: 'architect output', occurredAt: 4 })
+    // Sanity: the plan really did reset those steps' outputs (so the history is the only copy).
+    expect(steps[1]!.output).toBeUndefined()
+  })
+
+  it('records nothing for a retry (it resumes at the first UNFINISHED step)', () => {
+    // A retry resumes at the failed coder (index 3); no completed step is reset, so there is
+    // no successful output to preserve — the trail is just carried through untouched.
+    const { currentStep } = planResumedSteps({ steps: fullSteps('working'), currentStep: 3 })
+    const prior = [{ stepIndex: 0, occurredAt: 1, output: 'earlier restart' }]
+    expect(
+      carryForwardOutputs({ steps: fullSteps('working'), outputHistory: prior }, currentStep, 9),
+    ).toEqual(prior)
+  })
+
+  it('skips reset steps with no usable output (failed / never-run / whitespace-only)', () => {
+    const steps: PipelineStep[] = [
+      step('coder', 'done', { output: '   ', finishedAt: 2 }), // whitespace-only → skipped
+      step('tester-api', 'working', { output: 'partial', finishedAt: 3 }), // not done → skipped
+      step('merger', 'pending'), // never ran → skipped
+    ]
+    expect(carryForwardOutputs({ steps }, 0, 100)).toEqual([])
+  })
+
+  it('accumulates across successive restarts, oldest→newest', () => {
+    const prior = [{ stepIndex: 1, occurredAt: 4, output: 'from an earlier restart' }]
+    const steps: PipelineStep[] = [step('spec-writer', 'done', { output: 'spec', finishedAt: 10 })]
+    const trail = carryForwardOutputs({ steps, outputHistory: prior }, 0, 50)
+    expect(trail).toEqual([prior[0], { stepIndex: 0, occurredAt: 10, output: 'spec' }])
+  })
+
+  it('falls back to the supplied clock when a discarded step has no finishedAt', () => {
+    const steps: PipelineStep[] = [step('coder', 'done', { output: 'code' })]
+    expect(carryForwardOutputs({ steps }, 0, 777)).toEqual([
+      { stepIndex: 0, occurredAt: 777, output: 'code' },
+    ])
+  })
+
+  it('clips an oversized output and flags it truncated', () => {
+    const big = 'x'.repeat(MAX_HISTORY_OUTPUT_CHARS + 500)
+    const steps: PipelineStep[] = [step('architect', 'done', { output: big, finishedAt: 1 })]
+    const [entry] = carryForwardOutputs({ steps }, 0, 1)
+    expect(entry!.output).toHaveLength(MAX_HISTORY_OUTPUT_CHARS)
+    expect(entry!.truncated).toBe(true)
+  })
+
+  it('caps the trail at MAX_OUTPUT_HISTORY, dropping the oldest', () => {
+    const prior = Array.from({ length: MAX_OUTPUT_HISTORY }, (_, i) => ({
+      stepIndex: 0,
+      occurredAt: i,
+      output: `old ${i}`,
+    }))
+    const steps: PipelineStep[] = [step('coder', 'done', { output: 'newest', finishedAt: 999 })]
+    const trail = carryForwardOutputs({ steps, outputHistory: prior }, 0, 1)
+    expect(trail).toHaveLength(MAX_OUTPUT_HISTORY)
+    expect(trail[0]).toEqual(prior[1]) // oldest evicted
+    expect(trail.at(-1)).toMatchObject({ output: 'newest' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// What survives a re-drive. A retry/restart mints a FRESH run id over the same work, so anything
+// describing the WORK has to be carried forward explicitly — and the merge-policy pair is the
+// half where dropping it is an escape hatch rather than a degraded feature.
+// ---------------------------------------------------------------------------
+
+describe('buildResumedInstance', () => {
+  const previous = (extra: Partial<ExecutionInstance> = {}): ExecutionInstance =>
+    ({
+      id: 'exec_old',
+      blockId: 'task_login',
+      pipelineId: 'pl_full',
+      pipelineName: 'Full',
+      steps: [step('coder', 'working')],
+      currentStep: 0,
+      status: 'failed',
+      initiatedBy: 'usr_1',
+      createdAt: 1,
+      ...extra,
+    }) as ExecutionInstance
+
+  const resume = (extra: Partial<ExecutionInstance> = {}): ExecutionInstance =>
+    buildResumedInstance({
+      previous: previous(extra),
+      id: 'exec_new',
+      plan: { steps: [step('coder', 'pending')], currentStep: 0 },
+      now: 10,
+    })
+
+  it('carries the pinned role and sandboxed mode onto the resumed run', () => {
+    // A re-drive is the same work under the same authority, so the tier the operator admitted it
+    // under governs it still. Re-resolving is impossible here anyway: a retry can be driven by a
+    // different user, or by a sweeper with no user at all.
+    const next = resume({ initiatedByRole: 'member', mode: 'dry_run' })
+    expect(next.initiatedByRole).toBe('member')
+    expect(next.mode).toBe('dry_run')
+    expect(next.id).toBe('exec_new')
+  })
+
+  it('keeps a dry run sandboxed across a RESTART, which needs no failure to reach', () => {
+    // The sharp case. `restartFromStep` has no `failed` precondition, so dropping the mode here
+    // would make start-a-dry-run then restart-from-step-0 mint a LIVE run over the same work:
+    // the sandbox exactly one restart deep, through the ordinary affordance rather than an
+    // exploit. Only a fresh start may settle a new mode.
+    const restarted = buildResumedInstance({
+      previous: previous({ status: 'running', mode: 'dry_run', initiatedByRole: 'member' }),
+      id: 'exec_new',
+      plan: { steps: [step('coder', 'pending')], currentStep: 0 },
+      now: 10,
+    })
+    expect(restarted.mode).toBe('dry_run')
+  })
+
+  it('leaves an unattributed live run exactly as it was', () => {
+    // The identity: a run that pinned neither must not gain either by being retried.
+    const next = resume()
+    expect(next.mode).toBeUndefined()
+    expect(next.initiatedByRole).toBeUndefined()
+    expect(next.initiatedByExternalIdentity).toBeUndefined()
+  })
+
+  it('keeps naming who the run was started for, whoever drives the re-drive', () => {
+    // A retry is the same work for the same requester. Re-taking the identity from the retrying
+    // caller would attribute the run to the operator who pressed retry, or (from a sweeper, which
+    // presents no key at all) to nobody, and the integration that started it would lose the
+    // mapping precisely when the run needed looking at.
+    const next = buildResumedInstance({
+      previous: previous({ initiatedByExternalIdentity: 'os-user:ada' }),
+      id: 'exec_new',
+      plan: { steps: [step('coder', 'pending')], currentStep: 0 },
+      initiatedBy: 'usr_operator',
+      now: 10,
+    })
+    expect(next.initiatedByExternalIdentity).toBe('os-user:ada')
+  })
+
+  it('does not let an initiator override re-tier the run', () => {
+    // A retry may be driven by someone else (their subscription pays for it), but the AUTHORITY
+    // the work runs under was settled at admission. Swapping in the retrying user's tier here
+    // would let a member launder a sandboxed run through an admin's retry, or an admin's run
+    // silently narrow because a member pressed retry.
+    const next = buildResumedInstance({
+      previous: previous({ initiatedByRole: 'member', mode: 'dry_run' }),
+      id: 'exec_new',
+      plan: { steps: [step('coder', 'pending')], currentStep: 0 },
+      initiatedBy: 'usr_admin',
+      now: 10,
+    })
+    expect(next.initiatedBy).toBe('usr_admin')
+    expect(next.initiatedByRole).toBe('member')
+    expect(next.mode).toBe('dry_run')
   })
 })

@@ -4,15 +4,25 @@
 // pipelines). A facade calls `validateRegistrationsOnce()` after all `register*` imports +
 // provider wiring, before serving.
 export {
+  type RegistrationErrorProblem,
   type RegistrationProblem,
+  type RegistrationWarnCode,
+  type RegistrationWarning,
   type ValidateRegistrationsOptions,
   collectRegistrationProblems,
+  logRegistrationWarning,
   validateRegistrations,
   validateRegistrationsOnce,
   resetRegistrationValidationGuard,
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
+export type { GuidedReviewOwner } from './modules/guidedReview/GuidedReviewService.js'
+export type {
+  PublicRepoOption,
+  RepoUse,
+  RepoUseByRepoId,
+} from './modules/board/publicBoardReads.js'
 export * as boardLogic from './modules/board/board.logic.js'
 export { sweepBinaryArtifactRetention } from './modules/artifacts/artifactRetention.js'
 
@@ -26,6 +36,13 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
 export type { TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
+// Where a run's `spec/` read stopped, for the ONE caller that reports the read rather than
+// surviving it: `GET /api/v1/runs/:runId/spec`.
+export type { RunSpecRead } from './modules/execution/RunEvidenceLoader.js'
+// The default judge assessor (the inline LLM verdict producer). Exported so a facade or a test
+// harness can build/replace it explicitly; `createCore` builds one from the model-provider deps
+// by default, so a deployment normally never names it. See `docs/initiatives/judge-registry.md`.
+export { JudgeService, type JudgeServiceDeps } from './modules/execution/JudgeService.js'
 export type { TesterQualityOutcome } from './modules/execution/testerQuality.logic.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
 // The gate / step-resolver extension seams live in @cat-factory/kernel (so a deployment
@@ -39,27 +56,64 @@ export {
   type GateContext,
   type GateFactory,
   recordGateAttempt,
-  registerGate,
-  registeredGateFactories,
-  clearRegisteredGates,
+  GateRegistry,
+  defaultGateRegistry,
   stubGateContext,
   type StepResolverContext,
   type StepResolution,
   type StepCompletionResolver,
   type ResolverContext,
   type StepResolverFactory,
-  registerStepResolver,
-  registeredStepResolverFactories,
-  clearRegisteredStepResolvers,
+  StepResolverRegistry,
+  defaultStepResolverRegistry,
   stubResolverContext,
+  type JudgeRubric,
+  type JudgeSubject,
+  type JudgeAssessor,
+  type JudgeDefinition,
+  type JudgeContext,
+  type JudgeFactory,
+  JudgeRegistry,
+  defaultJudgeRegistry,
+  stubJudgeContext,
+} from '@cat-factory/kernel'
+// The DELEGATED-EXECUTOR seam, re-exported for the same reason the judge seam is: a deployment
+// writing a registration must be able to name its shapes from the package it already depends on,
+// or it adds a direct kernel dependency and risks resolving a second physical copy of the registry
+// the server never reads.
+export {
+  type DelegatedExecutor,
+  type DelegatedExecutorDefinition,
+  type DelegatedExecutorDeps,
+  type DelegatedExecutorPresentation,
+  type DelegatedExecutorTelemetry,
+  type DelegatedExecutorView,
+  type DelegatedFetch,
+  type DelegatedFetchResponse,
+  type DelegatedPollPolicy,
+  type DelegationBrief,
+  type DelegationHandle,
+  type DelegationResult,
+  type DelegationStart,
+  type DelegationUpdate,
+  DelegatedExecutorRegistrationError,
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
 } from '@cat-factory/kernel'
 export {
   driveExecution,
+  MAX_PARK_HOPS,
   type DriveConfig,
-  type DriveLogger,
   type DriveOptions,
   type DriveOutcome,
+  type StepOutcome,
 } from './modules/execution/drive.js'
+export {
+  failureFromAdvanceError,
+  failureFromDriver,
+  failureFromResult,
+  type RunFailure,
+} from './modules/execution/runFailure.js'
 export {
   aggregateCi,
   isCiGreen,
@@ -82,6 +136,15 @@ export {
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
 export {
+  dedicatedParkSurface,
+  findParkedInterviewStep,
+  stepAwaitsDecision,
+  type DedicatedParkSurface,
+} from './modules/execution/step-park.logic.js'
+export { runnableShapeOf } from './modules/execution/retry.logic.js'
+export type { InterviewGate, InterviewView } from './modules/execution/InterviewGateController.js'
+export { followUpLoopBudget } from './modules/execution/followUp.logic.js'
+export {
   POST_RELEASE_HEALTH_AGENT_KIND,
   ON_CALL_AGENT_KIND,
   classifyReleaseHealth,
@@ -98,14 +161,16 @@ export {
   type ResolvedFrontendBinding,
   type LiveEnvHandle,
 } from './modules/execution/frontend-infra.logic.js'
-// A runtime facade tags an eviction it knows to be transient infra churn with this
-// marker so the engine's job.logic classifier recovers it on the larger budget.
-export { TRANSIENT_EVICTION_MARKER } from './modules/execution/job.logic.js'
 
 export {
   RecurringPipelineService,
   type RecurringPipelineServiceDependencies,
 } from './modules/recurring/RecurringPipelineService.js'
+export {
+  InitiativeService,
+  type InitiativeServiceDependencies,
+} from './modules/initiative/InitiativeService.js'
+export * as initiativeLogic from './modules/initiative/initiative.logic.js'
 export {
   TrackerSettingsService,
   type TrackerSettingsServiceDependencies,
@@ -116,14 +181,36 @@ export {
   NotificationService,
   type NotificationServiceDependencies,
 } from './modules/notifications/NotificationService.js'
+// The notification manager. Exported for the FACADES, which build it from the same
+// repository they pass to Core so the routing gate in front of their channels and the
+// settings API a human edits cannot resolve differently.
+export {
+  NotificationSettingsService,
+  type NotificationSettingsServiceDependencies,
+} from './modules/notifications/NotificationSettingsService.js'
 // `RaiseNotificationInput` lives in @cat-factory/kernel (so runtime-neutral extension
 // seams — e.g. a custom gate's `onExhausted` — can build one without depending on this
 // package); surfaced here for discovery alongside the NotificationService that consumes it.
 export type { RaiseNotificationInput } from '@cat-factory/kernel'
 export {
-  MergePresetService,
-  type MergePresetServiceDependencies,
-} from './modules/merge/MergePresetService.js'
+  RiskPolicyService,
+  type RiskPolicyServiceDependencies,
+} from './modules/merge/RiskPolicyService.js'
+// The ACCOUNT tier of the same library, and the merged read every policy consumer holds (ADR 0055).
+export {
+  AccountRiskPolicyService,
+  type AccountRiskPolicyServiceDependencies,
+} from './modules/merge/AccountRiskPolicyService.js'
+export {
+  WorkspaceRiskPolicyLibrary,
+  createWorkspaceRiskPolicyLibrary,
+  type WorkspaceRiskPolicyLibraryDeps,
+} from './modules/merge/WorkspaceRiskPolicyLibrary.js'
+export {
+  MergeTrackRecordService,
+  type MergeTrackRecordServiceDependencies,
+  type RecordMergeDecisionInput,
+} from './modules/merge/MergeTrackRecordService.js'
 export {
   SandboxService,
   type SandboxServiceDependencies,
@@ -140,6 +227,16 @@ export {
   WorkspaceSettingsService,
   type WorkspaceSettingsServiceDependencies,
 } from './modules/settings/WorkspaceSettingsService.js'
+export {
+  TutorialProgressService,
+  type TutorialProgressServiceDependencies,
+} from './modules/tutorial/TutorialProgressService.js'
+export {
+  MAX_DISTINCT_TOURS,
+  OTHER_TOUR,
+  TutorialTelemetryService,
+  type TutorialTelemetryServiceDependencies,
+} from './modules/tutorial/TutorialTelemetryService.js'
 export {
   ReleaseHealthService,
   type ReleaseHealthServiceDependencies,
@@ -165,7 +262,36 @@ export {
   ModelPresetService,
   type ModelPresetServiceDependencies,
   resolvePresetModelForKind,
+  resolvePresetProviderPreference,
 } from './modules/modelPresets/ModelPresetService.js'
+export {
+  ConsensusGroupService,
+  type ConsensusGroupServiceDependencies,
+} from './modules/consensusGroups/ConsensusGroupService.js'
+export {
+  AgentPromptService,
+  type AgentPromptServiceDependencies,
+} from './modules/agentPrompts/AgentPromptService.js'
+export {
+  WorkspaceAgentSettingsService,
+  type WorkspaceAgentSettingsServiceDependencies,
+} from './modules/agentSettings/WorkspaceAgentSettingsService.js'
+export {
+  suppressedTaskTypeIds,
+  TaskTypeSuppressionService,
+  type TaskTypeSuppressionServiceDependencies,
+  type TaskTypeSuppressionView,
+} from './modules/taskTypes/TaskTypeSuppressionService.js'
+// The public inline use-case surface: the deployment's non-container model operations, their
+// discovery projection and the one invocation path. See `backend/docs/inline-use-cases.md`.
+export {
+  InlineUseCaseService,
+  type InlineUseCaseServiceDeps,
+} from './modules/useCases/InlineUseCaseService.js'
+export {
+  LlmInlineUseCaseGenerator,
+  type LlmInlineUseCaseGeneratorDeps,
+} from './modules/useCases/LlmInlineUseCaseGenerator.js'
 export {
   ServiceFragmentDefaultsService,
   type ServiceFragmentDefaultsServiceDependencies,
@@ -176,7 +302,13 @@ export {
   type LlmObservabilityServiceDependencies,
   type RecordLlmCallInput,
   type HarnessCallsRecordInput,
+  type RecordHarnessCalls,
+  // Exported for the same reason `MAX_AGENT_CONTEXT_TOTAL_CHARS` below is: a transport that moves
+  // whole rows has to size its own limits against what capture can store, and deriving them from
+  // the one ceiling beats a second copy that drifts (see `MAX_TELEMETRY_READ_CHARS`).
+  MAX_BODY_CHARS,
   makeHarnessCallRecorder,
+  makeInlineCallRecorder,
 } from './modules/observability/LlmObservabilityService.js'
 export {
   AgentContextObservabilityService,
@@ -185,19 +317,116 @@ export {
   MAX_AGENT_CONTEXT_TOTAL_CHARS,
 } from './modules/observability/AgentContextObservabilityService.js'
 export {
-  classifyCall,
-  isWarningFinishReason,
+  SearchQueryObservabilityService,
+  type SearchQueryObservabilityServiceDependencies,
+  MAX_SEARCH_QUERY_CHARS,
+} from './modules/observability/SearchQueryObservabilityService.js'
+export {
+  ToolCallObservabilityService,
+  type ToolCallObservabilityServiceDependencies,
+  type ToolCallsRecordInput,
+  makeToolCallRecorder,
+  MAX_TOOL_BODY_CHARS,
+} from './modules/observability/ToolCallObservabilityService.js'
+export {
+  PlatformObservabilityService,
+  type PlatformObservabilityServiceDependencies,
+} from './modules/observability/PlatformObservabilityService.js'
+export {
+  ReportsService,
+  type ReportsServiceDependencies,
+} from './modules/reports/ReportsService.js'
+export {
+  REPORT_WINDOWS,
+  buildSpendTrend,
+  foldTotals,
+  toActivityRow,
+  toSpendRow,
+} from './modules/reports/reports.logic.js'
+export {
+  DAY_MS,
+  PLATFORM_WINDOWS,
+  buildTrend,
+  dailyFailureSlices,
+  dailyTrendRows,
+  summarizeGateOutcomes,
+  summarizeOutcomes,
+} from './modules/observability/platform-observability.logic.js'
+export {
+  GateOutcomeRecorder,
+  type GateOutcomeRecorderDeps,
+  type SettledGate,
+} from './modules/observability/GateOutcomeRecorder.js'
+export {
+  sweepPlatformMetrics,
+  distinctAccountIds,
+  type PlatformMetricsSink,
+  type PlatformMetricsSweepDeps,
+} from './modules/observability/platformMetricsSweep.js'
+export {
+  RUN_DAY_ROLLUP_LOOKBACK_MS,
+  createRetentionPass,
+  materializeSpendRollup,
+  type RetentionPass,
+} from './modules/observability/retentionPass.js'
+export {
+  flushOperationalMetrics,
+  type OperationalMetricsFlushDeps,
+  type OperationalMetricsSink,
+} from './modules/observability/operationalMetricsFlush.js'
+export {
+  DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+  alertsHaveRunEvidence,
+  evaluatePlatformHealth,
+  platformAlertFailureKinds,
+  platformAlertReasons,
+  platformHealthCardContent,
+  resolveAccountAlertConfig,
+  type PlatformAlertThresholds,
+  type ResolvedAccountAlertConfig,
+} from './modules/observability/platform-health.logic.js'
+export {
+  spendThresholdCardContent,
+  type SpendAlertSubject,
+} from './modules/spend/spend-alert.logic.js'
+export {
+  cacheHitRate,
+  classifyLlmCallOutcome,
+  isLlmWarningFinishReason,
   outputHeadroomRatio,
   transportOverheadRatio,
   buildLlmMetricsExport,
   type LlmCallOutcome,
 } from './modules/observability/observability.logic.js'
+export {
+  RunDebugService,
+  type DebugCursor,
+  type DebugPage,
+  type RunDebugServiceDependencies,
+} from './modules/debug/RunDebugService.js'
+export {
+  MAX_EVICTION_DETAIL_CHARS,
+  deriveSignals,
+  foldLlmRollup,
+  sliceText,
+  toDebugAgentContextDetail,
+  toDebugAgentContextEntry,
+  toDebugLlmCall,
+  toDebugRunStep,
+  toDebugRunSummary,
+} from './modules/debug/debug.logic.js'
 
 export {
   BootstrapService,
   type BootstrapServiceDependencies,
   type BootstrapPollResult,
 } from './modules/bootstrap/BootstrapService.js'
+export { MonorepoAdoptionAdvisorService } from './modules/bootstrap/MonorepoAdoptionAdvisorService.js'
+export {
+  MonorepoBootstrapController,
+  type MonorepoBootstrapDeps,
+} from './modules/bootstrap/MonorepoBootstrapController.js'
+export { parentDirectoryOf, surveyMonorepo } from './modules/bootstrap/monorepoSurvey.js'
 
 export {
   EnvConfigRepairService,
@@ -205,6 +434,19 @@ export {
   type EnvConfigRepairPollResult,
   type StartEnvConfigRepairInput,
 } from './modules/envConfigRepair/EnvConfigRepairService.js'
+
+export {
+  EnvironmentTestService,
+  type EnvironmentTestServiceDependencies,
+  type EnvironmentTestPollResult,
+} from './modules/environments/EnvironmentTestService.js'
+
+export {
+  EnvironmentProbeStage,
+  type EnvironmentProbeOutcome,
+  type EnvironmentProbeRegistry,
+  type EnvironmentProbeStageDependencies,
+} from './modules/environments/environmentProbeStage.js'
 
 export {
   BoardScanService,
@@ -235,10 +477,14 @@ export * as brainstormLogic from './modules/brainstorm/brainstorm.logic.js'
 
 export {
   type Core,
+  type CoreSpine,
+  type OptionalCoreModules,
   type CoreDependencies,
   type GitHubModule,
   type DocumentsModule,
   type TasksModule,
+  type AssistantModule,
+  type GuidedReviewModule,
   type EnvironmentsModule,
   type RunnersModule,
   type ProvisioningLogsModule,
@@ -253,12 +499,22 @@ export {
   type PreviewModule,
   type IncidentEnrichmentModule,
   type SlackModule,
-  type MergePresetsModule,
+  type MergeTrackRecordModule,
+  type RiskPoliciesModule,
+  type SharedStacksModule,
+  type PreflightsModule,
   type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,
+  type ConsensusGroupsModule,
+  type AgentPromptsModule,
+  type TaskTypeSuppressionModule,
+  type WorkspaceAgentSettingsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
+  type SkillLibraryModule,
+  type FoundationalServiceModule,
+  type InitiativesModule,
   type RecurringModule,
   type TrackerModule,
   type ServicesModule,

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_settings" ADD COLUMN "allow_initiator_pat" integer DEFAULT 1 NOT NULL;

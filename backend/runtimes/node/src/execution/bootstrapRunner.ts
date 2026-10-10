@@ -1,7 +1,10 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
+import { driveJobOptions, sleep } from './pgBossRunner.js'
 import type { DriveConfig } from './drive.js'
 
 // Durable bootstrap driving on pg-boss: the analogue of the Worker's BootstrapWorkflow
@@ -25,17 +28,11 @@ interface BootstrapJob {
 }
 
 function sendOptions(jobId: string, opts: AdvanceQueueOptions): SendOptions {
-  return {
-    singletonKey: jobId,
-    expireInSeconds: opts.expireInSeconds,
-    heartbeatSeconds: opts.heartbeatSeconds,
-    retryLimit: opts.retryLimit,
-    retryDelay: opts.retryDelaySeconds,
-    retryBackoff: true,
-  }
+  // Shared with the execution advance queue rather than restated: the singleton/expiry/heartbeat
+  // semantics and the flat (non-exponential) retry delay are one policy for every drive queue, and
+  // this file used to hold its own copy of it. See {@link driveJobOptions}.
+  return driveJobOptions(jobId, opts)
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
  * Poll a bootstrap run to a terminal state, sleeping between polls — the Node analogue
@@ -44,7 +41,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * change, so a re-drive (retry/sweeper) safely resumes. Returns when the run is done or
  * failed, or when the poll budget is spent (the sweeper re-drives a still-running run).
  */
-export async function driveBootstrap(
+async function driveBootstrap(
   container: ServerContainer,
   workspaceId: string,
   jobId: string,
@@ -56,12 +53,20 @@ export async function driveBootstrap(
   for (let p = 0; p < cfg.jobMaxPolls; p++) {
     const result = await bootstrap.service.pollBootstrapJob(workspaceId, jobId)
     if (result.state === 'done' || result.state === 'failed') return
+    if (result.state === 'awaiting_review') {
+      // The monorepo flow parked on a human decision, which can take days. This drive is done:
+      // the run is not `running`, so the stale-run sweeper leaves it alone, and the review's own
+      // resume enqueues a fresh drive under a new singleton key (which is why the key is the
+      // DRIVE, not the run: the same key would dedupe against this finished job).
+      log.info('bootstrap parked for adoption review', { workspaceId, jobId })
+      return
+    }
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn(
-    { workspaceId, jobId },
-    'bootstrap drive exhausted its poll budget; sweeper will re-drive',
-  )
+  log.warn('bootstrap drive exhausted its poll budget; sweeper will re-drive', {
+    workspaceId,
+    jobId,
+  })
 }
 
 export class PgBossBootstrapRunner implements BootstrapRunner {
@@ -70,11 +75,15 @@ export class PgBossBootstrapRunner implements BootstrapRunner {
     private readonly queueOptions: AdvanceQueueOptions,
   ) {}
 
-  async startRun(workspaceId: string, jobId: string): Promise<void> {
-    await this.boss.send(QUEUE, { workspaceId, jobId }, sendOptions(jobId, this.queueOptions))
+  async startRun(workspaceId: string, jobId: string, driveId: string): Promise<void> {
+    // The singleton key is the DRIVE, not the run: `exclusive` dedupes across created/active/
+    // retry, so a monorepo run's apply drive keyed on the run id would be swallowed as a
+    // duplicate of the survey drive that already finished, and an approved bootstrap would
+    // never write anything. `driveId === jobId` for a single-drive run.
+    await this.boss.send(QUEUE, { workspaceId, jobId }, sendOptions(driveId, this.queueOptions))
   }
 
-  async cancelRun(_workspaceId: string, _jobId: string): Promise<void> {
+  async cancelRun(_workspaceId: string, _driveId: string): Promise<void> {
     // Best-effort: the job is finalized by BootstrapService; any in-flight drive job is a
     // no-op once the job is terminal (pollBootstrapJob returns done/failed immediately).
   }
@@ -89,7 +98,7 @@ export async function startBootstrapWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
-  await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
+  await createQueueWithDeadLetter(boss, QUEUE, { policy: QUEUE_POLICY })
   await boss.work<BootstrapJob>(
     QUEUE,
     { localConcurrency: concurrency },
@@ -99,10 +108,11 @@ export async function startBootstrapWorker(
         try {
           await driveBootstrap(container, workspaceId, jobId, cfg, log)
         } catch (error) {
-          log.error(
-            { workspaceId, jobId, err: error instanceof Error ? error.message : String(error) },
-            'bootstrap drive failed',
-          )
+          log.error('bootstrap drive failed', {
+            workspaceId,
+            jobId,
+            err: getErrorMessage(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }
@@ -110,12 +120,19 @@ export async function startBootstrapWorker(
   )
 }
 
-/** Re-enqueue a stale bootstrap run (used by the stale-run sweeper). */
+/**
+ * Re-enqueue a stale bootstrap run (used by the stale-run sweeper).
+ *
+ * `driveId` is the run's CURRENT drive key, resolved by the caller from the stored row: a
+ * monorepo run re-driven under its run id while its apply drive is live would be deduped away
+ * on one key and duplicated on the other, depending on which phase it is in.
+ */
 export async function reenqueueStaleBootstrap(
   boss: PgBoss,
   workspaceId: string,
   jobId: string,
+  driveId: string,
   queueOptions: AdvanceQueueOptions,
 ): Promise<void> {
-  await boss.send(QUEUE, { workspaceId, jobId }, sendOptions(jobId, queueOptions))
+  await boss.send(QUEUE, { workspaceId, jobId }, sendOptions(driveId, queueOptions))
 }

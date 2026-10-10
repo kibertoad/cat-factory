@@ -9,6 +9,7 @@
 // description — is what every downstream agent step (the bug investigator, the coder)
 // consumes.
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   ClarityItemStatus,
@@ -18,14 +19,22 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/clarity'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const clarity = useClarityStore()
+const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
+// The server-side reply each draft was last seeded/synced to, so the seeding watch can refresh
+// a draft when the recorded reply changes server-side WITHOUT clobbering one the human is
+// actively editing (mirrors the requirements window).
+const seededReply = ref<Record<string, string>>({})
 // Freeform "do it differently" comment when redoing a merge the human was unhappy with.
 const redoComment = ref('')
 const showRedo = ref(false)
@@ -36,12 +45,16 @@ const showRedo = ref(false)
 // fresh each open, so a non-immediate per-window watch used to leave it empty for whichever
 // route (a pipeline step / "Review & approve") didn't warm the cache by selecting the block.
 const { open, blockId, close } = useResultView('clarity-review', {
-  onOpen: (id) => {
+  onOpen: ({ blockId }) => {
     drafts.value = {}
+    seededReply.value = {}
     redoComment.value = ''
     showRedo.value = false
-    void clarity.load(id)
+    void clarity.load(blockId)
   },
+  // Flush any typed-but-unblurred answer before the view tears down (X, backdrop, Escape) so
+  // closing the window never silently drops it (UX-33).
+  onClose: () => void flushDrafts(),
 })
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const review = computed<ClarityReview | null>(() =>
@@ -134,42 +147,86 @@ const STATUS_LABELS: Record<ReviewItemStatus, string> = {
   recommend_requested: 'clarity.itemStatus.recommend_requested',
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
-async function submitReply(item: ClarityReviewItem) {
-  if (!review.value) return
+// Answers auto-save on blur — no explicit "save" button (matching the requirements window, so
+// muscle memory carries across the two, UX-34). The textarea is pre-seeded with the recorded
+// reply (see the watch below); persist only when the trimmed draft actually differs from what's
+// already recorded, so blurring an untouched field is a no-op.
+async function persistDraft(item: ClarityReviewItem, r: ClarityReview | null = review.value) {
+  if (!r || frozen.value) return
   const text = (drafts.value[item.id] ?? '').trim()
-  if (!text) return
+  if (!text || text === (item.reply ?? '').trim()) return
   try {
-    await clarity.reply(review.value, item.id, text)
-    drafts.value = { ...drafts.value, [item.id]: '' }
+    await clarity.reply(r, item.id, text)
   } catch (e) {
-    notifyError(t('clarity.error.saveAnswer'), e)
+    present(e, 'clarity.error.saveAnswer')
   }
 }
+
+// Persist every dirty draft before an action that consumes the answers (or on window close).
+// Snapshots the review up front and threads it through, so the persist completes even if the
+// window closes mid-flush (the reactive `review` goes null the moment the view tears down).
+async function flushDrafts() {
+  const r = review.value
+  if (!r) return
+  for (const item of r.items) {
+    if (item.status === 'open' || item.status === 'answered') await persistDraft(item, r)
+  }
+}
+
+// Seed a draft for each finding from its recorded reply so the textarea shows the current
+// answer (editing in place). New findings from a re-review get seeded; a draft the user hasn't
+// diverged from is refreshed when the recorded reply changes server-side; drafts the user is
+// actively editing are left untouched.
+watch(
+  review,
+  (r) => {
+    if (!r) return
+    const nextDrafts = { ...drafts.value }
+    const nextSeeded = { ...seededReply.value }
+    let changed = false
+    for (const item of r.items) {
+      const reply = item.reply ?? ''
+      if (!(item.id in nextDrafts)) {
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+        continue
+      }
+      const draft = nextDrafts[item.id] ?? ''
+      const seeded = nextSeeded[item.id] ?? ''
+      if (draft === seeded && draft !== reply) {
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+      } else if (draft === reply && seeded !== reply) {
+        nextSeeded[item.id] = reply
+        changed = true
+      }
+    }
+    if (changed) {
+      drafts.value = nextDrafts
+      seededReply.value = nextSeeded
+    }
+  },
+  { immediate: true },
+)
 
 async function setStatus(item: ClarityReviewItem, itemStatus: ClarityItemStatus) {
   if (!review.value) return
   try {
     await clarity.setItemStatus(review.value, item.id, itemStatus)
   } catch (e) {
-    notifyError(t('clarity.error.updateFinding'), e)
+    present(e, 'clarity.error.updateFinding')
   }
 }
 
 async function incorporate(feedback?: string) {
   if (!review.value || !blockId.value) return
   try {
+    await flushDrafts()
     await clarity.incorporate(review.value, feedback)
   } catch (e) {
-    notifyError(t('clarity.error.incorporate'), e)
+    present(e, 'clarity.error.incorporate')
     return
   }
   redoComment.value = ''
@@ -199,7 +256,7 @@ async function reReview() {
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError(t('clarity.error.reReview'), e)
+    present(e, 'clarity.error.reReview')
   }
 }
 
@@ -207,10 +264,11 @@ async function proceed() {
   if (!blockId.value) return
   acting.value = true
   try {
+    await flushDrafts()
     await clarity.proceed(blockId.value)
     toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError(t('clarity.error.proceed'), e)
+    present(e, 'clarity.error.proceed')
   } finally {
     acting.value = false
   }
@@ -230,7 +288,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       toast.add({ title: t('clarity.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError(t('clarity.error.resolve'), e)
+    present(e, 'clarity.error.resolve')
   } finally {
     acting.value = false
   }
@@ -238,407 +296,370 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <!-- header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15"
-          >
-            <UIcon name="i-lucide-bug" class="h-5 w-5 text-indigo-300" />
-          </div>
-          <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">{{ t('clarity.title') }}</h1>
-            <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
-          </div>
-          <div class="ms-auto flex items-center gap-1.5">
-            <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
-              {{ t('clarity.iteration', { current: iteration, max: maxIterations }) }}
-            </UBadge>
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
-          </div>
-        </header>
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-bug"
+    icon-class="bg-primary/15 text-primary"
+    :title="t('clarity.title')"
+    :subtitle="block?.title"
+    variant="centered"
+    width="full"
+    @close="close"
+  >
+    <template v-if="review" #header-extras>
+      <UBadge color="neutral" variant="subtle" size="sm">
+        {{ t('clarity.iteration', { current: iteration, max: maxIterations }) }}
+      </UBadge>
+    </template>
 
-        <div class="flex min-h-0 flex-1">
-          <!-- main column -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            <p class="mb-4 text-sm text-slate-400">
-              <i18n-t keypath="clarity.intro" tag="span" scope="global">
-                <template #level>{{ block?.level ?? t('clarity.itemFallback') }}</template>
-                <template #answer
-                  ><span class="text-slate-300">{{ t('clarity.introAnswer') }}</span></template
-                >
-                <template #dismiss
-                  ><span class="text-slate-300">{{ t('clarity.introDismiss') }}</span></template
-                >
-              </i18n-t>
-            </p>
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <!-- main column -->
+      <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+        <p class="mb-4 text-sm text-muted">
+          <i18n-t keypath="clarity.intro" tag="span" scope="global">
+            <template #level>{{ block?.level ?? t('clarity.itemFallback') }}</template>
+            <template #answer
+              ><span class="text-toned">{{ t('clarity.introAnswer') }}</span></template
+            >
+            <template #dismiss
+              ><span class="text-toned">{{ t('clarity.introDismiss') }}</span></template
+            >
+          </i18n-t>
+        </p>
 
-            <!-- empty state — the reviewer runs automatically as the first pipeline
+        <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
-            <div
-              v-if="!review && !busy && !loading"
-              class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
-            >
-              {{ t('clarity.empty') }}
-            </div>
+        <div
+          v-if="!review && !busy && !loading"
+          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
+        >
+          {{ t('clarity.empty') }}
+        </div>
 
-            <!-- working state (initial fetch on open, or a reviewer pass running) -->
-            <div
-              v-else-if="(busy || loading) && !review"
-              class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ loading && !busy ? t('clarity.loadingReview') : t('clarity.triaging') }}
-            </div>
+        <!-- working state (initial fetch on open, or a reviewer pass running) -->
+        <div
+          v-else-if="(busy || loading) && !review"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+          {{ loading && !busy ? t('clarity.loadingReview') : t('clarity.triaging') }}
+        </div>
 
-            <template v-else-if="review">
-              <!-- converged: reviewer satisfied -->
-              <div
-                v-if="incorporated"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
-              >
-                <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                {{ t('clarity.converged') }}
-              </div>
+        <template v-else-if="review">
+          <!-- converged: reviewer satisfied -->
+          <div
+            v-if="incorporated"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
+          >
+            <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
+            {{ t('clarity.converged') }}
+          </div>
 
-              <!-- iteration cap hit -->
-              <IterationCapPrompt
-                v-else-if="exceeded"
-                class="mb-4"
-                :heading="t('clarity.capHeading', { max: maxIterations })"
-                :detail="t('clarity.capDetail')"
-                :loading="acting"
-                @resolve="resolveExceeded"
-              />
+          <!-- iteration cap hit -->
+          <IterationCapPrompt
+            v-else-if="exceeded"
+            class="mb-4"
+            :heading="t('clarity.capHeading', { max: maxIterations })"
+            :detail="t('clarity.capDetail')"
+            :loading="acting"
+            @resolve="resolveExceeded"
+          />
 
-              <!-- working: the async cycle is running in the driver. Two distinct stages so
+          <!-- working: the async cycle is running in the driver. Two distinct stages so
                    the human can see which of the two LLM calls is currently in progress. -->
-              <div
-                v-else-if="working"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
-              >
-                <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
-                <span v-if="incorporating">
-                  {{ t('clarity.incorporatingStage') }}
-                </span>
-                <span v-else>
-                  {{ t('clarity.reReviewingStage') }}
-                </span>
-              </div>
+          <div
+            v-else-if="working"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <span v-if="incorporating">
+              {{ t('clarity.incorporatingStage') }}
+            </span>
+            <span v-else>
+              {{ t('clarity.reReviewingStage') }}
+            </span>
+          </div>
 
-              <!-- findings to react to -->
-              <div v-if="review.items.length" class="flex flex-col gap-3">
-                <div
-                  v-for="item in sortedItems"
-                  :key="item.id"
-                  class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-                  :class="{ 'opacity-60': item.status === 'dismissed' }"
-                >
-                  <div class="flex items-start gap-2">
-                    <UIcon
-                      :name="CATEGORY_ICON[item.category]"
-                      class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <span class="text-sm font-medium text-white">{{ item.title }}</span>
-                        <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
-                          {{ t(SEVERITY_LABELS[item.severity]) }}
-                        </UBadge>
-                        <UBadge size="xs" variant="outline" color="neutral">
-                          {{ t(CATEGORY_LABELS[item.category]) }}
-                        </UBadge>
-                        <UBadge
-                          size="xs"
-                          variant="soft"
-                          :color="STATUS_COLOR[item.status]"
-                          class="ms-auto"
-                        >
-                          {{ t(STATUS_LABELS[item.status]) }}
-                        </UBadge>
-                      </div>
-                      <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
-                        {{ item.detail }}
-                      </p>
+          <!-- findings to react to -->
+          <div v-if="review.items.length" class="flex flex-col gap-3">
+            <div
+              v-for="item in sortedItems"
+              :key="item.id"
+              class="rounded-lg border border-default bg-default/60 p-3"
+              :class="{ 'opacity-60': item.status === 'dismissed' }"
+            >
+              <div class="flex items-start gap-2">
+                <UIcon
+                  :name="CATEGORY_ICON[item.category]"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-muted"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-sm font-medium text-highlighted">{{ item.title }}</span>
+                    <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
+                      {{ t(SEVERITY_LABELS[item.severity]) }}
+                    </UBadge>
+                    <UBadge size="xs" variant="outline" color="neutral">
+                      {{ t(CATEGORY_LABELS[item.category]) }}
+                    </UBadge>
+                    <UBadge
+                      size="xs"
+                      variant="soft"
+                      :color="STATUS_COLOR[item.status]"
+                      class="ms-auto"
+                    >
+                      {{ t(STATUS_LABELS[item.status]) }}
+                    </UBadge>
+                  </div>
+                  <!-- The reviewer's question is prose, so it takes the measure even though the
+                       card around it takes the span (see the shell's `width` prop: the unit is the
+                       paragraph, not the section). The badge row above and the answer control
+                       below are what the full width is actually for. -->
+                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
+                    {{ item.detail }}
+                  </p>
 
-                      <!-- recorded answer -->
-                      <div
-                        v-if="item.reply"
-                        class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
-                      >
-                        <span class="text-[10px] uppercase tracking-wide text-slate-500">
-                          {{ t('clarity.answerLabel') }}
-                        </span>
-                        <p class="whitespace-pre-line">{{ item.reply }}</p>
-                      </div>
+                  <!-- recorded answer (only for non-editable findings — for editable ones
+                           the answer lives in the textarea below, seeded from the reply) -->
+                  <div
+                    v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
+                    class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
+                  >
+                    <SectionLabel as="span">
+                      {{ t('clarity.answerLabel') }}
+                    </SectionLabel>
+                    <p class="whitespace-pre-line">{{ item.reply }}</p>
+                  </div>
 
-                      <!-- react: answer (relevant) or dismiss (irrelevant). Disabled once the
+                  <!-- react: answer (relevant) or dismiss (irrelevant). The answer
+                           auto-saves on blur — no explicit save button. Disabled once the
                            bug report is clarified / awaiting a higher-level decision. -->
-                      <template v-if="item.status === 'open' || item.status === 'answered'">
-                        <UTextarea
-                          v-model="drafts[item.id]"
-                          :rows="2"
-                          autoresize
-                          size="sm"
-                          class="mt-2 w-full"
-                          :placeholder="
-                            item.reply
-                              ? t('clarity.refineAnswerPlaceholder')
-                              : t('clarity.answerPlaceholder')
-                          "
-                          :disabled="frozen"
-                        />
-                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                          <UButton
-                            color="primary"
-                            variant="soft"
-                            size="xs"
-                            icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim() || frozen"
-                            @click="submitReply(item)"
-                          >
-                            {{ t('clarity.saveAnswer') }}
-                          </UButton>
-                          <UButton
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                            icon="i-lucide-x"
-                            :disabled="frozen"
-                            @click="setStatus(item, 'dismissed')"
-                          >
-                            {{ t('clarity.dismissIrrelevant') }}
-                          </UButton>
-                        </div>
-                      </template>
-
-                      <!-- reopen a dismissed finding -->
-                      <div v-else-if="item.status === 'dismissed'" class="mt-2">
-                        <UButton
-                          color="neutral"
-                          variant="ghost"
-                          size="xs"
-                          icon="i-lucide-rotate-ccw"
-                          :disabled="frozen"
-                          @click="setStatus(item, 'open')"
-                        >
-                          {{ t('clarity.reopen') }}
-                        </UButton>
-                      </div>
+                  <template v-if="item.status === 'open' || item.status === 'answered'">
+                    <UTextarea
+                      v-model="drafts[item.id]"
+                      :rows="2"
+                      autoresize
+                      size="sm"
+                      class="mt-2 w-full"
+                      :placeholder="t('clarity.answerPlaceholder')"
+                      :disabled="frozen"
+                      @blur="persistDraft(item)"
+                    />
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        size="xs"
+                        icon="i-lucide-x"
+                        :disabled="frozen || !access.canExecuteRuns.value"
+                        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                        @click="setStatus(item, 'dismissed')"
+                      >
+                        {{ t('clarity.dismissIrrelevant') }}
+                      </UButton>
                     </div>
+                  </template>
+
+                  <!-- reopen a dismissed finding -->
+                  <div v-else-if="item.status === 'dismissed'" class="mt-2">
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-lucide-rotate-ccw"
+                      :disabled="frozen || !access.canExecuteRuns.value"
+                      :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                      @click="setStatus(item, 'open')"
+                    >
+                      {{ t('clarity.reopen') }}
+                    </UButton>
                   </div>
                 </div>
               </div>
-
-              <!-- clarified document: the standard-format bug report -->
-              <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
-                <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
-                  <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">
-                    {{ incorporated ? t('clarity.docHeading') : t('clarity.docHeadingDraft') }}
-                  </span>
-                </div>
-                <div v-for="s in outline.sections" :key="s.id" class="mb-2">
-                  <button
-                    v-if="s.title"
-                    class="group flex w-full items-center gap-2 text-start"
-                    @click="toggle(s.id)"
-                  >
-                    <UIcon
-                      name="i-lucide-chevron-right"
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
-                      :class="collapsed[s.id] ? '' : 'rotate-90'"
-                    />
-                    <span
-                      class="font-semibold text-white"
-                      :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
-                      v-html="s.titleHtml"
-                    />
-                  </button>
-                  <div
-                    v-show="!s.title || !collapsed[s.id]"
-                    class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
-                    v-html="s.bodyHtml"
-                  />
-                </div>
-              </section>
-            </template>
+            </div>
           </div>
 
-          <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
-            <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="review" class="space-y-2 text-xs text-slate-400">
-                <div class="flex items-center justify-between">
-                  <span>{{ t('clarity.rail.findings') }}</span>
-                  <span class="text-slate-300">{{ review.items.length }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('clarity.rail.open') }}</span>
-                  <span class="text-slate-300">{{ openCount }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('clarity.rail.answered') }}</span>
-                  <span class="text-slate-300">{{ answeredCount }}</span>
-                </div>
-                <div v-if="review.model" class="flex items-center justify-between">
-                  <span>{{ t('clarity.rail.model') }}</span>
-                  <span class="truncate ps-2 text-slate-500">{{ review.model }}</span>
-                </div>
-              </div>
-
-              <!-- action: ready (answer → incorporate / proceed) -->
-              <div
-                v-if="review && status === 'ready'"
-                class="space-y-2 border-t border-slate-800 pt-4"
-              >
-                <UButton
-                  v-if="canProceed"
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-arrow-right"
-                  :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
-                  :loading="acting"
-                  @click="proceed"
-                >
-                  {{ t('clarity.proceedNothing') }}
-                </UButton>
-                <UButton
-                  v-else
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-sparkles"
-                  :loading="reworking"
-                  :disabled="!canIncorporate"
-                  @click="incorporate()"
-                >
-                  {{ t('clarity.incorporateAnswers') }}
-                </UButton>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  <template v-if="canProceed">
-                    {{ t('clarity.hint.proceed') }}
-                  </template>
-                  <template v-else-if="canIncorporate">
-                    {{ t('clarity.hint.incorporate') }}
-                  </template>
-                  <template v-else> {{ t('clarity.hint.answerAll') }} </template>
-                </p>
-              </div>
-
-              <!-- action: merged (inspect → re-review / redo) -->
-              <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
-                <UButton
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-sparkles"
-                  :loading="busy"
-                  @click="reReview"
-                >
-                  {{ busy ? t('clarity.reReviewing') : t('clarity.looksGoodReReview') }}
-                </UButton>
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-pencil"
-                  @click="showRedo = !showRedo"
-                >
-                  {{ t('clarity.redoIncorporation') }}
-                </UButton>
-                <div v-if="showRedo" class="space-y-2">
-                  <UTextarea
-                    v-model="redoComment"
-                    :rows="3"
-                    autoresize
-                    size="sm"
-                    class="w-full"
-                    :placeholder="t('clarity.redoPlaceholder')"
-                  />
-                  <UButton
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    block
-                    icon="i-lucide-wand-sparkles"
-                    :loading="reworking"
-                    :disabled="!redoComment.trim()"
-                    @click="incorporate(redoComment.trim())"
-                  >
-                    {{ t('clarity.redoWithDirection') }}
-                  </UButton>
-                </div>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  {{ t('clarity.redoHint') }}
-                </p>
-              </div>
-
-              <div
-                v-if="review && incorporated"
-                class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
-              >
-                {{ t('clarity.incorporatedFooter') }}
-              </div>
+          <!-- clarified document: the standard-format bug report -->
+          <section v-if="outline" class="mt-6 border-t border-default pt-5">
+            <div class="mb-3 flex items-center gap-1.5 text-2xs text-app-success-400">
+              <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
+              <span class="font-semibold uppercase tracking-wide">
+                {{ incorporated ? t('clarity.docHeading') : t('clarity.docHeadingDraft') }}
+              </span>
             </div>
-          </aside>
-        </div>
+            <!-- The same reading measure the findings' own prose takes above (see the shell's
+                 `width` prop): the window is `full`-width now, and this is continuous prose that
+                 would otherwise run to 200-character lines. -->
+            <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
+              <button
+                v-if="s.title"
+                class="group flex w-full items-center gap-2 text-start"
+                @click="toggle(s.id)"
+              >
+                <UIcon
+                  name="i-lucide-chevron-right"
+                  class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform"
+                  :class="collapsed[s.id] ? '' : 'rotate-90'"
+                />
+                <span
+                  class="font-semibold text-highlighted"
+                  :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
+                  v-html="s.titleHtml"
+                />
+              </button>
+              <div
+                v-show="!s.title || !collapsed[s.id]"
+                class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
+                v-html="s.bodyHtml"
+              />
+            </div>
+          </section>
+        </template>
       </div>
+
+      <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`
+               (never hidden — the gate is otherwise unadvanceable on a laptop split-screen /
+               tablet, UX-32). The informational stats collapse away below `lg` to keep the
+               bottom bar compact; the actions themselves always show. -->
+      <aside
+        class="flex w-full shrink-0 flex-col border-t border-default lg:w-72 lg:border-s lg:border-t-0"
+      >
+        <div class="flex flex-col gap-4 px-4 py-5">
+          <div v-if="review" class="hidden space-y-2 text-xs text-muted lg:block">
+            <div class="flex items-center justify-between">
+              <span>{{ t('clarity.rail.findings') }}</span>
+              <span class="text-toned">{{ review.items.length }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('clarity.rail.open') }}</span>
+              <span class="text-toned">{{ openCount }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('clarity.rail.answered') }}</span>
+              <span class="text-toned">{{ answeredCount }}</span>
+            </div>
+            <div v-if="review.model" class="flex items-center justify-between">
+              <span>{{ t('clarity.rail.model') }}</span>
+              <span class="truncate ps-2 text-dimmed">{{
+                models.labelForRef(review.model) ?? review.model
+              }}</span>
+            </div>
+          </div>
+
+          <!-- action: ready (answer → incorporate / proceed) -->
+          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-default pt-4">
+            <UButton
+              v-if="canProceed"
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-arrow-right"
+              :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
+              :loading="acting"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="proceed"
+            >
+              {{ t('clarity.proceedNothing') }}
+            </UButton>
+            <UButton
+              v-else
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-wand-sparkles"
+              :loading="reworking"
+              :disabled="!canIncorporate || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="incorporate()"
+            >
+              {{ t('clarity.incorporateAnswers') }}
+            </UButton>
+            <p class="text-2xs leading-relaxed text-dimmed">
+              <template v-if="canProceed">
+                {{ t('clarity.hint.proceed') }}
+              </template>
+              <template v-else-if="canIncorporate">
+                {{ t('clarity.hint.incorporate') }}
+              </template>
+              <template v-else> {{ t('clarity.hint.answerAll') }} </template>
+            </p>
+          </div>
+
+          <!-- action: merged (inspect → re-review / redo) -->
+          <div v-if="review && merged" class="space-y-2 border-t border-default pt-4">
+            <UButton
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-sparkles"
+              :loading="busy"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="reReview"
+            >
+              {{ busy ? t('clarity.reReviewing') : t('clarity.looksGoodReReview') }}
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              block
+              icon="i-lucide-pencil"
+              @click="
+                () => {
+                  showRedo = !showRedo
+                }
+              "
+            >
+              {{ t('clarity.redoIncorporation') }}
+            </UButton>
+            <div v-if="showRedo" class="space-y-2">
+              <UTextarea
+                v-model="redoComment"
+                :rows="3"
+                autoresize
+                size="sm"
+                class="w-full"
+                :placeholder="t('clarity.redoPlaceholder')"
+              />
+              <UButton
+                color="primary"
+                variant="soft"
+                size="xs"
+                block
+                icon="i-lucide-wand-sparkles"
+                :loading="reworking"
+                :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                @click="incorporate(redoComment.trim())"
+              >
+                {{ t('clarity.redoWithDirection') }}
+              </UButton>
+            </div>
+            <p class="text-2xs leading-relaxed text-dimmed">
+              {{ t('clarity.redoHint') }}
+            </p>
+          </div>
+
+          <div
+            v-if="review && incorporated"
+            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
+          >
+            {{ t('clarity.incorporatedFooter') }}
+          </div>
+        </div>
+      </aside>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>
 
 <style scoped>
 .pl-5\.5 {
   padding-left: 1.375rem;
 }
-/* Minimal CommonMark styling for the clarified bug-report reader (mirrors the
-   prose review window's reader-prose). */
-.reader-prose :deep(p) {
-  margin: 0.4rem 0;
-}
-.reader-prose :deep(ul),
-.reader-prose :deep(ol) {
-  margin: 0.4rem 0;
-  padding-left: 1.25rem;
-  list-style: revert;
-}
-.reader-prose :deep(li) {
-  margin: 0.2rem 0;
-}
-.reader-prose :deep(strong) {
-  color: rgb(226 232 240);
-  font-weight: 600;
-}
-.reader-prose :deep(code) {
-  border-radius: 0.25rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.05rem 0.3rem;
-  font-size: 0.85em;
-}
-.reader-prose :deep(pre) {
-  margin: 0.5rem 0;
-  overflow-x: auto;
-  border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.75rem;
-}
-.reader-prose :deep(blockquote) {
-  margin: 0.5rem 0;
-  border-left: 2px solid rgb(51 65 85);
-  padding-left: 0.75rem;
-  color: rgb(148 163 184);
-}
+/* The rendered-markdown presentation is the SHARED global `.reader-prose` sheet
+   (`assets/css/prose.css`), not a local copy: this reader shows the same agent-authored
+   markdown the step reader does, and a per-window duplicate is how the review surfaces
+   drift apart one property at a time. */
 </style>

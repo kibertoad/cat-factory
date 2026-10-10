@@ -33,6 +33,41 @@ describe('comboKeyFor', () => {
   it('joins agentKind, model and promptVersion', () => {
     expect(comboKeyFor('coder', 'claude', 3)).toBe('coder|claude|3')
   })
+
+  it('keys a workspace-edited prompt apart from the shipped one', () => {
+    expect(comboKeyFor('coder', 'claude', 3, 7)).toBe('coder|claude|3|w7')
+  })
+
+  it('keys a varied step by the variant id AND a fingerprint of its contribution', () => {
+    // The fingerprint is what stops a re-worded variant inheriting the streak its previous
+    // wording earned, since re-registering the same id is a supported way to re-word one.
+    expect(
+      comboKeyFor('coder', 'claude', 3, undefined, { id: 'org:tdd', fingerprint: 'abc' }),
+    ).toBe('coder|claude|3|vorg:tdd@abc')
+    expect(
+      comboKeyFor('coder', 'claude', 3, undefined, { id: 'org:tdd', fingerprint: 'def' }),
+    ).not.toBe(comboKeyFor('coder', 'claude', 3, undefined, { id: 'org:tdd', fingerprint: 'abc' }))
+  })
+
+  it('carries both suffixes, variant first, when a workspace edited a varied step kind', () => {
+    expect(comboKeyFor('coder', 'claude', 3, 7, { id: 'org:tdd', fingerprint: 'abc' })).toBe(
+      'coder|claude|3|vorg:tdd@abc|w7',
+    )
+  })
+
+  it('leaves a variant that contributed NOTHING out of the key entirely', () => {
+    // Withdrawn mid-run, or its replacement displaced by a workspace override with no addition of
+    // its own: the text that ran is the shipped or workspace prompt alone, and the key describes
+    // the text — so it must match the key an unvaried step of the same shape gets.
+    expect(comboKeyFor('coder', 'claude', 3, undefined, { id: 'org:tdd' })).toBe('coder|claude|3')
+    expect(comboKeyFor('coder', 'claude', 3, 7, { id: 'org:tdd' })).toBe('coder|claude|3|w7')
+  })
+
+  it('keeps the key an unvaried, unedited step always had', () => {
+    // The migration property: every combo verified before variants existed keeps its key, so no
+    // streak is silently reset by this feature landing.
+    expect(comboKeyFor('coder', 'claude', 3, undefined, undefined)).toBe('coder|claude|3')
+  })
 })
 
 describe('isHighGrade', () => {

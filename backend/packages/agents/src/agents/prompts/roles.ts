@@ -9,6 +9,34 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
  */
 export const TASK_ESTIMATOR_AGENT_KIND = 'task-estimator'
 
+/**
+ * The core POST-implementation task-triage agent kind: the estimator's retrospective twin. Runs
+ * read-only in a container after the work landed, scores the SAME three axes against the change
+ * that was actually made, and the engine persists it on the block as an `observed` estimate,
+ * carrying whatever forecast it replaced.
+ *
+ * A kind of its own rather than a mode of {@link TASK_ESTIMATOR_AGENT_KIND}: the estimator is
+ * INLINE by construction (it is a member of the inline-engine taxonomy the preset-satisfiability
+ * guard keys off) and this one needs a real checkout to read a diff. One kind cannot be classified
+ * both ways. See `backend/docs/task-assessment.md`.
+ */
+export const TASK_REASSESSOR_AGENT_KIND = 'task-reassessor'
+
+/**
+ * The three-axis JSON contract the engine PARSES off a triage reply (`coerceTaskEstimate` for the
+ * estimator, `resolveMergerStep` for the merger).
+ *
+ * Named rather than written twice inline because it is an invariant of how the platform RUNS these
+ * kinds, not editorial content: it is an `OVERRIDE_PRESERVED_FRAGMENTS` member, so a workspace that
+ * rewrites the role text around it gets it back. Without that, a promoted Sandbox candidate (the
+ * estimator is a promotable catalog kind) could delete the only statement of the shape the engine
+ * reads, and every later estimate would parse to nothing, silently disabling every step gated on
+ * it. The bespoke kinds solve the same problem with a `{ role, directives }` split; a kind whose
+ * prompt comes from a built-in TRACK cannot, because an override replaces the whole track prompt.
+ */
+export const TRIAGE_JSON_CONTRACT =
+  'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.'
+
 // Thin one-line role prompts for the built-in agent kinds that do NOT have a
 // built-out, multi-section prompt elsewhere (the standard phases, acceptance,
 // business-logic, mock, testing and companion tracks each own their own file).
@@ -25,13 +53,10 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // `tracker` step files as an issue and a `coder` step then implements.
   analysis:
     'You are a senior engineer performing a technical-debt audit of this service. Explore the repository (build scripts, dependencies, tests, hot spots, TODO/FIXME markers, outdated patterns) and identify the highest-value technical debt to address now. Produce a single prioritized markdown report: for each item give a short title, the affected area, why it matters, and a concrete suggested fix. Lead with the one item most worth doing first, since it will be turned into a tracked issue and implemented.',
-  // Opens a bug-fix pipeline. Clones the repo and reads the codebase from the raw bug
-  // report to enrich it before triage. It MUST be read-only (no edits / commits / PR);
-  // its prose report feeds the downstream clarity reviewer (the triage subject) and the
-  // coder (a non-binding lead). It only proposes a root-cause hypothesis when reasonably
-  // confident — a low-confidence guess would misdirect the fix.
-  'bug-investigator':
-    'You are a senior engineer triaging a bug report against this codebase before anyone fixes it. Read the relevant code paths, tests and configuration to understand the reported behaviour. Produce a single Markdown report with these sections: "## Enriched bug report" — restate the bug with the technical context you found (the components/files involved, how the affected code currently behaves, and any missing repro/expected-vs-actual/environment details you can now fill in); "## Relevant files" — a short bullet list of the files most likely involved. ONLY when you are reasonably confident, add a "## Working hypothesis" section naming the suspected root cause and marking it explicitly as a non-binding lead to be confirmed or disproved during the fix — if you are not reasonably confident, OMIT this section entirely rather than guessing. Do not propose or write a fix.',
+  // NOTE: `bug-investigator` is no longer a prose ROLE — it is a STRUCTURED
+  // `container-explore` kind registered via `registerAgentKind` in
+  // `agents/kinds/bug-investigator.ts` (its structured `clarity`/`questions` drive the
+  // downstream clarity gate). It intentionally has no entry here.
   documenter:
     'You are a technical writer. Produce concise developer documentation and a usage example for the building block.',
   integrator:
@@ -41,7 +66,7 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // to a human at an approval gate (to reject items or supply missing information)
   // before the architect proceeds, so it must read as a clear, editable list.
   'requirements-review':
-    'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. Surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds. Focus on business requirements and behaviours, not on technical questions that architect will answer later.',
+    'You are a meticulous product / requirements analyst reviewing the collected requirements for a single building block before an engineer designs or builds it. This stage settles PRODUCT AND BUSINESS requirements ONLY — what the software must do for its users and the business, and the rules and outcomes that govern that behaviour. It never settles HOW the software will be built: technology and library choice, architecture and component decomposition, API, schema and data-model shape, algorithms and performance techniques, infrastructure, and coding or test approach all belong to the later ARCHITECT and RESEARCHER steps, which refine them with the repository and the technical specification in hand. Within the product scope, surface everything that would block confident implementation: missing information (gaps), ambiguities that need clarification, unstated assumptions, risks, and open questions. Be specific, concrete and actionable, and phrase each item so a product owner can answer it directly. Do NOT invent answers or requirements. Before raising a point, apply the test: could a product owner who does not read code answer it from business knowledge alone? If not, drop it entirely rather than raising it as a minor note. Group your findings under clear headings and present a concise, readable markdown list — a human will review and edit it before the architect proceeds. Raising nothing is a valid result when the product intent is already clear, and is the normal result for purely technical work.',
   // The two brainstorm (structured-dialogue) gate agents. These are driven inline by
   // `BrainstormService` with their own system prompts (see prompts/brainstorm.ts); the role
   // lines here are only a fallback for any generic `systemPromptFor` lookup.
@@ -67,11 +92,25 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // and to surface Complexity/Risk/Impact ratings in the UI. Mirror of `merger`'s
   // JSON-only contract, but predictive (pre-implementation) rather than retrospective.
   'task-estimator':
-    'You are a delivery lead triaging a software task BEFORE any design or implementation has begun. From the clarified requirements and any specification context provided, predict three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work will be — scope, coupling, unknowns), risk (how likely the change is to break something or go wrong), and impact (the blast radius / how much and who it affects if it does). Be calibrated and conservative; do not anchor every axis to the middle. Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. The rationale must briefly justify each score.',
+    'You are a delivery lead triaging a software task BEFORE any design or implementation has begun. From the clarified requirements and any specification context provided, predict three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work will be — scope, coupling, unknowns), risk (how likely the change is to break something or go wrong), and impact (the blast radius / how much and who it affects if it does). Be calibrated and conservative; do not anchor every axis to the middle. ' +
+    TRIAGE_JSON_CONTRACT +
+    ' The rationale must briefly justify each score.',
+  // The estimator's retrospective twin: same three axes, same JSON contract, but scored from the
+  // change that was actually made rather than predicted from the requirements. Runs read-only in
+  // a container with the base checkout plus the pull request's head, so what it reads is the diff.
+  //
+  // It is deliberately NOT told the earlier forecast. An assessment handed the number it is
+  // revising anchors on it, and the delta is not the model's to report anyway: the platform
+  // derives it from the two records (see `reviseTaskEstimate`).
+  'task-reassessor':
+    'You are a delivery lead assessing a software task AFTER its implementation has landed. Read the change that was actually made and score three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work turned out to be: the scope it reached, the coupling it had to deal with, the unknowns it hit), risk (how likely THIS change is to break something, judged from what it touches and how well it is covered), and impact (its real blast radius: how much of the system, and how many users, it affects). Judge what the diff shows, not what the task description hoped for; a task that was described as sweeping and landed as a two-line change is a low-complexity change. Be calibrated and conservative; do not anchor every axis to the middle. ' +
+    TRIAGE_JSON_CONTRACT +
+    ' The rationale must briefly justify each score, naming what in the change drove it.',
   // Runs in a container against the PR head branch as the final pipeline step. It
   // ONLY assesses — it must not modify the repo — and returns a JSON score object.
   merger:
-    'You are a release manager assessing a pull request before merge. Inspect the change against the base branch and judge three axes, each from 0 (trivial/safe) to 1 (severe): complexity, risk and impact. Be conservative. Make no commits. Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.',
+    'You are a release manager assessing a pull request before merge. Inspect the change against the base branch and judge three axes, each from 0 (trivial/safe) to 1 (severe): complexity, risk and impact. Be conservative. Make no commits. ' +
+    TRIAGE_JSON_CONTRACT,
 }
 
 /**

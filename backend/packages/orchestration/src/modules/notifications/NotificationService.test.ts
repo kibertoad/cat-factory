@@ -3,6 +3,7 @@ import type {
   Clock,
   IdGenerator,
   Notification,
+  NotificationDeliveryReason,
   NotificationRepository,
   NotificationType,
   WorkspaceRepository,
@@ -31,8 +32,49 @@ function fakeRepo() {
         ) ?? null
       )
     },
+    async listOpenByBlock(_ws, blockId) {
+      return [...rows.values()]
+        .filter((n) => n.status === 'open' && n.blockId === blockId)
+        .sort((a, b) => b.createdAt - a.createdAt)
+    },
+    async findOpenByType(_ws, type) {
+      // Block-LESS dedup: the open card of `type` with no block, newest first.
+      return (
+        [...rows.values()]
+          .filter((n) => n.status === 'open' && n.blockId === null && n.type === type)
+          .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null
+      )
+    },
+    async listOpenByType(workspaceIds, type) {
+      // Batched block-less dedup: the newest open block-less card of `type` per workspace.
+      // The fake keys rows by id (single workspace), so all requested ids share `rows`.
+      const out = new Map<string, Notification>()
+      const newest = [...rows.values()]
+        .filter((n) => n.status === 'open' && n.blockId === null && n.type === type)
+        .sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (newest) for (const ws of workspaceIds) out.set(ws, newest)
+      return out
+    },
+    async listLatestByType(workspaceIds, type) {
+      // As above but with NO status filter: the newest block-less card of `type`, dismissed or not.
+      const out = new Map<string, Notification>()
+      const newest = [...rows.values()]
+        .filter((n) => n.blockId === null && n.type === type)
+        .sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (newest) for (const ws of workspaceIds) out.set(ws, newest)
+      return out
+    },
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
+    },
+    async claimForAction(_ws, id, resolvedAt) {
+      // Mirror the real repos' conditional UPDATE ... RETURNING: flip `open` → `acted` only
+      // when the row is still open, returning the claimed row (null otherwise).
+      const existing = rows.get(id)
+      if (!existing || existing.status !== 'open') return null
+      const claimed: Notification = { ...existing, status: 'acted', resolvedAt }
+      rows.set(id, claimed)
+      return { ...claimed }
     },
     async escalateStaleOpen(_ws, cutoff) {
       // Mirror the real repos' single UPDATE ... RETURNING: flip every open, still-normal
@@ -47,6 +89,18 @@ function fakeRepo() {
         escalated.push({ ...updated })
       }
       return escalated
+    },
+    async dismissOpenByType(_ws, type, resolvedAt) {
+      // Mirror the real repos' single UPDATE ... RETURNING: settle EVERY open block-less card of
+      // the type (a raced raise can leave two) and return the dismissed rows, unordered.
+      const dismissed: Notification[] = []
+      for (const n of rows.values()) {
+        if (n.status !== 'open' || n.blockId !== null || n.type !== type) continue
+        const updated: Notification = { ...n, status: 'dismissed', resolvedAt }
+        rows.set(n.id, updated)
+        dismissed.push({ ...updated })
+      }
+      return dismissed
     },
     async upsertOpenForBlock(_ws, n) {
       // Mirror the partial-index dedup: an existing open card for (block, type) is updated
@@ -70,6 +124,18 @@ function fakeRepo() {
       rows.set(n.id, { ...n })
       return { ...n }
     },
+    async deleteResolvedOlderThan(cutoff) {
+      // Mirror the real repos' retention prune: drop terminal (acted/dismissed) rows whose
+      // resolvedAt is at or before the cutoff; open rows (and null resolvedAt) are kept.
+      let removed = 0
+      for (const [id, n] of rows) {
+        if (n.status === 'open') continue
+        if (n.resolvedAt == null || n.resolvedAt > cutoff) continue
+        rows.delete(id)
+        removed += 1
+      }
+      return removed
+    },
   }
   return { repo, rows }
 }
@@ -79,20 +145,27 @@ function makeService(now: () => number) {
   let seq = 0
   const idGenerator: IdGenerator = { next: (p = 'id') => `${p}_${++seq}` }
   const clock: Clock = { now }
-  const workspaceRepository = {} as unknown as WorkspaceRepository
+  // `act` guards on the workspace existing; a stub whose `get` resolves is enough here.
+  const workspaceRepository = {
+    async get(id: string) {
+      return { id } as unknown
+    },
+  } as unknown as WorkspaceRepository
   const delivered: Notification[] = []
+  const reasons: Array<{ id: string; reason: NotificationDeliveryReason }> = []
   const service = new NotificationService({
     notificationRepository: repo,
     workspaceRepository,
     idGenerator,
     clock,
     channel: {
-      async deliver(_ws, n) {
+      async deliver(_ws, n, reason) {
         delivered.push(n)
+        reasons.push({ id: n.id, reason })
       },
     },
   })
-  return { service, rows, delivered }
+  return { service, rows, delivered, reasons }
 }
 
 const raiseInput = (over: Partial<Parameters<NotificationService['raise']>[1]> = {}) => ({
@@ -165,6 +238,111 @@ describe('NotificationService', () => {
     expect(await service.listOpen(WS)).toHaveLength(0)
   })
 
+  it('de-dupes a block-less card by (workspace, type), re-delivering only on content change', async () => {
+    const { service, rows, delivered } = makeService(() => time)
+    const blockLess = (over: Partial<Parameters<NotificationService['raise']>[1]> = {}) =>
+      raiseInput({ type: 'platform_health', blockId: null, executionId: null, ...over })
+
+    // First raise creates the card and delivers it.
+    const first = await service.raise(WS, blockLess())
+    expect(delivered).toHaveLength(1)
+
+    // An identical re-raise reuses the id (no stacking) and does NOT re-deliver.
+    const second = await service.raise(WS, blockLess())
+    expect(second.id).toBe(first.id)
+    expect(await service.listOpen(WS)).toHaveLength(1)
+    expect(delivered).toHaveLength(1)
+
+    // A content change (the firing-condition set changed) re-delivers the SAME card.
+    const third = await service.raise(WS, blockLess({ body: 'now also slow' }))
+    expect(third.id).toBe(first.id)
+    expect(rows.get(first.id)?.body).toBe('now also slow')
+    expect(delivered).toHaveLength(2)
+  })
+
+  it('clearByType dismisses the open block-less card, and is a no-op when none is open', async () => {
+    const { service, rows } = makeService(() => time)
+    expect(await service.clearByType(WS, 'platform_health')).toEqual([])
+
+    const raised = await service.raise(
+      WS,
+      raiseInput({ type: 'platform_health', blockId: null, executionId: null }),
+    )
+    const cleared = await service.clearByType(WS, 'platform_health')
+    expect(cleared.map((n) => n.id)).toEqual([raised.id])
+    expect(rows.get(raised.id)?.status).toBe('dismissed')
+    expect(await service.listOpen(WS)).toHaveLength(0)
+    // Idempotent: nothing open now.
+    expect(await service.clearByType(WS, 'platform_health')).toEqual([])
+  })
+
+  it('clearByType settles a RACED pair of block-less cards, newest first', async () => {
+    // A block-less card is exempt from the open-dedup unique index (NULLs are distinct), so
+    // `raise`'s read-before-write can stack two of them when two writers land in one tick. The
+    // clear is what heals that: settling only the newest would leave the other open forever, and
+    // the escalation sweep would flip it red for a budget the operator has already raised.
+    const { service, rows, delivered } = makeService(() => time)
+    for (const [id, createdAt] of [
+      ['ntf_loser', 10],
+      ['ntf_winner', 20],
+    ] as const) {
+      rows.set(id, {
+        id,
+        type: 'budget_paused',
+        status: 'open',
+        severity: 'normal',
+        blockId: null,
+        executionId: null,
+        title: 'Runs paused: spend budget reached',
+        body: 'raise the budget',
+        payload: null,
+        createdAt,
+        resolvedAt: null,
+      })
+    }
+    delivered.length = 0
+
+    const cleared = await service.clearByType(WS, 'budget_paused')
+
+    // Newest first, so a caller reporting "the card that resolved" (the platform-health sweep
+    // quotes its id on the outbound edge) names the one `findOpenByType` would have picked.
+    expect(cleared.map((n) => n.id)).toEqual(['ntf_winner', 'ntf_loser'])
+    expect(rows.get('ntf_loser')?.status).toBe('dismissed')
+    expect(rows.get('ntf_winner')?.status).toBe('dismissed')
+    expect(await service.listOpen(WS)).toHaveLength(0)
+    // Both leave the inbox in real time, not just the reported one.
+    expect(delivered.map((n) => n.id)).toEqual(['ntf_winner', 'ntf_loser'])
+  })
+
+  it('clearOnBlock settles the block card with the action given, and is a no-op when none is open', async () => {
+    const { service, rows } = makeService(() => time)
+    expect(await service.clearOnBlock(WS, 'blk_1', 'human_test_ready', 'act')).toBeNull()
+
+    const raised = await service.raise(
+      WS,
+      raiseInput({ type: 'human_test_ready', blockId: 'blk_1' }),
+    )
+    // A card of the same type on ANOTHER block, and another type on THIS one: neither is the ask.
+    const other = await service.raise(
+      WS,
+      raiseInput({ type: 'human_test_ready', blockId: 'blk_2' }),
+    )
+    const sibling = await service.raise(WS, raiseInput({ type: 'merge_review', blockId: 'blk_1' }))
+
+    const cleared = await service.clearOnBlock(WS, 'blk_1', 'human_test_ready', 'act')
+
+    // `acted`, not `dismissed`: the human did the thing the card asked for, and the inbox
+    // renders the two differently.
+    expect(cleared?.id).toBe(raised.id)
+    expect(rows.get(raised.id)?.status).toBe('acted')
+    expect(rows.get(other.id)?.status).toBe('open')
+    expect(rows.get(sibling.id)?.status).toBe('open')
+    // Idempotent, and `dismiss` is the default for the gate-driven clears.
+    expect(await service.clearOnBlock(WS, 'blk_1', 'human_test_ready', 'act')).toBeNull()
+    expect((await service.clearOnBlock(WS, 'blk_1', 'merge_review'))?.id).toBe(sibling.id)
+    expect(rows.get(sibling.id)?.status).toBe('dismissed')
+  })
+
   it('raise returns the canonical persisted card when a concurrent insert won (no phantom id)', async () => {
     const { repo, rows } = fakeRepo()
     // A concurrent raise already inserted THE open card for (blk_1, decision_required)…
@@ -213,6 +391,79 @@ describe('NotificationService', () => {
     expect(await service.get(WS, result.id)).not.toBeNull()
   })
 
+  it('act claims the card, runs the side effect once, and marks it acted + delivered', async () => {
+    const { service, rows, delivered } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'merge_review' }))
+
+    let calls = 0
+    const acted = await service.act(WS, raised.id, async () => {
+      calls++
+    })
+    expect(calls).toBe(1)
+    expect(acted.status).toBe('acted')
+    expect(acted.resolvedAt).toBe(time)
+    expect(rows.get(raised.id)?.status).toBe('acted')
+    expect(delivered.at(-1)?.status).toBe('acted')
+  })
+
+  it('act on an already-resolved card is a no-op (idempotent, no double side effect)', async () => {
+    const { service, rows } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'merge_review' }))
+    await service.act(WS, raised.id, async () => {})
+
+    let calls = 0
+    const again = await service.act(WS, raised.id, async () => {
+      calls++
+    })
+    expect(calls).toBe(0)
+    expect(again.status).toBe('acted')
+    expect(rows.get(raised.id)?.status).toBe('acted')
+  })
+
+  it('two concurrent acts fire the side effect EXACTLY once (atomic claim)', async () => {
+    const { service } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'merge_review' }))
+
+    let calls = 0
+    const [a, b] = await Promise.all([
+      service.act(WS, raised.id, async () => {
+        calls++
+      }),
+      service.act(WS, raised.id, async () => {
+        calls++
+      }),
+    ])
+    // The atomic `open` → `acted` claim admits only one act; the loser skips its side effect
+    // and returns the settled row.
+    expect(calls).toBe(1)
+    expect(a.status).toBe('acted')
+    expect(b.status).toBe('acted')
+  })
+
+  it('act reopens the card and rethrows when the side effect fails, staying retryable', async () => {
+    const { service, rows, delivered } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'ci_failed' }))
+
+    await expect(
+      service.act(WS, raised.id, async () => {
+        throw new Error('retry failed')
+      }),
+    ).rejects.toThrow('retry failed')
+
+    // Reverted to open so the human can act again, and re-delivered as open.
+    expect(rows.get(raised.id)?.status).toBe('open')
+    expect(rows.get(raised.id)?.resolvedAt).toBeNull()
+    expect(delivered.at(-1)?.status).toBe('open')
+
+    // A follow-up act now succeeds and settles it.
+    let calls = 0
+    const acted = await service.act(WS, raised.id, async () => {
+      calls++
+    })
+    expect(calls).toBe(1)
+    expect(acted.status).toBe('acted')
+  })
+
   it('re-raise preserves an already-escalated severity and the original createdAt', async () => {
     const { service, rows } = makeService(() => time)
     const first = await service.raise(WS, raiseInput())
@@ -224,5 +475,84 @@ describe('NotificationService', () => {
     expect(reraised.id).toBe(first.id)
     expect(reraised.severity).toBe('urgent')
     expect(reraised.createdAt).toBe(first.createdAt)
+  })
+})
+
+// The delivery EDGE this service stamps on each re-delivery. It is the whole basis on which an
+// ALERT transport (email, Slack) decides to interrupt a human, and the row it re-delivers cannot
+// carry it: an escalated card and a freshly raised one are both `open`. Getting a transition's
+// edge wrong is therefore not a rendering bug, it is a board-wide mail announcing a decision that
+// was already made, so every transition that delivers is pinned here by name.
+describe('NotificationService delivery edges', () => {
+  let time = 0
+  beforeEach(() => {
+    time = 1_000_000
+  })
+  const now = () => time
+
+  it('stamps a new card, and a content change on an open one, as `raised`', async () => {
+    const { service, reasons } = makeService(now)
+
+    await service.raise(WS, raiseInput())
+    // An identical re-raise is persisted but NOT re-delivered, so it adds no edge at all.
+    await service.raise(WS, raiseInput())
+    await service.raise(WS, raiseInput({ title: 'still waiting' }))
+
+    expect(reasons.map((r) => r.reason)).toEqual(['raised', 'raised'])
+  })
+
+  it('stamps every settlement as `settled`, so no transport re-announces the ask', async () => {
+    const { service, reasons } = makeService(now)
+
+    // A human dismissal…
+    const dismissed = await service.raise(WS, raiseInput({ blockId: 'blk_dismiss' }))
+    await service.resolve(WS, dismissed.id, 'dismiss')
+    // …a successful act…
+    const acted = await service.raise(WS, raiseInput({ blockId: 'blk_act' }))
+    await service.act(WS, acted.id, async () => {})
+    // …the auto-clear when a run advances past its gate…
+    await service.raise(WS, raiseInput({ blockId: 'blk_gate' }))
+    await service.clearWaitingDecision(WS, 'blk_gate')
+    // …and the block-less sweep's self-clear.
+    await service.raise(
+      WS,
+      raiseInput({ type: 'platform_health', blockId: null, executionId: null }),
+    )
+    await service.clearByType(WS, 'platform_health')
+
+    // Four raises, each followed by exactly one settlement. Asserted as a relation over the
+    // recorded edges rather than a hand-counted list, so adding a settling path here fails
+    // loudly instead of quietly joining the raises.
+    expect(reasons.filter((r) => r.reason === 'raised')).toHaveLength(4)
+    expect(reasons.filter((r) => r.reason === 'settled')).toHaveLength(4)
+    expect(reasons.filter((r) => r.reason === 'refreshed')).toHaveLength(0)
+  })
+
+  it('stamps the escalation sweep as `refreshed`, not a second ask', async () => {
+    const { service, reasons } = makeService(now)
+
+    const raised = await service.raise(WS, raiseInput())
+    time += 60_000
+    expect(await service.escalateStale(WS, 30_000, now())).toBe(1)
+
+    expect(reasons).toEqual([
+      { id: raised.id, reason: 'raised' },
+      { id: raised.id, reason: 'refreshed' },
+    ])
+  })
+
+  it("stamps a FAILED action's reopen as `refreshed`: the ask never changed", async () => {
+    const { service, reasons } = makeService(now)
+
+    const raised = await service.raise(WS, raiseInput())
+    await expect(
+      service.act(WS, raised.id, async () => {
+        throw new Error('merge rejected')
+      }),
+    ).rejects.toThrow('merge rejected')
+
+    // The card is open and retryable again, and the human is at the screen they just acted from.
+    // Re-alerting the whole board because one call failed states a decision nobody has to make.
+    expect(reasons.map((r) => r.reason)).toEqual(['raised', 'refreshed'])
   })
 })

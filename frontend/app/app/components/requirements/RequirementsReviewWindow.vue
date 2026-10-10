@@ -8,9 +8,19 @@
 // document — not the original description + linked docs/tasks — is what every downstream
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
-import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import {
+  orderFindings,
+  reconcileFindingOrder,
+  type FindingAttention,
+  type FindingClass,
+  type OrderedFinding,
+} from './RequirementsReviewWindow.logic'
+import { recommendationConfidenceBand } from '@cat-factory/contracts'
+import type { RecommendationConfidenceBand } from '@cat-factory/contracts'
 import type {
+  RecommendationSource,
   RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
@@ -18,11 +28,15 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/requirements'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const requirements = useRequirementsStore()
+const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
@@ -30,14 +44,27 @@ const drafts = ref<Record<string, string>>({})
 // a draft when the recorded reply changes server-side (e.g. accepting a recommendation sets the
 // finding's answer) WITHOUT clobbering a reply the human is actively editing.
 const seededReply = ref<Record<string, string>>({})
-// Findings the human marked for a Requirement-Writer recommendation, batched until they
-// click "Request recommendations" (so the Writer runs once over the whole batch).
-const markedForRecommend = ref<Set<string>>(new Set())
+// Findings the human switched to "recommend" mode (the per-finding 3-way selector's third
+// option), batched until they click "Request recommendations" so the Writer runs once over the
+// whole batch.
+const recommendMode = ref<Set<string>>(new Set())
+// Per-finding guidance for the Writer, keyed by finding id: whatever the human typed in the
+// answer box before choosing "recommend" is carried here as steering guidance for THAT finding's
+// recommendation (it steers the suggestion, it is NOT the answer itself).
+const guidanceDrafts = ref<Record<string, string>>({})
 // Re-request "do it differently" notes, keyed by recommendation id.
 const reRequestNotes = ref<Record<string, string>>({})
 // Freeform "do it differently" comment when redoing a merge the human was unhappy with.
 const redoComment = ref('')
 const showRedo = ref(false)
+// Human's explicit collapse choice for the whole incorporated-requirements section; null = follow
+// the default (collapse it while there's still work to do so it doesn't dominate the window).
+const docCollapsedOverride = ref<boolean | null>(null)
+// State of the floating findings order (the section that computes it, further down, explains the
+// pinning rule). Declared up here because `onOpen` fires SYNCHRONOUSLY during setup and resets
+// them — a ref declared below would be in its temporal dead zone at that point.
+const pinnedOrder = ref<OrderedFinding[] | null>(null)
+const editingFinding = ref(false)
 
 // The seam contract (open/blockId/close + Escape handling + load-on-open) lives in
 // `useResultView`, so this window can't drift from the others. Declaring `onOpen` makes the
@@ -45,15 +72,25 @@ const showRedo = ref(false)
 // fresh each open, so a non-immediate per-window watch used to leave it empty for whichever
 // route (a pipeline step / "Review & approve") didn't warm the cache by selecting the block.
 const { open, blockId, instanceId, stepIndex, close } = useResultView('requirements-review', {
-  onOpen: (id) => {
+  onOpen: ({ blockId }) => {
     drafts.value = {}
     seededReply.value = {}
-    markedForRecommend.value = new Set()
+    recommendMode.value = new Set()
+    guidanceDrafts.value = {}
     reRequestNotes.value = {}
     redoComment.value = ''
     showRedo.value = false
-    void requirements.load(id)
+    docCollapsedOverride.value = null
+    // Re-open is the settle point that matters most: whatever is still outstanding floats back to
+    // the top rather than inheriting the order the previous session was pinned to.
+    pinnedOrder.value = null
+    editingFinding.value = false
+    void requirements.load(blockId)
   },
+  // Closing the window (X, backdrop, Escape) must not silently drop an answer the user typed
+  // but never blurred out of. Flush before the view tears down; flushDrafts captures the
+  // review up front so the persist survives blockId going null on close (UX-33).
+  onClose: () => void flushDrafts(),
 })
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const review = computed<RequirementReview | null>(() =>
@@ -67,14 +104,6 @@ const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
 const acting = ref(false)
-
-const SEVERITY_RANK: Record<ReviewItemSeverity, number> = { high: 0, medium: 1, low: 2 }
-const sortedItems = computed<RequirementReviewItem[]>(() => {
-  if (!review.value) return []
-  return [...review.value.items].sort(
-    (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity],
-  )
-})
 
 const openCount = computed(() => (review.value ? requirements.openCount(review.value) : 0))
 const answeredCount = computed(() => (review.value ? requirements.answeredCount(review.value) : 0))
@@ -127,12 +156,29 @@ const STATUS_COLOR = {
   recommend_requested: 'primary',
 } as const satisfies Record<ReviewItemStatus, string>
 
+// What a Writer suggestion actually rests on. Shown because a suggestion drawn from the team's own
+// standards and one resting on nothing but the model look identical once they are sitting in the
+// answer box, and they deserve very different scrutiny. A suggestion whose standard resolved already
+// carries the richer "current standard" badge, so this fills in the rest rather than repeating it.
+const GROUNDING_COLOR = {
+  standard: 'success',
+  'project-spec': 'info',
+  web: 'neutral',
+  'general-practice': 'warning',
+} as const satisfies Record<RecommendationSource, string>
+
 // Exhaustive enum→label maps of literal keys, so the typed-key drift guard sees each key
 // (vs a runtime-built `requirements.severity.${value}`).
 const SEVERITY_LABELS = computed<Record<ReviewItemSeverity, string>>(() => ({
   high: t('requirements.severity.high'),
   medium: t('requirements.severity.medium'),
   low: t('requirements.severity.low'),
+}))
+const GROUNDING_LABELS = computed<Record<RecommendationSource, string>>(() => ({
+  standard: t('requirements.grounding.standard'),
+  'project-spec': t('requirements.grounding.project-spec'),
+  web: t('requirements.grounding.web'),
+  'general-practice': t('requirements.grounding.general-practice'),
 }))
 const CATEGORY_LABELS = computed<Record<ReviewItemCategory, string>>(() => ({
   gap: t('requirements.category.gap'),
@@ -149,36 +195,79 @@ const STATUS_LABELS = computed<Record<ReviewItemStatus, string>>(() => ({
   recommend_requested: t('requirements.itemStatus.recommend_requested'),
 }))
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
+// The two GROUPS the reviewer sorts its findings into, which is the window's top-level structure:
+// what only this person can decide, and what practice can answer. Each section says what its group
+// IS rather than only naming it, because the distinction is what tells the reader which half of the
+// list is theirs — and, on an unwatched run, which half the platform may answer without them.
+const CLASS_LABELS = computed<Record<FindingClass, string>>(() => ({
+  judgement: t('requirements.findingClass.judgement'),
+  practice: t('requirements.findingClass.practice'),
+}))
+const CLASS_HINTS = computed<Record<FindingClass, string>>(() => ({
+  judgement: t('requirements.findingClass.judgementHint'),
+  practice: t('requirements.findingClass.practiceHint'),
+}))
+const CLASS_LABEL_COLOR = {
+  judgement: 'text-app-warning-300',
+  practice: 'text-app-info-300',
+} as const satisfies Record<FindingClass, string>
+
+// How sure the Writer says it is. Shown on every suggestion, because the confidence is what an
+// unattended run compares against its policy floor: a reader deciding whether to keep a
+// pre-filled answer is looking at the same number the platform used to decide not to ask them.
+// A suggestion the Writer did not grade renders NO badge rather than a "low" one — unreported and
+// unsure are different facts (see `recommendationConfidenceBand`).
+const CONFIDENCE_COLOR = {
+  high: 'success',
+  medium: 'warning',
+  low: 'error',
+} as const satisfies Record<RecommendationConfidenceBand, string>
+const CONFIDENCE_LABELS = computed<Record<RecommendationConfidenceBand, string>>(() => ({
+  high: t('requirements.confidence.high'),
+  medium: t('requirements.confidence.medium'),
+  low: t('requirements.confidence.low'),
+}))
+/** The band a recommendation's grade falls in, or null when it reported none. */
+function confidenceBandOf(
+  rec: RequirementRecommendation | undefined,
+): RecommendationConfidenceBand | null {
+  return rec ? recommendationConfidenceBand(rec.confidence) : null
+}
+/** The grade as a percentage for the badge's tooltip, or null when ungraded. */
+function confidencePercent(rec: RequirementRecommendation | undefined): string | null {
+  return rec?.confidence == null ? null : `${Math.round(rec.confidence * 100)}%`
 }
 
 // Answers auto-save: there is no explicit "save" button. The textarea is pre-seeded with
 // the recorded reply (see the watch below); editing and blurring persists it. Persist only
 // when the trimmed draft actually differs from what's already recorded, so blurring an
 // untouched field is a no-op.
-async function persistDraft(item: RequirementReviewItem) {
-  if (!review.value || frozen.value) return
+async function persistDraft(
+  item: RequirementReviewItem,
+  r: RequirementReview | null = review.value,
+) {
+  if (!r || frozen.value) return
   const text = (drafts.value[item.id] ?? '').trim()
   if (!text || text === (item.reply ?? '').trim()) return
   try {
-    await requirements.reply(review.value, item.id, text)
+    await requirements.reply(r, item.id, text)
   } catch (e) {
-    notifyError(t('requirements.errors.saveAnswer'), e)
+    present(e, 'requirements.errors.saveAnswer')
   }
 }
 
-// Persist every dirty draft before an action that consumes the answers, so a value the
-// user typed but never blurred out of isn't lost.
+// Persist every dirty draft before an action that consumes the answers (or on window close),
+// so a value the user typed but never blurred out of isn't lost. Snapshots the review up front
+// and threads it through, so the persist completes even if the window closes mid-flush (the
+// reactive `review` goes null the moment the view tears down).
 async function flushDrafts() {
-  if (!review.value) return
-  for (const item of review.value.items) {
-    if (item.status === 'open' || item.status === 'answered') await persistDraft(item)
+  const r = review.value
+  if (!r) return
+  for (const item of r.items) {
+    // A finding switched to "recommend" mode holds GUIDANCE in its box, not an answer — never
+    // persist that as the reply.
+    if (recommendMode.value.has(item.id)) continue
+    if (item.status === 'open' || item.status === 'answered') await persistDraft(item, r)
   }
 }
 
@@ -230,7 +319,7 @@ async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStat
   try {
     await requirements.setItemStatus(review.value, item.id, itemStatus)
   } catch (e) {
-    notifyError(t('requirements.errors.updateFinding'), e)
+    present(e, 'requirements.errors.updateFinding')
   }
 }
 
@@ -246,37 +335,239 @@ const readyRecommendations = computed<RequirementRecommendation[]>(() =>
 const generatingRecommendations = computed<RequirementRecommendation[]>(() =>
   (review.value?.recommendations ?? []).filter((r) => r.status === 'pending'),
 )
-// "ready / total" progress for the in-flight batch (null when nothing is generating). Scoped to
-// the current wave via `createdAt` (all placeholders in one request share the timestamp), so
-// stale `ready` recommendations the human hasn't acted on from an earlier batch don't inflate it.
-const recommendationProgress = computed(() => {
-  const generating = generatingRecommendations.value
-  if (generating.length === 0) return null
-  const batchTimes = new Set(generating.map((r) => r.createdAt))
-  const ready = readyRecommendations.value.filter((r) => batchTimes.has(r.createdAt)).length
-  return { ready, total: ready + generating.length }
+// Findings whose current answer is an AUTO-generated recommended default (an accepted `auto`
+// recommendation) — keyed by finding id. These are pre-filled by the auto-recommendation
+// automation for findings the reviewer judged answerable without a product owner; the human can
+// keep, edit or dismiss them. Matched by the snapshotted itemId first (findings churn across
+// re-reviews), then by title+detail. Precomputed so the template doesn't re-scan per finding.
+const autoDefaults = computed(() => {
+  const recs = (review.value?.recommendations ?? []).filter(
+    (r) => r.auto === true && r.status === 'accepted',
+  )
+  const map = new Map<string, RequirementRecommendation>()
+  for (const item of review.value?.items ?? []) {
+    const rec = recs.find(
+      (r) =>
+        r.sourceFinding.itemId === item.id ||
+        (r.sourceFinding.title === item.title && r.sourceFinding.detail === item.detail),
+    )
+    if (rec) map.set(item.id, rec)
+  }
+  return map
 })
-function isMarkedForRecommend(item: RequirementReviewItem): boolean {
-  return markedForRecommend.value.has(item.id)
+// True once the automation has pre-answered at least one finding — used to flag the REMAINING
+// open findings (the genuine business decisions the reviewer left for the human) as needing input.
+const hasAutoDefaults = computed(() => autoDefaults.value.size > 0)
+// Recommendations rendered INLINE inside their source finding card (rather than in a separate
+// section): the human-requested ones that are `ready` (awaiting accept/reject) or still `pending`
+// (generating). Keyed by finding id, matched by snapshotted itemId first then title+detail.
+function recFor(item: RequirementReviewItem, status: 'ready' | 'pending') {
+  return (review.value?.recommendations ?? []).find(
+    (r) =>
+      r.status === status &&
+      r.auto !== true &&
+      (r.sourceFinding.itemId === item.id ||
+        (r.sourceFinding.title === item.title && r.sourceFinding.detail === item.detail)),
+  )
 }
-function toggleRecommend(item: RequirementReviewItem) {
-  const next = new Set(markedForRecommend.value)
-  if (next.has(item.id)) next.delete(item.id)
-  else next.add(item.id)
-  markedForRecommend.value = next
+function readyRecFor(item: RequirementReviewItem) {
+  return recFor(item, 'ready')
 }
+function pendingRecFor(item: RequirementReviewItem) {
+  return recFor(item, 'pending')
+}
+
+// --- Floating findings order ------------------------------------------------
+// Findings the human still owes a reaction float to the top, then the ones the Writer is still
+// thinking about, then everything already handled — so a long review (or a re-review, which
+// re-raises unresolved findings alongside new ones) doesn't leave the outstanding work scattered
+// between settled cards. Severity remains the order WITHIN a bucket. Ranking is pure
+// (`RequirementsReviewWindow.logic.ts`); the window only decides WHEN to apply it.
+const desiredOrder = computed<OrderedFinding[]>(() =>
+  orderFindings(review.value?.items ?? [], (item) => ({
+    pending: !!pendingRecFor(item),
+    ready: !!readyRecFor(item),
+  })),
+)
+// `pinnedOrder` (declared at the top of the script, since `onOpen` resets it) holds the order
+// actually rendered; null means "use the computed one". It is pinned while `editingFinding` — focus
+// inside one of a finding's text boxes — is true, because an answer auto-saves on BLUR, which
+// re-buckets that finding: re-sorting right then would slide the card the user just clicked into
+// out from under their cursor. Focus moving straight from one box to the next never lets the flag
+// settle to `false`, so the list holds still for a whole editing burst and the remaining work
+// floats back up the moment they leave it.
+function isTextEntry(target: EventTarget | null): boolean {
+  return target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement
+}
+function onFindingFocusIn(event: FocusEvent) {
+  if (isTextEntry(event.target)) editingFinding.value = true
+}
+function onFindingFocusOut(event: FocusEvent) {
+  if (isTextEntry(event.target)) editingFinding.value = false
+}
+watch(
+  [desiredOrder, editingFinding],
+  () => {
+    if (!editingFinding.value) pinnedOrder.value = desiredOrder.value
+  },
+  { immediate: true },
+)
+const orderedFindings = computed<
+  { item: RequirementReviewItem; attention: FindingAttention; group: FindingClass }[]
+>(() => {
+  const byId = new Map((review.value?.items ?? []).map((item) => [item.id, item]))
+  return reconcileFindingOrder(desiredOrder.value, pinnedOrder.value).flatMap((entry) => {
+    const item = byId.get(entry.id)
+    return item ? [{ item, attention: entry.attention, group: entry.group }] : []
+  })
+})
+// The GROUP heading is shown whenever the list spans both groups, which is the point of the split:
+// a reader has to be able to see where "yours to decide" ends. A review entirely in one group needs
+// no heading, because then the whole list is that group.
+function startsFindingGroup(index: number): boolean {
+  const entries = orderedFindings.value
+  if (new Set(entries.map((entry) => entry.group)).size < 2) return false
+  return index === 0 || entries[index - 1]?.group !== entries[index]?.group
+}
+// The attention sub-heading is shown only inside a group that spans more than one bucket, so the
+// two levels of heading cannot both appear on a review where they would say the same thing (a fresh
+// review is all outstanding; a pre-answered practice group is all settled).
+function startsAttentionGroup(index: number): boolean {
+  const entries = orderedFindings.value
+  const here = entries[index]
+  if (!here) return false
+  if (entries.filter((entry) => entry.group === here.group).length < 2) return false
+  const spansBuckets =
+    new Set(entries.filter((entry) => entry.group === here.group).map((entry) => entry.attention))
+      .size > 1
+  if (!spansBuckets) return false
+  const previous = entries[index - 1]
+  return !previous || previous.group !== here.group || previous.attention !== here.attention
+}
+const ATTENTION_LABELS = computed<Record<FindingAttention, string>>(() => ({
+  action: t('requirements.group.action'),
+  waiting: t('requirements.group.waiting'),
+  settled: t('requirements.group.settled'),
+}))
+const ATTENTION_LABEL_COLOR = {
+  action: 'text-app-warning-300',
+  waiting: 'text-primary',
+  settled: 'text-dimmed',
+} as const satisfies Record<FindingAttention, string>
+// Whether a finding's recorded reply is the human's OWN answer (vs an untouched auto-generated
+// recommended default). Drives the "User answered" marker on the Answer option.
+function isUserAnswered(item: RequirementReviewItem): boolean {
+  const reply = (item.reply ?? '').trim()
+  if (!reply) return false
+  const auto = autoDefaults.value.get(item.id)
+  return !auto || auto.recommendedText.trim() !== reply
+}
+// Whether the human still has something to act on (findings to answer/dismiss or recommendations
+// to decide). Drives the incorporated-document default collapse so the reference doc doesn't push
+// the actionable findings/recommendations off-screen while there's still work.
+const hasActionableWork = computed(() => {
+  if (!review.value) return false
+  const findingWork = review.value.items.some(
+    (i) => i.status === 'open' || i.status === 'answered' || i.status === 'recommend_requested',
+  )
+  return (
+    findingWork ||
+    readyRecommendations.value.length > 0 ||
+    generatingRecommendations.value.length > 0
+  )
+})
+// The whole incorporated-requirements section collapses as a unit (independent of the per-heading
+// collapse below). Default: collapsed only in the pre-incorporation `ready`-style phase while
+// there's still actionable work — so the (potentially long) reference doc stays out of the way of
+// the findings the human is working through. In `merged` (inspect the draft to decide re-review vs
+// redo) and `incorporated` (the settled deliverable) the document IS the thing to read, so it
+// defaults expanded. The human's explicit toggle wins within a phase; a status change (below)
+// clears it so a collapse from one phase doesn't leak into the next.
+const docCollapsed = computed(
+  () =>
+    docCollapsedOverride.value ?? (!incorporated.value && !merged.value && hasActionableWork.value),
+)
+function toggleDoc() {
+  docCollapsedOverride.value = !docCollapsed.value
+}
+// Reset the manual collapse on every status transition so a collapse chosen in one phase doesn't
+// persist into the next (e.g. a `ready` collapse leaking into `merged`, or surviving convergence to
+// `incorporated` and hiding the final requirements) — each phase then falls back to its own default.
+watch(status, () => {
+  docCollapsedOverride.value = null
+})
+
+// The per-finding 3-way selector: which of Answer / Dismiss / Recommend is currently active.
+// Derived from the finding's status plus the local `recommendMode` set (so a freshly-toggled
+// finding shows "recommend" before any request has fired).
+type FindingMode = 'answer' | 'dismiss' | 'recommend'
+const FINDING_MODES = [
+  { mode: 'answer', labelKey: 'requirements.mode.answer', icon: 'i-lucide-pencil-line' },
+  { mode: 'dismiss', labelKey: 'requirements.mode.dismiss', icon: 'i-lucide-x' },
+  { mode: 'recommend', labelKey: 'requirements.mode.recommend', icon: 'i-lucide-wand-2' },
+] as const satisfies ReadonlyArray<{ mode: FindingMode; labelKey: string; icon: string }>
+function modeFor(item: RequirementReviewItem): FindingMode {
+  if (item.status === 'dismissed') return 'dismiss'
+  if (recommendMode.value.has(item.id) || item.status === 'recommend_requested') return 'recommend'
+  return 'answer'
+}
+async function setMode(item: RequirementReviewItem, mode: FindingMode) {
+  if (frozen.value || modeFor(item) === mode) return
+  if (mode === 'dismiss') {
+    dropRecommendMode(item.id)
+    await setStatus(item, 'dismissed')
+    return
+  }
+  if (mode === 'answer') {
+    dropRecommendMode(item.id)
+    // Re-open a dismissed finding so its answer box is editable again.
+    if (item.status === 'dismissed') await setStatus(item, 'open')
+    return
+  }
+  // Recommend: carry whatever the human typed in the answer box over as the starting guidance,
+  // then flag the finding for the batch request (fired from the action rail).
+  const carried = (drafts.value[item.id] ?? '').trim()
+  if (carried && !(guidanceDrafts.value[item.id] ?? '').trim()) {
+    guidanceDrafts.value = { ...guidanceDrafts.value, [item.id]: carried }
+  }
+  recommendMode.value = new Set(recommendMode.value).add(item.id)
+}
+function dropRecommendMode(id: string) {
+  if (!recommendMode.value.has(id)) return
+  const next = new Set(recommendMode.value)
+  next.delete(id)
+  recommendMode.value = next
+}
+// Findings currently flagged for a recommendation request (recommend mode, not yet requested).
+const pendingRecommendRequests = computed(() =>
+  (review.value?.items ?? []).filter(
+    (i) =>
+      recommendMode.value.has(i.id) &&
+      i.status !== 'dismissed' &&
+      !pendingRecFor(i) &&
+      !readyRecFor(i),
+  ),
+)
 
 // Fire the Writer over the whole marked batch (grounded on the project's best-practice
 // standards, specs/tech-specs and web search). ASYNCHRONOUS: it returns at once with `pending`
 // placeholders that fill in live; the user can close the window and is notified when the batch
 // is ready. Flush any typed-but-unblurred answers first so nothing the human entered is lost.
 async function requestRecommendations() {
-  if (!blockId.value || markedForRecommend.value.size === 0) return
-  const ids = [...markedForRecommend.value]
+  if (!blockId.value) return
+  const targets = pendingRecommendRequests.value
+  if (targets.length === 0) return
+  // Each finding carries its own guidance (transformed from what the human typed in its box);
+  // an empty guidance is omitted so the Writer falls back to grounding alone.
+  const items = targets.map((item) => {
+    const note = (guidanceDrafts.value[item.id] ?? '').trim()
+    return note ? { itemId: item.id, note } : { itemId: item.id }
+  })
+  const ids = targets.map((i) => i.id)
   try {
     await flushDrafts()
-    const updated = await requirements.requestRecommendations(blockId.value, ids)
-    markedForRecommend.value = new Set()
+    const updated = await requirements.requestRecommendations(blockId.value, items)
+    recommendMode.value = new Set()
     const n = ids.length
     // On a parked run the request returns at once with `pending` placeholders the durable driver
     // fills in the background; off-path (no active pipeline) there is no driver, so the Writer
@@ -296,7 +587,7 @@ async function requestRecommendations() {
           },
     )
   } catch (e) {
-    notifyError(t('requirements.errors.requestRecommendations'), e)
+    present(e, 'requirements.errors.requestRecommendations')
   }
 }
 
@@ -305,7 +596,7 @@ async function acceptRecommendation(rec: RequirementRecommendation) {
   try {
     await requirements.acceptRecommendation(review.value, rec.id)
   } catch (e) {
-    notifyError(t('requirements.errors.acceptRecommendation'), e)
+    present(e, 'requirements.errors.acceptRecommendation')
   }
 }
 
@@ -314,7 +605,7 @@ async function rejectRecommendation(rec: RequirementRecommendation) {
   try {
     await requirements.rejectRecommendation(review.value, rec.id)
   } catch (e) {
-    notifyError(t('requirements.errors.rejectRecommendation'), e)
+    present(e, 'requirements.errors.rejectRecommendation')
   }
 }
 
@@ -326,7 +617,7 @@ async function reRequestRecommendation(rec: RequirementRecommendation) {
     await requirements.reRequestRecommendation(review.value, rec.id, note)
     reRequestNotes.value = { ...reRequestNotes.value, [rec.id]: '' }
   } catch (e) {
-    notifyError(t('requirements.errors.reRequestRecommendation'), e)
+    present(e, 'requirements.errors.reRequestRecommendation')
   }
 }
 
@@ -336,7 +627,7 @@ async function incorporate(feedback?: string) {
     await flushDrafts()
     await requirements.incorporate(review.value, feedback)
   } catch (e) {
-    notifyError(t('requirements.errors.incorporate'), e)
+    present(e, 'requirements.errors.incorporate')
     return
   }
   redoComment.value = ''
@@ -366,7 +657,7 @@ async function reReview() {
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError(t('requirements.errors.reReview'), e)
+    present(e, 'requirements.errors.reReview')
   }
 }
 
@@ -378,7 +669,7 @@ async function proceed() {
     await requirements.proceed(blockId.value)
     toast.add({ title: t('requirements.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError(t('requirements.errors.proceed'), e)
+    present(e, 'requirements.errors.proceed')
   } finally {
     acting.value = false
   }
@@ -398,7 +689,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       toast.add({ title: t('requirements.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError(t('requirements.errors.resolveReview'), e)
+    present(e, 'requirements.errors.resolveReview')
   } finally {
     acting.value = false
   }
@@ -406,165 +697,261 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <!-- header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15"
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-clipboard-check"
+    icon-class="bg-primary/15 text-primary"
+    :title="t('requirements.title')"
+    :subtitle="block?.title"
+    :step-ref="{ instanceId, stepIndex }"
+    variant="centered"
+    width="full"
+    @close="close"
+  >
+    <template v-if="review" #header-extras>
+      <UBadge color="neutral" variant="subtle" size="sm">
+        {{ t('requirements.iteration', { current: iteration, max: maxIterations }) }}
+      </UBadge>
+    </template>
+
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <!-- main column -->
+      <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+        <i18n-t keypath="requirements.intro" tag="p" class="mb-4 text-sm text-muted" scope="global">
+          <template #level>{{ block?.level ?? t('requirements.levelFallback') }}</template>
+          <template #answer
+            ><span class="text-toned">{{ t('requirements.answerVerb') }}</span></template
           >
-            <UIcon name="i-lucide-clipboard-check" class="h-5 w-5 text-indigo-300" />
-          </div>
-          <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
-              {{ t('requirements.title') }}
-            </h1>
-            <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
-          </div>
-          <div class="ms-auto flex items-center gap-1.5">
-            <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
-              {{ t('requirements.iteration', { current: iteration, max: maxIterations }) }}
-            </UBadge>
-            <StepRestartControl
-              :instance-id="instanceId"
-              :step-index="stepIndex"
-              @restarted="close"
-            />
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
-          </div>
-        </header>
+          <template #dismiss
+            ><span class="text-toned">{{ t('requirements.dismissVerb') }}</span></template
+          >
+        </i18n-t>
 
-        <div class="flex min-h-0 flex-1">
-          <!-- main column -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            <i18n-t
-              keypath="requirements.intro"
-              tag="p"
-              class="mb-4 text-sm text-slate-400"
-              scope="global"
-            >
-              <template #level>{{ block?.level ?? t('requirements.levelFallback') }}</template>
-              <template #answer
-                ><span class="text-slate-300">{{ t('requirements.answerVerb') }}</span></template
-              >
-              <template #dismiss
-                ><span class="text-slate-300">{{ t('requirements.dismissVerb') }}</span></template
-              >
-            </i18n-t>
+        <!-- Why the findings never ask a technical question: this gate settles the
+                 product/business layer, and the architect/researcher steps settle the rest.
+                 Without this a reader reads the missing technical questions as an oversight. -->
+        <p class="mb-4 text-xs text-dimmed">{{ t('requirements.scopeNote') }}</p>
 
-            <!-- empty state — the reviewer runs automatically as the first pipeline
+        <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
-            <div
-              v-if="!review && !busy && !loading"
-              class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
-            >
-              {{ t('requirements.empty') }}
-            </div>
+        <div
+          v-if="!review && !busy && !loading"
+          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
+        >
+          {{ t('requirements.empty') }}
+        </div>
 
-            <!-- working state (initial fetch on open, or a reviewer pass running) -->
-            <div
-              v-else-if="(busy || loading) && !review"
-              class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
-            </div>
+        <!-- working state (initial fetch on open, or a reviewer pass running) -->
+        <div
+          v-else-if="(busy || loading) && !review"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+          {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
+        </div>
 
-            <template v-else-if="review">
-              <!-- converged: reviewer satisfied -->
-              <div
-                v-if="incorporated"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
-              >
-                <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                {{ t('requirements.settled') }}
-              </div>
+        <template v-else-if="review">
+          <!-- converged: reviewer satisfied -->
+          <div
+            v-if="incorporated"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
+            data-testid="requirements-settled"
+          >
+            <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
+            {{ t('requirements.settled') }}
+          </div>
 
-              <!-- iteration cap hit -->
-              <IterationCapPrompt
-                v-else-if="exceeded"
-                class="mb-4"
-                :heading="t('requirements.exceeded.heading', { max: maxIterations })"
-                :detail="t('requirements.exceeded.detail')"
-                :loading="acting"
-                @resolve="resolveExceeded"
-              />
+          <!-- iteration cap hit -->
+          <IterationCapPrompt
+            v-else-if="exceeded"
+            class="mb-4"
+            :heading="t('requirements.exceeded.heading', { max: maxIterations })"
+            :detail="t('requirements.exceeded.detail')"
+            :loading="acting"
+            @resolve="resolveExceeded"
+          />
 
-              <!-- working: the async cycle is running in the driver. Two distinct stages so
+          <!-- working: the async cycle is running in the driver. Two distinct stages so
                    the human can see which of the two LLM calls is currently in progress. -->
-              <div
-                v-else-if="working"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
-              >
-                <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
-                <span v-if="incorporating">
-                  {{ t('requirements.working.incorporating') }}
-                </span>
-                <span v-else>
-                  {{ t('requirements.working.reReviewing') }}
-                </span>
+          <div
+            v-else-if="working"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <span v-if="incorporating">
+              {{ t('requirements.working.incorporating') }}
+            </span>
+            <span v-else>
+              {{ t('requirements.working.reReviewing') }}
+            </span>
+          </div>
+
+          <!-- findings to react to — ordered so anything still owed a reaction sits at the
+                   top (see the floating-order section in the script), with the buckets labelled
+                   once the list spans more than one of them -->
+          <div
+            v-if="review.items.length"
+            class="flex flex-col gap-3"
+            @focusin="onFindingFocusIn"
+            @focusout="onFindingFocusOut"
+          >
+            <template v-for="({ item, attention, group }, index) in orderedFindings" :key="item.id">
+              <div v-if="startsFindingGroup(index)" class="pt-2" data-testid="requirements-group">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="text-xs font-semibold uppercase tracking-wide"
+                    :class="CLASS_LABEL_COLOR[group]"
+                    :data-finding-group="group"
+                  >
+                    {{ CLASS_LABELS[group] }}
+                  </span>
+                  <span class="h-px flex-1 bg-accented" />
+                </div>
+                <p class="mt-0.5 text-2xs text-dimmed">{{ CLASS_HINTS[group] }}</p>
               </div>
-
-              <!-- findings to react to -->
-              <div v-if="review.items.length" class="flex flex-col gap-3">
-                <div
-                  v-for="item in sortedItems"
-                  :key="item.id"
-                  class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-                  :class="{ 'opacity-60': item.status === 'dismissed' }"
+              <div v-if="startsAttentionGroup(index)" class="flex items-center gap-2 pt-1">
+                <span
+                  class="text-2xs font-semibold uppercase tracking-wide"
+                  :class="ATTENTION_LABEL_COLOR[attention]"
                 >
-                  <div class="flex items-start gap-2">
-                    <UIcon
-                      :name="CATEGORY_ICON[item.category]"
-                      class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <span class="text-sm font-medium text-white">{{ item.title }}</span>
-                        <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
-                          {{ SEVERITY_LABELS[item.severity] }}
-                        </UBadge>
-                        <UBadge size="xs" variant="outline" color="neutral">
-                          {{ CATEGORY_LABELS[item.category] }}
-                        </UBadge>
-                        <UBadge
-                          size="xs"
-                          variant="soft"
-                          :color="STATUS_COLOR[item.status]"
-                          class="ms-auto"
-                        >
-                          {{ STATUS_LABELS[item.status] }}
-                        </UBadge>
-                      </div>
-                      <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
-                        {{ item.detail }}
-                      </p>
-
-                      <!-- recorded answer (only for non-editable findings — for editable
-                           ones the answer lives in the textarea below, seeded from the reply) -->
-                      <div
-                        v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
-                        class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                  {{ ATTENTION_LABELS[attention] }}
+                </span>
+                <span class="h-px flex-1 bg-elevated" />
+              </div>
+              <div
+                class="rounded-lg border border-default bg-default/60 p-3"
+                :class="{ 'opacity-60': item.status === 'dismissed' }"
+                data-testid="requirements-finding"
+                :data-finding-status="item.status"
+                :data-finding-severity="item.severity"
+              >
+                <div class="flex items-start gap-2">
+                  <UIcon
+                    :name="CATEGORY_ICON[item.category]"
+                    class="mt-0.5 h-4 w-4 shrink-0 text-muted"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-sm font-medium text-highlighted">{{ item.title }}</span>
+                      <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
+                        {{ SEVERITY_LABELS[item.severity] }}
+                      </UBadge>
+                      <UBadge size="xs" variant="outline" color="neutral">
+                        {{ CATEGORY_LABELS[item.category] }}
+                      </UBadge>
+                      <!-- Once the automation has pre-answered some findings, flag the ones it
+                             left open as the genuine business decisions that need the human. -->
+                      <UBadge
+                        v-if="
+                          hasAutoDefaults && item.status === 'open' && item.autoAnswerable === false
+                        "
+                        size="xs"
+                        variant="subtle"
+                        color="warning"
                       >
-                        <span class="text-[10px] uppercase tracking-wide text-slate-500">
-                          {{ t('requirements.answerLabel') }}
-                        </span>
-                        <p class="whitespace-pre-line">{{ item.reply }}</p>
+                        {{ t('requirements.needsYourInput') }}
+                      </UBadge>
+                      <UBadge
+                        size="xs"
+                        variant="soft"
+                        :color="STATUS_COLOR[item.status]"
+                        class="ms-auto"
+                      >
+                        {{ STATUS_LABELS[item.status] }}
+                      </UBadge>
+                    </div>
+                    <!-- The reviewer's question is prose, so it takes the measure even though the
+                         card around it takes the span (see the shell's `width` prop: the unit is
+                         the paragraph, not the section). The badge row above and the mode buttons
+                         and textarea below are what the full width is actually for. -->
+                    <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
+                      {{ item.detail }}
+                    </p>
+
+                    <!-- recorded answer (only for non-editable findings — for editable
+                           ones the answer lives in the textarea below, seeded from the reply) -->
+                    <div
+                      v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
+                      class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
+                    >
+                      <SectionLabel as="span">
+                        {{ t('requirements.answerLabel') }}
+                      </SectionLabel>
+                      <p class="whitespace-pre-line">{{ item.reply }}</p>
+                    </div>
+
+                    <!-- per-finding 3-way selector: Answer (write it) / Dismiss (irrelevant) /
+                           Recommend (let the Requirement Writer suggest one). The active mode
+                           drives the content below, IN PLACE — no separate section. Disabled once
+                           the requirements are settled / a cycle is running; hidden for a
+                           `resolved` finding (its recorded answer shows above). -->
+                    <template v-if="item.status !== 'resolved'">
+                      <div class="mt-2 flex flex-wrap items-center gap-1">
+                        <UButton
+                          v-for="opt in FINDING_MODES"
+                          :key="opt.mode"
+                          :color="modeFor(item) === opt.mode ? 'primary' : 'neutral'"
+                          :variant="modeFor(item) === opt.mode ? 'soft' : 'ghost'"
+                          size="xs"
+                          :icon="opt.icon"
+                          :disabled="frozen"
+                          :data-testid="`requirements-mode-${opt.mode}`"
+                          @click="setMode(item, opt.mode)"
+                        >
+                          {{ t(opt.labelKey) }}
+                          <UIcon
+                            v-if="opt.mode === 'answer' && isUserAnswered(item)"
+                            name="i-lucide-check"
+                            class="h-3.5 w-3.5 text-app-success-400"
+                          />
+                        </UButton>
                       </div>
 
-                      <!-- react: answer (relevant) or dismiss (irrelevant). The answer
-                           auto-saves on blur — no explicit save button. Disabled once the
-                           requirements are settled / awaiting a higher-level decision. -->
-                      <template v-if="item.status === 'open' || item.status === 'answered'">
+                      <!-- ANSWER: type the answer directly (auto-saves on blur) -->
+                      <template v-if="modeFor(item) === 'answer'">
+                        <!-- Auto-generated recommended default: the automation pre-filled this
+                               answer; the human can keep it, edit it, or switch modes. -->
+                        <div
+                          v-if="autoDefaults.get(item.id)"
+                          class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-primary"
+                        >
+                          <UIcon name="i-lucide-sparkles" class="h-3.5 w-3.5 shrink-0" />
+                          <span>{{ t('requirements.recommendedDefault') }}</span>
+                          <UBadge
+                            v-if="autoDefaults.get(item.id)!.groundedInFragment"
+                            size="xs"
+                            variant="subtle"
+                            color="primary"
+                          >
+                            {{
+                              t('requirements.currentStandard', {
+                                title: autoDefaults.get(item.id)!.groundedInFragment!.title,
+                              })
+                            }}
+                          </UBadge>
+                          <UBadge
+                            v-else-if="autoDefaults.get(item.id)!.groundedIn"
+                            size="xs"
+                            variant="subtle"
+                            :color="GROUNDING_COLOR[autoDefaults.get(item.id)!.groundedIn!]"
+                          >
+                            {{ GROUNDING_LABELS[autoDefaults.get(item.id)!.groundedIn!] }}
+                          </UBadge>
+                          <!-- The Writer's own grade, which is a different question from where the
+                                 answer came from: it is what an unwatched run compares against its
+                                 policy floor, so it is also what tells a reader how hard this
+                                 pre-filled answer was to be sure of. -->
+                          <UBadge
+                            v-if="confidenceBandOf(autoDefaults.get(item.id))"
+                            size="xs"
+                            variant="outline"
+                            :color="CONFIDENCE_COLOR[confidenceBandOf(autoDefaults.get(item.id))!]"
+                            :title="confidencePercent(autoDefaults.get(item.id)) ?? undefined"
+                            data-testid="requirements-confidence"
+                          >
+                            {{ CONFIDENCE_LABELS[confidenceBandOf(autoDefaults.get(item.id))!] }}
+                          </UBadge>
+                        </div>
                         <UTextarea
                           v-model="drafts[item.id]"
                           :rows="2"
@@ -573,409 +960,411 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           class="mt-2 w-full"
                           :placeholder="t('requirements.answerPlaceholder')"
                           :disabled="frozen"
+                          data-testid="requirements-answer"
                           @blur="persistDraft(item)"
                         />
-                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                          <UButton
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                            icon="i-lucide-x"
-                            :disabled="frozen"
-                            @click="setStatus(item, 'dismissed')"
-                          >
-                            {{ t('requirements.dismissIrrelevant') }}
-                          </UButton>
-                          <UButton
-                            :color="isMarkedForRecommend(item) ? 'primary' : 'neutral'"
-                            :variant="isMarkedForRecommend(item) ? 'soft' : 'ghost'"
-                            size="xs"
-                            icon="i-lucide-wand-2"
-                            :disabled="frozen"
-                            @click="toggleRecommend(item)"
-                          >
-                            {{
-                              isMarkedForRecommend(item)
-                                ? t('requirements.markedForRecommendation')
-                                : t('requirements.recommendSomething')
-                            }}
-                          </UButton>
-                        </div>
+                        <p
+                          v-if="isUserAnswered(item)"
+                          class="mt-1 flex items-center gap-1 text-2xs text-app-success-400"
+                        >
+                          <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
+                          {{ t('requirements.userAnswered') }}
+                        </p>
                       </template>
 
-                      <!-- finding awaiting a recommendation batch -->
-                      <div
-                        v-else-if="item.status === 'recommend_requested'"
-                        class="mt-2 flex items-center gap-1.5 text-xs text-indigo-300"
-                      >
-                        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
-                        {{ t('requirements.recommendationRequested') }}
-                      </div>
-
-                      <!-- reopen a dismissed finding -->
-                      <div v-else-if="item.status === 'dismissed'" class="mt-2">
-                        <UButton
-                          color="neutral"
-                          variant="ghost"
-                          size="xs"
-                          icon="i-lucide-rotate-ccw"
-                          :disabled="frozen"
-                          @click="setStatus(item, 'open')"
+                      <!-- RECOMMEND: generating / the ready suggestion / a guidance box, all
+                             rendered inline where the question was asked. -->
+                      <template v-else-if="modeFor(item) === 'recommend'">
+                        <div
+                          v-if="pendingRecFor(item)"
+                          class="mt-2 flex items-center gap-1.5 text-xs text-primary"
                         >
-                          {{ t('requirements.reopen') }}
-                        </UButton>
-                      </div>
-                    </div>
+                          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                          {{ t('requirements.generatingSuggestion') }}
+                        </div>
+                        <template v-else-if="readyRecFor(item)">
+                          <div
+                            v-for="rec in [readyRecFor(item)!]"
+                            :key="rec.id"
+                            class="mt-2 rounded-lg border border-primary/50 bg-primary/10 p-3"
+                          >
+                            <UBadge
+                              v-if="rec.groundedInFragment"
+                              size="xs"
+                              variant="subtle"
+                              color="success"
+                              icon="i-lucide-badge-check"
+                            >
+                              {{
+                                t('requirements.currentStandard', {
+                                  title: rec.groundedInFragment.title,
+                                })
+                              }}
+                            </UBadge>
+                            <UBadge
+                              v-else-if="rec.groundedIn"
+                              size="xs"
+                              variant="subtle"
+                              :color="GROUNDING_COLOR[rec.groundedIn]"
+                            >
+                              {{ GROUNDING_LABELS[rec.groundedIn] }}
+                            </UBadge>
+                            <UBadge
+                              v-if="confidenceBandOf(rec)"
+                              size="xs"
+                              variant="outline"
+                              class="ms-1.5"
+                              :color="CONFIDENCE_COLOR[confidenceBandOf(rec)!]"
+                              :title="confidencePercent(rec) ?? undefined"
+                              data-testid="requirements-confidence"
+                            >
+                              {{ CONFIDENCE_LABELS[confidenceBandOf(rec)!] }}
+                            </UBadge>
+                            <!-- The Writer's suggested answer — agent prose, so it takes the
+                                 measure like the finding's own question above it. -->
+                            <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-toned">
+                              {{ rec.recommendedText }}
+                            </p>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                              <UButton
+                                color="primary"
+                                variant="soft"
+                                size="xs"
+                                icon="i-lucide-check"
+                                :disabled="frozen || !access.canExecuteRuns.value"
+                                :title="
+                                  access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                                "
+                                @click="acceptRecommendation(rec)"
+                              >
+                                {{ t('requirements.accept') }}
+                              </UButton>
+                              <UButton
+                                color="neutral"
+                                variant="ghost"
+                                size="xs"
+                                icon="i-lucide-x"
+                                :disabled="frozen || !access.canExecuteRuns.value"
+                                :title="
+                                  access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                                "
+                                @click="rejectRecommendation(rec)"
+                              >
+                                {{ t('requirements.reject') }}
+                              </UButton>
+                            </div>
+                            <div class="mt-2 flex items-start gap-2">
+                              <UTextarea
+                                v-model="reRequestNotes[rec.id]"
+                                :rows="1"
+                                autoresize
+                                size="sm"
+                                class="flex-1"
+                                :placeholder="t('requirements.reRequestPlaceholder')"
+                                :disabled="frozen || recommending"
+                              />
+                              <UButton
+                                color="neutral"
+                                variant="soft"
+                                size="xs"
+                                icon="i-lucide-rotate-cw"
+                                :loading="recommending"
+                                :disabled="
+                                  !(reRequestNotes[rec.id] ?? '').trim() ||
+                                  frozen ||
+                                  !access.canExecuteRuns.value
+                                "
+                                :title="
+                                  access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                                "
+                                @click="reRequestRecommendation(rec)"
+                              >
+                                {{ t('requirements.reRequest') }}
+                              </UButton>
+                            </div>
+                          </div>
+                        </template>
+                        <template v-else>
+                          <UTextarea
+                            v-model="guidanceDrafts[item.id]"
+                            :rows="2"
+                            autoresize
+                            size="sm"
+                            class="mt-2 w-full"
+                            :placeholder="t('requirements.guidancePlaceholder')"
+                            :disabled="frozen"
+                          />
+                          <p class="mt-1 flex items-center gap-1 text-2xs text-primary/80">
+                            <UIcon name="i-lucide-wand-2" class="h-3 w-3 shrink-0" />
+                            {{ t('requirements.guidanceHint') }}
+                          </p>
+                        </template>
+                      </template>
+
+                      <!-- DISMISS: nothing to fill in — a short note explains the effect -->
+                      <p v-else class="mt-2 text-2xs text-dimmed">
+                        {{ t('requirements.dismissedHint') }}
+                      </p>
+                    </template>
                   </div>
                 </div>
               </div>
-
-              <!-- Requirement-Writer recommendations: awaiting a human decision (`ready`) and/or
-                   still generating in the background (`pending`) -->
-              <section
-                v-if="readyRecommendations.length || generatingRecommendations.length"
-                class="mt-6 border-t border-slate-800 pt-5"
-              >
-                <div class="mb-3 flex items-center gap-2 text-[11px] text-indigo-300">
-                  <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">{{
-                    t('requirements.recommendedAnswers')
-                  }}</span>
-                  <span
-                    v-if="recommendationProgress"
-                    class="ms-auto flex items-center gap-1.5 normal-case text-indigo-300/80"
-                  >
-                    <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
-                    {{
-                      t('requirements.recommendationProgress', {
-                        ready: recommendationProgress.ready,
-                        total: recommendationProgress.total,
-                      })
-                    }}
-                  </span>
-                </div>
-
-                <!-- still-generating placeholders (one per requested finding) -->
-                <div v-if="generatingRecommendations.length" class="mb-3 flex flex-col gap-3">
-                  <div
-                    v-for="rec in generatingRecommendations"
-                    :key="rec.id"
-                    class="flex items-start gap-2 rounded-lg border border-dashed border-indigo-900/50 bg-indigo-950/10 p-3"
-                  >
-                    <UIcon
-                      name="i-lucide-loader-circle"
-                      class="mt-0.5 h-4 w-4 shrink-0 animate-spin text-indigo-300"
-                    />
-                    <div class="min-w-0">
-                      <span class="text-sm font-medium text-white">{{
-                        rec.sourceFinding.title
-                      }}</span>
-                      <p class="text-xs text-indigo-300/70">
-                        {{ t('requirements.generatingSuggestion') }}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="flex flex-col gap-3">
-                  <div
-                    v-for="rec in readyRecommendations"
-                    :key="rec.id"
-                    class="rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
-                  >
-                    <div class="flex flex-wrap items-center gap-1.5">
-                      <span class="text-sm font-medium text-white">{{
-                        rec.sourceFinding.title
-                      }}</span>
-                      <UBadge
-                        v-if="rec.groundedInFragment"
-                        size="xs"
-                        variant="subtle"
-                        color="success"
-                        icon="i-lucide-badge-check"
-                      >
-                        {{
-                          t('requirements.currentStandard', { title: rec.groundedInFragment.title })
-                        }}
-                      </UBadge>
-                    </div>
-                    <p class="mt-2 whitespace-pre-line text-sm text-slate-300">
-                      {{ rec.recommendedText }}
-                    </p>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                      <UButton
-                        color="primary"
-                        variant="soft"
-                        size="xs"
-                        icon="i-lucide-check"
-                        :disabled="frozen"
-                        @click="acceptRecommendation(rec)"
-                      >
-                        {{ t('requirements.accept') }}
-                      </UButton>
-                      <UButton
-                        color="neutral"
-                        variant="ghost"
-                        size="xs"
-                        icon="i-lucide-x"
-                        :disabled="frozen"
-                        @click="rejectRecommendation(rec)"
-                      >
-                        {{ t('requirements.reject') }}
-                      </UButton>
-                    </div>
-                    <!-- re-request with a note (an alternative to rejecting outright) -->
-                    <div class="mt-2 flex items-start gap-2">
-                      <UTextarea
-                        v-model="reRequestNotes[rec.id]"
-                        :rows="1"
-                        autoresize
-                        size="sm"
-                        class="flex-1"
-                        :placeholder="t('requirements.reRequestPlaceholder')"
-                        :disabled="frozen || recommending"
-                      />
-                      <UButton
-                        color="neutral"
-                        variant="soft"
-                        size="xs"
-                        icon="i-lucide-rotate-cw"
-                        :loading="recommending"
-                        :disabled="!(reRequestNotes[rec.id] ?? '').trim() || frozen"
-                        @click="reRequestRecommendation(rec)"
-                      >
-                        {{ t('requirements.reRequest') }}
-                      </UButton>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <!-- incorporated document: the standard-format requirements -->
-              <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
-                <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
-                  <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">
-                    {{
-                      incorporated
-                        ? t('requirements.finalRequirements')
-                        : t('requirements.incorporatedDraft')
-                    }}
-                  </span>
-                </div>
-                <div v-for="s in outline.sections" :key="s.id" class="mb-2">
-                  <button
-                    v-if="s.title"
-                    class="group flex w-full items-center gap-2 text-start"
-                    @click="toggle(s.id)"
-                  >
-                    <UIcon
-                      name="i-lucide-chevron-right"
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
-                      :class="collapsed[s.id] ? '' : 'rotate-90'"
-                    />
-                    <span
-                      class="font-semibold text-white"
-                      :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
-                      v-html="s.titleHtml"
-                    />
-                  </button>
-                  <div
-                    v-show="!s.title || !collapsed[s.id]"
-                    class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
-                    v-html="s.bodyHtml"
-                  />
-                </div>
-              </section>
             </template>
           </div>
 
-          <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
-            <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="review" class="space-y-2 text-xs text-slate-400">
-                <div class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.findings') }}</span>
-                  <span class="text-slate-300">{{ review.items.length }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.open') }}</span>
-                  <span class="text-slate-300">{{ openCount }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.answered') }}</span>
-                  <span class="text-slate-300">{{ answeredCount }}</span>
-                </div>
-                <div v-if="review.model" class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.model') }}</span>
-                  <span class="truncate ps-2 text-slate-500">{{ review.model }}</span>
-                </div>
-              </div>
-
-              <!-- action: ready (answer → incorporate / proceed) -->
-              <div
-                v-if="review && status === 'ready'"
-                class="space-y-2 border-t border-slate-800 pt-4"
-              >
-                <UButton
-                  v-if="canProceed"
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-arrow-right"
-                  :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
-                  :loading="acting"
-                  @click="proceed"
+          <!-- incorporated document: the standard-format requirements. The whole section
+                   collapses as a unit (a long doc otherwise pushes the findings/recommendations
+                   off-screen); the per-heading toggles below still work when it's expanded. -->
+          <section v-if="outline" class="mt-6 border-t border-default pt-5">
+            <button
+              class="mb-3 flex w-full items-center gap-1.5 text-2xs text-app-success-400"
+              @click="toggleDoc"
+            >
+              <UIcon
+                name="i-lucide-chevron-right"
+                class="h-3.5 w-3.5 shrink-0 transition-transform"
+                :class="docCollapsed ? '' : 'rotate-90'"
+              />
+              <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
+              <span class="font-semibold uppercase tracking-wide">
+                {{
+                  incorporated
+                    ? t('requirements.finalRequirements')
+                    : t('requirements.incorporatedDraft')
+                }}
+              </span>
+            </button>
+            <!-- The same reading measure the findings' own prose takes above (see the shell's
+                 `width` prop): the window is `full`-width now, and this is continuous prose that
+                 would otherwise run to 200-character lines. Left-aligned rather than centred, so
+                 it starts where every finding above it starts. -->
+            <div v-show="!docCollapsed" class="max-w-3xl">
+              <div v-for="s in outline.sections" :key="s.id" class="mb-2">
+                <button
+                  v-if="s.title"
+                  class="group flex w-full items-center gap-2 text-start"
+                  @click="toggle(s.id)"
                 >
-                  {{ t('requirements.actions.proceedNothing') }}
-                </UButton>
-                <UButton
-                  v-else
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-sparkles"
-                  :loading="reworking"
-                  :disabled="!canIncorporate"
-                  @click="incorporate()"
-                >
-                  {{ t('requirements.actions.incorporateAnswers') }}
-                </UButton>
-                <UButton
-                  v-if="markedForRecommend.size > 0"
-                  color="primary"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-2"
-                  :loading="recommending"
-                  @click="requestRecommendations"
-                >
-                  {{
-                    t(
-                      'requirements.actions.requestRecommendations',
-                      { count: markedForRecommend.size },
-                      markedForRecommend.size,
-                    )
-                  }}
-                </UButton>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  <template v-if="canProceed">
-                    {{ t('requirements.help.canProceed') }}
-                  </template>
-                  <template v-else-if="canIncorporate">
-                    {{ t('requirements.help.canIncorporate') }}
-                  </template>
-                  <template v-else> {{ t('requirements.help.answerAll') }} </template>
-                </p>
-              </div>
-
-              <!-- action: merged (inspect → re-review / redo) -->
-              <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
-                <UButton
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-sparkles"
-                  :loading="busy"
-                  @click="reReview"
-                >
-                  {{
-                    busy
-                      ? t('requirements.actions.reReviewing')
-                      : t('requirements.actions.reReview')
-                  }}
-                </UButton>
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-pencil"
-                  @click="showRedo = !showRedo"
-                >
-                  {{ t('requirements.actions.redoIncorporation') }}
-                </UButton>
-                <div v-if="showRedo" class="space-y-2">
-                  <UTextarea
-                    v-model="redoComment"
-                    :rows="3"
-                    autoresize
-                    size="sm"
-                    class="w-full"
-                    :placeholder="t('requirements.redoPlaceholder')"
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform"
+                    :class="collapsed[s.id] ? '' : 'rotate-90'"
                   />
-                  <UButton
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    block
-                    icon="i-lucide-wand-sparkles"
-                    :loading="reworking"
-                    :disabled="!redoComment.trim()"
-                    @click="incorporate(redoComment.trim())"
-                  >
-                    {{ t('requirements.actions.redoWithDirection') }}
-                  </UButton>
-                </div>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  {{ t('requirements.help.merged') }}
-                </p>
-              </div>
-
-              <div
-                v-if="review && incorporated"
-                class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
-              >
-                {{ t('requirements.settledFooter') }}
+                  <span
+                    class="font-semibold text-highlighted"
+                    :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
+                    v-html="s.titleHtml"
+                  />
+                </button>
+                <div
+                  v-show="!s.title || !collapsed[s.id]"
+                  class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
+                  v-html="s.bodyHtml"
+                />
               </div>
             </div>
-          </aside>
-        </div>
+          </section>
+        </template>
       </div>
+
+      <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`
+               (never hidden — the gate is otherwise unadvanceable on a laptop split-screen /
+               tablet, UX-32). The informational stats collapse away below `lg` to keep the
+               bottom bar compact; the actions themselves always show. -->
+      <aside
+        class="flex w-full shrink-0 flex-col border-t border-default lg:w-72 lg:border-s lg:border-t-0"
+      >
+        <div class="flex flex-col gap-4 px-4 py-5">
+          <div v-if="review" class="hidden space-y-2 text-xs text-muted lg:block">
+            <div class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.findings') }}</span>
+              <span class="text-toned">{{ review.items.length }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.open') }}</span>
+              <span class="text-toned">{{ openCount }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.answered') }}</span>
+              <span class="text-toned">{{ answeredCount }}</span>
+            </div>
+            <!-- awaited recommendations — kept here (always visible) so the human can see what
+                     the Writer is still producing / what's waiting on them even while reading the
+                     incorporated document or acting elsewhere in the window. -->
+            <template v-if="generatingRecommendations.length || readyRecommendations.length">
+              <div class="flex items-center gap-1.5 border-t border-default/60 pt-2 text-primary">
+                <UIcon name="i-lucide-wand-2" class="h-3 w-3" />
+                <span class="font-medium">{{ t('requirements.stats.recommendations') }}</span>
+              </div>
+              <div
+                v-if="generatingRecommendations.length"
+                class="flex items-center justify-between"
+              >
+                <span>{{ t('requirements.stats.recsGenerating') }}</span>
+                <span class="text-primary">{{ generatingRecommendations.length }}</span>
+              </div>
+              <div v-if="readyRecommendations.length" class="flex items-center justify-between">
+                <span>{{ t('requirements.stats.recsToReview') }}</span>
+                <span class="text-primary">{{ readyRecommendations.length }}</span>
+              </div>
+            </template>
+            <div v-if="review.model" class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.model') }}</span>
+              <span class="truncate ps-2 text-dimmed">{{
+                models.labelForRef(review.model) ?? review.model
+              }}</span>
+            </div>
+          </div>
+
+          <!-- Request the Requirement Writer for the marked findings. Kept OUT of the
+                   status-scoped blocks below so it's available whenever the review is still
+                   editable — the `ready` first pass AND a `merged` review being reworked — not
+                   only when status is exactly `ready`. Scoped to exactly those two states (NOT a
+                   bare `!frozen`, which would also expose it in `exceeded`, where the run is parked
+                   on the cap decision and a fresh recommendation batch has no path to settle). -->
+          <div
+            v-if="review && pendingRecommendRequests.length > 0 && (status === 'ready' || merged)"
+            class="border-t border-default pt-4"
+          >
+            <UButton
+              color="primary"
+              variant="soft"
+              size="sm"
+              block
+              icon="i-lucide-wand-2"
+              :loading="recommending"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="requestRecommendations"
+            >
+              {{
+                t(
+                  'requirements.actions.requestRecommendations',
+                  { count: pendingRecommendRequests.length },
+                  pendingRecommendRequests.length,
+                )
+              }}
+            </UButton>
+          </div>
+
+          <!-- action: ready (answer → incorporate / proceed) -->
+          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-default pt-4">
+            <UButton
+              v-if="canProceed"
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-arrow-right"
+              :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
+              :loading="acting"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              data-testid="requirements-proceed"
+              @click="proceed"
+            >
+              {{ t('requirements.actions.proceedNothing') }}
+            </UButton>
+            <UButton
+              v-else
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-wand-sparkles"
+              :loading="reworking"
+              :disabled="!canIncorporate || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              data-testid="requirements-incorporate"
+              @click="incorporate()"
+            >
+              {{ t('requirements.actions.incorporateAnswers') }}
+            </UButton>
+            <p class="text-2xs leading-relaxed text-dimmed">
+              <template v-if="canProceed">
+                {{ t('requirements.help.canProceed') }}
+              </template>
+              <template v-else-if="canIncorporate">
+                {{ t('requirements.help.canIncorporate') }}
+              </template>
+              <template v-else> {{ t('requirements.help.answerAll') }} </template>
+            </p>
+          </div>
+
+          <!-- action: merged (inspect → re-review / redo) -->
+          <div v-if="review && merged" class="space-y-2 border-t border-default pt-4">
+            <UButton
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-sparkles"
+              :loading="busy"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="reReview"
+            >
+              {{
+                busy ? t('requirements.actions.reReviewing') : t('requirements.actions.reReview')
+              }}
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              block
+              icon="i-lucide-pencil"
+              @click="
+                () => {
+                  showRedo = !showRedo
+                }
+              "
+            >
+              {{ t('requirements.actions.redoIncorporation') }}
+            </UButton>
+            <div v-if="showRedo" class="space-y-2">
+              <UTextarea
+                v-model="redoComment"
+                :rows="3"
+                autoresize
+                size="sm"
+                class="w-full"
+                :placeholder="t('requirements.redoPlaceholder')"
+              />
+              <UButton
+                color="primary"
+                variant="soft"
+                size="xs"
+                block
+                icon="i-lucide-wand-sparkles"
+                :loading="reworking"
+                :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                @click="incorporate(redoComment.trim())"
+              >
+                {{ t('requirements.actions.redoWithDirection') }}
+              </UButton>
+            </div>
+            <p class="text-2xs leading-relaxed text-dimmed">
+              {{ t('requirements.help.merged') }}
+            </p>
+          </div>
+
+          <div
+            v-if="review && incorporated"
+            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
+          >
+            {{ t('requirements.settledFooter') }}
+          </div>
+        </div>
+      </aside>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>
 
 <style scoped>
 .pl-5\.5 {
   padding-left: 1.375rem;
 }
-/* Minimal CommonMark styling for the incorporated requirements reader (mirrors the
-   prose review window's reader-prose). */
-.reader-prose :deep(p) {
-  margin: 0.4rem 0;
-}
-.reader-prose :deep(ul),
-.reader-prose :deep(ol) {
-  margin: 0.4rem 0;
-  padding-left: 1.25rem;
-  list-style: revert;
-}
-.reader-prose :deep(li) {
-  margin: 0.2rem 0;
-}
-.reader-prose :deep(strong) {
-  color: rgb(226 232 240);
-  font-weight: 600;
-}
-.reader-prose :deep(code) {
-  border-radius: 0.25rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.05rem 0.3rem;
-  font-size: 0.85em;
-}
-.reader-prose :deep(pre) {
-  margin: 0.5rem 0;
-  overflow-x: auto;
-  border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.75rem;
-}
-.reader-prose :deep(blockquote) {
-  margin: 0.5rem 0;
-  border-left: 2px solid rgb(51 65 85);
-  padding-left: 0.75rem;
-  color: rgb(148 163 184);
-}
+/* The rendered-markdown presentation is the SHARED global `.reader-prose` sheet
+   (`assets/css/prose.css`), not a local copy: this reader shows the same agent-authored
+   markdown the step reader does, and a per-window duplicate is how the review surfaces
+   drift apart one property at a time. */
 </style>

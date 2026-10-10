@@ -3,7 +3,9 @@ import type {
   GitHubInstallationRepository,
   InstallationPermissions,
 } from '@cat-factory/kernel'
+import { GITHUB_SETTINGS_URLS, VCS_DOC_URLS } from '@cat-factory/kernel'
 import { base64url, pkcs8PemToDer } from '../crypto/encoding.js'
+import { InstallationTokenCache, installationTokenKey } from './installationTokenCache.js'
 
 // GitHub App authentication, implemented entirely on Web Crypto (`crypto.subtle`)
 // so it runs in a plain Workers isolate without Node `crypto` — and identically
@@ -22,17 +24,95 @@ const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
 
 /**
- * Installation tokens (live ~1h repo read/write credentials) are cached IN
- * MEMORY, per isolate/process — never persisted. Persisting them put a plaintext
- * credential at rest (readable from any DB dump / console / SQLi elsewhere); an
- * in-memory cache keeps the hit rate high for a warm process while the token never
- * outlives it. A cache miss just re-mints cheaply from the app JWT. The
- * module-level map intentionally persists across requests within the same process.
+ * A failed installation-token mint, carrying the HTTP `status` as a STRUCTURED FIELD so the
+ * stale-installation reconcile classifies by `instanceof` (via {@link installationTokenMintStatusOf})
+ * instead of parsing the message (error-message coverage I7). This is where the mint failure ENTERS
+ * the system (the App JWT → `/access_tokens` call is not a `VcsClient` request, so it never routes
+ * through `describeVcsApiError`), so the code is attached exactly once here and nothing downstream
+ * re-parses it — the first-wrap-point rule (I6).
+ *
+ * The message is the elaborated {@link explainInstallationTokenMintFailure} text; the reconcile
+ * reads the `status` field, so the wording is free to change without affecting classification.
  */
-const tokenCache = new Map<
-  number,
-  { token: string; expiresAt: number; permissions: InstallationPermissions }
->()
+export class InstallationTokenMintError extends Error {
+  constructor(
+    readonly installationId: number,
+    readonly status: number,
+  ) {
+    super(explainInstallationTokenMintFailure(installationId, status))
+    this.name = 'InstallationTokenMintError'
+  }
+}
+
+/**
+ * The HTTP status of an installation-token MINT failure, or undefined for any other error. Reads
+ * the status ONLY off a real {@link InstallationTokenMintError}, so a repo-level 404 `GitHubApiError`
+ * — which also carries a `status` — is NOT mistaken for a gone installation (the reconcile must
+ * tombstone only on a mint 404/410, never a single deleted repo). The mint always throws in-process
+ * to the reconcile catch, so `instanceof` is authoritative.
+ */
+export function installationTokenMintStatusOf(error: unknown): number | undefined {
+  return error instanceof InstallationTokenMintError ? error.status : undefined
+}
+
+/**
+ * Turn a failed installation-token mint into an actionable message (error-message coverage C3).
+ * The App JWT → `/access_tokens` call is not a `VcsClient` request, so it doesn't route through
+ * `describeVcsApiError`; this is the local equivalent for that one endpoint.
+ *
+ * The wording is purely for humans: the stale-installation reconcile classifies off the structured
+ * {@link InstallationTokenMintError} `status` field, not this text, so the cause/remedy prose is
+ * free to change. Exported for unit testing, mirroring `explainMigrationFailure`.
+ */
+export function explainInstallationTokenMintFailure(
+  installationId: number,
+  status: number,
+): string {
+  const base = `Failed to mint installation token for ${installationId} (HTTP ${status})`
+  if (status === 401) {
+    return (
+      `${base}\nCause: the App failed to authenticate — GITHUB_APP_PRIVATE_KEY does not match this ` +
+      `App, or the key was rotated in the App settings. Fix: set GITHUB_APP_PRIVATE_KEY to the ` +
+      `App's current private key (PKCS#8 PEM). Manage the App at ${GITHUB_SETTINGS_URLS.installations}. ` +
+      `See ${VCS_DOC_URLS.githubOperations}.`
+    )
+  }
+  if (status === 404 || status === 410) {
+    return (
+      `${base}\nCause: installation ${installationId} no longer exists — the GitHub App was ` +
+      `uninstalled from the org/repo, or this workspace points at a stale installation. Fix: ` +
+      `reinstall the App and reconnect GitHub for the workspace (Settings → GitHub). Manage ` +
+      `installations at ${GITHUB_SETTINGS_URLS.installations}. See ${VCS_DOC_URLS.githubIntegration}.`
+    )
+  }
+  if (status === 403) {
+    return (
+      `${base}\nCause: the App JWT was rejected or rate-limited for this installation. Fix: verify ` +
+      `GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are current and the server clock is accurate, then ` +
+      `retry shortly. See ${VCS_DOC_URLS.githubOperations}.`
+    )
+  }
+  return base
+}
+
+/**
+ * Installation tokens (live ~1h repo read/write credentials) are cached IN MEMORY, per
+ * isolate/process, never persisted. Persisting them put a plaintext credential at rest
+ * (readable from any DB dump / console / SQLi elsewhere); an in-memory cache keeps the hit
+ * rate high for a warm process while the token never outlives it. The module-level cache
+ * intentionally persists across requests within the same process.
+ *
+ * Keyed by installation AND repo scope ({@link installationTokenKey}), so a mint narrowed to
+ * one dispatch's repos is cached beside the unscoped engine token instead of bypassing the
+ * cache entirely. Bypassing was the honest reading while the key was an installation id alone,
+ * but it made the standard dispatch path pay a JWT signature plus a GitHub round trip on EVERY
+ * step and every re-dispatch epoch, where it used to pay one per installation per hour.
+ */
+const tokenCache = new InstallationTokenCache<{
+  token: string
+  expiresAt: number
+  permissions: InstallationPermissions
+}>()
 
 export interface GitHubAppAuthDependencies {
   appId: string
@@ -81,9 +161,14 @@ export class GitHubAppAuth {
    */
   async installationToken(
     installationId: number,
-    opts?: { forceRefresh?: boolean },
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
   ): Promise<string> {
-    return (await this.cachedToken(installationId, opts?.forceRefresh)).token
+    // A repo-SCOPED mint (a container dispatch's job token, the mothership delegation path)
+    // shares the cache with the unscoped engine token but never its ENTRY: the key carries the
+    // scope, so a narrowed token can neither be served to a caller that asked for none nor
+    // poison the engine path with one. That is what makes caching it safe, and caching it is
+    // what keeps the standard dispatch off a JWT signature plus a GitHub round trip per step.
+    return (await this.cachedToken(installationId, opts?.forceRefresh, opts?.repositoryIds)).token
   }
 
   /**
@@ -100,18 +185,21 @@ export class GitHubAppAuth {
   private async cachedToken(
     installationId: number,
     forceRefresh = false,
+    repositoryIds?: number[],
   ): Promise<{ token: string; permissions: InstallationPermissions }> {
     if (!forceRefresh) {
-      const cached = tokenCache.get(installationId)
-      if (cached && cached.expiresAt - TOKEN_SKEW_MS > this.deps.clock.now()) {
-        return cached
-      }
+      const cached = tokenCache.get(
+        installationTokenKey(installationId, repositoryIds),
+        this.deps.clock.now(),
+      )
+      if (cached) return cached
     }
-    return this.mintInstallationToken(installationId)
+    return this.mintInstallationToken(installationId, repositoryIds)
   }
 
   private async mintInstallationToken(
     installationId: number,
+    repositoryIds?: number[],
   ): Promise<{ token: string; permissions: InstallationPermissions }> {
     const jwt = await this.appJwt()
     const res = await fetch(
@@ -123,13 +211,15 @@ export class GitHubAppAuth {
           accept: 'application/vnd.github+json',
           'user-agent': USER_AGENT,
           'x-github-api-version': API_VERSION,
+          // GitHub narrows the token to the named repos (numeric ids) when the mint
+          // carries a `repository_ids` body; bodyless mints stay installation-wide.
+          ...(repositoryIds ? { 'content-type': 'application/json' } : {}),
         },
+        ...(repositoryIds ? { body: JSON.stringify({ repository_ids: repositoryIds }) } : {}),
       },
     )
     if (!res.ok) {
-      throw new Error(
-        `Failed to mint installation token for ${installationId} (HTTP ${res.status})`,
-      )
+      throw new InstallationTokenMintError(installationId, res.status)
     }
     const body = (await res.json()) as AccessTokenResponse
     const expiresAt = Date.parse(body.expires_at)
@@ -138,20 +228,40 @@ export class GitHubAppAuth {
       permissions: body.permissions ?? {},
       expiresAt: Number.isNaN(expiresAt) ? this.deps.clock.now() + 30 * 60 * 1000 : expiresAt,
     }
-    // In-memory only (see tokenCache note) — never persisted.
-    tokenCache.set(installationId, entry)
+    // In-memory only (see the tokenCache note above), never persisted. The token is treated as
+    // lapsed a few minutes early so one is never picked up moments before it expires mid-request.
+    tokenCache.set(
+      installationTokenKey(installationId, repositoryIds),
+      entry,
+      entry.expiresAt - TOKEN_SKEW_MS,
+      this.deps.clock.now(),
+    )
     return entry
   }
 
   private importKey(): Promise<CryptoKey> {
     if (!this.keyPromise) {
-      this.keyPromise = crypto.subtle.importKey(
-        'pkcs8',
-        pkcs8PemToDer(this.deps.privateKeyPem),
-        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      )
+      // The config loaders validate the key's SHAPE at boot (PKCS#8 PEM + decodable body — see
+      // `requireGitHubAppPrivateKey`), so the common malformed cases fail on the misconfigured
+      // screen. A body that is valid base64 but not actually a PKCS#8 RSA key still slips through
+      // to here and would reject opaquely, so name the var + the openssl conversion on failure.
+      this.keyPromise = crypto.subtle
+        .importKey(
+          'pkcs8',
+          pkcs8PemToDer(this.deps.privateKeyPem),
+          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+          false,
+          ['sign'],
+        )
+        .catch((cause) => {
+          throw new Error(
+            'GITHUB_APP_PRIVATE_KEY could not be imported as a PKCS#8 RSA private key. Ensure it is ' +
+              "the GitHub App's private key converted to PKCS#8 (`-----BEGIN PRIVATE KEY-----`) with " +
+              '`openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem`. ' +
+              `See ${VCS_DOC_URLS.githubOperations}.`,
+            { cause },
+          )
+        })
     }
     return this.keyPromise
   }

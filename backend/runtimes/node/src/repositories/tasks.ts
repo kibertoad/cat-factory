@@ -1,34 +1,24 @@
 import type {
-  SecretCipher,
+  SealedTaskConnectionRecord,
   TaskComment,
-  TaskConnectionRecord,
   TaskConnectionRepository,
   TaskRecord,
+  TaskRef,
   TaskRepository,
   TaskSourceKind,
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { taskConnections, taskSourceSettings, tasks } from '../db/schema.js'
 
 // Drizzle/Postgres implementations of the task-source ports, mirroring the
 // Cloudflare facade's `D1TaskConnectionRepository` / `D1TaskRepository` (D1
 // migration 0014) so the Jira integration behaves identically across runtimes.
-// Source credentials are third-party secrets, encrypted at rest with the same
-// AES-256-GCM envelope the Cloudflare store uses (never written in plaintext).
-
-function parseCredentials(json: string): Record<string, string> {
-  try {
-    const parsed = JSON.parse(json)
-    if (parsed && typeof parsed === 'object') return parsed as Record<string, string>
-  } catch {
-    // A malformed bag is treated as empty; the import path then fails closed.
-  }
-  return {}
-}
+// Source credentials cross these repositories as the AES-256-GCM envelope they are stored as;
+// opening one belongs to `createTaskConnectionStore` (`@cat-factory/integrations`).
 
 function parseJsonArray<T>(json: string): T[] {
   try {
@@ -40,29 +30,19 @@ function parseJsonArray<T>(json: string): T[] {
   return []
 }
 
+/**
+ * Workspace → task-source connections over Postgres. The credential bag is the SEALED envelope
+ * here; opening it belongs to the store, which is what lets a mothership-mode node (holding no key
+ * for these rows) read them by naming the row over `/internal/secrets/unseal`.
+ */
 export class DrizzleTaskConnectionRepository implements TaskConnectionRepository {
-  constructor(
-    private readonly db: DrizzleDb,
-    private readonly cipher: SecretCipher,
-  ) {}
+  constructor(private readonly db: DrizzleDb) {}
 
-  /** Decode the stored credential blob, decrypting the envelope when present. */
-  private async decodeCredentials(stored: string): Promise<Record<string, string>> {
-    if (!stored.startsWith('v1.')) return parseCredentials(stored)
-    try {
-      return parseCredentials(await this.cipher.decrypt(stored))
-    } catch {
-      return {}
-    }
-  }
-
-  private async rowToRecord(
-    row: typeof taskConnections.$inferSelect,
-  ): Promise<TaskConnectionRecord> {
+  private rowToRecord(row: typeof taskConnections.$inferSelect): SealedTaskConnectionRecord {
     return {
       workspaceId: row.workspace_id,
       source: row.source as TaskSourceKind,
-      credentials: await this.decodeCredentials(row.credentials),
+      credentialsCipher: row.credentials,
       label: row.label,
       createdAt: row.created_at,
       deletedAt: row.deleted_at,
@@ -72,7 +52,7 @@ export class DrizzleTaskConnectionRepository implements TaskConnectionRepository
   async getByWorkspace(
     workspaceId: string,
     source: TaskSourceKind,
-  ): Promise<TaskConnectionRecord | null> {
+  ): Promise<SealedTaskConnectionRecord | null> {
     const [row] = await this.db
       .select()
       .from(taskConnections)
@@ -86,17 +66,16 @@ export class DrizzleTaskConnectionRepository implements TaskConnectionRepository
     return row ? this.rowToRecord(row) : null
   }
 
-  async listByWorkspace(workspaceId: string): Promise<TaskConnectionRecord[]> {
+  async listByWorkspace(workspaceId: string): Promise<SealedTaskConnectionRecord[]> {
     const rows = await this.db
       .select()
       .from(taskConnections)
       .where(and(eq(taskConnections.workspace_id, workspaceId), isNull(taskConnections.deleted_at)))
       .orderBy(desc(taskConnections.created_at))
-    return Promise.all(rows.map((row) => this.rowToRecord(row)))
+    return rows.map((row) => this.rowToRecord(row))
   }
 
-  async upsert(record: TaskConnectionRecord): Promise<void> {
-    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
+  async upsert(record: SealedTaskConnectionRecord): Promise<void> {
     // A workspace has a single live connection per source: clear any prior binding
     // (live or tombstoned) before inserting, so reconnecting can't collide on the PK.
     await this.db.transaction(async (tx) => {
@@ -111,7 +90,7 @@ export class DrizzleTaskConnectionRepository implements TaskConnectionRepository
       await tx.insert(taskConnections).values({
         workspace_id: record.workspaceId,
         source: record.source,
-        credentials,
+        credentials: record.credentialsCipher,
         label: record.label,
         created_at: record.createdAt,
         deleted_at: null,
@@ -269,6 +248,35 @@ export class DrizzleTaskRepository implements TaskRepository {
     return row ? rowToTask(row) : null
   }
 
+  async listByRefs(workspaceId: string, refs: readonly TaskRef[]): Promise<TaskRecord[]> {
+    if (refs.length === 0) return []
+    // Group the external ids by source so each source is ONE `IN` read (never a point-read
+    // per ref). Postgres has no D1-style bound-parameter ceiling, so the id list needs no
+    // chunking — mirroring the unchunked `getByUrl` above.
+    const idsBySource = new Map<TaskSourceKind, string[]>()
+    for (const ref of refs) {
+      const ids = idsBySource.get(ref.source)
+      if (ids) ids.push(ref.externalId)
+      else idsBySource.set(ref.source, [ref.externalId])
+    }
+    const out: TaskRecord[] = []
+    for (const [source, externalIds] of idsBySource) {
+      const rows = await this.db
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.workspace_id, workspaceId),
+            eq(tasks.source, source),
+            inArray(tasks.external_id, externalIds),
+            isNull(tasks.deleted_at),
+          ),
+        )
+      for (const row of rows) out.push(rowToTask(row))
+    }
+    return out
+  }
+
   async listByWorkspace(workspaceId: string): Promise<TaskRecord[]> {
     const rows = await this.db
       .select()
@@ -294,13 +302,17 @@ export class DrizzleTaskRepository implements TaskRepository {
   }
 
   async getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null> {
+    // A needle that normalises to nothing is not a URL, and must never be matched (see
+    // `urlMatchCandidates`).
+    const candidates = urlMatchCandidates(url)
+    if (!candidates) return null
     const rows = await this.db
       .select()
       .from(tasks)
       .where(
         and(
           eq(tasks.workspace_id, workspaceId),
-          inArray(tasks.url, urlMatchCandidates(url)),
+          inArray(tasks.url, candidates),
           isNull(tasks.deleted_at),
         ),
       )
@@ -324,6 +336,49 @@ export class DrizzleTaskRepository implements TaskRepository {
           eq(tasks.source, source),
           eq(tasks.external_id, externalId),
         ),
+      )
+  }
+
+  async claimBlockLink(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    blockId: string,
+  ): Promise<boolean> {
+    // The `linked_block_id IS NULL OR = ?` predicate is the claim, and it has to be IN the
+    // statement: at READ COMMITTED a preceding SELECT takes no lock, so two concurrent filings of
+    // one ticket would both read it free. Inside the UPDATE the second writer blocks on the
+    // first's row lock and re-evaluates against the committed value, so it matches nothing.
+    // `.returning()` is what makes the outcome readable — the row count is the verdict.
+    const claimed = await this.db
+      .update(tasks)
+      .set({ linked_block_id: blockId })
+      .where(
+        and(
+          eq(tasks.workspace_id, workspaceId),
+          eq(tasks.source, source),
+          eq(tasks.external_id, externalId),
+          or(isNull(tasks.linked_block_id), eq(tasks.linked_block_id, blockId)),
+        ),
+      )
+      .returning({ externalId: tasks.external_id })
+    return claimed.length > 0
+  }
+
+  async unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .update(tasks)
+      .set({ linked_block_id: null })
+      .where(and(eq(tasks.workspace_id, workspaceId), eq(tasks.linked_block_id, blockId)))
+  }
+
+  async unlinkAllFromBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    await this.db
+      .update(tasks)
+      .set({ linked_block_id: null })
+      .where(
+        and(eq(tasks.workspace_id, workspaceId), inArray(tasks.linked_block_id, [...blockIds])),
       )
   }
 }

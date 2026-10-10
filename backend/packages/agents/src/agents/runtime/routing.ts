@@ -1,6 +1,6 @@
-import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentKind, LocalModelDeclarations, ModelFlavor } from '@cat-factory/kernel'
 import type { ModelRef } from '@cat-factory/kernel'
-import { inlineModelRef } from '@cat-factory/kernel'
+import { inlineModelRef, withLocalModelDeclaration } from '@cat-factory/kernel'
 
 // "Which LLM, with what configuration, for what." Routing maps each agent kind
 // to a model and generation settings, with a mandatory default fallback. The
@@ -30,8 +30,18 @@ export function resolveAgentConfig(routing: AgentRouting, kind: AgentKind): Agen
 /** The resolvers a caller supplies so a step's model is picked the same way everywhere. */
 export interface StepModelResolvers {
   agentRouting: AgentRouting
-  /** Resolve a model catalog id to a concrete ref; unknown/absent ids return undefined. */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Resolve a model catalog id to a concrete ref; unknown/absent ids return undefined.
+   *
+   * `providerPreference` is the route order the MODEL PRESET in force states, folded onto the
+   * deployment capability set the facade closes over. Omitted (a test fake, a caller with no
+   * preset in hand) ⇒ the deployment's default order, which is what every caller got before
+   * presets could state one.
+   */
+  resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve a workspace's default model id for an agent kind (via the task's selected
    * or the workspace's default model preset), consulted when the block pins no usable
@@ -61,6 +71,18 @@ export interface StepModelInputs {
   modelPresetId?: string
   /** The workspace the step runs in; required to consult a preset default. */
   workspaceId?: string
+  /**
+   * The route order the preset in force states, resolved ONCE per dispatch by the engine and
+   * carried on `AgentRunContext.providerPreference`. Absent ⇒ the deployment's default order.
+   */
+  providerPreference?: readonly ModelFlavor[]
+  /**
+   * What the run initiator declared about their locally-run models, resolved ONCE per dispatch by
+   * the engine and carried on `AgentRunContext.localModelDeclarations`. Folded onto the resolved
+   * ref below, because a local model has no catalog entry for those facts to come from. Absent ⇒
+   * a local ref stays undeclared.
+   */
+  localModelDeclarations?: readonly LocalModelDeclarations[]
 }
 
 /**
@@ -71,12 +93,29 @@ export interface StepModelInputs {
  * candidate id is run through {@link StepModelResolvers.resolveBlockModel}, so an
  * unresolvable pin (e.g. a stale id) falls through to the next source rather than
  * silently skipping the workspace default.
+ *
+ * Whichever source wins, a LOCAL ref leaves here carrying the initiator's declaration for it. The
+ * fold is applied here rather than at each dispatch site precisely because this is the one function
+ * all three of them resolve through: `resolveBlockModel` is a boot-time closure over deployment
+ * capabilities, so it can neither know the user nor find a per-user model in the catalog.
  */
 export async function resolveStepModelRef(
   resolvers: StepModelResolvers,
   inputs: StepModelInputs,
 ): Promise<ModelRef> {
-  const fromBlock = resolvers.resolveBlockModel(inputs.blockModelId)
+  return withLocalModelDeclaration(
+    await resolveRoutedRef(resolvers, inputs),
+    inputs.localModelDeclarations,
+  )
+}
+
+/** The precedence itself: block pin > workspace per-kind default > the kind's env routing. */
+async function resolveRoutedRef(
+  resolvers: StepModelResolvers,
+  inputs: StepModelInputs,
+): Promise<ModelRef> {
+  const preference = inputs.providerPreference
+  const fromBlock = resolvers.resolveBlockModel(inputs.blockModelId, preference)
   if (fromBlock) return fromBlock
   if (resolvers.resolveWorkspaceModelDefault && inputs.workspaceId) {
     const defaultId = await resolvers.resolveWorkspaceModelDefault(
@@ -84,7 +123,7 @@ export async function resolveStepModelRef(
       inputs.agentKind,
       inputs.modelPresetId,
     )
-    const fromDefault = resolvers.resolveBlockModel(defaultId)
+    const fromDefault = resolvers.resolveBlockModel(defaultId, preference)
     if (fromDefault) return fromDefault
   }
   return resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref

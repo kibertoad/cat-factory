@@ -115,6 +115,38 @@ describe('web search proxy /v1/web-search/search', () => {
     expect(body.results).toEqual([{ url: 'https://zod.dev', title: 'Zod', content: 'TS schemas' }])
   })
 
+  it('falls back to the deployment-default upstream when the account has no keys', async () => {
+    // Parity with the Node facade (see runtimes/node/test/web-search-proxy.spec.ts): a
+    // `WEB_SEARCH_*` env var configures a deployment-wide DEFAULT upstream the proxy uses when
+    // the run's account resolves none of its own. Proves this facade builds + surfaces
+    // `defaultWebSearchUpstream` from env (a facade that forgot the wiring 200-degrades instead).
+    let braveUrl = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        braveUrl = String(input)
+        return new Response(
+          JSON.stringify({
+            web: { results: [{ url: 'https://zod.dev', title: 'Zod', description: 'TS schemas' }] },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
+    // An account with NO web-search keys of its own ⇒ the deployment default must serve it.
+    const token = await mint({ accountId: `acct-${crypto.randomUUID()}` })
+    const res = await app.fetch(
+      searchRequest(token),
+      testEnv({ WEB_SEARCH_BRAVE_API_KEY: 'deploy-brave-key' }),
+    )
+    expect(res.status).toBe(200)
+    expect(braveUrl).toContain('api.search.brave.com')
+    const body = (await res.json()) as { results: Array<{ url: string; content: string }> }
+    expect(body.results).toEqual([{ url: 'https://zod.dev', title: 'Zod', content: 'TS schemas' }])
+  })
+
   it('returns 402 when the spend budget is exhausted', async () => {
     const accountId = `acct-${crypto.randomUUID()}`
     const workspaceId = `ws-${crypto.randomUUID()}`

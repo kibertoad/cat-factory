@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  linearDocumentVersion,
   mapLinearDocument,
   mapLinearDocumentSearch,
   parseLinearDocRef,
@@ -24,13 +25,14 @@ describe('parseLinearDocRef', () => {
 })
 
 describe('mapLinearDocument', () => {
-  it('maps content as Markdown and collapses blank lines', () => {
+  it('maps content as Markdown, collapses blank lines, and carries updatedAt as the version', () => {
     const doc = mapLinearDocument({
       document: {
         id: 'd1',
         title: ' Spec ',
         url: 'https://linear.app/d/d1',
         content: 'A\n\n\n\nB',
+        updatedAt: '2026-07-04T00:00:00.000Z',
       },
     })
     expect(doc).toEqual({
@@ -38,11 +40,22 @@ describe('mapLinearDocument', () => {
       title: 'Spec',
       url: 'https://linear.app/d/d1',
       body: 'A\n\nB',
+      version: '2026-07-04T00:00:00.000Z',
     })
   })
 
   it('throws when no document came back', () => {
     expect(() => mapLinearDocument({ document: null })).toThrow()
+  })
+})
+
+describe('linearDocumentVersion', () => {
+  it('returns the document updatedAt token, or empty when absent', () => {
+    expect(linearDocumentVersion({ document: { updatedAt: '2026-01-02T03:04:05Z' } })).toBe(
+      '2026-01-02T03:04:05Z',
+    )
+    expect(linearDocumentVersion({ document: {} })).toBe('')
+    expect(linearDocumentVersion({ document: null })).toBe('')
   })
 })
 

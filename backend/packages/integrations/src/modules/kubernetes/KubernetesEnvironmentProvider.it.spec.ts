@@ -77,6 +77,7 @@ function runRepo(files: Record<string, string>): RunRepoContext {
       return null
     },
     async createBranch() {},
+    async deleteBranch() {},
     async commitFiles() {
       return { sha: 'c' }
     },
@@ -84,7 +85,7 @@ function runRepo(files: Record<string, string>): RunRepoContext {
       return { number: 1 } as never
     },
   }
-  return { repo, baseBranch: 'main' }
+  return { repo, baseBranch: 'main', repoId: 'repo_1' }
 }
 
 describe.skipIf(skip !== null)(
@@ -137,7 +138,7 @@ describe.skipIf(skip !== null)(
           provider.status({
             manifest,
             externalId: namespace,
-            provisionFields: provisioned.fields,
+            provisionFields: provisioned.fields ?? {},
             resolveSecret,
           }),
         (s) => s.status === 'ready' && !!s.url,
@@ -213,7 +214,7 @@ spec:
       const ready = await provider.status({
         manifest: ingressManifest,
         externalId: namespace,
-        provisionFields: provisioned.fields,
+        provisionFields: provisioned.fields ?? {},
         resolveSecret,
       })
       expect(ready.status).toBe('ready')
@@ -234,7 +235,7 @@ spec:
       const first = await provider.teardown({
         manifest,
         externalId: namespace,
-        provisionFields: provisioned.fields,
+        provisionFields: provisioned.fields ?? {},
         resolveSecret,
       })
       expect(first.status).toBe('torn_down')
@@ -243,7 +244,7 @@ spec:
       const second = await provider.teardown({
         manifest,
         externalId: namespace,
-        provisionFields: provisioned.fields,
+        provisionFields: provisioned.fields ?? {},
         resolveSecret,
       })
       expect(second.status).toBe('torn_down')

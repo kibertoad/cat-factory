@@ -12,7 +12,7 @@ describe('execution engine', () => {
     const start = await app.call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_simple' },
     )
     expect(start.status).toBe(201)
     expect(start.body.status).toBe('running')
@@ -44,7 +44,7 @@ describe('execution engine', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: 'pl_quick',
+      pipelineId: 'pl_simple',
     })
     await app.drive(wsId)
 
@@ -73,7 +73,7 @@ describe('execution engine', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: 'pl_quick',
+      pipelineId: 'pl_simple',
     })
     await app.drive(wsId)
 
@@ -97,7 +97,7 @@ describe('execution engine', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: 'pl_quick',
+      pipelineId: 'pl_simple',
     })
 
     const blocked = await app.drive(wsId)
@@ -134,6 +134,7 @@ describe('execution engine', () => {
     // A two-step pipeline gated after the first step.
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -181,6 +182,7 @@ describe('execution engine', () => {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -217,7 +219,7 @@ describe('execution engine', () => {
     const wsId = workspace.id
 
     await app.call('POST', `/workspaces/${wsId}/blocks/blk_api/executions`, {
-      pipelineId: 'pl_quick',
+      pipelineId: 'pl_simple',
     })
     await app.drive(wsId)
 

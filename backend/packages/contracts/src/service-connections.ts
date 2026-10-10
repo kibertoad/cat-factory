@@ -50,3 +50,28 @@ export function connectionNeighborIds(
   }
   return neighbors
 }
+
+/**
+ * The connection `description` prose for the edge between two service frames, in either
+ * direction — the consumer→provider line explaining the relationship ("sends transactional
+ * email via it"). Prefers the edge `a` declares toward `b` (a uses b), falling back to the
+ * reverse (b uses a) so a task on either endpoint still gets the human/agent-facing prose.
+ * Returns undefined when neither frame declares the edge or the line is blank. Shared by the
+ * engine's involved-services resolution (folds it into the agent prompt) — pure like the
+ * other contracts helpers.
+ */
+export function connectionDescription(
+  blocks: ReadonlyArray<{ id: string; serviceConnections?: ServiceConnection[] }>,
+  aFrameId: string,
+  bFrameId: string,
+): string | undefined {
+  const byId = new Map(blocks.map((b) => [b.id, b]))
+  const edge = (fromId: string, toId: string): string | undefined => {
+    const from = byId.get(fromId)
+    const description = from?.serviceConnections?.find(
+      (c) => c.serviceBlockId === toId,
+    )?.description
+    return description?.trim() ? description : undefined
+  }
+  return edge(aFrameId, bFrameId) ?? edge(bFrameId, aFrameId)
+}

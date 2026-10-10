@@ -1,7 +1,7 @@
 {
   "name": "@cat-factory/observability-langfuse",
-  "version": "0.7.119",
-  "description": "Opt-in Langfuse trace sink for the Agent Architecture Board. A fetch-based LlmTraceSink that streams LLM generations (and container tool spans) to Langfuse's ingestion API — runs unchanged on both the Cloudflare Worker (workerd) and Node facades.",
+  "version": "0.11.64",
+  "description": "Opt-in Langfuse trace sink for the Agent Architecture Board. The workerd-safe OTLP/HTTP exporter pointed at Langfuse's OpenTelemetry endpoint, so LLM generations and container tool spans stream unchanged on both the Cloudflare Worker and Node facades.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
@@ -30,11 +30,12 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/kernel": "workspace:*"
+    "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/observability-otel": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc",
-    "undici": "^8.5.0",
-    "vitest": "^4.1.9"
+    "typescript": "7.0.2",
+    "undici": "^8.11.2",
+    "vitest": "^4.1.11"
   }
 }

@@ -1,13 +1,11 @@
 import { computed } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import type { StepGating } from '~/types/consensus'
+import { isBuiltinGatableKind, producesTaskEstimate } from '@cat-factory/contracts'
 import { COMPANION_FOR_PRODUCER, isKnownAgentKind, isProducerCompanion } from '~/utils/catalog'
 import { usePipelinesStore } from '~/stores/pipelines'
 
-/** Estimate-gating consults a `task-estimator` step (mirrors the backend constant). */
-const TASK_ESTIMATOR_KIND = 'task-estimator'
-
-export type PipelineProblemType = 'unknown-kind' | 'shape' | 'outdated'
+export type PipelineProblemType = 'unknown-kind' | 'shape' | 'outdated' | 'retired'
 
 export interface PipelineProblem {
   type: PipelineProblemType
@@ -23,6 +21,52 @@ export interface PipelineHealth {
   outdated: boolean
 }
 
+/**
+ * A stored built-in that has been WITHDRAWN from the catalog — no longer relevant, and removable
+ * (the one case where deleting a built-in is allowed).
+ *
+ * It is a list of its own rather than a {@link PipelineProblem} on {@link PipelineHealth} because
+ * every problem there is answered by a RESEED, and a retired pipeline has no catalog definition
+ * left to reseed from. Keeping it separate is what guarantees the advisory can never offer both
+ * fixes for one row — a retired pipeline is skipped by the health scan entirely.
+ */
+export interface RetiredPipelineHealth {
+  pipeline: Pipeline
+  /**
+   * The live pipeline that supersedes it, when the catalog names one — resolved to a display name
+   * so the advisory can write "Use {name} instead".
+   *
+   * Deliberately NOT a {@link Pipeline}: the replacement usually is NOT one this workspace stores.
+   * The canonical retirement is "old flow superseded by a NEWLY SHIPPED built-in", and a new
+   * built-in lives in `catalogVersions` with no row until someone reseeds it — it is literally a
+   * {@link NewPipeline} at that moment. Typing this as a stored `Pipeline` made the replacement
+   * unresolvable in exactly the case `replacedBy` exists for, silently dropping the sentence.
+   */
+  replacement?: { id: string; name: string }
+}
+
+/** A brand-new built-in pipeline that appeared in the catalog but isn't in the workspace yet. */
+export interface NewPipeline {
+  /** The catalog (built-in) id — what the reseed endpoint is keyed by (it creates the row). */
+  id: string
+  /** The built-in's display name, from the catalog versions' companion name map. */
+  name: string
+}
+
+/**
+ * A catalog entry's display name for the "new pipeline" advisory, used only while the entry has no
+ * stored row to take a name off. The snapshot's companion name map answers it; the humanised id
+ * (`pl_review` -> "review", rendered capitalised) is the FALLBACK for a facade that ships no map.
+ *
+ * The map is not a nicety. Humanising was fine for the shipped built-ins, whose ids read as their
+ * names, and wrong the moment a deployment registers its own: a reusable operation's
+ * `pl_org_introduce_api` was offered as "org introduce api", a name appearing nowhere else in the
+ * product, on exactly the boards that predate the operation and therefore see this advisory.
+ */
+function builtinPipelineName(id: string, names: Record<string, string>): string {
+  return names[id] ?? id.replace(/^pl_/, '').replace(/_/g, ' ')
+}
+
 /** Producers a companion kind is allowed to review (inverse of {@link COMPANION_FOR_PRODUCER}). */
 function companionTargets(companion: string): string[] {
   return Object.entries(COMPANION_FOR_PRODUCER)
@@ -33,19 +77,11 @@ function companionTargets(companion: string): string[] {
 const isEnabledAt = (p: Pipeline, i: number) => p.enabled?.[i] !== false
 
 /**
- * Client-side mirror of the backend `validatePipelineShape` (companion adjacency + estimate
- * gating, over the ENABLED subset), collecting the first problem instead of throwing. Returns a
- * human message, or null when the shape is valid. Kept in step with
- * `backend/packages/orchestration/src/modules/pipelines/pipelineShape.ts`.
+ * Companion adjacency: an enabled companion's nearest preceding ENABLED step must be a producer it
+ * can review. Mirrors `assertValidCompanionPlacement`.
  */
-function shapeProblem(p: Pipeline): string | null {
+function companionProblem(p: Pipeline): string | null {
   const kinds = p.agentKinds
-  // No enabled steps ⇒ nothing would run.
-  if (kinds.length === 0 || !kinds.some((_, i) => isEnabledAt(p, i))) {
-    return 'No enabled steps — the pipeline has nothing to run.'
-  }
-  // Companion adjacency: an enabled companion's nearest preceding enabled step must be a
-  // producer it can review.
   for (let i = 0; i < kinds.length; i++) {
     const kind = kinds[i]
     if (!kind || !isProducerCompanion(kind) || !isEnabledAt(p, i)) continue
@@ -61,46 +97,146 @@ function shapeProblem(p: Pipeline): string | null {
       return `Companion '${kind}' must run immediately after an enabled step it can review (${targets.join(', ')}).`
     }
   }
-  // Estimate gating: an enabled gated step must be a companion, set ≥1 threshold, and have an
-  // enabled task-estimator earlier in the chain.
+  return null
+}
+
+/**
+ * The rule both SKIP AXES share: a step that may be absent from a run must be a kind whose result
+ * later steps read as context, and must not also carry a human approval gate (a skip may leave a
+ * checkpoint un-reached, never cancel one the author asked for). Returns the problem, or null.
+ *
+ * Shared by {@link gatingProblem} and {@link conditionProblem} rather than written twice, because
+ * the reason is identical and only the axis's name differs — which is exactly how the two would
+ * drift apart. `axis` supplies the naming, mirroring `assertValidGating` /
+ * `assertValidRunConditions`.
+ *
+ * Gatability reads the SHARED `BUILTIN_GATABLE_KINDS` rather than a local rule, because this
+ * advisory auto-opens a modal over the board: a copy of the rule that drifts behind the engine's
+ * does not merely warn wrongly, it calls a pipeline the product SHIPS invalid and leaves the board
+ * unusable. A DEPLOYMENT-registered kind can override gatability for itself through the agent-kind
+ * registry, which the SPA cannot see, so the two are not perfectly symmetric: such a kind is
+ * reported here and accepted by the engine. That is the safe direction of the asymmetry — a
+ * dismissible advisory rather than a refused save — and the only one available without shipping the
+ * registry to the browser.
+ */
+function skipAxisProblem(
+  p: Pipeline,
+  i: number,
+  axis: {
+    notGatable: (kind: string | undefined) => string
+    withHumanGate: (kind: string) => string
+  },
+): string | null {
+  const kind = p.agentKinds[i]
+  if (!kind || !isBuiltinGatableKind(kind)) return axis.notGatable(kind)
+  if (p.gates?.[i] === true) return axis.withHumanGate(kind)
+  return null
+}
+
+/**
+ * Estimate gating: the shared skip-axis rules, plus the two specific to an estimate: at least one
+ * axis threshold (with none the step would ALWAYS skip) and an enabled step that PRODUCES an
+ * estimate earlier in the chain (or the gate has nothing to consult). Mirrors `assertValidGating`,
+ * through the same `producesTaskEstimate` predicate, so neither surface can drift from the other
+ * about which kinds count.
+ */
+function gatingProblem(p: Pipeline): string | null {
   const gating = p.gating
-  if (gating) {
-    for (let i = 0; i < kinds.length; i++) {
-      const g = gating[i] as StepGating | null | undefined
-      if (!g?.enabled || !isEnabledAt(p, i)) continue
-      const kind = kinds[i]
-      if (!kind || !isProducerCompanion(kind)) {
-        return `Step '${kind}' cannot be estimate-gated — only companion steps may be skipped on the estimate.`
-      }
-      if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
-        return `Step '${kind}' is estimate-gated but sets no threshold (complexity / risk / impact).`
-      }
-      const hasEstimator = kinds
-        .slice(0, i)
-        .some((k, j) => k === TASK_ESTIMATOR_KIND && isEnabledAt(p, j))
-      if (!hasEstimator) {
-        return `Step '${kind}' is gated on the estimate but no enabled '${TASK_ESTIMATOR_KIND}' runs before it.`
-      }
+  if (!gating) return null
+  const kinds = p.agentKinds
+  for (let i = 0; i < kinds.length; i++) {
+    const g = gating[i] as StepGating | null | undefined
+    if (!g?.enabled || !isEnabledAt(p, i)) continue
+    const shared = skipAxisProblem(p, i, {
+      notGatable: (kind) =>
+        `Step '${kind}' may not be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`,
+      withHumanGate: (kind) =>
+        `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one.`,
+    })
+    if (shared) return shared
+    const kind = kinds[i]
+    if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
+      return `Step '${kind}' is estimate-gated but sets no threshold (complexity / risk / impact).`
+    }
+    const hasEstimator = kinds
+      .slice(0, i)
+      .some((k, j) => producesTaskEstimate(k) && isEnabledAt(p, j))
+    if (!hasEstimator) {
+      return `Step '${kind}' is gated on the estimate but no step that produces one runs before it.`
     }
   }
   return null
 }
 
 /**
+ * Run conditions: the SECOND skip axis, held to the shared rules and nothing more. A skip is a skip
+ * whichever axis caused it, so a condition on a non-gatable kind drops something the run needs.
+ * Mirrors `assertValidRunConditions`. A condition BESIDE an estimate gate is deliberately fine.
+ */
+function conditionProblem(p: Pipeline): string | null {
+  const stepOptions = p.stepOptions
+  if (!stepOptions) return null
+  for (let i = 0; i < p.agentKinds.length; i++) {
+    if (!stepOptions[i]?.condition || !isEnabledAt(p, i)) continue
+    const problem = skipAxisProblem(p, i, {
+      notGatable: (kind) =>
+        `Step '${kind}' may not carry a run condition — its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it.`,
+      withHumanGate: (kind) =>
+        `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition — a condition may leave a checkpoint un-reached but never remove one.`,
+    })
+    if (problem) return problem
+  }
+  return null
+}
+
+/**
+ * Client-side mirror of the backend `validatePipelineShape` (companion adjacency + both skip axes,
+ * over the ENABLED subset), collecting the first problem instead of throwing. Returns a human
+ * message, or null when the shape is valid. Kept in step with
+ * `backend/packages/orchestration/src/modules/pipelines/pipelineShape.ts`.
+ *
+ * One delegate per rule, in the order the backend checks them, so adding the next rule is a
+ * function beside these rather than another branch inside one that already carries three.
+ *
+ * A rule here must be keyed off vocabulary SHARED with that module (`@cat-factory/contracts`)
+ * wherever one exists, never re-stated locally — see {@link skipAxisProblem} for what a drifted
+ * copy costs. Adding a rule to `validatePipelineShape` without adding it here is the milder half of
+ * the same drift: a pipeline the engine refuses at save that this advisory calls healthy.
+ */
+function shapeProblem(p: Pipeline): string | null {
+  // No enabled steps ⇒ nothing would run.
+  if (p.agentKinds.length === 0 || !p.agentKinds.some((_, i) => isEnabledAt(p, i))) {
+    return 'No enabled steps — the pipeline has nothing to run.'
+  }
+  return companionProblem(p) ?? gatingProblem(p) ?? conditionProblem(p)
+}
+
+/**
  * Detect pipelines in an unhealthy state for the startup advisory: those referencing an unknown
- * agent kind or with an invalid shape (offer to delete a custom one / reseed a built-in), and
- * built-ins whose seeded definition has moved ahead of the stored copy (offer to reseed). Reads
- * the pipeline library + the snapshot's catalog versions from the pipelines store. Detection runs
- * entirely client-side because the canonical agent-kind catalog lives here (`AGENT_BY_KIND` +
- * `SYSTEM_AGENT_META` + registered custom kinds); the version comparison uses the catalog
- * versions the snapshot ships.
+ * agent kind or with an invalid shape (offer to delete a custom one / reseed a built-in), built-ins
+ * whose seeded definition has moved ahead of the stored copy (offer to reseed), AND brand-new
+ * built-ins that appeared in the catalog but aren't in the workspace yet (offer to ADD them — a
+ * board seeded before the built-in shipped, e.g. `pl_review`). Reads the pipeline library + the
+ * snapshot's catalog versions from the pipelines store. Detection runs entirely client-side: the
+ * canonical agent-kind catalog lives here (`AGENT_BY_KIND` + `SYSTEM_AGENT_META` + registered custom
+ * kinds), and the catalog versions the snapshot ships ARE the set of built-in ids — a catalog id
+ * with no stored pipeline is a new built-in. Mirrors `useRiskPolicyHealth` / `useModelPresetHealth`.
  */
 export function usePipelineHealth() {
   const store = usePipelinesStore()
 
+  /** Catalog ids the backend reports as withdrawn, indexed to their (optional) replacement id. */
+  const retiredIds = computed(
+    () => new Map(store.retiredPipelines.map((p) => [p.id, p.replacedBy])),
+  )
+
   const health = computed<PipelineHealth[]>(() => {
     const out: PipelineHealth[] = []
     for (const pipeline of store.pipelines) {
+      // A retired pipeline is reported by `retired` below, never here: every problem this scan
+      // raises is answered by a reseed, and there is no catalog definition left to reseed from.
+      // (An invalid retired pipeline would otherwise get a Reseed button that can only 422.)
+      if (retiredIds.value.has(pipeline.id)) continue
       const problems: PipelineProblem[] = []
 
       const unknown = [...new Set(pipeline.agentKinds.filter((k) => !isKnownAgentKind(k)))]
@@ -130,11 +266,55 @@ export function usePipelineHealth() {
     return out
   })
 
+  // Brand-new built-ins: a catalog id (a `catalogVersions` key) with no stored pipeline. Adding one
+  // is the same reseed call as adopting an update (it inserts the row when absent).
+  const newPipelines = computed<NewPipeline[]>(() => {
+    const storedIds = new Set(store.pipelines.map((p) => p.id))
+    return Object.keys(store.catalogVersions)
+      .filter((id) => !storedIds.has(id))
+      .map((id) => ({ id, name: builtinPipelineName(id, store.catalogNames) }))
+  })
+
+  // Retired built-ins this workspace still stores: the ones seeded before the withdrawal. A
+  // retirement the board never had a row for is nothing to report — there is no cleanup to do.
+  const retired = computed<RetiredPipelineHealth[]>(() =>
+    store.pipelines
+      .filter((p) => retiredIds.value.has(p.id))
+      .map((pipeline) => {
+        const replacementId = retiredIds.value.get(pipeline.id)
+        const replacement = replacementId ? resolveReplacement(replacementId) : undefined
+        return { pipeline, ...(replacement ? { replacement } : {}) }
+      }),
+  )
+
+  /**
+   * Name the pipeline a retirement points at. Two sources, in order, because a replacement is a
+   * LIVE catalog id and a live catalog id may or may not have been seeded into this workspace yet:
+   * the stored row's authored name when there is one, else the catalog-derived name — the same
+   * `builtinPipelineName` fallback `newPipelines` uses for exactly this "in the catalog, no row
+   * yet" state. Reading only the store would blank the replacement on the most common retirement
+   * (superseded by a newly shipped built-in, which by definition has no row until it is added).
+   *
+   * An id in neither returns undefined and the advisory falls back to the un-named copy: the
+   * backend guards `replacedBy` against naming a non-existent pipeline, but a SPA running against
+   * a newer backend can still be handed one it doesn't know, and inventing a name for it would be
+   * worse than saying nothing.
+   */
+  function resolveReplacement(id: string): { id: string; name: string } | undefined {
+    const stored = store.getPipeline(id)
+    if (stored) return { id, name: stored.name }
+    if (id in store.catalogVersions)
+      return { id, name: builtinPipelineName(id, store.catalogNames) }
+    return undefined
+  }
+
   // An invalid built-in is reseeded (not deleted) and that also clears any "outdated" flag, so
   // exclude it from the outdated list to avoid offering the same fix twice.
   const invalid = computed(() => health.value.filter((h) => h.invalid))
   const outdated = computed(() => health.value.filter((h) => h.outdated && !h.invalid))
-  const hasIssues = computed(() => health.value.length > 0)
+  const hasIssues = computed(
+    () => health.value.length > 0 || newPipelines.value.length > 0 || retired.value.length > 0,
+  )
 
-  return { health, invalid, outdated, hasIssues }
+  return { health, invalid, outdated, newPipelines, retired, hasIssues }
 }

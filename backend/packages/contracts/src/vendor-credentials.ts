@@ -33,6 +33,13 @@ export const vendorCredentialSchema = v.object({
   inputTokens: v.number(),
   outputTokens: v.number(),
   requestCount: v.number(),
+  /** Whether this token is eligible for leasing. A disabled token stays in the pool
+   * (visible + re-enablable) but is never leased and doesn't make its vendor "configured". */
+  enabled: v.boolean(),
+  /** Whether this token is the pinned default for its vendor: preferred at lease time over
+   * usage-aware rotation. At most one default per (workspace, vendor); a disabled default
+   * is ignored (leasing falls back to rotation among the remaining enabled tokens). */
+  isDefault: v.boolean(),
 })
 export type VendorCredential = v.InferOutput<typeof vendorCredentialSchema>
 
@@ -46,3 +53,15 @@ export const addVendorCredentialSchema = v.object({
   token: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type AddVendorCredentialInput = v.InferOutput<typeof addVendorCredentialSchema>
+
+/**
+ * Update a pool token's lifecycle flags. Both fields are optional — only the supplied
+ * ones change. `enabled: false` takes the token out of rotation without deleting it;
+ * `isDefault: true` pins it as the vendor's default (clearing any prior default), and
+ * `isDefault: false` un-pins it (the vendor reverts to usage-aware rotation).
+ */
+export const updateVendorCredentialSchema = v.object({
+  enabled: v.optional(v.boolean()),
+  isDefault: v.optional(v.boolean()),
+})
+export type UpdateVendorCredentialInput = v.InferOutput<typeof updateVendorCredentialSchema>

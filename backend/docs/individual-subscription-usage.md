@@ -81,9 +81,14 @@ never accidentally ride yours. There is no API that pools or shares these tokens
 
 **The client-side password cache.** To stay low-friction the typed password is cached in the
 browser (`localStorage`, single key, ~40h TTL) so a start/retry rides along without a
-re-prompt. This does not weaken at-rest protection, which is carried by the system
-encryption, not by how long the password lives on the user's own device: the server never
-stores the password, and the cache is useless to an external attacker without the system key.
+re-prompt. Every gated action (start / confirm / retry) re-validates the cache against an **8h
+expiry buffer**: a key with less than that runway left is _withheld_ (treated as absent) so
+the server's 428 gate re-challenges and the user re-enters **early**, refreshing the full
+window while they are present at the action, rather than letting the key lapse mid-pipeline and
+surface as a broken run that asks for a retry. This does not weaken at-rest protection, which
+is carried by the system encryption, not by how long the password lives on the user's own
+device: the server never stores the password, and the cache is useless to an external attacker
+without the system key.
 (An XSS attacker on the origin who could read the cache could already act as the signed-in
 user, but still cannot recover the raw token, which is never returned to the client.) The
 password rides to the server as a request header (`X-Personal-Password`), like the bearer
@@ -98,7 +103,9 @@ so the window is kept tight: the default TTL is **~12h**, and a healthy run **de
 activation the moment it finishes**, so in the common case the window is far shorter. The TTL
 can stay short without ever re-prompting a working user because an actively-tended run
 **re-mints** the activation on each interaction (resolve a decision / approve a step / retry)
-from the cached password, so the TTL only ever bounds a stuck or abandoned run, never a live
+from the cached password; the interaction hard-gates exactly like start/retry, so a healthy
+(≥8h) key re-mints silently while a within-buffer/lapsed one prompts for early re-entry rather
+than coasting. The TTL only ever bounds a stuck or abandoned run, never a live
 one. It also has to outlast a fully-autonomous run (which has no human touch-points to
 re-mint at), which 12h comfortably does; the expiry sweep reclaims any straggler as a
 backstop. Even at its widest the exposure only matters to a system-key holder, the actor
@@ -116,14 +123,17 @@ token in an active run is marginal incremental exposure.
    unlocks every vendor it touches with a single password.
 3. **Password supplied per session, not stored server-side**: cached client-side with a
    ~40h TTL for low friction (§3) and carried as the `X-Personal-Password` header, never a
-   body field. Restricted to printable ASCII so it is header-safe.
+   body field. Restricted to printable ASCII so it is header-safe. Re-validated against an 8h
+   expiry buffer on every gated action, so the user re-enters early instead of mid-pipeline.
 4. **Short, transparently-extended per-run activations**: system-key-only, scoped to the
    run, ~12h TTL, deleted on completion (or when the block's run is replaced), re-minted from
-   the cached password on each user interaction so a live run never lapses, TTL-swept as a
-   backstop (§3).
+   the cached password on each user interaction (which hard-gates like start/retry, so a
+   within-buffer/lapsed key prompts for early re-entry) so a live run never lapses, TTL-swept
+   as a backstop (§3).
 5. **No unattended use.** A recurring schedule whose block resolves to an individual-usage
    model (by pin _or_ workspace default) is refused at fire time (no one is present to
-   unlock it).
+   unlock it). A HEADLESS start over `/api/v1` is the same rule seen from the other side, and
+   §7 covers the one shape that satisfies it.
 6. **Loud, recoverable failures.** A missing/needed credential returns
    `428 credential_required` (with `{ vendor, reason }`); a lapsed activation fails the step
    clearly and a retry (with the cached/entered password) re-activates it.
@@ -155,9 +165,10 @@ Each async container step:
     → system.decrypt(activation) → raw token handed to the runner transport
 
 Interact with a live run (resolve decision / approve / request changes):
-  POST … (same X-Personal-Password header, ridden from the cache, no prompt)
-    → remintActivations: re-mint the run's activation(s) BEFORE advancing, so the
-      short TTL never lapses a run the user is actively tending
+  POST … (same X-Personal-Password header, ridden from the cache; a within-buffer/
+          lapsed key is withheld → 428 → the client re-prompts early)
+    → activateForInteraction: gate (like start/retry) + re-mint the run's activation(s)
+      BEFORE advancing, so the short TTL never lapses a run the user is actively tending
 
 Run finishes (done/failed), or is replaced by a new run on the block:
   ExecutionService deletes the run's subscription_activations immediately
@@ -185,11 +196,55 @@ activation. (Env-routing defaults, the last fallback, are operator-level and not
 | Persistence (Node/local) | Drizzle `personalSubscriptions` / `subscriptionActivations` + generated migration                                                                                                                                               |
 | Sweeps                   | Worker `scheduled` (activation sweeper) ⇄ Node retention timer                                                                                                                                                                  |
 | Frontend                 | `stores/personalSubscriptions.ts`, `components/providers/PersonalSubscriptionSection.vue` + `PersonalCredentialModal.vue`                                                                                                       |
+| Headless binding (§7)    | `PublicApiKeyRecord.actsAsUserId` (kernel), `createPublicApiKeySchema.actsAsSelf` (contracts), `PublicApiKeyController` (the ONLY writer), `publicApi/personalUnlock.ts` (the reader), `ApiTokensPanel.vue` ("Runs as")         |
 
 Both runtimes wire the same repositories + service behind the same ports, so the behaviour
 is identical on Cloudflare D1 and Node/local Postgres.
 
-## 7. Your responsibilities as a user
+## 7. Headless runs: system tokens vs personal tokens
+
+A public-API key is one of two things, chosen when it is minted (Integrations → API access
+tokens, "Runs as"), and the choice decides whether this whole mechanism is reachable at all:
+
+|                        | **System token** (the default)                                                                                                                          | **Personal token**           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `actsAsUserId`         | `null`                                                                                                                                                  | the minter's own `usr_*`     |
+| Who its runs belong to | nobody                                                                                                                                                  | the person who minted it     |
+| Whose merge policy     | none pinned (the preset's base rules)                                                                                                                   | that person's workspace role |
+| Individual-usage model | refused, `409 individual_model_unsupported`                                                                                                             | runs, once unlocked          |
+| `GET /api/v1/models`   | cannot RUN a `personalSubscription` row, but reports via `subscriptionConfigured` whether its minter's subscription exists; omits locally-run endpoints | resolves under that user     |
+
+**A bound run is that person's run all the way through, policy included.** The start resolves
+the bound user's workspace role (`keyInitiatorRole`) and pins it, so a headless start is
+admitted under the same `classRulesByRole` narrowing and the same `dryRunRoles` sandbox they
+get in the app: a key cannot land what its own holder could not. A retry is the one exception
+and deliberately so — `buildResumedInstance` carries the ORIGINAL run's pinned role forward,
+because a re-drive is the same work under the authority it was first granted.
+
+**The binding alone unlocks nothing.** A personal token still has to send
+`X-Personal-Password` on **every** call that advances such a run: the start, the retry, and
+each answered decision (which wakes the driver and re-mints the activation). The server holds
+the password for exactly the duration of that request. An answered decision leaves a still-fresh
+activation alone rather than re-deriving it (`hasFreshActivation`): the key derivation is
+deliberately expensive, and a driver answering a run's parks one call at a time would otherwise
+pay it once per call. Storing it anywhere — on the key row,
+in a session, in a client's config file — would collapse the two factors §3 keeps apart into
+one, which is the whole reason the password layer exists. A call that needs one and does not
+carry it gets `428 credential_required` with `{ vendor, reason }`, exactly as the app does.
+
+**A token can only ever be bound to the person minting it.** The wire field is the boolean
+`actsAsSelf` and the server writes the id off the session, so "mint a key onto a colleague's
+subscription" has no representation, not merely no permission. A mint with no signed-in user
+(dev-open) is refused rather than silently producing an unbound key. Headless provisioning
+(`POST /api/v1/keys`) can never bind: a provisioning key holds nobody's consent.
+
+**Prefer a system token.** It is the narrower credential and the right one for CI and shared
+integrations: a leak cannot spend one person's quota, because there is no person attached.
+Reach for a personal token when the runs genuinely are yours — the acceptance suite is the
+worked example ([`backend/internal/acceptance/README.md`](../internal/acceptance/README.md)),
+and it prompts for the password at the moment a run needs it and keeps it in memory only.
+
+## 8. Your responsibilities as a user
 
 - Connect **only your own** subscription, and only where its terms permit individual use.
   For organization-wide use, use a **direct provider API key** instead (§1).

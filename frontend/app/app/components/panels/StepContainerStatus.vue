@@ -1,15 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useClipboard } from '@vueuse/core'
 import type { PipelineStep, RunContainerStatus } from '~/types/execution'
 import { containerPhaseLabel } from '~/utils/pipelineRender'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The per-run container lifecycle for a container-backed step: its status (spinning up /
 // running / errored / reclaimed), the live phase (preparing the checkout vs the agent
 // making calls), and the container's id + reachable URL once up. Shared by the generic
 // step detail (StepMetadataCard) and the dedicated Tester window so both surface WHAT the
 // container is doing and WHERE it lives instead of a bare "working" — identical parity.
-const props = defineProps<{ step: PipelineStep; runFailed: boolean }>()
+const props = defineProps<{
+  step: PipelineStep
+  runFailed: boolean
+  /**
+   * Whether the enclosing run is still being driven (`runIsActive`). Distinct from
+   * {@link runFailed}, which answers whether the container was RECLAIMED: a run parked on a
+   * human decision or a spend budget has reclaimed nothing, so its container keeps whatever
+   * status it stopped at. A `starting` one is no longer cold-booting, though, so it must not
+   * keep spinning as though it were.
+   */
+  runActive: boolean
+}>()
 
 const { t, te } = useI18n()
 
@@ -41,43 +52,39 @@ const CONTAINER_STATUS_META: Record<
   starting: {
     icon: 'i-lucide-loader-circle',
     spin: true,
-    cls: 'border-sky-900/50 bg-sky-950/30 text-sky-300',
+    cls: 'border-app-info-900/50 bg-app-info-950/30 text-app-info-300',
   },
   up: {
     icon: 'i-lucide-box',
     spin: false,
-    cls: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
+    cls: 'border-app-success-900/50 bg-app-success-950/30 text-app-success-300',
   },
   errored: {
     icon: 'i-lucide-circle-x',
     spin: false,
-    cls: 'border-rose-900/50 bg-rose-950/30 text-rose-300',
+    cls: 'border-app-error-900/50 bg-app-error-950/30 text-app-error-300',
   },
   destroyed: {
     icon: 'i-lucide-power-off',
     spin: false,
-    cls: 'border-slate-800 bg-slate-900/40 text-slate-400',
+    cls: 'border-default bg-default/40 text-muted',
   },
 }
+
+// Whether the status icon animates: only a cold-boot genuinely in flight, i.e. one whose run is
+// still being driven. A `starting` container on a parked or terminated run keeps its label and
+// freezes, the same way a mid-flight subtask item does (`subtaskIconClass`).
+const spinIcon = computed(
+  () =>
+    props.runActive && !!containerStatus.value && CONTAINER_STATUS_META[containerStatus.value].spin,
+)
 
 // The friendly phase label (clone → "Preparing workspace", …); only meaningful while up.
 const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phase, { t, te }))
 
 // Make the container id / URL one-click copyable (they're long and used to be
 // select-and-copy-by-hand), with a toast confirming the copy landed.
-const toast = useToast()
-const { copy, isSupported } = useClipboard()
-async function copyText(text: string) {
-  // Only claim success once the write actually landed — a failed/unsupported clipboard
-  // (insecure context, denied permission) must not show a misleading "Copied" toast.
-  try {
-    if (!isSupported.value) throw new Error('clipboard unsupported')
-    await copy(text)
-    toast.add({ title: t('common.copied'), color: 'success', icon: 'i-lucide-check' })
-  } catch {
-    toast.add({ title: t('common.copyFailed'), color: 'error', icon: 'i-lucide-x' })
-  }
-}
+const { copy: copyText } = useCopyToClipboard()
 </script>
 
 <template>
@@ -88,27 +95,27 @@ async function copyText(text: string) {
          live phase (preparing the checkout vs the agent making calls), and the
          container's id + reachable URL once up. -->
     <div
-      class="rounded-lg border px-3 py-2 text-[12px]"
+      class="rounded-lg border px-3 py-2 text-xs"
       :class="CONTAINER_STATUS_META[containerStatus].cls"
     >
       <div class="flex items-center gap-2">
         <UIcon
           :name="CONTAINER_STATUS_META[containerStatus].icon"
           class="h-4 w-4 shrink-0"
-          :class="CONTAINER_STATUS_META[containerStatus].spin ? 'animate-spin' : ''"
+          :class="spinIcon ? 'animate-spin' : ''"
         />
         <span class="font-medium">{{ t(CONTAINER_STATUS_KEYS[containerStatus]) }}</span>
         <template v-if="phaseLabel && containerStatus === 'up'">
-          <span class="text-slate-500">·</span>
+          <span class="text-dimmed">·</span>
           <span>{{ phaseLabel }}</span>
         </template>
       </div>
       <dl v-if="step.container?.id || step.container?.url" class="mt-2 space-y-1">
         <div v-if="step.container?.id" class="flex items-center gap-2">
-          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="dt" class="shrink-0">
             {{ t('panels.stepMeta.container.id') }}
-          </dt>
-          <dd class="truncate font-mono text-[11px] text-slate-300" :title="step.container.id">
+          </SectionLabel>
+          <dd class="truncate font-mono text-2xs text-toned" :title="step.container.id">
             {{ step.container.id }}
           </dd>
           <UButton
@@ -123,10 +130,10 @@ async function copyText(text: string) {
           />
         </div>
         <div v-if="step.container?.url" class="flex items-center gap-2">
-          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="dt" class="shrink-0">
             {{ t('panels.stepMeta.container.url') }}
-          </dt>
-          <dd class="truncate font-mono text-[11px] text-slate-300">
+          </SectionLabel>
+          <dd class="truncate font-mono text-2xs text-toned">
             <a
               :href="step.container.url"
               target="_blank"

@@ -1,0 +1,16 @@
+{
+  // Typecheck project for the TESTS (run in Node under vitest), which legitimately use Node
+  // types: `Buffer`, and undici's mock types (which transitively reference Node types). Kept
+  // SEPARATE from the src project so `@types/node` never leaks into the runtime-neutral `src`
+  // surface — the src project (`tsconfig.json`) runs with `"types": []` and only types the one
+  // cross-runtime Node built-in (`AsyncLocalStorage`) via a local shim.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Opt the tests INTO `@types/node`; that also provides `node:async_hooks`, so exclude the
+    // src shim below to avoid a duplicate `AsyncLocalStorage` declaration.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["src/node-async-hooks.d.ts"]
+}

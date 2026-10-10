@@ -1,15 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import { defineStructuredOutput } from './structured-output.js'
-import {
-  clearRegisteredAgentKinds,
-  registerAgentKind,
-  registeredAgentStep,
-  registeredStructuredOutput,
-} from './registry.js'
+import { AgentKindRegistry } from './registry.js'
 
 // Schema-driven structured output: one valibot schema replaces a hand-written shapeHint
-// string + lenient coercer, and `registerAgentKind` auto-derives `agent.output` from it.
+// string + lenient coercer, and `registry.register` auto-derives `agent.output` from it.
 
 const assessment = defineStructuredOutput(
   v.object({
@@ -56,31 +51,31 @@ describe('defineStructuredOutput', () => {
   })
 })
 
-describe('registerAgentKind structuredOutput auto-fill', () => {
-  afterEach(() => clearRegisteredAgentKinds())
-
+describe('registry.register structuredOutput auto-fill', () => {
   it('derives agent.output from structuredOutput when not set by hand', () => {
-    registerAgentKind({
+    const registry = new AgentKindRegistry()
+    registry.register({
       kind: 'auditor',
       systemPrompt: 'audit',
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
       structuredOutput: assessment,
     })
-    expect(registeredAgentStep('auditor')?.output).toEqual(assessment.spec)
-    expect(registeredStructuredOutput('auditor')?.safeParse({ summary: 'x' })).toEqual({
+    expect(registry.agentStep('auditor')?.output).toEqual(assessment.spec)
+    expect(registry.structuredOutput('auditor')?.safeParse({ summary: 'x' })).toEqual({
       summary: 'x',
       findings: [],
     })
   })
 
   it('does not override an explicit agent.output', () => {
+    const registry = new AgentKindRegistry()
     const explicit = { kind: 'structured' as const, shapeHint: 'HAND' }
-    registerAgentKind({
+    registry.register({
       kind: 'auditor2',
       systemPrompt: 'audit',
       agent: { surface: 'container-explore', output: explicit },
       structuredOutput: assessment,
     })
-    expect(registeredAgentStep('auditor2')?.output).toEqual(explicit)
+    expect(registry.agentStep('auditor2')?.output).toEqual(explicit)
   })
 })

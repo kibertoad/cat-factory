@@ -5,19 +5,46 @@
 //   - Merge thresholds: the auto-merge preset library.
 //   - Issue tracker: filing-tracker selection + linking sources + writeback.
 //   - Service best practices: the default fragments new services inherit.
+//   - Metadata: values for the custom workspace fields the DEPLOYMENT declares in code (read
+//     by external-tool URL resolvers); present only where any are declared.
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
-import { reactive, ref, watch } from 'vue'
-import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
-import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useReactiveSlots } from '@modular-vue/runtime'
+import type { InputGateMode, ReviewFrictionMode, TaskLimitMode } from '~/types/domain'
+import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
+import TaskTypeSuppressionsPanel from '~/components/settings/TaskTypeSuppressionsPanel.vue'
+import BudgetSettings from '~/components/settings/BudgetSettings.vue'
+import UsageSettings from '~/components/settings/UsageSettings.vue'
+import WorkspaceMembersSettings from '~/components/layout/WorkspaceMembersSettings.vue'
+import WorkspaceMetadataSettings from '~/components/settings/WorkspaceMetadataSettings.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import type { AppSlots } from '~/modular/slots'
+import { usePipelinesStore } from '~/stores/pipelines'
+import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, te } = useI18n()
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()
+const workspace = useWorkspaceStore()
+const access = useWorkspaceAccess()
+const pipelines = usePipelinesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
+const slots = useReactiveSlots<AppSlots>()
+// Whether the deployment registers any reusable operation at all, hidden or not, so the
+// Operations tab exists only where there is something for it to manage. Not the OFFERED catalog:
+// hiding the last operation would then take away the only screen that un-hides one.
+const taskTypes = useTaskTypesStore()
+
+// The Metadata tab exists only where the deployment DECLARES custom fields — an unwired
+// capability is invisible, not an empty tab in every deployment. Declared-but-malformed fields
+// still open the tab: it carries the empty state (and the console warning names the keys), so a
+// broken declaration surfaces instead of looking like one nobody wrote.
+const hasMetadataFields = computed(() => (slots.value.workspaceMetadataFields ?? []).length > 0)
 
 const open = computed({
   get: () => ui.workspaceSettingsOpen,
@@ -46,6 +73,12 @@ const tabs = computed(() => [
     slot: 'budget',
   },
   {
+    value: 'usage',
+    label: t('settings.workspaceSettings.tabs.usage'),
+    icon: 'i-lucide-bar-chart-3',
+    slot: 'usage',
+  },
+  {
     value: 'merge',
     label: t('settings.workspaceSettings.tabs.merge'),
     icon: 'i-lucide-git-merge',
@@ -63,6 +96,40 @@ const tabs = computed(() => [
     icon: 'i-lucide-book-open-check',
     slot: 'fragments',
   },
+  // Which of the deployment's reusable operations this board offers. Only where the deployment
+  // registers any: on the stock product the tab would name a catalog that does not exist.
+  ...(taskTypes.hasRegisteredOperations
+    ? [
+        {
+          value: 'operations',
+          label: t('settings.workspaceSettings.tabs.operations'),
+          icon: 'i-lucide-plug',
+          slot: 'operations',
+        },
+      ]
+    : []),
+  ...(hasMetadataFields.value
+    ? [
+        {
+          value: 'metadata',
+          label: t('settings.workspaceSettings.tabs.metadata'),
+          icon: 'i-lucide-tags',
+          slot: 'metadata',
+        },
+      ]
+    : []),
+  // Roster + access-mode management is `members.manage` (workspace admins only). Hidden
+  // for everyone else — the backend 403s the writes and the tab has nothing to read.
+  ...(access.canManageMembers.value
+    ? [
+        {
+          value: 'members',
+          label: t('settings.workspaceSettings.tabs.members'),
+          icon: 'i-lucide-users',
+          slot: 'members',
+        },
+      ]
+    : []),
 ])
 
 // Tab strip styling: the labels must always fit (never truncate) and the strip must never
@@ -80,16 +147,25 @@ const tabsUi = {
   indicator: 'hidden',
 }
 
-const TASK_TYPES: CreateTaskType[] = ['feature', 'bug', 'document', 'spike']
+// The finite BUILT-IN create-task types this per-type running-task-limit UI configures.
+// `CreateTaskType` widened to an open `string` (to admit consumer-registered CUSTOM task types),
+// so the config surface pins the built-in set it renders inputs for — a custom type buckets on its
+// own id server-side (`RunAdmission`) and is not configured here. Keying the records below off this
+// finite union (not the open `CreateTaskType`) keeps them exhaustive + undefined-free.
+type LimitTaskType = 'feature' | 'bug' | 'document' | 'spike' | 'review' | 'ralph' | 'media'
+const TASK_TYPES: LimitTaskType[] = ['feature', 'bug', 'document', 'spike']
 
 // Per-task-type label for the "Max {type} tasks" inputs. An exhaustive Record keyed off
-// the CreateTaskType union (a missing member fails the typecheck); each value is a LITERAL
-// catalog key so the typed-message-keys check sees it. Leaf keys mirror the enum verbatim.
-const TASK_TYPE_KEYS: Record<CreateTaskType, string> = {
+// the finite {@link LimitTaskType} union (a missing member fails the typecheck); each value is a
+// LITERAL catalog key so the typed-message-keys check sees it. Leaf keys mirror the enum verbatim.
+const TASK_TYPE_KEYS: Record<LimitTaskType, string> = {
   feature: 'settings.workspaceSettings.taskTypes.feature',
   bug: 'settings.workspaceSettings.taskTypes.bug',
   document: 'settings.workspaceSettings.taskTypes.document',
   spike: 'settings.workspaceSettings.taskTypes.spike',
+  review: 'settings.workspaceSettings.taskTypes.review',
+  ralph: 'settings.workspaceSettings.taskTypes.ralph',
+  media: 'settings.workspaceSettings.taskTypes.media',
 }
 
 const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [
@@ -98,8 +174,36 @@ const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [
   { value: 'per_type', label: t('settings.workspaceSettings.taskLimit.modes.per_type') },
 ])
 
+const INPUT_GATE_MODES = computed<{ value: InputGateMode; label: string }[]>(() => [
+  { value: 'standard', label: t('settings.workspaceSettings.inputGate.modes.standard') },
+  { value: 'advisory', label: t('settings.workspaceSettings.inputGate.modes.advisory') },
+  { value: 'off', label: t('settings.workspaceSettings.inputGate.modes.off') },
+])
+
+const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: string }[]>(() => [
+  { value: 'off', label: t('settings.workspaceSettings.reviewFriction.modes.off') },
+  { value: 'warn', label: t('settings.workspaceSettings.reviewFriction.modes.warn') },
+  { value: 'enforce', label: t('settings.workspaceSettings.reviewFriction.modes.enforce') },
+])
+
+/**
+ * The pipelines a bug-fishing expedition's spawned fix task may run, plus the "use the built-in
+ * bug-fix preset" row that clears the pin.
+ *
+ * Narrowed by the same predicate the create form uses for a `bug` task, because a spawned fix IS
+ * one — a board that could pin a document-authoring preset here would spawn tasks that author a
+ * document instead of fixing the defect they were spawned for. The clearing row carries the empty
+ * string rather than being absent, so "no board default" is a value someone can choose back to.
+ */
+const fixPipelineOptions = computed<{ value: string; label: string }[]>(() => [
+  { value: '', label: t('settings.workspaceSettings.bugFishing.builtInDefault') },
+  ...pipelines.pipelines
+    .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
+    .map((p) => ({ value: p.id, label: p.name })),
+])
+
 /** The localized "Max {type} tasks" label for a per-type running-task limit input. */
-function maxTaskTypeLabel(type: CreateTaskType): string {
+function maxTaskTypeLabel(type: LimitTaskType): string {
   const key = TASK_TYPE_KEYS[type]
   const typeLabel = te(key) ? t(key) : type
   return t('settings.workspaceSettings.taskLimit.maxPerType', { type: typeLabel })
@@ -110,13 +214,24 @@ const draft = reactive({
   waitingEscalationMinutes: 120,
   taskLimitMode: 'off' as TaskLimitMode,
   taskLimitShared: 5 as number,
-  perType: {} as Record<CreateTaskType, number>,
+  perType: {} as Record<LimitTaskType, number>,
   storeAgentContext: true,
+  publishPrVerificationReport: true,
   artifactRetentionDays: 14,
+  doneLaneMaxItems: 20,
+  doneLaneRetentionEnabled: true,
+  doneLaneRetentionDays: 14 as number,
   kaizenEnabled: true,
-  // Budget: empty string ⇒ "use the built-in default" (null on the wire).
-  spendCurrency: '',
-  spendMonthlyLimit: '',
+  allowInitiatorPat: true,
+  // '' means "no board default", which resolves to the built-in bug-fix preset at spawn time.
+  bugFishingFixPipelineId: '',
+  inputGateMode: 'standard' as InputGateMode,
+  reviewFrictionMode: 'off' as ReviewFrictionMode,
+  reviewFrictionWarnCount: 3,
+  reviewFrictionBlockCountEnabled: false,
+  reviewFrictionBlockCount: 10 as number,
+  reviewFrictionBlockStuckEnabled: false,
+  reviewFrictionBlockStuckMinutes: 1440 as number,
 })
 
 function hydrate() {
@@ -127,10 +242,26 @@ function hydrate() {
   const pt = s.taskLimitPerType ?? {}
   for (const t of TASK_TYPES) draft.perType[t] = pt[t] ?? 3
   draft.storeAgentContext = s.storeAgentContext
+  draft.publishPrVerificationReport = s.publishPrVerificationReport
   draft.artifactRetentionDays = s.artifactRetentionDays
+  draft.doneLaneMaxItems = s.doneLaneMaxItems
+  // Nullable (null ⇒ no age cap), so a checkbox is derived from whether a value is stored
+  // and the number input keeps a sensible starting value to switch back on with — the same
+  // shape the nullable review-friction triggers below use.
+  draft.doneLaneRetentionEnabled = s.doneLaneRetentionDays != null
+  draft.doneLaneRetentionDays = s.doneLaneRetentionDays ?? 14
   draft.kaizenEnabled = s.kaizenEnabled
-  draft.spendCurrency = s.spendCurrency ?? ''
-  draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
+  draft.allowInitiatorPat = s.allowInitiatorPat
+  draft.bugFishingFixPipelineId = s.bugFishingFixPipelineId ?? ''
+  draft.inputGateMode = s.inputGateMode
+  draft.reviewFrictionMode = s.reviewFrictionMode
+  draft.reviewFrictionWarnCount = s.reviewFrictionWarnCount
+  // The hard-block knobs are nullable (null ⇒ that trigger is off); a per-trigger checkbox is
+  // enabled from whether a value is stored, defaulting the input to a sensible starting number.
+  draft.reviewFrictionBlockCountEnabled = s.reviewFrictionBlockCount != null
+  draft.reviewFrictionBlockCount = s.reviewFrictionBlockCount ?? 10
+  draft.reviewFrictionBlockStuckEnabled = s.reviewFrictionBlockStuckMinutes != null
+  draft.reviewFrictionBlockStuckMinutes = s.reviewFrictionBlockStuckMinutes ?? 1440
 }
 
 // `store.settings` is always replaced wholesale (store hydrate/update reassign the ref),
@@ -140,6 +271,25 @@ watch(() => store.settings, hydrate, { immediate: true })
 const saving = ref(false)
 
 async function save() {
+  // The hard-block triggers only apply in `enforce` mode; a disabled trigger sends null.
+  const blockCount =
+    draft.reviewFrictionMode === 'enforce' && draft.reviewFrictionBlockCountEnabled
+      ? draft.reviewFrictionBlockCount
+      : null
+  const blockStuckMinutes =
+    draft.reviewFrictionMode === 'enforce' && draft.reviewFrictionBlockStuckEnabled
+      ? draft.reviewFrictionBlockStuckMinutes
+      : null
+  // Mirror the backend's enforce-mode validation client-side so the user gets an immediate,
+  // localized message instead of the raw 422 (enforce needs at least one hard trigger).
+  if (draft.reviewFrictionMode === 'enforce' && blockCount == null && blockStuckMinutes == null) {
+    toast.add({
+      title: t('settings.workspaceSettings.reviewFriction.needsTrigger'),
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+    })
+    return
+  }
   saving.value = true
   try {
     await store.update({
@@ -153,12 +303,24 @@ async function save() {
                 acc[t] = draft.perType[t]
                 return acc
               },
-              {} as Record<CreateTaskType, number>,
+              {} as Record<LimitTaskType, number>,
             )
           : null,
       storeAgentContext: draft.storeAgentContext,
+      publishPrVerificationReport: draft.publishPrVerificationReport,
       artifactRetentionDays: draft.artifactRetentionDays,
+      doneLaneMaxItems: draft.doneLaneMaxItems,
+      doneLaneRetentionDays: draft.doneLaneRetentionEnabled ? draft.doneLaneRetentionDays : null,
       kaizenEnabled: draft.kaizenEnabled,
+      allowInitiatorPat: draft.allowInitiatorPat,
+      // The empty string clears the pin back to the built-in preset (the backend trims it to null),
+      // which is how every other pinned-pipeline field on the platform is cleared.
+      bugFishingFixPipelineId: draft.bugFishingFixPipelineId,
+      inputGateMode: draft.inputGateMode,
+      reviewFrictionMode: draft.reviewFrictionMode,
+      reviewFrictionWarnCount: draft.reviewFrictionWarnCount,
+      reviewFrictionBlockCount: blockCount,
+      reviewFrictionBlockStuckMinutes: blockStuckMinutes,
     })
     toast.add({
       title: t('settings.workspaceSettings.toast.saved'),
@@ -166,54 +328,9 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
     saving.value = false
-  }
-}
-
-const savingBudget = ref(false)
-
-async function saveBudget() {
-  savingBudget.value = true
-  // The number input emits a raw number once edited but starts as a string from hydrate, so
-  // coerce through String() before trimming. Blank ⇒ "use the built-in default" (null on the wire).
-  const raw = String(draft.spendMonthlyLimit ?? '').trim()
-  const monthlyLimit = raw === '' ? null : Number(raw)
-  try {
-    await store.update({
-      spendCurrency: draft.spendCurrency.trim() ? draft.spendCurrency.trim().toUpperCase() : null,
-      spendMonthlyLimit: monthlyLimit,
-    })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.budgetSaved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
-    // The settings PUT only returns the settings; re-fetch the snapshot so the toolbar's
-    // spend meter reflects the newly-set limit/currency (spendService.status) right away.
-    // Best-effort and AFTER the save succeeded: a transient snapshot-refresh failure must
-    // not report a successfully-saved budget as failed (the meter also catches up on the
-    // next snapshot pushed over the stream).
-    try {
-      await useWorkspaceStore().refresh()
-    } catch {
-      // ignore — the budget is persisted; the meter will catch up on the next snapshot.
-    }
-  } catch (e) {
-    toast.add({
-      title: t('settings.workspaceSettings.toast.budgetSaveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    savingBudget.value = false
   }
 }
 </script>
@@ -229,28 +346,36 @@ async function saveBudget() {
     </template>
     <template #body>
       <UTabs v-model="activeTab" :items="tabs" variant="link" :ui="tabsUi">
+        <!-- The tab LABEL, overridden only to carry a per-tab test hook: `UTabs` renders its own
+             triggers and forwards nothing from an item, so this slot is the one place a stable
+             selector can name which tab a click means (the labels themselves are translated). -->
+        <template #default="{ item }">
+          <span :data-testid="`workspace-settings-tab-${item.value}`">{{ item.label }}</span>
+        </template>
+
         <!-- Workspace -->
         <template #workspace>
           <div class="space-y-6">
             <!-- Run-timing escalation -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.waiting.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-2xs text-muted">
                 <i18n-t keypath="settings.workspaceSettings.waiting.body" tag="span" scope="global">
                   <template #overdue>
-                    <span class="text-error-400">{{
+                    <span class="text-app-error-400">{{
                       t('settings.workspaceSettings.waiting.overdue')
                     }}</span>
                   </template>
                 </i18n-t>
               </p>
-              <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <label class="block">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.waiting.escalateAfter') }}
-                </span>
+                </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.waitingEscalationMinutes"
                   type="number"
                   :min="1"
@@ -261,37 +386,43 @@ async function saveBudget() {
 
             <!-- Per-service running-task limit -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.taskLimit.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.taskLimit.body') }}
               </p>
-              <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+              <label class="block">
+                <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.taskLimit.mode')
-                }}</span>
+                }}</SectionLabel>
                 <USelect
                   v-model="draft.taskLimitMode"
                   :items="MODES"
                   value-key="value"
                   size="sm"
-                  class="w-full"
+                  class="w-64"
                 />
               </label>
 
-              <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <label v-if="draft.taskLimitMode === 'shared'" class="block">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.taskLimit.maxRunning') }}
-                </span>
-                <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
+                </SectionLabel>
+                <UInput
+                  class="w-48"
+                  v-model.number="draft.taskLimitShared"
+                  type="number"
+                  :min="1"
+                  size="sm"
+                />
               </label>
 
               <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
                 <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  <SectionLabel as="span" class="mb-1 block">
                     {{ maxTaskTypeLabel(taskType) }}
-                  </span>
+                  </SectionLabel>
                   <UInput
                     v-model.number="draft.perType[taskType]"
                     type="number"
@@ -302,35 +433,153 @@ async function saveBudget() {
               </div>
             </section>
 
+            <!-- The pre-dispatch input gate: the structural check of a task's own wording, run
+                 before a run's first agent step is dispatched. -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-default">
+                {{ t('settings.workspaceSettings.inputGate.heading') }}
+              </h3>
+              <p class="text-2xs text-muted">
+                {{ t('settings.workspaceSettings.inputGate.body') }}
+              </p>
+              <label class="block">
+                <SectionLabel as="span" class="mb-1 block">{{
+                  t('settings.workspaceSettings.inputGate.mode')
+                }}</SectionLabel>
+                <USelect
+                  v-model="draft.inputGateMode"
+                  :items="INPUT_GATE_MODES"
+                  value-key="value"
+                  size="sm"
+                  class="w-64"
+                  data-testid="input-gate-mode"
+                />
+              </label>
+            </section>
+
+            <!-- Review-debt friction on task creation -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-default">
+                {{ t('settings.workspaceSettings.reviewFriction.heading') }}
+              </h3>
+              <p class="text-2xs text-muted">
+                {{ t('settings.workspaceSettings.reviewFriction.body') }}
+              </p>
+              <label class="block">
+                <SectionLabel as="span" class="mb-1 block">{{
+                  t('settings.workspaceSettings.reviewFriction.mode')
+                }}</SectionLabel>
+                <USelect
+                  v-model="draft.reviewFrictionMode"
+                  :items="REVIEW_FRICTION_MODES"
+                  value-key="value"
+                  size="sm"
+                  class="w-64"
+                />
+              </label>
+
+              <label v-if="draft.reviewFrictionMode !== 'off'" class="block">
+                <SectionLabel as="span" class="mb-1 block">
+                  {{ t('settings.workspaceSettings.reviewFriction.warnCount') }}
+                </SectionLabel>
+                <UInput
+                  class="w-48"
+                  v-model.number="draft.reviewFrictionWarnCount"
+                  type="number"
+                  :min="1"
+                  size="sm"
+                />
+              </label>
+
+              <div v-if="draft.reviewFrictionMode === 'enforce'" class="space-y-2">
+                <p class="text-2xs text-muted">
+                  {{ t('settings.workspaceSettings.reviewFriction.enforceHint') }}
+                </p>
+                <label class="flex items-center gap-2">
+                  <USwitch v-model="draft.reviewFrictionBlockCountEnabled" size="sm" />
+                  <span class="text-sm text-toned">{{
+                    t('settings.workspaceSettings.reviewFriction.blockCountToggle')
+                  }}</span>
+                </label>
+                <label v-if="draft.reviewFrictionBlockCountEnabled" class="block">
+                  <SectionLabel as="span" class="mb-1 block">
+                    {{ t('settings.workspaceSettings.reviewFriction.blockCount') }}
+                  </SectionLabel>
+                  <UInput
+                    class="w-48"
+                    v-model.number="draft.reviewFrictionBlockCount"
+                    type="number"
+                    :min="1"
+                    size="sm"
+                  />
+                </label>
+                <label class="flex items-center gap-2">
+                  <USwitch v-model="draft.reviewFrictionBlockStuckEnabled" size="sm" />
+                  <span class="text-sm text-toned">{{
+                    t('settings.workspaceSettings.reviewFriction.blockStuckToggle')
+                  }}</span>
+                </label>
+                <label v-if="draft.reviewFrictionBlockStuckEnabled" class="block">
+                  <SectionLabel as="span" class="mb-1 block">
+                    {{ t('settings.workspaceSettings.reviewFriction.blockStuckMinutes') }}
+                  </SectionLabel>
+                  <UInput
+                    class="w-48"
+                    v-model.number="draft.reviewFrictionBlockStuckMinutes"
+                    type="number"
+                    :min="1"
+                    size="sm"
+                  />
+                </label>
+              </div>
+            </section>
+
             <!-- Agent observability -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.observability.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.observability.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.storeAgentContext" size="sm" />
-                <span class="text-sm text-slate-200">{{
+                <span class="text-sm text-default">{{
                   t('settings.workspaceSettings.observability.toggle')
+                }}</span>
+              </label>
+            </section>
+
+            <!-- Engine-maintained PR verification report -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-default">
+                {{ t('settings.workspaceSettings.prReport.heading') }}
+              </h3>
+              <p class="text-2xs text-muted">
+                {{ t('settings.workspaceSettings.prReport.body') }}
+              </p>
+              <label class="flex items-center gap-2">
+                <USwitch v-model="draft.publishPrVerificationReport" size="sm" />
+                <span class="text-sm text-default">{{
+                  t('settings.workspaceSettings.prReport.toggle')
                 }}</span>
               </label>
             </section>
 
             <!-- Visual-confirmation artifact retention -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.retention.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.retention.body') }}
               </p>
-              <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <label class="block">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.retention.days') }}
-                </span>
+                </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.artifactRetentionDays"
                   type="number"
                   :min="1"
@@ -340,17 +589,117 @@ async function saveBudget() {
               </label>
             </section>
 
+            <!-- What the board's Done swimlane keeps in view -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-default">
+                {{ t('settings.workspaceSettings.doneLane.heading') }}
+              </h3>
+              <p class="text-2xs text-muted">
+                {{ t('settings.workspaceSettings.doneLane.body') }}
+              </p>
+              <label class="block">
+                <SectionLabel as="span" class="mb-1 block">
+                  {{ t('settings.workspaceSettings.doneLane.maxItems') }}
+                </SectionLabel>
+                <UInput
+                  class="w-48"
+                  v-model.number="draft.doneLaneMaxItems"
+                  type="number"
+                  :min="0"
+                  :max="500"
+                  size="sm"
+                  data-testid="done-lane-max-items"
+                />
+              </label>
+              <p v-if="draft.doneLaneMaxItems === 0" class="text-2xs text-dimmed">
+                {{ t('settings.workspaceSettings.doneLane.zeroHint') }}
+              </p>
+              <label class="flex items-center gap-2">
+                <UCheckbox v-model="draft.doneLaneRetentionEnabled" size="sm" />
+                <span class="text-2xs text-toned">{{
+                  t('settings.workspaceSettings.doneLane.ageToggle')
+                }}</span>
+              </label>
+              <label v-if="draft.doneLaneRetentionEnabled" class="block">
+                <SectionLabel as="span" class="mb-1 block">
+                  {{ t('settings.workspaceSettings.doneLane.days') }}
+                </SectionLabel>
+                <UInput
+                  class="w-48"
+                  v-model.number="draft.doneLaneRetentionDays"
+                  type="number"
+                  :min="1"
+                  :max="3650"
+                  size="sm"
+                  data-testid="done-lane-retention-days"
+                />
+              </label>
+              <p class="text-2xs text-dimmed">
+                {{ t('settings.workspaceSettings.doneLane.hidesOnlyHint') }}
+              </p>
+            </section>
+
+            <!-- Run credential: the App installation vs. the initiator's own token -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-default">
+                {{ t('settings.workspaceSettings.runCredential.heading') }}
+              </h3>
+              <p class="text-2xs text-muted">
+                {{ t('settings.workspaceSettings.runCredential.body') }}
+              </p>
+              <label class="flex items-center gap-2">
+                <USwitch
+                  v-model="draft.allowInitiatorPat"
+                  size="sm"
+                  data-testid="allow-initiator-pat"
+                />
+                <span class="text-sm text-default">{{
+                  t('settings.workspaceSettings.runCredential.toggle')
+                }}</span>
+              </label>
+              <p v-if="!draft.allowInitiatorPat" class="text-2xs text-app-warning-300">
+                {{ t('settings.workspaceSettings.runCredential.offHint') }}
+              </p>
+              <!-- Stated rather than read: the account floor lives behind an ACCOUNT-admin
+                   endpoint, which a workspace admin may not hold, so probing it here would 403
+                   for exactly the people this note is for. A static line sets the expectation
+                   without pretending to report a value we cannot see. -->
+              <p v-if="draft.allowInitiatorPat" class="text-2xs text-dimmed">
+                {{ t('settings.workspaceSettings.runCredential.accountFloorNote') }}
+              </p>
+            </section>
+
+            <!-- Bug-fishing expedition: the pipeline a MARKED finding's spawned fix task runs.
+                 It is a property of how this team fixes bugs rather than of any one hunt, which
+                 is why it is a board setting and not a field on the expedition. -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-default">
+                {{ t('settings.workspaceSettings.bugFishing.heading') }}
+              </h3>
+              <p class="text-2xs text-muted">
+                {{ t('settings.workspaceSettings.bugFishing.body') }}
+              </p>
+              <USelectMenu
+                v-model="draft.bugFishingFixPipelineId"
+                :items="fixPipelineOptions"
+                value-key="value"
+                size="sm"
+                class="max-w-md"
+                data-testid="workspace-settings-bug-fishing-pipeline"
+              />
+            </section>
+
             <!-- Kaizen agent -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.kaizen.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.kaizen.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.kaizenEnabled" size="sm" />
-                <span class="text-sm text-slate-200">{{
+                <span class="text-sm text-default">{{
                   t('settings.workspaceSettings.kaizen.toggle')
                 }}</span>
               </label>
@@ -370,61 +719,19 @@ async function saveBudget() {
           </div>
         </template>
 
-        <!-- Budget -->
+        <!-- Budget (workspace / account / user tiers) -->
         <template #budget>
-          <div class="space-y-6">
-            <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
-                {{ t('settings.workspaceSettings.budget.heading') }}
-              </h3>
-              <p class="text-[11px] text-slate-400">
-                {{ t('settings.workspaceSettings.budget.body') }}
-              </p>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-                  </span>
-                  <UInput
-                    v-model="draft.spendMonthlyLimit"
-                    type="number"
-                    :min="0"
-                    :placeholder="t('settings.workspaceSettings.budget.defaultPlaceholder')"
-                    size="sm"
-                  />
-                </label>
-                <label class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    {{ t('settings.workspaceSettings.budget.currency') }}
-                  </span>
-                  <UInput
-                    v-model="draft.spendCurrency"
-                    placeholder="EUR"
-                    maxlength="3"
-                    size="sm"
-                    class="uppercase"
-                  />
-                </label>
-              </div>
-            </section>
+          <BudgetSettings />
+        </template>
 
-            <div class="flex justify-end">
-              <UButton
-                color="primary"
-                icon="i-lucide-save"
-                size="sm"
-                :loading="savingBudget"
-                @click="saveBudget"
-              >
-                {{ t('settings.workspaceSettings.budget.save') }}
-              </UButton>
-            </div>
-          </div>
+        <!-- Usage report (metered + subscription token usage this period) -->
+        <template #usage>
+          <UsageSettings />
         </template>
 
         <!-- Merge thresholds -->
         <template #merge>
-          <MergeThresholdsPanel />
+          <RiskPolicyPanel />
         </template>
 
         <!-- Issue tracker -->
@@ -435,6 +742,21 @@ async function saveBudget() {
         <!-- Service best practices -->
         <template #fragments>
           <ServiceFragmentDefaultsPanel />
+        </template>
+
+        <!-- Reusable operations this board offers (only where the deployment registers any) -->
+        <template v-if="taskTypes.hasRegisteredOperations" #operations>
+          <TaskTypeSuppressionsPanel />
+        </template>
+
+        <!-- Custom workspace metadata (only where the deployment declares fields) -->
+        <template v-if="hasMetadataFields" #metadata>
+          <WorkspaceMetadataSettings />
+        </template>
+
+        <!-- Members (workspace RBAC roster + access mode; admins only) -->
+        <template v-if="access.canManageMembers.value && workspace.workspaceId" #members>
+          <WorkspaceMembersSettings :workspace-id="workspace.workspaceId" />
         </template>
       </UTabs>
     </template>

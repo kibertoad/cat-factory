@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Block, BlockStatus } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { EMPTY_FRAME_SIZE } from '~/utils/framePlacement'
+import { frameContentSize, laneBodyHeightIn, LANE_GEOMETRY } from '~/utils/laneGeometry'
 
 /** Minimal Block factory — only the fields the read getters care about. */
 function block(id: string, over: Partial<Block> = {}): Block {
@@ -27,6 +29,8 @@ const moduleBlock = (id: string, parentId: string, over: Partial<Block> = {}) =>
   block(id, { level: 'module', parentId, ...over })
 const task = (id: string, parentId: string, over: Partial<Block> = {}) =>
   block(id, { level: 'task', parentId, ...over })
+const initiativeBlock = (id: string, parentId: string, over: Partial<Block> = {}) =>
+  block(id, { level: 'initiative', parentId, ...over })
 
 describe('board store read getters', () => {
   let store: ReturnType<typeof useBoardStore>
@@ -87,6 +91,26 @@ describe('board store read getters', () => {
         .map((b) => b.id)
         .sort(),
     ).toEqual(['t2', 't3'])
+  })
+
+  it('descendantsOf returns the transitive structural subtree, excluding the root', () => {
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1'),
+      task('t1', 'f1'),
+      task('t2', 'm1'),
+      frame('f2'),
+      task('t3', 'f2'),
+    ])
+    expect(
+      store
+        .descendantsOf('f1')
+        .map((b) => b.id)
+        .sort(),
+    ).toEqual(['m1', 't1', 't2'])
+    // a leaf task has no descendants; unknown ids are a safe empty
+    expect(store.descendantsOf('t1')).toEqual([])
+    expect(store.descendantsOf('missing')).toEqual([])
   })
 
   it('epicMembers groups blocks by their epicId (indexed lookup)', () => {
@@ -192,29 +216,77 @@ describe('board store read getters', () => {
   })
 
   describe('containerSize', () => {
-    it('returns base dimensions for an empty service', () => {
+    // A frame's size is now a function of the LANE GEOMETRY, not of its contents. That is the
+    // point of the swimlanes: each lane scrolls, so a service accumulating work no longer grows
+    // a taller and taller frame until it dwarfs its neighbours. These tests pin the INVARIANT
+    // (size independent of task count and task position) rather than the pixel arithmetic, which
+    // belongs to `LANE_GEOMETRY` and would otherwise be restated here to no purpose.
+    it('sizes a service with nothing in it to the panel it actually renders', () => {
+      // An empty service shows one "add the first task" panel, not lanes, so it reserves the
+      // panel's footprint. Reserving the lanes' would leave the frame more than twice as tall as
+      // its own contents — and, since a placement clears frames by their reserved size, would
+      // push its neighbours that much further away for a frame holding nothing.
       store.hydrate([frame('f1')])
-      expect(store.containerSize('f1')).toEqual({ w: 360, h: 220 })
+      expect(store.containerSize('f1')).toEqual(
+        frameContentSize({ hasChildren: false, initiatives: 0 }),
+      )
     })
 
-    it('grows to fit a task and adds the module header height for modules', () => {
+    it('reserves the same footprint for a new frame that a new frame will render at', () => {
+      // The drift this caught: `EMPTY_FRAME_SIZE` is what a placement decision reserves BEFORE the
+      // block exists, so it cannot measure the frame and has to predict it. A hand-copied pair
+      // went stale when the floor changed underneath it, and every new service was then dropped
+      // on top of a neighbour it had been placed to clear.
+      store.hydrate([frame('f1')])
+      expect(store.containerSize('f1')).toEqual(EMPTY_FRAME_SIZE)
+    })
+
+    it('does not grow with task count, however many tasks and wherever they sat', () => {
+      store.hydrate([frame('f1'), task('t1', 'f1')])
+      const oneTask = store.containerSize('f1')
+
       store.hydrate([
         frame('f1'),
-        moduleBlock('m1', 'f1', { position: { x: 0, y: 0 } }),
+        moduleBlock('m1', 'f1', { position: { x: 400, y: 300 } }),
         task('t1', 'm1', { position: { x: 300, y: 200 } }),
+        // A position far outside the old content extent: it used to stretch the frame to reach
+        // it, and now means nothing at all, because a task no longer renders at coordinates.
+        task('t2', 'f1', { position: { x: 4000, y: 9000 } }),
       ])
-      // module inner width/height fit the task, plus the 30px module header.
-      const size = store.containerSize('m1')
-      expect(size.w).toBe(300 + 210 + 12)
-      expect(size.h).toBe(200 + 160 + 12 + 30)
+      expect(store.containerSize('f1')).toEqual(oneTask)
     })
 
-    it('expands a service to enclose its nested modules', () => {
-      store.hydrate([frame('f1'), moduleBlock('m1', 'f1', { position: { x: 400, y: 300 } })])
-      const mod = store.containerSize('m1')
-      const svc = store.containerSize('f1')
-      expect(svc.w).toBe(400 + mod.w + 12)
-      expect(svc.h).toBe(300 + mod.h + 12)
+    it('makes room for the initiative band above the lanes', () => {
+      // Initiatives are the one child still laid out by the frame itself (in a wrapping band),
+      // so they are the one thing the frame's height still has to account for.
+      store.hydrate([frame('f1'), task('t1', 'f1')])
+      const withoutBand = store.containerSize('f1').h
+      store.hydrate([frame('f1'), task('t1', 'f1'), initiativeBlock('i1', 'f1')])
+      expect(store.containerSize('f1').h).toBe(withoutBand + LANE_GEOMETRY.initiativeHeight)
+    })
+
+    it('sizes a frame holding only an initiative for lanes, since that is what it renders', () => {
+      // `BlockNode` gates the lanes on having ANY child — tasks, modules or initiatives — so a
+      // frame with an initiative and no tasks renders three (empty) lanes. A size that disagreed
+      // with what rendered is the clipping this geometry exists to prevent.
+      store.hydrate([frame('f1'), initiativeBlock('i1', 'f1')])
+      expect(store.containerSize('f1')).toEqual(
+        frameContentSize({ hasChildren: true, initiatives: 1 }),
+      )
+    })
+
+    it('a module reports no canvas of its own, since it is no longer drawn as a box', () => {
+      store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
+      expect(store.containerSize('m1').h).toBe(0)
+    })
+
+    it('keeps an explicitly resized frame at the size the user dragged it to', () => {
+      // The geometry is a FLOOR, not a fixed size: dragging the border still gives a reader more
+      // room, and a lane grows its scroll viewport into it rather than leaving dead canvas below.
+      store.hydrate([frame('f1', { size: { w: 2000, h: 1500 } }), task('t1', 'f1')])
+      const size = store.containerSize('f1')
+      expect(size).toEqual({ w: 2000, h: 1500 })
+      expect(laneBodyHeightIn(size, 0)).toBeGreaterThan(LANE_GEOMETRY.laneBodyHeight)
     })
   })
 
@@ -226,20 +298,34 @@ describe('board store read getters', () => {
     expect(() => store.previewMove('missing', { x: 1, y: 1 })).not.toThrow()
   })
 
-  it('updateBlock restores the patched fields and toasts when the write fails', async () => {
-    // Capture the toast the store surfaces on failure. Re-stub before creating the store so it
-    // binds this spy (the store resolves `useToast()` once at setup).
+  it('updateBlock restores the patched fields and reports the failure when the write fails', async () => {
+    // Capture what the store surfaces on failure. Every rolled-back write drains into the shared
+    // failure funnel (`usePipelineErrorToast().present`) rather than building its own toast, so the
+    // assertion is on the funnel and on the TITLE KEY it was given. Re-stub before creating the
+    // store: it resolves both handles once at setup.
     const addSpy = vi.fn()
+    const presentSpy = vi.fn()
     vi.stubGlobal('useToast', () => ({ add: addSpy }))
+    vi.stubGlobal('usePipelineErrorToast', () => ({ present: presentSpy }))
     setActivePinia(createPinia())
     const s = useBoardStore()
     s.hydrate([frame('f1', { title: 'Original', description: 'orig' })])
     // With no active workspace, `requireId()` throws inside updateBlock's try — the same catch
     // that a rejected API write hits — so this exercises the optimistic-rollback + toast path.
-    await s.updateBlock('f1', { title: 'Edited', description: 'changed' })
+    // The outcome is REPORTED to the caller, not only toasted: a caller that goes on to announce
+    // what the patch achieved (the monorepo import's frontend wiring) has to see the rollback.
+    await expect(s.updateBlock('f1', { title: 'Edited', description: 'changed' })).resolves.toBe(
+      false,
+    )
     expect(s.getBlock('f1')?.title).toBe('Original')
     expect(s.getBlock('f1')?.description).toBe('orig')
-    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+    expect(presentSpy).toHaveBeenCalledWith(expect.any(Error), 'board.toast.updateFailed')
+  })
+
+  it('updateBlock reports a no-op for a block that is not on the board', async () => {
+    // Nothing is patched and nothing is toasted, so the return value is the ONLY signal that the
+    // write did not happen.
+    await expect(store.updateBlock('missing', { title: 'Edited' })).resolves.toBe(false)
   })
 
   it('hydrate replaces and upsert inserts/updates cached blocks', () => {
@@ -285,8 +371,300 @@ describe('board store optimistic rollback', () => {
     }))
     const store = useBoardStore()
     store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig', description: 'keep' })])
-    await store.updateBlock('t1', { title: 'renamed' })
+    await expect(store.updateBlock('t1', { title: 'renamed' })).resolves.toBe(false)
     expect(store.getBlock('t1')?.title).toBe('orig')
     expect(store.getBlock('t1')?.description).toBe('keep')
+  })
+
+  it('updateBlock reports the patch persisted when the API accepts it', async () => {
+    vi.stubGlobal('useApi', () => ({
+      updateBlock: async () => task('t1', 'f1', { title: 'renamed' }),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig' })])
+    await expect(store.updateBlock('t1', { title: 'renamed' })).resolves.toBe(true)
+    expect(store.getBlock('t1')?.title).toBe('renamed')
+  })
+
+  it('previewResize translates the children when the drag moves the content origin', () => {
+    // A child's position is relative to its container's content origin, so growing the frame
+    // 40px west (origin -40) has to move every direct child +40 or the whole content slides with
+    // the border. A grandchild rides its module and must NOT move on its own.
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1', { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } }),
+      moduleBlock('m1', 'f1', { position: { x: 20, y: 30 } }),
+      task('t1', 'f1', { position: { x: 10, y: 20 } }),
+      task('t2', 'm1', { position: { x: 5, y: 5 } }),
+    ])
+    store.previewResize('f1', { x: 60, y: 100 }, { w: 640, h: 400 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 50, y: 20 })
+    expect(store.getBlock('m1')?.position).toEqual({ x: 60, y: 30 })
+    expect(store.getBlock('t2')?.position).toEqual({ x: 5, y: 5 })
+  })
+
+  it('previewResize leaves the children alone when only the far border moved', () => {
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1', { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } }),
+      task('t1', 'f1', { position: { x: 10, y: 20 } }),
+    ])
+    store.previewResize('f1', { x: 100, y: 100 }, { w: 700, h: 500 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 10, y: 20 })
+    expect(store.getBlock('f1')?.size).toEqual({ w: 700, h: 500 })
+  })
+
+  it('resizeBlock rolls the bounds AND the child translation back when the API rejects', async () => {
+    // The rollback has to undo both halves: a restored box with its contents still offset is the
+    // one failure mode that looks fine until the next refresh moves everything.
+    vi.stubGlobal('useApi', () => ({
+      resizeBlock: () => Promise.reject(new Error('conflict')),
+    }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1', { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } }),
+      task('t1', 'f1', { position: { x: 10, y: 20 } }),
+    ])
+    await store.resizeBlock(
+      'f1',
+      { position: { x: 60, y: 70 }, size: { w: 640, h: 430 } },
+      { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } },
+    )
+    expect(store.getBlock('f1')?.position).toEqual({ x: 100, y: 100 })
+    expect(store.getBlock('f1')?.size).toEqual({ w: 600, h: 400 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 10, y: 20 })
+  })
+
+  it('reparentBlock offers an undo that moves the block back to its previous home', async () => {
+    vi.stubGlobal('useApi', () => ({
+      reparentBlock: async (
+        _ws: string,
+        id: string,
+        body: { parentId: string; position: unknown },
+      ) => task(id, body.parentId, { position: body.position as { x: number; y: number } }),
+    }))
+    interface ToastAction {
+      onClick: () => void
+    }
+    const actions: ToastAction[] = []
+    vi.stubGlobal('useToast', () => ({
+      add: (t: { actions?: ToastAction[] }) => {
+        if (t.actions) actions.push(...t.actions)
+      },
+    }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1'),
+      task('t1', 'f1', { position: { x: 1, y: 2 } }),
+    ])
+    await store.reparentBlock('t1', 'm1', { x: 5, y: 6 })
+    expect(store.getBlock('t1')?.parentId).toBe('m1')
+    // the undo action returns the block to its original parent + position
+    expect(actions).toHaveLength(1)
+    actions[0]!.onClick()
+    await vi.waitFor(() => {
+      expect(store.getBlock('t1')?.parentId).toBe('f1')
+      expect(store.getBlock('t1')?.position).toEqual({ x: 1, y: 2 })
+    })
+    // the undo move is itself non-undoable, so no second toast is queued
+    expect(actions).toHaveLength(1)
+  })
+
+  it('reparentBlock predicts the declared module the server will re-stamp', async () => {
+    // The board reads a task's PARENT for its module and falls back to the name it DECLARES (a
+    // task can name a module before the engine materialises the block on merge). So a card
+    // dragged out of a module and left still declaring it re-groups under the module it was just
+    // dragged out of. The server re-stamps the name on every reparent; the optimistic write here
+    // has to predict the same answer or the card visibly jumps when the response lands.
+    //
+    // The request never settles, so what is asserted is strictly what this store put on screen
+    // BEFORE hearing back — the window the card would otherwise spend in the wrong group.
+    vi.stubGlobal('useApi', () => ({ reparentBlock: () => new Promise(() => {}) }))
+    vi.stubGlobal('useToast', () => ({ add: () => {} }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1', { title: 'Sessions' }),
+      task('t1', 'm1', { moduleName: 'Sessions' }),
+      task('t2', 'f1'),
+    ])
+
+    // Out to the service frame: the declared name goes with it, as the empty string the store
+    // maps to NULL. Left behind, it is what files the card straight back into "Sessions".
+    void store.reparentBlock('t1', 'f1', { x: 0, y: 0 })
+    expect(store.getBlock('t1')?.moduleName).toBe('')
+
+    // And in: the destination module's title, whatever the task declared before.
+    void store.reparentBlock('t2', 'm1', { x: 0, y: 0 })
+    expect(store.getBlock('t2')?.moduleName).toBe('Sessions')
+  })
+
+  it('reparentBlock restores the declared module when the move is rejected', async () => {
+    // The same rollback contract the parent and position already had: a refused move must not
+    // leave the card grouped somewhere the server never put it.
+    vi.stubGlobal('useApi', () => ({
+      reparentBlock: async () => {
+        throw new Error('nope')
+      },
+    }))
+    vi.stubGlobal('useToast', () => ({ add: () => {} }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1', { title: 'Sessions' }),
+      task('t1', 'm1', { moduleName: 'Sessions' }),
+    ])
+
+    await store.reparentBlock('t1', 'f1', { x: 0, y: 0 })
+    expect(store.getBlock('t1')).toMatchObject({ parentId: 'm1', moduleName: 'Sessions' })
+  })
+})
+
+describe('board store deferred delete + undo', () => {
+  interface ToastAction {
+    onClick: () => void
+  }
+  /** Build a store with a stubbed api/toast, capturing the undo action offered on delete. */
+  function setup(removeImpl: () => Promise<void>) {
+    const removeSpy = vi.fn(removeImpl)
+    const addSpy = vi.fn()
+    const presentSpy = vi.fn()
+    const actions: ToastAction[] = []
+    vi.stubGlobal('useApi', () => ({ removeBlock: removeSpy }))
+    vi.stubGlobal('useToast', () => ({
+      add: (t: { actions?: ToastAction[] }) => {
+        addSpy(t)
+        if (t.actions) actions.push(...t.actions)
+      },
+    }))
+    vi.stubGlobal('usePipelineErrorToast', () => ({ present: presentSpy }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    return { store: useBoardStore(), removeSpy, addSpy, presentSpy, actions }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('hides the subtree immediately but defers the backend delete', () => {
+    const { store, removeSpy } = setup(async () => {})
+    store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
+    store.removeBlock('f1')
+    // the whole subtree disappears at once…
+    expect(store.getBlock('f1')).toBeUndefined()
+    expect(store.getBlock('m1')).toBeUndefined()
+    expect(store.getBlock('t1')).toBeUndefined()
+    // …but nothing is deleted server-side yet.
+    expect(removeSpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps a pending-delete subtree hidden across a coarse refresh, and prunes its edges', () => {
+    const { store } = setup(async () => {})
+    store.hydrate([frame('f1'), task('t1', 'f1'), task('t2', 'f1', { dependsOn: ['t1'] })])
+    store.removeBlock('t1')
+    // A full re-hydrate (e.g. a `board` live event) that still carries the deleted block and
+    // the now-dangling dependency edge must not resurrect either.
+    store.hydrate([frame('f1'), task('t1', 'f1'), task('t2', 'f1', { dependsOn: ['t1'] })])
+    expect(store.getBlock('t1')).toBeUndefined()
+    expect(store.getBlock('t2')?.dependsOn).toEqual([])
+  })
+
+  it('ignores a live upsert for a block awaiting its deferred delete', () => {
+    const { store } = setup(async () => {})
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('t1')
+    store.upsert(task('t1', 'f1', { title: 'resurrected' }))
+    expect(store.getBlock('t1')).toBeUndefined()
+  })
+
+  it('undo cancels the pending delete and restores the subtree', async () => {
+    const { store, removeSpy, actions } = setup(async () => {})
+    store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
+    store.removeBlock('f1')
+    expect(actions).toHaveLength(1)
+    actions[0]!.onClick()
+    expect(store.getBlock('f1')?.id).toBe('f1')
+    expect(store.getBlock('t1')?.id).toBe('t1')
+    // the deferred delete never fires after an undo
+    await vi.runAllTimersAsync()
+    expect(removeSpy).not.toHaveBeenCalled()
+  })
+
+  it('fires the backend delete for the captured workspace once the window elapses', async () => {
+    const { store, removeSpy } = setup(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1')
+    await vi.runAllTimersAsync()
+    expect(removeSpy).toHaveBeenCalledWith('ws1', 'f1')
+  })
+
+  it('restores the subtree and reports the failure if the deferred delete fails', async () => {
+    const { store, presentSpy } = setup(() => Promise.reject(new Error('boom')))
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('f1')
+    await vi.runAllTimersAsync()
+    expect(store.getBlock('f1')?.id).toBe('f1')
+    expect(store.getBlock('t1')?.id).toBe('t1')
+    // Through the shared funnel, named by its title key (see `updateBlock`'s case above).
+    expect(presentSpy).toHaveBeenCalledWith(expect.any(Error), 'board.toast.deleteFailed')
+  })
+
+  it('does not reattach a failed deferred delete onto a different workspace', async () => {
+    const { store } = setup(() => Promise.reject(new Error('boom')))
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('f1')
+    // The user switches workspace during the undo window; when the delete then fails, the
+    // ws1 subtree must NOT be injected onto the ws2 board now on screen.
+    useWorkspaceStore().workspaceId = 'ws2'
+    await vi.runAllTimersAsync()
+    expect(store.getBlock('f1')).toBeUndefined()
+    expect(store.getBlock('t1')).toBeUndefined()
+  })
+
+  it('runs onCommit with the captured workspace only when the window elapses', async () => {
+    const { store } = setup(async () => {})
+    const onCommit = vi.fn(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1', { onCommit })
+    await vi.runAllTimersAsync()
+    expect(onCommit).toHaveBeenCalledWith('ws1')
+  })
+
+  it('skips onCommit (the irreversible side effect) when the delete is undone', async () => {
+    const { store, actions } = setup(async () => {})
+    const onCommit = vi.fn(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1', { onCommit })
+    actions[0]!.onClick() // undo before the window elapses
+    await vi.runAllTimersAsync()
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('undo re-adds pruned edges without clobbering ones gained during the window', () => {
+    const { store, actions } = setup(async () => {})
+    store.hydrate([
+      frame('f1'),
+      task('t1', 'f1'),
+      task('t2', 'f1', { dependsOn: ['t1'] }),
+      task('t3', 'f1'),
+    ])
+    store.removeBlock('t1')
+    // A live event adds a new dependency to the survivor mid-window (t1's edge was pruned).
+    store.upsert(task('t2', 'f1', { dependsOn: ['t3'] }))
+    actions[0]!.onClick() // undo restores t1 and its edge, keeping the newly-added t3 edge
+    expect(store.getBlock('t2')?.dependsOn.slice().sort()).toEqual(['t1', 't3'])
   })
 })

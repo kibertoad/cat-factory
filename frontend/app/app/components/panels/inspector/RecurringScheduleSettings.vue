@@ -4,11 +4,12 @@
 // (lazily loaded; retained ~1 week on the backend).
 import type { Block } from '~/types/domain'
 import type { Recurrence } from '~/types/recurring'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ block: Block }>()
 const recurring = useRecurringPipelinesStore()
 const pipelines = usePipelinesStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 
 const schedule = computed(() => recurring.byBlock(props.block.id))
@@ -72,11 +73,7 @@ async function saveEdit() {
     await recurring.update(schedule.value.id, { recurrence: draft.value })
     editing.value = false
   } catch (e) {
-    toast.add({
-      title: t('inspector.recurring.updateFailed'),
-      description: errMsg(e),
-      color: 'error',
-    })
+    present(e, 'inspector.recurring.updateFailed')
   } finally {
     busy.value = false
   }
@@ -88,11 +85,7 @@ async function toggleEnabled() {
   try {
     await recurring.update(schedule.value.id, { enabled: !schedule.value.enabled })
   } catch (e) {
-    toast.add({
-      title: t('inspector.recurring.updateFailed'),
-      description: errMsg(e),
-      color: 'error',
-    })
+    present(e, 'inspector.recurring.updateFailed')
   } finally {
     busy.value = false
   }
@@ -104,25 +97,17 @@ async function runNow() {
   try {
     await recurring.runNow(schedule.value.id)
   } catch (e) {
-    toast.add({
-      title: t('inspector.recurring.runNowFailed'),
-      description: errMsg(e),
-      color: 'error',
-    })
+    present(e, 'inspector.recurring.runNowFailed')
   } finally {
     busy.value = false
   }
 }
 
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : String(e)
-}
-
 const RUN_COLOR: Record<string, string> = {
-  running: 'text-amber-400',
-  done: 'text-emerald-400',
-  failed: 'text-rose-400',
-  skipped: 'text-slate-500',
+  running: 'text-app-warning-400',
+  done: 'text-app-success-400',
+  failed: 'text-app-error-400',
+  skipped: 'text-dimmed',
 }
 const RUN_STATUS_KEYS: Record<string, string> = {
   running: 'inspector.recurring.runStatus.running',
@@ -139,29 +124,46 @@ function fmtTime(ms: number) {
 </script>
 
 <template>
-  <div
-    v-if="schedule"
-    class="space-y-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
-  >
+  <div v-if="schedule" class="space-y-2 rounded-lg border border-primary/50 bg-primary/10 p-3">
     <div class="flex items-center justify-between">
       <span
-        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-300"
+        class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-primary"
       >
         <UIcon name="i-lucide-repeat" class="h-3.5 w-3.5" />
         {{ t('inspector.recurring.title') }}
       </span>
-      <UBadge :color="schedule.enabled ? 'primary' : 'neutral'" variant="subtle" size="xs">
-        {{ schedule.enabled ? t('inspector.recurring.active') : t('inspector.recurring.paused') }}
+      <UBadge
+        :color="schedule.onDemand ? 'primary' : schedule.enabled ? 'primary' : 'neutral'"
+        variant="subtle"
+        size="xs"
+      >
+        {{
+          schedule.onDemand
+            ? t('inspector.recurring.onDemand')
+            : schedule.enabled
+              ? t('inspector.recurring.active')
+              : t('inspector.recurring.paused')
+        }}
       </UBadge>
     </div>
 
-    <p class="text-[11px] text-slate-400">
-      <span class="text-slate-300">{{ pipelineName }}</span>
+    <p class="text-2xs text-muted">
+      <span class="text-toned">{{ pipelineName }}</span>
     </p>
 
-    <template v-if="!editing">
-      <p class="text-[11px] text-slate-400">{{ describeCadence(schedule.recurrence) }}</p>
-      <p class="text-[11px] text-slate-500">
+    <!-- On-demand: no cadence, no pause/resume — it fires only when a person triggers it. -->
+    <template v-if="schedule.onDemand">
+      <p class="text-2xs text-dimmed">{{ t('inspector.recurring.onDemandHint') }}</p>
+      <div class="flex flex-wrap gap-1.5 pt-1">
+        <UButton size="xs" variant="soft" icon="i-lucide-play" :loading="busy" @click="runNow">
+          {{ t('inspector.recurring.runNow') }}
+        </UButton>
+      </div>
+    </template>
+
+    <template v-else-if="!editing">
+      <p class="text-2xs text-muted">{{ describeCadence(schedule.recurrence) }}</p>
+      <p class="text-2xs text-dimmed">
         {{ t('inspector.recurring.nextRun', { time: fmtTime(schedule.nextRunAt) }) }}
       </p>
       <div class="flex flex-wrap gap-1.5 pt-1">
@@ -193,9 +195,17 @@ function fmtTime(ms: number) {
     <template v-else-if="draft">
       <RecurringRecurrenceEditor v-model="draft" />
       <div class="flex justify-end gap-1.5 pt-1">
-        <UButton size="xs" variant="ghost" color="neutral" @click="editing = false">{{
-          t('common.cancel')
-        }}</UButton>
+        <UButton
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          @click="
+            () => {
+              editing = false
+            }
+          "
+          >{{ t('common.cancel') }}</UButton
+        >
         <UButton size="xs" color="primary" :loading="busy" @click="saveEdit">{{
           t('common.save')
         }}</UButton>
@@ -203,16 +213,16 @@ function fmtTime(ms: number) {
     </template>
 
     <!-- run history -->
-    <div v-if="runs.length" class="space-y-1 border-t border-slate-800 pt-2">
-      <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+    <div v-if="runs.length" class="space-y-1 border-t border-default pt-2">
+      <SectionLabel as="span">
         {{ t('inspector.recurring.recentRuns') }}
-      </span>
-      <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-[11px]">
-        <span :class="RUN_COLOR[run.status] ?? 'text-slate-400'" class="w-14 shrink-0">
+      </SectionLabel>
+      <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-2xs">
+        <span :class="RUN_COLOR[run.status] ?? 'text-muted'" class="w-14 shrink-0">
           {{ runStatusLabel(run.status) }}
         </span>
-        <span class="truncate text-slate-500">{{ fmtTime(run.startedAt) }}</span>
-        <span v-if="run.outcome" class="ms-auto truncate text-slate-500">{{ run.outcome }}</span>
+        <span class="truncate text-dimmed">{{ fmtTime(run.startedAt) }}</span>
+        <span v-if="run.outcome" class="ms-auto truncate text-dimmed">{{ run.outcome }}</span>
       </div>
     </div>
   </div>

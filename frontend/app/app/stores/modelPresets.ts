@@ -18,9 +18,35 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
   const api = useApi()
 
   const presets = ref<ModelPreset[]>([])
+  /**
+   * Current built-in catalog versions (`seedModelPresets()`), keyed by preset id, from the
+   * workspace snapshot. The keys ARE the set of built-in ids: a stored preset whose id is a
+   * key here is a built-in (and is outdated when its `version` is below the catalog value),
+   * and a key with no matching stored preset is a NEW built-in the workspace can add. Drives
+   * `useModelPresetHealth`.
+   */
+  const catalogVersions = ref<Record<string, number>>({})
+  /**
+   * The catalog's own NAME per id in {@link catalogVersions}, from the same snapshot field pair.
+   * Read only where a built-in has no stored row to take a name off, which is the "new built-in"
+   * advisory and nothing else. Empty for a facade that ships no name map.
+   */
+  const catalogNames = ref<Record<string, string>>({})
 
-  function hydrate(list: ModelPreset[]) {
+  function hydrate(
+    list: ModelPreset[],
+    versions?: Record<string, number>,
+    names?: Record<string, string>,
+  ) {
     presets.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
+    // The two catalog maps move TOGETHER, being one snapshot read split in two and keyed
+    // identically by construction. Assigning names on their own truthiness would let a facade
+    // shipping versions and no names leave the previous board's names indexed against this board's
+    // ids, which is the one way the pair can disagree (see the pipelines store).
+    if (versions) {
+      catalogVersions.value = versions
+      catalogNames.value = names ?? {}
+    }
   }
 
   /** The workspace default (fallback for a task that picks none). */
@@ -61,5 +87,44 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
     await ws.refresh()
   }
 
-  return { presets, defaultPreset, resolve, modelForKind, hydrate, create, update, remove }
+  /**
+   * Reseed a built-in preset from the backend's current catalog: adopt an updated definition,
+   * repair a drifted one, or materialise a NEW built-in that appeared after the workspace was
+   * created. The `presetId` is the catalog id (e.g. `mdp_kimi`). Refreshes the snapshot.
+   */
+  async function reseed(presetId: string) {
+    const ws = useWorkspaceStore()
+    const updated = await api.reseedModelPreset(ws.requireId(), presetId)
+    await ws.refresh()
+    return updated
+  }
+
+  /**
+   * Reseed several built-ins in one go, refreshing the snapshot ONCE at the end rather than
+   * after every id (each `reseed` refetches the whole board, so a per-id refresh in a loop is
+   * wasteful). The POSTs run sequentially so the backend's single-default invariant settles
+   * deterministically.
+   */
+  async function reseedMany(presetIds: string[]) {
+    const ws = useWorkspaceStore()
+    for (const presetId of presetIds) {
+      await api.reseedModelPreset(ws.requireId(), presetId)
+    }
+    await ws.refresh()
+  }
+
+  return {
+    presets,
+    catalogVersions,
+    catalogNames,
+    defaultPreset,
+    resolve,
+    modelForKind,
+    hydrate,
+    create,
+    update,
+    remove,
+    reseed,
+    reseedMany,
+  }
 })

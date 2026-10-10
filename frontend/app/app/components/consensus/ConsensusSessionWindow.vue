@@ -8,15 +8,21 @@
 // as `consensus` stream events arrive.
 import { computed } from 'vue'
 import type { ConsensusContribution, ConsensusSession } from '~/types/consensus'
+import CopyButton from '~/components/common/CopyButton.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import { agentKindMeta } from '~/utils/catalog'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, n } = useI18n()
 
 const board = useBoardStore()
 const consensus = useConsensusStore()
+const models = useModelsStore()
 
 const { open, blockId, close } = useResultView('consensus-session', {
-  onOpen: (id) => {
-    void consensus.load(id)
+  onOpen: ({ blockId }) => {
+    void consensus.load(blockId)
   },
 })
 
@@ -25,6 +31,24 @@ const session = computed<ConsensusSession | null>(() =>
   blockId.value ? consensus.sessionFor(blockId.value) : null,
 )
 const loading = computed(() => (blockId.value ? consensus.isLoading(blockId.value) : false))
+
+// Composed header: "Consensus · <strategy>" as the dialog title (with the block appended when
+// present), and the agent kind + participant count as the subtitle line.
+const headerTitle = computed(() => {
+  const base = session.value
+    ? `${t('consensus.titlePrefix')} · ${strategyLabel(session.value.strategy)}`
+    : t('consensus.titlePrefix')
+  return block.value ? `${base} — ${block.value.title}` : base
+})
+const headerSubtitle = computed(() =>
+  session.value
+    ? `${agentKindMeta(session.value.agentKind).label} · ${t(
+        'consensus.participantCount',
+        { count: session.value.participants.length },
+        session.value.participants.length,
+      )}`
+    : undefined,
+)
 
 // Exhaustive enum→key maps (literal key strings keep the typed-key drift guard live,
 // vs a runtime-built `consensus.strategy.${value}`).
@@ -45,10 +69,10 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   failed: 'consensus.status.failed',
 }
 const STATUS_CLASS: Record<string, string> = {
-  running: 'bg-sky-500/15 text-sky-300',
-  synthesizing: 'bg-indigo-500/15 text-indigo-300',
-  done: 'bg-emerald-500/15 text-emerald-300',
-  failed: 'bg-rose-500/15 text-rose-300',
+  running: 'bg-app-info-500/15 text-app-info-300',
+  synthesizing: 'bg-primary/15 text-primary',
+  done: 'bg-app-success-500/15 text-app-success-300',
+  failed: 'bg-app-error-500/15 text-app-error-300',
 }
 
 function strategyLabel(strategy: string): string {
@@ -90,161 +114,148 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-users-round"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
+    :title="headerTitle"
+    :subtitle="headerSubtitle"
+    variant="centered"
+    width="5xl"
+    @close="close"
+  >
+    <template v-if="session" #header-extras>
+      <!-- Which workspace consensus GROUP the run escalated to. Only a tiered step has one, and
+           the name is the session's own copy — so it still reads correctly after the library
+           entry was renamed or deleted. Without it, a reader asking "why did five models run on
+           this task" has the transcript but not the reason. -->
+      <span
+        v-if="session.groupName"
+        class="rounded-full bg-app-success-900/50 px-2.5 py-1 text-xs font-medium text-app-success-200"
+        :title="t('consensus.groupTitle')"
       >
-        <!-- header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15">
-            <UIcon name="i-lucide-users-round" class="h-5 w-5 text-amber-300" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ t('consensus.titlePrefix') }} ·
-              {{ session ? strategyLabel(session.strategy) : '' }}
-              <span v-if="block" class="font-normal text-slate-400">— {{ block.title }}</span>
-            </h2>
-            <p v-if="session" class="text-xs text-slate-500">
-              {{ session.agentKind }} ·
-              {{
-                t(
-                  'consensus.participantCount',
-                  { count: session.participants.length },
-                  session.participants.length,
-                )
-              }}
-            </p>
-          </div>
-          <span
-            v-if="session"
-            class="rounded-full px-2.5 py-1 text-xs font-medium"
-            :class="STATUS_CLASS[session.status] ?? 'bg-slate-700 text-slate-300'"
-          >
-            {{ statusLabel(session.status) }}
-          </span>
-          <button
-            class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-5 w-5" />
-          </button>
-        </header>
+        {{ session.groupName }}
+      </span>
+      <span
+        class="rounded-full px-2.5 py-1 text-xs font-medium"
+        :class="STATUS_CLASS[session.status] ?? 'bg-accented text-toned'"
+      >
+        {{ statusLabel(session.status) }}
+      </span>
+    </template>
 
-        <div class="flex-1 overflow-y-auto px-6 py-5">
-          <div v-if="loading && !session" class="py-16 text-center text-sm text-slate-500">
-            {{ t('consensus.loading') }}
-          </div>
-          <div v-else-if="!session" class="py-16 text-center text-sm text-slate-500">
-            {{ t('consensus.empty') }}
-          </div>
-          <template v-else>
-            <!-- failure -->
-            <div
-              v-if="session.status === 'failed'"
-              class="mb-5 rounded-lg border border-rose-800/60 bg-rose-950/40 px-4 py-3 text-sm text-rose-200"
-            >
-              {{ t('consensus.failed', { error: session.error ?? t('consensus.unknownError') }) }}
-            </div>
-
-            <!-- synthesized result -->
-            <section v-if="session.synthesis" class="mb-6">
-              <div class="mb-2 flex items-center gap-2">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  {{ t('consensus.synthesizedResult') }}
-                </h3>
-                <span
-                  v-if="session.confidence != null"
-                  class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300"
-                  >{{ t('consensus.confidence', { pct: pct(session.confidence) }) }}</span
-                >
-              </div>
-              <pre
-                class="whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
-                >{{ session.synthesis }}</pre
-              >
-              <ul v-if="session.dissent?.length" class="mt-2 space-y-1">
-                <li
-                  v-for="(d, i) in session.dissent"
-                  :key="i"
-                  class="flex items-start gap-2 text-xs text-amber-300/90"
-                >
-                  <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>{{ d }}</span>
-                </li>
-              </ul>
-            </section>
-
-            <!-- participants -->
-            <section class="mb-6">
-              <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('consensus.panel') }}
-              </h3>
-              <div class="flex flex-wrap gap-2">
-                <div
-                  v-for="(p, i) in session.participants"
-                  :key="p.id"
-                  class="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs"
-                >
-                  <span class="font-medium text-slate-200">{{
-                    t('consensus.expert', { letter: String.fromCharCode(65 + i) })
-                  }}</span>
-                  <span class="text-slate-400"> · {{ p.role }}</span>
-                  <span v-if="p.modelId" class="ms-1 text-slate-500">({{ p.modelId }})</span>
-                </div>
-              </div>
-            </section>
-
-            <!-- rounds -->
-            <section v-for="round in session.rounds" :key="round.index" class="mb-5">
-              <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('consensus.round.heading', { n: round.index + 1 }) }} ·
-                {{ roundLabel(round.kind) }}
-              </h3>
-              <div class="space-y-3">
-                <div
-                  v-for="c in round.contributions"
-                  :key="c.participantId"
-                  class="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3"
-                >
-                  <div class="mb-1 flex items-center gap-2">
-                    <span class="text-xs font-semibold text-slate-200">{{
-                      anonLabel(c.participantId)
-                    }}</span>
-                    <span class="text-xs text-slate-500">{{ roleFor(c.participantId) }}</span>
-                    <span
-                      v-if="topScore(c)"
-                      class="ms-auto rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-300"
-                      >{{
-                        t('consensus.topScore', {
-                          label: topScore(c)!.label,
-                          pct: pct(topScore(c)!.value),
-                        })
-                      }}</span
-                    >
-                  </div>
-                  <pre class="whitespace-pre-wrap text-sm text-slate-300">{{ c.text }}</pre>
-                  <div v-if="c.scores?.length" class="mt-2 flex flex-wrap gap-1.5">
-                    <span
-                      v-for="s in c.scores"
-                      :key="s.dimension"
-                      class="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-400"
-                      >{{ s.dimension }}: {{ pct(s.value) }}</span
-                    >
-                  </div>
-                </div>
-              </div>
-            </section>
-          </template>
-        </div>
+    <div class="flex-1 overflow-y-auto px-6 py-5">
+      <div v-if="loading && !session" class="py-16 text-center text-sm text-dimmed">
+        {{ t('consensus.loading') }}
       </div>
+      <div v-else-if="!session" class="py-16 text-center text-sm text-dimmed">
+        {{ t('consensus.empty') }}
+      </div>
+      <template v-else>
+        <!-- failure -->
+        <div
+          v-if="session.status === 'failed'"
+          class="mb-5 flex items-start gap-2 rounded-lg border border-app-error-800/60 bg-app-error-950/40 px-4 py-3 text-sm text-app-error-200"
+        >
+          <span class="min-w-0 flex-1">{{
+            t('consensus.failed', { error: session.error ?? t('consensus.unknownError') })
+          }}</span>
+          <CopyButton v-if="session.error" :text="session.error" class="-me-1 shrink-0" />
+        </div>
+
+        <!-- synthesized result -->
+        <section v-if="session.synthesis" class="mb-6">
+          <div class="mb-2 flex items-center gap-2">
+            <SectionLabel as="h3">
+              {{ t('consensus.synthesizedResult') }}
+            </SectionLabel>
+            <span
+              v-if="session.confidence != null"
+              class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-xs text-app-success-300"
+              >{{ t('consensus.confidence', { pct: pct(session.confidence) }) }}</span
+            >
+            <CopyButton :text="session.synthesis" class="ms-auto -my-1" />
+          </div>
+          <MarkdownProse
+            :text="session.synthesis"
+            class="rounded-lg border border-default bg-app-950/60 px-4 py-3 text-sm text-default"
+          />
+          <ul v-if="session.dissent?.length" class="mt-2 space-y-1">
+            <li
+              v-for="(d, i) in session.dissent"
+              :key="i"
+              class="flex items-start gap-2 text-xs text-app-warning-300/90"
+            >
+              <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{{ d }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- participants -->
+        <section class="mb-6">
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('consensus.panel') }}
+          </SectionLabel>
+          <div class="flex flex-wrap gap-2">
+            <div
+              v-for="(p, i) in session.participants"
+              :key="p.id"
+              class="rounded-lg border border-default bg-app-950/40 px-3 py-1.5 text-xs"
+            >
+              <span class="font-medium text-default">{{
+                t('consensus.expert', { letter: String.fromCharCode(65 + i) })
+              }}</span>
+              <span class="text-muted"> · {{ p.role }}</span>
+              <span v-if="p.modelId" class="ms-1 text-dimmed"
+                >({{ models.labelForRef(p.modelId) ?? p.modelId }})</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- rounds -->
+        <section v-for="round in session.rounds" :key="round.index" class="mb-5">
+          <SectionLabel as="h3" class="mb-2">
+            {{ t('consensus.round.heading', { n: round.index + 1 }) }} ·
+            {{ roundLabel(round.kind) }}
+          </SectionLabel>
+          <div class="space-y-3">
+            <div
+              v-for="c in round.contributions"
+              :key="c.participantId"
+              class="rounded-lg border border-default bg-app-950/40 px-4 py-3"
+            >
+              <div class="mb-1 flex items-center gap-2">
+                <span class="text-xs font-semibold text-default">{{
+                  anonLabel(c.participantId)
+                }}</span>
+                <span class="text-xs text-dimmed">{{ roleFor(c.participantId) }}</span>
+                <span
+                  v-if="topScore(c)"
+                  class="ms-auto rounded-sm bg-elevated px-1.5 py-0.5 text-xs text-toned"
+                  >{{
+                    t('consensus.topScore', {
+                      label: topScore(c)!.label,
+                      pct: pct(topScore(c)!.value),
+                    })
+                  }}</span
+                >
+                <CopyButton :text="c.text" :class="topScore(c) ? '-my-1' : 'ms-auto -my-1'" />
+              </div>
+              <MarkdownProse :text="c.text" class="text-sm text-toned" />
+              <div v-if="c.scores?.length" class="mt-2 flex flex-wrap gap-1.5">
+                <span
+                  v-for="s in c.scores"
+                  :key="s.dimension"
+                  class="rounded-sm bg-elevated/80 px-1.5 py-0.5 text-xs text-muted"
+                  >{{ s.dimension }}: {{ pct(s.value) }}</span
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>

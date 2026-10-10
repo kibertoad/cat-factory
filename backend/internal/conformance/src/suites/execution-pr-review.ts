@@ -1,0 +1,999 @@
+import {
+  type Block,
+  type CreateReviewInput,
+  type ExecutionInstance,
+  type OpenedPullRequest,
+  type PrReviewStepState,
+  type RepoFiles,
+  type WorkspaceSnapshot,
+} from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+import type { ConformanceApp, ConformanceHarness } from '../harness.js'
+import { mintPublicApiKey } from './shared.js'
+
+// PR deep-review park → select → resolve (finish / fix / post), asserted identically against every
+// facade. Extracted from `core.ts` as a cohesive sub-suite so that giant function stays within its
+// line budget (see AGENTS.md — split, don't raise the budget). Registers under the same parent
+// `[name] conformance` describe because it's called from within `defineCoreConformance`'s body.
+// The reviewer + effort-report fixtures every case in this file drives the fake agent with.
+const reviewerOutput = {
+  summary: 'Mostly solid; one correctness concern.',
+  slices: [{ title: 'Auth', rationale: 'auth + its test', paths: ['src/auth.ts'] }],
+  findings: [
+    {
+      path: 'src/auth.ts',
+      line: 12,
+      side: 'RIGHT',
+      severity: 'high',
+      category: 'correctness',
+      title: 'Missing null guard',
+      detail: 'The token may be undefined here.',
+      suggestedFix: 'Guard before dereferencing.',
+    },
+    {
+      path: 'README.md',
+      severity: 'nit',
+      category: 'style',
+      title: 'Typo',
+      detail: 'teh → the',
+    },
+  ],
+}
+
+const effortReport = {
+  difficulty: 8,
+  summary: 'Large diff across two subsystems.',
+  reducedEffectiveness: 'No spec for the auth change.',
+  obstacles: ['missing spec', 'no test coverage on the touched path'],
+}
+
+// A checkout-free `RepoFiles` capturing the deep-review resolutions' VCS writes/reads (the suite's
+// stand-in for a facade's GitHubClient-backed one) and the seeding of a parked review task, both
+// at module scope because the RESOLUTION cases and the PUBLIC-API cases below drive the same
+// fixture through two different doors: the same review, answered through `/workspaces/:ws/…` and
+// through `/api/v1/runs/:runId/decisions/…`. Duplicating them per function is how the two doors
+// would end up asserted against different reviews.
+const makeReviewRepo = (
+  recorder: {
+    headRefFor?: number
+    posted?: { number: number; input: CreateReviewInput }[]
+    /** Comment paths to REJECT (simulating GitHub's "Line could not be resolved" 422). */
+    failPaths?: string[]
+    /** The PR head sha the fake reports; mutate between drives to simulate a branch update. */
+    headSha?: string | null
+  },
+  headRef: string | null = 'feature/pr-42',
+): RepoFiles => ({
+  getFile: async () => null,
+  listDirectory: async () => [],
+  headSha: async () => 'base-sha',
+  createBranch: async () => {},
+  deleteBranch: async () => {},
+  commitFiles: async () => ({ sha: 'commit-sha' }),
+  openPullRequest: async () => {
+    throw new Error('not exercised by this test')
+  },
+  pullRequestHeadRef: async (number) => {
+    recorder.headRefFor = number
+    return headRef
+  },
+  pullRequestHeadSha: async () => recorder.headSha ?? null,
+  createReview: async (number, input) => {
+    ;(recorder.posted ??= []).push({ number, input })
+    const fail = new Set(recorder.failPaths ?? [])
+    return {
+      comments: input.comments.map((c) =>
+        fail.has(c.path)
+          ? { posted: false, error: 'Line could not be resolved' }
+          : { posted: true },
+      ),
+      bodyPosted: input.body ? true : null,
+    }
+  },
+})
+
+const seedReviewTask = async (
+  call: ConformanceApp['call'],
+  drive: ConformanceApp['drive'],
+  wsId: string,
+) => {
+  const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+    title: 'Review PR #42',
+    taskType: 'review',
+    taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+  })
+  await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+    pipelineId: 'pl_review',
+  })
+  const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+  const step = parked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+  return {
+    taskId: task.body.id,
+    executionId: parked.id,
+    findings: step.prReview?.findings ?? [],
+  }
+}
+
+/**
+ * The `pr-review` decision as `/api/v1` serves it, plus the read that finds it.
+ *
+ * At module scope because two registrars below drive the same surface (the curate/resolve cases
+ * and the resume/retry ones), and a projection each spelled for itself would let one of them go on
+ * asserting a field the other had already watched move.
+ */
+type PublicReviewDecision = {
+  kind: string
+  status: string
+  prUrl: string | null
+  slices: { sliceId: string; paths: string[] }[]
+  findings: {
+    findingId: string
+    sliceId: string | null
+    path: string
+    line: number | null
+    severity: string
+    suggestedFix: string | null
+  }[]
+  selectedFindingIds: string[]
+  postReport: {
+    attempted: number
+    posted: number
+    folded: number
+    bodyPosted: boolean | null
+    attempt: number | null
+    failures: { findingId: string; path: string; line: number | null; reason: string }[]
+  } | null
+  postedFindingIds: string[]
+  postedBody: boolean
+  postAttempts: number
+  resumeAttempts: number
+  maxResumeAttempts: number
+  reportedSlices: number
+  lastActivityAt: number | null
+}
+
+/** The run's `pr-review` decision as `/api/v1` serves it, or undefined once it has settled. */
+const readReview = async (
+  app: ConformanceApp,
+  executionId: string,
+  auth: Record<string, string>,
+): Promise<PublicReviewDecision | undefined> => {
+  const listed = await app.call<{ parked: boolean; decisions: PublicReviewDecision[] }>(
+    'GET',
+    `/api/v1/runs/${executionId}/decisions`,
+    undefined,
+    auth,
+  )
+  expect(listed.status).toBe(200)
+  return listed.body.decisions.find((d) => d.kind === 'pr-review')
+}
+
+export function definePrReviewSuite(harness: ConformanceHarness): void {
+  describe('PR deep-review (pr-reviewer park → select → resolve)', () => {
+    // The read-only pr-reviewer's structured findings, returned by the fake as `result.custom`.
+
+    // The reviewer's effort self-assessment, lifted by the harness off its sentinel file.
+
+    registerReviewChallengeTests(harness)
+    registerReviewResolutionTests(harness)
+    registerPublicReviewApiTests(harness)
+    registerPublicReviewLoopTests(harness)
+  })
+}
+
+/**
+ * Parking a review run on its findings and every disposition a human can take on one:
+ * resolve, dismiss, and the four investigator outcomes a challenge can settle to.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerReviewChallengeTests(harness: ConformanceHarness): void {
+  it('parks a review run on its findings, then resolves the human selection to done', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({
+      customResult: reviewerOutput,
+      effortReport,
+    })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    // A review task defaults to the pl_review pipeline (a single read-only pr-reviewer step).
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    expect(task.status).toBe(201)
+    const start = await call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+      { pipelineId: 'pl_review' },
+    )
+    expect(start.status).toBe(201)
+
+    // Driving runs the reviewer; its findings are recorded onto the step and the run PARKS
+    // for a human to select — it does NOT finish on its own.
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    expect(parked.status).toBe('blocked')
+    const step = parked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(step.prReview?.status).toBe('awaiting_selection')
+    expect(step.prReview?.prUrl).toBe('https://github.com/o/r/pull/42')
+    // Findings are id-stamped, severity-ordered (high before nit), and anchored to a slice.
+    const findings = step.prReview?.findings ?? []
+    expect(findings.map((f) => f.severity)).toEqual(['high', 'nit'])
+    expect(findings[0]!.id).toMatch(/^prf_/)
+    expect(findings[0]!.sliceId).toBe(step.prReview?.slices?.[0]?.id)
+    // The reviewer's effort self-assessment is recorded on the step even though this kind
+    // NEVER reaches the normal completion (its findings park the run), which is what the
+    // run-details windows render. Recording it only on the completion path silently dropped
+    // it for every verdict-driven kind.
+    expect(step.effortReport?.difficulty).toBe(8)
+    expect(step.effortReport?.reducedEffectiveness).toBe('No spec for the auth change.')
+    expect(step.effortReport?.obstacles).toEqual(effortReport.obstacles)
+
+    // The park raised a `pr_review_ready` inbox card (identically on both runtimes).
+    const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(snap.body.notifications?.some((n) => n.type === 'pr_review_ready')).toBe(true)
+
+    // The GET returns the same active state.
+    const active = await call<PrReviewStepState>(
+      'GET',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review`,
+    )
+    expect(active.body.status).toBe('awaiting_selection')
+
+    // Resolving with a curated selection records it and advances the read-only run to done.
+    const resolved = await call<PrReviewStepState>(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/resolve`,
+      { action: 'finish', findingIds: [findings[0]!.id] },
+    )
+    expect(resolved.status).toBe(200)
+    expect(resolved.body.status).toBe('done')
+    expect(resolved.body.selectedFindingIds).toEqual([findings[0]!.id])
+
+    const done = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    expect(done.status).toBe('done')
+    const finalBlock = (
+      await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    ).body.blocks.find((b) => b.id === task.body.id)!
+    expect(finalBlock.status).toBe('done')
+  })
+
+  it('dismisses a finding — removes it from the review + the selection, staying parked', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({ customResult: reviewerOutput })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_review',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const step = parked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    const findings = step.prReview?.findings ?? []
+    expect(findings).toHaveLength(2)
+
+    // Dismiss the nit — it drops out of the review entirely; the run stays parked.
+    const afterDismiss = await call<PrReviewStepState>(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${findings[1]!.id}/dismiss`,
+    )
+    expect(afterDismiss.status).toBe(200)
+    expect(afterDismiss.body.status).toBe('awaiting_selection')
+    expect(afterDismiss.body.findings?.map((f) => f.id)).toEqual([findings[0]!.id])
+
+    // The run is still parked (dismiss is curation, not a resolution).
+    const stillParked = (
+      await call<PrReviewStepState>('GET', `/workspaces/${wsId}/executions/${parked.id}/pr-review`)
+    ).body
+    expect(stillParked.status).toBe('awaiting_selection')
+    expect(stillParked.findings).toHaveLength(1)
+  })
+
+  it('challenges a finding — the investigator RETRACTS it, auto-deselecting it', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({
+      customResultByKind: {
+        'pr-reviewer': reviewerOutput,
+        'challenge-investigator': {
+          verdict: 'retracted',
+          justification: 'The token is guarded by the caller; this cannot be undefined here.',
+        },
+      },
+    })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_review',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const findings =
+      parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+
+    // Challenge the blocker finding with a specific concern — the run moves to `challenging`.
+    const challenged = await call<PrReviewStepState>(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${findings[0]!.id}/challenge`,
+      { question: 'The token comes from a guarded caller — is this real?' },
+    )
+    expect(challenged.status).toBe(200)
+    expect(challenged.body.status).toBe('challenging')
+
+    // Driving runs the Challenge Investigator (inline in conformance) → applies the RETRACT
+    // verdict + re-parks the review at `awaiting_selection`.
+    const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    expect(reparked.status).toBe('blocked')
+    const reStep = reparked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(reStep.prReview?.status).toBe('awaiting_selection')
+    const retracted = reStep.prReview?.findings?.find((f) => f.id === findings[0]!.id)
+    expect(retracted?.challenge?.status).toBe('retracted')
+    expect(retracted?.challenge?.question).toMatch(/guarded caller/)
+    expect(retracted?.challenge?.justification).toMatch(/guarded by the caller/)
+
+    // A retracted finding can't be acted on: resolving `fix` selecting only it is rejected.
+    const rejected = await call(
+      'POST',
+      `/workspaces/${wsId}/executions/${reparked.id}/pr-review/resolve`,
+      { action: 'fix', findingIds: [findings[0]!.id] },
+    )
+    expect(rejected.status).toBe(409)
+
+    // ...nor can it be re-challenged (the same invariant, enforced at the challenge endpoint).
+    const reChallenge = await call(
+      'POST',
+      `/workspaces/${wsId}/executions/${reparked.id}/pr-review/findings/${findings[0]!.id}/challenge`,
+      {},
+    )
+    expect(reChallenge.status).toBe(409)
+  })
+
+  it('challenges a finding — the investigator UPHOLDS + strengthens it', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({
+      customResultByKind: {
+        'pr-reviewer': reviewerOutput,
+        'challenge-investigator': {
+          verdict: 'upheld',
+          justification: 'Confirmed: the guard is missing on the error path.',
+          revisedDetail:
+            'The token is undefined on the 401 path (auth.ts:12), dereferenced at :14.',
+          revisedSeverity: 'blocker',
+        },
+      },
+    })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_review',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const findings =
+      parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+
+    // Challenge with NO text — the generic "dig deeper + validate" prompt is used.
+    await call(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${findings[0]!.id}/challenge`,
+      {},
+    )
+    const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const upheld = reparked.steps
+      .find((s) => s.agentKind === 'pr-reviewer')!
+      .prReview?.findings?.find((f) => f.id === findings[0]!.id)
+    expect(upheld?.challenge?.status).toBe('amended')
+    expect(upheld?.challenge?.question).toBeNull()
+    // The revised body + severity replaced the originals; the finding is still selectable.
+    expect(upheld?.detail).toMatch(/dereferenced at :14/)
+    expect(upheld?.severity).toBe('blocker')
+  })
+
+  it('challenges a finding — the investigator UPHOLDS it unchanged (`upheld`, not amended)', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({
+      customResultByKind: {
+        'pr-reviewer': reviewerOutput,
+        // Upheld with a justification but NO `revised*` fields — the finding holds as written, so
+        // it must settle `upheld`, never a false `amended` ("Strengthened").
+        'challenge-investigator': {
+          verdict: 'upheld',
+          justification: 'It holds — the guard really is missing on the error path.',
+        },
+      },
+    })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_review',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const findings =
+      parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+    const original = findings[0]!
+
+    await call(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${original.id}/challenge`,
+      {},
+    )
+    const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const upheld = reparked.steps
+      .find((s) => s.agentKind === 'pr-reviewer')!
+      .prReview?.findings?.find((f) => f.id === original.id)
+    expect(upheld?.challenge?.status).toBe('upheld')
+    // Body untouched; still selectable.
+    expect(upheld?.title).toBe(original.title)
+    expect(upheld?.detail).toBe(original.detail)
+  })
+
+  it('challenges a finding — a FAILED investigator settles `failed` + re-parks (never fails the run)', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({
+      customResultByKind: { 'pr-reviewer': reviewerOutput },
+      // Drive the investigator as an async job that FAILS on poll — the run must NOT fail; the
+      // challenge settles `failed` and the review re-parks with the finding kept + actionable.
+      asyncKinds: ['challenge-investigator'],
+      pollFailKinds: ['challenge-investigator'],
+    })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_review',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const findings =
+      parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+    const original = findings[0]!
+
+    await call(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${original.id}/challenge`,
+      { question: 'is this real?' },
+    )
+    const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    // The run stays parked (blocked), NOT failed.
+    expect(reparked.status).toBe('blocked')
+    const reStep = reparked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(reStep.prReview?.status).toBe('awaiting_selection')
+    const failed = reStep.prReview?.findings?.find((f) => f.id === original.id)
+    expect(failed?.challenge?.status).toBe('failed')
+    expect(failed?.challenge?.question).toBe('is this real?')
+    // The finding is kept and still actionable (unlike a retraction): resolving `fix` on it works.
+    expect(failed?.title).toBe(original.title)
+    const resolved = await call(
+      'POST',
+      `/workspaces/${wsId}/executions/${reparked.id}/pr-review/resolve`,
+      { action: 'finish', findingIds: [original.id] },
+    )
+    expect(resolved.status).toBe(200)
+  })
+
+  // A checkout-free RepoFiles capturing the deep-review resolutions' VCS writes/reads (the
+  // suite's stand-in for a facade's GitHubClient-backed RepoFiles) — no real GitHub needed.
+}
+
+/**
+ * Resolving a parked review: re-dispatching the step as a Fixer on the reviewed PR head,
+ * publishing the selected findings as inline comments, and the two refusals around a moved
+ * or absent PR.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerReviewResolutionTests(harness: ConformanceHarness): void {
+  it('resolves with `fix` — re-dispatches the step as a Fixer on the reviewed PR head branch', async () => {
+    const recorder: { headRefFor?: number } = {}
+    const { call, createWorkspace, drive } = harness.makeApp(
+      { customResult: reviewerOutput },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+    // Resolve with `fix`, selecting the blocker finding — re-arms the step to `fixing`.
+    const resolved = await call<PrReviewStepState>(
+      'POST',
+      `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`,
+      { action: 'fix', findingIds: [findings[0]!.id] },
+    )
+    expect(resolved.status).toBe(200)
+    expect(resolved.body.status).toBe('fixing')
+    expect(resolved.body.resolution).toBe('fix')
+
+    // Driving dispatches + completes the Fixer against the PR head branch, then finishes.
+    const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(done.status).toBe('done')
+    const finalStep = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(finalStep.prReview?.status).toBe('done')
+    expect(finalStep.prReview?.resolution).toBe('fix')
+    // The Fixer resolved PR #42's head branch to clone + push to (a review task has no own PR).
+    expect(recorder.headRefFor).toBe(42)
+  })
+
+  it('resolves with `post` — publishes the selected findings as inline PR review comments', async () => {
+    const recorder: { posted?: { number: number; input: CreateReviewInput }[] } = {}
+    const { call, createWorkspace, drive } = harness.makeApp(
+      { customResult: reviewerOutput },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+    // Resolve with `post`, selecting BOTH findings (one anchored, one line-less).
+    const resolved = await call<PrReviewStepState>(
+      'POST',
+      `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`,
+      { action: 'post', findingIds: findings.map((f) => f.id) },
+    )
+    expect(resolved.status).toBe(200)
+    expect(resolved.body.status).toBe('posting')
+
+    // Driving posts the comments + finishes the read-only run with a full-success report.
+    const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(done.status).toBe('done')
+    const finalStep = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(finalStep.prReview?.status).toBe('done')
+    expect(finalStep.prReview?.resolution).toBe('post')
+    expect(finalStep.prReview?.postReport?.posted).toBe(1)
+    expect(finalStep.prReview?.postReport?.failures ?? []).toHaveLength(0)
+    expect(finalStep.prReview?.postedFindingIds).toContain(findings[0]!.id)
+
+    // One review call, to PR #42, with the anchored finding as an inline comment.
+    expect(recorder.posted).toHaveLength(1)
+    expect(recorder.posted![0]!.number).toBe(42)
+    expect(recorder.posted![0]!.input.event).toBe('COMMENT')
+    expect(
+      recorder.posted![0]!.input.comments.some((c) => c.path === 'src/auth.ts' && c.line === 12),
+    ).toBe(true)
+  })
+
+  it('re-parks (does NOT fail the run) when a comment fails, carrying a retryable report', async () => {
+    // GitHub rejects the anchored comment (line outside the diff). The old behaviour failed the
+    // whole run and stuck the window; now the run RE-PARKS at `awaiting_selection` carrying a
+    // report of what posted / what failed, so the human can retry ONLY the posting.
+    const recorder: {
+      posted?: { number: number; input: CreateReviewInput }[]
+      failPaths?: string[]
+    } = { failPaths: ['src/auth.ts'] }
+    const { call, createWorkspace, drive } = harness.makeApp(
+      { customResult: reviewerOutput },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+    // Select the anchored (soon-to-fail) finding + resolve `post`.
+    await call('POST', `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`, {
+      action: 'post',
+      findingIds: [findings[0]!.id],
+    })
+
+    // The run is parked again, NOT failed, and the step carries the failure report.
+    const parked = (await drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(parked.status).toBe('blocked')
+    const step = parked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(step.prReview?.status).toBe('awaiting_selection')
+    expect(step.prReview?.postReport?.posted).toBe(0)
+    expect(step.prReview?.postReport?.failures?.[0]?.reason).toMatch(/Line could not be resolved/)
+    expect(step.prReview?.postedFindingIds ?? []).toHaveLength(0)
+    // The inline comment failed but the summary/body comment DID land — so it is marked posted,
+    // which suppresses re-posting it on the retry below (the body's at-most-once guard).
+    expect(step.prReview?.postedBody).toBe(true)
+
+    // Retry (the SAME `post`) after GitHub now accepts the comment — only the un-posted finding
+    // is re-attempted, and the run completes without re-running the reviewer.
+    recorder.failPaths = []
+    await call('POST', `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`, {
+      action: 'post',
+      findingIds: [findings[0]!.id],
+    })
+    const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(done.status).toBe('done')
+    const finalStep = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(finalStep.prReview?.status).toBe('done')
+    expect(finalStep.prReview?.postedFindingIds).toContain(findings[0]!.id)
+    // The summary/body comment was published exactly ONCE across both attempts — the retry
+    // suppressed it (its body was empty) so the PR conversation isn't spammed with duplicates.
+    const bodiesPosted = (recorder.posted ?? []).filter((p) => p.input.body).length
+    expect(bodiesPosted).toBe(1)
+  })
+
+  it('folds every finding into the summary when the PR branch moved after the review started', async () => {
+    // The reviewer anchored a finding to src/auth.ts:12, but the PR branch is force-pushed
+    // AFTER the review parked. Posting that finding inline would stamp it onto a line that may
+    // now be different code, so the `post` resolution detects the head drift and folds the
+    // finding into the summary comment instead of anchoring it — the review still lands.
+    const recorder: {
+      posted?: { number: number; input: CreateReviewInput }[]
+      headSha?: string | null
+    } = { headSha: 'sha-at-review-start' }
+    // Drive the reviewer as the CONTAINER (async) kind it is in production: the review-start
+    // head-sha capture rides the async dispatch path, so a synchronous reviewer would never
+    // stamp `reviewedHeadSha` and the drift guard would be untested. Polling once is enough.
+    const { call, createWorkspace, drive } = harness.makeApp(
+      { customResult: reviewerOutput, asyncKinds: ['pr-reviewer'], asyncPolls: 1 },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    // Dispatching the reviewer captured the review-start head sha ('sha-at-review-start').
+    const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+    // The PR head moves (a push) while the review sits parked awaiting selection.
+    recorder.headSha = 'sha-after-push'
+
+    // Post the anchored (line 12) finding — the drift must fold it rather than anchor it.
+    await call('POST', `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`, {
+      action: 'post',
+      findingIds: [findings[0]!.id],
+    })
+    const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(done.status).toBe('done')
+    const step = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(step.prReview?.status).toBe('done')
+    // Nothing anchored inline; the finding was folded into the summary (reported as `folded`).
+    expect(step.prReview?.postReport?.posted).toBe(0)
+    expect(step.prReview?.postReport?.folded).toBe(1)
+    expect(recorder.posted).toHaveLength(1)
+    expect(recorder.posted![0]!.input.comments).toHaveLength(0)
+    expect(recorder.posted![0]!.input.body).toContain('branch was updated')
+  })
+
+  // Creation-time validation of the review TARGET, driven through the same run-repo seam every
+  // facade wires. Both halves matter: the refusal (a typo'd number never becomes a run with
+  // nothing to review) and the canonical url the task records for the inspector to link.
+  it('refuses a review task whose PR the provider reports as absent, and canonicalises one it confirms', async () => {
+    const { call, createWorkspace } = harness.makeApp(
+      {},
+      {
+        resolveRunRepoContext: async () => ({
+          repo: {
+            ...makeReviewRepo({}),
+            // Only #42 exists on this repo; everything else is a positive "no such PR".
+            getPullRequest: async (number: number) =>
+              number === 42
+                ? ({ number, url: 'https://github.com/o/r/pull/42' } as OpenedPullRequest)
+                : null,
+          },
+          baseBranch: 'main',
+          repoId: 'repo_1',
+          owner: 'o',
+          name: 'r',
+        }),
+      },
+    )
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const missing = await call('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review a PR that never existed',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 4242 },
+    })
+    expect(missing.status).toBe(422)
+    expect(
+      (missing.body as { error?: { details?: { reason?: string } } }).error?.details?.reason,
+    ).toBe('review_pr_not_found')
+
+    // A bare number that DOES resolve is accepted and rewritten to the provider's own link.
+    const created = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42 },
+    })
+    expect(created.status).toBe(201)
+    expect(created.body.taskTypeFields?.prUrl).toBe('https://github.com/o/r/pull/42')
+  })
+}
+
+/**
+ * The same parked review, driven entirely through `/api/v1`: the door an integration that renders
+ * findings in its own UI actually uses.
+ *
+ * Here rather than only in a unit test because everything AROUND the shared projection is
+ * per-facade: the review rides the run's step JSON through each facade's own execution mapper, and
+ * the key store the `decide` scope is read from is a per-runtime table. A facade that mounted the
+ * routes and mapped the step differently would answer with empty `findings` while the shared
+ * projection stayed green.
+ */
+function registerPublicReviewApiTests(harness: ConformanceHarness): void {
+  it('serves the parked findings, curates and resolves them over /api/v1', async () => {
+    const recorder: { posted?: { number: number; input: CreateReviewInput }[] } = {}
+    const app = harness.makeApp(
+      { customResult: reviewerOutput },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review')
+
+    const parked = (await readReview(app, executionId, decideAuth))!
+    expect(parked.status).toBe('awaiting_selection')
+    expect(parked.prUrl).toBe('https://github.com/o/r/pull/42')
+    // Severity-ordered, id-stamped, and carrying the anchor a `post` turns into an inline comment.
+    expect(parked.findings.map((f) => f.severity)).toEqual(['high', 'nit'])
+    expect(parked.findings[0]!.findingId).toBe(findings[0]!.id)
+    expect(parked.findings[0]!.line).toBe(12)
+    expect(parked.findings[0]!.suggestedFix).toBe('Guard before dereferencing.')
+    expect(parked.findings[0]!.sliceId).toBe(parked.slices[0]!.sliceId)
+    // Nothing has been posted, and that is a NULL report rather than a zeroed one: "no post has
+    // run" and "a post ran and landed nothing" are opposite facts a caller has to tell apart.
+    expect(parked.postReport).toBeNull()
+    expect(parked.postedFindingIds).toEqual([])
+
+    // Drop the nit through the public curation route; the run stays parked with one finding left.
+    const dismissed = await app.call<{ decisions: PublicReviewDecision[] }>(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/findings/${findings[1]!.id}/dismiss`,
+      undefined,
+      decideAuth,
+    )
+    expect(dismissed.status).toBe(200)
+    const afterDismiss = dismissed.body.decisions.find((d) => d.kind === 'pr-review')!
+    expect(afterDismiss.status).toBe('awaiting_selection')
+    expect(afterDismiss.findings.map((f) => f.findingId)).toEqual([findings[0]!.id])
+
+    // Post what is left. The resolution is ASYNCHRONOUS: it reports `posting` and the durable
+    // driver does the work, which is why a caller polls rather than reading the outcome here.
+    const resolved = await app.call<{ decisions: PublicReviewDecision[] }>(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resolve`,
+      { action: 'post', findingIds: [findings[0]!.id] },
+      decideAuth,
+    )
+    expect(resolved.status).toBe(200)
+    expect(resolved.body.decisions.find((d) => d.kind === 'pr-review')!.status).toBe('posting')
+
+    const done = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(done.status).toBe('done')
+    expect(recorder.posted![0]!.input.comments.some((c) => c.line === 12)).toBe(true)
+    // A review that SETTLES leaves the decision list: there is nothing left to answer.
+    expect(await readReview(app, executionId, decideAuth)).toBeUndefined()
+  })
+
+  it('states a partial post through `postReport` instead of re-parking silently', async () => {
+    // The defect this pins. A `post` that fails re-parks at `awaiting_selection` with its
+    // resolution cleared, which is byte-for-byte an unresolved review, so without the report a
+    // caller that posted and landed nothing reads back exactly the state it held before resolving.
+    const recorder: {
+      posted?: { number: number; input: CreateReviewInput }[]
+      failPaths?: string[]
+    } = { failPaths: ['src/auth.ts'] }
+    const app = harness.makeApp(
+      { customResult: reviewerOutput },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-partial')
+
+    await app.call(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resolve`,
+      { action: 'post', findingIds: [findings[0]!.id] },
+      decideAuth,
+    )
+    const reparked = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(reparked.status).toBe('blocked')
+
+    const review = (await readReview(app, executionId, decideAuth))!
+    expect(review.status).toBe('awaiting_selection')
+    expect(review.postReport).not.toBeNull()
+    expect(review.postReport!.attempted).toBe(1)
+    expect(review.postReport!.posted).toBe(0)
+    expect(review.postReport!.failures[0]!.findingId).toBe(findings[0]!.id)
+    expect(review.postReport!.failures[0]!.line).toBe(12)
+    expect(review.postReport!.failures[0]!.reason).toMatch(/Line could not be resolved/)
+    // Nothing landed inline, so a retry skips nothing; the summary comment DID land, which is the
+    // sticky guard that keeps the retry from duplicating it.
+    expect(review.postedFindingIds).toEqual([])
+    expect(review.postReport!.bodyPosted).toBe(true)
+    // …and the STICKY flag says so at the decision level, which is what tells a later
+    // `bodyPosted: null` ("suppressed, it already landed") from a review that never had a summary.
+    expect(review.postedBody).toBe(true)
+    // The pass is NUMBERED, on both sides: the report names the pass it describes and the decision
+    // counts the passes requested. Equal ⇒ the report in hand is the one this caller asked for.
+    expect(review.postReport!.attempt).toBe(1)
+    expect(review.postAttempts).toBe(1)
+
+    // Retry the same selection, and fail it the same way. The report comes back byte-identical
+    // except for the pass number, which is the whole point: without it a caller that polls on an
+    // interval and misses the brief `posting` window cannot tell its retry's failure from the
+    // failure it had already read, and either loops or reports success.
+    await app.call(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resolve`,
+      { action: 'post', findingIds: [findings[0]!.id] },
+      decideAuth,
+    )
+    await app.drive(wsId)
+    const retried = (await readReview(app, executionId, decideAuth))!
+    expect(retried.postAttempts).toBe(2)
+    expect(retried.postReport!.attempt).toBe(2)
+    expect(retried.postReport!.posted).toBe(0)
+    // The summary is suppressed on the retry (it already landed), and the pair of fields states
+    // exactly that rather than leaving `null` to mean two opposite things.
+    expect(retried.postReport!.bodyPosted).toBeNull()
+    expect(retried.postedBody).toBe(true)
+  })
+
+  it('refuses a review start below `decide`, naming the park and the answer path', async () => {
+    // `pl_review` is one `pr-reviewer` step with no gate flag, so every park mechanism that reads
+    // the step CHAIN says it never stops, while every run of it parks for curation. A `write` key
+    // admitted here would hold a run whose every verb needs `decide`.
+    const app = harness.makeApp({ customResult: reviewerOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'pr-review-admission')
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/tasks/${task.body.id}/start`,
+      {},
+      writeAuth,
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
+    expect(refused.body.error.message).toContain('pr-reviewer')
+    expect(refused.body.error.message).toContain('/api/v1/runs/:runId/decisions')
+
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-admission')
+    const started = await app.call('POST', `/api/v1/tasks/${task.body.id}/start`, {}, decideAuth)
+    expect(started.status).toBe(202)
+  })
+}
+
+/**
+ * The two ways a key can drive the review loop that are not reading or resolving it: RESUMING a
+ * review that looks wedged, and RETRYING the whole run after it failed.
+ *
+ * Registered as its own function purely to keep each within the per-function line budget.
+ */
+function registerPublicReviewLoopTests(harness: ConformanceHarness): void {
+  it('mounts the resume route on every facade, refusing a review that is not in progress', async () => {
+    // The route's registration, its path, its scope floor and its 409 mapping, none of which the
+    // read/curate/resolve cases above touch. A wrong `pathResolver`, a missing `buildHonoRoute`
+    // registration, or a `ConflictError` that never reaches `handleError` on one facade would all
+    // be invisible otherwise. The SUCCESS path needs a reviewer wedged mid-review, which a
+    // conformance drive cannot produce (the fake reviewer returns inside the same tick), so the
+    // budget rule it enforces is asserted directly in `resumeBudget.test.ts`.
+    const app = harness.makeApp({ customResult: reviewerOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { executionId } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-resume')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'pr-review-resume')
+
+    // A parked review has its own verbs; re-dispatching it would destroy findings a human may be
+    // mid-selection on, so the engine refuses and the refusal arrives as a 409 rather than a 500.
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resume`,
+      undefined,
+      decideAuth,
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('conflict')
+    expect(refused.body.error.message).toMatch(/still in progress/)
+
+    // Same floor as every other decision verb: resuming re-dispatches a container agent.
+    const belowScope = await app.call(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resume`,
+      undefined,
+      writeAuth,
+    )
+    expect(belowScope.status).toBe(403)
+
+    // And the budget a caller reads BEFORE spending a call is projected on the decision itself.
+    const review = (await readReview(app, executionId, decideAuth))!
+    expect(review.resumeAttempts).toBe(0)
+    expect(review.maxResumeAttempts).toBeGreaterThan(0)
+    expect(review.reportedSlices).toBe(0)
+  })
+
+  it('refuses a RETRY that would re-drive the curation park below `decide`', async () => {
+    // The start paths are not the only way to set a park in motion. A `write` key holding a task
+    // whose review run failed could re-drive the stored `pr-reviewer` step and be holding a parked
+    // run again a moment later, which is exactly the capability the scope ladder says it does not
+    // have. Asked of the run's STORED steps, which is what a retry re-drives.
+    const app = harness.makeApp({ customResult: reviewerOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-retry')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'pr-review-retry')
+
+    // Stop the parked run: it settles terminal-but-retryable, which is the state a retry acts on.
+    expect(
+      (await app.call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, decideAuth)).status,
+    ).toBe(200)
+
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/tasks/${taskId}/retry`,
+      undefined,
+      writeAuth,
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
+    expect(refused.body.error.message).toContain('pr-reviewer')
+    expect(refused.body.error.message).toContain('/api/v1/runs/:runId/decisions')
+
+    // The same call from a key that CAN answer the park is admitted, and re-drives the review.
+    const retried = await app.call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, decideAuth)
+    expect(retried.status).toBe(202)
+    const reparked = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(reparked.status).toBe('blocked')
+    expect(reparked.id).not.toBe(executionId)
+  })
+}

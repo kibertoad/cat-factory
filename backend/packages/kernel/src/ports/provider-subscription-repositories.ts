@@ -39,6 +39,19 @@ export interface ProviderSubscriptionTokenRecord {
   outputTokens: number
   /** Job count in the current window. */
   requestCount: number
+  /**
+   * Whether this token is eligible for leasing. A disabled token stays in the pool
+   * (visible + re-enablable) but is skipped when choosing a token to lease and is not
+   * counted by `hasToken`. Defaults to true.
+   */
+  enabled: boolean
+  /**
+   * Whether this token is the pinned default for its vendor: preferred at lease time
+   * over usage-aware rotation. At most one default per (workspace, vendor); a disabled
+   * default is ignored (leasing falls back to rotation among the enabled tokens).
+   * Defaults to false.
+   */
+  isDefault: boolean
   /** Set when the workspace removes the token (tombstone). */
   deletedAt: number | null
 }
@@ -49,6 +62,15 @@ export interface ProviderSubscriptionTokenRepository {
     workspaceId: string,
     vendor: SubscriptionVendor,
   ): Promise<ProviderSubscriptionTokenRecord[]>
+  /**
+   * Every live token the workspace holds, across all vendors, oldest first.
+   *
+   * The batch shape for "which vendors does this workspace have a pool for", which the model
+   * catalog and every run start ask. Walking {@link listByVendor} per vendor for that answer is one
+   * round trip per member of a closed vocabulary on a hot read, which is the banned N+1 class even
+   * though the vocabulary bounds it: the same data arrives in one statement.
+   */
+  listByWorkspace(workspaceId: string): Promise<ProviderSubscriptionTokenRecord[]>
   /** Fetch one live token by id (scoped to the workspace). */
   getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null>
   /** Insert a new pool token. */
@@ -67,6 +89,14 @@ export interface ProviderSubscriptionTokenRepository {
     at: number,
     windowMs: number,
   ): Promise<void>
+  /** Enable or disable a token (scoped to the workspace) without deleting it. */
+  setEnabled(workspaceId: string, id: string, enabled: boolean): Promise<void>
+  /**
+   * Set (or clear) the pinned default token for a (workspace, vendor). Clears the
+   * `isDefault` flag on every other live token of that vendor first, so at most one
+   * default ever exists per group. Passing `id: null` just clears the group's default.
+   */
+  setDefault(workspaceId: string, vendor: SubscriptionVendor, id: string | null): Promise<void>
   /** Tombstone a token. */
   softDelete(workspaceId: string, id: string, at: number): Promise<void>
 }

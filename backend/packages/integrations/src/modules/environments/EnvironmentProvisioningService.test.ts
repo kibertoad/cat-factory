@@ -3,15 +3,13 @@ import { ValidationError } from '@cat-factory/kernel'
 import type {
   DeployProvisionJob,
   EnvironmentProvider,
-  EnvironmentRecord,
   EnvironmentRegistryRepository,
-  ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
+  ProvisionEnvironmentRequest,
   RepoValidationResult,
   ResolveRunRepoContext,
   RunnerJobRef,
   RunnerJobView,
-  SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import {
@@ -19,105 +17,19 @@ import {
   EnvironmentProvisioningService,
 } from './EnvironmentProvisioningService.js'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import {
+  fakeCipher,
+  fakeRegistry,
+  makeService,
+  MANIFEST,
+  READY,
+  recordingProvider,
+} from './test-support/environment-provisioning-fakes.js'
 
 // EnvironmentProvisioningService is the seam an in-house adapter (e.g. a PR-environment
 // platform) plugs into: it receives the typed provisionContext + the flattened inputs and
 // owns the returned `fields`. These tests assert that contract + the returned-URL policy,
 // independent of any HTTP provider.
-
-const MANIFEST = {
-  providerId: 'acme',
-  label: 'Acme',
-  baseUrl: 'https://envs.test/api',
-  auth: { type: 'none' as const },
-  provision: { method: 'POST' as const, pathTemplate: '/envs' },
-  response: {},
-}
-
-/** A passthrough cipher: persistence round-trips JSON without real crypto. */
-const fakeCipher: SecretCipher = {
-  encrypt: async (plaintext: string) => `enc:${plaintext}`,
-  decrypt: async (cipher: string) => cipher.replace(/^enc:/, ''),
-}
-
-/** In-memory registry repo capturing inserts. */
-function fakeRegistry(): EnvironmentRegistryRepository & { records: EnvironmentRecord[] } {
-  const records: EnvironmentRecord[] = []
-  return {
-    records,
-    async insert(record) {
-      records.push(record)
-    },
-    async update(workspaceId, id, patch) {
-      const i = records.findIndex((r) => r.id === id)
-      if (i >= 0) records[i] = { ...records[i]!, ...patch }
-    },
-    async get(_workspaceId, id) {
-      return records.find((r) => r.id === id) ?? null
-    },
-    async getByBlock(_workspaceId, blockId) {
-      return records.find((r) => r.blockId === blockId && !r.deletedAt) ?? null
-    },
-    async listByWorkspace() {
-      return records
-    },
-    async listExpired() {
-      return []
-    },
-    async softDelete(_workspaceId, id, at) {
-      const r = records.find((x) => x.id === id)
-      if (r) r.deletedAt = at
-    },
-  }
-}
-
-/** A recording provider returning a fixed environment; captures the request it saw. */
-function recordingProvider(
-  returns: ProvisionedEnvironment,
-): EnvironmentProvider & { lastProvision?: ProvisionEnvironmentRequest } {
-  const provider: EnvironmentProvider & { lastProvision?: ProvisionEnvironmentRequest } = {
-    async provision(req) {
-      provider.lastProvision = req
-      return returns
-    },
-    async status() {
-      return returns
-    },
-    async teardown() {
-      return { status: 'torn_down' }
-    },
-  }
-  return provider
-}
-
-function makeService(
-  provider: EnvironmentProvider,
-  registry: EnvironmentRegistryRepository,
-  urlPolicy?: UrlSafetyPolicy,
-) {
-  const connectionService = {
-    resolveProvider: async () => ({ provider, manifest: MANIFEST }),
-    resolveSecrets: async () => () => undefined,
-  } as unknown as EnvironmentConnectionService
-  let n = 0
-  return new EnvironmentProvisioningService({
-    connectionService,
-    environmentRegistryRepository: registry,
-    secretCipher: fakeCipher,
-    idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
-    clock: { now: () => 1_700_000_000_000 },
-    ...(urlPolicy ? { urlPolicy } : {}),
-  })
-}
-
-const READY: ProvisionedEnvironment = {
-  externalId: 'env-123',
-  url: 'https://app.public.example/preview',
-  status: 'ready',
-  expiresAt: null,
-  access: null,
-  fields: { externalId: 'env-123', ref: 'feat/login' },
-}
 
 describe('EnvironmentProvisioningService — provision context', () => {
   it('passes the typed provisionContext to the provider and flattens it into inputs', async () => {
@@ -167,7 +79,7 @@ describe('EnvironmentProvisioningService — provision context', () => {
     const registry = fakeRegistry()
     const service = makeService(recordingProvider(READY), registry)
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    // The provider's arbitrary `fields` (here a Kargo-style ref) round-trip encrypted.
+    // The provider's arbitrary `fields` (here a provider-native ref) round-trip encrypted.
     expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
   })
 })
@@ -182,10 +94,12 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
         listDirectory: async () => [],
         headSha: async () => 'sha',
         createBranch: async () => {},
+        deleteBranch: async () => {},
         commitFiles: async () => ({ sha: 'c' }),
         openPullRequest: async () => ({ number: 1 }) as never,
       },
       baseBranch: 'main',
+      repoId: 'repo_1',
     })
   }
 
@@ -234,7 +148,7 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
   it('throws ValidationError BEFORE calling provider.provision when validation fails', async () => {
     const provider = gatedProvider({
       ok: false,
-      issues: [{ severity: 'error', message: 'no jobs', path: '.kargo.yml' }],
+      issues: [{ severity: 'error', message: 'no jobs', path: '.acme-envs.yml' }],
     })
     const service = makeGatedService(provider, fakeRegistry(), gateResolver())
 
@@ -269,6 +183,63 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
 
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
     expect(provider.provisionCalled).toBe(true)
+  })
+})
+
+describe('EnvironmentProvisioningService — frame-keyed reads with manual-env fallback', () => {
+  it('a frame-keyed read falls back to a FRAME-LESS (manual) env on the block', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    // A manual / human-test provision carries no frameId, so it is stored with frame_id = NULL.
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(registry.records[0]!.frameId).toBeNull()
+    // A later frame-keyed read (the agent-context path always resolves the own frame) must still
+    // surface that manual env rather than missing it because of the exact-frame match.
+    const resolved = await service.resolveForBlock('ws1', 'blk1', 'frame_own')
+    expect(resolved?.url).toBe(READY.url)
+    const handle = await service.getHandleForBlock('ws1', 'blk1', 'frame_own')
+    expect(handle?.url).toBe(READY.url)
+  })
+
+  it('a frame-keyed read does NOT leak a SIBLING frame’s env as the asked-for frame’s', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    // Only a sibling frame's env exists (a peer provisioned under the same block, different frame).
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame_peer' })
+    // Resolving a DIFFERENT frame's env returns nothing — the sibling is not this frame's, and the
+    // manual-env fallback only accepts a frame-less row (this one has a non-null frame_id).
+    expect(await service.resolveForBlock('ws1', 'blk1', 'frame_own')).toBeNull()
+    expect(await service.getHandleForBlock('ws1', 'blk1', 'frame_own')).toBeNull()
+    // The peer's own frame still resolves it.
+    expect((await service.resolveForBlock('ws1', 'blk1', 'frame_peer'))?.url).toBe(READY.url)
+  })
+
+  it('resolves the FRAME-LESS manual env even when a NEWER sibling-frame env exists', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    // The manual/human-test env (frame_id = NULL) is provisioned FIRST, then a fan-out peer env
+    // under the same block but a different frame is provisioned LATER (so it is the newest row).
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame_peer' })
+    // Resolving the OWN frame's env must still surface the manual env: the fallback reads the
+    // frame-less row directly, so the newer sibling can't shadow it (a plain block newest-wins read
+    // would have returned the sibling and dropped the manual env entirely).
+    expect((await service.resolveForBlock('ws1', 'blk1', 'frame_own'))?.url).toBe(READY.url)
+    expect(
+      (await service.getHandleForBlock('ws1', 'blk1', 'frame_own'))?.frameId ?? null,
+    ).toBeNull()
+  })
+
+  it('a manual re-provision supersedes the frame-less env, NOT a newer sibling frame’s env', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' }) // frame-less manual
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame_peer' }) // sibling
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' }) // manual re-provision
+    // Only the prior FRAME-LESS row is tombstoned; the sibling frame's env stays live.
+    const live = registry.records.filter((r) => !r.deletedAt)
+    expect(live.filter((r) => r.frameId === null)).toHaveLength(1)
+    expect(live.filter((r) => r.frameId === 'frame_peer')).toHaveLength(1)
   })
 })
 
@@ -473,9 +444,13 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       status: 'ready',
       accessCipher: null,
       provisionFieldsCipher: null,
+      reachability: null,
       createdAt: 1,
       expiresAt: null,
       lastError: null,
+      statusNote: null,
+      lastPolledAt: null,
+      pollCount: 0,
       provisionType: 'kubernetes',
       engine: 'remote-kubernetes',
       deletedAt: null,
@@ -496,7 +471,7 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
 })
 
 describe('EnvironmentProvisioningService — returned URL policy', () => {
-  const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://prenv.kargo.internal' }
+  const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://box.envs.internal' }
 
   it('rejects an internal returned URL under the strict default', async () => {
     const service = makeService(recordingProvider(internalEnv), fakeRegistry())
@@ -512,8 +487,61 @@ describe('EnvironmentProvisioningService — returned URL policy', () => {
       allowHosts: ['.internal'],
     })
     const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    expect(handle.url).toBe('https://prenv.kargo.internal')
+    expect(handle.url).toBe('https://box.envs.internal')
     expect(registry.records).toHaveLength(1)
+  })
+})
+
+describe('EnvironmentProvisioningService — mis-resolving URL policy', () => {
+  // A wildcard-DNS host answers from the LEFTMOST four-octet run in a name, so `cf-acc-5` in
+  // front of the loopback host answers 5.127.0.0. The URL is otherwise perfectly safe, which is
+  // why this is graded beside the safety policy rather than folded into it: the two refuse
+  // different things about the same value.
+  const LOOPBACK: UrlSafetyPolicy = { schemes: ['http'], allowHosts: ['.nip.io'] }
+  const misresolving: ProvisionedEnvironment = {
+    ...READY,
+    url: 'http://cf-acc-5.127.0.0.1.nip.io',
+  }
+
+  it('refuses the URL a provider returns from a synchronous provision', async () => {
+    const service = makeService(recordingProvider(misresolving), fakeRegistry(), LOOPBACK)
+    await expect(service.provision({ workspaceId: 'ws1', blockId: 'blk1' })).rejects.toThrow(
+      /5\.127\.0\.0/,
+    )
+  })
+
+  it('refuses a host first read back on the STATUS poll', async () => {
+    // The `ingressStatus` / `gatewayStatus` shape: the URL is null at provision and only exists
+    // once the live Ingress is read, so a provision-time-only check can never see it at all.
+    const registry = fakeRegistry()
+    const provider: EnvironmentProvider = {
+      async provision() {
+        return { ...misresolving, url: null, status: 'provisioning' }
+      },
+      async status() {
+        return misresolving
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+    const service = makeService(provider, registry, LOOPBACK)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    await expect(service.refreshStatus('ws1', id)).rejects.toThrow(/5\.127\.0\.0/)
+  })
+
+  it('leaves a correctly-composed wildcard host alone', async () => {
+    // The control, and the one a false positive would break: every working ephemeral environment
+    // on a local cluster looks exactly like this.
+    const registry = fakeRegistry()
+    const service = makeService(
+      recordingProvider({ ...READY, url: 'http://cf-acc-pr5.127.0.0.1.nip.io' }),
+      registry,
+      LOOPBACK,
+    )
+    const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(handle.url).toBe('http://cf-acc-pr5.127.0.0.1.nip.io')
   })
 })
 
@@ -535,7 +563,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
         return { status: 'torn_down' }
       },
       asyncProvision: {
-        buildProvisionJob(req): DeployProvisionJob {
+        async buildProvisionJob(req): Promise<DeployProvisionJob> {
           provider.lastBuild = req
           return {
             ref: req.deploy!.ref,
@@ -599,6 +627,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     opts: {
       deployJobClient?: DeployJobClient
       cloneTarget?: typeof CLONE | null
+      urlPolicy?: UrlSafetyPolicy
     } = {},
   ) {
     const connectionService = {
@@ -612,6 +641,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
       secretCipher: fakeCipher,
       idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
       clock: { now: () => 1_700_000_000_000 },
+      ...(opts.urlPolicy ? { urlPolicy: opts.urlPolicy } : {}),
       ...(opts.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
       ...(opts.cloneTarget !== null
         ? { resolveDeployCloneTarget: async () => opts.cloneTarget ?? CLONE }
@@ -651,7 +681,10 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
       state: 'done',
       result: { custom: { namespace: 'pr-blk1', url: 'https://pr-blk1.example' } },
     }
-    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+    const { handle } = await service.finalizeProvision(
+      { workspaceId: 'ws1', blockId: 'blk1' },
+      view,
+    )
 
     expect(handle.status).toBe('ready')
     expect(handle.url).toBe('https://pr-blk1.example')
@@ -659,6 +692,23 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     // The prior `provisioning` record is superseded; the ready one is the live record.
     const live = registry.records.find((r) => r.blockId === 'blk1' && !r.deletedAt)
     expect(live!.status).toBe('ready')
+  })
+
+  it('refuses a mis-resolving URL the deploy container rendered', async () => {
+    // The URL a container hands back is published exactly as one derived in process is, so the
+    // grade has to sit on the seam both settle on. Without it, every kustomize/helm/image-override
+    // service shipped the failure this rule exists for while the raw-manifest path was guarded.
+    const service = makeAsyncService(asyncProvider(), fakeRegistry(), {
+      deployJobClient: fakeJobClient({ state: 'running' }),
+      urlPolicy: { schemes: ['http'], allowHosts: ['.nip.io'] },
+    })
+    const view: RunnerJobView = {
+      state: 'done',
+      result: { custom: { namespace: 'cf-acc-5', url: 'http://cf-acc-5.127.0.0.1.nip.io' } },
+    }
+    await expect(
+      service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view),
+    ).rejects.toThrow(/5\.127\.0\.0/)
   })
 
   it('finalizes a failed deploy view into a failed environment carrying the error', async () => {
@@ -669,10 +719,19 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     })
 
     const view: RunnerJobView = { state: 'failed', error: 'helm release failed' }
-    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+    const { handle, reason } = await service.finalizeProvision(
+      { workspaceId: 'ws1', blockId: 'blk1' },
+      view,
+    )
 
     expect(handle.status).toBe('failed')
     expect(handle.lastError).toBe('helm release failed')
+    // A deploy container reports free-form CLI output, so this failure is UNCLASSIFIED, and
+    // unclassified is what keeps a `deploy-fixer` away from it. Pinned because the alternative
+    // (reading `manifest_invalid` out of the text) would re-create the exact failure the
+    // classification exists to prevent: a run whose `{{image}}` was never substituted looks
+    // identical here to one whose manifests are genuinely wrong.
+    expect(reason).toBeNull()
   })
 
   it('pollProvisionJob returns the transport view', async () => {
@@ -688,9 +747,14 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     // No deployJobClient: buildProvisionJob returns a job (render needed) but nothing can run it.
     const service = makeAsyncService(provider, registry, {})
 
-    await expect(
-      service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF),
-    ).rejects.toThrow(/no runner transport is wired/i)
+    const error = await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF).then(
+      () => null,
+      (e) => e as { message: string; details?: Record<string, unknown> },
+    )
+    expect(error?.message).toMatch(/no deploy runner wired/i)
+    // The machine-readable reason rides the error so the engine can propagate it onto the
+    // run's `AgentFailure.reason` (→ the SPA's precise, gated hint).
+    expect(error?.details?.reason).toBe('deploy_runner_unwired')
     expect(registry.records).toHaveLength(1)
     expect(registry.records[0]!.status).toBe('failed')
   })
@@ -698,7 +762,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
   it('falls back to the synchronous path when the provider builds no deploy job', async () => {
     // A provider whose buildProvisionJob returns null (raw manifests) provisions synchronously.
     const provider = asyncProvider()
-    provider.asyncProvision!.buildProvisionJob = () => null
+    provider.asyncProvision!.buildProvisionJob = async () => null
     provider.provision = async () => READY
     const registry = fakeRegistry()
     const service = makeAsyncService(provider, registry, {
@@ -730,5 +794,87 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
 
     expect(result.kind).toBe('dispatched')
     expect(client.dispatched).toHaveLength(1)
+  })
+})
+
+describe('EnvironmentProvisioningService — canProvision + testProvisioning (Deployer-config gate)', () => {
+  /**
+   * A service whose connection layer resolves a handler ONLY when a per-user override is present
+   * (so the override-awareness is observable), and returns the given provider for `testProvisioning`.
+   */
+  function makeGateService(
+    provider: EnvironmentProvider,
+    opts: {
+      resolveUserHandlerOverrides?: (userId: string, workspaceId: string) => Promise<unknown[]>
+    } = {},
+  ) {
+    const connectionService = {
+      resolveHandlerForType: async (_ws: string, _service: unknown, overrides: unknown[] = []) =>
+        overrides.length > 0
+          ? { ok: true, engine: 'remote-custom', handler: {}, fromUserOverride: true }
+          : { ok: false, reason: 'no-handler' as const },
+      resolveProviderForType: async () => ({
+        provider,
+        manifest: MANIFEST,
+        provisionType: 'custom',
+        engine: 'remote-custom',
+        resolveSecret: () => undefined,
+      }),
+    } as unknown as EnvironmentConnectionService
+    let n = 0
+    return new EnvironmentProvisioningService({
+      connectionService,
+      environmentRegistryRepository: fakeRegistry(),
+      secretCipher: fakeCipher,
+      idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+      clock: { now: () => 1_700_000_000_000 },
+      ...(opts.resolveUserHandlerOverrides
+        ? { resolveUserHandlerOverrides: opts.resolveUserHandlerOverrides as never }
+        : {}),
+    })
+  }
+
+  it('canProvision honors the run initiator local per-user override', async () => {
+    const service = makeGateService(recordingProvider(READY), {
+      resolveUserHandlerOverrides: async () => [{ provisionType: 'custom' }],
+    })
+    // No initiator ⇒ no override loaded ⇒ the workspace handler alone doesn't resolve.
+    expect(await service.canProvision('ws1', { type: 'custom', manifestId: 'preview' })).toEqual({
+      ok: false,
+      reason: 'no-handler',
+    })
+    // WITH an initiator, the per-user override resolves it (matching what provision() would do).
+    expect(
+      await service.canProvision('ws1', { type: 'custom', manifestId: 'preview' }, 'user-7'),
+    ).toEqual({ ok: true })
+  })
+
+  it('testProvisioning returns null for infraless (nothing to probe)', async () => {
+    const service = makeGateService(recordingProvider(READY))
+    expect(await service.testProvisioning('ws1', { type: 'infraless' })).toBeNull()
+  })
+
+  it('testProvisioning returns null when the resolved provider has no testConnection', async () => {
+    // recordingProvider implements no testConnection.
+    const service = makeGateService(recordingProvider(READY))
+    expect(
+      await service.testProvisioning('ws1', { type: 'custom', manifestId: 'preview' }),
+    ).toBeNull()
+  })
+
+  it('testProvisioning delegates to the provider testConnection and returns its verdict', async () => {
+    const provider: EnvironmentProvider = {
+      ...recordingProvider(READY),
+      async testConnection() {
+        return { ok: false, message: 'apiserver unreachable' }
+      },
+    }
+    const service = makeGateService(provider)
+    expect(
+      await service.testProvisioning('ws1', { type: 'custom', manifestId: 'preview' }),
+    ).toEqual({
+      ok: false,
+      message: 'apiserver unreachable',
+    })
   })
 })

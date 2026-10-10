@@ -15,11 +15,22 @@ function fakeClient(opts: {
   issues?: Record<string, GitHubIssueDetail>
 }) {
   const searchCalls: string[] = []
+  const searchOrders: (string | undefined)[] = []
   const issueCalls: string[] = []
   const client = {
-    async searchIssues(_installationId: number, query: string) {
+    async searchIssues(
+      _installationId: number,
+      query: string,
+      limit = 20,
+      order?: string,
+      page = 1,
+    ) {
       searchCalls.push(query)
-      return opts.hits ?? []
+      searchOrders.push(order)
+      // Page the canned hits like the real search API so the intake overscan walk is exercised.
+      const all = opts.hits ?? []
+      const start = (page - 1) * limit
+      return all.slice(start, start + limit)
     },
     async getIssue(_installationId: number, ref: { owner: string; repo: string }, n: number) {
       issueCalls.push(`${ref.owner}/${ref.repo}#${n}`)
@@ -28,7 +39,7 @@ function fakeClient(opts: {
       return found
     },
   } as unknown as GitHubClient
-  return { client, searchCalls, issueCalls }
+  return { client, searchCalls, searchOrders, issueCalls }
 }
 
 const installations = {
@@ -154,5 +165,166 @@ describe('GitHubIssuesProvider.search', () => {
 
     expect(issueCalls).toEqual([])
     expect(results).toEqual([])
+  })
+
+  it('does not surface a sibling repo through the search, even in the same account', async () => {
+    // Same account, different repo: the installation CAN read it, so nothing but the scope
+    // stops it being offered as a hit the search "found". Linking it stays possible by
+    // pasting the URL, which imports the ref directly instead of searching.
+    const { client, issueCalls, searchCalls } = fakeClient({
+      hits: [],
+      issues: { 'kibertoad/other-service#3': detail({ number: 3, title: 'Three', url: 'u3' }) },
+    })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.search({}, 'kibertoad/other-service#3', 'ws1', scope)
+
+    expect(issueCalls).toEqual([])
+    expect(searchCalls).toEqual(['repo:kibertoad/simple-service kibertoad/other-service#3'])
+    expect(results).toEqual([])
+  })
+
+  it('refuses an unscoped search instead of querying every repo the credential can see', async () => {
+    // The regression this guards: `/search/issues` has no scope of its own. Under an App
+    // installation token an unscoped query silently returned the installation's repos, which
+    // is why it looked harmless; under a PAT the same query searches all of public GitHub and
+    // hands the user strangers' issues. No scope ⇒ no query at all.
+    //
+    // The port makes the argument mandatory, so this can only be reached with the explicit
+    // `null` a repo-LESS source (Jira, Linear) legitimately passes — never by a caller that
+    // forgot it, which is now a typecheck failure.
+    const { client, searchCalls, issueCalls } = fakeClient({ hits: [] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    await expect(provider.search({}, 'login bug', 'ws1', null)).rejects.toThrow(
+      /scoped to a repository/,
+    )
+    expect(searchCalls).toEqual([])
+    expect(issueCalls).toEqual([])
+  })
+})
+
+describe('GitHubIssuesProvider.searchIssues (issue intake)', () => {
+  const hit = (number: number): GitHubIssueSearchHit => ({
+    owner: 'kibertoad',
+    repo: 'simple-service',
+    number,
+    title: `Issue ${number}`,
+    state: 'open',
+    url: `u${number}`,
+  })
+
+  it('compiles the predicates into one oldest-first search call', async () => {
+    const { client, searchCalls, searchOrders } = fakeClient({ hits: [hit(1), hit(2)] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      {
+        board: { githubRepo: 'kibertoad/simple-service' },
+        issueType: 'Bug',
+        labels: ['triage'],
+        titleFragment: 'crash',
+        limit: 2,
+      },
+      'ws1',
+    )
+
+    expect(searchCalls).toEqual([
+      'repo:kibertoad/simple-service is:open type:"Bug" label:"triage" in:title "crash"',
+    ])
+    expect(searchOrders).toEqual(['created-asc'])
+    expect(results.map((r) => r.externalId)).toEqual([
+      'kibertoad/simple-service#1',
+      'kibertoad/simple-service#2',
+    ])
+  })
+
+  it('filters the already-worked exclusion list and still honors the limit', async () => {
+    const { client } = fakeClient({ hits: [hit(1), hit(2), hit(3)] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      {
+        board: { githubRepo: 'kibertoad/simple-service' },
+        excludeExternalIds: ['kibertoad/simple-service#1'],
+        limit: 1,
+      },
+      'ws1',
+    )
+
+    expect(results.map((r) => r.externalId)).toEqual(['kibertoad/simple-service#2'])
+  })
+
+  it('pages past a first page filled entirely with already-worked issues', async () => {
+    // 150 open matches, the oldest 100 already worked (they cluster at the front of the
+    // oldest-first results). With `per` capped at 100, page 1 is entirely excluded; the
+    // walk must fetch page 2 to find the first eligible issue instead of returning [].
+    const hits = Array.from({ length: 150 }, (_, i) => hit(i + 1))
+    const excludeExternalIds = hits.slice(0, 100).map((h) => `kibertoad/simple-service#${h.number}`)
+    const { client } = fakeClient({ hits })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      { board: { githubRepo: 'kibertoad/simple-service' }, excludeExternalIds, limit: 1 },
+      'ws1',
+    )
+
+    expect(results.map((r) => r.externalId)).toEqual(['kibertoad/simple-service#101'])
+  })
+
+  it('excludes case-insensitively (GitHub owner/repo are case-insensitive)', async () => {
+    const { client } = fakeClient({ hits: [hit(1), hit(2)] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      {
+        board: { githubRepo: 'kibertoad/simple-service' },
+        // Stored with different casing than the API's canonical `kibertoad/simple-service#1`.
+        excludeExternalIds: ['Kibertoad/Simple-Service#1'],
+        limit: 1,
+      },
+      'ws1',
+    )
+
+    expect(results.map((r) => r.externalId)).toEqual(['kibertoad/simple-service#2'])
+  })
+
+  it('returns nothing when the workspace has no installation', async () => {
+    const { client, searchCalls } = fakeClient({ hits: [hit(1)] })
+    const noInstall = {
+      async getByWorkspace() {
+        return null
+      },
+      async listActive() {
+        return []
+      },
+    } as unknown as GitHubInstallationRepository
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations: noInstall })
+
+    const results = await provider.searchIssues({}, { board: {}, limit: 3 }, 'ws1')
+
+    expect(results).toEqual([])
+    expect(searchCalls).toEqual([])
+  })
+})
+
+describe('GitHubIssuesProvider.repoScope', () => {
+  const provider = new GitHubIssuesProvider({
+    githubClient: fakeClient({}).client,
+    installations,
+  })
+
+  // Declaring `repoScope` is what makes the source repo-backed: the controller resolves a scope
+  // before the search because of it, and the imported-issue list narrows to that scope because
+  // of it. Both callers read the declaration and neither can see the other, so it is pinned here.
+  it('is declared, and matches on GitHub casing rules', () => {
+    expect(provider.repoScope).toBeDefined()
+    expect(provider.repoScope?.matches('kibertoad/simple-service#3', scope)).toBe(true)
+    expect(provider.repoScope?.matches('Kibertoad/Simple-Service#3', scope)).toBe(true)
+    expect(provider.repoScope?.matches('kibertoad/other#3', scope)).toBe(false)
   })
 })

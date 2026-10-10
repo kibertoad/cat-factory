@@ -1,0 +1,1 @@
+ALTER TABLE "blocks" ADD COLUMN "apriori_branches" text;

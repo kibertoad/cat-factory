@@ -56,10 +56,15 @@ export interface LinearWorkflowState {
 }
 
 /**
- * Pick the id of the team's **completed**-type workflow state (Linear's standard
- * resolved category), or null if none exists. Returns the first match, the
- * conventional resolve target in a default workflow.
+ * Pick the id of the team's workflow state of a given standard type — `completed`
+ * (Linear's resolved category, the merge-resolve target) or `started` (its "In
+ * Progress" category, the intake pickup mark) — or null if none exists. Returns
+ * the first match, the conventional target in a default workflow. The Linear
+ * analogue of Jira's {@link pickTransitionByCategory}.
  */
-export function pickCompletedStateId(states: LinearWorkflowState[]): string | null {
-  return states.find((s) => s.type === 'completed' && s.id)?.id ?? null
+export function pickStateIdByType(
+  states: LinearWorkflowState[],
+  type: 'completed' | 'started',
+): string | null {
+  return states.find((s) => s.type === type && s.id)?.id ?? null
 }

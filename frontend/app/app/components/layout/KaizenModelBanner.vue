@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Advisory banner shown when the Kaizen agent is enabled but its resolved model can't drive
-// the inline grader (a subscription-only model with no inline harness, or nothing configured),
-// so the backend skips grading those runs. Steers the user to point Kaizen at a compatible
-// model in Model Configuration. Dismissible per session, mirroring AiProvidersBanner; its
-// positioning/stacking is owned by the shared banner column in `pages/index.vue`.
+// the inline grader (a subscription-only model with no inline harness, or nothing usable), so
+// the backend skips grading those runs. Steers the user to point Kaizen at a compatible model in
+// Model Configuration. Dismissible per session, mirroring AiProvidersBanner; its positioning and
+// stacking are owned by the shared banner column in `BoardTopOverlays.vue`.
 import { computed } from 'vue'
 
 const { t } = useI18n()
@@ -17,14 +17,14 @@ const show = computed(() => modelUnfit.value && !ui.kaizenModelDismissed)
   <Transition name="fade">
     <div v-if="show" class="pointer-events-auto w-full max-w-3xl">
       <div
-        class="w-full max-w-3xl rounded-2xl border border-amber-500/50 bg-amber-950/90 p-4 shadow-xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border border-app-warning-500/50 bg-app-warning-950/90 p-4 shadow-xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-3">
-          <UIcon name="i-lucide-sparkles" class="mt-0.5 h-7 w-7 shrink-0 text-amber-400" />
+          <UIcon name="i-lucide-sparkles" class="mt-0.5 h-7 w-7 shrink-0 text-app-warning-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-sm font-semibold text-amber-100">
+              <h2 class="text-sm font-semibold text-app-warning-100">
                 {{ t('layout.kaizenModelBanner.title') }}
               </h2>
               <UButton
@@ -36,7 +36,7 @@ const show = computed(() => modelUnfit.value && !ui.kaizenModelDismissed)
                 @click="ui.dismissKaizenModel()"
               />
             </div>
-            <p class="mt-1 text-[13px] text-amber-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.kaizenModelBanner.body') }}
             </p>
             <div class="mt-3">

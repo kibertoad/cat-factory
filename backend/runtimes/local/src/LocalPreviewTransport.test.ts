@@ -1,36 +1,45 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerEndpoint, ContainerExec, ContainerRuntimeAdapter } from './runtimes/index.js'
+import { HARNESS_PORT } from './runtimes/index.js'
 import { LocalPreviewTransport } from './LocalPreviewTransport.js'
 
-// A minimal fake adapter: one container, an 8080 harness endpoint + a per-port map for the
+// A minimal fake adapter: one container, a harness endpoint + a per-port map for the
 // published serve port, and running-state/removal tracking.
 function fakeAdapter(overrides: Partial<ContainerRuntimeAdapter> = {}): {
   adapter: ContainerRuntimeAdapter
   removed: string[]
-  runs: Array<{ runId: string; publishPorts?: Array<{ container: number; host?: number }> }>
+  runs: Array<{ containerKey: string; publishPorts?: Array<{ container: number; host?: number }> }>
 } {
   const removed: string[] = []
-  const runs: Array<{ runId: string; publishPorts?: Array<{ container: number; host?: number }> }> =
-    []
+  const runs: Array<{
+    containerKey: string
+    publishPorts?: Array<{ container: number; host?: number }>
+  }> = []
   const adapter: ContainerRuntimeAdapter = {
     id: 'docker',
     binary: 'docker',
     capabilities: { localDind: true, pooling: true },
     hostAlias: 'host.docker.internal',
     publishesToLocalhost: true,
+    honoursHostBridges: true,
     async run(_exec, spec) {
-      runs.push({ runId: spec.runId, publishPorts: spec.publishPorts })
-      return `cid-${spec.runId}`
+      runs.push({ containerKey: spec.containerKey, publishPorts: spec.publishPorts })
+      return `cid-${spec.containerKey}`
     },
     async find(_exec, runId) {
       return `cid-${runId}`
     },
-    async endpoint(_exec, _id, port = 8080): Promise<ContainerEndpoint | undefined> {
-      // 8080 → the harness; the published serve port → a distinct ephemeral host port.
-      return port === 8080 ? { host: '127.0.0.1', port: 18080 } : { host: '127.0.0.1', port: 54173 }
+    async endpoint(_exec, _id, port = HARNESS_PORT): Promise<ContainerEndpoint | undefined> {
+      // The harness port → the harness; the published serve port → a distinct ephemeral host port.
+      return port === HARNESS_PORT
+        ? { host: '127.0.0.1', port: 18080 }
+        : { host: '127.0.0.1', port: 54173 }
     },
     async isRunning() {
       return true
+    },
+    async exitState() {
+      return undefined
     },
     async logs() {
       return ''
@@ -88,7 +97,7 @@ describe('LocalPreviewTransport', () => {
     const transport = makeTransport(adapter, okFetch())
     await transport.start(ref, { jobId: 'preview', mode: 'preview' }, 4173)
     expect(runs).toHaveLength(1)
-    expect(runs[0]!.runId).toBe('preview-blk_fe')
+    expect(runs[0]!.containerKey).toBe('preview-blk_fe')
     // On a localhost-publishing runtime the host port is PINNED to the serve port (deterministic origin).
     expect(runs[0]!.publishPorts).toEqual([{ container: 4173, host: 4173 }])
   })
@@ -125,8 +134,11 @@ describe('LocalPreviewTransport', () => {
     // transport reads the endpoint (container IP + serve port) rather than pinning a localhost port.
     const { adapter, runs } = fakeAdapter({
       publishesToLocalhost: false,
-      async endpoint(_exec, _id, port = 8080) {
-        return port === 8080 ? { host: '192.168.64.7', port: 8080 } : { host: '192.168.64.7', port }
+      honoursHostBridges: true,
+      async endpoint(_exec, _id, port = HARNESS_PORT) {
+        return port === HARNESS_PORT
+          ? { host: '192.168.64.7', port: HARNESS_PORT }
+          : { host: '192.168.64.7', port }
       },
     })
     const transport = makeTransport(adapter, okFetch('done'))

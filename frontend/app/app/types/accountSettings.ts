@@ -15,4 +15,9 @@ export type {
   ContentStorageConfig,
   ContentStorageSummary,
   ContentStorageCapability,
+  // Account-wide model-family allow/block policy.
+  ModelFamily,
+  ModelFamilyPolicy,
+  ModelPolicyMode,
+  AccountRegion,
 } from '@cat-factory/contracts'

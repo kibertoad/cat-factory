@@ -15,4 +15,7 @@ export type {
   ConsensusRound,
   ConsensusSessionStatus,
   ConsensusSession,
+  ConsensusGroup,
+  CreateConsensusGroupInput,
+  UpdateConsensusGroupInput,
 } from '@cat-factory/contracts'

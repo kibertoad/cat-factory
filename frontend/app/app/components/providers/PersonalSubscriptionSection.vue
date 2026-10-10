@@ -4,14 +4,17 @@
 // rather than pooled on the workspace. Each token is double-encrypted server-side under a
 // personal PASSWORD (never stored); that password is what you'll enter when you start/retry
 // such a run (cached locally so it's usually transparent). Recurring schedules can't use them.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
+import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
 const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -86,10 +89,48 @@ const password = ref('')
 const expiresOn = ref('') // yyyy-mm-dd (optional)
 const busy = ref(false)
 
+// A transient "credentials stored" confirmation shown inline right after a successful save.
+// Emptying the form on success recomputes `disabledReason` back to "enter a token", so without
+// this the user is greeted by a red validation error immediately after they succeeded — which
+// reads as a failure. While this notice is set we suppress `disabledReason` and show it instead,
+// then clear it after a few seconds (or the moment the user starts entering a new credential).
+const savedNotice = ref<string | null>(null)
+let savedTimer: ReturnType<typeof setTimeout> | undefined
+
+function clearSavedNotice() {
+  savedNotice.value = null
+  if (savedTimer) {
+    clearTimeout(savedTimer)
+    savedTimer = undefined
+  }
+}
+
+// Once the user touches the form again the success notice is stale — drop it so `disabledReason`
+// guides the next entry as usual. Guard on non-empty input so the programmatic clear performed by
+// a successful `connect()` (which resets the fields to empty) doesn't immediately wipe the notice
+// we just set; switching vendor always clears it.
+watch([token, password], ([tok, pwd]) => {
+  if (savedNotice.value && (tok.trim() || pwd)) clearSavedNotice()
+})
+watch(vendor, () => clearSavedNotice())
+
 onMounted(() => void personal.load())
+onBeforeUnmount(() => clearSavedNotice())
 
 const selectedMeta = computed(() => vendorMeta(vendor.value) ?? PERSONAL_VENDORS.value[0]!)
 const existing = computed(() => personal.subscriptions.find((s) => s.vendor === vendor.value))
+
+/**
+ * Why the Connect button is disabled, or null when it's actionable. This is the single source
+ * of truth: the button's `:disabled` is bound to `disabledReason !== null`, and the same value
+ * renders in red next to it, so the button state and the shown reason can never disagree.
+ */
+const disabledReason = computed(() => {
+  if (needsSignIn.value) return t('personalSubscriptions.disabledReason.signIn')
+  if (!token.value.trim()) return t('personalSubscriptions.disabledReason.token')
+  if (password.value.length < 6) return t('personalSubscriptions.disabledReason.password')
+  return null
+})
 
 /** Renewal nudges for any connected subscription that's near or past expiry. */
 const renewals = computed(() =>
@@ -105,6 +146,7 @@ const renewals = computed(() =>
 
 async function connect() {
   if (!token.value.trim() || password.value.length < 6) return
+  const vendorName = selectedMeta.value.label
   busy.value = true
   try {
     await personal.store({
@@ -120,22 +162,24 @@ async function connect() {
     password.value = ''
     label.value = ''
     expiresOn.value = ''
+    // Confirm success inline (and transiently) so emptying the form doesn't surface the
+    // `disabledReason` validation text as if the save had failed. It clears after a few
+    // seconds, or as soon as the user starts entering another credential.
+    savedNotice.value = t('personalSubscriptions.saved', { vendor: vendorName })
+    if (savedTimer) clearTimeout(savedTimer)
+    savedTimer = setTimeout(clearSavedNotice, 5000)
     // A connected subscription makes its vendor's models usable, so refresh the catalog:
     // this clears the "No AI model configured" banner and, if the default preset still
     // points at models this subscription doesn't cover, reactively surfaces the
     // preset-mismatch prompt (with its "pick a different preset" link).
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({
-      title: t('personalSubscriptions.toast.connected', { vendor: selectedMeta.value.label }),
+      title: t('personalSubscriptions.toast.connected', { vendor: vendorName }),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('personalSubscriptions.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'personalSubscriptions.toast.connectFailed')
   } finally {
     busy.value = false
   }
@@ -157,11 +201,7 @@ async function disconnect(v: SubscriptionVendor) {
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({ title: t('personalSubscriptions.toast.disconnected'), icon: 'i-lucide-check' })
   } catch (e) {
-    toast.add({
-      title: t('personalSubscriptions.toast.disconnectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'personalSubscriptions.toast.disconnectFailed')
   }
 }
 </script>
@@ -169,10 +209,10 @@ async function disconnect(v: SubscriptionVendor) {
 <template>
   <div class="space-y-3">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4">
         {{ t('personalSubscriptions.heading') }}
-      </h4>
-      <p class="mt-1 text-sm text-slate-400">{{ t('personalSubscriptions.intro') }}</p>
+      </SectionLabel>
+      <p class="mt-1 text-sm text-muted">{{ t('personalSubscriptions.intro') }}</p>
     </div>
 
     <ProvidersSignInRequiredNotice
@@ -184,12 +224,12 @@ async function disconnect(v: SubscriptionVendor) {
     <div
       v-for="sub in personal.subscriptions"
       :key="sub.vendor"
-      class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+      class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
     >
       <div>
-        <span class="font-medium text-slate-200">{{ sub.label }}</span>
-        <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(sub.vendor) }}</span>
-        <div class="text-[11px] text-slate-500">
+        <span class="font-medium text-default">{{ sub.label }}</span>
+        <span class="ms-2 text-xs text-dimmed">{{ vendorLabel(sub.vendor) }}</span>
+        <div class="text-2xs text-dimmed">
           <template v-if="sub.expiresAt">
             {{ t('personalSubscriptions.expires', { date: d(new Date(sub.expiresAt), 'short') }) }}
           </template>
@@ -205,7 +245,7 @@ async function disconnect(v: SubscriptionVendor) {
       />
     </div>
 
-    <p v-for="(line, i) in renewals" :key="i" class="text-sm text-amber-400/90">{{ line }}</p>
+    <p v-for="(line, i) in renewals" :key="i" class="text-sm text-app-warning-400/90">{{ line }}</p>
 
     <!-- vendor picker -->
     <UFormField :label="t('personalSubscriptions.vendorField')">
@@ -219,7 +259,7 @@ async function disconnect(v: SubscriptionVendor) {
 
     <!-- connect / replace form -->
     <ol
-      class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
+      class="list-decimal space-y-1.5 rounded-lg border border-muted bg-default/60 p-4 ps-8 text-sm text-toned"
     >
       <li v-for="(step, i) in selectedMeta.steps" :key="i">{{ step }}</li>
     </ol>
@@ -233,19 +273,17 @@ async function disconnect(v: SubscriptionVendor) {
         />
       </UFormField>
       <UFormField :label="selectedMeta.tokenLabel">
-        <UTextarea
+        <SecretInput
           v-model="token"
-          :rows="2"
           :disabled="needsSignIn"
           :placeholder="selectedMeta.tokenPlaceholder"
-          class="font-mono"
+          class="w-full font-mono"
         />
       </UFormField>
       <div class="flex flex-wrap gap-3">
         <UFormField :label="t('personalSubscriptions.passwordField')" class="flex-1">
-          <UInput
+          <SecretInput
             v-model="password"
-            type="password"
             :disabled="needsSignIn"
             :placeholder="t('personalSubscriptions.passwordPlaceholder')"
           />
@@ -254,10 +292,15 @@ async function disconnect(v: SubscriptionVendor) {
           <UInput v-model="expiresOn" type="date" :disabled="needsSignIn" />
         </UFormField>
       </div>
-      <div class="flex justify-end">
+      <div class="flex items-center justify-end gap-3">
+        <p v-if="savedNotice" class="flex items-center gap-1.5 text-sm text-app-success-400">
+          <UIcon name="i-lucide-check" class="size-4" />
+          {{ savedNotice }}
+        </p>
+        <p v-else-if="disabledReason" class="text-sm text-app-error-400">{{ disabledReason }}</p>
         <UButton
           :loading="busy"
-          :disabled="needsSignIn || !token.trim() || password.length < 6"
+          :disabled="disabledReason !== null"
           icon="i-lucide-shield-check"
           @click="connect()"
         >

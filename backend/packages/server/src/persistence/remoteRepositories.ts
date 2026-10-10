@@ -56,9 +56,18 @@ function makeRepoProxy<T extends object>(client: PersistenceRpcClient, repo: str
  * Credentials are deliberately NOT part of this set — they stay local (the `node:sqlite`
  * store), composed over the top of this registry by the facade. This is the single mechanism
  * a mothership-mode node uses; there is no narrower typed repository set to drift from it.
+ *
+ * `localFirst` is that composition seam: any repository named there is served by the supplied
+ * LOCAL instance instead of the RPC, for the whole registry at once. It exists because the
+ * remote default is drift-proof by being TOTAL — every unlisted name becomes a remote proxy —
+ * so a bucket that must NOT be remote has to be named somewhere, and naming it here (rather
+ * than at each of a repository's consumers) is what keeps a consumer from silently resolving
+ * the remote proxy that the allow-list will only ever answer with `unknown_method`. Today it
+ * carries the local-first TELEMETRY bucket (see the local facade's `telemetryStore.ts`).
  */
 export function createRemoteRepositoryRegistry(
   client: PersistenceRpcClient,
+  localFirst: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const cache = new Map<string, unknown>()
   return new Proxy(
@@ -70,6 +79,9 @@ export function createRemoteRepositoryRegistry(
         // absent — so the registry itself is never mistaken for a thenable. (The per-repo
         // `then`/symbol guard in `makeRepoProxy` protects an awaited individual repo proxy too.)
         if (typeof repoName !== 'string' || repoName === 'then') return undefined
+        // Own-property only: `localFirst` is a plain object, so an inherited `constructor` /
+        // `toString` would otherwise shadow a real repository name with a non-repository.
+        if (Object.hasOwn(localFirst, repoName)) return localFirst[repoName]
         let proxy = cache.get(repoName)
         if (!proxy) {
           proxy = makeRepoProxy(client, repoName)

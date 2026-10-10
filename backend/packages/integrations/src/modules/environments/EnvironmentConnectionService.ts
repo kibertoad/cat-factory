@@ -6,7 +6,8 @@ import type {
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,
 } from '@cat-factory/kernel'
-import type { SecretCipher } from '@cat-factory/kernel'
+import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
+import { createOrgSecretCipher } from '@cat-factory/kernel'
 import type { SecretResolver, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
   BootstrapEnvironmentRepoInput,
@@ -24,6 +25,7 @@ import type {
   RepoValidationIssue,
   RepoValidationResult,
   RunRepoContext,
+  SavedConnectionProbe,
   ServiceProvisioning,
   TestEnvironmentConnectionInput,
   TestEnvironmentHandlerInput,
@@ -39,8 +41,15 @@ import type {
   ProvisioningRecommendation,
   RepairCustomManifestInput,
 } from '@cat-factory/contracts'
-import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
+import { commitGeneratedConfig, maybeDispatchConfigRepair } from './config-bootstrap.logic.js'
+import {
+  type DetectionConventions,
+  detectKubernetesProvisioning,
+} from './provision-detect.logic.js'
+import { arbitrateCustomProviders, resolveCustomProvisioning } from './custom-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
+import { RepoReadError } from './repo-read-error.js'
+import { createEnvironmentConnectionProbes } from './connectionProbes.js'
 import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -53,8 +62,7 @@ import {
   buildInfraHandlerFields,
   handlerConfigToBackendConfig,
   overlaySecrets,
-  resolveHandlerBackend,
-  type ServiceKubeInputs,
+  type ServiceProvisioningInputs,
   toManifestId,
 } from './infra-handler-build.js'
 import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
@@ -76,6 +84,26 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 // surface lands (slices 4–5). See docs/initiatives/per-service-provision-types.md.
 // ---------------------------------------------------------------------------
 
+/**
+ * The provider-specific "check the credential has read access" clause of the auto-detect
+ * read-fault guidance. Kept provider-neutral in the shared detect path: name a GitHub-only
+ * concept ("GitHub App", "Contents: read") ONLY when the detect input actually pinned GitHub,
+ * so a GitLab deployment (local mode is GitLab-capable) isn't told to fix a permission it has
+ * no equivalent for. Absent provider (⇒ the workspace's connected provider) stays neutral.
+ */
+function repoAccessHint(provider?: 'github' | 'gitlab'): string {
+  if (provider === 'gitlab') {
+    return 'Confirm the connected GitLab token still has "read_repository" scope and access to this project'
+  }
+  if (provider === 'github') {
+    return (
+      'Confirm the GitHub App still has "Contents: read" access to this repository ' +
+      "(re-check the installation's repository access)"
+    )
+  }
+  return 'Confirm the connected VCS credential still has read access to this repository'
+}
+
 /** Map a resolved engine back to the provision type it serves. */
 function engineToProvisionType(engine: InfraEngine): ProvisionType {
   switch (engine) {
@@ -84,6 +112,8 @@ function engineToProvisionType(engine: InfraEngine): ProvisionType {
     case 'local-k3s':
     case 'remote-kubernetes':
       return 'kubernetes'
+    case 'cloudflare':
+      return 'cloudflare'
     case 'remote-custom':
       return 'custom'
     case 'none':
@@ -116,9 +146,6 @@ export interface ConfigRepairDispatch {
    */
   manifestPath?: string
 }
-
-/** Deterministic head branch for the PR-mode config bootstrap (idempotent re-runs). */
-const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
 
 /**
  * Compose the coding-agent prompt for a custom-manifest generate/fix run: the custom type's own
@@ -166,6 +193,12 @@ export interface EnvironmentConnectionServiceDependencies {
   environmentConnectionRepository: EnvironmentConnectionRepository
   workspaceRepository: WorkspaceRepository
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the handler bundle was sealed under the
+   * MOTHERSHIP's key. Without it the connection panel persists and reads back fine (the summary
+   * never decrypts) and every PROVISION against it fails on an unopenable bundle.
+   */
+  secretDelegate?: SecretDelegate
   clock: Clock
   /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
@@ -213,6 +246,13 @@ export interface EnvironmentConnectionServiceDependencies {
   customManifestTypeRepository?: CustomManifestTypeRepository
   /** The app-owned registry of code-defined custom manifest types (merged into the catalog). */
   customManifestTypeRegistry?: CustomManifestTypeRegistry
+  /**
+   * Deployment-level, ADDITIVE extensions to the built-in provisioning-detection conventions
+   * (extra compose file names/dirs, seed dirs, env-template dirs). Passed straight into
+   * {@link detectKubernetesProvisioning} so an org whose repos follow house conventions the
+   * defaults don't name broadens detection without a code edit. Absent ⇒ built-in behaviour.
+   */
+  detectionConventions?: DetectionConventions
 }
 
 export interface ResolvedConnection {
@@ -265,7 +305,34 @@ export interface ResolvedTypeProvider {
 }
 
 export class EnvironmentConnectionService {
-  constructor(private readonly deps: EnvironmentConnectionServiceDependencies) {}
+  /** The connection PROBES (candidate config / candidate handler / saved connection). */
+  private readonly probes: ReturnType<typeof createEnvironmentConnectionProbes>
+  /** Seals/opens the handler bundle, through the mothership when this node holds no org key. */
+  private readonly orgSecrets: OrgSecretCipher
+
+  constructor(private readonly deps: EnvironmentConnectionServiceDependencies) {
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
+    this.probes = createEnvironmentConnectionProbes({
+      workspaceRepository: deps.workspaceRepository,
+      environmentBackendRegistry: deps.environmentBackendRegistry,
+      ...(deps.environmentProvider ? { environmentProvider: deps.environmentProvider } : {}),
+      ...(deps.urlPolicy ? { urlPolicy: deps.urlPolicy } : {}),
+      ...(deps.customTlsSupported !== undefined
+        ? { customTlsSupported: deps.customTlsSupported }
+        : {}),
+      requireBackend: (kind) => this.requireBackend(kind),
+      buildProvider: (backend) => this.buildProvider(backend),
+      primaryRecord: (workspaceId) => this.primaryRecord(workspaceId),
+      buildFromRecord: (record) => this.buildFromRecord(record),
+      buildResolveSecret: (record) => this.buildResolveSecret(record),
+      storedSecretsFor: (workspaceId, provisionType, manifestId) =>
+        this.storedSecretsFor(workspaceId, provisionType, manifestId),
+      engineToProvisionType,
+    })
+  }
 
   // ---- per-type handlers (the final API) ---------------------------------
 
@@ -317,7 +384,7 @@ export class EnvironmentConnectionService {
     if (missing.length) {
       throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
     }
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
+    const secretsCipher = await this.sealSecrets(workspaceId, secrets)
     const updated: EnvironmentConnectionRecord = { ...record, secretsCipher }
     await this.deps.environmentConnectionRepository.upsert(updated)
     return this.toHandlerView(updated, Object.keys(secrets))
@@ -386,6 +453,7 @@ export class EnvironmentConnectionService {
       ...(service.images ? { images: service.images } : {}),
       ...(service.helmReleases ? { helmReleases: service.helmReleases } : {}),
       ...(service.secretInjections ? { secretInjections: service.secretInjections } : {}),
+      ...(service.recipe ? { recipe: service.recipe } : {}),
     })
     return {
       provider,
@@ -514,7 +582,7 @@ export class EnvironmentConnectionService {
     if (missing.length) {
       throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
     }
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
+    const secretsCipher = await this.sealSecrets(workspaceId, secrets)
     const updated: EnvironmentConnectionRecord = { ...record, secretsCipher }
     await this.deps.environmentConnectionRepository.upsert(updated)
     return this.toConnection(updated, Object.keys(secrets))
@@ -559,7 +627,7 @@ export class EnvironmentConnectionService {
         ? { bootstrapInputs: provider.describeBootstrapInputs() }
         : {}),
       missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
-      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(manifest ? { savedManifest: manifest } : {}),
       ...(provider.describeManifestTemplate
         ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
         : {}),
@@ -567,64 +635,31 @@ export class EnvironmentConnectionService {
   }
 
   /**
-   * Probe a candidate connection before saving (nothing is persisted). Builds the
-   * backend's provider from the candidate config + a resolver over the supplied
-   * (unsaved) secrets and delegates to the provider's `testConnection`.
+   * Probe a candidate connection before saving (nothing is persisted).
+   *
+   * The three connection PROBES live in `connectionProbes.ts` — they are the module's only
+   * liveness questions (as opposed to reads and writes of connection state), and the difference
+   * between probing a candidate config and probing a SAVED one is subtle enough to be stated in one
+   * place. These stay as the service's public surface.
    */
   async testConnection(
     workspaceId: string,
     input: TestEnvironmentConnectionInput,
   ): Promise<ConnectionTestResult> {
-    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    if (!input.config) return { ok: true, message: 'Nothing to test.' }
-    const backend = this.requireBackend(input.config.kind)
-    backend.assertConfigSafe(input.config, {
-      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
-      ...(this.deps.customTlsSupported !== undefined
-        ? { customTlsSupported: this.deps.customTlsSupported }
-        : {}),
-    })
-    const provider = this.buildProvider(backend)
-    if (!provider.testConnection) {
-      return { ok: true, message: 'This provider has no connection test.' }
-    }
-    const manifest = backend.toManifest(input.config)
-    const secrets = input.secrets ?? {}
-    return provider.testConnection({
-      manifest,
-      config: {},
-      resolveSecret: (key) => secrets[key],
-    })
+    return this.probes.testConnection(workspaceId, input)
   }
 
-  /**
-   * Probe a candidate per-type infra HANDLER connection before saving (nothing persisted).
-   * Lowers the engine-discriminated handler config to the backend config — with a placeholder
-   * manifest source, since a connectivity probe reads only the apiserver/token, never the
-   * (service-owned) source — and delegates to {@link testConnection}. So the per-type engine
-   * form (e.g. a `local-k3s` / `remote-kubernetes` Kubernetes engine) can verify the apiserver
-   * is reachable and the token authenticates before the operator commits the handler.
-   */
+  /** Probe the workspace's SAVED primary connection, for the reachability watcher. */
+  async probeSavedConnection(workspaceId: string): Promise<SavedConnectionProbe> {
+    return this.probes.probeSavedConnection(workspaceId)
+  }
+
+  /** Probe a candidate per-type infra HANDLER connection before saving (nothing persisted). */
   async testHandler(
     workspaceId: string,
     input: TestEnvironmentHandlerInput,
   ): Promise<ConnectionTestResult> {
-    const backend = resolveHandlerBackend(
-      this.deps.environmentBackendRegistry,
-      input.config.engine,
-      input.backendKind,
-    )
-    const backendConfig = handlerConfigToBackendConfig(input.config, backend.kind)
-    // Fall back to the SAVED handler's stored secrets so an operator can (re)test an existing
-    // connection — or edit a non-secret field and test it — WITHOUT re-entering the write-only
-    // token the edit form never surfaces. A freshly-typed secret still overrides the stored one;
-    // a blank/omitted value preserves it (see overlaySecrets).
-    const provisionType = engineToProvisionType(input.config.engine)
-    const manifestId =
-      input.config.engine === 'remote-custom' ? input.config.acceptsManifestId : null
-    const stored = await this.storedSecretsFor(workspaceId, provisionType, manifestId)
-    const secrets = overlaySecrets(stored, input.secrets)
-    return this.testConnection(workspaceId, { config: backendConfig, secrets })
+    return this.probes.testHandler(workspaceId, input)
   }
 
   /**
@@ -658,8 +693,7 @@ export class EnvironmentConnectionService {
       provider,
       bound,
       gitRef,
-      input.owner,
-      input.repo,
+      { owner: input.owner, repo: input.repo },
       stringifyProviderConfig(manifest?.providerConfig),
       resolveSecret,
     )
@@ -692,26 +726,83 @@ export class EnvironmentConnectionService {
         ],
       }
     }
-    // `custom`: detect the in-repo manifest PATH from the selected type's default (monorepo-aware),
-    // rather than the kubernetes/compose heuristic. Requires a selected `manifestId` to look up
-    // the default; without one there's nothing type-specific to detect.
-    if (input.prefer === 'custom' && input.manifestId) {
-      const type = (await this.listCustomTypes(workspaceId)).find(
-        (t) => t.manifestId === input.manifestId,
-      )
-      return detectCustomManifest(bound.repo, {
-        gitRef: input.gitRef ?? bound.baseBranch,
-        ...(input.directory ? { directory: input.directory } : {}),
-        manifestId: input.manifestId,
-        ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
-        ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
-      })
-    }
-    return detectKubernetesProvisioning(bound.repo, {
+    // `custom`: run the provider's own autodetection rather than the kubernetes/compose heuristic.
+    // With a SELECTED `manifestId` ⇒ that type's `detect()` hook (or its `defaultManifestPath`
+    // path-only search when it has no hook). WITHOUT one ⇒ ARBITRATE across every registered
+    // type's `detect()` and propose the best match.
+    const registered = this.deps.customManifestTypeRegistry?.list() ?? []
+    const scope = {
       gitRef: input.gitRef ?? bound.baseBranch,
       ...(input.directory ? { directory: input.directory } : {}),
-      ...(input.prefer ? { prefer: input.prefer } : {}),
-    })
+      ...(input.currentManifestPath ? { currentManifestPath: input.currentManifestPath } : {}),
+    }
+    // `custom` tab: the provider's own autodetection (selected type's hook, or arbitration across
+    // all registered types). A null (arbitration found nothing) falls through to the k8s sweep.
+    if (input.prefer === 'custom') {
+      const wire = input.manifestId
+        ? (await this.listCustomTypes(workspaceId)).find((t) => t.manifestId === input.manifestId)
+        : undefined
+      const rec = await this.mapRepoReadError(input, () =>
+        resolveCustomProvisioning(bound.repo, registered, {
+          ...scope,
+          ...(input.manifestId ? { manifestId: input.manifestId } : {}),
+          ...(wire?.defaultManifestPath ? { defaultPath: wire.defaultManifestPath } : {}),
+        }),
+      )
+      if (rec) return rec
+    }
+
+    const recommendation = await this.mapRepoReadError(input, () =>
+      detectKubernetesProvisioning(bound.repo, {
+        gitRef: scope.gitRef,
+        ...(input.directory ? { directory: input.directory } : {}),
+        ...(input.prefer ? { prefer: input.prefer } : {}),
+        ...(this.deps.detectionConventions ? { conventions: this.deps.detectionConventions } : {}),
+      }),
+    )
+    // Last resort (only when NOT already on the custom tab, which arbitrated above): if the
+    // default sweep found no k8s/compose layout, try custom arbitration so a repo carrying ONLY a
+    // custom provider signature (a company's own deploy convention) is still recognized. This runs
+    // a second scanner (the k8s sweep's cache isn't shared), but only on the no-detection miss path
+    // and still budget-bounded — a rare, bounded cost, not an N+1.
+    if (!recommendation.detected && input.prefer !== 'custom') {
+      const arbitrated = await this.mapRepoReadError(input, () =>
+        arbitrateCustomProviders(bound.repo, registered, scope),
+      )
+      if (arbitrated) return arbitrated
+    }
+    return recommendation
+  }
+
+  /**
+   * Run an auto-detect scan and translate a {@link RepoReadError} — a genuine "couldn't read the
+   * repo" fault the checkout-free reader threw — into an actionable {@link ValidationError} the
+   * SPA surfaces verbatim. Without this the fault would either be masked as a misleading "nothing
+   * detected" or escape as an opaque 500 ("Internal server error"), which is exactly the vague,
+   * unhelpful outcome this replaces. A clean miss (nothing found, no fault) returns normally.
+   */
+  private async mapRepoReadError<T>(
+    input: {
+      owner: string
+      repo: string
+      directory?: string
+      gitRef?: string
+      provider?: 'github' | 'gitlab'
+    },
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run()
+    } catch (err) {
+      if (!(err instanceof RepoReadError)) throw err
+      const where = input.directory ? ` (directory "${input.directory}")` : ''
+      const at = input.gitRef ? ` at "${input.gitRef}"` : ''
+      throw new ValidationError(
+        `Could not read ${input.owner}/${input.repo}${where}${at} to auto-detect. ` +
+          `${repoAccessHint(input.provider)}, that the branch exists, and that you are not ` +
+          `rate-limited, then retry. Underlying error: ${err.reason}`,
+      )
+    }
   }
 
   /**
@@ -741,10 +832,12 @@ export class EnvironmentConnectionService {
         ],
       }
     }
-    return detectFrontendConfig(bound.repo, {
-      gitRef: input.gitRef ?? bound.baseBranch,
-      ...(input.directory ? { directory: input.directory } : {}),
-    })
+    return this.mapRepoReadError(input, () =>
+      detectFrontendConfig(bound.repo, {
+        gitRef: input.gitRef ?? bound.baseBranch,
+        ...(input.directory ? { directory: input.directory } : {}),
+      }),
+    )
   }
 
   /**
@@ -796,90 +889,32 @@ export class EnvironmentConnectionService {
       resolveSecret,
     })
 
-    let committed = false
-    let writeBranch = targetBranch
-    if (!generated.needsAgent && generated.files.length) {
-      const prMode = !!input.openPr
-      let prBranchHead: string | null = null
-      if (prMode) {
-        writeBranch = BOOTSTRAP_CONFIG_BRANCH
-        prBranchHead = await bound.repo.headSha(writeBranch)
-      }
-      const compareBranch = prMode && prBranchHead ? writeBranch : targetBranch
-
-      const changed: { path: string; content: string }[] = []
-      for (const file of generated.files) {
-        const existing = await readRepoFile(file.path, compareBranch)
-        if (!existing || existing.content !== file.content) changed.push(file)
-      }
-      if (changed.length) {
-        const message = generated.commitMessage ?? 'chore: bootstrap environment provider config'
-        if (prMode) {
-          if (!prBranchHead) {
-            const base = await bound.repo.headSha(targetBranch)
-            if (base) await bound.repo.createBranch(writeBranch, base)
-          }
-          await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
-          if (!prBranchHead) {
-            await bound.repo.openPullRequest({
-              title: message,
-              head: writeBranch,
-              base: targetBranch,
-              body: 'Automated provider configuration bootstrap.',
-            })
-          }
-        } else {
-          await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
-        }
-        committed = true
-      }
-    }
+    const commit = await commitGeneratedConfig(bound, generated, input, targetBranch, readRepoFile)
+    const committed = commit.committed
+    let writeBranch = commit.writeBranch
 
     let validation = await this.runProviderValidate(
       provider,
       bound,
       writeBranch,
-      input.owner,
-      input.repo,
+      { owner: input.owner, repo: input.repo },
       config,
       resolveSecret,
     )
 
-    let usedAgent = false
-    let repairJobId: string | undefined
-    if (
-      !validation.ok &&
-      input.allowAgentFallback &&
-      provider.describeRepairAgent &&
-      this.deps.dispatchConfigRepair
-    ) {
-      usedAgent = true
-      if (input.openPr && writeBranch === targetBranch) {
-        const prBranchHead = await bound.repo.headSha(BOOTSTRAP_CONFIG_BRANCH)
-        if (!prBranchHead) {
-          const base = await bound.repo.headSha(targetBranch)
-          if (base) {
-            await bound.repo.createBranch(BOOTSTRAP_CONFIG_BRANCH, base)
-            await bound.repo.openPullRequest({
-              title: 'chore: repair environment provider config',
-              head: BOOTSTRAP_CONFIG_BRANCH,
-              base: targetBranch,
-              body: 'Automated provider configuration repair.',
-            })
-          }
-        }
-        writeBranch = BOOTSTRAP_CONFIG_BRANCH
-      }
-      const started = await this.deps.dispatchConfigRepair({
-        workspaceId,
-        owner: input.owner,
-        repo: input.repo,
-        gitRef: writeBranch,
-        issues: validation.issues,
-        inputs: input.inputs,
-      })
-      repairJobId = started.jobId
-    }
+    const agent = await maybeDispatchConfigRepair({
+      provider,
+      bound,
+      validation,
+      input,
+      workspaceId,
+      targetBranch,
+      writeBranch,
+      dispatchConfigRepair: this.deps.dispatchConfigRepair,
+    })
+    const usedAgent = agent.usedAgent
+    const repairJobId = agent.repairJobId
+    writeBranch = agent.writeBranch
 
     await this.deps.provisioningLog?.record({
       workspaceId,
@@ -974,8 +1009,7 @@ export class EnvironmentConnectionService {
           provider,
           bound,
           targetBranch,
-          input.owner,
-          input.repo,
+          { owner: input.owner, repo: input.repo },
           stringifyProviderConfig(manifest?.providerConfig),
           resolveSecret,
         )
@@ -1055,7 +1089,7 @@ export class EnvironmentConnectionService {
     const manifest = await this.optionalManifest(workspaceId)
     const resolveSecret = await this.resolveSecrets(workspaceId)
     const config = stringifyProviderConfig(manifest?.providerConfig)
-    return this.runProviderValidate(provider, bound, gitRef, owner, repo, config, resolveSecret)
+    return this.runProviderValidate(provider, bound, gitRef, { owner, repo }, config, resolveSecret)
   }
 
   /**
@@ -1068,6 +1102,49 @@ export class EnvironmentConnectionService {
     const record = await this.requirePrimary(workspaceId)
     const { provider, manifest } = this.buildFromRecord(record)
     return { provider: this.deps.environmentProvider ?? provider, manifest }
+  }
+
+  /**
+   * Resolve the live provider + manifest + secret resolver for an EXISTING environment record,
+   * keyed by the record's persisted provision type/engine — the per-type handler that stood it up,
+   * NOT the workspace-primary handler. So teardown / status of an env in a workspace with several
+   * per-type handlers goes through the SAME handler that provisioned it (the previous
+   * `resolveProvider` always used the primary, tearing an env down through the wrong provider).
+   * Falls back to the legacy single-connection resolution for a legacy row (null `provisionType`)
+   * or when no per-type handler matches (its handler was unregistered) — so those envs keep working
+   * and the fallback preserves the old behaviour.
+   */
+  async resolveProviderForRecord(record: {
+    workspaceId: string
+    provisionType: string | null
+    engine: string | null
+  }): Promise<{
+    provider: EnvironmentProvider
+    manifest: EnvironmentManifest
+    resolveSecret: SecretResolver
+  }> {
+    const { workspaceId } = record
+    if (record.provisionType) {
+      // One batched list + a pure filter (no N+1 point-read). `EnvironmentRecord` carries no
+      // manifestId, so a `custom` type pinned to a manifest id can't be disambiguated here — a
+      // single matching handler wins, else prefer the same engine, else fall through to legacy.
+      const handlers = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
+      const matches = handlers.filter((h) => h.provisionType === record.provisionType)
+      const handler =
+        matches.length === 1
+          ? matches[0]
+          : (matches.find((h) => h.engine === record.engine) ?? undefined)
+      if (handler) {
+        const { provider, manifest } = this.buildFromRecord(handler)
+        return {
+          provider: this.deps.environmentProvider ?? provider,
+          manifest,
+          resolveSecret: await this.buildResolveSecret(handler),
+        }
+      }
+    }
+    const { provider, manifest } = await this.resolveProvider(workspaceId)
+    return { provider, manifest, resolveSecret: await this.resolveSecrets(workspaceId) }
   }
 
   /** Resolve a VCS-neutral bound RepoFiles for the workspace+coords, or null. */
@@ -1091,8 +1168,7 @@ export class EnvironmentConnectionService {
     provider: EnvironmentProvider,
     bound: RunRepoContext,
     gitRef: string,
-    owner: string,
-    repo: string,
+    target: { owner: string; repo: string },
     config: Record<string, string> | undefined,
     resolveSecret: (key: string) => string | undefined,
   ): Promise<RepoValidationResult> {
@@ -1100,8 +1176,8 @@ export class EnvironmentConnectionService {
     return provider.validateRepo({
       readRepoFile: (path, ref) => bound.repo.getFile(path, ref ?? gitRef),
       defaultGitRef: gitRef,
-      repoOwner: owner,
-      repoName: repo,
+      repoOwner: target.owner,
+      repoName: target.repo,
       ...(config ? { config } : {}),
       resolveSecret,
     })
@@ -1245,7 +1321,7 @@ export class EnvironmentConnectionService {
           : {}),
       },
     )
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
+    const secretsCipher = await this.sealSecrets(workspaceId, secrets)
     const record: EnvironmentConnectionRecord = {
       workspaceId,
       ...fields,
@@ -1297,6 +1373,14 @@ export class EnvironmentConnectionService {
       if (!('manifest' in config)) throw new ValidationError('Expected a compose config')
       return { engine, manifest: config.manifest }
     }
+    // The Cloudflare preview carries no service-owned half (no manifest source, no compose
+    // path), so the handler config IS the backend config. It still needs a branch here or the
+    // legacy single-connection endpoint would be the one surface where a built-in backend
+    // cannot be registered at all — which is what the conformance assertion caught.
+    if (engine === 'cloudflare') {
+      if (!('cloudflare' in config)) throw new ValidationError('Expected a Cloudflare config')
+      return { engine, cloudflare: config.cloudflare }
+    }
     throw new ValidationError(`Cannot bridge a connection onto engine '${engine}'`)
   }
 
@@ -1307,7 +1391,7 @@ export class EnvironmentConnectionService {
    */
   private buildFromRecord(
     record: EnvironmentConnectionRecord,
-    service?: ServiceKubeInputs,
+    service?: ServiceProvisioningInputs,
   ): {
     backend: EnvironmentBackendProvider
     provider: EnvironmentProvider
@@ -1332,11 +1416,33 @@ export class EnvironmentConnectionService {
     return (key: string) => bundle[key]
   }
 
+  /**
+   * Seal a handler's secret bundle. Routed through {@link orgSecrets} rather than the raw cipher
+   * so a mothership-mode node's write lands under the ORG's key: a bundle a laptop sealed locally
+   * would be unopenable by the mothership and by every hosted teammate, and nothing would say so
+   * until the next provision.
+   */
+  private async sealSecrets(workspaceId: string, secrets: Record<string, string>): Promise<string> {
+    return this.orgSecrets.encryptFor(
+      { source: 'environment_connection', workspaceId },
+      JSON.stringify(secrets),
+    )
+  }
+
   private async decryptSecrets(
     record: EnvironmentConnectionRecord,
   ): Promise<Record<string, string>> {
     if (!record.secretsCipher) return {}
-    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(record.secretsCipher))
+    const parsed = JSON.parse(
+      await this.orgSecrets.decryptFor(
+        {
+          source: 'environment_connection',
+          workspaceId: record.workspaceId,
+          key: [record.provisionType, record.manifestId],
+        },
+        record.secretsCipher,
+      ),
+    )
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
   }
 

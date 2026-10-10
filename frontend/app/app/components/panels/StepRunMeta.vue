@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { PipelineStep } from '~/types/execution'
 import { useStepTimer } from '~/composables/useStepTimer'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Shared run-metadata + observability block for the step-backed result windows
 // (the CI/conflicts gate, the tester report). It carries the facts every step has in
@@ -27,7 +28,15 @@ const props = defineProps<{
 const models = useModelsStore()
 const { t, d } = useI18n()
 
-const { isRunning, durationLabel } = useStepTimer({
+/**
+ * The deployment-registered VARIANT this step ran under — an alternate prompt for its agent kind.
+ * Reported beside the model because it is the other half of "what actually ran": two steps of the
+ * same kind on the same model can be told to be different things, and nothing else on this panel
+ * would say so. Null on every step that ran the shipped prompt.
+ */
+const promptVariant = useStepPromptVariant(() => props.step)
+
+const { isRunning, durationLabel, activityAgoLabel } = useStepTimer({
   step: () => props.step,
   runFailed: () => props.runFailed ?? false,
   failureAt: () => props.failureAt,
@@ -40,68 +49,92 @@ function formatClock(ms?: number | null): string | null {
   return ms ? d(new Date(ms), 'long') : null
 }
 
+const { copy } = useCopyToClipboard()
 async function copyRunId() {
-  if (runId.value) await navigator.clipboard?.writeText(runId.value)
+  if (runId.value) await copy(runId.value)
 }
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
     <div v-if="stepNumber && totalSteps">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.step') }}
-      </h4>
-      <p class="text-[12px] text-slate-300">
+      </SectionLabel>
+      <p class="text-xs text-toned">
         {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
       </p>
     </div>
 
     <div v-if="durationLabel">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.duration') }}
-      </h4>
-      <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-slate-300">
+      </SectionLabel>
+      <p class="flex items-center gap-1.5 text-xs tabular-nums text-toned">
         <UIcon
           v-if="isRunning"
           name="i-lucide-loader-circle"
-          class="h-3 w-3 animate-spin text-indigo-400"
+          class="h-3 w-3 animate-spin text-primary"
         />
         {{ durationLabel }}
-        <span v-if="isRunning" class="text-[11px] text-slate-500">{{
+        <span v-if="isRunning" class="text-2xs text-dimmed">{{
           t('panels.stepMeta.elapsed')
         }}</span>
       </p>
     </div>
 
+    <!-- Liveness: time since the agent's last sign of life (the harness heartbeat), distinct from
+         the elapsed clock above — a long, quiet phase keeps this small while elapsed climbs, so a
+         genuinely-active-but-quiet run reads apart from a wedged one. Only while actively running. -->
+    <div v-if="isRunning && activityAgoLabel" data-testid="step-activity">
+      <SectionLabel as="h4" class="mb-1">
+        {{ t('panels.stepMeta.activity') }}
+      </SectionLabel>
+      <p class="flex items-center gap-1.5 text-xs tabular-nums text-toned">
+        <span class="h-1.5 w-1.5 rounded-full bg-app-success-400" />
+        {{ t('panels.stepMeta.activityAgo', { duration: activityAgoLabel }) }}
+      </p>
+    </div>
+
     <div v-if="formatClock(step.startedAt)">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.started') }}
-      </h4>
-      <p class="text-[12px] text-slate-300">{{ formatClock(step.startedAt) }}</p>
+      </SectionLabel>
+      <p class="text-xs text-toned">{{ formatClock(step.startedAt) }}</p>
     </div>
 
     <div v-if="formatClock(step.finishedAt)">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.finished') }}
-      </h4>
-      <p class="text-[12px] text-slate-300">{{ formatClock(step.finishedAt) }}</p>
+      </SectionLabel>
+      <p class="text-xs text-toned">{{ formatClock(step.finishedAt) }}</p>
     </div>
 
     <div v-if="step.model">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.model') }}
-      </h4>
-      <p class="break-all text-[12px] text-slate-300" :title="step.model">
+      </SectionLabel>
+      <p class="break-all text-xs text-toned" :title="step.model">
         {{ modelLabel ?? step.model }}
       </p>
     </div>
 
+    <div v-if="promptVariant">
+      <SectionLabel as="h4" class="mb-1">
+        {{ t('panels.stepMeta.promptVariant') }}
+      </SectionLabel>
+      <p class="break-all text-xs text-toned">{{ promptVariant.label }}</p>
+      <p v-if="promptVariant.note" class="mt-0.5 text-2xs text-app-warning-400/80">
+        {{ promptVariant.note }}
+      </p>
+    </div>
+
     <div v-if="runId">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.run') }}
-      </h4>
+      </SectionLabel>
       <p
-        class="cursor-pointer break-all font-mono text-[12px] text-slate-400 hover:text-slate-200"
+        class="cursor-pointer break-all font-mono text-xs text-muted hover:text-default"
         :title="t('panels.stepMeta.clickToCopy', { id: runId })"
         @click="copyRunId"
       >
@@ -113,6 +146,10 @@ async function copyRunId() {
          run's observability panel even when this step recorded no calls (e.g. a gate that
          passed its precheck with no helper spun up), so every window reaches it the same
          way; the metrics bar shows only when the step itself made calls. -->
-    <StepModelActivity :metrics="step.metrics" :instance-id="instanceId" />
+    <StepModelActivity
+      :metrics="step.metrics"
+      :billing="step.usageBilling"
+      :instance-id="instanceId"
+    />
   </div>
 </template>

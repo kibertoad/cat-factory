@@ -127,6 +127,8 @@ interface PageResponse {
   id?: string
   url?: string
   properties?: Record<string, unknown>
+  /** ISO timestamp Notion advances on every edit — the version token. */
+  last_edited_time?: string
 }
 
 interface BlockChildrenResponse {
@@ -151,9 +153,19 @@ export class NotionProvider implements DocumentSourceProvider {
     return notionLogic.parseNotionRef(input)
   }
 
+  /**
+   * Notion resolves a bare id URL to the page, so the id alone rebuilds a working link: the attach
+   * pre-flight can show what a pasted share link (`…/Some-Long-Title-1f2e3d…?pvs=4`) trimmed to,
+   * rather than falling back to the raw id on the source people paste into most.
+   */
+  canonicalUrl(externalId: string): string {
+    return notionLogic.notionPageUrl(externalId)
+  }
+
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const page = await this.get<PageResponse>(
       credentials,
@@ -166,9 +178,30 @@ export class NotionProvider implements DocumentSourceProvider {
     return {
       externalId: page.id,
       title: notionLogic.notionPageTitle(page.properties),
-      url: page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`,
+      url: page.url ?? notionLogic.notionPageUrl(page.id),
       body: notionLogic.notionBlocksToMarkdown(blocks),
+      version: page.last_edited_time ?? '',
     }
+  }
+
+  /**
+   * The cheap version probe: read only the page object for its `last_edited_time`,
+   * skipping the (bounded but multi-request) block backfill that dominates a full
+   * fetch. An unchanged timestamp means the page body is still current.
+   */
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string | null,
+  ): Promise<string> {
+    const page = await this.get<PageResponse>(
+      credentials,
+      `/pages/${encodeURIComponent(externalId)}`,
+    )
+    if (!page.id) {
+      throw new NotionApiError(502, `Notion returned an unexpected body for page ${externalId}`)
+    }
+    return page.last_edited_time ?? ''
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {

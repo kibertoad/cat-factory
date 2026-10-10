@@ -1,0 +1,4 @@
+# Sanitized fixture — the committed config template the real consumer copies by hand
+# (`.split.yaml.dist` → `.split.yaml`). Detection reads only the filename → materialization
+# target; the placeholder body is never parsed. See ../../../README.md.
+flags: {}

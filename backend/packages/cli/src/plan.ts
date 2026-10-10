@@ -1,3 +1,4 @@
+import { COMPOSE_FILE_PATH } from './composeProject.js'
 import { buildFrontendEnv, buildLocalEnv } from './env.js'
 import { buildGitignore, mergeGitignore } from './gitignore.js'
 import {
@@ -25,6 +26,13 @@ export interface PlannedFile {
 /** Everything the orchestrator needs to render the full project. Fully resolved (no prompting). */
 export interface BootstrapInput {
   projectName: string
+  /**
+   * The Compose project name keying this deployment's container, network and database volume,
+   * resolved by `composeProjectNameFor` from the target DIRECTORY. Required rather than derived
+   * here because the planner never sees that directory, and a defaulted one would silently put
+   * two deployments back in a single Compose project.
+   */
+  composeProjectName: string
   appTitle: string
   provider: VcsProvider
   token: string
@@ -32,7 +40,8 @@ export interface BootstrapInput {
   apiBase: string
   port: number
   corsAllowedOrigins: string
-  harnessImage: string
+  /** An explicit harness-image pin, or undefined to let the backend use its matched version. */
+  harnessImage?: string
   containerRuntime: ContainerRuntime
   /** How agent jobs execute: a Docker container pool (default) or native host agents. */
   executionMode?: ExecutionMode
@@ -42,6 +51,8 @@ export interface BootstrapInput {
   harnessEntry?: string
   authSessionSecret: string
   encryptionKey: string
+  /** Shared HMAC secret between the backend and the executor-harness (`HARNESS_SHARED_SECRET`). */
+  harnessSharedSecret: string
   /** Existing root `.gitignore` content, if the target dir already has one (rules are merged in). */
   existingGitignore?: string
 }
@@ -52,6 +63,7 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     databaseUrl: input.databaseUrl,
     authSessionSecret: input.authSessionSecret,
     encryptionKey: input.encryptionKey,
+    harnessSharedSecret: input.harnessSharedSecret,
     harnessImage: input.harnessImage,
     port: input.port,
     corsAllowedOrigins: input.corsAllowedOrigins,
@@ -75,7 +87,13 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     // Local-mode backend.
     { path: 'local/package.json', content: localPackageJson(input.projectName) },
     { path: 'local/src/main.ts', content: localMainTs },
-    { path: 'local/docker-compose.yml', content: dockerCompose(input.databaseUrl) },
+    {
+      path: COMPOSE_FILE_PATH,
+      content: dockerCompose({
+        databaseUrl: input.databaseUrl,
+        composeProjectName: input.composeProjectName,
+      }),
+    },
     { path: 'local/tsconfig.json', content: tsconfigJson },
     {
       path: 'local/.env.example',
@@ -136,7 +154,8 @@ with \`cat-factory init\`. It has two parts:
   via a personal access token.
 - **\`frontend/\`** — the board SPA (extends the \`@cat-factory/app\` Nuxt layer).
 
-> The \`.env\` files hold generated secrets (\`AUTH_SESSION_SECRET\`, \`ENCRYPTION_KEY\`) and your
+> The \`.env\` files hold generated secrets (\`AUTH_SESSION_SECRET\`, \`ENCRYPTION_KEY\`,
+> \`HARNESS_SHARED_SECRET\`) and your
 > ${label} token (\`${tokenVar}\`). They are gitignored — **keep the values stable and never
 > commit them.** Regenerating \`AUTH_SESSION_SECRET\` forces a re-login; regenerating
 > \`ENCRYPTION_KEY\` orphans every encrypted credential.
@@ -145,10 +164,9 @@ with \`cat-factory init\`. It has two parts:
 
 - Node.js 24+ (the backend entry runs TypeScript via type stripping).
 - A container runtime (Docker/Podman/OrbStack/Colima) for Postgres and the agent containers.
-- The executor-harness image pulled locally:
-  \`\`\`sh
-  docker pull ${input.harnessImage}
-  \`\`\`
+  The backend pulls the executor-harness image it was built against automatically on first
+  boot, so no manual \`docker pull\` is needed — pin \`LOCAL_HARNESS_IMAGE\` in \`local/.env\`
+  only if you want to lock to a specific version.
 
 ## Install
 
@@ -163,6 +181,12 @@ cd local
 npm run db:up      # start local Postgres (docker compose)
 npm start          # migrate + serve the API on :${input.port}
 \`\`\`
+
+Both scripts act on the Compose project \`${input.composeProjectName}\`, declared as \`name:\` in
+\`local/docker-compose.yml\`, so this deployment's Postgres container and its
+\`${input.composeProjectName}_cat-factory-pg\` volume are its own. Inspect them from anywhere with
+\`docker compose -p ${input.composeProjectName} ps\`. Another deployment scaffolded into a
+directory of the same name would share them, so give each one its own directory name.
 ${dbUpRuntimeNote(input.containerRuntime)}
 At least one **model provider** must be configured or no model is selectable. The simplest is
 Cloudflare Workers AI over REST — set \`CLOUDFLARE_ACCOUNT_ID\` + \`CLOUDFLARE_API_TOKEN\` in

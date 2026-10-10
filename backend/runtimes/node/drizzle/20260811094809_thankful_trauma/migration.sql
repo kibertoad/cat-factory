@@ -1,0 +1,1 @@
+ALTER TABLE "public_api_keys" ADD COLUMN "acts_as_user_id" text;

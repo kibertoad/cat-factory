@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { connectionTestResultSchema, providerDescriptorSchema } from '../provider-config.js'
 import {
@@ -42,7 +42,7 @@ export const updateRunnerPoolSecretsContract = defineApiContract({
 export const unregisterRunnerPoolContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/runner-pool/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const describeRunnerPoolProviderContract = defineApiContract({

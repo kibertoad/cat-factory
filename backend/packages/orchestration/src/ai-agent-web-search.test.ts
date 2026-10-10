@@ -40,6 +40,7 @@ function executorFor(ref: ModelRef, webSearch?: InlineWebSearchOptions) {
     modelProvider: provider,
     agentRouting: { default: { ref }, byKind: {} },
     resolveBlockModel: () => undefined,
+    agentContextRecorder: undefined,
     ...(webSearch ? { webSearch } : {}),
   })
   return { exec, captured }

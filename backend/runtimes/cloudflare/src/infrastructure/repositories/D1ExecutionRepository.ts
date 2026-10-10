@@ -1,11 +1,24 @@
-import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/kernel'
-import type { ExecutionInstance } from '@cat-factory/contracts'
+import {
+  type AgentFailure,
+  type Clock,
+  type ExecutionRepository,
+  LIVE_EXECUTION_STATUSES,
+  type LiveRunSummary,
+  type RunRef,
+} from '@cat-factory/kernel'
+import type { ExecutionInstance, ExecutionStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
-import { type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
+import { adoptCreatedAt, type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
 
 const runContext = (row: ExecutionRow) => ({ table: 'agent_runs', id: row.id })
+
+// The live statuses as a SQL list literal, derived from the shared constant so the live-run
+// projection and the admission-control capacity COUNT read the same set here and on Node.
+// `insertLive` deliberately keeps its literals: those mirror the frozen index predicate
+// (see LIVE_EXECUTION_STATUSES).
+const LIVE_STATUS_LIST_SQL = LIVE_EXECUTION_STATUSES.map((s) => `'${s}'`).join(', ')
 
 /**
  * Execution runs, stored as `kind='execution'` rows of the unified `agent_runs`
@@ -34,14 +47,35 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return tryDecodeRows(results, rowToExecution, runContext)
   }
 
-  async listByService(serviceId: string): Promise<ExecutionInstance[]> {
+  async listLive(workspaceId: string): Promise<LiveRunSummary[]> {
+    // Lean live-run projection: block_id + status + id only, NEVER the heavy `detail` column.
+    // Served by idx_agent_runs_ws_kind_status (workspace_id, kind, status). Unordered: the two
+    // consumers (dispatch guard's block-id Set, resumePaused's id iteration) are order-agnostic.
     const { results } = await this.db
       .prepare(
-        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'execution' ORDER BY created_at`,
+        `SELECT id, block_id, status FROM agent_runs
+         WHERE workspace_id = ? AND kind = 'execution'
+           AND status IN (${LIVE_STATUS_LIST_SQL})`,
       )
-      .bind(serviceId)
-      .all<ExecutionRow>()
-    return tryDecodeRows(results, rowToExecution, runContext)
+      .bind(workspaceId)
+      .all<{ id: string; block_id: string | null; status: LiveRunSummary['status'] }>()
+    // `block_id` is nullable on the table; coalesce to '' so the projection matches the Drizzle
+    // repo's `string` shape exactly (live execution runs always carry one in practice).
+    return results.map((r) => ({ id: r.id, blockId: r.block_id ?? '', status: r.status }))
+  }
+
+  async countActiveByWorkspace(workspaceId: string): Promise<number> {
+    // Admission-control capacity read: the COUNT is pushed into SQL (never rows reduced in JS),
+    // over the same live predicate and index as `listLive` above. Mirrors the Drizzle repo.
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM agent_runs
+         WHERE workspace_id = ? AND kind = 'execution'
+           AND status IN (${LIVE_STATUS_LIST_SQL})`,
+      )
+      .bind(workspaceId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 
   async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
@@ -59,6 +93,100 @@ export class D1ExecutionRepository implements ExecutionRepository {
       out.push(...tryDecodeRows(results, rowToExecution, runContext))
     }
     return out
+  }
+
+  async listInternal(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // The `internal` scope is enforced by JOINing the anchor block, so an ordinary board run can
+    // never leak into the public job list. Driven by idx_agent_runs_workspace (workspace_id,
+    // created_at) walked in reverse, probing blocks by its (workspace_id, id) primary key.
+    const where = [`r.workspace_id = ?`, `r.kind = 'execution'`, `b.internal = 1`]
+    const binds: (string | number)[] = [workspaceId]
+    if (opts.statuses && opts.statuses.length > 0) {
+      where.push(`r.status IN (${opts.statuses.map(() => '?').join(', ')})`)
+      binds.push(...opts.statuses)
+    }
+    if (opts.since != null) {
+      where.push(`r.created_at >= ?`)
+      binds.push(opts.since)
+    }
+    if (opts.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` are not skipped.
+      where.push(`(r.created_at < ? OR (r.created_at = ? AND r.id < ?))`)
+      binds.push(opts.cursor.createdAt, opts.cursor.createdAt, opts.cursor.id)
+    }
+    const { results } = await this.db
+      .prepare(
+        `SELECT r.* FROM agent_runs r
+         JOIN blocks b ON b.workspace_id = r.workspace_id AND b.id = r.block_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY r.created_at DESC, r.id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds, opts.limit)
+      .all<ExecutionRow>()
+    // List read: drop a corrupt run rather than failing the whole page.
+    return tryDecodeRows(results, rowToExecution, runContext)
+  }
+
+  async listRecent(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // Same predicates and ordering as `listInternal`, minus its anchor-block join: the debug
+    // run index deliberately spans every run in the workspace (see the port). Driven by
+    // idx_agent_runs_workspace (workspace_id, created_at) walked in reverse.
+    const where = [`workspace_id = ?`, `kind = 'execution'`]
+    const binds: (string | number)[] = [workspaceId]
+    if (opts.statuses && opts.statuses.length > 0) {
+      where.push(`status IN (${opts.statuses.map(() => '?').join(', ')})`)
+      binds.push(...opts.statuses)
+    }
+    if (opts.since != null) {
+      where.push(`created_at >= ?`)
+      binds.push(opts.since)
+    }
+    if (opts.cursor) {
+      where.push(`(created_at < ? OR (created_at = ? AND id < ?))`)
+      binds.push(opts.cursor.createdAt, opts.cursor.createdAt, opts.cursor.id)
+    }
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_runs
+         WHERE ${where.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds, opts.limit)
+      .all<ExecutionRow>()
+    // List read: drop a corrupt run rather than failing the whole page. Note the interaction
+    // with the caller's peek-one-extra pagination: a dropped row shrinks the page below
+    // `limit + 1`, so a page containing a corrupt run reads as the LAST page and later rows
+    // become unreachable until the row is repaired — accepted, matching every other list read.
+    return tryDecodeRows(results, rowToExecution, runContext)
+  }
+
+  async exists(workspaceId: string, id: string): Promise<boolean> {
+    // One indexed probe, no row decode (see the port). Mirrors the Drizzle repo.
+    const row = await this.db
+      .prepare(
+        `SELECT 1 AS one FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`,
+      )
+      .bind(workspaceId, id)
+      .first<{ one: number }>()
+    return row != null
   }
 
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
@@ -85,6 +213,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // `error`/`failure`/`workflow_instance_id` are deliberately left out of the
     // conflict update so they survive normal step writes (see markFailed).
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block so the run is discoverable by service (in-org
     // sharing): a shared service's runs surface on every board that mounts it via
@@ -114,7 +243,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         execution.blockId,
         execution.status,
         detail,
-        now,
+        createdAt,
         now,
         // Instance id == execution id today; stored for forward-compatibility.
         execution.id,
@@ -140,6 +269,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // unconditional pre-delete would remove a concurrent winner and re-open the race). The
     // ON CONFLICT target MUST mirror the index predicate exactly.
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // `replaceId ?? null`: with no replaceId, `id = NULL` matches nothing, so only terminal
     // rows are cleared.
@@ -168,7 +298,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         execution.blockId,
         execution.status,
         detail,
-        now,
+        createdAt,
         now,
         execution.id,
         workspaceId,
@@ -240,11 +370,26 @@ export class D1ExecutionRepository implements ExecutionRepository {
   }
 
   async markFailed(workspaceId: string, id: string, failure: AgentFailure): Promise<void> {
+    // Guard against clobbering a row that already reached a terminal state: a `stopRun`
+    // racing a run that just merged (`done`) or already failed must not overwrite it. This
+    // is the authoritative first-write-wins / no-re-fail-a-merged-run check — `failRun`'s
+    // in-memory guard reads a snapshot that can be stale by the time this write lands
+    // (race-audit 2.3).
+    //
+    // BUMP `rev` on the terminal write so it participates in the driver's optimistic
+    // concurrency: a `casPersist` from an in-flight driver iteration that loaded the run
+    // BEFORE this `stopRun`/`failRun` still holds the pre-fail `rev`, so bumping it here makes
+    // that stale write miss its `rev = ?` guard → `RunContendedError` → re-drive → the reload
+    // sees `failed` and no-ops. Without the bump `markFailed` left `rev` untouched, so a stale
+    // `casPersist` writing a non-terminal status (`pollGate` pending, dispatch, …) would MATCH
+    // the unchanged `rev` and RESURRECT the stopped run as `running` (race-audit 2.3, the
+    // driver-clobbers-terminal direction — the dual of the SQL status guard above).
     await this.db
       .prepare(
         `UPDATE agent_runs
-           SET status = 'failed', error = ?, failure = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND kind = 'execution'`,
+           SET status = 'failed', error = ?, failure = ?, updated_at = ?, rev = rev + 1
+         WHERE workspace_id = ? AND id = ? AND kind = 'execution'
+           AND status NOT IN ('done', 'failed')`,
       )
       .bind(failure.message, JSON.stringify(failure), this.clock.now(), workspaceId, id)
       .run()

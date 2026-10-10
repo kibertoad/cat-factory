@@ -22,6 +22,9 @@
 #   GHCR_OWNER     GHCR namespace                          (default: kibertoad)
 #   DOCKERHUB_ORG  Docker Hub namespace                    (default: kibertoad)
 #   IMAGE_NAME     repository name                         (default: cat-factory-executor)
+#   DOCKERFILE     which Dockerfile to build                (default: Dockerfile)
+#   BASE_IMAGE     base ref for Dockerfile.ui               (default: the GHCR executor image at
+#                  the same TAG, so the UI image always layers on the executor build it ships with)
 #   TAG            primary tag                             (default: package.json version)
 #   PUSH_LATEST    also tag :latest ("true"/"false")       (default: true)
 #   PLATFORMS      buildx target platforms                 (default: linux/amd64,linux/arm64)
@@ -31,6 +34,7 @@
 #   ./scripts/publish-image.sh                 # publish version + latest to both registries
 #   REGISTRIES=ghcr ./scripts/publish-image.sh # GHCR only
 #   TAG=0.6.0-rc1 PUSH_LATEST=false ./scripts/publish-image.sh
+#   IMAGE_NAME=cat-factory-executor-ui DOCKERFILE=Dockerfile.ui ./scripts/publish-image.sh
 #
 set -euo pipefail
 
@@ -43,6 +47,7 @@ DOCKERHUB_ORG="${DOCKERHUB_ORG:-kibertoad}"
 IMAGE_NAME="${IMAGE_NAME:-cat-factory-executor}"
 TAG="${TAG:-$(node -p "require('./package.json').version")}"
 PUSH_LATEST="${PUSH_LATEST:-true}"
+DOCKERFILE="${DOCKERFILE:-Dockerfile}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 
 # Build the list of `-t <ref>` tag args across the selected registries.
@@ -78,6 +83,14 @@ if [ -n "${EXTRA_CA:-}" ]; then
   secret_args+=(--secret "id=extra_ca,src=${EXTRA_CA}")
 fi
 
+# Dockerfile.ui layers on a PUBLISHED executor image. Default it to the executor image at this
+# same TAG: the two carry one version by design, so a UI image built on a different base is a
+# pairing nothing else in the repo can express, let alone check.
+build_args=()
+if [ "${DOCKERFILE}" = "Dockerfile.ui" ]; then
+  build_args+=(--build-arg "BASE_IMAGE=${BASE_IMAGE:-ghcr.io/${GHCR_OWNER}/cat-factory-executor:${TAG}}")
+fi
+
 echo "Publishing ${IMAGE_NAME}:${TAG} (${PLATFORMS}) to: ${REGISTRIES}"
 for arg in "${tag_args[@]}"; do
   [ "$arg" = "-t" ] || echo "  $arg"
@@ -86,8 +99,9 @@ done
 docker buildx build \
   --builder "$BUILDER" \
   --platform "$PLATFORMS" \
-  --file Dockerfile \
+  --file "${DOCKERFILE}" \
   "${secret_args[@]}" \
+  "${build_args[@]}" \
   "${tag_args[@]}" \
   --push \
   .

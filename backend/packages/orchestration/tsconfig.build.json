@@ -5,12 +5,29 @@
   },
   "exclude": ["**/*.test.ts", "**/*.spec.ts"],
   "references": [
-    { "path": "../agents/tsconfig.build.json" },
-    { "path": "../contracts/tsconfig.build.json" },
-    { "path": "../integrations/tsconfig.build.json" },
-    { "path": "../kernel/tsconfig.build.json" },
-    { "path": "../sandbox/tsconfig.build.json" },
-    { "path": "../spend/tsconfig.build.json" },
-    { "path": "../workspaces/tsconfig.build.json" }
+    {
+      "path": "../caching/tsconfig.build.json"
+    },
+    {
+      "path": "../agents/tsconfig.build.json"
+    },
+    {
+      "path": "../contracts/tsconfig.build.json"
+    },
+    {
+      "path": "../integrations/tsconfig.build.json"
+    },
+    {
+      "path": "../kernel/tsconfig.build.json"
+    },
+    {
+      "path": "../sandbox/tsconfig.build.json"
+    },
+    {
+      "path": "../spend/tsconfig.build.json"
+    },
+    {
+      "path": "../workspaces/tsconfig.build.json"
+    }
   ]
 }

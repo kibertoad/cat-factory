@@ -55,6 +55,30 @@ describe('unwrapLinearData', () => {
     )
   })
 
+  it('reads a rate limit off the error CODE, which Linear sends with HTTP 400', () => {
+    try {
+      unwrapLinearData(400, false, {
+        errors: [{ message: 'Rate limit exceeded', extensions: { code: 'RATELIMITED' } }],
+      })
+      throw new Error('expected throw')
+    } catch (err) {
+      // A caller testing `status === 429` misses every rate limit Linear produces and reports a
+      // spent quota as a malformed request, which sends the reader to fix the query.
+      expect(err).toBeInstanceOf(LinearApiError)
+      expect((err as LinearApiError).rateLimited).toBe(true)
+      expect((err as LinearApiError).message).toContain('rate limited')
+    }
+  })
+
+  it('does not call an ordinary 400 a rate limit', () => {
+    try {
+      unwrapLinearData(400, false, { errors: [{ message: 'unknown argument' }] })
+      throw new Error('expected throw')
+    } catch (err) {
+      expect((err as LinearApiError).rateLimited).toBe(false)
+    }
+  })
+
   it('throws when data is missing', () => {
     expect(() => unwrapLinearData(200, true, {})).toThrow()
   })

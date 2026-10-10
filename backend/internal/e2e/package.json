@@ -6,20 +6,27 @@
   "type": "module",
   "scripts": {
     "serve": "node --env-file-if-exists=.env src/testServer.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
-    "test:e2e:merge": "playwright merge-reports --reporter html ./all-blob-reports",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@cat-factory/agents": "workspace:*",
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
-    "@cat-factory/node-server": "workspace:*"
+    "@cat-factory/example-custom-agent": "workspace:*",
+    "@cat-factory/node-server": "workspace:*",
+    "@cat-factory/server": "workspace:*"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@types/node": "^26.0.1",
-    "typescript": "7.0.1-rc"
+    "@cat-factory/orchestration": "workspace:*",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.4",
+    "ai": "^7.0.131",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   }
 }

@@ -4,8 +4,10 @@
 // the unified retry through the agentRuns store, so every surface (board card,
 // inspector, task panel) gets identical behaviour from one place. Replaces the
 // three hand-rolled bootstrap banners that used to duplicate this logic.
+import type { ConflictReason, EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import FailureDetail from '~/components/board/FailureDetail.vue'
+import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 
 const props = withDefaults(
   defineProps<{ run: AgentRunSummary; variant?: 'compact' | 'expanded' }>(),
@@ -14,10 +16,69 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const access = useWorkspaceAccess()
+const ui = useUiStore()
+const auth = useAuthStore()
+const board = useBoardStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
+// An `environment` failure is a provisioning/config problem, so offer a one-click jump to the
+// place it's configured alongside the retry — the same "Configure…" deep-link pattern the
+// infra-setup banners use.
+const isEnvironmentFailure = computed(() => failure.value?.kind === 'environment')
+const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
+// A `preflight` rejection with this reason means the run couldn't start because the workspace
+// has no connected/linked repo — the same cause the 409 toast words, so reuse its translated
+// title (and let the backend's actionable message + doc link show in the detail below).
+const GITHUB_NOT_CONNECTED: ConflictReason = 'github_not_connected'
+
+// The provision type of the failed run's SERVICE frame (walk up to the frame, mirroring the
+// backend's `resolveServiceProvisioning`). Drives the K8s-specific gate below.
+const provisionType = computed(() => {
+  const block = board.getBlock(props.run.blockId)
+  return block ? board.serviceOf(block)?.provisioning?.type : undefined
+})
+
+// Where the deep-link should land. A `deploy_runner_unwired` cause is fixed by wiring the DEPLOY
+// RUNNER, which is the same self-hosted runner pool that runs agent containers (Infrastructure →
+// "Agent containers" / `runner-pool`) — NOT the environment-provider connection (Infrastructure →
+// "Test environments" / `environment`), where the generic banner would otherwise dead-end. So route
+// that cause to the runner-pool tab on a non-local deployment; local mode's fix is an env var (the
+// hint below, not a UI tab), and every OTHER environment failure is a provider-config problem that
+// belongs on the environment tab.
+const routesToRunnerPool = computed(
+  () =>
+    isEnvironmentFailure.value &&
+    failure.value?.reason === DEPLOY_RUNNER_UNWIRED &&
+    auth.localMode?.enabled !== true,
+)
+function openFailureSetup() {
+  ui.openProviderConnection(routesToRunnerPool.value ? 'runner-pool' : 'environment')
+}
+const failureSetupLabel = computed(() =>
+  routesToRunnerPool.value
+    ? t('board.failure.deployRunnerSetup')
+    : t('board.failure.environmentSetup'),
+)
+
+// The env-var hint is Kubernetes+local specific, so gate it precisely rather than showing it for
+// every environment failure: only for the machine-readable `deploy_runner_unwired` cause (NOT a
+// helm/apply error or a transient blip), only in local mode (where the deploy runtime is an env
+// var, not a UI connection the tab could fix), and only for a `kubernetes` provision (so a future
+// Nomad/custom provider triggering the same cause never shows kubectl/kustomize/helm guidance).
+const showEnvironmentLocalHint = computed(
+  () =>
+    isEnvironmentFailure.value &&
+    auth.localMode?.enabled === true &&
+    failure.value?.reason === DEPLOY_RUNNER_UNWIRED &&
+    provisionType.value === 'kubernetes',
+)
 const title = computed(() => {
+  // A `github_not_connected` preflight rejection (no repo linked/connected) — name it with
+  // the same translated title the 409 toast uses, with the actionable remedy in the detail.
+  if (failure.value?.reason === GITHUB_NOT_CONNECTED)
+    return t('errors.conflict.title.github_not_connected')
   // A `dispatch` failure means the container/runner never accepted the job — say so
   // explicitly rather than the generic "Run failed", and show the verbatim provider
   // error in the collapsible detail below.
@@ -32,9 +93,29 @@ const title = computed(() => {
     ? t('board.failure.bootstrapFailed')
     : t('board.failure.runFailed')
 })
-const retryLabel = computed(() =>
-  props.run.kind === 'bootstrap' ? t('board.failure.retryBootstrap') : t('board.failure.retryRun'),
+// A MULTI-STEP bootstrap (the monorepo flow) is not retried from the top: the service resumes
+// from the step the run reached, keeping the survey's paid-for reads and, past the review, the
+// decisions a human already gave. So the button says which step it re-enters at, from the SAME
+// rule the service branches on, rather than "retry", which invites the reviewer to expect to be
+// asked for their decisions again. A single-step run has nothing to resume and keeps "retry".
+const { resumeStep } = useBootstrapRunSteps(() =>
+  props.run.kind === 'bootstrap' ? props.run.runId : null,
 )
+const retryLabel = computed(() => {
+  if (props.run.kind !== 'bootstrap') return t('board.failure.retryRun')
+  const step = resumeStep.value
+  return step
+    ? t('board.failure.resumeBootstrap', { step: t(`bootstrap.steps.name.${step}`) })
+    : t('board.failure.retryBootstrap')
+})
+
+// The run's own observability panel. Offered here because a failed BOOTSTRAP has no step surface
+// to reach it from (a task run's steps each carry their own "Model activity" control), and what
+// a bootstrap failed on is exactly the question its model calls, provided context and tool-call
+// trajectory answer.
+function inspectRun() {
+  ui.openObservability(props.run.runId)
+}
 
 const retrying = ref(false)
 async function retry() {
@@ -52,24 +133,24 @@ async function retry() {
 
 <template>
   <div
-    class="nodrag rounded-lg border border-rose-900/60 bg-rose-950/40"
+    class="nodrag rounded-lg border border-app-error-900/60 bg-app-error-950/40"
     :class="compact ? 'px-3 py-2' : 'px-3 py-2.5'"
     data-testid="agent-failure-banner"
     :data-run-kind="run.kind"
   >
-    <div class="flex items-center gap-1.5" :class="compact ? 'text-[11px]' : 'text-xs'">
+    <div class="flex items-center gap-1.5" :class="compact ? 'text-2xs' : 'text-xs'">
       <UIcon
         name="i-lucide-alert-triangle"
-        class="shrink-0 text-rose-400"
+        class="shrink-0 text-app-error-400"
         :class="compact ? 'h-3.5 w-3.5' : 'h-4 w-4'"
       />
-      <span class="text-rose-300">{{ title }}</span>
+      <span class="text-app-error-300">{{ title }}</span>
     </div>
 
     <p
       v-if="failure?.message"
-      class="mt-1 leading-snug text-rose-300/90"
-      :class="compact ? 'line-clamp-2 text-[10px]' : 'text-[11px]'"
+      class="mt-1 leading-snug text-app-error-300/90"
+      :class="compact ? 'line-clamp-2 text-3xs' : 'text-2xs'"
       :title="failure.message"
     >
       {{ failure.message }}
@@ -77,33 +158,89 @@ async function retry() {
 
     <p
       v-if="failure?.hint"
-      class="mt-1 leading-snug text-rose-400/70"
-      :class="compact ? 'text-[10px]' : 'text-[11px]'"
+      class="mt-1 leading-snug text-app-error-400/70"
+      :class="compact ? 'text-3xs' : 'text-2xs'"
     >
       {{ failure.hint }}
     </p>
+
+    <!-- Local mode only: the deploy runtime is configured via env vars, not a UI connection, so
+         name the concrete .env fix rather than only pointing at the (unhelpful-here) tab. -->
+    <p
+      v-if="showEnvironmentLocalHint && !compact"
+      class="mt-1 text-2xs leading-snug text-app-error-400/70"
+      data-testid="agent-failure-environment-local-hint"
+    >
+      {{
+        t('board.failure.environmentLocalHint', {
+          runtime: 'LOCAL_DEPLOY_RUNTIME',
+          native: 'LOCAL_DEPLOY_HARNESS_ENTRY',
+          container: 'LOCAL_DEPLOY_IMAGE',
+        })
+      }}
+    </p>
+
+    <!-- Which of the run's steps it got to. Renders for a multi-step (monorepo) bootstrap only;
+         see BootstrapRunSteps. -->
+    <BootstrapRunSteps
+      v-if="!compact && run.kind === 'bootstrap'"
+      :run-id="run.runId"
+      class="mt-2"
+    />
 
     <FailureDetail
       v-if="!compact && failure"
       :detail="failure.detail"
       :message="failure.message"
-      summary-class="text-[10px] text-rose-400/60 hover:text-rose-300"
-      pre-class="bg-rose-950/60 text-[10px] text-rose-200/80"
+      summary-class="text-3xs text-app-error-400/60 hover:text-app-error-300"
+      pre-class="bg-app-error-950/60 text-3xs text-app-error-200/80"
     />
 
-    <button
-      type="button"
-      class="nodrag mt-2 flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
-      :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
-      :disabled="retrying"
-      data-testid="agent-failure-retry"
-      @click.stop="retry"
-    >
-      <UIcon
-        :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
-        :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
-      />
-      {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
-    </button>
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/40 text-app-error-200 hover:bg-app-error-900/70 disabled:opacity-60"
+        :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
+        :disabled="retrying || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="agent-failure-retry"
+        @click.stop="retry"
+      >
+        <UIcon
+          :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
+          :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
+        />
+        {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
+      </button>
+
+      <button
+        v-if="run.kind === 'bootstrap'"
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/20 text-app-error-300 hover:bg-app-error-900/50"
+        :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
+        data-testid="agent-failure-inspect"
+        @click.stop="inspectRun"
+      >
+        <UIcon name="i-lucide-activity" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
+        {{ t('observability.modelActivity') }}
+      </button>
+
+      <!-- Environment provisioning failures are almost always a deploy-backend / provider-config
+           issue, so link straight to where it's set up rather than leaving the user to hunt. The
+           destination + label follow the cause: a `deploy_runner_unwired` failure needs the runner
+           pool (Agent containers tab), every other cause needs the environment provider (Test
+           environments tab) — see `routesToRunnerPool`. -->
+      <button
+        v-if="isEnvironmentFailure"
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/20 text-app-error-300 hover:bg-app-error-900/50"
+        :class="compact ? 'px-2 py-0.5 text-3xs' : 'px-2 py-1 text-2xs'"
+        data-testid="agent-failure-configure-environment"
+        @click.stop="openFailureSetup"
+      >
+        <UIcon name="i-lucide-settings" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
+        {{ failureSetupLabel }}
+      </button>
+    </div>
   </div>
 </template>

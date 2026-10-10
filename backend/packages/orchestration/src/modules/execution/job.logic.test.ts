@@ -1,28 +1,30 @@
+import { ConflictError, harnessDispatchError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
-  agentFailureKindFromCause,
-  classifyAgentFailure,
+  ACTIVITY_PERSIST_THROTTLE_MS,
+  classifyDispatchFailure,
+  containerShutdownFailure,
+  delegatedTerminalFailure,
+  evictionFailureDetail,
   isContainerEvictionError,
-  isTransientEviction,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
-  TRANSIENT_EVICTION_MARKER,
+  shouldPersistActivity,
 } from './job.logic.js'
 
 const CRASH_EVICTION = 'Job not found (container evicted or crashed)'
-const TRANSIENT_EVICTION = `${CRASH_EVICTION} (${TRANSIENT_EVICTION_MARKER})`
 
-describe('isContainerEvictionError', () => {
-  it('matches the transport 404 eviction message', () => {
+// `isContainerEvictionError` is the ONLY remaining eviction string test (error-message coverage
+// I5): it classifies a DISPATCH-time eviction throw, which carries no job view to hold the
+// structured `evicted` field. Poll-time eviction rides that field directly (see RunDispatcher /
+// ContainerRepoBootstrapper / ContainerEnvConfigRepairer), so there is no string fallback to test.
+describe('isContainerEvictionError (dispatch-time throw only)', () => {
+  it('matches the eviction message', () => {
     expect(isContainerEvictionError(CRASH_EVICTION)).toBe(true)
   })
 
   it('is case-insensitive', () => {
     expect(isContainerEvictionError('JOB NOT FOUND (CONTAINER EVICTED OR CRASHED)')).toBe(true)
-  })
-
-  it('also matches a transient eviction (so the shared recovery machinery engages)', () => {
-    expect(isContainerEvictionError(TRANSIENT_EVICTION)).toBe(true)
   })
 
   it('does not match a genuine agent/job failure', () => {
@@ -34,60 +36,227 @@ describe('isContainerEvictionError', () => {
     expect(isContainerEvictionError(undefined)).toBe(false)
   })
 
-  it('recovers a single crash eviction (budget of 1)', () => {
+  it('recovers a single crash eviction (budget of 1), transient a larger one', () => {
     expect(MAX_EVICTION_RECOVERIES).toBe(1)
-  })
-})
-
-describe('isTransientEviction', () => {
-  it('matches a facade-tagged transient eviction', () => {
-    expect(isTransientEviction(TRANSIENT_EVICTION)).toBe(true)
-  })
-
-  it('does not match a plain crash/OOM eviction', () => {
-    expect(isTransientEviction(CRASH_EVICTION)).toBe(false)
-  })
-
-  it('handles an absent error', () => {
-    expect(isTransientEviction(undefined)).toBe(false)
-  })
-
-  it('gives a transient eviction a larger recovery budget than a crash', () => {
     expect(MAX_TRANSIENT_EVICTION_RECOVERIES).toBeGreaterThan(MAX_EVICTION_RECOVERIES)
   })
 })
 
-describe('agentFailureKindFromCause', () => {
-  it('maps the watchdog timeouts to `timeout`', () => {
-    expect(agentFailureKindFromCause('inactivity-timeout')).toBe('timeout')
-    expect(agentFailureKindFromCause('max-duration')).toBe('timeout')
+// With a crash budget of 1, the container that dies FIRST is re-dispatched and removed at once —
+// so its post-mortem has to be carried forward on the step, or the recorded failure ends up
+// describing only the retry (a fresh container hitting the same wall).
+describe('evictionFailureDetail', () => {
+  it('keeps both post-mortems when the first death and the last differ', () => {
+    expect(evictionFailureDetail('exit code 137, OOM-killed', 'exit code 1')).toBe(
+      'First eviction:\nexit code 137, OOM-killed\n\nFinal eviction:\nexit code 1',
+    )
   })
 
-  it('maps every other harness cause to `agent`', () => {
-    for (const cause of ['agent', 'git', 'api', 'no-usable-output', 'no-changes']) {
-      expect(agentFailureKindFromCause(cause)).toBe('agent')
-    }
+  it('collapses to one when they say the same thing', () => {
+    expect(evictionFailureDetail('exit code 137', 'exit code 137')).toBe('exit code 137')
   })
 
-  it('returns undefined for an absent/unknown cause (caller falls back to the error regex)', () => {
-    expect(agentFailureKindFromCause(undefined)).toBeUndefined()
-    expect(agentFailureKindFromCause('something-new')).toBeUndefined()
-    // Eviction is never a harness cause — it routes through isContainerEvictionError, not here.
-    expect(agentFailureKindFromCause('evicted')).toBeUndefined()
+  it('falls back to whichever one exists', () => {
+    expect(evictionFailureDetail('first only', undefined)).toBe('first only')
+    expect(evictionFailureDetail(undefined, 'last only')).toBe('last only')
+  })
+
+  it('is absent when no transport reported a post-mortem', () => {
+    expect(evictionFailureDetail(undefined, undefined)).toBeUndefined()
   })
 })
 
-describe('classifyAgentFailure (error-string fallback)', () => {
-  it('maps the watchdog phrases to `timeout`, matching the bootstrap path', () => {
-    expect(classifyAgentFailure('Aborted: no agent activity for 600s (likely hung)')).toBe(
-      'timeout',
-    )
-    expect(classifyAgentFailure('Aborted: exceeded max duration of 3600s')).toBe('timeout')
-    expect(classifyAgentFailure('inactivity watchdog fired')).toBe('timeout')
+describe('shouldPersistActivity (throttled liveness heartbeat)', () => {
+  const base = 1_000_000_000_000
+
+  it('persists the first heartbeat when none is stored yet', () => {
+    expect(shouldPersistActivity(undefined, base)).toBe(true)
+    expect(shouldPersistActivity(null, base)).toBe(true)
   })
 
-  it('maps anything else (and an absent error) to `agent`', () => {
-    expect(classifyAgentFailure('the agent produced no usable result')).toBe('agent')
-    expect(classifyAgentFailure(undefined)).toBe('agent')
+  it('skips an advance smaller than the throttle window (avoids a write on every poll)', () => {
+    expect(shouldPersistActivity(base, base + ACTIVITY_PERSIST_THROTTLE_MS - 1)).toBe(false)
+    // A ~15s poll cadence is under the 20s window, so a single poll's advance is throttled out.
+    expect(shouldPersistActivity(base, base + 15_000)).toBe(false)
+  })
+
+  it('persists once the heartbeat has advanced by at least the throttle window', () => {
+    expect(shouldPersistActivity(base, base + ACTIVITY_PERSIST_THROTTLE_MS)).toBe(true)
+    expect(shouldPersistActivity(base, base + 60_000)).toBe(true)
+  })
+
+  it('never persists a frozen (wedged) or absent heartbeat, so updated_at can go stale', () => {
+    // A wedged job reports the SAME heartbeat every poll → never re-stamped → the sweeper/UI
+    // correctly see the run as stale. This is the whole point of the signal.
+    expect(shouldPersistActivity(base, base)).toBe(false)
+    // A heartbeat that somehow went backwards is likewise not persisted.
+    expect(shouldPersistActivity(base, base - 5_000)).toBe(false)
+    // No incoming value (older harness image / transport that doesn't forward it) → no-op.
+    expect(shouldPersistActivity(base, undefined)).toBe(false)
+  })
+})
+
+describe('classifyDispatchFailure', () => {
+  it('frames a domain PRECONDITION (ConflictError) as `preflight`, keeping its message + reason', () => {
+    const err = new ConflictError(
+      "No connected GitHub repository found for workspace 'ws1'. Connect it first.",
+      'github_not_connected',
+    )
+    const c = classifyDispatchFailure(err)
+    expect(c.failureKind).toBe('preflight')
+    expect(c.reason).toBe('github_not_connected')
+    // The actionable message survives (not replaced by the container framing) — on both fields.
+    expect(c.error).toContain('No connected GitHub repository')
+    expect(c.detail).toContain('No connected GitHub repository')
+  })
+
+  it('carries no reason for a domain error that has none', () => {
+    const c = classifyDispatchFailure(new ConflictError('some conflict'))
+    expect(c.failureKind).toBe('preflight')
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('routes a container eviction to `evicted` with the verbatim message', () => {
+    const c = classifyDispatchFailure(new Error(CRASH_EVICTION))
+    expect(c.failureKind).toBe('evicted')
+    expect(c.error).toBe(CRASH_EVICTION)
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('frames a genuine container accept failure as `dispatch`, hiding the raw text behind detail', () => {
+    const c = classifyDispatchFailure(new Error('HTTP 502 from runner'))
+    expect(c.failureKind).toBe('dispatch')
+    expect(c.error).toBe('The container failed to start.')
+    expect(c.detail).toBe('HTTP 502 from runner')
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('surfaces a structured DispatchError message verbatim (incl. the 404 stale-image remedy)', () => {
+    const c = classifyDispatchFailure(
+      harnessDispatchError({ label: 'Container', status: 404, body: 'not found' }),
+    )
+    expect(c.failureKind).toBe('dispatch')
+    // Not the generic "failed to start" — the elaborated remedy is the headline + the detail.
+    expect(c.error).toContain('predates this dispatch route')
+    expect(c.detail).toContain('predates this dispatch route')
+    expect(c.reason).toBeUndefined()
+  })
+
+  // ADR 0026 D1: a generic throw on the FAILED recovery re-dispatch of an already-evicted step
+  // (which had reached the agent phase and done work) must NOT read as "container failed to start".
+  describe('a generic throw on a step that had already begun work (evicted-after-work)', () => {
+    it('frames it as `evicted`, not a fresh-start `dispatch`', () => {
+      const c = classifyDispatchFailure(new Error('HTTP 500 re-dispatch failed'), {
+        evictionRecoveries: 1,
+      })
+      expect(c.failureKind).toBe('evicted')
+      expect(c.error).not.toContain('failed to start')
+      // The verbatim throw stays on `detail` for the post-mortem.
+      expect(c.detail).toBe('HTTP 500 re-dispatch failed')
+    })
+
+    it('folds the elapsed minutes + partial slice count into the message', () => {
+      const now = 1_000_000_000_000
+      const c = classifyDispatchFailure(new Error('boom'), {
+        evictionRecoveries: 1,
+        startedAt: now - 17 * 60_000,
+        sliceCount: 6,
+        now,
+      })
+      expect(c.failureKind).toBe('evicted')
+      expect(c.error).toContain('17 minutes of work')
+      expect(c.error).toContain('6 slices reviewed')
+      expect(c.error).toContain('could not be recovered')
+    })
+
+    it('reads cleanly with no timing/slice history (singular minute, no slice clause)', () => {
+      const now = 1_000_000_000_000
+      const c = classifyDispatchFailure(new Error('boom'), {
+        transientEvictionRecoveries: 2,
+        startedAt: now - 60_000,
+        now,
+      })
+      expect(c.error).toBe(
+        'The container was evicted after 1 minute of work and could not be recovered.',
+      )
+    })
+
+    it('still frames a first-dispatch throw (no recoveries, no history) as `dispatch`', () => {
+      const c = classifyDispatchFailure(new Error('HTTP 502 from runner'))
+      expect(c.failureKind).toBe('dispatch')
+      expect(c.error).toBe('The container failed to start.')
+    })
+
+    // A structured DispatchError keeps its `dispatch` framing even on a recovery re-dispatch: its
+    // elaborated, actionable message (the raw status line + any stale-image remedy) is more useful
+    // than — and not as misleading as — the generic eviction message. Precedence is deliberate.
+    it('keeps a structured DispatchError as `dispatch` even after work had begun', () => {
+      const c = classifyDispatchFailure(
+        harnessDispatchError({ label: 'Container', status: 404, body: 'not found' }),
+        { evictionRecoveries: 1, startedAt: 1_000_000_000_000 - 17 * 60_000, sliceCount: 6 },
+      )
+      expect(c.failureKind).toBe('dispatch')
+      // The elaborated remedy is surfaced, NOT the generic "evicted after N minutes" message.
+      expect(c.error).toContain('predates this dispatch route')
+      expect(c.error).not.toContain('minutes of work')
+    })
+  })
+})
+
+// The one container-loss shape with NO recovery. An eviction spends a budget on a fresh
+// container; a harness that was shut down under the job fails the run on the first occurrence,
+// because whatever stopped it is still there on the next attempt and each attempt costs a full
+// agent run. (The run that named this spent its whole budget re-dispatching an agent whose own
+// cleanup command killed the harness every time.)
+describe('containerShutdownFailure', () => {
+  it('answers null for every view that is not a shutdown', () => {
+    expect(containerShutdownFailure({})).toBeNull()
+    expect(containerShutdownFailure({ error: CRASH_EVICTION, evicted: 'crash' })).toBeNull()
+    expect(containerShutdownFailure({ error: 'Implementation failed' })).toBeNull()
+  })
+
+  it('classifies a shutdown as its own failure kind, not an eviction', () => {
+    const failure = containerShutdownFailure({
+      error: 'The executor-harness shut down while this job was still running',
+      harnessShutdown: true,
+      detail: 'Container abc exited while the job was running. Exit: exit code 0',
+    })
+    expect(failure?.failureKind).toBe('harness_shutdown')
+    expect(failure?.error).toContain('shut down')
+    expect(failure?.detail).toContain('exit code 0')
+  })
+
+  it('falls back to the error as the detail rather than reporting none', () => {
+    const failure = containerShutdownFailure({ error: 'harness gone', harnessShutdown: true })
+    expect(failure?.detail).toBe('harness gone')
+  })
+})
+
+// The DELEGATED sibling: the same disposition under a name that describes the step it happened to.
+describe('delegatedTerminalFailure', () => {
+  it('answers null for a failure that is not a terminal delegated verdict', () => {
+    expect(delegatedTerminalFailure({ error: 'boom' })).toBeNull()
+    expect(
+      delegatedTerminalFailure({ error: 'boom', delegated: { url: 'https://ci/1' } }),
+    ).toBeNull()
+  })
+
+  it('classifies a terminal external verdict under its OWN kind, never as a harness shutdown', () => {
+    // Borrowing `harness_shutdown` put "Harness shut down" in front of an operator whose step
+    // never had a harness, and filed external CI verdicts under container eviction in the rollups.
+    const failure = delegatedTerminalFailure({
+      error: 'The workflow run finished as "failure".',
+      delegated: { disposition: 'terminal' },
+    })
+    expect(failure?.failureKind).toBe('delegated_failed')
+    expect(failure?.failureKind).not.toBe('harness_shutdown')
+  })
+
+  it('falls back to the error as the detail rather than reporting none', () => {
+    const failure = delegatedTerminalFailure({
+      error: 'the run failed',
+      delegated: { disposition: 'terminal' },
+    })
+    expect(failure?.detail).toBe('the run failed')
   })
 })

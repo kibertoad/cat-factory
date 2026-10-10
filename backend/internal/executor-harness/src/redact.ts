@@ -72,6 +72,25 @@ export function redactSecrets(input: string): string {
   return redact(input)
 }
 
+/**
+ * A scrubbed, length-bounded excerpt of a string that is about to be QUOTED at a human or a
+ * model: a failing command's output, a rejected setting, a thrown message.
+ *
+ * One helper rather than a private `bounded()` per module, which is what this replaced. Two of
+ * them had drifted: `docker-probe-image.ts` echoed a rejected `HARNESS_DOCKER_EGRESS_TARGET`
+ * verbatim into a string that reaches every agent's system prompt and `GET /health`, while its
+ * same-named neighbour in `docker-capability.ts` scrubbed first. A proxy URL with an embedded
+ * token in that setting is the ordinary way that becomes a leak, and two helpers with one name
+ * in sibling files is what kept the divergence invisible.
+ *
+ * Scrub BEFORE bounding, so the cut cannot land inside a credential and leave half of it
+ * quotable, and mark a trimmed value so a reader never takes the head for the whole.
+ */
+export function scrubbedExcerpt(text: string, maxChars: number): string {
+  const scrubbed = redactSecrets(text)
+  return scrubbed.length > maxChars ? `${scrubbed.slice(0, maxChars)}…` : scrubbed
+}
+
 /** Cap on captured command output kept on an infra record (tail-biased — failures show last). */
 export const MAX_CAPTURED_OUTPUT_CHARS = 16_000
 

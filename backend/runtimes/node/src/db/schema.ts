@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
-  customType,
   doublePrecision,
   index,
   integer,
@@ -12,29 +11,6 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-
-// Raw binary column (Postgres `bytea`), used by the Node-only `binary_artifact_blobs`
-// store-in-DB blob backend. Reads/writes as a `Uint8Array`.
-const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
-  dataType() {
-    return 'bytea'
-  },
-  toDriver(value: Uint8Array): Buffer {
-    return Buffer.from(value)
-  },
-  fromDriver(value: Buffer): Uint8Array {
-    return new Uint8Array(value)
-  },
-})
-
-// Telemetry has a very different write profile from the transactional domain
-// (append-heavy, high-volume, write-and-rarely-read, short retention), so it lives in
-// its own `telemetry` Postgres schema rather than `public`. This is the Node analogue
-// of the Cloudflare worker's separate TELEMETRY_DB D1 database. The schema is purely a
-// namespace served by the same connection/pool; `migrate()` creates it on boot. The
-// `llm_call_metrics` table and `agent_context_snapshots` table live here.
-export const telemetry = pgSchema('telemetry')
-
 // Postgres schema mirroring the Cloudflare D1 tables column-for-column (snake_case
 // field names = column names) so the shared row<->domain mappers in
 // @cat-factory/server work unchanged against either store. JSON-shaped columns are
@@ -42,170 +18,50 @@ export const telemetry = pgSchema('telemetry')
 // `bigint({ mode: 'number' })` so they read back as JS numbers. The indexes mirror
 // the D1 migrations 1:1 so query plans (and the unique personal-account constraint)
 // match across stores.
+//
+// The TENANCY & IDENTITY tables (the `workspaces` / `users` roots, login identities, the
+// account + membership graph, invitations / password resets, and the per-account email and
+// settings rows) live in `tables/identity.ts` — one cohesive group, extracted to keep this
+// module inside its size budget — and are re-exported below. It also holds the schema's only
+// FK TARGETS, so the modules whose tables reference `users.id` import it by name.
+export * from './tables/identity.js'
+// The foundational-services catalog (backend/docs/adr/0031-foundational-services.md).
+export * from './tables/foundational-services.js'
+// The ACCOUNT tier of the risk-policy library plus a board's suppressions of it (ADR 0055) live
+// in `tables/risk-policies.ts` — the same cohesive-group extraction as the groups above, for the
+// same size-budget reason. The board's OWN policies stay below, beside the merge track record they
+// are judged against.
+export * from './tables/risk-policies.js'
 
-export const workspaces = pgTable(
-  'workspaces',
-  {
-    id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    description: text('description'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    account_id: text('account_id'),
-    owner_user_id: text('owner_user_id'),
-  },
-  // listVisible filters by owner_user_id (legacy) and account_id (membership scope).
-  (t) => [
-    index('idx_workspaces_owner').on(t.owner_user_id),
-    index('idx_workspaces_account').on(t.account_id),
-  ],
-)
+// The SETTINGS tables (the local-mode singleton, the per-user budget, the per-workspace
+// runtime policy row + its custom metadata bag, and the per-agent-kind generation knob) live
+// in `tables/settings.ts` — the same cohesive-group extraction, for the same size-budget
+// reason — and are re-exported here.
+export * from './tables/settings.js'
 
-// Canonical user identity (decoupled from GitHub). Everything else keys off users.id.
-export const users = pgTable(
-  'users',
-  {
-    id: text('id').primaryKey(),
-    name: text('name'),
-    email: text('email'),
-    avatar_url: text('avatar_url'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    uniqueIndex('idx_users_email')
-      .on(t.email)
-      .where(sql`email IS NOT NULL`),
-  ],
-)
+// The PROMPT-FRAGMENT LIBRARY tables (the tenant-scoped best-practice catalog, its generated
+// condensed briefs, the repo directories it syncs from, and the per-workspace inherited
+// selection) live in `tables/prompt-fragments.ts` — the same cohesive-group extraction, for
+// the same size-budget reason — and are re-exported here.
+export * from './tables/prompt-fragments.js'
+// The telemetry sinks + the platform-operator projections (see `tables/observability.ts`).
+export * from './tables/observability.js'
+// The account audit log, in its own `audit` schema (see `tables/audit.ts` for why it is a
+// separate store rather than a table in `public`: retention, not write profile).
+export * from './tables/audit.js'
+// Guided PR review sessions, threads, messages and comment drafts (see `tables/guided-review.ts`).
+export * from './tables/guided-review.js'
 
-// A linked login identity for a user. (provider, subject) is unique.
-export const userIdentities = pgTable(
-  'user_identities',
-  {
-    user_id: text('user_id').notNull(),
-    provider: text('provider').notNull(),
-    subject: text('subject').notNull(),
-    secret: text('secret'),
-    metadata: text('metadata'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.provider, t.subject] }),
-    index('idx_user_identities_user').on(t.user_id),
-  ],
-)
-
-export const accounts = pgTable(
-  'accounts',
-  {
-    id: text('id').primaryKey(),
-    type: text('type').notNull(),
-    name: text('name').notNull(),
-    github_account_login: text('github_account_login'),
-    // The user who owns a personal account (its account-of-one). Null for orgs.
-    owner_user_id: text('owner_user_id'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    // The default cloud provider new services in this account inherit.
-    default_cloud_provider: text('default_cloud_provider'),
-  },
-  // Enforce one personal account per user (a correctness constraint, not just a
-  // lookup index) — the partial unique index `findPersonalByUser` relies on.
-  (t) => [
-    uniqueIndex('idx_accounts_personal')
-      .on(t.owner_user_id)
-      .where(sql`type = 'personal'`),
-  ],
-)
-
-export const memberships = pgTable(
-  'memberships',
-  {
-    account_id: text('account_id').notNull(),
-    user_id: text('user_id').notNull(),
-    // Combinable roles (admin / developer / product) as a CSV; defaults to developer.
-    roles: text('roles').notNull().default('developer'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.account_id, t.user_id] }),
-    index('idx_memberships_user').on(t.user_id),
-  ],
-)
-
-// Per-account transactional-email sender (UI-onboarded). The provider API key is
-// sealed at rest (SecretCipher), never plaintext.
-export const emailConnections = pgTable('email_connections', {
-  account_id: text('account_id').primaryKey(),
-  provider: text('provider').notNull(),
-  from_address: text('from_address').notNull(),
-  api_key_cipher: text('api_key_cipher').notNull(),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  deleted_at: bigint('deleted_at', { mode: 'number' }),
-})
-
-// Per-account (deployment-wide) settings, moved out of env (mirror of D1 migration 0014's
-// `account_settings`). `config` is non-secret tuning JSON; `secrets_cipher` is ONE sealed
-// blob grouping every integration credential (domain tag 'cat-factory:account-settings');
-// `summary` is non-secret presence JSON. A missing row means all defaults.
-export const accountSettings = pgTable('account_settings', {
-  account_id: text('account_id').primaryKey(),
-  config: text('config').notNull(),
-  secrets_cipher: text('secrets_cipher'),
-  summary: text('summary').notNull().default('{}'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Local-mode operational settings — a per-DEPLOYMENT SINGLETON (one developer's machine),
-// addressed by a fixed `id` ('local'). `config` is non-secret tuning JSON (warm-pool
-// sizing + per-repo checkout reuse) that replaced the `LOCAL_POOL_*` / `HARNESS_*` env
-// vars. LOCAL-MODE-ONLY: the warm pool is the local Docker-family runner's differentiator,
-// so this table has NO D1 mirror (the symmetry rule's runtime-specific carve-out). A
-// missing row means all defaults (pooling off).
-export const localSettings = pgTable('local_settings', {
+// ADR 0026 D6.1 — the non-secret fingerprint of the deployment's master ENCRYPTION_KEY,
+// a per-DEPLOYMENT SINGLETON addressed by a fixed `id` ('key'). Seeded once on first boot
+// and compared on every boot to detect key drift before any request touches a stale secret.
+// The value is a one-way HKDF of the key (leaks nothing usable), so it is stored in the
+// clear. Mirrored to D1 (`key_fingerprint` migration) per the runtime-symmetry rule.
+export const keyFingerprint = pgTable('key_fingerprint', {
   id: text('id').primaryKey(),
-  config: text('config').notNull(),
+  fingerprint: text('fingerprint').notNull(),
   created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
-
-// Email invitations into an org account. Only the token's hash is stored.
-export const accountInvitations = pgTable(
-  'account_invitations',
-  {
-    id: text('id').primaryKey(),
-    account_id: text('account_id').notNull(),
-    email: text('email').notNull(),
-    roles: text('roles').notNull().default('developer'),
-    token_hash: text('token_hash').notNull(),
-    invited_by: text('invited_by').notNull(),
-    status: text('status').notNull().default('pending'),
-    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    index('idx_account_invitations_account').on(t.account_id),
-    uniqueIndex('idx_account_invitations_token').on(t.token_hash),
-  ],
-)
-
-// Password-reset tokens ("forgot my password"). Only the SHA-256 token hash is stored;
-// single-use (status flips to 'used') and expiring. Mirrors the D1 table.
-export const passwordResetTokens = pgTable(
-  'password_reset_tokens',
-  {
-    id: text('id').primaryKey(),
-    user_id: text('user_id').notNull(),
-    token_hash: text('token_hash').notNull(),
-    status: text('status').notNull().default('pending'),
-    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    uniqueIndex('idx_password_reset_tokens_token').on(t.token_hash),
-    index('idx_password_reset_tokens_user').on(t.user_id, t.status),
-  ],
-)
 
 export const blocks = pgTable(
   'blocks',
@@ -221,6 +77,12 @@ export const blocks = pgTable(
     width: doublePrecision('width'),
     height: doublePrecision('height'),
     status: text('status').notNull(),
+    // Epoch ms the block last entered `done`. Derived by the repository at its `update`
+    // funnel (first-write-wins, cleared when the block leaves `done`); null means "no
+    // recorded completion date", which is every block merged before this column existed.
+    // `bigint`-free on purpose: epoch ms fits a double exactly, and the rest of the row's
+    // numeric columns are already doubles.
+    completed_at: doublePrecision('completed_at'),
     progress: doublePrecision('progress').notNull().default(0),
     depends_on: text('depends_on').notNull().default('[]'),
     execution_id: text('execution_id'),
@@ -229,6 +91,13 @@ export const blocks = pgTable(
     // Task-level: membership link to an `epic`-level block, independent of parent_id
     // (the structural container). Deleting an epic clears this, never the member tasks.
     epic_id: text('epic_id'),
+    // Task-level: membership link to an `initiative`-level block (a task the
+    // initiative's execution loop spawned), independent of parent_id.
+    initiative_id: text('initiative_id'),
+    // Task-level: the BUG-FISHING expedition block whose finding spawned this fix task,
+    // independent of parent_id (which stays the enclosing service frame, so the fix runs
+    // against the repository the expedition fished).
+    expedition_id: text('expedition_id'),
     // Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. When set, merging
     // this task auto-starts every dependent whose other dependencies are also done.
     auto_start_dependents: integer('auto_start_dependents'),
@@ -239,6 +108,9 @@ export const blocks = pgTable(
     service_fragment_ids: text('service_fragment_ids'),
     model_id: text('model_id'),
     pull_request: text('pull_request'),
+    // Task-level: PRs a multi-repo run opened in connected services' repos beside the
+    // own-service `pull_request` — serialized JSON array of { repo, frameId?, ref }.
+    peer_pull_requests: text('peer_pull_requests'),
     merge_preset_id: text('merge_preset_id'),
     model_preset_id: text('model_preset_id'),
     pipeline_id: text('pipeline_id'),
@@ -248,6 +120,10 @@ export const blocks = pgTable(
     // Carries the provision type + in-repo specifics; the Tester's infra stand-up + the
     // deployer read it. The cloud provider and abstract instance size follow.
     provisioning: text('provisioning'),
+    // Service-frame-level: the operator's freeform TESTING CONTEXT (how to test this service),
+    // injected verbatim into every tester prompt for it (the pipeline testers and the environment
+    // dry run's prober). Non-sensitive by contract; secrets live in `test_secrets`.
+    testing_context: text('testing_context'),
     cloud_provider: text('cloud_provider'),
     instance_size: text('instance_size'),
     // Frontend-frame-level (`type: 'frontend'`): serialized FrontendConfig — how to
@@ -263,6 +139,13 @@ export const blocks = pgTable(
     // beyond its own service (JSON array of frame block ids) — spun up as ephemeral
     // environments too; the coding agent may change their repos.
     involved_service_ids: text('involved_service_ids'),
+    // Task-level (document tasks): read-only reference repos for the `doc-writer` agent —
+    // serialized JSON array of { githubId, owner, name, defaultBranch, installationId? }.
+    reference_repos: text('reference_repos'),
+    // Task-level: pre-existing branches of the primary target repo handed to the run as input
+    // — serialized JSON array of { name, mode: 'reference' | 'working' }. One optional
+    // `working` branch the run builds inside; any number of read-only `reference` branches.
+    apriori_branches: text('apriori_branches'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),
@@ -285,6 +168,15 @@ export const blocks = pgTable(
     // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
     tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),
     tracker_resolve_on_merge: text('tracker_resolve_on_merge'),
+    // ...and the headless clarification loop's question echo (mirror of D1 migration 0062).
+    tracker_questions_on_park: text('tracker_questions_on_park'),
+    // Headless marker (mirrors the D1 `blocks.internal` column): 1 ⇒ a public-API "initiative"
+    // anchor block, excluded from every board projection. Null/absent ⇒ a normal, visible block.
+    internal: integer('internal'),
+    // Archive marker (mirrors the D1 `blocks.archived` column): 1 ⇒ an archived service frame,
+    // hidden from the board projection with its whole subtree but fully preserved and restorable
+    // with no expiry. Null/absent ⇒ a normal, visible block.
+    archived: integer('archived'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): block list reads come
     // back in insertion order — sibling order in the board tree, deterministic
     // snapshots — matching the Cloudflare facade (which orders by `rowid`).
@@ -295,6 +187,8 @@ export const blocks = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
     index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
+    index('idx_blocks_initiative').on(t.workspace_id, t.initiative_id),
+    index('idx_blocks_expedition').on(t.workspace_id, t.expedition_id),
     index('idx_blocks_service').on(t.service_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.
@@ -354,6 +248,9 @@ export const pipelines = pgTable(
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
     name: text('name').notNull(),
+    // Optional prose description shown next to the step list in the pickers/builder (mirror of D1
+    // migration 0055_pipeline_description); NULL ⇒ no description.
+    description: text('description'),
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
     thresholds: text('thresholds'),
@@ -374,6 +271,10 @@ export const pipelines = pgTable(
     // agent_kinds: an `enabled: false` entry turns the QC companion off on a Tester step, an
     // entry with `gating` makes the coverage audit estimate-conditional (mirror of D1 0032).
     tester_quality: text('tester_quality'),
+    // Nullable JSON array of per-step options bags, parallel to agent_kinds: the extensible
+    // home for new per-step parameters (see `stepOptionsSchema`), replacing the one-column-per-
+    // knob pattern. Today carries only `autoRecommend` (mirror of D1 0044_pipeline_step_options).
+    step_options: text('step_options'),
     // Nullable JSON array of free-form organizational labels; `archived` (truthy) hides the
     // pipeline from the default library view (mirror of D1 0003).
     labels: text('labels'),
@@ -382,13 +283,46 @@ export const pipelines = pgTable(
     // custom/cloned pipelines and on legacy rows. Lets a workspace's persisted copy be compared
     // against the current `seedPipelines()` catalog and offered a reseed when it moves ahead.
     version: integer('version'),
+    // `public = 1` marks a pipeline callable via the public API (mirror of D1 migration 0034);
+    // NULL/absent ⇒ not exposed. Only inline pipelines are honored by the public surface.
+    public: integer('public'),
+    // How the pipeline may be LAUNCHED: `'one-off'` / `'recurring'` / `'both'` (mirror of D1
+    // migration 0037); NULL/absent ⇒ unrestricted (`'both'`).
+    availability: text('availability'),
+    // The pipeline's use-case classifier, plain TEXT holding a member of contracts'
+    // `PIPELINE_PURPOSES`, today `'build'` / `'bugfix'` / `'document'` / `'review'` /
+    // `'research'` / `'planning'` (the column mirrors D1 migration 0056_pipeline_purpose, which
+    // predates the `'bugfix'` member; that picklist is the authority, not this list).
+    // NULL/absent ⇒ unclassified. Drives the task pickers (a `document` task offers only
+    // `'document'`, and a `feature` task everything but `'bugfix'`) and the builder palette.
+    purpose: text('purpose'),
+    // The workspace's DECLARED default pipeline per resolution scope (mirror of D1 migration
+    // 0091_pipeline_defaults): `is_default` for a run somebody started in the app, and
+    // `is_unattended_default` for one nothing is watching. NULL/absent on every row means the
+    // scope has no declared default and its own fallback answers (the interface-mode rung in the
+    // app; catalog order behind it) — which is why neither is `NOT NULL DEFAULT 0`: "nobody said"
+    // is a real state here, unlike on `merge_threshold_presets` where a default always resolves.
+    is_default: integer('is_default'),
+    is_unattended_default: integer('is_unattended_default'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
     // matches the Cloudflare facade (which orders by `rowid`). Auto-assigned on insert.
     seq: serial('seq').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // One row per scope may claim a default, enforced by the store rather than by the writer
+    // remembering to demote: a partial unique index, so the many rows claiming NEITHER do not
+    // collide (a plain unique index on a nullable column would allow only one NULL on some
+    // engines and is the wrong statement anyway).
+    uniqueIndex('idx_pipelines_default')
+      .on(t.workspace_id)
+      .where(sql`${t.is_default} = 1`),
+    uniqueIndex('idx_pipelines_unattended_default')
+      .on(t.workspace_id)
+      .where(sql`${t.is_unattended_default} = 1`),
+  ],
 )
 
 export const agentRuns = pgTable(
@@ -411,6 +345,10 @@ export const agentRuns = pgTable(
     // Optimistic-concurrency revision, bumped on every write; guarded by compareAndSwap
     // so a human-action write that raced the driver is retried, not silently clobbered.
     rev: integer('rev').notNull().default(0),
+    // Sweeper re-drives of this run. Deliberately NOT rev-guarded (a monotonic counter about
+    // the run, not derived from its state, so it can never fail a re-drive) and it survives the
+    // restart/eviction the sweeper's in-memory orphan map does not. Mirrors D1 migration 0076.
+    redrive_count: integer('redrive_count').notNull().default(0),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -419,6 +357,10 @@ export const agentRuns = pgTable(
     index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
     index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
     index('idx_agent_runs_service').on(t.service_id),
+    // Serves the lean live-run projection `ExecutionRepository.listLive`
+    // (workspace_id = ? AND kind = 'execution' AND status IN (running/blocked/paused)) backing the
+    // per-service task-concurrency dispatch guard + resumePaused. Mirrors D1 migration 0048.
+    index('idx_agent_runs_ws_kind_status').on(t.workspace_id, t.kind, t.status),
     // At most ONE live execution run per block — the one-run-per-block invariant the engine
     // relied on via a racy delete-then-insert, now enforced atomically so two concurrent
     // starts can't create two live runs (two drivers, two containers). Partial (only live
@@ -435,6 +377,9 @@ export const tokenUsage = pgTable(
   {
     id: text('id').primaryKey(),
     workspace_id: text('workspace_id').notNull(),
+    // Owning account + initiating user, denormalized for the account/user budget tiers.
+    account_id: text('account_id'),
+    user_id: text('user_id'),
     execution_id: text('execution_id'),
     agent_kind: text('agent_kind').notNull(),
     provider: text('provider').notNull(),
@@ -442,6 +387,11 @@ export const tokenUsage = pgTable(
     input_tokens: integer('input_tokens').notNull().default(0),
     output_tokens: integer('output_tokens').notNull().default(0),
     cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
+    // Metered (per-token cost, summed by the budget gate) vs subscription (flat-rate quota
+    // harness usage, counted for the usage report but excluded from every spend rollup).
+    billing: text('billing').notNull().default('metered'),
+    // The subscription vendor for a subscription row (claude/codex/glm/kimi/deepseek).
+    vendor: text('vendor'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -450,6 +400,9 @@ export const tokenUsage = pgTable(
     // LLM-proxy call + web-search + step gate; index (workspace_id, created_at) so it
     // doesn't scan the whole ledger and filter workspace_id row-by-row.
     index('idx_token_usage_workspace').on(t.workspace_id, t.created_at),
+    // Account/user tier rollups (`totalsSinceForAccount` / `totalsSinceForUser`).
+    index('idx_token_usage_account').on(t.account_id, t.created_at),
+    index('idx_token_usage_user').on(t.user_id, t.created_at),
   ],
 )
 
@@ -468,6 +421,12 @@ export const modelPresets = pgTable(
     base_model_id: text('base_model_id').notNull(),
     overrides: text('overrides').notNull().default('{}'),
     is_default: integer('is_default').notNull().default(0),
+    // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
+    version: integer('version'),
+    // The order this preset's runs prefer a model's routes in (JSON array of `ModelFlavor`,
+    // most preferred first). REORDERS, never filters: omitted routes are appended in the
+    // default order. NULL (or an empty array) -> the deployment's default order.
+    provider_preference: text('provider_preference'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -476,163 +435,102 @@ export const modelPresets = pgTable(
     index('idx_model_presets_default').on(t.workspace_id, t.is_default),
   ],
 )
-// Per-workspace default service-fragment selection (mirror of D1 migration 0040). One
-// row per workspace; the best-practice fragment ids new services inherit, JSON array.
-export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', {
-  workspace_id: text('workspace_id').primaryKey(),
-  fragment_ids: text('fragment_ids').notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Prompt-fragment library (ADR 0006; mirror of D1 migration 0020). The managed,
-// tenant-scoped catalog of best-practice fragments, scoped by an (owner_kind,
-// owner_id) pair so one table backs both the account and workspace tiers. JSON-shaped
-// columns (`applies_to`, `tags`) are `text`; a tombstone (`deleted_at`) suppresses an
-// inherited or removed-upstream fragment.
-export const promptFragments = pgTable(
-  'prompt_fragments',
+// Per-workspace agent system-prompt overrides (mirror of D1 migration 0068), edited from the
+// pipeline builder. APPEND-ONLY: one row per revision, the HIGHEST `revision` is live, and
+// restoring an older prompt appends a copy of it (tagged `restored_from`) rather than moving a
+// pointer. `text` NULL is the deliberate way back to the shipped built-in — distinct from
+// having no rows at all, so the log records the revert. The composite primary key is
+// load-bearing: the next revision number comes from a read, so the collision is what keeps two
+// concurrent editors from clobbering each other (surfaced as a 409). Never upsert into it.
+export const agentPromptRevisions = pgTable(
+  'agent_prompt_revisions',
   {
-    fragment_id: text('fragment_id').notNull(),
-    owner_kind: text('owner_kind').notNull(),
-    owner_id: text('owner_id').notNull(),
-    version: text('version').notNull(),
-    title: text('title').notNull(),
-    category: text('category'),
-    summary: text('summary').notNull(),
-    body: text('body').notNull(),
-    applies_to: text('applies_to'),
-    tags: text('tags'),
-    source_id: text('source_id'),
-    source_path: text('source_path'),
-    source_sha: text('source_sha'),
-    doc_source: text('doc_source'),
-    doc_external_id: text('doc_external_id'),
-    doc_via_workspace_id: text('doc_via_workspace_id'),
-    resolved_at: bigint('resolved_at', { mode: 'number' }),
+    workspace_id: text('workspace_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    revision: integer('revision').notNull(),
+    text: text('text'),
+    restored_from: integer('restored_from'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
+    created_by: text('created_by'),
   },
   (t) => [
-    primaryKey({ columns: [t.owner_kind, t.owner_id, t.fragment_id] }),
-    index('idx_prompt_fragments_owner')
-      .on(t.owner_kind, t.owner_id)
-      .where(sql`${t.deleted_at} IS NULL`),
-    index('idx_prompt_fragments_source')
-      .on(t.source_id)
-      .where(sql`${t.deleted_at} IS NULL`),
+    primaryKey({ columns: [t.workspace_id, t.agent_kind, t.revision] }),
+    // The workspace-wide override index reads every kind's head in one pass (mirrors
+    // idx_agent_prompt_revisions_workspace). The D1 mirror declares `revision DESC`; this one is
+    // ASC deliberately — Postgres scans a btree backwards at the same cost, so matching the
+    // direction would buy nothing and cost a regenerated snapshot. Neither store's head read
+    // depends on the declared direction.
+    index('idx_agent_prompt_revisions_workspace').on(t.workspace_id, t.agent_kind, t.revision),
   ],
 )
 
-// A repo directory linked as a source of Markdown guideline files (ADR 0006 §3;
-// mirror of D1 migration 0020). At most one live source per (owner, repo, ref, dir) —
-// the unique index is the upsert key; a partial owner index powers the list.
-export const fragmentSources = pgTable(
-  'fragment_sources',
+// Repo-sourced Claude Skills library (ADR 0024, slice 1; mirror of D1 migration 0052).
+// An account links a repo directory of skill folders; the link is synced into the
+// account's skill catalog. ONE tier (the account), a directory-per-skill sync unit,
+// resources JSON-encoded in a `text` column.
+export const skillSources = pgTable(
+  'skill_sources',
   {
     id: text('id').primaryKey(),
-    owner_kind: text('owner_kind').notNull(),
-    owner_id: text('owner_id').notNull(),
+    account_id: text('account_id').notNull(),
     repo_owner: text('repo_owner').notNull(),
     repo_name: text('repo_name').notNull(),
     git_ref: text('git_ref').notNull().default('HEAD'),
     dir_path: text('dir_path').notNull().default(''),
-    // Head commit sha of the source dir at the last sync (name kept for column stability;
-    // it no longer stores the former tree-listing digest). Powers the staleness probe.
-    last_synced_sha: text('last_synced_sha'),
+    // Head commit sha of the source dir at the last sync; powers the staleness probe.
+    last_synced_commit: text('last_synced_commit'),
     last_synced_at: bigint('last_synced_at', { mode: 'number' }),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [
-    uniqueIndex('idx_fragment_sources_unique').on(
-      t.owner_kind,
-      t.owner_id,
+    uniqueIndex('idx_skill_sources_unique').on(
+      t.account_id,
       t.repo_owner,
       t.repo_name,
       t.git_ref,
       t.dir_path,
     ),
-    index('idx_fragment_sources_owner')
-      .on(t.owner_kind, t.owner_id)
+    index('idx_skill_sources_account')
+      .on(t.account_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    // Push-webhook fan-out (slice 4) looks sources up by repo.
+    index('idx_skill_sources_repo')
+      .on(t.repo_owner, t.repo_name)
       .where(sql`${t.deleted_at} IS NULL`),
   ],
 )
 
-// LLM observability sink (mirror of D1 migration 0026). One row per proxied
-// container-agent model call: full prompt/response, output-limit headroom and the
-// transport-vs-execution latency split. Pruned aggressively by retention (the full
-// bodies make it heavy); booleans are integer 0/1 to match the SQLite store.
-export const llmCallMetrics = telemetry.table(
-  'llm_call_metrics',
+export const accountSkills = pgTable(
+  'account_skills',
   {
-    id: text('id').primaryKey(),
-    workspace_id: text('workspace_id').notNull(),
-    execution_id: text('execution_id'),
-    agent_kind: text('agent_kind').notNull(),
-    provider: text('provider').notNull(),
-    model: text('model').notNull(),
+    skill_id: text('skill_id').notNull(),
+    account_id: text('account_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    // The RAW `group:` the manifest declared (lowercased by the sync), narrowed to the wire
+    // vocabulary on read so an unrecognised value can be shown back to its author. `group` is a
+    // reserved word in both engines, hence the column name.
+    skill_group: text('skill_group').notNull().default('other'),
+    instructions: text('instructions').notNull(),
+    // JSON [{ path, sha, size }] manifest of sibling resource files (bodies not stored).
+    resources: text('resources').notNull().default('[]'),
+    source_id: text('source_id').notNull(),
+    source_path: text('source_path').notNull(),
+    source_sha: text('source_sha').notNull(),
+    pinned_commit: text('pinned_commit'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    streaming: integer('streaming').notNull().default(0),
-    message_count: integer('message_count').notNull().default(0),
-    tool_count: integer('tool_count').notNull().default(0),
-    request_max_tokens: integer('request_max_tokens'),
-    prompt_tokens: integer('prompt_tokens').notNull().default(0),
-    cached_prompt_tokens: integer('cached_prompt_tokens').notNull().default(0),
-    completion_tokens: integer('completion_tokens').notNull().default(0),
-    total_tokens: integer('total_tokens').notNull().default(0),
-    finish_reason: text('finish_reason'),
-    upstream_ms: integer('upstream_ms').notNull().default(0),
-    overhead_ms: integer('overhead_ms').notNull().default(0),
-    total_ms: integer('total_ms').notNull().default(0),
-    ok: integer('ok').notNull().default(1),
-    http_status: integer('http_status'),
-    error_message: text('error_message'),
-    // prompt_text is stored as a DELTA (only the messages this call appended beyond
-    // prompt_prefix_count); the full prompt is rebuilt on export. See D1 migration 0027.
-    prompt_text: text('prompt_text').notNull().default(''),
-    prompt_prefix_count: integer('prompt_prefix_count').notNull().default(0),
-    prompt_hash: text('prompt_hash').notNull().default(''),
-    response_text: text('response_text').notNull().default(''),
-    // The model's reasoning/"thinking" trace on a separate channel, when emitted (a
-    // reasoning model can spend its whole output budget here and return empty
-    // response_text). Mirrors D1 migration 0002_llm_reasoning_text.
-    reasoning_text: text('reasoning_text').notNull().default(''),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [
-    index('idx_llm_call_metrics_execution').on(t.workspace_id, t.execution_id, t.created_at),
-    index('idx_llm_call_metrics_created').on(t.created_at),
-  ],
-)
-
-// The complete, redacted context provided to one container-agent dispatch (per step
-// attempt): the fully fragment-composed system + user prompts, the fragment bodies
-// folded in, and the full content of the files injected into the container. Captures
-// what proxy telemetry can't (the injected `.cat-context/*` files the agent reads via
-// tools). JSON-shaped columns are text; pruned on the same retention window as
-// llm_call_metrics. Mirrors the D1 agent_context_snapshots table column-for-column.
-export const agentContextSnapshots = telemetry.table(
-  'agent_context_snapshots',
-  {
-    id: text('id').primaryKey(),
-    workspace_id: text('workspace_id').notNull(),
-    execution_id: text('execution_id').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    step_index: integer('step_index').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    model: text('model'),
-    harness: text('harness'),
-    system_prompt: text('system_prompt').notNull().default(''),
-    user_prompt: text('user_prompt').notNull().default(''),
-    // JSON arrays: [{id, body}] and [{path, title, url, content}].
-    fragments: text('fragments').notNull().default('[]'),
-    context_files: text('context_files').notNull().default('[]'),
-    // Redacted structural bits (repo/branch, webSearch, infra, decisions, revision).
-    extras: text('extras').notNull().default('{}'),
-  },
-  (t) => [
-    index('idx_agent_context_snapshots_execution').on(t.workspace_id, t.execution_id, t.created_at),
-    index('idx_agent_context_snapshots_created').on(t.created_at),
+    primaryKey({ columns: [t.account_id, t.skill_id] }),
+    index('idx_account_skills_account')
+      .on(t.account_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_account_skills_source')
+      .on(t.source_id)
+      .where(sql`${t.deleted_at} IS NULL`),
   ],
 )
 
@@ -691,6 +589,11 @@ export const pipelineSchedules = pgTable(
     window_end_hour: integer('window_end_hour'),
     timezone: text('timezone').notNull().default('UTC'),
     enabled: integer('enabled').notNull().default(1),
+    // Manual-only schedule: never auto-fired by the sweeper (`listDue` filters `on_demand = 0`).
+    on_demand: integer('on_demand').notNull().default(0),
+    // Nullable JSON issue-intake config (mirror of D1 migration 0038): source + board
+    // scope + predicates for a pipeline with a `bug-intake` step.
+    issue_intake: text('issue_intake'),
     last_run_at: bigint('last_run_at', { mode: 'number' }),
     next_run_at: bigint('next_run_at', { mode: 'number' }).notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
@@ -743,13 +646,45 @@ export const requirementReviews = pgTable(
     max_iterations: integer('max_iterations').notNull().default(1),
     // Requirement-Writer recommendations as a JSON array (text), mirror of D1 migration 0009.
     recommendations: text('recommendations').notNull().default('[]'),
+    // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
+    // it, so two writers editing different findings can't clobber each other.
+    rev: integer('rev').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
-    // getByBlock looks up a block's reviews (newest wins), mirroring D1 migration 0021.
-    index('idx_requirement_reviews_block').on(t.workspace_id, t.block_id),
+    // UNIQUE (D1 migration 0066): a block holds at most ONE live review, and the constraint is
+    // what enforces it — `replaceForBlock` is a conflict-targeted upsert on this key, so two
+    // concurrent review runs can't interleave into two live reviews the way a transactioned
+    // delete-then-insert could under READ COMMITTED. Also serves `getByBlock`'s lookup.
+    uniqueIndex('idx_requirement_reviews_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
+// Interactive document-interview sessions (WS5; mirror of D1 migration 0040): one live session
+// per document-authoring block. The Q&A transcript lives as a JSON array (text) in `qa`;
+// `round`/`max_rounds` track the iterative interview loop; `brief` is the synthesized authoring
+// brief the writer starts from once the interview converges.
+export const docInterviewSessions = pgTable(
+  'doc_interview_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    status: text('status').notNull(),
+    round: integer('round').notNull().default(0),
+    max_rounds: integer('max_rounds').notNull().default(4),
+    qa: text('qa').notNull().default('[]'),
+    brief: text('brief'),
+    model: text('model'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // getByBlock looks up a block's sessions (newest wins), mirroring D1 migration 0040.
+    index('idx_doc_interview_sessions_block').on(t.workspace_id, t.block_id),
   ],
 )
 
@@ -774,6 +709,11 @@ export const kaizenGradings = pgTable(
     recommendations: text('recommendations').notNull().default('[]'),
     grader_model: text('grader_model'),
     error: text('error'),
+    // Written only by `setAcknowledgement` (never by the grading sweep's upsert), so a re-graded
+    // row keeps whatever a person recorded about the grade it used to carry.
+    acknowledged_at: bigint('acknowledged_at', { mode: 'number' }),
+    acknowledged_by: text('acknowledged_by'),
+    acknowledgement_note: text('acknowledgement_note'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -782,6 +722,8 @@ export const kaizenGradings = pgTable(
     uniqueIndex('idx_kaizen_gradings_step').on(t.workspace_id, t.execution_id, t.step_index),
     index('idx_kaizen_gradings_status').on(t.status, t.updated_at),
     index('idx_kaizen_gradings_execution').on(t.workspace_id, t.execution_id),
+    // The public entry list's `(created_at DESC, id DESC)` page over one workspace.
+    index('idx_kaizen_gradings_workspace_created').on(t.workspace_id, t.created_at),
   ],
 )
 
@@ -819,6 +761,11 @@ export const consensusSessions = pgTable(
     agent_kind: text('agent_kind').notNull(),
     strategy: text('strategy').notNull(),
     status: text('status').notNull(),
+    // The workspace consensus GROUP whose panel ran (the tier the task's estimate earned), when
+    // the step named a tier set. The NAME is copied, not joined: the library row can be renamed
+    // or deleted afterwards and the transcript must still say which panel produced it.
+    group_id: text('group_id'),
+    group_name: text('group_name'),
     participants: text('participants').notNull().default('[]'),
     rounds: text('rounds').notNull().default('[]'),
     synthesis: text('synthesis'),
@@ -832,6 +779,31 @@ export const consensusSessions = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_consensus_sessions_step').on(t.workspace_id, t.execution_id, t.step_index),
     index('idx_consensus_sessions_block').on(t.workspace_id, t.block_id, t.created_at),
+  ],
+)
+
+// The workspace CONSENSUS-GROUP library (mirror of D1 migration 0070): the reusable,
+// estimate-gated panels a pipeline step escalates to. `participants` and `gating` are JSON
+// columns — neither is ever a query predicate, since the tier selection runs in TypeScript over
+// the batch `listByIds` returns. A step names a SET of these (inside the existing
+// `pipelines.consensus` JSON) and the engine picks the most demanding tier the estimate clears.
+export const consensusGroups = pgTable(
+  'consensus_groups',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    strategy: text('strategy').notNull(),
+    participants: text('participants').notNull().default('[]'),
+    synthesizer_model_id: text('synthesizer_model_id'),
+    rounds: integer('rounds'),
+    gating: text('gating').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_consensus_groups_workspace').on(t.workspace_id, t.created_at),
   ],
 )
 
@@ -850,12 +822,17 @@ export const clarityReviews = pgTable(
     clarified_report: text('clarified_report'),
     iteration: integer('iteration').notNull().default(1),
     max_iterations: integer('max_iterations').notNull().default(1),
+    // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
+    // it, so two writers editing different findings can't clobber each other.
+    rev: integer('rev').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_clarity_reviews_block').on(t.workspace_id, t.block_id),
+    // UNIQUE (D1 migration 0066) — see `requirement_reviews`: the constraint, not a transaction,
+    // is what keeps a block to one live review.
+    uniqueIndex('idx_clarity_reviews_block').on(t.workspace_id, t.block_id),
   ],
 )
 
@@ -876,84 +853,80 @@ export const brainstormSessions = pgTable(
     converged_direction: text('converged_direction'),
     iteration: integer('iteration').notNull().default(1),
     max_iterations: integer('max_iterations').notNull().default(1),
+    // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
+    // it, so two writers editing different findings can't clobber each other.
+    rev: integer('rev').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
+    // UNIQUE (D1 migration 0066) — one live session per block AND STAGE, since a block
+    // legitimately holds a `requirements` and an `architecture` session at the same time.
+    uniqueIndex('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
   ],
 )
 
-// A workspace's issue-tracker selection (mirror of D1 migration 0029).
-export const trackerSettings = pgTable('tracker_settings', {
-  workspace_id: text('workspace_id').primaryKey(),
-  tracker: text('tracker'),
-  jira_project_key: text('jira_project_key'),
-  linear_team_id: text('linear_team_id'),
-  // Issue-tracker writeback toggles (0/1): comment on a task's linked issue when its
-  // PR opens, and comment + close as resolved when it merges. Per-task overridable.
-  writeback_comment_on_pr_open: integer('writeback_comment_on_pr_open').notNull().default(0),
-  writeback_resolve_on_merge: integer('writeback_resolve_on_merge').notNull().default(0),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Task-source integration (mirror of D1 migration 0014): a workspace's connections
-// to external issue trackers (Jira) and local projections of the issues it imported.
-// `credentials` is an encrypted JSON bag (AES-256-GCM envelope), never sent on the
-// wire. At most one live connection per (workspace, source); a `deleted_at` tombstone
-// lets a workspace disconnect/reconnect.
-export const taskConnections = pgTable(
-  'task_connections',
+// Initiatives: the long-running multi-task work container (mirror of D1 migration
+// 0035_initiatives). One row per `initiative`-level block; the whole entity lives in
+// the `doc` JSON blob with the loop-relevant keys (status, rev) lifted into columns.
+// `rev` is the optimistic-concurrency token every post-insert write CAS-es on.
+export const initiatives = pgTable(
+  'initiatives',
   {
     workspace_id: text('workspace_id').notNull(),
-    source: text('source').notNull(),
-    credentials: text('credentials').notNull(),
-    label: text('label').notNull().default(''),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    slug: text('slug').notNull(),
+    status: text('status').notNull(),
+    rev: integer('rev').notNull(),
+    doc: text('doc').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
-)
-
-// Per-workspace task-source toggle (mirrors D1 migration 0008). No row ⇒ the
-// default (enabled), so a source is offered as soon as it's available; an
-// `enabled: false` row is an explicit opt-out. Replaces the TASK_SOURCES env gate.
-export const taskSourceSettings = pgTable(
-  'task_source_settings',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    source: text('source').notNull(),
-    // Integer 0/1 to match the D1 (SQLite) store, per this file's boolean convention.
-    enabled: integer('enabled').notNull().default(1),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
-)
-
-export const tasks = pgTable(
-  'tasks',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    source: text('source').notNull(),
-    external_id: text('external_id').notNull(),
-    title: text('title').notNull(),
-    url: text('url').notNull(),
-    status: text('status').notNull().default(''),
-    type: text('type').notNull().default(''),
-    assignee: text('assignee'),
-    priority: text('priority'),
-    labels: text('labels').notNull().default('[]'),
-    description: text('description').notNull().default(''),
-    comments: text('comments').notNull().default('[]'),
-    excerpt: text('excerpt').notNull().default(''),
-    linked_block_id: text('linked_block_id'),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
-    index('idx_tasks_block').on(t.workspace_id, t.linked_block_id),
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    uniqueIndex('idx_initiatives_block').on(t.workspace_id, t.block_id),
+    // The tracker folder `docs/initiatives/<slug>/` is keyed by slug, so a slug must be
+    // unique per workspace — this backstops the read-then-insert slug derivation in
+    // InitiativeService.create against a concurrent same-title race (the loser's insert
+    // fails rather than silently sharing a folder with the winner).
+    uniqueIndex('idx_initiatives_slug').on(t.workspace_id, t.slug),
+    // The cron sweeper's work list (slice 3): every `executing` initiative.
+    index('idx_initiatives_status').on(t.status),
   ],
+)
+
+// A workspace's outbound notification webhook (mirror of D1 migration 0061): ONE endpoint per
+// workspace that receives the workspace's notifications as they are raised — the delivery channel
+// a HEADLESS integration needs, chiefly so a public-API run that PARKS on a human decision reaches
+// its caller by push. `secret_sealed` is the signing secret encrypted with the deployment
+// SecretCipher (never read back over the API); `types` is a JSON array of notification types where
+// EMPTY means "the defaults", not "everything".
+export const notificationWebhooks = pgTable(
+  'notification_webhooks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    // The caller-chosen endpoint id (D1 migration 0085). `default` is the one the singular
+    // `/api/v1/notification-webhook` routes address, so an endpoint registered before the
+    // collection existed keeps its route.
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    types: text('types').notNull().default('[]'),
+    // The run-lifecycle subscription (D1 migration 0072). EMPTY means NONE, unlike `types` above:
+    // an endpoint registered before run events existed must not start receiving a new family.
+    run_events: text('run_events').notNull().default('[]'),
+    // The platform-health subscription (D1 migration 0080) — the family an ON-CALL system is paged
+    // by. EMPTY means NONE, like `run_events` and for the sharper version of the same reason.
+    alert_events: text('alert_events').notNull().default('[]'),
+    enabled: integer('enabled').notNull().default(1),
+    secret_sealed: text('secret_sealed'),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  // No separate `workspace_id` index: it leads the composite key, so the per-workspace list every
+  // delivery reads is already served.
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
 
 // A workspace's binding to a self-hosted runner pool (mirror of D1 migration 0013):
@@ -1020,35 +993,14 @@ export const notifications = pgTable(
   ],
 )
 
-// Per-workspace runtime settings (mirror of D1 migration 0004's `workspace_settings`):
-// the human-wait escalation threshold + the per-service running-task limit policy. One
-// row per workspace; the service lazily seeds DEFAULT_WORKSPACE_SETTINGS on first read.
-export const workspaceSettings = pgTable('workspace_settings', {
-  workspace_id: text('workspace_id').notNull().primaryKey(),
-  waiting_escalation_minutes: integer('waiting_escalation_minutes').notNull().default(120),
-  // 'off' | 'shared' | 'per_type'
-  task_limit_mode: text('task_limit_mode').notNull().default('off'),
-  // The shared cap when task_limit_mode = 'shared'; null otherwise.
-  task_limit_shared: integer('task_limit_shared'),
-  // JSON object of per-type caps when task_limit_mode = 'per_type'; null otherwise.
-  task_limit_per_type: text('task_limit_per_type'),
-  // Whether to store the full provided-context snapshot for each container agent
-  // (the observability feature). On by default; integer 0/1 to match the SQLite store.
-  store_agent_context: integer('store_agent_context').notNull().default(1),
-  // Retention window (days) for binary artifacts (UI screenshots + reference designs)
-  // before the cleanup sweep deletes them. Default 14; mirrors the D1 column.
-  artifact_retention_days: integer('artifact_retention_days').notNull().default(14),
-  // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
-  // 0/1 to match the SQLite store.
-  kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
-  // LOCAL MODE ONLY toggle (inert on Cloudflare/Node): delegate container agents to the
-  // workspace's runner pool instead of the host container runtime. Off by default; integer
-  // 0/1 to match the SQLite store.
-  delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
-  // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
-  // DEFAULT_SPEND_PRICING base table.
-  spend_currency: text('spend_currency'),
-  spend_monthly_limit: doublePrecision('spend_monthly_limit'),
+// The notification manager (mirror of D1 migration 0088): which notification types a workspace
+// delivers on which channel (`in_app` / `email`). `matrix` is a SPARSE JSON map of OVERRIDES —
+// an absent cell means the board never chose, which resolves to the shipped default — so a new
+// notification type or channel arrives on its default instead of a `false` nobody picked.
+export const notificationSettings = pgTable('notification_settings', {
+  workspace_id: text('workspace_id').primaryKey(),
+  matrix: text('matrix').notNull().default('{}'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
@@ -1056,7 +1008,7 @@ export const workspaceSettings = pgTable('workspace_settings', {
 // the workspace default (`is_default`, exactly one per workspace — the repository
 // demotes the prior default when promoting a new one). `is_default` is 0/1 to mirror
 // the D1 integer flag. Carries the auto-merge ceilings + `ci_max_attempts`.
-export const mergeThresholdPresets = pgTable(
+export const riskPolicies = pgTable(
   'merge_threshold_presets',
   {
     workspace_id: text('workspace_id').notNull(),
@@ -1071,191 +1023,160 @@ export const mergeThresholdPresets = pgTable(
       .notNull()
       .default('none'),
     max_tester_quality_iterations: integer('max_tester_quality_iterations').notNull().default(3),
+    // How many automatic rework rounds a companion (reviewer / architect-companion /
+    // spec-companion) may drive before it parks for a person (mirror of D1's
+    // `companion_max_reworks`). The default is the ceiling the engine hard-coded before this was
+    // policy, so an un-edited row behaves exactly as it did.
+    companion_max_reworks: integer('companion_max_reworks').notNull().default(3),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
+    // Judge steps (the fourth step-taxonomy bucket): the minimum verdict score (0..1) a rubric
+    // assessment must reach to advance without a human, and how many rework BOUNCE rounds a
+    // judge may spend first. Mirrors D1's `judge_min_score` / `judge_max_bounces`.
+    judge_min_score: doublePrecision('judge_min_score').notNull().default(0.7),
+    judge_max_bounces: integer('judge_max_bounces').notNull().default(1),
     // When 0 the `merger` step never auto-merges — every PR is routed to human review.
     auto_merge_enabled: integer('auto_merge_enabled').notNull().default(1),
+    // Estimate gating for the implementation-fork decision phase, a JSON `StepGating` blob
+    // (mirror of D1's `fork_decision` TEXT column). NULL ⇒ off in `auto` mode.
+    fork_decision: text('fork_decision'),
+    // Per-change-class auto-merge rules, a JSON partial map from change class to
+    // `thresholds` | `always` | `never` (mirror of D1's `class_rules` TEXT column). `{}` — the
+    // default — means every class uses the score ceilings above, the historical behaviour.
+    class_rules: text('class_rules').notNull().default('{}'),
+    // Per-ROLE narrowing of `class_rules`: a JSON partial map from workspace role to that role's
+    // own rule map (mirror of D1's `class_rules_by_role`). Narrow-only in the domain, so `{}` —
+    // the default — leaves every role on the base rules above.
+    class_rules_by_role: text('class_rules_by_role').notNull().default('{}'),
+    // JSON array of the roles whose runs are forced into dry-run mode: the pipeline runs and
+    // opens its PR, but nothing merges (mirror of D1's `dry_run_roles`). `[]` sandboxes nobody.
+    dry_run_roles: text('dry_run_roles').notNull().default('[]'),
+    // Per-ROLE allowlist of the change classes a run may LAND at all: a JSON partial map from
+    // workspace role to a list of change classes (mirror of D1's `submission_classes_by_role`).
+    // An absent role entry is unrestricted, so the `{}` default scopes nobody; an EMPTY array
+    // is the different, real policy that the role lands nothing.
+    submission_classes_by_role: text('submission_classes_by_role').notNull().default('{}'),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
+    // Whether a run under this policy answers the parks its own automatic loops raise when they
+    // give up (`attended` | `unattended`; see `runAutonomySchema`). Defaults to the historical
+    // behaviour, which is to stop for a person.
+    autonomy: text('autonomy').notNull().default('attended'),
+    // The confidence floor a Requirement-Writer suggestion must report for an `unattended` run to
+    // take it as a review finding's answer rather than parking (mirror of D1
+    // 0091_pipeline_defaults). Read only under `unattended`, so the default is the shipped floor
+    // rather than 0: a policy that never reads it is unaffected either way, and one that does
+    // should not start out accepting an ungraded answer.
+    min_auto_answer_confidence: doublePrecision('min_auto_answer_confidence')
+      .notNull()
+      .default(0.8),
     is_default: integer('is_default').notNull().default(0),
+    // The workspace's default for a run NOTHING is watching (the public API, a tracker dispatch,
+    // a schedule fire). Independent of `is_default`: one row may hold both, and each scope has
+    // exactly one holder.
+    is_unattended_default: integer('is_unattended_default').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
     index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
+    // The same lookup for the unattended scope, which the engine resolves on every gate
+    // evaluation of an API-started run (mirrors idx_merge_presets_unattended_default).
+    index('idx_merge_presets_unattended_default').on(t.workspace_id, t.is_unattended_default),
   ],
 )
 
-// Sandbox (parallel prompt/model testing surface). Lives in a DEDICATED Postgres
-// `sandbox` schema (the analogue of the Worker's separate `SANDBOX_DB` D1 database), so
-// the tables are unprefixed (`sandbox.prompt_versions`, …) — the schema is the namespace.
-// Same connection/migrator as the main schema; the boot migrator creates the schema.
-// Shipped baselines are NOT stored (read live from `@cat-factory/agents`); only candidate
-// prompt versions are. JSON-shaped fields are text JSON. See backend/CLAUDE.md
-// "Keep the runtimes symmetric".
-export const sandboxSchema = pgSchema('sandbox')
-
-export const sandboxPromptVersions = sandboxSchema.table(
-  'prompt_versions',
+// Merge TRACK RECORD — one row per merge decision: the run's deterministic change class, the
+// merger's scores at the decision, what happened, and the reviewer-effort tag a human left
+// (mirror of D1 migration 0061's `merge_track_records`). Per-class rollups over this table are
+// SQL aggregates behind `DrizzleMergeTrackRecordRepository.rollupByClass`, never rows reduced in
+// JS. Provider-neutral: repo identity is `repo_id` + `provider`, never a GitHub-shaped id.
+export const mergeTrackRecords = pgTable(
+  'merge_track_records',
   {
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
-    lineage_id: text('lineage_id').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    name: text('name').notNull(),
-    origin: text('origin').notNull(),
-    system_text: text('system_text').notNull(),
-    base_prompt_id: text('base_prompt_id'),
-    version: integer('version').notNull(),
-    parent_id: text('parent_id'),
-    labels: text('labels').notNull().default('[]'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    created_by: text('created_by'),
-    archived_at: bigint('archived_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_sandbox_prompts_kind').on(t.workspace_id, t.agent_kind),
-  ],
-)
-
-export const sandboxFixtures = sandboxSchema.table(
-  'fixtures',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    kind: text('kind').notNull(),
-    name: text('name').notNull(),
-    payload: text('payload'),
-    repo_ref: text('repo_ref'),
-    objective: text('objective'),
-    origin: text('origin').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
-)
-
-export const sandboxExperiments = sandboxSchema.table(
-  'experiments',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    name: text('name').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    judge_model: text('judge_model').notNull(),
-    repeats: integer('repeats').notNull(),
-    status: text('status').notNull(),
-    matrix: text('matrix').notNull(),
-    budget_tokens: bigint('budget_tokens', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    created_by: text('created_by'),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
-)
-
-export const sandboxRuns = sandboxSchema.table(
-  'runs',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    experiment_id: text('experiment_id').notNull(),
-    prompt_version_id: text('prompt_version_id').notNull(),
-    model: text('model').notNull(),
-    fixture_id: text('fixture_id').notNull(),
-    repeat_index: integer('repeat_index').notNull(),
-    status: text('status').notNull(),
-    output_text: text('output_text'),
-    usage: text('usage'),
-    latency_ms: integer('latency_ms'),
-    branch: text('branch'),
-    pr_url: text('pr_url'),
-    diff: text('diff'),
-    error: text('error'),
-    seed_sha: text('seed_sha'),
-    prompt_label: text('prompt_label').notNull(),
-    started_at: bigint('started_at', { mode: 'number' }),
-    finished_at: bigint('finished_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_sandbox_runs_experiment').on(t.workspace_id, t.experiment_id),
-    index('idx_sandbox_runs_queued').on(t.workspace_id, t.experiment_id, t.status),
-  ],
-)
-
-export const sandboxGrades = sandboxSchema.table(
-  'grades',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    run_id: text('run_id').notNull(),
-    judge_model: text('judge_model').notNull(),
-    scores: text('scores').notNull().default('[]'),
-    weighted_total: doublePrecision('weighted_total').notNull(),
-    objective: text('objective'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_sandbox_grades_run').on(t.workspace_id, t.run_id),
-  ],
-)
-
-// Post-release-health gate (pluggable observability — Datadog today). One connection per
-// workspace (mirror of D1 migration 0007's `observability_connections`). `credentials` is a
-// sealed JSON blob of the provider-specific secret (domain tag 'cat-factory:observability');
-// `summary` is a non-secret display blob. Plaintext credentials only in memory.
-export const observabilityConnections = pgTable('observability_connections', {
-  workspace_id: text('workspace_id').primaryKey(),
-  provider: text('provider').notNull(),
-  credentials: text('credentials').notNull(),
-  summary: text('summary').notNull().default('{}'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Private package-registry entries per workspace (npm private orgs, GitHub Packages), so
-// agent containers can resolve private dependencies on checkout (mirror of D1 migration
-// 0034's `package_registry_connections`). `entries` is ONE sealed JSON array of
-// { id, ecosystem, vendor, scopes, token } (domain tag 'cat-factory:package-registries');
-// `summary` is a non-secret display blob. Plaintext tokens only in memory.
-export const packageRegistryConnections = pgTable('package_registry_connections', {
-  workspace_id: text('workspace_id').primaryKey(),
-  entries: text('entries').notNull(),
-  summary: text('summary').notNull().default('[]'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Per-workspace incident-enrichment connection (PagerDuty + incident.io), moved out of
-// env onto a sealed row (mirror of D1 migration 0013's `incident_enrichment_connections`).
-// `credentials` is ONE sealed JSON blob { pagerDuty?, incidentIo? } (domain tag
-// 'cat-factory:incident-enrichment'); `summary` is a non-secret presence blob.
-export const incidentEnrichmentConnections = pgTable('incident_enrichment_connections', {
-  workspace_id: text('workspace_id').primaryKey(),
-  credentials: text('credentials').notNull(),
-  summary: text('summary').notNull().default('{}'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Per-block (service frame) monitor/SLO mapping the gate reads (mirror of D1
-// `release_health_configs`). `monitor_ids`/`slo_ids` are JSON arrays as `text`.
-export const releaseHealthConfigs = pgTable(
-  'release_health_configs',
-  {
-    workspace_id: text('workspace_id').notNull(),
     block_id: text('block_id').notNull(),
-    monitor_ids: text('monitor_ids').notNull().default('[]'),
-    slo_ids: text('slo_ids').notNull().default('[]'),
-    env_tag: text('env_tag'),
+    // NULL for a record born from an externally-merged PR with no cat-factory run.
+    execution_id: text('execution_id'),
+    // docs | test | dependency | config | source | schema | unknown.
+    change_class: text('change_class').notNull(),
+    changed_file_count: integer('changed_file_count'),
+    // The merger's 0..1 axes; NULL when it produced no parseable assessment (or never ran).
+    complexity: doublePrecision('complexity'),
+    risk: doublePrecision('risk'),
+    impact: doublePrecision('impact'),
+    risk_policy_id: text('risk_policy_id'),
+    risk_policy_name: text('risk_policy_name'),
+    // pending_review | auto_merged | human_merged | external_merged | rejected.
+    decision: text('decision').notNull(),
+    // none | minor | major. NULL until tagged — tagging is a nudge, never a gate.
+    review_effort: text('review_effort'),
+    pr_number: integer('pr_number'),
+    pr_url: text('pr_url'),
+    repo_id: text('repo_id'),
+    provider: text('provider'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    resolved_at: bigint('resolved_at', { mode: 'number' }),
+    tagged_at: bigint('tagged_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // The per-class rollup reads a whole workspace grouped by class.
+    index('idx_merge_track_records_class').on(t.workspace_id, t.change_class),
+    // Settling a decision / tagging effort resolves by run.
+    index('idx_merge_track_records_execution').on(t.workspace_id, t.execution_id),
+    // The block-scoped merge controls read the block's most recent record.
+    index('idx_merge_track_records_block').on(t.workspace_id, t.block_id, t.created_at),
+    // External-merge attribution looks a record up by the PR the webhook named.
+    index('idx_merge_track_records_pr').on(t.workspace_id, t.repo_id, t.pr_number),
+  ],
+)
+
+// Shared stacks — long-lived compose infra a per-PR consumer environment attaches to over an
+// external network (mirror of D1 migration 0041's `shared_stacks`). JSON-shaped columns
+// (`compose_files`/`compose_profiles`/`env_files`/`managed_networks`/`setup_steps`/
+// `health_gate`) are `text` JSON; `allow_host_commands` is 0/1 to mirror D1. Behaviourally
+// identical to the D1 repo so the cross-runtime conformance suite asserts the same round-trip.
+export const sharedStacks = pgTable(
+  'shared_stacks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    // NULL ⇒ a repo-less stack: every compose layer is an inline document or a reference into
+    // another repo, so there is nothing of its own to clone (migration 0070 ⇄ D1).
+    clone_url: text('clone_url'),
+    git_ref: text('git_ref'),
+    compose_files: text('compose_files').notNull().default('[]'),
+    compose_profiles: text('compose_profiles').notNull().default('[]'),
+    env_files: text('env_files').notNull().default('[]'),
+    managed_networks: text('managed_networks').notNull().default('[]'),
+    setup_steps: text('setup_steps').notNull().default('[]'),
+    prerequisites: text('prerequisites').notNull().default('[]'),
+    health_gate: text('health_gate'),
+    allow_host_commands: integer('allow_host_commands').notNull().default(0),
+    status: text('status').notNull().default('stopped'),
+    last_error: text('last_error'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
+
+// The sandbox surface's tables live in their own Postgres schema and their own module (see
+// `schema/sandbox.ts`) — the architecture's existing "extractable sandbox" boundary. Re-exported
+// here so `db/schema.ts` remains the ONE import surface for the Drizzle schema: every repository,
+// the boot migrator and drizzle-kit's snapshot generation all read it from this module.
+export * from './schema/sandbox.js'
+export * from './schema/tracker.js'
+
+// The opt-in integration tables (sealed connections + per-service-frame integration config)
+// live in their own module; re-exported here so drizzle-kit still sees one schema graph and
+// every existing `schema.js` import site is unchanged.
+export * from './schema-integrations.js'
 
 // Document-source integration (mirror of D1 migration 0012). A `source`
 // discriminator tags every row so one pair of tables serves every provider. The
@@ -1288,87 +1209,35 @@ export const documents = pgTable(
     excerpt: text('excerpt').notNull().default(''),
     body: text('body').notNull().default(''),
     content_hash: text('content_hash').notNull().default(''),
+    // The source version token this body was imported at (mirror of D1 migration 0083) — what the
+    // dispatch-time refresh compares a cheap `probeVersion` against. Nullable rather than defaulted:
+    // an empty string would be indistinguishable from a source that exposes no version at all.
+    source_version: text('source_version'),
     linked_block_id: text('linked_block_id'),
+    // Workspace+DocKind role link (WS1 items 2–4), alongside `linked_block_id`: `template` |
+    // `exemplar` scoped to `doc_kind`. Nullable — a plain imported / block-linked doc has neither.
+    role: text('role'),
+    doc_kind: text('doc_kind'),
+    // What became of the document's rendered images at the import that wrote this body (mirror of
+    // D1 migration 0087). NULL is a distinct state, not a default: the question does not apply to a
+    // prose source or an `upload`, where every non-null value means renders were in scope and says
+    // how they went.
+    render_status: text('render_status'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
     index('idx_documents_block').on(t.workspace_id, t.linked_block_id),
+    index('idx_documents_role').on(t.workspace_id, t.role, t.doc_kind),
   ],
 )
 
-// Ephemeral-environment integration (mirror of D1 migration 0025). A workspace's per-
-// provision-type infra HANDLERS (how a service's declared provision type is stood up) and
-// the registry of environments provisioned from them. Keyed by (workspace_id,
-// provision_type, manifest_id) — one handler per type, plus one per pinned custom manifest
-// id ('' for non-custom). `handler_json` carries the engine connection (sans secrets); the
-// manifests to apply come from the service at provision time. Credentials are opaque
-// ciphertext (SecretCipher envelopes), never plaintext. See
-// docs/initiatives/per-service-provision-types.md.
-export const environmentConnections = pgTable(
-  'environment_connections',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    provision_type: text('provision_type').notNull(),
-    manifest_id: text('manifest_id').notNull().default(''),
-    engine: text('engine').notNull(),
-    backend_kind: text('backend_kind').notNull(),
-    provider_id: text('provider_id').notNull(),
-    label: text('label').notNull(),
-    base_url: text('base_url').notNull(),
-    handler_json: text('handler_json').notNull(),
-    accepts_manifest_id: text('accepts_manifest_id'),
-    secrets_cipher: text('secrets_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.provision_type, t.manifest_id] }),
-    index('idx_environment_conn_workspace')
-      .on(t.workspace_id)
-      .where(sql`${t.deleted_at} IS NULL`),
-  ],
-)
-
-// One row per provisioned environment. `access_cipher` holds the env's own access
-// creds (what the tester uses); `provision_fields_cipher` holds the fields captured at
-// provision time that status/teardown calls interpolate.
-export const environments = pgTable(
-  'environments',
-  {
-    id: text('id').primaryKey(),
-    workspace_id: text('workspace_id').notNull(),
-    block_id: text('block_id'),
-    // The service FRAME this env belongs to (the deployer block walked up to its frame). The
-    // cross-frame discovery key — a `frontend` frame's `service` binding resolves the live env
-    // by the bound service FRAME id, not the task the deployer ran on (`block_id`).
-    frame_id: text('frame_id'),
-    execution_id: text('execution_id'),
-    provider_id: text('provider_id').notNull(),
-    external_id: text('external_id'),
-    url: text('url'),
-    status: text('status').notNull(),
-    access_cipher: text('access_cipher'),
-    provision_fields_cipher: text('provision_fields_cipher'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    expires_at: bigint('expires_at', { mode: 'number' }),
-    last_error: text('last_error'),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-    // The service's declared provision type + the resolved engine that handled it,
-    // recorded at provision time so run details can show exactly what ran where.
-    provision_type: text('provision_type'),
-    engine: text('engine'),
-  },
-  (t) => [
-    index('idx_environments_block')
-      .on(t.workspace_id, t.block_id)
-      .where(sql`${t.deleted_at} IS NULL`),
-    index('idx_environments_expiry')
-      .on(t.expires_at)
-      .where(sql`${t.deleted_at} IS NULL AND ${t.expires_at} IS NOT NULL`),
-  ],
-)
+// The EPHEMERAL-ENVIRONMENT tables (the per-provision-type infra handlers, the registry of
+// provisioned environments, and the self-test runs) live in `tables/environments.ts`: one
+// cohesive group, extracted to keep this module inside its size budget, re-exported below so
+// every `from '../db/schema.js'` importer is unaffected.
+export { environmentConnections, environments, environmentTestRuns } from './tables/environments.js'
 
 // Repo-bootstrap feature: managed reference architectures a new repo is bootstrapped
 // from (mirror of D1 migration 0010). The bootstrap *runs* themselves are stored as
@@ -1395,135 +1264,62 @@ export const referenceArchitectures = pgTable(
   ],
 )
 
-// Slack integration (mirror of D1 migration 0037). An additional delivery transport
-// for the notification mechanism. Per-account connection (+ encrypted bot token,
-// `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace
-// routing, and the per-account GitHub→Slack member map for @-mentions.
-export const slackConnections = pgTable(
-  'slack_connections',
-  {
-    account_id: text('account_id').primaryKey(),
-    team_id: text('team_id').notNull(),
-    team_name: text('team_name').notNull(),
-    team_icon_url: text('team_icon_url'),
-    bot_user_id: text('bot_user_id'),
-    scopes: text('scopes'),
-    token_cipher: text('token_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  // A Slack team binds to at most one live account (mirrors the D1 partial unique).
-  (t) => [
-    uniqueIndex('idx_slack_conn_team')
-      .on(t.team_id)
-      .where(sql`deleted_at IS NULL`),
-  ],
-)
+// The Slack integration's tables live in their own module (this file is at its size ratchet);
+// re-exported here so drizzle-kit and every repository still read ONE schema module.
+export { slackConnections, slackMemberMappings, slackSettings } from './schema-slack.js'
 
-export const slackSettings = pgTable('slack_settings', {
-  workspace_id: text('workspace_id').primaryKey(),
-  routes: text('routes').notNull().default('{}'),
-  mentions_enabled: integer('mentions_enabled').notNull().default(0),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
+// The OUTBOUND MODEL-PROVIDER CREDENTIAL tables (the pooled subscription tokens, the
+// direct-provider API keys, the personal subscriptions + their per-run activations, the
+// per-user local endpoints, the gateway-model catalog and the quota-cycle windows they all
+// accumulate into) live in `tables/model-credentials.ts` — one cohesive group, extracted to
+// keep this module inside its size budget — and are re-exported here.
+export * from './tables/model-credentials.js'
 
-export const slackMemberMappings = pgTable('slack_member_mappings', {
-  account_id: text('account_id').primaryKey(),
-  entries: text('entries').notNull().default('[]'),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Provider-subscription token pool (mirror of D1 migration 0035): per-workspace,
-// per-vendor subscription credentials (Claude Pro/Max OAuth token, ChatGPT
-// auth.json) authenticating the Claude Code / Codex harnesses. The credential is
-// stored as an opaque SecretCipher envelope; usage counters drive usage-aware
-// rotation. A workspace may hold many tokens per vendor (a pool).
-export const providerSubscriptionTokens = pgTable(
-  'provider_subscription_tokens',
+// Inbound public-API keys: the credentials external systems present to `/api/v1` (mirror of D1
+// migration 0034). The secret is stored ONLY as a one-way peppered hash — never plaintext, never
+// recoverable — the opposite of the outbound provider credentials in
+// `tables/model-credentials.ts` (which are decryptable, because a run has to replay them).
+export const publicApiKeys = pgTable(
+  'public_api_keys',
   {
     id: text('id').primaryKey(),
+    account_id: text('account_id').notNull(),
     workspace_id: text('workspace_id').notNull(),
-    vendor: text('vendor').notNull(),
     label: text('label').notNull(),
-    token_cipher: text('token_cipher').notNull(),
+    // Permission on `/api/v1`: read ⊂ write ⊂ admin. Existing rows backfill to `write` (D1
+    // migration 0053). Kept as text (matches D1) rather than a pg enum, so the two runtimes'
+    // storage stays column-for-column identical.
+    scope: text('scope').notNull().default('write'),
+    secret_hash: text('secret_hash').notNull(),
+    // The user who minted the key (audit + UI attribution); nullable — a dev-open mint has no
+    // session, and pre-existing rows predate the column (D1 migration 0054). Not a FK: a key is
+    // a workspace-scoped service credential that outlives its minter's access. Mirror of D1 0054.
+    created_by_user_id: text('created_by_user_id'),
+    // The KEY that minted this one, set only for a headless mint through `POST /api/v1/keys`
+    // (D1 migration 0081). Provenance AND a lifecycle link: revoking a key revokes everything it
+    // minted, which is what the `idx_public_api_keys_minter` index below serves. Not a FK, for
+    // the same reason `created_by_user_id` is not: the row must survive its minter's removal.
+    created_by_key_id: text('created_by_key_id'),
+    // Who the key acts for on the PROVISIONER's side, supplied at a headless mint (D1 migration
+    // 0086). Opaque: never parsed, never resolved, never an authorization input — so it carries no
+    // index and no constraint beyond nullability. Written once; a run pins its own copy at
+    // admission rather than joining back to here.
+    external_identity: text('external_identity'),
+    // The user whose PERSONAL subscriptions this key may unlock, set at a session-authed mint the
+    // person opted into (D1 migration 0089). The one authorization input on the row, and useless
+    // on its own: the unlock also needs that user's personal password, which is never stored.
+    // Only ever the minter's own id (the wire body is a boolean). Not a FK, for the reason
+    // `created_by_user_id` is not: the key outlives its user's access, and a bound key whose user
+    // is gone must fail the unlock at the run that needed it rather than vanish from the table.
+    acts_as_user_id: text('acts_as_user_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),
-    window_started_at: bigint('window_started_at', { mode: 'number' }),
-    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
-    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
-    request_count: integer('request_count').notNull().default(0),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
-)
-
-// Direct-provider API-key pool: UI-onboarded vendor API keys scoped to an
-// account, workspace, or user (mirror of D1 migration 0042). The key is stored as
-// an opaque SecretCipher envelope — never plaintext.
-export const providerApiKeys = pgTable(
-  'provider_api_keys',
-  {
-    id: text('id').primaryKey(),
-    scope: text('scope').notNull(),
-    scope_id: text('scope_id').notNull(),
-    provider: text('provider').notNull(),
-    label: text('label').notNull(),
-    key_cipher: text('key_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    last_used_at: bigint('last_used_at', { mode: 'number' }),
-    window_started_at: bigint('window_started_at', { mode: 'number' }),
-    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
-    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
-    request_count: integer('request_count').notNull().default(0),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [index('idx_provider_api_keys_pool').on(t.scope, t.scope_id, t.provider, t.deleted_at)],
-)
-
-// Individual-usage subscriptions (Claude): per-USER, never pooled (mirror of D1
-// migration 0039). The credential is double-encrypted (password layer inside the
-// system layer).
-export const personalSubscriptions = pgTable(
-  'personal_subscriptions',
-  {
-    id: text('id').primaryKey(),
-    user_id: text('user_id').notNull(),
-    vendor: text('vendor').notNull(),
-    label: text('label').notNull(),
-    token_cipher: text('token_cipher').notNull(),
-    expires_at: bigint('expires_at', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-    last_used_at: bigint('last_used_at', { mode: 'number' }),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
+    revoked_at: bigint('revoked_at', { mode: 'number' }),
   },
   (t) => [
-    uniqueIndex('idx_personal_subs_user_vendor')
-      .on(t.user_id, t.vendor)
-      .where(sql`${t.deleted_at} IS NULL`),
-    index('idx_personal_subs_expiry')
-      .on(t.expires_at)
-      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_public_api_keys_workspace').on(t.workspace_id),
+    index('idx_public_api_keys_minter').on(t.created_by_key_id),
   ],
-)
-
-// Per-USER locally-run model endpoints (Ollama / LM Studio / llama.cpp / vLLM / custom),
-// keyed by (user_id, provider). The optional bearer key is system-key-encrypted in
-// `api_key_cipher`; `models` is a JSON array of enabled model ids (mirror of D1
-// migration 0002).
-export const localModelEndpoints = pgTable(
-  'local_model_endpoints',
-  {
-    user_id: text('user_id').notNull(),
-    provider: text('provider').notNull(),
-    label: text('label').notNull(),
-    base_url: text('base_url').notNull(),
-    api_key_cipher: text('api_key_cipher'),
-    models: text('models').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
 )
 
 // Per-USER infra handler overrides (local mode): the per-user layer over a workspace's
@@ -1591,238 +1387,25 @@ export const userSecrets = pgTable(
   (t) => [primaryKey({ columns: [t.user_id, t.kind] })],
 )
 
-// Per-WORKSPACE enabled GATEWAY models (the dynamic catalog subset) — OpenRouter today,
-// LiteLLM and others later. `models` is a JSON array of { id, name, contextLength?,
-// inputPerMillion, outputPerMillion } — the enabled subset with cached context + price
-// (mirror of D1 migration 0006). Keyed by (workspace_id, provider).
-export const providerModelCatalog = pgTable(
-  'provider_model_catalog',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    provider: text('provider').notNull(),
-    models: text('models').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.provider] })],
-)
+// The VCS/projection tables (installations, repos, per-user repo access, and the branch /
+// pull-request / issue / commit / check-run / sync-cursor projections) live in
+// `tables/vcs.ts` — one cohesive group, extracted to keep this module inside its size budget —
+// and are re-exported below so every `from '../db/schema.js'` importer is unaffected.
+export {
+  githubInstallations,
+  githubRepos,
+  githubUserRepoAccess,
+  githubBranches,
+  githubPullRequests,
+  githubIssues,
+  githubCommits,
+  githubCheckRuns,
+  githubSyncCursors,
+} from './tables/vcs.js'
 
-// Per-run activations of a personal credential: the raw token re-encrypted with the
-// system key only, scoped to one execution with a TTL (mirror of D1 migration 0039).
-export const subscriptionActivations = pgTable(
-  'subscription_activations',
-  {
-    id: text('id').primaryKey(),
-    execution_id: text('execution_id').notNull(),
-    user_id: text('user_id').notNull(),
-    vendor: text('vendor').notNull(),
-    token_cipher: text('token_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    uniqueIndex('idx_sub_activations_run').on(t.execution_id, t.user_id, t.vendor),
-    index('idx_sub_activations_expiry').on(t.expires_at),
-  ],
-)
-
-// GitHub App installation bindings (mirror of D1 migration 0004 + the account_id /
-// app_id columns from 0017 / 0019). The container executor reads this to resolve a
-// run's installation id and mint a short-lived push token; tokens are cached
-// in-memory by the auth adapter, never persisted here.
-export const githubInstallations = pgTable(
-  'github_installations',
-  {
-    installation_id: bigint('installation_id', { mode: 'number' }).primaryKey(),
-    workspace_id: text('workspace_id').notNull(),
-    account_id: text('account_id'),
-    account_login: text('account_login').notNull(),
-    target_type: text('target_type').notNull(),
-    app_id: text('app_id'),
-    cached_token: text('cached_token'),
-    token_expires_at: bigint('token_expires_at', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    uniqueIndex('idx_gh_install_workspace')
-      .on(t.workspace_id)
-      .where(sql`deleted_at IS NULL`),
-    index('idx_gh_install_account')
-      .on(t.account_id)
-      .where(sql`deleted_at IS NULL`),
-  ],
-)
-
-// Projection of a workspace's GitHub repositories (mirror of D1 migration 0004).
-// `block_id` links a repo to a board service frame and is owned by the board link
-// (never overwritten by sync). The container executor resolves a run's target repo
-// from the service frame the block sits under.
-export const githubRepos = pgTable(
-  'github_repos',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
-    owner: text('owner').notNull(),
-    name: text('name').notNull(),
-    default_branch: text('default_branch'),
-    private: integer('private').notNull().default(0),
-    block_id: text('block_id'),
-    // Whether the repo is a monorepo hosting several services (board-owned, like
-    // block_id — sync preserves it). See contracts `GitHubRepo.isMonorepo`.
-    is_monorepo: integer('is_monorepo').notNull().default(0),
-    etag: text('etag'),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.github_id] }),
-    index('idx_gh_repos_install').on(t.installation_id),
-  ],
-)
-
-// GitHub projection tables (mirror of D1 migration 0004; sync cursors re-keyed by
-// migration 0032). Local read models of a workspace's repos' branches / PRs / issues /
-// commits / check runs, populated by the inline GitHub sync. `protected`/`merged` are
-// 0/1 to mirror the D1 integer flags; soft-delete tombstones where the D1 tables have one.
-export const githubBranches = pgTable(
-  'github_branches',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    name: text('name').notNull(),
-    head_sha: text('head_sha').notNull(),
-    protected: integer('protected').notNull().default(0),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.name] })],
-)
-
-export const githubPullRequests = pgTable(
-  'github_pull_requests',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    number: integer('number').notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    title: text('title').notNull(),
-    state: text('state').notNull(),
-    head_ref: text('head_ref'),
-    base_ref: text('base_ref'),
-    head_sha: text('head_sha'),
-    merged: integer('merged').notNull().default(0),
-    author: text('author'),
-    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] }),
-    index('idx_gh_pr_state').on(t.workspace_id, t.state),
-  ],
-)
-
-export const githubIssues = pgTable(
-  'github_issues',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    number: integer('number').notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    title: text('title').notNull(),
-    state: text('state').notNull(),
-    author: text('author'),
-    labels: text('labels').notNull().default('[]'),
-    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] })],
-)
-
-export const githubCommits = pgTable(
-  'github_commits',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    sha: text('sha').notNull(),
-    message: text('message').notNull(),
-    author: text('author'),
-    authored_at: bigint('authored_at', { mode: 'number' }),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.sha] })],
-)
-
-export const githubCheckRuns = pgTable(
-  'github_check_runs',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    head_sha: text('head_sha').notNull(),
-    name: text('name').notNull(),
-    status: text('status').notNull(),
-    conclusion: text('conclusion'),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.github_id] }),
-    index('idx_gh_checks_sha').on(t.workspace_id, t.repo_github_id, t.head_sha),
-  ],
-)
-
-// Incremental-sync bookkeeping, keyed by (installation, repo, kind) so a repo is
-// fetched once per org and fanned out (mirror of D1 migration 0032).
-export const githubSyncCursors = pgTable(
-  'github_sync_cursors',
-  {
-    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    kind: text('kind').notNull(),
-    etag: text('etag'),
-    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
-    since_iso: text('since_iso'),
-  },
-  (t) => [primaryKey({ columns: [t.installation_id, t.repo_github_id, t.kind] })],
-)
-
-// Binary-artifact METADATA (mirror of D1 migration 0017). The bytes live in a blob
-// backend keyed by `storage_key` (R2 / S3 / the `binary_artifact_blobs` table below);
-// this table holds only the queryable metadata, identical column-for-column to D1.
-export const binaryArtifacts = pgTable(
-  'binary_artifacts',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    execution_id: text('execution_id'),
-    block_id: text('block_id'),
-    kind: text('kind').notNull(),
-    view: text('view'),
-    content_type: text('content_type').notNull(),
-    byte_size: integer('byte_size').notNull(),
-    hash: text('hash').notNull(),
-    storage: text('storage').notNull(),
-    storage_key: text('storage_key').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_binary_artifacts_execution').on(t.workspace_id, t.execution_id),
-    index('idx_binary_artifacts_block').on(t.workspace_id, t.block_id),
-    // The per-workspace retention sweep filters on `created_at`; index it so the prune is an
-    // indexed range delete (mirrors the D1 idx_binary_artifacts_created index).
-    index('idx_binary_artifacts_created').on(t.workspace_id, t.created_at),
-  ],
-)
-
-// Node-ONLY blob backend: when an account selects the `db` content-storage backend, the
-// bytes live in this Postgres `bytea` table (keyed by the artifact's `storage_key`). There
-// is no D1 equivalent — on Cloudflare blobs always go to R2 (D1 can't hold large values), so
-// this store-in-DB backend genuinely cannot exist on the Worker runtime.
-export const binaryArtifactBlobs = pgTable('binary_artifact_blobs', {
-  storage_key: text('storage_key').primaryKey(),
-  bytes: bytea('bytes').notNull(),
-})
+// The BINARY-artifact tables (the queryable metadata mirror of D1, plus the Node-only
+// store-in-DB blob backend and the `bytea` column type only it uses) live in
+// `tables/binary.ts` — one cohesive group, extracted to keep this module inside its size
+// budget — and are re-exported below so every `from '../db/schema.js'` importer is
+// unaffected and drizzle-kit still sees the tables through that entry point.
+export { binaryArtifacts, binaryArtifactBlobs } from './tables/binary.js'

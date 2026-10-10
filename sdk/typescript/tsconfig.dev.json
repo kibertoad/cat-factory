@@ -1,0 +1,11 @@
+{
+  // Everything that is NOT shipped: the unit tests and the cross-SDK smoketest program. Both are
+  // Node scripts, so `@types/node` is in scope here and deliberately NOT in `tsconfig.json` —
+  // that config's `types: []` is what proves `src/` compiles against web platform types alone
+  // (the SDK runs in browsers and worker isolates too).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "smoketest/**/*.ts"]
+}

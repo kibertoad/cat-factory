@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import { addPackageRegistrySchema, packageRegistryListSchema } from '../package-registries.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -29,5 +29,5 @@ export const deletePackageRegistryContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: entryIdParams,
   pathResolver: ({ entryId }) => `/package-registries/${entryId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

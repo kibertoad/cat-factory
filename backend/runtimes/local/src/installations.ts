@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto'
-import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/kernel'
+import type {
+  GitHubInstallation,
+  GitHubInstallationRepository,
+  VcsProvider,
+} from '@cat-factory/kernel'
 
 // Local mode has no GitHub-App connect flow: a single developer runs the whole product
 // against one PAT. So instead of binding a real App installation, every workspace is
@@ -39,7 +43,21 @@ export interface PatAccount {
 export class AutoProvisioningInstallationRepository implements GitHubInstallationRepository {
   constructor(
     private readonly inner: GitHubInstallationRepository,
-    private readonly resolveAccount: () => Promise<PatAccount>,
+    /**
+     * The account the deployment's token belongs to, or NULL when it holds no token yet. Null is
+     * a distinct answer from "the `/user` call failed", which still provisions (the link flow
+     * only needs the row to exist): with no token there is nothing to be connected TO, so no row
+     * is written and the workspace reports disconnected until one is installed.
+     */
+    private readonly resolveAccount: () => Promise<PatAccount | null>,
+    /**
+     * The deployment's VCS provider ('github' with a GitHub PAT, 'gitlab' with a GitLab PAT),
+     * read at provision time because local mode's credential can be installed while the server
+     * runs. Local mode is single-provider, so the synthetic connection is stamped with it — the
+     * account metadata can't distinguish the two (a GitLab-only deployment can't read GitHub's
+     * `/user`), so it's injected rather than inferred.
+     */
+    private readonly provider: () => VcsProvider = () => 'github',
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -47,6 +65,7 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
     const existing = await this.inner.getByWorkspace(workspaceId)
     if (existing && !existing.deletedAt) return existing
     const account = await this.resolveAccount()
+    if (!account) return null
     const installation: GitHubInstallation = {
       installationId: syntheticInstallationId(workspaceId),
       workspaceId,
@@ -54,8 +73,12 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
       accountLogin: account.accountLogin,
       targetType: account.targetType,
       appId: null,
+      provider: this.provider(),
       cachedToken: null,
       tokenExpiresAt: null,
+      // Local mode authenticates every workspace with the one deployment PAT (the
+      // `mintInstallationToken` seam), so the synthetic row stores no per-connection token.
+      accessToken: null,
       createdAt: this.now(),
       deletedAt: null,
     }
@@ -79,12 +102,12 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
     return this.inner.listActive()
   }
 
-  upsert(installation: GitHubInstallation): Promise<void> {
-    return this.inner.upsert(installation)
+  listActiveForAccount(accountId: string): Promise<GitHubInstallation[]> {
+    return this.inner.listActiveForAccount(accountId)
   }
 
-  updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void> {
-    return this.inner.updateCachedToken(installationId, token, expiresAt)
+  upsert(installation: GitHubInstallation): Promise<void> {
+    return this.inner.upsert(installation)
   }
 
   softDelete(installationId: number, at: number): Promise<void> {

@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { AgentContextSnapshot, LlmCallActivity, LlmCallMetric } from '~/types/execution'
+import type { LlmCallActivity, LlmCallMetric } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { createToolCallSinkState } from '~/stores/observability/toolCalls'
+import { createAgentContextSinkState } from '~/stores/observability/agentContext'
+import { useSingleFlight } from '~/composables/useSingleFlight'
 
 /**
  * LLM observability state: the full per-call model activity for a run (prompts,
@@ -17,12 +20,46 @@ export const useObservabilityStore = defineStore('observability', () => {
   const api = useApi()
   const workspace = useWorkspaceStore()
 
-  /** Per-execution-id call list (newest first). */
+  /**
+   * One in-flight read per run for the call log below. Its load is triggered by a panel OPENING,
+   * and two openers in one tick is the normal case (the window and its shell, a deep link plus the
+   * click behind it), so it fired twice for one answer. The extracted sinks hold their own.
+   */
+  const loads = useSingleFlight<string, void>()
+
+  /**
+   * The TOOL-CALL sink, extracted whole: two reads at two different bounds, plus the rule that
+   * keeps them apart (see `observability/toolCalls.ts`). The store owns the workspace binding and
+   * nothing else about it.
+   */
+  const toolCalls = createToolCallSinkState({
+    ready: () => !!workspace.workspaceId,
+    fetchTrajectory: (executionId) => api.getToolCalls(workspace.requireId(), executionId),
+    fetchFailures: (executionId) => api.getToolCallFailures(workspace.requireId(), executionId),
+  })
+
+  /**
+   * The AGENT-CONTEXT and SEARCH-QUERY sinks, extracted as one pair for the same reason as the
+   * tool-call one beside it: both are per-dispatch records the panel loads on open and neither is
+   * pushed live (see `observability/agentContext.ts`).
+   */
+  const agentContext = createAgentContextSinkState({
+    ready: () => !!workspace.workspaceId,
+    fetchContext: (executionId) => api.getAgentContext(workspace.requireId(), executionId),
+    fetchSearchQueries: (executionId) => api.getSearchQueries(workspace.requireId(), executionId),
+  })
+
+  /**
+   * Per-execution-id call list (newest first).
+   *
+   * DELIBERATELY UNCAPPED. A per-run cap was tried and removed: the rows it evicted are the ones
+   * this panel exists to show, and no eviction rule can tell an operator which call they now
+   * cannot read. What bounds this store instead costs nothing: {@link appendCall} folds live
+   * events only into runs whose panel has been OPENED, and {@link reset} drops every run on a
+   * board switch. What is left growing is one open run's own log while someone watches it, which
+   * is a list they asked for and are reading.
+   */
   const callsByExecution = ref<Record<string, LlmCallMetric[]>>({})
-  /** Per-execution-id provided-context snapshot list (newest first). */
-  const contextByExecution = ref<Record<string, AgentContextSnapshot[]>>({})
-  /** Execution ids whose context is currently loading. */
-  const contextLoading = ref<Set<string>>(new Set())
   /** Execution ids currently loading. */
   const loading = ref<Set<string>>(new Set())
   /** Execution ids currently exporting. */
@@ -48,7 +85,11 @@ export const useObservabilityStore = defineStore('observability', () => {
   }
 
   /** Load (or refresh) the per-call detail for a run. */
-  async function load(executionId: string) {
+  function load(executionId: string): Promise<void> {
+    return loads.run(`calls:${executionId}`, () => fetchCalls(executionId))
+  }
+
+  async function fetchCalls(executionId: string) {
     if (!workspace.workspaceId) return
     withFlag(loading, executionId, true)
     errors.value = { ...errors.value, [executionId]: null }
@@ -104,34 +145,43 @@ export const useObservabilityStore = defineStore('observability', () => {
     if (existing.some((c) => c.id === activity.id)) return
     const row: LlmCallMetric = {
       ...activity,
+      // The live event carries the phase (the proxy knows it) but no turn ordinal — that is
+      // the harness's job-scoped counter, which a proxied call has no equivalent of. Null is
+      // what the stored row will say too, so the live row and the loaded one agree.
+      turnIndex: null,
+      // A live event is always a PROXIED call, and the proxy has no shortfall concept: it sees one
+      // HTTP call at a time and files it. Only a harness CLI's step-level remainder is spend-only,
+      // and that arrives through the stored row, never here.
+      spendOnly: false,
+      // The live event is the COMPACT wire shape, which carries no gateway report: the cost a
+      // gateway states and the upstream it routed to arrive with the stored row. Null rather than
+      // 0, because absent and free are different facts everywhere else on this type and a
+      // placeholder zero here would render this run's live rows as free until the panel reloads.
+      reportedCostUsd: null,
+      upstreamProvider: null,
       promptText: '',
       promptPrefixCount: 0,
       promptHash: '',
       responseText: '',
       reasoningText: '',
     }
-    callsByExecution.value = { ...callsByExecution.value, [executionId]: [row, ...existing] }
-  }
-
-  function contextFor(executionId: string): AgentContextSnapshot[] {
-    return contextByExecution.value[executionId] ?? []
-  }
-  function isContextLoading(executionId: string): boolean {
-    return contextLoading.value.has(executionId)
-  }
-
-  /** Load (or refresh) the per-dispatch provided-context snapshots for a run. */
-  async function loadContext(executionId: string) {
-    if (!workspace.workspaceId) return
-    withFlag(contextLoading, executionId, true)
-    try {
-      const { snapshots } = await api.getAgentContext(workspace.requireId(), executionId)
-      contextByExecution.value = { ...contextByExecution.value, [executionId]: snapshots }
-    } catch {
-      // Best-effort: the panel shows an empty state; nothing is persisted client-side.
-    } finally {
-      withFlag(contextLoading, executionId, false)
+    callsByExecution.value = {
+      ...callsByExecution.value,
+      [executionId]: [row, ...existing],
     }
+  }
+
+  /**
+   * Drop every per-run cache. Called on a board SWITCH: an execution id is scoped to the board
+   * that owns it, nothing here is part of the snapshot, and no id was ever evicted otherwise, so
+   * without this the session accumulates every run of every board it visits. Each panel re-loads
+   * on open, which is how these were populated in the first place.
+   */
+  function reset() {
+    callsByExecution.value = {}
+    errors.value = {}
+    agentContext.resetAgentContext()
+    toolCalls.resetToolCalls()
   }
 
   /**
@@ -159,15 +209,14 @@ export const useObservabilityStore = defineStore('observability', () => {
   return {
     callsByExecution,
     callsFor,
+    reset,
     isLoading,
     isExporting,
     errors,
     load,
     appendCall,
     downloadExport,
-    contextByExecution,
-    contextFor,
-    isContextLoading,
-    loadContext,
+    ...agentContext,
+    ...toolCalls,
   }
 })

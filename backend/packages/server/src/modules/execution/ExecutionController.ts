@@ -3,27 +3,37 @@ import {
   cancelExecutionContract,
   exportExecutionLlmMetricsContract,
   getExecutionAgentContextContract,
+  getExecutionContract,
   getExecutionLlmMetricsContract,
+  getExecutionSearchQueriesContract,
+  getExecutionToolCallFailuresContract,
+  getExecutionToolCallsContract,
   getSpendStatusContract,
+  getWorkspaceUsageContract,
   mergeBlockContract,
   rejectStepContract,
   requestStepChangesContract,
   resolveDecisionContract,
   restartExecutionContract,
   resumeSpendContract,
+  startAgentKindExecutionContract,
   startExecutionContract,
   resolveStepExceededContract,
 } from '@cat-factory/contracts'
+import { NotFoundError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
+import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
+import { gateActor, runInitiatorRole } from '../../http/runAdmission.js'
 import {
+  activateForInteraction,
+  personalGateForAgentKind,
   personalGateForBlock,
   personalGateForRun,
   readPersonalPassword,
-  remintActivations,
 } from '../providers/personalCredentialGate.js'
 
 /**
@@ -39,7 +49,7 @@ export function executionController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const blockId = c.req.valid('param').blockId
-    const { pipelineId } = c.req.valid('json')
+    const { pipelineId, mode } = c.req.valid('json')
     // Individual-usage models (Claude/GLM/Codex) require the initiator's personal
     // subscription: resolve the initiator + an activation closure (throws 428 when a
     // password is needed). The password rides on the X-Personal-Password header. A run
@@ -52,12 +62,44 @@ export function executionController(): Hono<AppEnv> {
       c.get('user'),
       readPersonalPassword(c),
     )
-    const instance = await container.executionService.start(
+    const instance = await container.executionService.start(workspaceId, blockId, pipelineId, {
+      initiatedBy,
+      // The tier this run is admitted under (see `runInitiatorRole` for why it is read off the
+      // gate rather than re-derived, and why `null` is a real state rather than a lowest tier).
+      initiatedByRole: runInitiatorRole(c),
+      // A REQUEST for a sandboxed run; the task's merge preset can still force one (see
+      // `resolveRunMode`), so the engine settles the mode rather than trusting this.
+      ...(mode ? { mode } : {}),
+      activate,
+    })
+    return c.json(instance, 201)
+  })
+
+  // Start ONE agent kind against a block (the board's "Map service" action, the environment
+  // wizard's deep analysis). Same gates and same 201 as the pipeline start above; only the
+  // definition is synthesized (`adHocPipelineFor`).
+  buildHonoRoute(app, startAgentKindExecutionContract, async (c) => {
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = c.req.valid('param').blockId
+    const { agentKind } = c.req.valid('json')
+    const { initiatedBy, activate } = await personalGateForAgentKind(
+      container,
       workspaceId,
       blockId,
-      pipelineId,
-      initiatedBy,
-      activate,
+      agentKind,
+      c.get('user'),
+      readPersonalPassword(c),
+    )
+    const instance = await container.executionService.startAgentKind(
+      workspaceId,
+      blockId,
+      agentKind,
+      {
+        initiatedBy,
+        initiatedByRole: runInitiatorRole(c),
+        activate,
+      },
     )
     return c.json(instance, 201)
   })
@@ -69,81 +111,34 @@ export function executionController(): Hono<AppEnv> {
     return c.json(block, 200)
   })
 
+  // `reviewEffort` is optional, so the historical body-less merge must keep working (the SPA,
+  // headless clients and the conformance suite all call it that way).
+  app.use('/blocks/:blockId/merge', optionalJsonBody)
   buildHonoRoute(app, mergeBlockContract, async (c) => {
     // Manual confirm-merge runs the engine GitHub client under the acting user's
-    // ambient context, so their per-user PAT (when set) authors the merge.
-    const block = await runWithInitiator(c.get('user')?.id, () =>
-      c
-        .get('container')
-        .executionService.mergePr(param(c, 'workspaceId'), c.req.valid('param').blockId),
+    // ambient context, so their per-user PAT (when set) authors the merge. The optional
+    // `reviewEffort` records how much review the PR needed onto the block's merge track record in
+    // the same request; omitting it merges exactly as before and leaves the tag null.
+    const { reviewEffort } = c.req.valid('json')
+    const block = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: c.get('user')?.id },
+      () =>
+        c
+          .get('container')
+          .executionService.mergePr(
+            param(c, 'workspaceId'),
+            c.req.valid('param').blockId,
+            reviewEffort,
+          ),
     )
     return c.json(block, 200)
   })
 
-  // Current spend-safeguard status (token usage vs budget for this period).
-  buildHonoRoute(app, getSpendStatusContract, async (c) => {
-    return c.json(await c.get('container').spendService.status(param(c, 'workspaceId')), 200)
-  })
+  // The run-observability READS (spend status, workspace usage, per-run LLM metrics, the agent
+  // context snapshot, performed searches and the metrics export), registered by a sibling so this
+  // controller stays within the per-function line budget.
+  registerExecutionTelemetryRoutes(app)
 
-  // LLM observability for a run: the full per-call detail (prompts, responses,
-  // token usage, output-limit headroom, transport-vs-execution latency) behind the
-  // board's step rollups. Empty when the observability sink is not wired.
-  buildHonoRoute(app, getExecutionLlmMetricsContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').llmObservability
-    const calls = observability
-      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
-      : []
-    return c.json({ executionId, calls }, 200)
-  })
-
-  // The complete context provided to each container agent in a run: the composed
-  // system + user prompts, the best-practice fragment bodies folded in, and the full
-  // content of the files injected into the container. Empty when the agent-context
-  // sink is not wired or the workspace disabled storing it.
-  buildHonoRoute(app, getExecutionAgentContextContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').agentContextObservability
-    const snapshots = observability
-      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
-      : []
-    return c.json({ executionId, snapshots }, 200)
-  })
-
-  // LLM-friendly export of a run's model activity: a self-describing JSON bundle
-  // (totals + per-agent insights + every call, with derived ratios) meant to be
-  // handed straight to a model for analysis. Sets a download filename.
-  buildHonoRoute(app, exportExecutionLlmMetricsContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').llmObservability
-    const exported = observability
-      ? await observability.exportForExecution(param(c, 'workspaceId'), executionId)
-      : {
-          kind: 'cat-factory.llm-metrics-export' as const,
-          version: 1 as const,
-          executionId,
-          generatedAt: 0,
-          totals: {
-            calls: 0,
-            promptTokens: 0,
-            cachedPromptTokens: 0,
-            cacheHitRate: null,
-            completionTokens: 0,
-            upstreamMs: 0,
-            overheadMs: 0,
-            transportOverheadRatio: null,
-            errors: 0,
-            warnings: 0,
-            truncatedCalls: 0,
-          },
-          insights: [],
-          calls: [],
-        }
-    c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
-    return c.json(exported, 200)
-  })
-
-  // Resume runs paused by the spend safeguard in this workspace.
   buildHonoRoute(app, resumeSpendContract, async (c) => {
     const instances = await c
       .get('container')
@@ -153,8 +148,9 @@ export function executionController(): Hono<AppEnv> {
 
   buildHonoRoute(app, resolveDecisionContract, async (c) => {
     const { executionId, decisionId } = c.req.valid('param')
-    // Re-mint the run's activation BEFORE the engine advances + dispatches the next step.
-    await remintActivations(c, param(c, 'workspaceId'), executionId)
+    // Re-mint the run's activation BEFORE the engine advances + dispatches the next step
+    // (gates: a needed-but-absent/within-buffer password 428s so the client re-prompts early).
+    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
       .executionService.resolveDecision(
@@ -170,13 +166,18 @@ export function executionController(): Hono<AppEnv> {
   // the run advances to the next step carrying it forward as context.
   buildHonoRoute(app, approveStepContract, async (c) => {
     const { executionId, approvalId } = c.req.valid('param')
-    // Re-mint the run's activation BEFORE the engine advances + dispatches the next step.
-    await remintActivations(c, param(c, 'workspaceId'), executionId)
+    // Re-mint the run's activation BEFORE the engine advances + dispatches the next step
+    // (gates: a needed-but-absent/within-buffer password 428s so the client re-prompts early).
+    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
-      .executionService.approveStep(param(c, 'workspaceId'), executionId, approvalId, {
-        proposal: c.req.valid('json').proposal,
-      })
+      .executionService.approveStep(
+        param(c, 'workspaceId'),
+        executionId,
+        approvalId,
+        { proposal: c.req.valid('json').proposal },
+        gateActor(c),
+      )
     return c.json(instance, 200)
   })
 
@@ -185,14 +186,18 @@ export function executionController(): Hono<AppEnv> {
   buildHonoRoute(app, requestStepChangesContract, async (c) => {
     const { executionId, approvalId } = c.req.valid('param')
     const { feedback, comments } = c.req.valid('json')
-    // The step re-runs (dispatches) — re-mint the run's activation first.
-    await remintActivations(c, param(c, 'workspaceId'), executionId)
+    // The step re-runs (dispatches) — re-mint the run's activation first (gates: a
+    // needed-but-absent/within-buffer password 428s so the client re-prompts early).
+    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
-      .executionService.requestStepChanges(param(c, 'workspaceId'), executionId, approvalId, {
-        feedback,
-        comments,
-      })
+      .executionService.requestStepChanges(
+        param(c, 'workspaceId'),
+        executionId,
+        approvalId,
+        { feedback, comments },
+        gateActor(c),
+      )
     return c.json(instance, 200)
   })
 
@@ -202,8 +207,9 @@ export function executionController(): Hono<AppEnv> {
   // generic approve/reject can't short-circuit it.
   buildHonoRoute(app, resolveStepExceededContract, async (c) => {
     const { executionId, approvalId } = c.req.valid('param')
-    // extra-round / proceed re-dispatch the next agent step — re-mint first.
-    await remintActivations(c, param(c, 'workspaceId'), executionId)
+    // extra-round / proceed re-dispatch the next agent step — re-mint first (gates: a
+    // needed-but-absent/within-buffer password 428s so the client re-prompts early).
+    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
       .executionService.resolveCompanionExceeded(
@@ -253,9 +259,160 @@ export function executionController(): Hono<AppEnv> {
         executionId,
         approvalId,
         c.req.valid('json').reason,
+        gateActor(c),
       )
     return c.json(instance, 200)
   })
 
   return app
+}
+
+/**
+ * The run-observability READ surface. Split out of {@link executionController} purely for size;
+ * it registers onto the SAME app instance, so every middleware mounted there still applies.
+ */
+function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
+  // Current spend-safeguard status (token usage vs budget for this period).
+  buildHonoRoute(app, getSpendStatusContract, async (c) => {
+    return c.json(await c.get('container').spendService.status(param(c, 'workspaceId')), 200)
+  })
+
+  // Usage report for this period: token usage broken down by billing kind / vendor /
+  // model — both metered API calls and flat-rate subscription harness usage. Powers the
+  // "Usage" settings tab. (Reporting only; the budget gate above still counts metered.)
+  buildHonoRoute(app, getWorkspaceUsageContract, async (c) => {
+    return c.json(
+      await c.get('container').spendService.usageBreakdown(param(c, 'workspaceId')),
+      200,
+    )
+  })
+
+  // One run, WHOLE. The board snapshot serves a lean projection that withholds each step's
+  // captured prose (`projectExecutionForBoard`), so the step-detail overlays fetch the run they
+  // are about through here. A 404 rather than a null body: an id the workspace does not hold is
+  // a 404 like every other point-read, and an overlay reading `null` as "this step said nothing"
+  // is exactly the withheld-vs-absent confusion the projection exists to avoid.
+  buildHonoRoute(app, getExecutionContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const workspaceId = param(c, 'workspaceId')
+    const instance = await c.get('container').executionRepository.get(workspaceId, executionId)
+    if (!instance) throw new NotFoundError('Run', executionId)
+    return c.json(instance, 200)
+  })
+
+  // LLM observability for a run: the full per-call detail (prompts, responses,
+  // token usage, output-limit headroom, transport-vs-execution latency) behind the
+  // board's step rollups. Empty when the observability sink is not wired.
+  //
+  // This and the five reads below take an AGENT RUN id (see the contract file): they answer off
+  // the telemetry stores, which are keyed by the run, so a repo-bootstrap run (which has no
+  // execution row) is inspectable through exactly these routes. Do not add an execution
+  // existence guard here; the workspace scope is already applied by each store.
+  buildHonoRoute(app, getExecutionLlmMetricsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').llmObservability
+    const calls = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, calls }, 200)
+  })
+
+  // The complete context provided to each container agent in a run: the composed
+  // system + user prompts, the best-practice fragment bodies folded in, and the full
+  // content of the files injected into the container. Empty when the agent-context
+  // sink is not wired or the workspace disabled storing it.
+  buildHonoRoute(app, getExecutionAgentContextContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').agentContextObservability
+    const snapshots = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, snapshots }, 200)
+  })
+
+  // The web searches each container agent in a run performed through the search proxy:
+  // the query text, the provider that served it, and the result count. Empty when the
+  // search-query sink is not wired or the workspace disabled storing agent context.
+  buildHonoRoute(app, getExecutionSearchQueriesContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').searchQueryObservability
+    const searchQueries = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, searchQueries }, 200)
+  })
+
+  // The tool-call TRAJECTORY: every tool each container agent invoked, oldest first, in the
+  // order it invoked them. The half of "what happened" no model call answers: a tool-execution
+  // failure leaves the model call that requested it reporting `ok`, so the panel's LLM rollups
+  // see a healthy run right up to the moment it dies.
+  //
+  // This is the BROWSE read, and the expensive one — every captured argument and result the run
+  // produced. The panel loads it when an operator opens the trajectory, not when the panel
+  // opens; what it needs up front is the failure read below.
+  buildHonoRoute(app, getExecutionToolCallsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').toolCallObservability
+    // An unwired sink is an empty prefix that is NOT truncated: there is nothing past it. That
+    // is a different claim from the trajectory itself, which says so via `available` on the
+    // debug overview; here the panel's own sink states carry it (see `RunFailureEvidence`).
+    const trajectory = observability
+      ? await observability.listForRun(param(c, 'workspaceId'), executionId)
+      : { toolCalls: [], truncated: false }
+    return c.json({ executionId, ...trajectory }, 200)
+  })
+
+  // The run's FAILING tool calls plus the exact counts behind them — the panel's headline, and
+  // the read it makes on open. Cheap by construction: two indexed aggregates and a handful of
+  // rows, never the trajectory's bodies, so the one answer an operator opens the panel for does
+  // not queue behind megabytes of arguments they may never scroll.
+  buildHonoRoute(app, getExecutionToolCallFailuresContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').toolCallObservability
+    const failures = observability
+      ? await observability.failuresForRun(param(c, 'workspaceId'), executionId)
+      : { total: 0, failed: 0, failures: [], failuresTruncated: false }
+    return c.json({ executionId, ...failures }, 200)
+  })
+
+  // LLM-friendly export of a run's model activity: a self-describing JSON bundle
+  // (totals + per-agent insights + every call, with derived ratios) meant to be
+  // handed straight to a model for analysis. Sets a download filename.
+  buildHonoRoute(app, exportExecutionLlmMetricsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').llmObservability
+    const exported = observability
+      ? await observability.exportForExecution(param(c, 'workspaceId'), executionId)
+      : {
+          kind: 'cat-factory.llm-metrics-export' as const,
+          version: 1 as const,
+          executionId,
+          generatedAt: 0,
+          totals: {
+            calls: 0,
+            promptTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cacheHitRate: null,
+            completionTokens: 0,
+            upstreamMs: 0,
+            overheadMs: 0,
+            transportOverheadRatio: null,
+            errors: 0,
+            warnings: 0,
+            truncatedCalls: 0,
+            // Null, not 0: this branch is "no telemetry sink is wired", and a zero here would
+            // report a run that spent nothing rather than one nothing was recorded for.
+            costEstimate: null,
+          },
+          insights: [],
+          calls: [],
+          // An empty bundle is complete, not a slice: there was nothing to cap.
+          truncated: false,
+        }
+    c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
+    return c.json(exported, 200)
+  })
+
+  // Resume runs paused by the spend safeguard in this workspace.
 }

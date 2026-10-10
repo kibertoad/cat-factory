@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentRunResult, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type {
+  AgentJobHandle,
+  AgentRunResult,
+  Block,
+  ExecutionInstance,
+  PipelineStep,
+} from '@cat-factory/kernel'
 import { TesterController, type TesterControllerDeps } from './TesterController.js'
 
 const block = (): Block =>
@@ -25,22 +32,49 @@ const instance = (step: PipelineStep): ExecutionInstance =>
 
 function makeController(over: Partial<TesterControllerDeps> = {}) {
   const raise = vi.fn(async () => ({}) as never)
-  const persistInstance = vi.fn(async () => {})
+  const casPersist = vi.fn(async () => {})
   const startJob = vi.fn(async (_context?: unknown) => ({ jobId: 'j1' }))
   const deps = {
     blockRepository: { get: async () => block() },
     notificationService: { raise },
-    agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), stopJob: vi.fn() },
+    agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), reclaimRun: vi.fn() },
     contextBuilder: { buildContext: vi.fn() },
-    resolveMergePreset: async () => ({ ciMaxAttempts: 10 }),
+    // The shared async dispatch: this suite drives container kinds, so it stamps the cold boot
+    // the real one does and then calls the fake executor.
+    startStepDispatch: vi.fn(
+      async ({
+        step,
+        context,
+        executor,
+      }: {
+        step: PipelineStep
+        context: { agentKind?: string }
+        // The executor the controller resolved, so a suite that overrides it with a throwing
+        // `startJob` exercises the dispatch failure rather than this fake's happy path.
+        executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+      }) => {
+        // The cold boot the real seam commits before the executor is called.
+        step.container = { status: 'starting' }
+        const handle = await executor.startJob(context as never)
+        // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+        // these suites assert, and a hand-written stub of it would assert the stub.
+        return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
+      },
+    ),
+    resolveRiskPolicy: async () => ({ ciMaxAttempts: 10 }),
     stateMachine: {
-      persistInstance,
+      casPersist,
       emitInstance: vi.fn(async () => {}),
       stopRunContainer: vi.fn(async () => {}),
+      // The pair helper the controller now writes through. Faked through `casPersist` so the
+      // `casPersist` assertions below still observe every persist the controller performs.
+      persistAndEmit: vi.fn(async () => {
+        await casPersist()
+      }),
     },
     ...over,
   } as unknown as TesterControllerDeps
-  return { controller: new TesterController(deps), raise, persistInstance, startJob }
+  return { controller: new TesterController(deps), raise, casPersist, startJob }
 }
 
 describe('TesterController auto-abort on a failed ephemeral environment', () => {

@@ -1,4 +1,6 @@
 import * as v from 'valibot'
+import { vcsProviderSchema } from './routes/auth.js'
+import { vcsConnectMethodSchema } from './routes/vcs.js'
 
 // ---------------------------------------------------------------------------
 // GitHub integration wire contracts. These describe the *projected* GitHub data
@@ -21,17 +23,33 @@ export const githubRepoSchema = v.object({
   name: v.string(),
   defaultBranch: v.nullable(v.string()),
   private: v.boolean(),
-  /** Optional link to a board block this repo backs. */
-  blockId: v.nullable(v.string()),
   /**
    * Whether this repo is a monorepo hosting more than one service. When true the
    * board lets several service frames target the same repo, each pinned to its own
    * subdirectory (carried on the {@link Service}), and that subdirectory is fed to
-   * every agent working on the service. Owned by the board (set explicitly), so —
-   * like `blockId` — sync never overwrites it. Absent/false ⇒ a plain single-service
-   * repo (the historical behaviour).
+   * every agent working on the service. Owned by the board (set explicitly), so
+   * sync never overwrites it. Absent/false ⇒ a plain single-service repo (the
+   * historical behaviour).
    */
   isMonorepo: v.optional(v.boolean()),
+  /**
+   * How this repo entered the workspace's projection:
+   *  - `'app'` (default) — reachable through the workspace's shared GitHub App
+   *    installation, so every workspace member sees and can operate on it.
+   *  - `'user_pat'` — reachable ONLY through the personal access token of the user
+   *    who linked it (the App installation isn't granted it). Its board frame is
+   *    redacted for members who can't reach it with their own PAT (fail closed).
+   * Owned by the link, so sync never overwrites it. Absent ⇒ `'app'`.
+   */
+  linkedVia: v.optional(v.picklist(['app', 'user_pat'])),
+  /**
+   * Which VCS the repo belongs to (github / gitlab). Presentation switches on this — labels
+   * ("Merge request" vs "Pull request"), icons, and host/URL shapes — while the data stays
+   * provider-neutral. Owned by the connection the repo is reached through (the sync service
+   * stamps the installation's provider). Absent on rows written before the column existed ⇒
+   * treated as `'github'` (the only provider that populated these tables before).
+   */
+  provider: v.optional(vcsProviderSchema),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
 })
@@ -81,6 +99,23 @@ export const githubPullRequestSchema = v.object({
 })
 export type GitHubPullRequest = v.InferOutput<typeof githubPullRequestSchema>
 
+/**
+ * The result of OPENING a pull request: the synced {@link GitHubPullRequest} projection PLUS
+ * the web `url`. The projection deliberately omits `url` (it isn't a sync cursor and never
+ * hits the DB), but the create call's response DOES carry it (`html_url` / `web_url`), so a
+ * caller that just opened a PR — e.g. a backend post-op recording {@link PullRequestRef} on a
+ * block — gets a real link without reconstructing a provider-specific URL. Each VCS provider
+ * fills `url` from its own field, keeping the shared layer provider-agnostic.
+ */
+export type OpenedPullRequest = GitHubPullRequest & {
+  url: string
+  /**
+   * True when the head branch lives in a different repository than the base (a fork), false when
+   * both are the same repository. Absent when the provider did not say.
+   */
+  crossRepository?: boolean
+}
+
 export const githubIssueStateSchema = v.picklist(['open', 'closed'])
 export type GitHubIssueState = v.InferOutput<typeof githubIssueStateSchema>
 
@@ -124,12 +159,47 @@ export const githubCheckRunSchema = v.object({
 })
 export type GitHubCheckRun = v.InferOutput<typeof githubCheckRunSchema>
 
-/** A workspace's GitHub App installation, as exposed to clients (no token). */
+/** A workspace's VCS connection (an App installation or a pasted PAT), as exposed to clients. */
 export const githubConnectionSchema = v.object({
   installationId: v.number(),
   accountLogin: v.string(),
   targetType: v.picklist(['Organization', 'User']),
   connectedAt: v.number(),
+  /**
+   * The VCS this connection talks to (github / gitlab). The SPA switches connect-surface
+   * copy/icons on it. Absent on backends predating the column ⇒ treated as `'github'`.
+   */
+  provider: v.optional(vcsProviderSchema),
+  /**
+   * HOW the workspace authenticates: a GitHub-App installation (`app`) or a pasted personal
+   * access token (`pat`). Stated by whichever connect service built the record rather than
+   * inferred from {@link provider}: an App-only affordance (the installation settings page,
+   * the repo-access grant) exists for `app` alone, and a provider test would mis-serve the
+   * moment a second provider gains a PAT connect (or GitHub gains one).
+   *
+   * REQUIRED, unlike {@link provider}, and deliberately so: this is an internal wire shape,
+   * where a compatibility fallback is what the repo's own rules forbid. A response without it
+   * fails client-side validation outright, which is the honest outcome: a client cannot
+   * decide what to offer from a value it never received, and the alternative (an optional
+   * field defaulted at every reader) leaves the two `toConnection` mappers free to forget it.
+   * Clients still ask `method === 'app'` rather than `!== 'pat'`, so any value that is not an
+   * App installation withholds the App affordances.
+   */
+  method: vcsConnectMethodSchema,
+  /**
+   * The browser-facing base URL of the instance this connection talks to (`https://github.com`,
+   * `https://gitlab.acme.dev`), or null when the deployment's API base does not name one.
+   *
+   * The SPA renders every repo / pull request / issue link from this: the host is a
+   * PER-CONNECTION fact (like {@link provider} and {@link method}), not a per-repo one, and
+   * before it was on the wire the SPA hand-built `https://github.com/{owner}/{name}`, which
+   * sent a self-managed GitLab workspace to whatever lives at that path on gitlab.com.
+   *
+   * Null is a real state, not a gap to paper over: a base behind a proxy path cannot be
+   * inverted, and a link to the wrong instance's namespace is worse than no link. Readers
+   * WITHHOLD the affordance rather than falling back to the provider's public host.
+   */
+  webUrl: v.nullable(v.string()),
   /**
    * Whether cat-factory can create repositories under this account itself — true
    * only for accounts served by the privileged App tier (ADR 0005). When false,
@@ -177,6 +247,19 @@ export const githubAvailableRepoSchema = v.object({
   linked: v.boolean(),
   /** Whether the (linked) repo is flagged as a monorepo. False for unlinked repos. */
   isMonorepo: v.optional(v.boolean(), false),
+  /**
+   * True when this repo is surfaced ONLY through the signed-in user's personal access token
+   * (the workspace's GitHub App can't reach it). Linking it makes a `linkedVia:'user_pat'`
+   * service whose frame is hidden from members without their own access. The picker badges
+   * these so the user knows the difference. Absent/false ⇒ an App-reachable repo.
+   */
+  personal: v.optional(v.boolean(), false),
+  /**
+   * The VCS this repo lives on (github / gitlab) — every listed repo is reachable through the
+   * workspace's one connection, so this is the connection's provider. Drives the picker's
+   * provider-keyed labels/icons. Absent ⇒ treated as `'github'`.
+   */
+  provider: v.optional(vcsProviderSchema),
 })
 export type GitHubAvailableRepo = v.InferOutput<typeof githubAvailableRepoSchema>
 
@@ -284,3 +367,67 @@ export const commentSchema = v.object({
   body: v.pipe(v.string(), v.minLength(1)),
 })
 export type CommentInput = v.InferOutput<typeof commentSchema>
+
+// ---------------------------------------------------------------------------
+// Branch-protection preflight. Branch protection on the HOST is the only control over a
+// stolen `Contents: write` token — it covers a direct push to the default branch and a
+// merge-API call alike — and it is the operator's to configure, not something the platform
+// can enforce (backend/docs/security-model.md, checklist item 1). This read is what tells
+// them, per linked repository, whether it is actually in place.
+// ---------------------------------------------------------------------------
+
+/**
+ * Three states, never two. `unknown` is a real answer: a probe that could not reach the host
+ * must not render as either "protected" or "unprotected", or the report manufactures an
+ * all-clear (or a false alarm) out of an outage.
+ */
+export const branchProtectionStateSchema = v.picklist(['protected', 'unprotected', 'unknown'])
+export type BranchProtectionStateValue = v.InferOutput<typeof branchProtectionStateSchema>
+
+/** Why a state is `unknown`. Kept apart because each needs a different fix. */
+export const branchProtectionUnknownReasonSchema = v.picklist([
+  'branch_not_found',
+  'forbidden',
+  'error',
+])
+
+/**
+ * The protection rule's contents. Present only when the run credential could READ the rule,
+ * which needs admin access a minimally-scoped App installation deliberately lacks — so the
+ * state above is always answerable and this is not.
+ */
+export const branchProtectionDetailSchema = v.object({
+  requiresPullRequest: v.boolean(),
+  requiredApprovingReviewCount: v.number(),
+  requiredStatusChecks: v.array(v.string()),
+  allowsForcePush: v.boolean(),
+})
+
+export const branchProtectionSummarySchema = v.object({
+  state: branchProtectionStateSchema,
+  reason: v.optional(branchProtectionUnknownReasonSchema),
+  detail: v.optional(branchProtectionDetailSchema),
+  /** Set on a PROTECTED branch whose rule could not be read — a distinct operator situation. */
+  detailUnavailable: v.optional(v.picklist(['forbidden', 'error'])),
+})
+export type BranchProtectionSummaryView = v.InferOutput<typeof branchProtectionSummarySchema>
+
+export const repoBranchProtectionSchema = v.object({
+  repoGithubId: v.number(),
+  owner: v.string(),
+  name: v.string(),
+  defaultBranch: v.string(),
+  protection: branchProtectionSummarySchema,
+})
+
+export const branchProtectionReportSchema = v.object({
+  /**
+   * `unavailable` ⇒ the wired VCS provider cannot answer this at all. Reported as its own
+   * state so an empty report never impersonates a clean one.
+   */
+  capability: v.picklist(['ok', 'unavailable']),
+  repos: v.array(repoBranchProtectionSchema),
+  /** Linked repositories left unprobed by the fan-out cap — stated, never silently dropped. */
+  omittedRepos: v.number(),
+})
+export type BranchProtectionReportView = v.InferOutput<typeof branchProtectionReportSchema>

@@ -1,0 +1,364 @@
+import { describe, expect, it } from 'vitest'
+import {
+  isSecretShapedFilename,
+  redactSecretFields,
+  redactSecrets,
+  redactSecretsDeep,
+} from './redact-secrets.logic.js'
+
+describe('redactSecrets', () => {
+  it('passes null/empty through unchanged', () => {
+    expect(redactSecrets(null)).toBeNull()
+    expect(redactSecrets('')).toBe('')
+  })
+
+  it('leaves ordinary prose untouched', () => {
+    const text = 'The coder should implement the endpoint and open a PR.'
+    expect(redactSecrets(text)).toBe(text)
+  })
+
+  it('drops a Bearer token, keeping the field name for diagnostics', () => {
+    const out = redactSecrets('Authorization: Bearer sk-abcdefghijklmnop1234')
+    expect(out).not.toContain('sk-abcdefghijklmnop1234')
+    expect(out?.toLowerCase()).toContain('authorization')
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('drops header echoes (authorization / x-api-key)', () => {
+    expect(redactSecrets('x-api-key: super-secret-value')).not.toContain('super-secret-value')
+    expect(redactSecrets('authorization=abc123def456')).toContain('[REDACTED]')
+  })
+
+  it('strips userinfo from a URL but keeps the host', () => {
+    const out = redactSecrets('clone https://user:ghp_0123456789abcdef@github.com/acme/repo.git')
+    expect(out).not.toContain('ghp_0123456789abcdef')
+    expect(out).toContain('github.com/acme/repo.git')
+    expect(out).toContain('user:[REDACTED]@')
+  })
+
+  it('strips userinfo across scheme shapes, keeping the scheme itself intact', () => {
+    // The scheme is matched in a lookbehind and never consumed, so it must survive the
+    // replacement byte-for-byte, whatever it is.
+    const cases: [string, string][] = [
+      ['postgres://admin:hunter2@db.internal:5432/app', 'postgres://admin:[REDACTED]@'],
+      ['git+ssh://user:tok0@host/x.git', 'git+ssh://user:[REDACTED]@'],
+      ['x+custom-scheme.v1://u:p@h/', 'x+custom-scheme.v1://u:[REDACTED]@'],
+      ['HTTPS://User:Pass@Host/', 'HTTPS://User:[REDACTED]@'],
+    ]
+    for (const [input, expected] of cases) {
+      expect(redactSecrets(input), input).toContain(expected)
+    }
+    // Userinfo with no scheme in front of it is left alone: `user:pass@host` in prose is
+    // not a URL, and the `:`-separated-value rules cover the credential-shaped cases.
+    expect(redactSecrets('no scheme user:pass@host')).toBe('no scheme user:pass@host')
+  })
+
+  it('leaves prose alone where the field name is just an English word', () => {
+    // These field names (`key`, `signature`, `basic`, `token`) are ordinary English, and this
+    // scrub now reaches the message a person READS on a form and the `reason` persisted on a
+    // failed run. Redacting the next word of a sentence deleted the identifier the operator had
+    // to go and set, and named the wrong thing as a secret.
+    const prose = [
+      'Missing required key: OPENAI_API_KEY',
+      'basic authentication failed for the cluster',
+      'Invalid signature: expected sha256 digest',
+      'Provider key=value pair rejected',
+      'token refresh returned nothing',
+    ]
+    for (const text of prose) expect(redactSecrets(text), text).toBe(text)
+  })
+
+  it('still drops a credential in every shape that carve-out could have covered', () => {
+    // The pairing test for the one above: what is spared must be words, never credentials.
+    const cases = [
+      'key=a1b2c3d4e5f6',
+      'password: hunter2seven',
+      'api_key: abcdefghijklmnopqrstuvwx',
+      'Basic dXNlcjpwYXNzd29yZA==',
+      'Bearer abcdefghijklmnopqrstuvwxyz',
+      'signature=deadbeefcafe1234',
+    ]
+    for (const text of cases) expect(redactSecrets(text), text).toContain('[REDACTED]')
+  })
+
+  it('drops secret-ish query/JSON params keeping the field name', () => {
+    const out = redactSecrets('{"token":"abcd1234efgh","note":"keep me"}')
+    expect(out).not.toContain('abcd1234efgh')
+    expect(out).toContain('"token"')
+    expect(out).toContain('keep me')
+  })
+
+  it('drops standalone token shapes regardless of context', () => {
+    const cases = [
+      'sk-ABCDEFGHIJKLMNOP1234',
+      'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345',
+      'github_pat_ABCDEFGHIJKLMNOPQRSTUV_0123456789',
+      'xoxb-1234567890-abcdefghij',
+      'AKIAIOSFODNN7EXAMPLE',
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.dozjgNryP4J3jVmNHl0w5N',
+    ]
+    for (const secret of cases) {
+      const out = redactSecrets(`token is ${secret} here`)
+      expect(out, secret).not.toContain(secret)
+      expect(out, secret).toContain('[REDACTED]')
+    }
+  })
+
+  it('drops a PEM-armored private key block regardless of the surrounding text', () => {
+    const key = [
+      '-----BEGIN OPENSSH PRIVATE KEY-----',
+      'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gt',
+      'ZWQyNTUxOQAAACDsecretkeymaterialthatmustneverbestoredAAAAAA==',
+      '-----END OPENSSH PRIVATE KEY-----',
+    ].join('\n')
+    const out = redactSecrets(`here is my key:\n${key}\nplease use it`)
+    expect(out).not.toContain('secretkeymaterialthatmustneverbestored')
+    expect(out).not.toContain('BEGIN OPENSSH PRIVATE KEY')
+    expect(out).toContain('[REDACTED]')
+    // Surrounding prose is preserved.
+    expect(out).toContain('here is my key:')
+    expect(out).toContain('please use it')
+  })
+
+  it('leaves a public certificate block untouched (only private keys are dropped)', () => {
+    const cert = '-----BEGIN CERTIFICATE-----\nMIIBkTCB+w==\n-----END CERTIFICATE-----'
+    expect(redactSecrets(cert)).toBe(cert)
+  })
+
+  it('pairs PEM markers exactly as one BEGIN-to-END regex would', () => {
+    // The block scrub walks the BEGIN and END markers in lockstep instead of matching one
+    // `BEGIN…[\s\S]*?…END` regex, so these pin the pairing decisions where a scanner could
+    // plausibly diverge from that regex: the drop runs to the FIRST END after a header
+    // (swallowing any nested header), a header with no END is left in place, and scanning
+    // resumes after the END that closed the previous block.
+    const b = '-----BEGIN RSA PRIVATE KEY-----'
+    const e = '-----END RSA PRIVATE KEY-----'
+    const cases: [string, string][] = [
+      [`${b}body${e}`, '[REDACTED]'],
+      [`a${b}1${e}b${b}2${e}c`, 'a[REDACTED]b[REDACTED]c'],
+      // A nested BEGIN is swallowed by the outer block rather than starting its own.
+      [`${b}x${b}y${e}`, '[REDACTED]'],
+      // The first END closes the first BEGIN; the trailing END is then ordinary text.
+      [`${b}x${e}y${e}`, `[REDACTED]y${e}`],
+      // Unterminated: no second delimiter to bound the drop, so it stays put.
+      [`${b}dangling body with no end marker`, `${b}dangling body with no end marker`],
+      // An END with no BEGIN before it is not a block at all.
+      [`${e}${b}`, `${e}${b}`],
+      [`${b}${e}${b}`, `[REDACTED]${b}`],
+    ]
+    for (const [input, expected] of cases) {
+      expect(redactSecrets(input), input).toBe(expected)
+    }
+  })
+
+  it('costs the same on credential-free text of any shape', () => {
+    // The scrub runs over every captured prompt and every injected context file, so its cost
+    // must depend on the SIZE of a body and not its shape. Two rules have broken that, and
+    // neither shows up in a single-body timing budget, so each shape below is measured
+    // against prose of the same size:
+    //   - the URL-userinfo scheme prefix, before it moved into a lookbehind, re-walked its
+    //     bounded run at every offset: ~15x prose on base64, ~130ms per 512KB;
+    //   - the PEM block body, before the markers were walked in lockstep, was an unbounded
+    //     lazy `[\s\S]*?` that rescanned the tail once per unterminated header: ~19s for 2MB,
+    //     quadratic rather than merely a bad constant.
+    const size = 2 * 1024 * 1024
+    const fill = (unit: string): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size)
+    const prose = fill('the quick brown fox jumps over the lazy dog ')
+    const shapes: Record<string, string> = {
+      // A long unbroken run of scheme-legal characters: an ordinary thing to find in a
+      // lockfile, an inlined asset, or a data URI.
+      base64: fill('aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQgcGF5bG9hZA'),
+      // Armor headers that never close. Truncation upstream of the scrub produces exactly
+      // this, since a capped context file can lose its END marker.
+      'unterminated PEM headers': fill('-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n'),
+      // Single-character filler: the body the agent-context size-budget test scrubs.
+      filler: fill('x'),
+    }
+    // Best-of-N: a scheduler stall inflates a single sample, and this suite shares a machine
+    // with the rest of the monorepo's tests. Every body is measured the same way in the same
+    // process, so contention that survives the minimum hits both sides of the ratio.
+    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
+    // a millisecond's granularity is noise against samples an order of magnitude larger.
+    const fastest = (body: string): number => {
+      let best = Number.POSITIVE_INFINITY
+      for (let i = 0; i < 3; i++) {
+        const started = Date.now()
+        redactSecrets(body)
+        best = Math.min(best, Date.now() - started)
+      }
+      return best
+    }
+    const baseline = fastest(prose)
+    // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
+    // with no hint of why, so it is asserted as its own condition. 2MB of prose is ~17ms, so
+    // this only trips if the body stopped being scrubbed at all.
+    expect(
+      baseline,
+      'prose baseline must be measurable at millisecond granularity',
+    ).toBeGreaterThan(0)
+    for (const [name, body] of Object.entries(shapes)) {
+      const ratio = fastest(body) / baseline
+      // Parity is ~1x once no rule rescans per offset or per marker; both regressions above
+      // are an order of magnitude away, so 4x separates them without riding on absolute
+      // timings. Measured worst case under 2x CPU oversubscription is 1.5x.
+      expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline}ms)`).toBeLessThan(4)
+    }
+  })
+})
+
+describe('isSecretShapedFilename', () => {
+  it('is false for nullish/empty and ordinary docs', () => {
+    expect(isSecretShapedFilename(null)).toBe(false)
+    expect(isSecretShapedFilename(undefined)).toBe(false)
+    expect(isSecretShapedFilename('')).toBe(false)
+    expect(isSecretShapedFilename('README.md')).toBe(false)
+    expect(isSecretShapedFilename('src/config.ts')).toBe(false)
+    // A file merely named "environment.md" is prose, not a dotenv file.
+    expect(isSecretShapedFilename('docs/environment.md')).toBe(false)
+  })
+
+  it('matches dotenv files and their variants', () => {
+    expect(isSecretShapedFilename('.env')).toBe(true)
+    expect(isSecretShapedFilename('.env.local')).toBe(true)
+    expect(isSecretShapedFilename('backend/.env.production')).toBe(true)
+  })
+
+  it('matches private-key / keystore suffixes', () => {
+    for (const path of [
+      'server.pem',
+      'tls/private.key',
+      'store.p12',
+      'cert.pfx',
+      'app.keystore',
+      'release.jks',
+      'key.asc',
+      'deploy.ppk',
+      'auth.p8',
+      'signing.pkcs8',
+    ]) {
+      expect(isSecretShapedFilename(path), path).toBe(true)
+    }
+  })
+
+  it('matches SSH keys and credential dotfiles by basename', () => {
+    for (const path of [
+      '.ssh/id_rsa',
+      '.ssh/id_ed25519',
+      'home/user/credentials',
+      '.npmrc',
+      '.netrc',
+      '.pgpass',
+      '.htpasswd',
+      '.git-credentials',
+      '.dockercfg',
+    ]) {
+      expect(isSecretShapedFilename(path), path).toBe(true)
+    }
+  })
+
+  it('matches on the basename only, ignoring directory segments', () => {
+    // A directory called `.env` does not make a nested markdown file secret-shaped.
+    expect(isSecretShapedFilename('.env/notes.md')).toBe(false)
+    // Backslash separators (a Windows-shaped path) are handled too.
+    expect(isSecretShapedFilename('conf\\secret.pem')).toBe(true)
+  })
+
+  it('is case-insensitive', () => {
+    expect(isSecretShapedFilename('SERVER.PEM')).toBe(true)
+    expect(isSecretShapedFilename('.ENV.PROD')).toBe(true)
+  })
+})
+
+describe('redactSecretsDeep', () => {
+  it('returns non-object leaves and nullish values unchanged', () => {
+    expect(redactSecretsDeep(null)).toBeNull()
+    expect(redactSecretsDeep(undefined)).toBeUndefined()
+    expect(redactSecretsDeep(42)).toBe(42)
+    expect(redactSecretsDeep(true)).toBe(true)
+    expect(redactSecretsDeep('plain prose')).toBe('plain prose')
+  })
+
+  it('scrubs a bare string leaf', () => {
+    const out = redactSecretsDeep('token is ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 now')
+    expect(out).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345')
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('scrubs every string reachable inside a nested object/array, keeping structure', () => {
+    const input = {
+      decisions: 'approved; use x-api-key: super-secret-value for the call',
+      count: 3,
+      enabled: false,
+      repo: { owner: 'acme', name: 'widgets' },
+      revision: { feedback: 'clone https://user:s3cr3ttoken0000@github.com/acme/repo.git' },
+      notes: ['keep me', 'sk-ABCDEFGHIJKLMNOP1234567890'],
+    }
+    const out = redactSecretsDeep(input)
+    expect(out.decisions).not.toContain('super-secret-value')
+    expect(out.revision.feedback).not.toContain('s3cr3ttoken0000')
+    expect(out.revision.feedback).toContain('github.com/acme/repo.git')
+    expect(out.notes[1]).not.toContain('sk-ABCDEFGHIJKLMNOP1234567890')
+    expect(out.notes[0]).toBe('keep me')
+    // Non-string leaves and non-secret identifiers pass through untouched.
+    expect(out.count).toBe(3)
+    expect(out.enabled).toBe(false)
+    expect(out.repo).toEqual({ owner: 'acme', name: 'widgets' })
+  })
+})
+
+describe('redactSecretFields', () => {
+  it('gives each value its own KEY as scrubbing context, which the deep walk cannot', () => {
+    // A bare value has no field-name scaffolding for the pattern rules to latch onto, so the deep
+    // walk keeps it. This is the shape a provider's captured provision fields arrive in.
+    const fields = { namespace: 'pr-42', apiToken: '9f2c8b7a6e5d4c3b2a19', region: 'eu-west-1' }
+    expect(redactSecretsDeep(fields).apiToken).toBe('9f2c8b7a6e5d4c3b2a19')
+
+    const out = redactSecretFields(fields)
+    expect(out.apiToken).not.toContain('9f2c8b7a6e5d4c3b2a19')
+    expect(out.namespace).toBe('pr-42')
+    expect(out.region).toBe('eu-west-1')
+  })
+
+  it('still scrubs a recognisable token shape under an innocuous key', () => {
+    const note = redactSecretFields({
+      note: 'deployed with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345',
+    }).note
+    expect(note).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345')
+    expect(note?.startsWith('deployed with ')).toBe(true)
+  })
+
+  it('scrubs a COMPOUND field name, which is the shape a real provision bag uses', () => {
+    // The rules are boundary-anchored and `_` is a word character, so `apiToken` matched while
+    // every prefixed spelling of the same field did not. Those are the normal shape of a
+    // provider's captured bag, and the values reach a model prompt and the telemetry store.
+    const out = redactSecretFields({
+      kargoApiToken: '9f2c8b7a6e5d4c3b2a19',
+      deployPassword: 'hunter2xyzzy',
+      provider_api_key: '9f2c8b7a6e5d4c3b2a19',
+      registryToken: 'abcd1234efgh5678ijkl',
+      'provider.clientSecret': 'sh-4f7a2b9c1d8e6f0a3b5c',
+    })
+    expect(out.kargoApiToken).not.toContain('9f2c8b7a6e5d4c3b2a19')
+    expect(out.deployPassword).not.toContain('hunter2xyzzy')
+    expect(out.provider_api_key).not.toContain('9f2c8b7a6e5d4c3b2a19')
+    expect(out.registryToken).not.toContain('abcd1234efgh5678ijkl')
+    expect(out['provider.clientSecret']).not.toContain('sh-4f7a2b9c1d8e6f0a3b5c')
+  })
+
+  it('leaves a name that merely ENDS in a secret-ish substring alone', () => {
+    // The boundary split is on the name's own case/separator changes, so it never invents a word
+    // break inside one: `monkey` is not a key, and `namespace` is not a `space`.
+    const out = redactSecretFields({ monkey: 'business-as-usual', namespace: 'pr-42' })
+    expect(out.monkey).toBe('business-as-usual')
+    expect(out.namespace).toBe('pr-42')
+  })
+
+  it('keeps a value containing an equals sign intact', () => {
+    const out = redactSecretFields({ selector: 'app=web,tier=frontend' })
+    expect(out.selector).toBe('app=web,tier=frontend')
+  })
+
+  it('returns an empty bag unchanged', () => {
+    expect(redactSecretFields({})).toEqual({})
+  })
+})

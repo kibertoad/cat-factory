@@ -1,4 +1,24 @@
-import { DomainError, type DomainErrorCode } from '@cat-factory/kernel'
+import {
+  DataIntegrityError,
+  DomainError,
+  type DomainErrorCode,
+  dataIntegrityFaultOf,
+  isDataIntegrityError,
+  isDataIntegrityFault,
+} from '@cat-factory/kernel'
+import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
+import {
+  checkInstallationListScope,
+  checkLibrarySourceScope,
+  checkOwnerFieldListScope,
+  checkOwnerFieldUpsertScope,
+  checkOwnerPairScope,
+  checkServiceInsertScope,
+  checkServiceMountScope,
+  checkServiceUpdateScope,
+  checkUsageRecordScope,
+  checkWorkspaceListScope,
+} from './rpc-scope.logic.js'
 
 // The mothership-mode persistence RPC wire protocol.
 //
@@ -31,7 +51,7 @@ export interface PersistenceRpcRequest {
 }
 
 /** The new `rev` of an in-place-mutated argument (the `execution` of `upsert`/`compareAndSwap`). */
-export interface MutatedArg {
+interface MutatedArg {
   arg: number
   rev: number
 }
@@ -40,8 +60,21 @@ export type PersistenceRpcResponse =
   | { ok: true; value: unknown; undef?: boolean; mutated?: MutatedArg }
   | { ok: false; error: PersistenceRpcError }
 
-/** A `DomainErrorCode` plus the transport-only codes the RPC layer itself can raise. */
-export type PersistenceErrorCode = DomainErrorCode | 'forbidden' | 'unknown_method' | 'internal'
+/**
+ * A `DomainErrorCode` plus the transport-only codes the RPC layer itself can raise.
+ *
+ * `data_integrity` is the one non-`DomainError` throw that may NOT be flattened into `internal`.
+ * A mothership-mode node runs the engine with no database of its own, so the row decode that
+ * recognises a poison run happens on the FAR side of this hop; relayed as an opaque 500 it arrives
+ * as a plain `Error`, `isDataIntegrityError` answers false, and the disposal that exists to break
+ * the immortal-run loop silently does nothing on exactly the deployment shape that cannot debug it.
+ */
+export type PersistenceErrorCode =
+  | DomainErrorCode
+  | 'forbidden'
+  | 'unknown_method'
+  | 'internal'
+  | 'data_integrity'
 
 export interface PersistenceRpcError {
   code: PersistenceErrorCode
@@ -57,8 +90,14 @@ const ERROR_STATUS: Record<PersistenceErrorCode, number> = {
   conflict: 409,
   credential_required: 428,
   forbidden: 403,
+  unavailable: 503,
+  unauthorized: 401,
+  rate_limited: 429,
   unknown_method: 400,
   internal: 500,
+  // Internal data corruption, like `internal`: the status class is right and the code is what
+  // carries the distinction the caller acts on.
+  data_integrity: 500,
 }
 
 /** Map an error code to the HTTP status the controller returns (and the client reads). */
@@ -84,8 +123,26 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       only ever lands in the caller's own in-scope workspace; the service layer
  *                       (bypassed by the RPC) is where block-existence is enforced.
  *   - `account`       — `args[arg]` IS an accountId.
+ *   - `accountField`  — `args[arg]` is a record with an `accountId` string field (an
+ *                       `upsert(record)` whose scope key is a property of the record, not a
+ *                       positional arg); the accountId IS the account, checked in scope directly
+ *                       (the account-owned mirror of `workspaceField`). ONLY the top-level
+ *                       `accountId` is bound — sibling fields are NOT scope-validated here, exactly
+ *                       as the raw repo upsert doesn't cross-check them; the row is stored under (and
+ *                       later read by) the bound `accountId`, so a stray sibling only ever lands in
+ *                       the caller's own in-scope account.
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
+ *   - `user`          — `args[arg]` is a userId whose DISPLAY record is being read; in scope iff
+ *                       that user is a CO-MEMBER of one of the token's in-scope accounts (resolved
+ *                       server-side from the account rosters). Unlike `selfUser` (which pins the
+ *                       token's OWN id) this admits any teammate the caller shares an account with —
+ *                       the member-roster display read. A user in no in-scope account (or an
+ *                       unresolvable one) fails closed (404, no existence leak).
+ *   - `userList`      — `args[arg]` is `string[]` of userIds (the batched roster enrichment); EVERY
+ *                       requested user must be a co-member of an in-scope account, so a missing or
+ *                       out-of-scope id fails closed — the batched form of `user`. Empty input is
+ *                       allowed (it returns empty).
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
  *                       scope so a node can never widen its own visibility.
  *   - `block`         — `args[arg]` is a blockId with NO workspace arg; resolve the block's
@@ -114,19 +171,206 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       directly. A non-object arg, a missing/non-string `workspaceId`/`serviceId`,
  *                       an out-of-scope workspace, or a service whose account differs from the
  *                       workspace's (incl. a missing service) is refused as 404.
+ *   - `skillSource`   — `args[arg]` is a skill-SOURCE id (a `skill_sources` row) with no account
+ *                       arg; resolve the source's owning account server-side. This is the rule the
+ *                       repo-sourced Claude Skills library's sync surface needs: a source id is the
+ *                       only key its reconcile/tombstone/pin methods carry, so nothing positional
+ *                       binds them. A missing source (or no resolver wired) fails closed (404, no
+ *                       existence leak), exactly like `block`/`service`.
+ *   - `accountFieldUpsert`
+ *                     — the UPSERT form of `accountField`, for a record-keyed write whose conflict
+ *                       key is the record's `id` rather than its `accountId`. Binds BOTH the
+ *                       declared account (`record.accountId`, exactly like `accountField`) AND — when
+ *                       a row with `record.id` already EXISTS — that stored row's owning account,
+ *                       resolved server-side by `entity`. An absent row is a CREATE and passes on the
+ *                       declared half alone.
+ *
+ *                       The second half is the whole point. `accountField` is safe only under the
+ *                       precondition stated in its own entry: the row is stored under, and later read
+ *                       by, the bound `accountId`. An `ON CONFLICT (id) DO UPDATE` that does not
+ *                       re-`SET account_id` breaks that precondition — the write lands on whichever
+ *                       row already holds that id, under ITS account, not the caller's. A token scoped
+ *                       to account A could then name account B's source id, declare `accountId: A` to
+ *                       satisfy the field check, and repoint B's row at an attacker-controlled repo;
+ *                       B's next sync would fold `SKILL.md` bodies — agent INSTRUCTIONS — from that
+ *                       repo into B's catalog. Binding the stored row closes it.
+ *
+ *                       Prefer `accountField` whenever the write IS keyed by the tenant column (the
+ *                       sibling `accountSkillRepository.upsert` conflicts on `(account_id, skill_id)`,
+ *                       so a foreign id inserts under the caller's own account and can never mutate
+ *                       another tenant's row). Reach for this rule only when the conflict key alone
+ *                       decides which row is written.
+ *   - `owner`         — `args[kindArg]`/`args[idArg]` are a tenant-library `(ownerKind, ownerId)`
+ *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
+ *                       `workspace` → resolve the workspace's owning account (like `workspace`);
+ *                       `account` → the ownerId IS an accountId (like `account`). Any other kind, a
+ *                       non-string ownerId, or an unresolvable / out-of-scope owner fails closed (404).
+ *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an
+ *                       `upsert(record)` whose owner is a property, not positional args). Binds on
+ *                       those fields exactly like `owner`; a non-object arg / missing fields fail closed.
+ *                       Safe only under the same precondition `accountField` states: the row is stored
+ *                       under, and later read by, the bound owner. An id-keyed conflict breaks that, so
+ *                       such a write takes `ownerFieldUpsert` below.
+ *   - `librarySource` — `args[arg]` is a content-library SOURCE id (a `fragment_sources` /
+ *                       `foundational_service_sources` row) with no owner arg; resolve that source's
+ *                       owning `(ownerKind, ownerId)` PAIR server-side by `entity` and bind it exactly
+ *                       like `owner`. This is what a repo-sourced library's SYNC surface needs: a
+ *                       source id is the only key its reconcile / tombstone / pin methods carry, so
+ *                       nothing positional binds them. The owner-pair analogue of `skillSource` (skills
+ *                       live in ONE tier, so theirs resolves to a bare accountId). A missing source, an
+ *                       unresolvable owner, or no resolver wired fails closed (404, no existence leak).
+ *   - `ownerFieldUpsert`
+ *                     — the UPSERT form of `ownerField`, and the owner-pair analogue of
+ *                       `accountFieldUpsert`: for a record-keyed write whose conflict key is the
+ *                       record's `id` rather than its owner columns. Binds BOTH the declared owner
+ *                       (`record.ownerKind`/`record.ownerId`, exactly like `ownerField`) AND — when a
+ *                       row with `record.id` already EXISTS — that stored row's owner pair, resolved
+ *                       server-side by `entity`. An absent row is a CREATE and passes on the declared
+ *                       half alone; a record with no usable `id` is refused rather than admitted on the
+ *                       declared half. See `accountFieldUpsert` for the attack the stored half closes:
+ *                       both source tables conflict on `id` alone and never re-`SET` their owner
+ *                       columns, so binding only the declared owner would let a token scoped to one
+ *                       tenant repoint another tenant's source at a repo it controls, whose Markdown
+ *                       bodies the victim's next sync folds into their prompts as guidance.
+ *   - `workspaceList` — `args[arg]` is `string[]` of workspaceIds; EVERY one must resolve to an
+ *                       in-scope account, so a missing or out-of-scope board fails closed. The
+ *                       workspace-keyed sibling of `blockList`/`serviceList`, and what a read whose
+ *                       ANSWER is a subset of a candidate list needs (`linkedWorkspaces`): binding
+ *                       the candidates is what stops a node learning about boards it cannot address
+ *                       by passing them in. Empty input is allowed (it returns empty).
+ *   - `installation`  — `args[arg]` is a VCS installation id (a `github_installations` row's
+ *                       `installationId`, a NUMBER) with no workspace/account arg; resolve that
+ *                       row's owning account server-side. A PAT connection stores no `accountId`,
+ *                       so the resolver falls back to the connector workspace's account: the
+ *                       binding is "whoever owns the board that connected it" either way. A missing
+ *                       row, an unreadable table, or no resolver fails closed (404).
+ *   - `installationList`
+ *                     — `args[arg]` is `number[]` of installation ids (the connect page's batched
+ *                       annotation read); EVERY id must resolve to an in-scope account. Unlike the
+ *                       other list kinds an id with NO row is admitted: the caller is asking which
+ *                       of the ids GitHub offered are already bound, and refusing an unbound one
+ *                       would make the read unusable for its only purpose. Nothing is disclosed by
+ *                       that: a row absent from the answer is the same value the caller sent in.
+ *   - `serviceInsert` — `args[arg]` is a `Service` record (`registerServiceForFrame`'s insert, run on
+ *                       EVERY top-level frame creation). Binds the DECLARED `accountId` and the
+ *                       `frameBlockId`: an EXISTING frame block must resolve to the same in-scope
+ *                       account, and one that does not exist yet is the ordinary case (the service
+ *                       row is written BEFORE its frame block, so an absent block is a create and
+ *                       passes on the declared account alone; block ids are server-minted, so a
+ *                       caller cannot reserve one another tenant will later be given).
+ *
+ *                       The equality is the point. `getByFrameBlock` resolves by frame block id
+ *                       ALONE — the unique index is `(account_id, frame_block_id)`, so two accounts
+ *                       may hold a service for one frame id and the walk answers with an arbitrary
+ *                       one — and `resolveRepoTarget` walks it on every dispatch. Binding only the
+ *                       declared account would let a caller plant a service on another org's frame
+ *                       block and redirect that org's runs at a repo it controls.
+ *   - `serviceUpdate` — `args[arg]` is a serviceId and `args[patchArg]` a `ServicePatch`. Binds the
+ *                       STORED service's owning account (like `service`) AND, when the patch
+ *                       declares an `accountId`, the account it would move the service INTO: a patch
+ *                       that re-homes a service into an account the caller cannot reach would put an
+ *                       attacker-authored frame in that org's mountable catalog. A patch clearing the
+ *                       account (an explicit null) is refused rather than admitted — a service with
+ *                       no account is the legacy/unscoped row, which no scoped token may create.
+ *   - `usageRecord`   — `args[arg]` is a `TokenUsageRecord` (the spend ledger's `record`). Binds on
+ *                       the row's `workspaceId` FIELD like `workspaceField`, AND ADDITIONALLY pins
+ *                       the two DENORMALIZED rollup keys the account- and user-tier budget reads
+ *                       index on: `accountId` must be null or exactly the workspace's own owning
+ *                       account, and `userId` must be null or the token's user. Without that, a node
+ *                       legitimately scoped to one account could stamp ANOTHER account's (or
+ *                       teammate's) id onto its ledger rows and exhaust their budget — pausing their
+ *                       runs — without touching any workspace it isn't entitled to.
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
   | { kind: 'workspaceField'; arg: number }
   | { kind: 'account'; arg: number }
+  | { kind: 'accountField'; arg: number }
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
+  | { kind: 'user'; arg: number }
+  | { kind: 'userList'; arg: number }
   | { kind: 'visibility'; arg: number }
   | { kind: 'block'; arg: number }
   | { kind: 'blockList'; arg: number }
+  | { kind: 'workspaceList'; arg: number }
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
+  | { kind: 'serviceInsert'; arg: number }
+  | { kind: 'serviceUpdate'; arg: number; patchArg: number }
+  | { kind: 'installation'; arg: number }
+  | { kind: 'installationList'; arg: number }
+  | { kind: 'skillSource'; arg: number }
+  // `entity` names the resolver that binds the STORED row. Skills live in ONE tier, so theirs is
+  // the account-keyed form; a library owned by an `(ownerKind, ownerId)` PAIR takes
+  // `ownerFieldUpsert` below instead. The exhaustive switch fails to compile until a member is
+  // handled.
+  | { kind: 'accountFieldUpsert'; arg: number; entity: 'skillSource' }
+  | { kind: 'usageRecord'; arg: number }
+  | { kind: 'owner'; kindArg: number; idArg: number }
+  | { kind: 'ownerField'; arg: number }
+  /**
+   * `ownerField` over a BATCH write: EVERY record in the list must declare an in-scope owner.
+   *
+   * Its own kind rather than reusing `ownerField` on the array, because the check that matters is
+   * the per-element one: a batched write whose scope was read off the first record would let a
+   * caller smuggle another tenant's row in at position two, which is precisely the admission the
+   * single-record rule exists to refuse.
+   */
+  | { kind: 'ownerFieldList'; arg: number }
+  | { kind: 'librarySource'; arg: number; entity: LibrarySourceEntity }
+  | { kind: 'ownerFieldUpsert'; arg: number; entity: LibrarySourceEntity }
+
+/**
+ * The owner-pair content-library SOURCE tables a `librarySource` / `ownerFieldUpsert` rule resolves
+ * against. Each names one source repository, because a source id from one library is meaningless in
+ * the other: the discriminator is what stops a fragment-source id being bound through the
+ * foundational-service source table (which would resolve to nothing and, without it, would have to
+ * fall back to trying both).
+ */
+export type LibrarySourceEntity = 'fragmentSource' | 'foundationalServiceSource'
+
+/** A content-library source row's owning tier, as the scope check needs it. */
+interface LibrarySourceOwner {
+  ownerKind: unknown
+  ownerId: unknown
+}
+
+/**
+ * What a {@link DispatchOptions.resolveLibrarySourceOwner} lookup ANSWERED, as three states rather
+ * than a nullable owner.
+ *
+ * `absent` and `unreadable` are the same VALUE and opposite FACTS, and only `ownerFieldUpsert` can
+ * tell them apart from the outside: it admits an absent row as a create (the declared half already
+ * bound it) and must refuse an unreadable one, because a table it cannot read cannot say whose row
+ * the write would land on. Collapsing the two into `null` is what made a deployment that wires a
+ * source table's `upsert` without its `get` — or a library added with a rule and no resolver row —
+ * silently drop the stored half and admit the cross-tenant repoint the rule exists to close.
+ */
+export type LibrarySourceOwnerLookup =
+  | { status: 'found'; owner: LibrarySourceOwner }
+  /** No such source row: for an id-keyed upsert this is a CREATE. */
+  | { status: 'absent' }
+  /** This deployment cannot read that source table at all, so nothing may be concluded. */
+  | { status: 'unreadable' }
+
+/**
+ * What a single-row OWNER lookup answered, in the same three states and for the same reason
+ * {@link LibrarySourceOwnerLookup} gives: a rule that reads "no such row" as an ADMISSION (the
+ * create half of an id-keyed write) may never spend a table it could not read as that admission.
+ *
+ * `accountId` is nullable inside `found` because a row can legitimately exist with no account (a
+ * PAT installation binds a board, not an org; a legacy service predates accounts). That is not a
+ * third state: it fails the scope check like any other unresolvable account, and it must not be
+ * mistaken for `absent`, which is the only value an id-keyed create may be granted on.
+ */
+export type EntityOwnerLookup =
+  | { status: 'found'; accountId: string | null | undefined }
+  /** No such row: for an id-keyed write this is a CREATE. */
+  | { status: 'absent' }
+  /** This deployment cannot read that table at all, so nothing may be concluded. */
+  | { status: 'unreadable' }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -136,443 +380,13 @@ export interface MethodSpec {
 
 /** repo → method → spec. A method absent here is NOT remotely invocable (default-deny). */
 export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
-
 /**
- * The mothership-mode persistence allow-list: the core domain repositories plus the
- * workspace-scoped reads a board load (`GET /workspaces/:id`) and an execution exercise.
- * Every method here binds to an account via its {@link ScopeRule} so a call outside the
- * machine token's scope is refused as 404.
- *
- * The cross-service board-composition reads keyed on `serviceIds[]`/`accountId`
- * (`listByServices`, `serviceRepository.listByIds`/`listByAccount`, `countByServiceIds`) and the
- * entity-id-keyed `blockRepository.findById` are allow-listed here too, each bound by the
- * {@link ScopeRule} `serviceList` / `block` / `account` kinds that resolve the entity's owning
- * account server-side before the scope check.
- *
- * Still EXCLUDED (added in later gate slices, with their own scope rules, or kept
- * mothership-internal):
- *   - `subscriptionActivationRepository.deleteByExecution` — the activation row is the local
- *     `node:sqlite` bucket (per the per-repo checklist), not the remote surface, so it is not
- *     exposed here.
- *   - Global sweeper methods (`listStale`, `deleteOlderThan`) and high-impact unscoped ops
- *     (`workspaceRepository.delete`, `accountRepository.create`).
- *
- * Admin-gated mutations are also EXCLUDED here. The RPC dispatches over the raw repository,
- * bypassing the service layer that normally enforces per-user role checks — e.g.
- * `AccountService.requireAdmin` guards `accountRepository.rename`/`updateSettings` and
- * `membershipRepository.upsert`/`remove`. A machine token is scoped to whole ACCOUNTS, not to
- * a role within them, so exposing those repo methods would let any account member self-promote
- * to admin or rewrite memberships over the wire. They stay mothership-internal until a later
- * slice adds a role dimension to the scope (or routes them through the service). Only the
- * account/membership READS a board load needs are remotely callable. Board-level mutations
- * (`workspaceRepository.rename`/`setDescription`, block/pipeline/execution CRUD) are
- * member-level in the service layer, so they remain.
+ * The mothership-mode persistence allow-list (repo → method → {@link MethodSpec}), extracted to
+ * {@link ./rpc-allowlist.js}: it is the initiative's living surface — every slice widens it —
+ * while everything else in this file is the stable protocol. Re-exported here so the table's
+ * long-standing import path is unchanged.
  */
-export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
-  workspaceRepository: {
-    listVisible: { scope: { kind: 'visibility', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    ownerOf: { scope: { kind: 'workspace', arg: 0 } },
-    accountOf: { scope: { kind: 'workspace', arg: 0 } },
-    rename: { scope: { kind: 'workspace', arg: 0 } },
-    setDescription: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  blockRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    insert: { scope: { kind: 'workspace', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
-    setService: { scope: { kind: 'workspace', arg: 0 } },
-    deleteMany: { scope: { kind: 'workspace', arg: 0 } },
-    // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
-    findById: { scope: { kind: 'block', arg: 0 } },
-    // The batched form (the cross-workspace dependency resolution on the run-start path).
-    findByIds: { scope: { kind: 'blockList', arg: 0 } },
-    // Cross-service: compose a board's blocks from every service it mounts.
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
-  },
-  pipelineRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    insert: { scope: { kind: 'workspace', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
-    delete: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  executionRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
-    // The one-live-run-per-block insert used by start/retry/restart. Workspace-scoped like
-    // upsert and bumps `execution.rev` in place on the arg-1 instance on a successful insert.
-    insertLive: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
-    compareAndSwap: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
-    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    markFailed: { scope: { kind: 'workspace', arg: 0 } },
-    // Cross-service: compose a board's runs from every service it mounts.
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
-  },
-  accountRepository: {
-    // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).
-    get: { scope: { kind: 'account', arg: 0 } },
-    listByIds: { scope: { kind: 'accountList', arg: 0 } },
-    findPersonalByUser: { scope: { kind: 'selfUser', arg: 0 } },
-  },
-  membershipRepository: {
-    // Reads only — `upsert`/`remove` are admin-gated (see allow-list note above).
-    listByUser: { scope: { kind: 'selfUser', arg: 0 } },
-    listByAccount: { scope: { kind: 'account', arg: 0 } },
-    get: { scope: { kind: 'account', arg: 0 } },
-  },
-  // --- Board-load read surface --------------------------------------------------
-  // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
-  // workspaceId as arg0, so they reuse the `workspace` rule (resolve the owning account, reject
-  // out-of-scope as 404). Reads only — no mutation is exposed here.
-  //
-  // The cross-service reads (`*.listByServices`, `countByServiceIds`, `serviceRepository.*`)
-  // compose a board from the services it mounts; their arg0 is `serviceIds[]` (the `serviceList`
-  // rule resolves each service's owning account) or an `accountId` (the `account` rule).
-  serviceRepository: {
-    listByIds: { scope: { kind: 'serviceList', arg: 0 } },
-    listByAccount: { scope: { kind: 'account', arg: 0 } },
-    // The run path resolves the service that owns a frame block (module materialisation /
-    // blueprint reconcile). arg0 is a frame BLOCK id, so the `block` rule resolves it to its
-    // home workspace's account server-side.
-    getByFrameBlock: { scope: { kind: 'block', arg: 0 } },
-    // The org-catalog mount flow reads a single service by id before mounting it onto a board
-    // (`ServiceMountService.mount` — the cross-org guard that a service is mounted only within
-    // its own account). arg0 is a serviceId with no workspace arg, so the `service` rule resolves
-    // its owning account server-side.
-    get: { scope: { kind: 'service', arg: 0 } },
-  },
-  // --- Shared-service mount management surface -------------------------------------
-  // The org-catalog / shared-service mounting flow a mothership-mode SPA drives
-  // (`ServiceMountService` / `ServiceMountController`): mount / unmount / re-layout a shared
-  // account service onto a workspace board. The reads that compose the catalog badge
-  // (`listByWorkspace`, `countByServiceIds`) were already exposed; these complete the write
-  // surface. `get`/`update`/`remove` take the workspaceId as arg0 (the `workspace` rule); the
-  // record-based `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount`
-  // rule. Each is member-level (the mount endpoints are not admin-gated) and workspace-scoped.
-  //
-  // Cross-org sharing stays enforced at the RPC layer, NOT only in the (bypassed) service layer:
-  // the `serviceMount` rule additionally requires the mounted `serviceId` to be owned by the SAME
-  // account as the target workspace, so a raw `upsert` can never plant a cross-org mount — even
-  // for a machine token that spans several accounts (a user in multiple orgs). Board composition
-  // (`blockRepository.listByServices`, `serviceRepository.listByIds`) stays account-scoped as a
-  // second line of defence, but it is no longer the sole guard for the mount invariant.
-  workspaceMountRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    countByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'serviceMount', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
-    remove: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  workspaceSettingsRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // The workspace-settings panel saves its edits (e.g. the `storeAgentContext` toggle). The
-    // settings endpoints are member-level (not admin-gated), workspace-scoped — the same policy
-    // as the block/pipeline mutations above. Completes the read+write settings surface.
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  mergePresetRepository: {
-    list: { scope: { kind: 'workspace', arg: 0 } },
-    // The merge lifecycle resolves a task's merge-threshold preset at run time
-    // (`resolveMergePreset` → the merger/requirements gate), reading the workspace default when
-    // the task pins none. Workspace-scoped read on the run path.
-    getDefault: { scope: { kind: 'workspace', arg: 0 } },
-    // `MergePresetService.list` lazily seeds the built-in default for a workspace that has
-    // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
-    // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    // The preset-library editor reads one preset and deletes it. Both take the workspaceId as
-    // arg0 and are member-level (the preset CRUD is not admin-gated), completing the merge-preset
-    // library management surface (list/getDefault/upsert were already exposed for the board load).
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    remove: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  modelPresetRepository: {
-    list: { scope: { kind: 'workspace', arg: 0 } },
-    // The run-start model resolution (`resolvePresetModelForKind` → the personal-credential
-    // gate) reads the workspace's default model preset for the dispatched agent kind.
-    getDefault: { scope: { kind: 'workspace', arg: 0 } },
-    // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
-    // (a write the board-load read triggers), exactly like `mergePresetRepository.upsert` above.
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    // The model-preset library editor's read-one + delete, the mirror of the merge-preset
-    // management pair above. Member-level, workspace-scoped.
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    remove: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // --- Agent-context run-path reads -----------------------------------------------
-  // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
-  // (it builds the agent context on each dispatch), so these reads are on the run path, not just
-  // the opt-in document/task integrations' own surfaces. arg0 is the workspaceId → `workspace`
-  // rule. The document/task SOURCE-PROVIDER + connection surfaces (connect/list/disconnect) are
-  // NOT exposed here — they are a later integration slice; only the block-scoped context reads are.
-  documentRepository: {
-    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // A URL named in a block's description is resolved against the imported corpus by a
-    // canonical-url point lookup (`AgentContextBuilder.resolveLinkedContext`), on the SAME
-    // per-dispatch run path as `get`/`listByBlock` above — so it must be allow-listed too
-    // (else a task whose description contains any link fails the run with `unknown_method`).
-    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  taskRepository: {
-    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // Same as `documentRepository.getByUrl`: a URL in the description resolves against the
-    // imported issue corpus by a point lookup on the run path.
-    getByUrl: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // The agent context also resolves the block's provisioned environment per step
-  // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
-  // (and decrypting a remotely-sealed env cipher, which needs the mothership's key) is a later slice.
-  environmentRegistryRepository: {
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // The workspace-scoped batch read behind `EnvironmentProvisioningService.listHandles`
-    // (the environments list endpoint + the frontend UI-test gate's single indexed env read,
-    // `AgentContextBuilder.resolveFrontendConfig` — a batch read, not a per-binding point read).
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  serviceFragmentDefaultsRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // The service-fragment-defaults editor saves the workspace's default fragment set. Member-level,
-    // workspace-scoped — completes the read+write surface (`get` was exposed for the board load).
-    set: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  pipelineScheduleRepository: {
-    list: { scope: { kind: 'workspace', arg: 0 } },
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
-    // Recurring-pipeline management, all driven by the local node's `RecurringPipelineController`
-    // → `RecurringPipelineService` (CRUD + run history + `runNow`). Every method takes the
-    // workspaceId as arg0 and is member-level (the schedule endpoints are not admin-gated).
-    // `runNow` fires the schedule in-process, so its `fire()` writes (`insertRun`/`updateRun`/
-    // `upsert`) are on the path too — the sweeper-only `listDue`/`pruneRunsBefore` stay
-    // mothership-internal (its cron owns them). Completes the schedule management surface (the
-    // `list`/`getByBlock`/`listByServices` reads were already exposed).
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    remove: { scope: { kind: 'workspace', arg: 0 } },
-    insertRun: { scope: { kind: 'workspace', arg: 0 } },
-    updateRun: { scope: { kind: 'workspace', arg: 0 } },
-    listRuns: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  trackerSettingsRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // The tracker-settings editor persists its config. Member-level, workspace-scoped — completes
-    // the read+write surface (`get` was exposed for the board load).
-    put: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  notificationRepository: {
-    listOpen: { scope: { kind: 'workspace', arg: 0 } },
-    // The inbox act/dismiss/escalate flow re-reads a single notification by id after a run
-    // settles (`NotificationService`). `get(workspaceId, id)` is workspace-scoped on arg0.
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // The merger-less pipeline tail raises a block notification on completion
-    // (`pipeline_complete`/`merge_review` → `findOpenByBlock` dedup + `upsertOpenForBlock`), so a
-    // run persists its inbox card on the mothership. Workspace-scoped, member-level (the inbox
-    // act/dismiss endpoints are not admin-gated) — the same policy as the block/pipeline writes.
-    findOpenByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    upsertOpenForBlock: { scope: { kind: 'workspace', arg: 0 } },
-    // Block-less raises (a card with no `blockId`) and every status transition the inbox
-    // performs right after a run settles — act / dismiss / escalate — go through `upsert`
-    // (`NotificationService`), not `upsertOpenForBlock`. Workspace-scoped, member-level (the
-    // inbox act/dismiss endpoints are not admin-gated) — same policy as the writes above.
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    // The escalation sweep's batched write (a local node runs the sweep too, so it must proxy
-    // like the listOpen + per-row upsert loop it replaced). Workspace-scoped like `upsert`.
-    escalateStaleOpen: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // --- Repo-bootstrap management / retry / stop surface ---------------------------
-  // The bootstrap flow a mothership-mode SPA drives (`BootstrapController` +
-  // `AgentRunController`): start a repo bootstrap, read a single job (the board-card poll), and
-  // retry / stop a failed or running one. The board-load reads (`listByWorkspace` /
-  // `listByServices`) were already exposed; these complete the surface. `get`/`update` take the
-  // workspaceId as arg0 (the `workspace` rule); the record-based `insert(record)` binds on the
-  // job's `workspaceId` FIELD (the `workspaceField` rule — the id is a property, not a positional
-  // arg). Each is member-level (the bootstrap endpoints are not admin-gated) and workspace-scoped —
-  // the same policy as the block/pipeline mutations. The `insert` record's sibling ids (`blockId`,
-  // `referenceArchitectureId`) are NOT re-validated over the RPC (see the `workspaceField` note):
-  // the row is stored under — and later read by — the bound `workspaceId`, and a foreign
-  // `referenceArchitectureId` is harmless because the retry run re-resolves it via the
-  // workspace-scoped `referenceArchitectureRepository.get` below, which 404s a cross-workspace id.
-  bootstrapJobRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    insert: { scope: { kind: 'workspaceField', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // The reference-architecture library the bootstrap modal reads + edits, and that a retry
-  // re-resolves the base repo from (`referenceArchitectureRepository.get`). Reads/updates/deletes
-  // take the workspaceId as arg0 (the `workspace` rule); the record-based `insert(record)` binds on
-  // the record's `workspaceId` FIELD (the `workspaceField` rule). Member-level (the reference-arch
-  // endpoints are not admin-gated), workspace-scoped — the same policy as the other library editors.
-  referenceArchitectureRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    insert: { scope: { kind: 'workspaceField', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
-    softDelete: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // The board's run controls (retry / stop a failed or running run) enter through the unified
-  // `agent_runs` table: `AgentRunController` calls `getRef(workspaceId, id)` to resolve the run's
-  // KIND, then dispatches to the matching service. `getRef` takes the workspaceId as arg0, so it
-  // reuses the `workspace` rule (resolve the owning account, reject out-of-scope as 404). Exposing
-  // it makes the EXECUTION-run retry/stop path functional in mothership mode — every downstream
-  // read+write those services make (`executionRepository.get/deleteByBlock/upsert/markFailed`,
-  // `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage prechecks) is
-  // already allow-listed on the run/start path. The bootstrap + env-config-repair retry branches
-  // read their own repos (`bootstrapJobRepository.get`, `referenceArchitectureRepository.get`, …),
-  // now allow-listed too (see the bootstrap / reference-architecture / env-config-repair management
-  // surface above). The sweeper-only `listStale`/`liveRunIds` stay mothership-internal (its cron
-  // owns them).
-  agentRunRepository: {
-    getRef: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  tokenUsageRepository: {
-    totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // Telemetry is local-first by design (Phase 5), but two READS are on the synchronous run
-  // path before that batch-sync lands — the kaizen grading step summarises an execution's LLM
-  // calls. Until Phase 5 they resolve against the mothership's telemetry store. High-volume
-  // telemetry WRITES (`record`) stay out of the allow-list — they must never hit the RPC.
-  llmCallMetricRepository: {
-    summarizeByExecution: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // Kaizen grading (the merge lifecycle's quality step) reads its prior grade for a step before
-  // (re-)grading and writes the result. Both are workspace-scoped on arg0; the sweeper methods
-  // (`listPending`/`claim`) stay mothership-internal.
-  //
-  // The Kaizen SCREEN read surface is exposed too, so a mothership-mode SPA can display the
-  // grading history + per-run grading status (`KaizenController` → `KaizenService.getOverview` /
-  // `listForExecution`, both member-level, read-only, mounted under `/workspaces/:workspaceId`):
-  // `listByWorkspace(workspaceId, limit?)` (the screen's bounded history) and
-  // `listByExecution(workspaceId, executionId)` (the run-window per-step status). Both take the
-  // workspaceId as arg0 (the `workspace` rule). The internal-only single-grade `get(workspaceId,
-  // id)` is not on any SPA path (the service never calls it), and `listPending`/`claim` are the
-  // background sweep's kind-spanning reads — all stay mothership-internal.
-  kaizenGradingRepository: {
-    getByStep: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    listByExecution: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
-  requirementReviewRepository: {
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    // The requirements gate reads a review by id (`get(workspaceId, id)`) when driving the
-    // parked run (re-review / incorporate). Workspace-scoped on arg0.
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    // The reviewer/incorporation companion persists the review as the gate iterates.
-    // Member-level (the requirement-review endpoints are not admin-gated), workspace-scoped.
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    // The service drops a block's prior review before a fresh review run
-    // (`RequirementReviewService.review`). Workspace-scoped on arg0 — completes the repo.
-    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // The merge lifecycle's kaizen step reads any prior verified model/prompt combo
-  // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0. The Kaizen
-  // screen also lists the whole verified-combo library (`listByWorkspace`, part of the same
-  // `getOverview` read) — workspace-scoped, read-only, member-level. The sweep's `upsert` (the
-  // streak/verified write) stays off the SPA path — kaizen grading is best-effort in mothership
-  // mode until the Phase 5 telemetry/local-first sync lands.
-  kaizenVerifiedComboRepository: {
-    getByKey: { scope: { kind: 'workspace', arg: 0 } },
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // Env-config-repair (a Tester sub-flow) lists a workspace's repair jobs on the run path
-  // (`listByWorkspace`), and the board's run controls retry / stop a failed or running repair run:
-  // `get`/`update` take the workspaceId as arg0 (the `workspace` rule), the record-based
-  // `insert(record)` binds on the job's `workspaceId` FIELD (the `workspaceField` rule). Retry
-  // STARTS a fresh run from the failed job's coords, so it reads the prior job (`get`) then inserts
-  // a new one; stop patches the running job (`update`). Member-level, workspace-scoped.
-  envConfigRepairJobRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    insert: { scope: { kind: 'workspaceField', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // --- Advanced review / structured-dialogue session surfaces ---------------------
-  // The clarity-review (bug-report triage), brainstorm (structured dialogue) and consensus
-  // (multi-strategy orchestration) windows mirror the requirements-review surface above: rows
-  // scoped by workspace, keyed by block/stage/step, with a live entry per block. A mothership-mode
-  // SPA runs and re-reads these reviews, and the services persist/replace them as the window
-  // iterates — every method takes the workspaceId as arg0 (the `upsert(workspaceId, review)`
-  // signature carries it positionally, so the `workspace` rule binds it, not `workspaceField`).
-  // Member-level (none of the review endpoints is admin-gated), workspace-scoped — the same policy
-  // as the requirement-review surface. Completes the read+write surface (`getByBlock` /
-  // `getByBlockStage` were already exposed for the board load).
-  clarityReviewRepository: {
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  brainstormSessionRepository: {
-    getByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-    deleteByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  consensusSessionRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    getByStep: { scope: { kind: 'workspace', arg: 0 } },
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // --- Post-release-health / observability settings surface -----------------------
-  // The three settings repositories a mothership-mode SPA manages for the post-release-health
-  // flow: the (single) observability connection, the per-block monitor/SLO mapping, and the
-  // incident-enrichment connection. Their controllers mount under `/workspaces/:workspaceId`
-  // and are member-level (not admin-gated), so they follow the same policy as the other
-  // settings panels above. Reads/deletes take the workspaceId as arg0 (the `workspace` rule);
-  // the record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the
-  // `workspaceField` rule — the id is a property, not a positional arg). Exposing them makes
-  // the observability / release-health / incident-enrichment editors functional (persist +
-  // read back), not read-only, in mothership mode.
-  //
-  // Scope of what this unlocks: the settings PANELS work end-to-end (save + read back the
-  // redacted summary, which never decrypts). The saved connection cannot yet DRIVE a
-  // post-release-health gate probe in mothership mode — decrypting the sealed connection cipher
-  // at gate-probe time belongs to the later secrets-delegation slice. The connection `get` here
-  // returns the FULL record (the sealed `credentials` blob), not the redacted service view: the
-  // RPC client is the trusted local node, the blob is sealed and account-scoped, so this matches
-  // the existing `environmentRegistryRepository.get` precedent (sealed cipher over the machine
-  // API). The record-based `upsert` binds only the top-level `record.workspaceId` (see the
-  // `workspaceField` note above) — `releaseHealthConfigRepository`'s `blockId` is NOT
-  // re-validated here, so a config can only ever be planted into the caller's own in-scope
-  // workspace, never another's.
-  observabilityConnectionRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
-    delete: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  releaseHealthConfigRepository: {
-    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
-    delete: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  incidentEnrichmentConnectionRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
-    delete: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  // The private package-registry connection (sealed npm/GitHub-Packages entries): the
-  // settings panel's list/add/remove and the container dispatch's decrypt-time read all
-  // ride get/upsert/delete, workspace-scoped like the observability connection above
-  // (same sealed-blob-over-the-machine-API precedent).
-  packageRegistryConnectionRepository: {
-    get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
-    delete: { scope: { kind: 'workspace', arg: 0 } },
-  },
-}
+export { REMOTE_PERSISTENCE_METHODS }
 
 // ---------------------------------------------------------------------------
 // Server-side dispatch
@@ -587,6 +401,15 @@ export interface DispatchOptions {
   scope: { accountIds: string[]; userId: string }
   /** Resolve a workspace's owning account id (the mothership's `WorkspaceRepository.accountOf`). */
   resolveAccountId(workspaceId: string): Promise<string | null | undefined>
+  /**
+   * The batched form (`WorkspaceRepository.accountIdsOf`), keyed by workspace id: one query for a
+   * whole list rather than a point read per id. A board that does not exist is ABSENT from the
+   * map, which fails the scope check exactly like the `undefined` {@link resolveAccountId} answers
+   * for the same board. Required by the `workspaceList` kind and by every resolver that maps a set
+   * of boards to their accounts; a deployment whose registry lacks the method answers an empty map,
+   * so the call fails closed.
+   */
+  resolveAccountIds(workspaceIds: string[]): Promise<Map<string, string | null | undefined>>
   /**
    * Resolve a block's owning account id (block → home workspace → account). Required for the
    * `block` scope kind; a call hitting that kind with no resolver fails closed (404).
@@ -604,6 +427,57 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve a skill source's owning account id (the mothership's `SkillSourceRepository.get`,
+   * projected to its `accountId`). Required for the `skillSource` scope kind; a call hitting that
+   * kind with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveSkillSourceAccountId?(sourceId: string): Promise<string | null | undefined>
+  /**
+   * Resolve a content-library source's owning `(ownerKind, ownerId)` pair (the mothership's
+   * `fragmentSourceRepository.get` / `foundationalServiceSourceRepository.get`, projected to the
+   * owner columns). ONE resolver taking the table rather than one member per table: the two answer
+   * the same question about the same shape, and a second near-identical option is how a new library
+   * lands with a rule and no resolver. Required for the `librarySource` and `ownerFieldUpsert` scope
+   * kinds; a call hitting either with no resolver fails closed (404), like the other entity
+   * resolvers. Answers a {@link LibrarySourceOwnerLookup} rather than a nullable owner so that "no
+   * such row" stays distinguishable from "that table is not readable here".
+   */
+  resolveLibrarySourceOwner?(
+    entity: LibrarySourceEntity,
+    sourceId: string,
+  ): Promise<LibrarySourceOwnerLookup>
+  /**
+   * Resolve a VCS installation row's owning account (`github_installations`), as a three-state
+   * lookup: an App binding answers its own `accountId`, a per-workspace PAT binding (which stores
+   * none) answers its connector workspace's account, and a row this deployment cannot read answers
+   * `unreadable` rather than an `absent` a caller could be entitled to read as an admission.
+   * Required for the `installation` kind; a call hitting it with no resolver fails closed (404),
+   * like the other entity resolvers.
+   */
+  resolveInstallationOwner?(installationId: number): Promise<EntityOwnerLookup>
+  /**
+   * The batched form, keyed by installation id: `listByInstallationIds` plus ONE account read for
+   * the PAT bindings that store none, rather than a point read per id. Required for the
+   * `installationList` kind (the connect page annotates a whole provider list at once); a call
+   * hitting it with no resolver fails closed (404).
+   */
+  resolveInstallationOwners?(installationIds: number[]): Promise<Map<number, EntityOwnerLookup>>
+  /**
+   * Resolve a FRAME BLOCK's owning account (block → home workspace → account), as a three-state
+   * lookup. Distinct from {@link resolveBlockAccountId} precisely because of the third state: the
+   * `serviceInsert` rule admits an absent frame block (the service row is written before its block)
+   * and must refuse an unreadable one, and a nullable answer cannot tell those apart. Required for
+   * the `serviceInsert` kind; a call hitting it with no resolver fails closed (404).
+   */
+  resolveFrameBlockOwner?(frameBlockId: string): Promise<EntityOwnerLookup>
+  /**
+   * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
+   * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
+   * scope iff they are a co-member of one of the token's in-scope accounts. A call hitting those
+   * kinds with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveAccountMemberIds?(accountId: string): Promise<string[]>
   /** The method table to enforce (defaults to the full remote allow-list). */
   table?: PersistenceMethodTable
 }
@@ -625,7 +499,9 @@ const fail = (
 
 interface VisibilityScope {
   accountIds: string[]
+  adminAccountIds: string[]
   ownerUserId: string
+  userId: string
 }
 
 /**
@@ -659,9 +535,81 @@ export async function dispatchPersistenceCall(
   const inScope = (accountId: string | null | undefined): boolean =>
     typeof accountId === 'string' && opts.scope.accountIds.includes(accountId)
 
+  // The set of userIds the token may see the DISPLAY record of: every member of an in-scope
+  // account. Computed at most once per dispatch (lazy) and bounded by the token's account scope
+  // (not by request data), so it is a fixed-size read, not an N+1 over the requested user list.
+  let visibleUsers: Promise<Set<string>> | undefined
+  const visibleUserIds = (): Promise<Set<string>> => {
+    if (!visibleUsers) {
+      visibleUsers = (async () => {
+        const set = new Set<string>()
+        for (const accountId of opts.scope.accountIds) {
+          const members = (await opts.resolveAccountMemberIds?.(accountId)) ?? []
+          for (const userId of members) set.add(userId)
+        }
+        return set
+      })()
+    }
+    return visibleUsers
+  }
+
   // Bind the call to an account and reject anything outside the token scope (404).
+  const scopeDenial = await checkCallScope(spec.scope, args, opts, { inScope, visibleUserIds })
+  if (scopeDenial) return scopeDenial
+
+  try {
+    const value = await fn.apply(repo, args)
+    const body: PersistenceRpcResponse = {
+      ok: true,
+      value: value === undefined ? null : value,
+      ...(value === undefined ? { undef: true } : {}),
+    }
+    if (spec.revWriteBack !== undefined) {
+      const mutated = args[spec.revWriteBack] as { rev?: unknown } | undefined
+      if (mutated && typeof mutated.rev === 'number') {
+        body.mutated = { arg: spec.revWriteBack, rev: mutated.rev }
+      }
+    }
+    return { status: 200, body }
+  } catch (err) {
+    if (err instanceof DomainError) {
+      return fail(err.code, err.message, err.details)
+    }
+    // A row the mothership cannot decode survives the hop with its FAULT, because that fault is
+    // what the node's engine branches on to dispose of a poison run. Reported rather than
+    // suppressed for the same reason `DomainError`s are: the message and context describe a row in
+    // the caller's OWN scope (already checked above), which this RPC hands over wholesale anyway,
+    // so there is nothing here the caller could not have read from the row itself.
+    if (isDataIntegrityError(err)) {
+      return fail('data_integrity', err.message, {
+        fault: dataIntegrityFaultOf(err),
+        // Nested, so a context key of its own can never shadow the fault above.
+        context: err.context ?? {},
+      })
+    }
+    // Opaque 500 — never leak an internal error's message over the machine API.
+    return fail('internal', 'Internal error')
+  }
+}
+
+/**
+ * Enforce a call's scope rule: bind it to an account and reject anything outside the token scope.
+ * Returns a `DispatchResult` (always a 404 `denied` — the existence-non-leak policy) when the call
+ * is out of scope, or `undefined` when it passes and the method may run. The `visibility` kind
+ * additionally narrows `args[rule.arg]` in place (the array is shared with the caller). Pure except
+ * for the injected `opts` resolver IO + the two closures (`inScope` / lazy `visibleUserIds`).
+ */
+async function checkCallScope(
+  rule: ScopeRule,
+  args: unknown[],
+  opts: DispatchOptions,
+  helpers: {
+    inScope: (accountId: string | null | undefined) => boolean
+    visibleUserIds: () => Promise<Set<string>>
+  },
+): Promise<DispatchResult | undefined> {
+  const { inScope } = helpers
   const denied = fail('not_found', 'Not found')
-  const rule = spec.scope
   switch (rule.kind) {
     case 'workspace': {
       // Bind via the workspace's owning account. A workspace that does not exist (or whose
@@ -692,6 +640,21 @@ export async function dispatchPersistenceCall(
       if (!inScope(args[rule.arg] as string)) return denied
       break
     }
+    case 'accountField': {
+      // The scope key is an `accountId` FIELD of the record arg (an `upsert(record)` whose
+      // accountId is a property, not a positional arg). The accountId IS the account, so it is
+      // checked in scope directly — the account-owned mirror of `workspaceField`. A non-object
+      // arg or a missing/non-string field is refused as 404; the write targets exactly
+      // `record.accountId`, so binding on it means the record can only land in an in-scope account.
+      const record = args[rule.arg]
+      const accountId =
+        record && typeof record === 'object'
+          ? (record as { accountId?: unknown }).accountId
+          : undefined
+      if (typeof accountId !== 'string') return denied
+      if (!inScope(accountId)) return denied
+      break
+    }
     case 'accountList': {
       const ids = args[rule.arg]
       if (!Array.isArray(ids) || !ids.every((id) => inScope(id as string))) return denied
@@ -701,13 +664,66 @@ export async function dispatchPersistenceCall(
       if (args[rule.arg] !== opts.scope.userId) return denied
       break
     }
-    case 'block': {
-      // Bind via the block's home workspace's account, resolved server-side (the block carries
-      // no workspace arg). An unresolvable block (missing, or no resolver wired) is refused as
-      // 404 — no existence leak, matching the `workspace` rule.
-      const blockId = args[rule.arg]
-      if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
-      if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
+    case 'visibility': {
+      // Never let a node widen its visibility: intersect the requested accountIds with the
+      // token scope, and pin the owner to the token user. A `null` (auth-disabled) scope is
+      // refused — mothership mode is always scoped.
+      const requested = args[rule.arg] as VisibilityScope | null
+      if (!requested || typeof requested !== 'object') return denied
+      const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
+      const adminAccountIds = (requested.adminAccountIds ?? []).filter((id) => inScope(id))
+      args[rule.arg] = {
+        accountIds,
+        adminAccountIds,
+        ownerUserId: opts.scope.userId,
+        userId: opts.scope.userId,
+      } satisfies VisibilityScope
+      break
+    }
+    default:
+      // The entity-resolver kinds (user/block/service/owner families) bind via a server-side
+      // account resolver; they are split out to keep each function under the complexity ceiling.
+      return checkEntityCallScope(rule, args, opts, helpers)
+  }
+
+  // In scope: let the method run.
+  return undefined
+}
+
+/**
+ * The batched list half of {@link checkEntityCallScope}: the scope kinds that bind a WHOLE list of
+ * ids (users / blocks / services), each of which must resolve to an in-scope account. Same contract
+ * — a `DispatchResult` (404 `denied`) when out of scope, `undefined` when it passes (an empty list
+ * is a no-op read). Split out purely to keep each function under the complexity ceiling; the `never`
+ * default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityListCallScope(
+  rule: Extract<
+    ScopeRule,
+    { kind: 'userList' | 'blockList' | 'workspaceList' | 'serviceList' | 'installationList' }
+  >,
+  args: unknown[],
+  opts: DispatchOptions,
+  helpers: {
+    inScope: (accountId: string | null | undefined) => boolean
+    visibleUserIds: () => Promise<Set<string>>
+  },
+): Promise<DispatchResult | undefined> {
+  const { inScope, visibleUserIds } = helpers
+  const denied = fail('not_found', 'Not found')
+  switch (rule.kind) {
+    case 'userList': {
+      // The batched roster enrichment: EVERY requested user must be a co-member of an in-scope
+      // account (the batched form of `user`), so a missing or out-of-scope id fails closed. An
+      // empty list is a no-op read (returns empty), so it needs no roster to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveAccountMemberIds) return denied
+      const visible = await visibleUserIds()
+      for (const id of ids as string[]) {
+        if (!visible.has(id)) return denied
+      }
       break
     }
     case 'blockList': {
@@ -739,87 +755,250 @@ export async function dispatchPersistenceCall(
       }
       break
     }
-    case 'service': {
-      // Bind via the service's owning account (services are account-owned; the single-id form of
-      // `serviceList`, reusing the same resolver). A missing service is absent from the map, so it
-      // is refused as 404 — no existence leak, matching the `serviceList`/`block` rules.
-      const serviceId = args[rule.arg]
-      if (typeof serviceId !== 'string' || !opts.resolveServiceAccountIds) return denied
-      const accounts = await opts.resolveServiceAccountIds([serviceId])
-      if (!inScope(accounts.get(serviceId))) return denied
-      break
-    }
-    case 'serviceMount': {
-      // The record-based mount `upsert`. Bind on the mount's `workspaceId` FIELD (must be in
-      // scope) AND enforce the cross-org mount invariant server-side: the mounted `serviceId`
-      // must be owned by the SAME account as the target workspace, so a raw upsert can never
-      // plant a cross-org mount — even for a token that spans several accounts (both would be in
-      // scope, so a workspace-only check would let one org's service be mounted onto another's
-      // board). A non-object arg, a missing/non-string field, an out-of-scope workspace, or a
-      // service whose account differs from the workspace's (incl. a missing service) → 404.
-      const record = args[rule.arg]
-      const workspaceId =
-        record && typeof record === 'object'
-          ? (record as { workspaceId?: unknown }).workspaceId
-          : undefined
-      const serviceId =
-        record && typeof record === 'object'
-          ? (record as { serviceId?: unknown }).serviceId
-          : undefined
-      if (typeof workspaceId !== 'string' || typeof serviceId !== 'string') return denied
-      if (!opts.resolveServiceAccountIds) return denied
-      const workspaceAccount = await opts.resolveAccountId(workspaceId)
-      if (!inScope(workspaceAccount)) return denied
-      const serviceAccounts = await opts.resolveServiceAccountIds([serviceId])
-      const serviceAccount = serviceAccounts.get(serviceId)
-      // Same-account: the service must be owned by the workspace's (in-scope) account. Since
-      // `workspaceAccount` is already confirmed in scope, requiring equality also keeps the
-      // service in scope — a legacy/NULL-account service (never present under a scoped token)
-      // won't equal the string account, so it fails closed too.
-      if (typeof serviceAccount !== 'string' || serviceAccount !== workspaceAccount) return denied
-      break
-    }
-    case 'visibility': {
-      // Never let a node widen its visibility: intersect the requested accountIds with the
-      // token scope, and pin the owner to the token user. A `null` (auth-disabled) scope is
-      // refused — mothership mode is always scoped.
-      const requested = args[rule.arg] as VisibilityScope | null
-      if (!requested || typeof requested !== 'object') return denied
-      const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
-      args[rule.arg] = { accountIds, ownerUserId: opts.scope.userId } satisfies VisibilityScope
-      break
-    }
+    case 'workspaceList':
+      return checkWorkspaceListScope(args[rule.arg], opts, inScope, denied)
+    case 'installationList':
+      return checkInstallationListScope(args[rule.arg], opts, inScope, denied)
     default: {
-      // Fail closed: a `ScopeRule` kind with no case above must NEVER reach the method
-      // unscoped. The `never` binding makes adding a kind without a case a compile error,
-      // and the `return denied` is the runtime backstop if one slips through anyway.
+      // Fail closed: a list kind with no case here must never reach the method unscoped. The
+      // `never` binding makes adding a list kind without a case a compile error.
       const _exhaustive: never = rule
       void _exhaustive
       return denied
     }
   }
 
-  try {
-    const value = await fn.apply(repo, args)
-    const body: PersistenceRpcResponse = {
-      ok: true,
-      value: value === undefined ? null : value,
-      ...(value === undefined ? { undef: true } : {}),
-    }
-    if (spec.revWriteBack !== undefined) {
-      const mutated = args[spec.revWriteBack] as { rev?: unknown } | undefined
-      if (mutated && typeof mutated.rev === 'number') {
-        body.mutated = { arg: spec.revWriteBack, rev: mutated.rev }
-      }
-    }
-    return { status: 200, body }
-  } catch (err) {
-    if (err instanceof DomainError) {
-      return fail(err.code, err.message, err.details)
-    }
-    // Opaque 500 — never leak an internal error's message over the machine API.
-    return fail('internal', 'Internal error')
+  // In scope: let the method run.
+  return undefined
+}
+
+/**
+ * The single-ENTITY-ID half of {@link checkEntityCallScope}: the kinds whose argument is one opaque
+ * id belonging to an account, bound through a server-side resolver because the call carries no
+ * workspace/account of its own. Same contract — a `DispatchResult` (404 `denied`) when out of
+ * scope, `undefined` when it passes. A missing entity, or an absent resolver, fails CLOSED in every
+ * case: an id that cannot be bound must never reach the method, and 404 (not 403) matches the auth
+ * gate's existence-non-leak policy. Split out purely to keep each function under the complexity
+ * ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityIdCallScope(
+  rule: Extract<ScopeRule, { kind: 'block' | 'service' | 'skillSource' | 'installation' }>,
+  args: unknown[],
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+): Promise<DispatchResult | undefined> {
+  const denied = fail('not_found', 'Not found')
+  const id = args[rule.arg]
+  // An installation id is a NUMBER (GitHub's own id, or the synthetic one a PAT connection derives
+  // from its workspace); every other entity here is an opaque string id.
+  if (rule.kind === 'installation') {
+    if (typeof id !== 'number' || !opts.resolveInstallationOwner) return denied
+    const owner = await opts.resolveInstallationOwner(id)
+    // `absent` fails closed here, unlike in `installationList`: a point read/write names ONE row,
+    // so an id with no row is a caller addressing something it cannot bind, not a question about
+    // its own list.
+    if (owner.status !== 'found' || !inScope(owner.accountId)) return denied
+    return undefined
   }
+  if (typeof id !== 'string') return denied
+  switch (rule.kind) {
+    case 'block': {
+      // The block's home workspace's account (the block carries no workspace arg).
+      if (!opts.resolveBlockAccountId) return denied
+      if (!inScope(await opts.resolveBlockAccountId(id))) return denied
+      break
+    }
+    case 'service': {
+      // The service's owning account (services are account-owned) — the single-id form of
+      // `serviceList`, reusing the same resolver. A missing service is absent from the map.
+      if (!opts.resolveServiceAccountIds) return denied
+      if (!inScope((await opts.resolveServiceAccountIds([id])).get(id))) return denied
+      break
+    }
+    case 'skillSource': {
+      // The skill source's owning account. The library's sync methods carry a source id and
+      // nothing else, so this resolver is the only thing that can bind them.
+      if (!opts.resolveSkillSourceAccountId) return denied
+      if (!inScope(await opts.resolveSkillSourceAccountId(id))) return denied
+      break
+    }
+    default: {
+      const _exhaustive: never = rule
+      void _exhaustive
+      return denied
+    }
+  }
+  return undefined
+}
+
+/**
+ * The `accountFieldUpsert` check: bind an id-keyed `upsert(record)` on BOTH the account the record
+ * DECLARES and the account that owns the row it would OVERWRITE. See the `accountFieldUpsert` entry
+ * on {@link ScopeRule} for why the declared half alone is not enough.
+ *
+ * The stored half is decided by row EXISTENCE: the resolver yields the row's `accountId`, and yields
+ * null/undefined exactly when no such row exists — `skill_sources.account_id` is NOT NULL on both
+ * runtimes, so there is no third state where a row exists but cannot be bound. An absent row is a
+ * CREATE, which the declared half has already bound. An absent RESOLVER still fails closed, like
+ * every other entity-resolved kind.
+ */
+async function checkAccountFieldUpsertScope(
+  rule: Extract<ScopeRule, { kind: 'accountFieldUpsert' }>,
+  args: unknown[],
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+): Promise<DispatchResult | undefined> {
+  const denied = fail('not_found', 'Not found')
+  const record = args[rule.arg]
+  if (!record || typeof record !== 'object') return denied
+  const { accountId, id } = record as { accountId?: unknown; id?: unknown }
+  // The declared half — identical to `accountField`.
+  if (typeof accountId !== 'string' || !inScope(accountId)) return denied
+  // The stored half. A record with no usable conflict key cannot be bound to the row it would
+  // write, so it is refused rather than allowed through on the declared half alone.
+  if (typeof id !== 'string') return denied
+  // A switch, not a ternary: adding an `entity` member must FAIL TO COMPILE here rather than fall
+  // through to a silent `undefined` that reads as "no resolver wired" and denies every write.
+  let resolveStoredAccountId: DispatchOptions['resolveSkillSourceAccountId']
+  switch (rule.entity) {
+    case 'skillSource':
+      resolveStoredAccountId = opts.resolveSkillSourceAccountId
+      break
+    default: {
+      const _exhaustive: never = rule.entity
+      void _exhaustive
+      return denied
+    }
+  }
+  if (!resolveStoredAccountId) return denied
+  const stored = await resolveStoredAccountId(id)
+  // No row ⇒ a create, already bound above. A row ⇒ its owner must be in scope too.
+  if (stored != null && !inScope(stored)) return denied
+  return undefined
+}
+
+/**
+ * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
+ * server-side account resolver (co-membership for users, block/service/skill-source ownership,
+ * tenant-library owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope,
+ * `undefined` when it passes. Split from the core kinds purely to keep each function under the
+ * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityCallScope(
+  rule: Extract<
+    ScopeRule,
+    {
+      kind:
+        | 'user'
+        | 'userList'
+        | 'block'
+        | 'blockList'
+        | 'workspaceList'
+        | 'service'
+        | 'serviceList'
+        | 'serviceMount'
+        | 'serviceInsert'
+        | 'serviceUpdate'
+        | 'installation'
+        | 'installationList'
+        | 'skillSource'
+        | 'accountFieldUpsert'
+        | 'usageRecord'
+        | 'owner'
+        | 'ownerField'
+        | 'ownerFieldList'
+        | 'librarySource'
+        | 'ownerFieldUpsert'
+    }
+  >,
+  args: unknown[],
+  opts: DispatchOptions,
+  helpers: {
+    inScope: (accountId: string | null | undefined) => boolean
+    visibleUserIds: () => Promise<Set<string>>
+  },
+): Promise<DispatchResult | undefined> {
+  const { inScope, visibleUserIds } = helpers
+  const denied = fail('not_found', 'Not found')
+  switch (rule.kind) {
+    case 'user': {
+      // Bind via co-membership: the target user's DISPLAY record is readable iff they are a member
+      // of one of the token's in-scope accounts. No resolver wired ⇒ fail closed (404), like the
+      // other entity resolvers. A user in no in-scope account is refused (no existence leak).
+      const userId = args[rule.arg]
+      if (typeof userId !== 'string' || !opts.resolveAccountMemberIds) return denied
+      if (!(await visibleUserIds()).has(userId)) return denied
+      break
+    }
+    case 'userList':
+    case 'blockList':
+    case 'workspaceList':
+    case 'serviceList':
+    case 'installationList':
+      // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
+      // function under the complexity ceiling; same contract (404 `denied` / `undefined`).
+      return checkEntityListCallScope(rule, args, opts, helpers)
+    case 'block':
+    case 'service':
+    case 'skillSource':
+    case 'installation':
+      // The single-ENTITY-ID kinds (an opaque id bound through a server-side account resolver) are
+      // split out to keep this function under the complexity ceiling; same contract.
+      return checkEntityIdCallScope(rule, args, opts, inScope)
+    case 'accountFieldUpsert':
+      // Binds the record's DECLARED account and the STORED row's account together; see the rule's
+      // entry on `ScopeRule` for why the declared half alone is not enough.
+      return checkAccountFieldUpsertScope(rule, args, opts, inScope)
+    case 'serviceMount':
+      return checkServiceMountScope(args[rule.arg], opts, inScope, denied)
+    case 'usageRecord':
+      return checkUsageRecordScope(args[rule.arg], opts, inScope, denied)
+    case 'serviceInsert':
+      // Binds the record's declared account AND the frame block it claims; see the rule's entry on
+      // `ScopeRule` for why an absent block is the ordinary create and a foreign one is a hijack.
+      return checkServiceInsertScope(args[rule.arg], opts, inScope, denied)
+    case 'serviceUpdate':
+      // Binds the STORED service's account AND the account a patch would re-home it into.
+      return checkServiceUpdateScope(args[rule.arg], args[rule.patchArg], opts, inScope, denied)
+    case 'owner':
+      // A tenant-library row keyed by an (ownerKind, ownerId) PAIR, positionally.
+      return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied)
+    case 'ownerField': {
+      // The same pair as FIELDS of a record `upsert(record)`, so the row can only ever be
+      // persisted under the caller's own in-scope owner.
+      const record = args[rule.arg]
+      const isObj = record && typeof record === 'object'
+      return checkOwnerPairScope(
+        isObj ? (record as { ownerKind?: unknown }).ownerKind : undefined,
+        isObj ? (record as { ownerId?: unknown }).ownerId : undefined,
+        opts,
+        inScope,
+        denied,
+      )
+    }
+    case 'ownerFieldList':
+      // The same pair as fields of EVERY record of a batched write; split out to keep this
+      // function under the complexity ceiling, same contract (404 `denied` / `undefined`).
+      return checkOwnerFieldListScope(args[rule.arg], opts, inScope, denied)
+    case 'librarySource':
+      // A repo-sourced library's sync method carries only a source id; resolve that source's owning
+      // tier PAIR server-side and bind it like `owner` (the owner-pair analogue of `skillSource`).
+      return checkLibrarySourceScope(rule.entity, args[rule.arg], opts, inScope, denied)
+    case 'ownerFieldUpsert':
+      // Binds the record's DECLARED owner and the STORED row's owner together; see the rule's entry
+      // on `ScopeRule` for why the declared half alone is not enough.
+      return checkOwnerFieldUpsertScope(rule.entity, args[rule.arg], opts, inScope, denied)
+    default: {
+      // Fail closed: a `ScopeRule` kind with no case in EITHER switch must NEVER reach the method
+      // unscoped. The `never` binding makes adding a kind without a case a compile error.
+      const _exhaustive: never = rule
+      void _exhaustive
+      return denied
+    }
+  }
+
+  // In scope: let the method run.
+  return undefined
 }
 
 /** Reconstruct the thrown error from an error envelope (client side). */
@@ -832,6 +1011,19 @@ export function persistenceErrorToThrowable(error: PersistenceRpcError): Error {
   ]
   if ((domainCodes as string[]).includes(error.code)) {
     return new DomainError(error.code as DomainErrorCode, error.message, error.details)
+  }
+  // Rebuilt as the real class, so a mothership-mode node's engine recognises a poison row exactly
+  // as a direct-database one does. The fault is decoded through kernel's own predicate: a value
+  // this build does not know falls back to `unrecognized_value`, i.e. the reading node declines to
+  // destroy a run on a vocabulary it does not share with the mothership.
+  if (error.code === 'data_integrity') {
+    const details = error.details ?? {}
+    const context = details.context
+    return new DataIntegrityError(
+      error.message,
+      context && typeof context === 'object' ? (context as Record<string, unknown>) : {},
+      isDataIntegrityFault(details.fault) ? details.fault : 'unrecognized_value',
+    )
   }
   return new Error(error.message)
 }

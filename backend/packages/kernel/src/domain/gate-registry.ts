@@ -3,16 +3,18 @@ import type {
   ExecutionInstance,
   GateAttempt,
   GateStepState,
-  MergeThresholdPreset,
+  RiskPolicy,
   PipelineStep,
 } from './types.js'
+import type { DescriptorField, DescriptorFieldValues } from '@cat-factory/contracts'
 import type { AgentRunResult } from '../ports/agent-executor.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
+import { noopLogger, type Logger } from '../ports/logging.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
 import {
-  getProvider as registryGetProvider,
-  requireProvider as registryRequireProvider,
+  defaultProviderRegistry,
+  type ProviderRegistry,
   type ProviderToken,
 } from './provider-registry.js'
 
@@ -30,8 +32,8 @@ import {
 //
 // This abstraction lives in kernel (alongside the pipeline registry) so a deployment
 // package can register its OWN gate as a startup import side effect (see
-// {@link registerGate}) without depending on the heavy orchestration package — exactly
-// the way `registerAgentKind` / `registerPipeline` already work.
+// registering it on the app-owned {@link GateRegistry}) without depending on the heavy
+// orchestration package — the same app-owned-registry seam as agent kinds and pipelines.
 
 /** The outcome of a single gate precheck against its provider. */
 export interface GateProbe {
@@ -45,6 +47,29 @@ export interface GateProbe {
   status: 'pass' | 'pending' | 'fail'
   /** The PR head commit the precheck ran against, or null when there is no open PR. */
   headSha: string | null
+  /**
+   * Per-PR head commits for a MULTI-REPO block (own-service + peer repos), keyed by
+   * repo full name (owner/name). Present only when the block has peer PRs; a single-repo
+   * block leaves it undefined and callers read the scalar {@link headSha}. Persisted onto
+   * `step.gate.headShas` so the run-detail UI can show which repo each check belongs to.
+   */
+  headShas?: Record<string, string>
+  /**
+   * For the conflicts gate on a `fail`: which of the block's repos conflicted (own-service
+   * or a peer), so the engine dispatches the single-repo conflict-resolver at that repo.
+   * Absent ⇒ the block's own-service repo. The CI gate leaves it undefined (its fixer runs
+   * across all repos).
+   */
+  conflictTarget?: { repo: string; frameId?: string; branch?: string }
+  /**
+   * Whether a `fail` verdict may escalate to the helper agent. Defaults to `true` (the
+   * usual "dispatch the fixer / resolver" path). A gate sets it to `false` when the helper
+   * it has cannot fix this particular failure — e.g. the conflicts gate detects the conflict
+   * on a PEER repo but only has the single-repo (own-repo) conflict-resolver, so escalating
+   * would burn the whole attempt budget on a container that can't touch the conflicted repo.
+   * The engine then skips the dispatch and goes straight to {@link GateDefinition.onExhausted}.
+   */
+  escalatable?: boolean
   /** Step output recorded on `pass` (a short human-readable reason). */
   passOutput?: string
   /** A summary of what failed on `fail` — fed to the helper agent and the give-up error. */
@@ -54,7 +79,7 @@ export interface GateProbe {
    * this from the red check runs; the conflicts gate leaves it undefined). Persisted
    * onto `step.gate` so the run-detail UI can list each failing check.
    */
-  failingChecks?: { name: string; conclusion: string | null; url?: string | null }[]
+  failingChecks?: { name: string; conclusion: string | null; url?: string | null; repo?: string }[]
 }
 
 /** The relevant outcome of a finished gate-helper job, for recording an attempt. */
@@ -140,31 +165,24 @@ export interface GateDefinition {
   /** Step output recorded when the gate passes through (no provider configured). */
   unwiredOutput: string
   /**
-   * What to do when the durable driver's poll budget (ciMaxPolls × ciPollInterval) is
-   * spent while the gate is still `pending` — distinct from the attempt budget (helper
-   * dispatches) handled by {@link onExhausted}:
-   *   - `fail` (default) — the precheck never settled, which is a failure for the CI /
-   *     conflicts gates (CI never went green / the PR never became mergeable).
-   *   - `pass` — for a time-windowed watch gate (post-release-health), running out of
-   *     polls just means the watch window outlasted the budget with NO regression seen,
-   *     which is a healthy pass — not a timeout failure.
-   *   - `rearm` — for an unbounded human-wait gate (`human-review`): there is no deadline
-   *     for a human reviewer, so running out of polls is NOT a verdict. Always re-arm
-   *     another poll cycle (never pass, never fail); the waiting is surfaced via the gate's
-   *     notification (which the severity sweep escalates), not by killing the run.
-   * Resolved by {@link ExecutionService.resolveGatePollExhaustion}.
-   */
-  pollExhaustion?: 'pass' | 'fail' | 'rearm'
-  /**
    * Run the precheck against the provider and classify it. Receives the live gate
    * state so a time-windowed gate (post-release-health) can read its `watchSince`.
    */
   probe(workspaceId: string, blockId: string, gateState: GateStepState): Promise<GateProbe>
   /**
-   * Optional: the attempt budget for this gate, resolved from the task's merge preset.
-   * Defaults to `ciMaxAttempts` when omitted (the CI/conflicts gates use that).
+   * Optional: the attempt budget for this gate, resolved from the task's merge preset and the
+   * STEP's own gate config (`stepOptions.gateConfig.fields`, already validated against
+   * {@link GateRegistration.configSchema}). Defaults to `ciMaxAttempts` when omitted (the
+   * CI/conflicts gates use that).
+   *
+   * The per-step override is resolved BY THE GATE rather than by the engine on purpose: the
+   * engine has no business knowing that this gate calls its budget `maxAttempts` and the next
+   * one does not, which is the hard-coding the config schema exists to stop.
    */
-  attemptBudget?(preset: Pick<MergeThresholdPreset, 'ciMaxAttempts' | 'releaseMaxAttempts'>): number
+  attemptBudget?(
+    preset: Pick<RiskPolicy, 'ciMaxAttempts' | 'releaseMaxAttempts'>,
+    config: GateConfigFields,
+  ): number
   /**
    * Optional extra context handed to the helper agent on escalation (the CI gate
    * passes the failing-check summary; the conflicts gate passes nothing).
@@ -222,6 +240,12 @@ export interface GateDefinition {
 export interface GateContext {
   /** The engine clock (monotonic-ish ms), for time-windowed gates. */
   clock: Clock
+  /**
+   * The engine's logger, already scoped. Required rather than optional: a gate's best-effort
+   * work (an incident annotation, a notification) has to name its own failures, and an absent
+   * logger would make that silence the default.
+   */
+  logger: Logger
   /** Read a block, e.g. to gate only a release that actually shipped. */
   getBlock(workspaceId: string, blockId: string): Promise<Block | null>
   /** Run a function under the run initiator's ambient context (per-user credentials). */
@@ -233,9 +257,14 @@ export interface GateContext {
   /**
    * The wired impl for a provider token, or throw. SAFE inside `probe()` — the engine only
    * probes a gate whose `wired()` returned true, and a gate's `wired()` should be
-   * `isProviderWired(token)` — so this replaces the old `getFoo()!` assertion with a guard.
+   * `ctx.isProviderWired(token)` — so this replaces the old `getFoo()!` assertion with a guard.
    */
   requireProvider<T>(token: ProviderToken<T>): T
+  /**
+   * Whether an impl is wired for a provider token — the canonical source for a gate's `wired()`
+   * (reads the app-owned {@link ProviderRegistry} the engine threads in, not a module global).
+   */
+  isProviderWired<T>(token: ProviderToken<T>): boolean
 }
 
 /**
@@ -246,49 +275,183 @@ export interface GateContext {
  */
 export type GateFactory = (ctx: GateContext) => GateDefinition
 
-// Process-wide registry, mirroring the agent-kind / pipeline registry seams. Registration
-// is a startup import side effect, read once when an ExecutionService lazily builds its
-// gate registry on first use. A gate registered AFTER an ExecutionService has already
-// built its registry is invisible to that instance — register at startup, before serving.
-const registry = new Map<string, GateFactory>()
+/**
+ * App-owned registry of polling gates, mirroring the agent-kind registry
+ * ({@link AgentKindRegistry}) and the backend-registries pilot. The composition root news
+ * ONE instance (`defaultGateRegistry()`), threads it through `CoreDependencies`, and the
+ * engine reads it from there when it lazily builds its per-kind gate map — so there is no
+ * module-global `Map`, no `clear*()` test cruft, and no external-adapter module-identity
+ * gotcha: a deployment registers extra gates by reference (`registry.register(kind, factory)`)
+ * on the instance the facade injects.
+ *
+ * Unlike {@link AgentKindRegistry}, the built-in gates are NOT pre-loaded by
+ * `defaultGateRegistry()` — they live in `@cat-factory/gates` (which depends on kernel, not
+ * the reverse), so a facade populates them explicitly via that package's
+ * `registerBuiltinGates(registry)`. A fresh registry is therefore empty; that is the whole
+ * dogfood — the platform's own gates register through the same public seam as anyone's.
+ */
+export class GateRegistry {
+  private readonly registry = new Map<string, GateRegistration>()
+
+  /**
+   * Register a polling gate, keyed by the step `agentKind` it gates. A later registration of
+   * the same kind replaces the earlier one (so a deployment can override a built-in). The
+   * `kind` is passed explicitly because the factory's result isn't built until the engine
+   * invokes it.
+   *
+   * `options.configFields` declares the gate's own per-step parameters and
+   * `options.pollExhaustion` what running out of polls MEANS for this gate (see
+   * {@link GateRegistration}). Both sit on the REGISTRATION rather than on the
+   * {@link GateDefinition} because the boundaries that need them most have no
+   * {@link GateContext} to build a definition with: pipeline save, which must refuse a bad
+   * pipeline at authoring time, and public-API admission, which must decide at HTTP request
+   * time whether a start can park the run on a person.
+   */
+  register(
+    kind: string,
+    factory: GateFactory,
+    options: {
+      configFields?: readonly DescriptorField[]
+      pollExhaustion?: GatePollExhaustion
+    } = {},
+  ): void {
+    this.registry.set(kind, { factory, ...options })
+  }
+
+  /** The registered gates (registration order). */
+  factories(): { kind: string; factory: GateFactory }[] {
+    return [...this.registry].map(([kind, { factory }]) => ({ kind, factory }))
+  }
+
+  /** Whether a gate is registered for this step kind — the "may this step carry gate config" test. */
+  has(kind: string): boolean {
+    return this.registry.has(kind)
+  }
+
+  /**
+   * What running out of polls MEANS for this gate, as it declared at registration, or
+   * `undefined` when the kind is not registered here at all.
+   *
+   * `undefined` is therefore a THIRD answer and never "the default": a registered gate that
+   * declared nothing answers `'fail'`, the disposition the engine applies to it, while an
+   * unregistered kind answers `undefined` because there is nothing to ask. Two readers depend on
+   * the distinction. The engine resolves the disposition of a spent poll budget; the public API
+   * decides at request time whether a start can park the run on a person forever, and reporting
+   * an unregistered kind as a bounded gate would be a guess about a gate this process cannot see.
+   */
+  pollExhaustion(kind: string): GatePollExhaustion | undefined {
+    const registration = this.registry.get(kind)
+    if (!registration) return undefined
+    return registration.pollExhaustion ?? 'fail'
+  }
+
+  /**
+   * The per-step parameters a gate declared, or `undefined` when it declared none. A gate with no
+   * declaration accepts NO per-step fields: an undeclared field is indistinguishable from a
+   * typo'd one, and both read to whoever typed them as configuration that took effect.
+   */
+  configFields(kind: string): readonly DescriptorField[] | undefined {
+    return this.registry.get(kind)?.configFields
+  }
+
+  /** Every gate that declares an authoring form, for the snapshot projection the builder renders. */
+  configForms(): { kind: string; fields: readonly DescriptorField[] }[] {
+    return [...this.registry].flatMap(([kind, { configFields }]) =>
+      configFields?.length ? [{ kind, fields: configFields }] : [],
+    )
+  }
+}
 
 /**
- * Register a custom polling gate, keyed by the step `agentKind` it gates. A later
- * registration of the same kind replaces the earlier one, and a registered gate replaces
- * a built-in of the same kind — so a deployment can both add new gates and customize the
- * built-in catalog. The `kind` is passed explicitly because the factory's result isn't
- * built until the engine invokes it.
+ * A gate's per-step parameters, as filled by a pipeline author and validated against its
+ * {@link GateRegistration.configFields}. The repo's shared descriptor-form value bag, not a
+ * gate-specific one: a gate config form is collected, validated, frozen and rendered by the same
+ * machinery as an initiative preset's form.
  */
-export function registerGate(kind: string, factory: GateFactory): void {
-  registry.set(kind, factory)
+export type GateConfigFields = DescriptorFieldValues
+
+/**
+ * What running out of the durable driver's gate-poll budget (ciMaxPolls × ciPollInterval) MEANS,
+ * while the gate is still `pending`. Distinct from the attempt budget (helper dispatches), which
+ * {@link GateDefinition.onExhausted} handles:
+ *
+ *   - `fail` (the default when a registration declares none): the precheck never settled, which
+ *     is a failure for the CI / conflicts gates (CI never went green / the PR never became
+ *     mergeable).
+ *   - `pass`: for a time-windowed watch gate (post-release-health), running out of polls just
+ *     means the watch window outlasted the budget with NO regression seen, which is a healthy
+ *     pass rather than a timeout failure.
+ *   - `rearm`: for an unbounded human-wait gate (`human-review`), there is no deadline for a
+ *     human reviewer, so running out of polls is NOT a verdict. Always re-arm another poll cycle
+ *     (never pass, never fail); the waiting is surfaced via the gate's notification (which the
+ *     severity sweep escalates), not by killing the run.
+ *
+ * Resolved by `ExecutionService.resolveGatePollExhaustion`, and read at HTTP request time by
+ * public-API admission, for which `rearm` IS the definition of a gate that parks on a person.
+ */
+export type GatePollExhaustion = 'pass' | 'fail' | 'rearm'
+
+/** What a {@link GateRegistry} stores per kind: the factory, plus what the gate declares about itself. */
+export interface GateRegistration {
+  factory: GateFactory
+  /**
+   * What a spent poll budget means for this gate ({@link GatePollExhaustion}); absent ⇒ `fail`.
+   *
+   * On the REGISTRATION rather than on the {@link GateDefinition} the factory builds, because the
+   * two readers that most need it hold no {@link GateContext}: standing a fake one up per HTTP
+   * request to interrogate a static declaration would be a shortcut, not a design. That is why
+   * this used to be mirrored by a hand-kept constant in `@cat-factory/contracts` naming the
+   * shipped human-wait gates, with a drift guard to keep the copy honest, and why a gate a
+   * DEPLOYMENT registered was invisible to the rule, so a plain `write` key could start a
+   * pipeline that then parked on it forever. Declared here, every gate answers for itself and
+   * there is no copy to drift.
+   */
+  pollExhaustion?: GatePollExhaustion
+  /**
+   * The gate's own per-step parameters, declared as descriptor fields so ONE declaration drives
+   * validation at pipeline save, re-validation at run start, and the authoring form the SPA
+   * renders (projected onto the workspace snapshot). Absent ⇒ the gate takes no per-step
+   * configuration.
+   *
+   * A `password` field has no place here: these values live in the pipeline row and are copied
+   * onto the run's step, so a secret belongs in the per-workspace capability-credential store.
+   */
+  configFields?: readonly DescriptorField[]
 }
 
-/** The registered custom gates (registration order). */
-export function registeredGateFactories(): { kind: string; factory: GateFactory }[] {
-  return [...registry].map(([kind, factory]) => ({ kind, factory }))
-}
-
-/** Drop all registered gates. Intended for tests that exercise registration. */
-export function clearRegisteredGates(): void {
-  registry.clear()
+/**
+ * A fresh gate registry. Empty by design — the built-in gate suite lives in
+ * `@cat-factory/gates` and is installed by a facade via `registerBuiltinGates(registry)`,
+ * since kernel cannot depend on the gate package. A deployment registers its own gates by
+ * reference on the instance the composition root injects.
+ */
+export function defaultGateRegistry(): GateRegistry {
+  return new GateRegistry()
 }
 
 /**
  * A minimal {@link GateContext} for tests that invoke a gate factory in isolation (the
  * real one is built by `ExecutionService.makeGateContext`). Defaults to harmless no-ops;
- * pass `overrides` to assert against a specific seam. Centralised here so a new required
- * `GateContext` field is filled in ONE place instead of every gate test.
+ * pass `providerRegistry` to have the provider seams read a specific registry (a gate test
+ * wires its provider on it), and `overrides` to assert against a specific seam. Centralised
+ * here so a new required `GateContext` field is filled in ONE place instead of every gate test.
  */
-export function stubGateContext(overrides: Partial<GateContext> = {}): GateContext {
+export function stubGateContext(
+  overrides: Partial<GateContext> = {},
+  providerRegistry: ProviderRegistry = defaultProviderRegistry(),
+): GateContext {
   return {
     clock: { now: () => 0 },
+    logger: noopLogger,
     getBlock: async () => null,
     runInitiatorScope: (_initiatedBy, fn) => fn(),
     raiseNotification: async () => {},
-    // Default to the real process-wide registry so a gate test that wires a provider sees
-    // it, and `requireProvider` on an unwired token throws exactly as it would in prod.
-    getProvider: registryGetProvider,
-    requireProvider: registryRequireProvider,
+    // Read the provider seams off the given registry (a fresh empty one by default), so a gate
+    // test that wires a provider on it sees it and `requireProvider` on an unwired token throws
+    // exactly as it would in prod.
+    getProvider: (token) => providerRegistry.get(token),
+    requireProvider: (token) => providerRegistry.require(token),
+    isProviderWired: (token) => providerRegistry.isWired(token),
     ...overrides,
   }
 }

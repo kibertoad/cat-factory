@@ -5,9 +5,18 @@ import {
   isMockKind,
   mockSystemPrompt,
   phaseForKind,
-  systemPromptFor,
-  userPromptFor,
+  STANDARDS_SECTION_OPENER,
+  systemPromptFor as _systemPromptFor,
+  defaultAgentKindRegistry,
+  userPromptFor as _userPromptFor,
 } from '@cat-factory/agents'
+
+// App-owned DI: a fresh registry (built-ins pre-loaded) injected into the prompt fns so
+// every existing call site keeps its original arity.
+const _agentKindRegistry = defaultAgentKindRegistry()
+const systemPromptFor = (kind: string) => _systemPromptFor(kind, _agentKindRegistry)
+const userPromptFor = (ctx: AgentRunContext, opts?: { materialized?: boolean }) =>
+  _userPromptFor(ctx, _agentKindRegistry, opts)
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 
@@ -36,7 +45,6 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 
 describe('mock-builder agent prompt', () => {
   it('recognises the mock kind and nothing else', () => {
-    expect(MOCK_AGENT_KIND).toBe('mocker')
     expect(isMockKind('mocker')).toBe(true)
     expect(isMockKind('coder')).toBe(false)
     // The mock builder is not a standard solution phase.
@@ -80,8 +88,13 @@ describe('mock-builder agent prompt', () => {
       expect(prompt).toMatch(/GitHub Actions|GHA/i)
     })
 
-    it('defers to the appended best-practice standards', () => {
-      expect(systemPromptFor('mocker')).toContain('best-practice standard')
+    it('leaves the best-practice-standards imperative to the FOLD, not the role text', () => {
+      // The imperative used to close each role prompt, while the fold appends nothing when a
+      // block resolved no standards — so it pointed at a section that was never injected. The
+      // fold owns it now, which is why the assertion is at that seam.
+      const bare = systemPromptFor('mocker')
+      expect(bare).not.toContain(STANDARDS_SECTION_OPENER)
+      expect(composeSystemPrompt(bare, [FRAGMENTS[0]!.id])).toContain(STANDARDS_SECTION_OPENER)
     })
 
     it('composes selected fragments onto the role prompt', () => {

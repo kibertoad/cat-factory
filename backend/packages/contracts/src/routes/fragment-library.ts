@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { promptFragmentSchema } from '../entities.js'
 import {
@@ -7,6 +7,8 @@ import {
   fragmentSourceSchema,
   fragmentSourceStatusSchema,
   fragmentSyncResultSchema,
+  generateFragmentTitleSchema,
+  generatedFragmentTitleSchema,
   linkFragmentSourceSchema,
   resolvedFragmentCatalogSchema,
   updatePromptFragmentSchema,
@@ -59,7 +61,18 @@ export const deletePromptFragmentContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: fragmentIdParams,
   pathResolver: ({ fragmentId }) => `/prompt-fragments/${fragmentId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
+})
+
+/** Suggest a concise title for a fragment from its content (an inline LLM call). */
+export const generatePromptFragmentTitleContract = defineApiContract({
+  method: 'post',
+  // At the account scope the inline model resolves against a workspace's credential scope;
+  // `viaWorkspaceId` names it (ignored at the workspace scope, which uses the addressed workspace).
+  requestQuerySchema: v.object({ viaWorkspaceId: v.optional(v.string()) }),
+  pathResolver: () => '/prompt-fragments/generate-title',
+  requestBodySchema: generateFragmentTitleSchema,
+  responsesByStatusCode: { 200: generatedFragmentTitleSchema, ...errorResponses },
 })
 
 // ---- document-backed fragments (living source of truth) -------------------
@@ -101,7 +114,7 @@ export const unlinkFragmentSourceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: sourceIdParams,
   pathResolver: ({ id }) => `/fragment-sources/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const fragmentSourceStatusContract = defineApiContract({

@@ -16,7 +16,7 @@ describe('buildLocalEnv', () => {
     databaseUrl: 'postgres://cat:cat@localhost:5432/catfactory',
     authSessionSecret: 'deadbeef',
     encryptionKey: 'YmFzZTY0',
-    harnessImage: 'ghcr.io/x/y:latest',
+    harnessSharedSecret: 'cafef00d',
     port: 8787,
     corsAllowedOrigins: 'http://localhost:3000',
     containerRuntime: 'docker' as const,
@@ -28,8 +28,27 @@ describe('buildLocalEnv', () => {
     expect(out).toContain('DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory')
     expect(out).toContain('AUTH_SESSION_SECRET=deadbeef')
     expect(out).toContain('ENCRYPTION_KEY=YmFzZTY0')
-    expect(out).toContain('LOCAL_HARNESS_IMAGE=ghcr.io/x/y:latest')
+    expect(out).toContain('HARNESS_SHARED_SECRET=cafef00d')
     expect(out).not.toContain('GITLAB_PAT=')
+  })
+
+  it('leaves LOCAL_HARNESS_IMAGE unset (commented) by default, never suggesting :latest', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github' })
+    // The var is documented but commented out, so the backend runs its matched version.
+    expect(out).toMatch(/^# LOCAL_HARNESS_IMAGE=/m)
+    expect(out).not.toMatch(/^LOCAL_HARNESS_IMAGE=/m)
+    expect(out).toContain('leave it')
+    // A mutable :latest tag is never suggested as the value to use.
+    expect(out).not.toContain('LOCAL_HARNESS_IMAGE=ghcr.io/kibertoad/cat-factory-executor:latest')
+  })
+
+  it('writes LOCAL_HARNESS_IMAGE active when an explicit pin is supplied', () => {
+    const out = buildLocalEnv({
+      ...base,
+      provider: 'github',
+      harnessImage: 'ghcr.io/x/y:1.2.3',
+    })
+    expect(out).toMatch(/^LOCAL_HARNESS_IMAGE=ghcr\.io\/x\/y:1\.2\.3$/m)
   })
 
   it('writes the gitlab token under GITLAB_PAT', () => {
@@ -83,7 +102,7 @@ describe('buildLocalEnv', () => {
     expect(out).toMatch(/^LOCAL_NATIVE_AGENTS=claude-code$/m)
     expect(out).toMatch(/^LOCAL_HARNESS_ENTRY=\/opt\/harness\/server\.js$/m)
     // Only claude-code models are named as running natively.
-    expect(out).toContain('Claude Opus 4.8 (claude-opus)')
+    expect(out).toContain('Claude Opus 5 (claude-opus)')
     expect(out).not.toContain('GPT-5.5')
   })
 
@@ -107,6 +126,22 @@ describe('buildLocalEnv', () => {
   it('adds the GitLab API base hint only for a gitlab deployment', () => {
     const out = buildLocalEnv({ ...base, provider: 'gitlab' })
     expect(out).toContain('# GITLAB_API_BASE=')
+  })
+
+  it('documents the Kubernetes deploy runner (commented; container is the steered mode)', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github' })
+    // All three vars are present but commented — deploy is unused by default. The steered mode is
+    // `container` (works out of the box; the image resolves automatically), not the brittle native.
+    expect(out).toContain('# LOCAL_DEPLOY_RUNTIME=container')
+    expect(out).toContain('# LOCAL_DEPLOY_HARNESS_ENTRY=')
+    expect(out).toContain('# LOCAL_DEPLOY_IMAGE=ghcr.io/kibertoad/cat-factory-deploy:<version>')
+    expect(out).not.toMatch(/^LOCAL_DEPLOY_RUNTIME=/m)
+    // The "no deploy runner wired" failure, both modes, and the escape-hatch framing are explained.
+    expect(out).toContain('no deploy')
+    expect(out).toMatch(/native/)
+    expect(out).toMatch(/container/)
+    expect(out).toContain('resolved automatically')
+    expect(out).toContain('Escape hatch')
   })
 })
 

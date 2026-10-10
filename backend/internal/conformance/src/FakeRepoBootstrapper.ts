@@ -3,7 +3,10 @@ import type {
   BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
+  MonorepoTargetRepo,
+  ReferenceRepoAccess,
   RepoBootstrapper,
+  RepoFiles,
   StepSubtasks,
 } from '@cat-factory/kernel'
 
@@ -17,8 +20,10 @@ import type {
 export class FakeRepoBootstrapper implements RepoBootstrapper {
   /** Dispatch requests, in order. */
   readonly calls: BootstrapRepoRequest[] = []
-  /** Repo→frame links recorded on success. */
-  readonly links: { workspaceId: string; outcome: BootstrapRepoOutcome; blockId: string }[] = []
+  /** Repos projected on success (the caller binds the frame's Service to them). */
+  readonly projected: { workspaceId: string; outcome: BootstrapRepoOutcome }[] = []
+  /** Deterministic github id handed back per projected repo (owner/name → id). */
+  private nextGithubId = 9000
   /** Job ids whose container was asked to stop (the failure-cleanup path). */
   readonly stopped: string[] = []
   /** When set, `startBootstrap` throws (pre-flight failure path — fails fast). */
@@ -29,6 +34,36 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
   progressScript: StepSubtasks[] = []
   /** Whether the workspace reports as connected (the pre-flight check); on by default. */
   connected = true
+  /**
+   * Report a completed `pull_request` run with no pull request (the "delivered nowhere" case).
+   * Ignored by a `direct_push` run, which never reports one.
+   */
+  omitPrUrl = false
+  /**
+   * The repos this workspace projects, by numeric id: what a monorepo target may name. Empty by
+   * default, so a suite that has not declared one exercises the refusal rather than accidentally
+   * resolving anything it asks for.
+   */
+  readonly monorepoRepos = new Map<number, MonorepoTargetRepo>()
+  /** Repo ids `markRepoAsMonorepo` marked, in order (empty when a pre-flight refused first). */
+  readonly markedMonorepo: number[] = []
+  /**
+   * The reference templates the workspace's connection can READ, keyed `owner/name`.
+   *
+   * Reachability defaults to true (matching {@link connected}: the fake models a healthy
+   * connection, and most suites name a reference architecture only to have a run to drive), so an
+   * entry here supplies the FILES a monorepo survey reads rather than granting access. Unreachable
+   * is the opt-in, through {@link referenceRepoVerdicts}.
+   */
+  readonly referenceRepoFiles = new Map<string, RepoFiles>()
+  /**
+   * Reference templates that are NOT reachable, keyed `owner/name`: the pre-flight refusals.
+   *
+   * Two verdicts rather than one flag, because the service turns them into two different refusals
+   * (a 422 about the entry, a 503 about the provider) and a fake that could only express one could
+   * not exercise the distinction.
+   */
+  readonly referenceRepoVerdicts = new Map<string, 'not_found' | 'unreadable'>()
 
   private readonly requests = new Map<string, BootstrapRepoRequest>()
   private readonly pollCounts = new Map<string, number>()
@@ -37,11 +72,45 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
     return this.connected
   }
 
+  async resolveMonorepoTarget(
+    _workspaceId: string,
+    repoGithubId: number,
+  ): Promise<MonorepoTargetRepo | null> {
+    return this.monorepoRepos.get(repoGithubId) ?? null
+  }
+
+  async markRepoAsMonorepo(_workspaceId: string, repoGithubId: number): Promise<void> {
+    this.markedMonorepo.push(repoGithubId)
+  }
+
+  async resolveReferenceRepo(
+    _workspaceId: string,
+    ref: { owner: string; name: string },
+  ): Promise<ReferenceRepoAccess> {
+    if (!this.connected) return { status: 'not_connected' }
+    const key = `${ref.owner}/${ref.name}`
+    const verdict = this.referenceRepoVerdicts.get(key)
+    if (verdict === 'not_found') return { status: 'not_found' }
+    if (verdict === 'unreadable') return { status: 'unreadable', detail: 'the fake probe failed' }
+    return {
+      status: 'reachable',
+      files: this.referenceRepoFiles.get(key) ?? emptyRepoFiles(),
+      defaultBranch: 'main',
+    }
+  }
+
   async startBootstrap(request: BootstrapRepoRequest): Promise<BootstrapJobHandle> {
     this.calls.push(request)
     if (this.failWith) throw new Error(this.failWith)
-    this.requests.set(request.jobId, request)
-    return { workspaceId: request.workspaceId, jobId: request.jobId }
+    // Keyed by the CONTAINER job id, which is what a poll addresses: a monorepo run's apply
+    // phase dispatches under its own key, and keying on the run id here would let a fake
+    // apply-phase poll silently answer with the survey drive's scripted outcome.
+    this.requests.set(request.containerJobId, request)
+    return {
+      workspaceId: request.workspaceId,
+      jobId: request.jobId,
+      containerJobId: request.containerJobId,
+    }
   }
 
   async pollBootstrap(handle: BootstrapJobHandle): Promise<BootstrapJobUpdate> {
@@ -55,24 +124,43 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
         detail: this.failPollWith,
       }
     }
-    const n = this.pollCounts.get(handle.jobId) ?? 0
-    this.pollCounts.set(handle.jobId, n + 1)
+    const n = this.pollCounts.get(handle.containerJobId) ?? 0
+    this.pollCounts.set(handle.containerJobId, n + 1)
     if (n < this.progressScript.length) {
       return { state: 'running', subtasks: this.progressScript[n]! }
     }
-    return { state: 'done', outcome: this.outcomeFor(handle.jobId) }
+    const request = this.requests.get(handle.containerJobId)
+    // A `pull_request` run's product is the pull request, so the fake reports one: the
+    // orchestration FAILS a completed run of that delivery which reports none, and a fake that
+    // never answered with a PR could not exercise either side of that. A `direct_push` run
+    // reports none, which is the ordinary state of that delivery rather than a failure.
+    const pr =
+      request?.delivery.mode === 'pull_request' && !this.omitPrUrl
+        ? { prUrl: this.prUrlFor(request) }
+        : {}
+    // A monorepo run created no repository, so it names none; every other run did.
+    if (request?.monorepo) return { state: 'done', ...pr }
+    return { state: 'done', outcome: this.outcomeFor(handle.containerJobId), ...pr }
+  }
+
+  /** The pull request the fake reports, on whichever repository the run wrote to. */
+  private prUrlFor(request: BootstrapRepoRequest): string {
+    const repo = request.monorepo
+      ? `${request.monorepo.owner}/${request.monorepo.name}`
+      : `acme/${request.target.name}`
+    return `https://github.com/${repo}/pull/7`
   }
 
   async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {
-    this.stopped.push(handle.jobId)
+    this.stopped.push(handle.containerJobId)
   }
 
-  async linkRepoToBlock(
+  async projectBootstrappedRepo(
     workspaceId: string,
     outcome: BootstrapRepoOutcome,
-    blockId: string,
-  ): Promise<void> {
-    this.links.push({ workspaceId, outcome, blockId })
+  ): Promise<{ installationId: number; githubId: number }> {
+    this.projected.push({ workspaceId, outcome })
+    return { installationId: 1, githubId: this.nextGithubId++ }
   }
 
   private outcomeFor(jobId: string): BootstrapRepoOutcome {
@@ -84,4 +172,20 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
       defaultBranch: 'main',
     }
   }
+}
+
+/**
+ * A reachable template with nothing in it: what a suite gets for a reference architecture it
+ * declared but never surveys (every new-repo bootstrap). Reads answer honestly, as absent rather
+ * than as failed, so a survey run against one records `absent` and not an unreadable provider.
+ */
+function emptyRepoFiles(): RepoFiles {
+  return {
+    async getFile() {
+      return null
+    },
+    async listDirectory() {
+      return []
+    },
+  } as unknown as RepoFiles
 }

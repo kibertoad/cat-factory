@@ -6,10 +6,13 @@ import {
   githubLoginContract,
   googleCallbackContract,
   googleLoginContract,
+  listMachineNodesContract,
   logoutContract,
   meContract,
   mintMachineTokenContract,
   passwordLoginContract,
+  revokeMachineNodeContract,
+  revokeMySessionsContract,
   patLoginContract,
   peekInvitationContract,
   resetPasswordContract,
@@ -18,51 +21,68 @@ import {
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { GitHubOAuth } from '../../auth/GitHubOAuth.js'
 import { GoogleOAuth } from '../../auth/GoogleOAuth.js'
 import { verifySession } from '../../auth/middleware.js'
 import { mintMachineToken } from '../../auth/machineToken.js'
-import {
-  HmacSigner,
-  type SessionPayload,
-  type SessionUser,
-  TOKEN_AUDIENCE,
-} from '../../auth/signing.js'
+import { passwordAttemptLimited, tooManyAttempts } from './authThrottle.js'
 import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
-import type { UserRecord, VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
-import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
+import type { VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+  UnavailableError,
+  UnauthorizedError,
+} from '@cat-factory/kernel'
+// No `requireUser` here, deliberately: it narrows `c.get('user')`, which nothing sets under the
+// PUBLIC `/auth` prefix. `requireSessionUser` (loginFlow.ts) is this controller's equivalent.
+import { requireCapability } from '../../http/guards.js'
+// The mechanics every redirecting login provider shares — the cookie-bound CSRF state, the
+// allow-listed post-login redirect, the session mint, the invite handling. Extracted when
+// enterprise SSO landed so there is exactly ONE implementation of each (see loginFlow.ts).
+import {
+  acceptInvite,
+  authConfig,
+  beginRoundTrip,
+  consumeState,
+  emailDomainAllowed,
+  emailMatchesInvite,
+  mintSession,
+  requireSessionUser,
+  sessionGenerationFor,
+  peekInvite,
+  sessionUser,
+  sessionUserFrom,
+  withToken,
+} from './loginFlow.js'
+import { registerSsoRoutes } from './ssoRoutes.js'
 
 // Authentication endpoints. The SPA is handed a signed session token (via the URL
 // fragment for OAuth redirects, or the JSON body for password login) which it carries
-// as `Authorization: Bearer` on subsequent calls. Three login providers compose here:
+// as `Authorization: Bearer` on subsequent calls. Four login providers compose here:
 //   - GitHub OAuth (browser round-trip)
 //   - Google OAuth (browser round-trip)
+//   - enterprise SSO / generic OIDC (browser round-trip, in `ssoRoutes.ts`)
 //   - email/password (direct JSON)
 // All resolve to ONE canonical `users` row via the UserService, so the session id is
 // always the internal `usr_*` id regardless of how the user signed in.
 
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
-
-/** Browser-binding cookie for an OAuth round-trip (see the GitHub flow notes below). */
-const OAUTH_STATE_COOKIE = 'cf_oauth_state'
-
-interface OAuthState {
-  aud: typeof TOKEN_AUDIENCE.oauthState
-  nonce: string
-  /** Where to send the browser (with the token) after a successful login. */
-  redirect: string
-  /** Optional invite token to redeem after a brand-new Google/GitHub signup. */
-  invite?: string
-  exp: number
+// The one controller that keeps a local thrower rather than `requireCapability`: what it
+// guards is a boolean FLAG (`cfg.githubEnabled` / `cfg.passwordEnabled`), not an absent
+// value, so there is nothing for the accessor to narrow and return.
+/**
+ * The Google OAuth client, or a 503. Wraps the nullable `googleClient(cfg)` builder so the two
+ * OAuth routes don't restate the refusal.
+ */
+function requireGoogle(cfg: AuthConfig) {
+  return requireCapability(googleClient(cfg), 'Authentication is not configured')
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Authentication is not configured' } }, 503)
-
-function authConfig<E extends AppEnv>(c: Context<E>): AuthConfig {
-  return c.get('container').config.auth
+const unavailable = (): never => {
+  throw new UnavailableError('Authentication is not configured')
 }
 
 function githubClient(cfg: AuthConfig): GitHubOAuth {
@@ -92,92 +112,6 @@ function githubCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): st
 function googleCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
   if (cfg.google?.redirectUrl) return cfg.google.redirectUrl
   return `${new URL(c.req.url).origin}/auth/google/callback`
-}
-
-/**
- * A loopback host (the user's OWN machine): `localhost`, the `127.0.0.0/8` block, or IPv6 `::1`.
- * A redirect to one of these is not an exfiltration vector — capturing the fragment there means
- * already running a server on the victim's own machine. This is what lets a mothership honour the
- * post-login redirect back to a mothership-mode LOCAL node (`http://localhost:PORT`), which is
- * neither same-origin nor pre-allowlisted, without an operator hand-listing every dev port.
- */
-function isLoopbackRedirect(url: URL): boolean {
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
-  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
-}
-
-/**
- * Choose the post-login landing URL from the (untrusted) `redirect` query. The
- * session token is appended as a fragment, so an unrestricted redirect is a
- * token-exfiltration primitive — only same-origin, an explicitly allowlisted origin, or a
- * loopback host (the caller's own machine) is honoured, else the request origin.
- */
-export function pickPostLoginRedirect(
-  requested: string | undefined,
-  requestOrigin: string,
-  cfg: Pick<AuthConfig, 'successRedirectUrl' | 'allowedRedirectOrigins'>,
-): string {
-  if (cfg.successRedirectUrl) return cfg.successRedirectUrl
-  const fallback = `${requestOrigin}/`
-  if (!requested) return fallback
-  try {
-    const url = new URL(requested)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback
-    if (
-      url.origin === requestOrigin ||
-      cfg.allowedRedirectOrigins.includes(url.origin) ||
-      isLoopbackRedirect(url)
-    ) {
-      return requested
-    }
-  } catch {
-    // fall through to the safe origin-relative default
-  }
-  return fallback
-}
-
-function resolveRedirect<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
-  return pickPostLoginRedirect(c.req.query('redirect'), new URL(c.req.url).origin, cfg)
-}
-
-/** Append the session token as a URL fragment on the landing URL. */
-function withToken(redirect: string, token: string): string {
-  const url = new URL(redirect)
-  url.hash = `token=${token}`
-  return url.toString()
-}
-
-/** Build the SessionUser surface from a canonical user + chosen display login. */
-function sessionUser(user: UserRecord, login: string): SessionUser {
-  return {
-    id: user.id,
-    login,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-    email: user.email,
-  }
-}
-
-/**
- * Mint a user SESSION token, returning the signed token and the exact `exp` it committed to so a
- * caller can report the real expiry without a second clock read. Shared by every login path AND
- * the local-mode mothership-connect controller, so the session claim shape lives in one place.
- */
-export async function mintSession(
-  cfg: AuthConfig,
-  user: SessionUser,
-): Promise<{ token: string; exp: number }> {
-  const exp = Date.now() + cfg.sessionTtlMs
-  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp }
-  return { token: await new HmacSigner(cfg.sessionSecret).sign(session), exp }
-}
-
-/** Whether an email's domain is on the self-signup allowlist. */
-function emailDomainAllowed(email: string, cfg: AuthConfig): boolean {
-  const at = email.lastIndexOf('@')
-  if (at < 0) return false
-  const domain = email.slice(at + 1).toLowerCase()
-  return cfg.allowedEmailDomains.includes(domain)
 }
 
 /**
@@ -237,50 +171,25 @@ async function isPatIdentityAllowed(
   return { allowed: false, orgLookupFailed }
 }
 
-// Best-effort in-process throttle for the password endpoints. It bounds naive online
-// brute-force / credential-stuffing bursts without any new infrastructure, but is
-// deliberately modest: the window is per-isolate (each Workers isolate / Node process
-// keeps its own), so it is a speed bump, not an authoritative limiter — a durable,
-// cross-runtime limiter (D1/Postgres-backed, exercised by the conformance suite) is the
-// proper follow-up. Keyed by client IP + email so one attacker can't lock out an
-// unrelated victim, and PBKDF2's per-attempt cost remains the primary defence.
-const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
-const MAX_ATTEMPTS = 10
-const attempts = new Map<string, number[]>()
-
-function clientIp<E extends AppEnv>(c: Context<E>): string {
-  return (
-    c.req.header('cf-connecting-ip') ||
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  )
-}
-
-/** Record a password attempt for `c`+`email`; true once it is over the burst limit. */
-function passwordAttemptLimited<E extends AppEnv>(c: Context<E>, email: string): boolean {
-  const now = Date.now()
-  const key = `${clientIp(c)}:${email.toLowerCase().trim()}`
-  const recent = (attempts.get(key) ?? []).filter((t) => now - t < ATTEMPT_WINDOW_MS)
-  recent.push(now)
-  attempts.set(key, recent)
-  // Opportunistically evict fully-stale keys so the map can't grow unbounded.
-  if (attempts.size > 10_000) {
-    for (const [k, ts] of attempts) {
-      if (ts.every((t) => now - t >= ATTEMPT_WINDOW_MS)) attempts.delete(k)
-    }
-  }
-  return recent.length > MAX_ATTEMPTS
-}
-
-const tooManyAttempts = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'rate_limited', message: 'Too many attempts. Please try again later.' } },
-    429,
-  )
-
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  // Route registrations grouped into cohesive registrars (OAuth, credential login, account
+  // recovery, session) purely so no single function exceeds the size budget; each registers
+  // onto the shared `app` and depends only on the module-level helpers above.
+  registerOAuthRoutes(app)
+  // Enterprise SSO lives in its own registrar: its round-trip carries PKCE + OIDC nonce secrets
+  // that must stay out of the URL, so it owns a different state mechanism (a signed httpOnly
+  // cookie) than the two consumer-OAuth legs above, while sharing their signer and redirect
+  // allow-list through `loginFlow.ts`.
+  registerSsoRoutes(app)
+  registerCredentialRoutes(app)
+  registerMachineNodeRoutes(app)
+  registerAccountRecoveryRoutes(app)
+  registerSessionRoutes(app)
+  return app
+}
 
+function registerOAuthRoutes(app: Hono<AppEnv>): void {
   // Lets the SPA decide which login controls to show, and (local mode only) surface a
   // setup banner when the GitHub PAT is missing.
   buildHonoRoute(app, authConfigContract, (c) => {
@@ -302,7 +211,11 @@ export function authController(): Hono<AppEnv> {
           github: cfg.githubEnabled,
           password: cfg.passwordEnabled,
           google: !!cfg.google,
+          sso: !!cfg.sso,
         },
+        // The operator's own button wording travels beside the boolean, because it names THEIR
+        // identity provider and so is the one part of the login screen the SPA cannot localize.
+        ...(cfg.sso ? { sso: { label: cfg.sso.label, protocol: 'oidc' as const } } : {}),
         ...(localMode ? { localMode } : {}),
         ...(patProviders.length > 0 ? { patLogin: { providers: patProviders } } : {}),
         // Test-only: advertise that the deployment runs with no auth, so the SPA renders the
@@ -318,23 +231,8 @@ export function authController(): Hono<AppEnv> {
 
   buildHonoRoute(app, githubLoginContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.githubEnabled) return unavailable(c)
-    const nonce = crypto.randomUUID()
-    const state: OAuthState = {
-      aud: TOKEN_AUDIENCE.oauthState,
-      nonce,
-      redirect: resolveRedirect(c, cfg),
-      ...(c.req.query('invite') ? { invite: c.req.query('invite') } : {}),
-      exp: Date.now() + OAUTH_STATE_TTL_MS,
-    }
-    const signedState = await new HmacSigner(cfg.sessionSecret).sign(state)
-    setCookie(c, OAUTH_STATE_COOKIE, nonce, {
-      httpOnly: true,
-      secure: new URL(c.req.url).protocol === 'https:',
-      sameSite: 'Lax',
-      path: '/auth',
-      maxAge: OAUTH_STATE_TTL_MS / 1000,
-    })
+    if (!cfg.githubEnabled) return unavailable()
+    const signedState = await beginRoundTrip(c, cfg)
     const url = githubClient(cfg).authorizeUrl({
       redirectUri: githubCallbackUrl(c, cfg),
       state: signedState,
@@ -345,7 +243,7 @@ export function authController(): Hono<AppEnv> {
 
   buildHonoRoute(app, githubCallbackContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.githubEnabled) return unavailable(c)
+    if (!cfg.githubEnabled) return unavailable()
     const state = await consumeState(c, cfg)
     const code = c.req.query('code')
     if (!code || !state) {
@@ -382,7 +280,11 @@ export function authController(): Hono<AppEnv> {
       name: user.name,
     })
     if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
-    const { token } = await mintSession(cfg, sessionUser(user, identity.login))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, identity.login),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.redirect(withToken(state.redirect, token))
   })
 
@@ -390,24 +292,8 @@ export function authController(): Hono<AppEnv> {
 
   buildHonoRoute(app, googleLoginContract, async (c) => {
     const cfg = authConfig(c)
-    const google = googleClient(cfg)
-    if (!google) return unavailable(c)
-    const nonce = crypto.randomUUID()
-    const state: OAuthState = {
-      aud: TOKEN_AUDIENCE.oauthState,
-      nonce,
-      redirect: resolveRedirect(c, cfg),
-      ...(c.req.query('invite') ? { invite: c.req.query('invite') } : {}),
-      exp: Date.now() + OAUTH_STATE_TTL_MS,
-    }
-    const signedState = await new HmacSigner(cfg.sessionSecret).sign(state)
-    setCookie(c, OAUTH_STATE_COOKIE, nonce, {
-      httpOnly: true,
-      secure: new URL(c.req.url).protocol === 'https:',
-      sameSite: 'Lax',
-      path: '/auth',
-      maxAge: OAUTH_STATE_TTL_MS / 1000,
-    })
+    const google = requireGoogle(cfg)
+    const signedState = await beginRoundTrip(c, cfg)
     return c.redirect(
       google.authorizeUrl({ redirectUri: googleCallbackUrl(c, cfg), state: signedState }),
     )
@@ -415,8 +301,7 @@ export function authController(): Hono<AppEnv> {
 
   buildHonoRoute(app, googleCallbackContract, async (c) => {
     const cfg = authConfig(c)
-    const google = googleClient(cfg)
-    if (!google) return unavailable(c)
+    const google = requireGoogle(cfg)
     const state = await consumeState(c, cfg)
     const code = c.req.query('code')
     if (!code || !state) {
@@ -455,17 +340,23 @@ export function authController(): Hono<AppEnv> {
       name: user.name,
     })
     if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
-    const { token } = await mintSession(cfg, sessionUser(user, identity.email || user.id))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, identity.email || user.id),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.redirect(withToken(state.redirect, token))
   })
+}
 
+function registerCredentialRoutes(app: Hono<AppEnv>): void {
   // ---- Email / password ---------------------------------------------------
 
   buildHonoRoute(app, signupContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.passwordEnabled) return unavailable(c)
+    if (!cfg.passwordEnabled) return unavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    if (await passwordAttemptLimited(c, body.email)) return tooManyAttempts()
     const container = c.get('container')
 
     // New-user creation is gated: an invite addressed to this email OR an allowlisted
@@ -482,38 +373,46 @@ export function authController(): Hono<AppEnv> {
         403,
       )
     }
-    try {
-      const user = await container.userService.signupWithPassword({
-        email: body.email,
-        password: body.password,
-        name: body.name,
-      })
-      await container.accountService.ensurePersonalAccount({
-        id: user.id,
-        login: user.email || user.id,
-        name: user.name,
-      })
-      if (body.invite) await acceptInvite(c, body.invite, user.id, user.email)
-      const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
-      return c.json({ token, user: sessionUser(user, user.email || user.id) }, 201)
-    } catch (err) {
-      if (err instanceof ConflictError || err instanceof ValidationError) {
-        return c.json({ error: { code: 'validation', message: err.message } }, 400)
-      }
-      throw err
-    }
+    // A `ConflictError` (email already registered) / `ValidationError` (password policy)
+    // from the service propagates to the shared handler UNTOUCHED. It used to be caught and
+    // flattened onto a 400 `validation` envelope, which discarded each error's own code AND
+    // its `details.reason` — the machine fact a client needs to tell "that email is taken"
+    // from "that password is too weak". The handler maps them to 409 / 422 with the reason
+    // intact. (Contrast the reset-password handler below, whose flattening is deliberate:
+    // there the distinct causes are an ORACLE for whether a token exists.)
+    const user = await container.userService.signupWithPassword({
+      email: body.email,
+      password: body.password,
+      name: body.name,
+    })
+    await container.accountService.ensurePersonalAccount({
+      id: user.id,
+      login: user.email || user.id,
+      name: user.name,
+    })
+    if (body.invite) await acceptInvite(c, body.invite, user.id, user.email)
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, user.email || user.id),
+      await sessionGenerationFor(c, user.id),
+    )
+    return c.json({ token, user: sessionUser(user, user.email || user.id) }, 201)
   })
 
   buildHonoRoute(app, passwordLoginContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.passwordEnabled) return unavailable(c)
+    if (!cfg.passwordEnabled) return unavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    if (await passwordAttemptLimited(c, body.email)) return tooManyAttempts()
     const user = await c.get('container').userService.verifyPassword(body)
     if (!user) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid email or password' } }, 401)
+      throw new UnauthorizedError('Invalid email or password')
     }
-    const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, user.email || user.id),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
   })
 
@@ -530,39 +429,33 @@ export function authController(): Hono<AppEnv> {
   buildHonoRoute(app, patLoginContract, async (c) => {
     const cfg = authConfig(c)
     const container = c.get('container')
-    const registry = container.vcsIdentity
-    if (!registry) return unavailable(c)
+    const registry = requireCapability(container.vcsIdentity, 'Authentication is not configured')
     const { provider, token } = c.req.valid('json')
     const entry = registry[provider]
     if (!entry) {
-      return c.json(
-        { error: { code: 'unavailable', message: `${provider} sign-in is not available` } },
-        503,
-      )
+      throw new UnavailableError(`${provider} sign-in is not available`)
     }
-    const pat = token ?? entry.configuredToken
+    const pat = token ?? entry.configuredToken?.()
     if (!pat) {
-      // Local mode has a server-configured one-click token, so guide the operator to set it;
-      // a hosted (multi-user) deployment has none — each user pastes their OWN PAT, so guide
-      // the user to do that rather than to set an env var they don't control.
-      const message = container.config.localMode
-        ? `No ${provider} token configured. Set ${provider === 'gitlab' ? 'GITLAB_PAT' : 'GITHUB_PAT'} in your environment to sign in.`
-        : `Paste your ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} personal access token to sign in.`
-      return c.json({ error: { code: 'validation', message } }, 400)
+      // Local mode can be handed a token right here (it becomes the deployment's own credential),
+      // so ask for one rather than for an env var the developer would have to restart to apply;
+      // a hosted (multi-user) deployment has no deployment token at all — each user pastes their
+      // OWN PAT, so the same instruction serves both.
+      return c.json(
+        {
+          error: {
+            code: 'validation',
+            message: `Paste your ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} personal access token to sign in.`,
+          },
+        },
+        400,
+      )
     }
     let identity
     try {
       identity = await entry.resolver.resolveIdentity(pat)
     } catch {
-      return c.json(
-        {
-          error: {
-            code: 'unauthorized',
-            message: `That ${provider} token is invalid or lacks the required access.`,
-          },
-        },
-        401,
-      )
+      throw new UnauthorizedError(`That ${provider} token is invalid or lacks the required access.`)
     }
     // Hosted facades (remote node) have no anonymous tier, so a PAT login is held to the same
     // login/org/domain allowlist as OAuth — a valid token alone must not admit an arbitrary
@@ -588,6 +481,16 @@ export function authController(): Hono<AppEnv> {
         )
       }
     }
+    // Local mode's ONE token is both the identity above and the credential every agent step
+    // clones, pushes, gates and merges with, so a token pasted into a deployment that holds none
+    // is installed as that credential here — before the session is minted, so a failure to store
+    // it is reported instead of handing the user a session into a product that cannot reach any
+    // repo. Only ever a token the caller supplied (never the deployment's own, re-installed), and
+    // only while `installable` says the environment names none; the facade's `install` refuses
+    // otherwise, which the shared error handler renders as the refusal it is.
+    if (token && container.localVcsSetup?.installable().includes(provider)) {
+      await container.localVcsSetup.install(provider, token, { login: identity.login })
+    }
     const user = await container.userService.findOrCreateByIdentity(provider, identity.externalId, {
       name: identity.name,
       email: identity.email,
@@ -603,10 +506,20 @@ export function authController(): Hono<AppEnv> {
       name: user.name,
     })
     const session = sessionUser(user, identity.login)
-    const { token: sessionToken } = await mintSession(cfg, session)
+    const { token: sessionToken } = await mintSession(
+      cfg,
+      session,
+      await sessionGenerationFor(c, user.id),
+    )
     return c.json({ token: sessionToken, user: session }, 200)
   })
+}
 
+// The machine-token surface (mothership mode): the mint that turns a session into an
+// account-scoped machine credential, plus the roster endpoints that make its nodes
+// visible and revocable (SEC-5). Its own registrar so no single registrar outgrows the
+// function budget.
+function registerMachineNodeRoutes(app: Hono<AppEnv>): void {
   // ---- Machine-token minting (mothership mode) ----------------------------
 
   // Exchange the caller's mothership SESSION for a `machine`-audience token scoped to the
@@ -620,10 +533,7 @@ export function authController(): Hono<AppEnv> {
     const cfg = authConfig(c)
     const container = c.get('container')
     if (!container.repositories) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'This deployment is not a mothership' } },
-        503,
-      )
+      throw new UnavailableError('This deployment is not a mothership')
     }
     // Verify the presented bearer as a SESSION token (pinned `aud: session`), NOT via the
     // authGate — `/internal`-style machine calls bypass that gate, and pinning the audience
@@ -655,6 +565,17 @@ export function authController(): Hono<AppEnv> {
         403,
       )
     }
+    // The machine-node roster (SEC-5) must be able to record this mint, or the token must not
+    // exist: an unrecorded token is an unrevocable one. A deployment acting as a mothership
+    // (it serves `/internal/*` and thus has `repositories`) with no roster wired would mint
+    // exactly that, so refuse rather than silently skipping the roster.
+    const machineNodes = container.machineNodeRepository
+    if (!machineNodes && container.repositories) {
+      throw new UnavailableError(
+        'Machine nodes cannot be recorded on this deployment',
+        'machine_roster_unavailable',
+      )
+    }
     // The mint helper computes and signs the authoritative `exp`/`nodeId`, then hands them back
     // so the response echoes EXACTLY what was signed (no second clock read that could drift).
     const { token, exp, nodeId } = await mintMachineToken(cfg.sessionSecret, {
@@ -663,6 +584,29 @@ export function authController(): Hono<AppEnv> {
       nodeId: body.nodeId,
       ttlMs: cfg.machineTokenTtlMs,
     })
+    // Fold the mint into the roster BEFORE handing out the token: the roster is what makes the
+    // node revocable, so a token the roster never saw must not leave the building.
+    //
+    // The write itself enforces ownership, so a REVOKED node id can never be re-minted
+    // (revocation is permanent per node id; reconnecting mints a fresh one) and a node id
+    // another user holds cannot be taken over. Doing that here rather than in a preceding
+    // `get` closes the race where two first mints of one id both read "unknown" and the loser
+    // overwrote the winner's scope. One 403 for both causes, so a node id is not an existence
+    // oracle. The token was signed above but never leaves this function.
+    if (machineNodes) {
+      const outcome = await machineNodes.recordMint({
+        nodeId,
+        userId: session.id,
+        accountIds,
+        mintedAt: Date.now(),
+        expiresAt: exp,
+      })
+      if (outcome === 'refused') {
+        throw new ForbiddenError('This node id is not available', {
+          reason: 'machine_node_unavailable',
+        })
+      }
+    }
     return c.json(
       {
         token,
@@ -684,6 +628,57 @@ export function authController(): Hono<AppEnv> {
     )
   })
 
+  // ---- Machine-node roster: list + revoke (SEC-5) --------------------------
+
+  // The mint above records every node against its user; these two are how that user sees
+  // and kills their nodes. Revocation writes a tombstone every `/internal/*` machine gate
+  // consults (`verifyMachineRequest`), so a leaked machine token stops working everywhere
+  // at once instead of staying valid for its full TTL.
+  buildHonoRoute(app, listMachineNodesContract, async (c) => {
+    // Authenticate BEFORE probing the capability, so an unauthenticated caller cannot learn
+    // whether this deployment records machine nodes (the ordering every other machine surface
+    // documents as load-bearing).
+    const session = await verifySession(c)
+    if (!session) throw new UnauthorizedError('A valid session is required')
+    const nodes = requireCapability(
+      c.get('container').machineNodeRepository,
+      'Machine nodes are not recorded on this deployment',
+    )
+    const rows = await nodes.listByUser(session.id)
+    return c.json(
+      {
+        nodes: rows.map((row) => ({
+          nodeId: row.nodeId,
+          accountIds: row.accountIds,
+          createdAt: row.createdAt,
+          lastMintedAt: row.lastMintedAt,
+          exp: row.expiresAt,
+          revokedAt: row.revokedAt,
+        })),
+      },
+      200,
+    )
+  })
+
+  buildHonoRoute(app, revokeMachineNodeContract, async (c) => {
+    // Authenticate first, for the same non-oracle reason as the list route above.
+    const session = await verifySession(c)
+    if (!session) throw new UnauthorizedError('A valid session is required')
+    const nodes = requireCapability(
+      c.get('container').machineNodeRepository,
+      'Machine nodes are not recorded on this deployment',
+    )
+    const { nodeId } = c.req.valid('param')
+    const row = await nodes.get(nodeId)
+    // Owner-scoped, with the auth gate's existence-non-leak policy: an unknown node and
+    // another user's node are the same 404.
+    if (!row || row.userId !== session.id) throw new NotFoundError('Machine node', nodeId)
+    await nodes.revoke(nodeId, Date.now(), session.id)
+    return c.body(null, 204)
+  })
+}
+
+function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
   // ---- Forgot / reset password --------------------------------------------
 
   // Request a reset link. ALWAYS returns 204 (whether or not the email is registered)
@@ -691,9 +686,9 @@ export function authController(): Hono<AppEnv> {
   // (or logs it when no system sender is configured) and never returns the raw token.
   buildHonoRoute(app, forgotPasswordContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.passwordEnabled) return unavailable(c)
+    if (!cfg.passwordEnabled) return unavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    if (await passwordAttemptLimited(c, body.email)) return tooManyAttempts()
     try {
       await c.get('container').passwordReset?.request(body.email)
     } catch {
@@ -705,17 +700,18 @@ export function authController(): Hono<AppEnv> {
   })
 
   // Redeem a reset token + set a new password. A missing / used / expired token maps to
-  // a generic 400 (never distinguishing the cases). Throttled by the token value.
+  // a generic 400 (never distinguishing the cases). Throttled per client IP under a
+  // fixed shared bucket (see the comment at the call site below).
   buildHonoRoute(app, resetPasswordContract, async (c) => {
     const cfg = authConfig(c)
     const passwordReset = c.get('container').passwordReset
-    if (!cfg.passwordEnabled || !passwordReset) return unavailable(c)
+    if (!cfg.passwordEnabled || !passwordReset) return unavailable()
     const body = c.req.valid('json')
     // Throttle per client IP, NOT per token: a brute-force attacker uses a fresh token
     // each guess, so keying on the token value would hand every guess its own bucket and
     // limit nothing. (Per-IP can't lock out a "victim" here — redeem is token-, not
     // email-, addressed.)
-    if (passwordAttemptLimited(c, 'reset-password')) return tooManyAttempts(c)
+    if (await passwordAttemptLimited(c, 'reset-password')) return tooManyAttempts()
     try {
       await passwordReset.reset(body.token, body.password)
       return c.body(null, 204)
@@ -758,11 +754,11 @@ export function authController(): Hono<AppEnv> {
   buildHonoRoute(app, acceptInvitationContract, async (c) => {
     const user = await verifySession(c)
     if (!user) {
-      return c.json({ error: { code: 'unauthorized', message: 'Sign in to accept' } }, 401)
+      throw new UnauthorizedError('Sign in to accept')
     }
     const container = c.get('container')
     if (!container.invitations) {
-      return c.json({ error: { code: 'unavailable', message: 'Invitations not configured' } }, 503)
+      throw new UnavailableError('Invitations not configured')
     }
     try {
       const accountId = await container.invitations.accept(
@@ -781,7 +777,9 @@ export function authController(): Hono<AppEnv> {
       throw err
     }
   })
+}
 
+function registerSessionRoutes(app: Hono<AppEnv>): void {
   // Who am I? Used by the SPA to validate a stored token on boot. A valid session resolves
   // even when auth is otherwise "disabled" (a local PAT/password session under devOpen);
   // only an absent/invalid token on a disabled deployment reports the anonymous state.
@@ -789,7 +787,7 @@ export function authController(): Hono<AppEnv> {
     const user = await verifySession(c)
     if (!user) {
       if (!authConfig(c).enabled) return c.json({ user: null, enabled: false }, 200)
-      return c.json({ error: { code: 'unauthorized', message: 'Not authenticated' } }, 401)
+      throw new UnauthorizedError('Not authenticated')
     }
     return c.json(
       {
@@ -806,50 +804,26 @@ export function authController(): Hono<AppEnv> {
     )
   })
 
-  // Stateless sessions: logout is a client-side token drop. Provided for symmetry.
+  // Logout is a client-side token drop: it ends THIS browser's session by forgetting the token,
+  // which is all a single sign-out needs and costs no write. Ending sessions the caller cannot
+  // reach is `revokeMySessionsContract` below.
   buildHonoRoute(app, logoutContract, (c) => c.body(null, 204))
 
-  return app
-}
-
-/** Verify + single-use the OAuth state (signature, expiry, browser-binding cookie). */
-async function consumeState<E extends AppEnv>(
-  c: Context<E>,
-  cfg: AuthConfig,
-): Promise<OAuthState | null> {
-  const state = await new HmacSigner(cfg.sessionSecret).verify<OAuthState>(c.req.query('state'), {
-    aud: TOKEN_AUDIENCE.oauthState,
+  // "Sign out everywhere": advance the caller's own session generation, which invalidates every
+  // token minted for them — including the one that made this request, which is the point rather
+  // than an oversight (somebody reaching for this has usually lost a device and cannot say which
+  // session to keep). A replacement token is minted from the NEW generation and returned, so the
+  // browser that asked stays signed in without a trip back through the identity provider.
+  buildHonoRoute(app, revokeMySessionsContract, async (c) => {
+    // `requireSessionUser`, NOT `requireUser`: this controller is mounted under `/auth`, a PUBLIC
+    // prefix, so the gate that populates `c.get('user')` never runs here. See its doc comment.
+    const user = await requireSessionUser(c, 'Sign in to manage your sessions')
+    const generation = await c.get('container').userService.revokeSessions(user.id)
+    // Deliberately NOT audited. The account audit log records what an account ADMIN is
+    // answerable for, and this is a person acting on their own sessions: there is no account it
+    // belongs to (a user may be in several, or none but their own), and filing it under a guess
+    // would be exactly the misattribution the log's actor model exists to prevent.
+    const { token, exp } = await mintSession(authConfig(c), sessionUserFrom(user), generation)
+    return c.json({ token, exp }, 200)
   })
-  const boundNonce = getCookie(c, OAUTH_STATE_COOKIE)
-  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/auth' })
-  if (!state || !boundNonce || boundNonce !== state.nonce) return null
-  return state
-}
-
-async function peekInvite<E extends AppEnv>(c: Context<E>, token: string) {
-  const inv = c.get('container').invitations
-  return inv ? inv.peek(token) : null
-}
-
-/** Whether a sign-in email matches the address an invitation was sent to. */
-function emailMatchesInvite(signInEmail: string | null | undefined, inviteEmail: string): boolean {
-  return !!signInEmail && signInEmail.toLowerCase().trim() === inviteEmail
-}
-
-async function acceptInvite<E extends AppEnv>(
-  c: Context<E>,
-  token: string,
-  userId: string,
-  userEmail: string | null,
-): Promise<void> {
-  const inv = c.get('container').invitations
-  if (!inv) return
-  try {
-    await inv.accept(token, userId, userEmail)
-  } catch (err) {
-    // Expected invite states (expired / already-used / wrong email) must not block an
-    // otherwise-valid login; an unexpected infra error should still surface.
-    if (err instanceof ConflictError || err instanceof NotFoundError) return
-    throw err
-  }
 }

@@ -4,6 +4,7 @@ import {
   addModuleContract,
   addServiceFromRepoContract,
   addTaskContract,
+  archiveBlockContract,
   assignEpicContract,
   clonePipelineContract,
   createPipelineContract,
@@ -14,6 +15,8 @@ import {
   removeBlockContract,
   reparentBlockContract,
   reseedPipelineContract,
+  resizeBlockContract,
+  restoreBlockContract,
   toggleDependencyContract,
   updateBlockContract,
   updatePipelineContract,
@@ -24,7 +27,7 @@ import type {
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
 import type { BlockType, CreateTaskType, TaskTypeFields } from '~/types/domain'
-import type { ApiContext, Position } from './context'
+import type { ApiContext, Position, Size } from './context'
 
 /** Board structure: block (frame/module/task) mutations + the pipeline library. */
 export function boardApi({ send, ws }: ApiContext) {
@@ -47,11 +50,12 @@ export function boardApi({ send, ws }: ApiContext) {
         description?: string
         taskType?: CreateTaskType
         taskTypeFields?: TaskTypeFields
-        mergePresetId?: string
+        riskPolicyId?: string
         modelPresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>
         technical?: boolean
+        acknowledgeReviewDebt?: boolean
       },
     ) => send(addTaskContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
@@ -77,6 +81,11 @@ export function boardApi({ send, ws }: ApiContext) {
     moveBlock: (workspaceId: string, blockId: string, body: { position: Position }) =>
       send(moveBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 
+    // Border-drag resize. One call for both halves of the geometry: the server derives the
+    // origin delta and translates the container's children so its contents stay put.
+    resizeBlock: (workspaceId: string, blockId: string, body: { position: Position; size: Size }) =>
+      send(resizeBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
+
     reparentBlock: (
       workspaceId: string,
       blockId: string,
@@ -86,6 +95,13 @@ export function boardApi({ send, ws }: ApiContext) {
 
     removeBlock: (workspaceId: string, blockId: string) =>
       send(removeBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    // Archive a service (hide it + its subtree, restorable with no expiry) instead of deleting.
+    archiveBlock: (workspaceId: string, blockId: string) =>
+      send(archiveBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    restoreBlock: (workspaceId: string, blockId: string) =>
+      send(restoreBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     toggleDependency: (workspaceId: string, blockId: string, body: { sourceId: string }) =>
       send(toggleDependencyContract, {

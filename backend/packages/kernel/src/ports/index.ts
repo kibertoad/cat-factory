@@ -2,11 +2,15 @@ export type {
   BlockPatch,
   BlockRepository,
   ExecutionRepository,
+  LiveRunSummary,
   PipelineRepository,
+  PreloadedBlocks,
   RunRef,
+  ServiceRehome,
   WorkspaceRepository,
   WorkspaceVisibility,
 } from './repositories.js'
+export { LIVE_EXECUTION_STATUSES } from './repositories.js'
 export type {
   AccountRecord,
   AccountRepository,
@@ -15,11 +19,17 @@ export type {
   MembershipRepository,
 } from './account-repositories.js'
 export type {
+  WorkspaceMemberRecord,
+  WorkspaceMemberRepository,
+} from './workspace-member-repositories.js'
+export type {
   IdentityProvider,
   UserRecord,
   UserIdentityRecord,
   UserRepository,
 } from './user-repositories.js'
+export type { OidcProviderMetadata, SsoDiscoveryDocument } from './sso.js'
+export { oidcIdentitySubject } from './sso.js'
 export type { PasswordHasher } from './password-hasher.js'
 export type {
   EmailMessage,
@@ -45,12 +55,70 @@ export type {
   WorkspaceMountRepository,
 } from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
+export {
+  type LogFields,
+  type LogLevel,
+  type LogRecord,
+  type LogSink,
+  type LogThreshold,
+  type Logger,
+  type RecordedLogLine,
+  createRecordingLogger,
+  noopLogger,
+} from './logging.js'
+export {
+  type OperationalCounter,
+  type OperationalCounterSample,
+  type OperationalDimensions,
+  type OperationalGauge,
+  type OperationalGaugeSample,
+  type OperationalMetrics,
+  type OperationalMetricsCollector,
+  createOperationalMetricsCollector,
+  noopOperationalMetrics,
+} from './operational-metrics.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
+export type { DocInterviewRepository } from './doc-interview-repositories.js'
+export type {
+  GuidedReviewClaim,
+  GuidedReviewDraftEdit,
+  GuidedReviewDriver,
+  GuidedReviewExchange,
+  GuidedReviewInvestigationRecord,
+  GuidedReviewDraftPostOutcome,
+  GuidedReviewDraftProposal,
+  GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
+  GuidedReviewOverviewOutcome,
+  GuidedReviewRefresh,
+  GuidedReviewRepository,
+  GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
+  GuidedReviewStaleJob,
+} from './guided-review-repositories.js'
+export {
+  guidedReviewJobKey,
+  GUIDED_REVIEW_MAX_PASSES,
+  type GuidedReviewJob,
+  type GuidedReviewJobProgress,
+  type GuidedReviewRunner,
+} from './guided-review-runner.js'
+export type {
+  GuidedReviewInvestigationDispatch,
+  GuidedReviewInvestigationHandle,
+  GuidedReviewInvestigationRequest,
+  GuidedReviewInvestigationUpdate,
+  GuidedReviewInvestigator,
+} from './guided-review-investigator.js'
+export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,
   KaizenVerifiedComboRepository,
 } from './kaizen-repositories.js'
-export type { ConsensusSessionRepository } from './consensus-repositories.js'
+export type {
+  ConsensusGroupRepository,
+  ConsensusSessionRepository,
+} from './consensus-repositories.js'
 export type { ClarityReviewRepository } from './clarity-review-repositories.js'
 export type { BrainstormSessionRepository } from './brainstorm-repositories.js'
 export type { AgentRunRef, AgentRunRepository, StaleAgentRun } from './agent-runs.js'
@@ -61,34 +129,124 @@ export type {
   ModelRef,
   ModelScope,
 } from './model-provider.js'
-export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
-export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage.js'
+export {
+  HARNESS_KINDS,
+  inlineModelRef,
+  isHarnessKind,
+  resolveScopedModelProvider,
+} from './model-provider.js'
 export type {
+  InlineUseCaseGeneration,
+  InlineUseCaseGenerationRequest,
+  InlineUseCaseGenerator,
+  InlineUseCaseModelAvailability,
+  InlineUseCaseScope,
+  InlineUseCaseSession,
+} from './inline-use-cases.js'
+export { ALL_USAGE_BILLING, isUsageBilling } from './token-usage.js'
+export type {
+  TokenUsageRecord,
+  ScopedSpendWindow,
+  TokenUsageRepository,
+  TokenUsageTotals,
+  UsageBilling,
+  UsageBreakdownRow,
+} from './token-usage.js'
+export type {
+  InlineLlmCall,
+  InlineLlmCallBody,
+  InlineLlmCallRecorder,
+  LlmCallBodySlice,
+  LlmCallBodyWindow,
   LlmCallMetric,
+  LlmCallMetricPage,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmCallOutcome,
+  LlmCallOutcomeFilter,
+  LlmCallPageQuery,
+  LlmCallRollupTotals,
+  LlmCallRunPageQuery,
   LlmPromptChainTip,
+  LlmRollupCell,
 } from './llm-metrics.js'
-export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
+export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'
+export type {
+  PlatformDailyRunCount,
+  PlatformDurationStats,
+  PlatformFailedRunRef,
+  PlatformFailureCount,
+  PlatformLiveCounts,
+  PlatformMetricsRepository,
+  PlatformRunOutcome,
+  PlatformRunTrendPoint,
+} from './platform-metrics.js'
+export { RUN_DAYS_ROLLUP } from './platform-metrics.js'
+export type {
+  GateOutcomeKind,
+  GateOutcomeRecord,
+  GateOutcomeRepository,
+  PlatformGateOutcomeCount,
+} from './gate-outcomes.js'
+export { noopGateOutcomeRepository } from './gate-outcomes.js'
+export type {
+  ReportActivityGroup,
+  ReportRange,
+  ReportScope,
+  ReportSpendGroup,
+  ReportSpendTrendBucket,
+  ReportsRepository,
+} from './reports.js'
+export type { SpendRollupRepository } from './spend-rollup.js'
+export { SPEND_DAYS_ROLLUP } from './spend-rollup.js'
 export type {
   AgentContextFile,
   AgentContextFragment,
+  AgentContextIndexQuery,
   AgentContextRecorder,
+  AgentContextRunPageQuery,
   AgentContextSnapshot,
+  AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
   RecordAgentContextInput,
 } from './agent-context.js'
 export type {
+  AgentSearchQuery,
+  AgentSearchQueryPageQuery,
+  AgentSearchQueryRecorder,
+  AgentSearchQueryRepository,
+  RecordAgentSearchQueryInput,
+} from './agent-search-queries.js'
+export type {
+  AgentToolCall,
+  AgentToolCallPageQuery,
+  AgentToolCallRecorder,
+  AgentToolCallRepository,
+  AgentToolCallSummary,
+  AgentToolCallTrajectoryQuery,
+  RecordAgentToolCallInput,
+  ToolCallBodiesState,
+  ToolCallOutcome,
+} from './agent-tool-calls.js'
+export type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
+  InlineAttribution,
+  InlineAttributionScope,
   InlineObservabilityContext,
+  TraceSinkObservability,
 } from './llm-trace-sink.js'
 export {
   INLINE_OBSERVABILITY_NS,
+  CompositeTraceSink,
   catFactoryObservability,
+  composeTraceSinks,
   readInlineObservabilityContext,
+  resolveInlineAttribution,
 } from './llm-trace-sink.js'
 export type {
   AgentDecisionRequest,
@@ -99,12 +257,26 @@ export type {
   AgentRunResult,
   AgentTokenUsage,
   AsyncAgentExecutor,
+  ReviewedPoint,
+  RunReclaimReport,
+  RunReclaimTarget,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
+export type {
+  McpOAuthTokenResult,
+  McpOAuthTokenSource,
+  ToolSecretResolver,
+  ToolSecretSubject,
+} from './agent-tools.js'
 export { type WorkRunner, NoopWorkRunner } from './work-runner.js'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events.js'
 export type {
   CommitFilesResult,
+  CreateReviewComment,
+  CreateReviewInput,
+  CreateReviewResult,
+  ReviewCommentOutcome,
+  GitHubChangedFile,
   GitHubClient,
   GitHubCodeSearchHit,
   GitHubIssueComment,
@@ -116,12 +288,19 @@ export type {
   GitHubPullRequestComment,
   GitHubSubIssue,
   GitHubRepoRef,
+  BranchProtectionState,
+  BranchProtectionUnknownReason,
+  BranchProtectionDetail,
+  BranchProtectionSummary,
   InstallationMeta,
   InstallationSummary,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RateLimitSnapshot,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
 } from './github-client.js'
@@ -132,7 +311,9 @@ export type {
   ProvisionedRepo,
 } from './github-provisioning.js'
 export type { VcsClient } from './vcs-client.js'
+export { VcsIdentityError } from './vcs-identity.js'
 export type {
+  LocalVcsSetup,
   VcsIdentity,
   VcsIdentityResolver,
   VcsIdentityEntry,
@@ -148,6 +329,7 @@ export type {
 export type {
   RepoFiles,
   ResolveRepoFiles,
+  ResolveRepoFilesForCoords,
   RunRepoContext,
   ResolveRunRepoContext,
 } from './repo-files.js'
@@ -155,20 +337,30 @@ export type {
   BinaryArtifactKind,
   BinaryArtifactRecord,
   BinaryArtifactStorageKind,
+  BuiltinBinaryArtifactStorageKind,
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
   BinaryBlobBackend,
+  DocumentArtifactRef,
   ResolveBinaryArtifactStore,
   StoreBinaryArtifactInput,
 } from './binary-artifacts.js'
-export { createBinaryArtifactStore } from './binary-artifacts.js'
+export {
+  BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
+  RETAINED_BINARY_ARTIFACT_KINDS,
+  createBinaryArtifactStore,
+  dedupeDocumentRefs,
+} from './binary-artifacts.js'
 export type {
   AgentCloneSpec,
+  AgentDispatchContext,
   AgentOutputSpec,
   AgentStepSpec,
   AgentSurface,
+  AgentUserPromptBuilder,
   RepoOp,
   RepoOpContext,
+  RepoOpResult,
 } from './agent-definition.js'
 export type {
   BranchProjectionRepository,
@@ -186,33 +378,85 @@ export type {
 } from './github-repositories.js'
 export type { WebhookVerifier } from './webhook-verifier.js'
 export type {
+  DesignRender,
   DocumentCredentials,
   DocumentContent,
+  DocumentOAuthTokens,
+  DocumentRenderPlan,
+  DocumentRenderResult,
+  DocumentRenderTarget,
+  DocumentSourceOAuthSpec,
   NormalizedConnection,
   DocumentSourceProvider,
   DocumentSourceRegistry,
   DocumentContentResolver,
+  DeploymentDocumentResolver,
+  LinkedDocumentRefresher,
+  LinkedDocumentRefreshOutcome,
+  RefreshedDocument,
+} from './document-source.js'
+export {
+  assertDocumentSourceOAuthAgrees,
+  DEPLOYMENT_DOCUMENT_CACHE_GROUP,
+  DOCUMENT_OAUTH_CREDENTIAL_KEYS,
+  documentOAuthAccessToken,
 } from './document-source.js'
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
+  DocumentConnectionStore,
+  DocumentConnectionSummary,
+  SealedDocumentConnectionRecord,
   DocumentRecord,
+  DocumentRef,
   DocumentRepository,
 } from './document-repositories.js'
 export type {
   TaskCredentials,
   TaskContent,
   TaskSearchRepoScope,
+  TaskRepoScopeRules,
+  IssueIntakeQuery,
+  IssueIntakePredicate,
+  BugCandidate,
+  TrackerBoard,
   NormalizedTaskConnection,
   TaskSourceProvider,
   TaskSourceRegistry,
 } from './task-source.js'
 export type {
+  TaskInProgressMark,
+  TaskSourceWritebackAdapter,
+  TaskWritebackContext,
+} from './task-source-writeback.js'
+export { createTaskWritebackContext } from './task-source-writeback.js'
+export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
+export type {
+  BuiltinTaskSourceKind,
+  TaskSourceWebhookAdapter,
+  TrackerCommentAuthor,
+  TrackerCommentEvent,
+  TrackerIssueEvent,
+  TrackerWebhookDelivery,
+  TrackerWebhookEvent,
+} from './tracker-webhook.js'
+export {
+  BUILTIN_TASK_SOURCE_KINDS,
+  TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
+  TRACKER_WEBHOOK_SECRET_KEY,
+  isTaskSourceKind,
+  trackerWebhookSecret,
+} from './tracker-webhook.js'
+export type {
   TaskConnectionRecord,
   TaskConnectionRepository,
+  TaskConnectionStore,
+  TaskConnectionSummary,
+  SealedTaskConnectionRecord,
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
   TaskRecord,
+  TaskRef,
   TaskRepository,
 } from './task-repositories.js'
 export type {
@@ -221,7 +465,64 @@ export type {
   PromptFragmentRepository,
   FragmentSourceRecord,
   FragmentSourceRepository,
+  ResolvedCatalogEntry,
 } from './fragment-repositories.js'
+export type {
+  FragmentBriefRecord,
+  FragmentBriefRepository,
+  FragmentBriefGeneration,
+  FragmentBriefGenerator,
+  FragmentBriefGeneratorInput,
+} from './fragment-brief.js'
+export type {
+  SkillResource,
+  AccountSkillRecord,
+  AccountSkillRepository,
+  SkillSourceRecord,
+  SkillSourceRepository,
+  SkillSourceResyncRequest,
+} from './skill-repositories.js'
+export type {
+  ApiContractManifestEntry,
+  ApiContractRecord,
+  ApiContractRepository,
+  FoundationalServiceRecord,
+  FoundationalServiceRepository,
+  FoundationalServiceSourceRecord,
+  FoundationalServiceSourceRepository,
+  FoundationalSourceResyncRequest,
+} from './foundational-service-repositories.js'
+export type {
+  ServiceCatalogConnectionRecord,
+  ServiceCatalogConnectionRepository,
+} from './service-catalog-repositories.js'
+export type {
+  ResolveServiceCatalogClient,
+  ServiceCatalogApi,
+  ServiceCatalogClient,
+  ServiceCatalogEntry,
+  ServiceCatalogFetch,
+  ServiceCatalogFetchOptions,
+} from './service-catalog.js'
+export type {
+  AppCaches,
+  AccountModelPolicyCacheValue,
+  BudgetLimitCacheValue,
+  CachedRepoRead,
+  GroupCacheHandle,
+  LocalModelDeclarationsCacheValue,
+  ModelPresetCacheValue,
+  ResolvedFoundationalService,
+  RiskPolicyCacheValue,
+  SessionGenerationCacheValue,
+  WorkspaceAccessCacheValue,
+  WorkspaceSettingsCacheValue,
+} from './caching.js'
+export {
+  readCachedLocalModelDeclarations,
+  readCachedWorkspaceSettings,
+  repoFilesCacheGroup,
+} from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,
@@ -231,8 +532,34 @@ export type {
   FragmentRunSelection,
   FragmentResolver,
 } from './fragment-selector.js'
-export type { SecretCipher } from './secret-cipher.js'
+export type { SecretCipher, SecretDecryptFailureReason } from './secret-cipher.js'
+export { SecretDecryptError, isSecretDecryptError } from './secret-cipher.js'
+export type { KeyFingerprintStore } from './key-fingerprint-store.js'
+export type {
+  SealedSecretInventory,
+  SealedSecretRef,
+  DropSealedSecretResult,
+} from './sealed-secret-inventory.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
+export type { SealedConnectionOpenResult } from './sealed-connections.js'
+export { openedConnections } from './sealed-connections.js'
+export type {
+  OrgSecretSource,
+  OrgSecretKeyArity,
+  OrgSecretKeyOf,
+  OrgSecretSourceOfArity,
+  DelegatedSecretRef,
+  DelegatedSealRef,
+  SecretDelegate,
+  OrgSecretCipher,
+  OrgSecretCipherOptions,
+} from './secret-delegation.js'
+export {
+  ORG_SECRET_SOURCES,
+  ORG_SECRET_KEY_ARITY,
+  createOrgSecretCipher,
+  orgSecretRef,
+} from './secret-delegation.js'
 export type {
   EnvironmentProvider,
   AsyncProvisionCapability,
@@ -244,7 +571,12 @@ export type {
   ProvisionEnvironmentRequest,
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
+  ConfirmTeardown,
+  TeardownProbe,
   ProvisionedEnvironment,
+  RecipeStepLog,
+  RecipeStepRecorder,
+  SharedStackEnsureResult,
   ProvisionFields,
   SecretResolver,
   RepoFileReader,
@@ -258,10 +590,32 @@ export type {
   RepairAgentRequest,
   RepairAgentSpec,
 } from './environment-provider.js'
+export type {
+  EnvironmentDiagnosis,
+  EnvironmentDiagnosticFact,
+  EnvironmentDiagnosticGap,
+  EnvironmentDiagnosticLog,
+  EnvironmentDiagnosticsCapability,
+  EnvironmentRemediationOutcome,
+  EnvironmentRemediationRequest,
+  ProviderRemediationAction,
+} from './environment-diagnostics.js'
+export type {
+  EnvironmentEvidenceBundle,
+  EnvironmentFailureFacts,
+  EnvironmentInvestigationSubject,
+  EnvironmentInvestigator,
+  EnvironmentReadinessWaitKind,
+  EnvironmentRecordFacts,
+  EnvironmentRouteEvidence,
+  EnvironmentTimelineEntry,
+} from './environment-investigation.js'
+export type { PreflightProbeOutcome, PreflightHostProbes } from './preflight.js'
 export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-policy.js'
 export type {
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,
+  EnvironmentHandlerSeeder,
   EnvironmentRecord,
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,
@@ -282,14 +636,27 @@ export type {
   ReferenceArchitectureRecord,
   ReferenceArchitectureRecordPatch,
   ReferenceArchitectureRepository,
+  SurveyClaim,
 } from './bootstrap-repositories.js'
 export type {
+  BootstrapDeliveryPlan,
   BootstrapJobHandle,
   BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
+  MonorepoBootstrapLeg,
+  MonorepoTargetRepo,
+  ReferenceRepoAccess,
   RepoBootstrapper,
 } from './repo-bootstrapper.js'
+export type {
+  MonorepoAdoptionAdvisor,
+  MonorepoAdoptionExplorer,
+  MonorepoAdoptionSide,
+  MonorepoAdoptionSubject,
+  MonorepoExplorationAnswer,
+  MonorepoExplorationRequest,
+} from './monorepo-adoption.js'
 export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner.js'
 export type {
   EnvConfigRepairJobRecord,
@@ -303,16 +670,66 @@ export type {
 } from './env-config-repair.js'
 export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
 export type {
+  EnvironmentTestRunRecord,
+  EnvironmentTestRunRecordPatch,
+  EnvironmentTestRunRepository,
+  EnvironmentTestRunner,
+} from './environment-test.js'
+export { NoopEnvironmentTestRunner } from './environment-test.js'
+// The agent DRY RUN's dispatch/poll/stop seam: the `probing` stage's side-effecting half.
+export type {
+  EnvironmentProbeAgent,
+  EnvironmentProbeDispatch,
+  EnvironmentProbeDispatchCheck,
+  EnvironmentProbeHandle,
+  EnvironmentProbeRepo,
+  EnvironmentProbeRequest,
+  EnvironmentProbeTarget,
+  EnvironmentProbeUpdate,
+} from './environment-probe.js'
+
+// Proving a route to a provisioned environment: one bounded TCP connect, per facade. See
+// `ports/route-probe.ts` for why it is a connect rather than a request.
+export type { RouteProbe, RouteProbeOutcome, RouteProbeRequest } from './route-probe.js'
+// Turning a stated NAME into addresses, for a provider whose stable identity is a name rather
+// than a literal. See `ports/host-resolver.ts` for why the platform resolves rather than the
+// provider.
+export type { HostResolveOutcome, HostResolveRequest, HostResolver } from './host-resolver.js'
+export type {
+  ContainerEvictionKind,
+  DispatchEnvironment,
   HarnessCallMetric,
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerImageVariant,
   RunnerJobContainer,
   RunnerJobProgress,
   RunnerJobRef,
   RunnerJobResult,
+  RunnerJobStopOutcome,
   RunnerJobView,
+  RunnerObservedToolServer,
+  RunnerReproductionPhase,
+  RunnerReproductionReport,
+  RunnerSliceReview,
   RunnerTransport,
+  RunnerValidationReport,
 } from './runner-transport.js'
+export {
+  CONTAINER_EVICTION_ERROR,
+  containerKeyForRef,
+  deploymentImageVariantMessage,
+  HARNESS_SHUTDOWN_ERROR,
+  isImageVariantName,
+  isPlatformImageVariant,
+  parseContainerKey,
+  PLATFORM_IMAGE_VARIANTS,
+  RUNNER_IMAGE_UNWIRED_REASON,
+  runIdFromContainerKey,
+  unservablePlatformImageVariant,
+} from './runner-transport.js'
+export type { PlatformImageVariant } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'
 export type {
@@ -337,29 +754,62 @@ export type {
   ProviderApiKeyRecord,
   ProviderApiKeyRepository,
 } from './provider-api-key-repositories.js'
+export type { PublicApiKeyRecord, PublicApiKeyRepository } from './public-api-key-repositories.js'
 export type {
+  ActivationScopeId,
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
   SubscriptionActivationRecord,
   SubscriptionActivationRepository,
 } from './personal-subscription-repositories.js'
+export { runActivationScope, userActivationScope } from './personal-subscription-repositories.js'
 export type {
   LocalModelEndpointRecord,
   LocalModelEndpointRepository,
 } from './local-model-repositories.js'
 export type {
+  MachineNodeMint,
+  MachineNodeMintOutcome,
+  MachineNodeRecord,
+  MachineNodeRepository,
+} from './machine-node-repositories.js'
+export type { AuthAttemptRecord, AuthAttemptRepository } from './auth-attempt-repositories.js'
+export type {
+  AuditActor,
+  AuditEvent,
+  AuditEventPage,
+  AuditEventRecord,
+  AuditEventRepository,
+  AuditEventView,
+  AuditLogReader,
+  AuditRecorder,
+} from './audit.js'
+export { noopAuditRecorder } from './audit.js'
+export type {
   UserSecretRecord,
   UserSecretRepository,
   ResolveUserGitHubToken,
+  RunCredentialScope,
   RunInitiatorScope,
 } from './user-secret-repositories.js'
+export type {
+  UserRepoAccessRecord,
+  UserRepoAccessRepository,
+} from './user-repo-access-repositories.js'
 export type {
   ProviderModelCatalogRecord,
   ProviderModelCatalogRepository,
 } from './provider-model-catalog-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
-export type { PullRequestMerger } from './pr-merger.js'
-export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'
+export type { PullRequestMerger, MergePrEntry, MergeAllOutcome } from './pr-merger.js'
+export type {
+  PrVerificationReportPublisher,
+  PrReportPublishResult,
+  PrReportSkipReason,
+  PrReportTarget,
+} from './pr-report.js'
+export type { CiCheck, RepoCiStatus, CiStatusReport, CiStatusProvider } from './ci-status.js'
+export type { DocQualityReport, DocQualityProvider } from './doc-quality.js'
 export type {
   ReviewThread,
   PullRequestComment,
@@ -390,9 +840,32 @@ export type {
   ReleaseHealthConfigRepository,
 } from './release-health-repositories.js'
 export type {
+  SubscriptionQuotaScope,
+  SubscriptionQuotaWindowKind,
+  SubscriptionQuotaCycleRecord,
+  SubscriptionQuotaCycleRepository,
+} from './subscription-quota-repositories.js'
+export type {
+  SubscriptionQuotaSource,
+  SubscriptionQuotaWindow,
+  SubscriptionQuotaCycle,
+  SubscriptionQuotaTarget,
+  SubscriptionQuotaProvider,
+} from './subscription-quota.js'
+export type {
   IncidentEnrichmentConnectionRecord,
   IncidentEnrichmentConnectionRepository,
 } from './incident-enrichment-repositories.js'
+export type { TestSecretRecord, TestSecretsRepository } from './test-secrets-repositories.js'
+export type {
+  CapabilityCredentialRecord,
+  CapabilityCredentialRepository,
+} from './capability-credential-repositories.js'
+export type { McpOAuthGrantRecord, McpOAuthGrantRepository } from './mcp-oauth-repositories.js'
+export type {
+  ValidationConfigRecord,
+  ValidationConfigRepository,
+} from './validation-repositories.js'
 export type {
   PackageRegistryConnectionRecord,
   PackageRegistryConnectionRepository,
@@ -400,15 +873,38 @@ export type {
 export type {
   AccountSettingsRecord,
   AccountSettingsRepository,
+  ResolvedAccountSettings,
 } from './account-settings-repositories.js'
 export type { LocalSettingsRecord, LocalSettingsRepository } from './local-settings-repositories.js'
 export type {
   MergeabilityVerdict,
+  RepoMergeability,
   MergeabilityReport,
   PullRequestMergeabilityProvider,
 } from './pr-mergeability.js'
 export type { BranchUpdateOutcome, BranchUpdater } from './branch-updater.js'
 export type { NotificationRepository } from './notification-repositories.js'
+export type {
+  NotificationWebhookPutOutcome,
+  NotificationWebhookRecord,
+  NotificationWebhookRepository,
+} from './notification-webhook-repositories.js'
+export type {
+  RunLifecycleEvent,
+  RunLifecycleEventKind,
+  RunLifecycleFailure,
+  RunLifecycleSink,
+  RunLifecycleStep,
+} from './run-lifecycle.js'
+export { RUN_LIFECYCLE_EVENTS, isRunLifecycleEventKind } from './run-lifecycle.js'
+export type {
+  PlatformAlertCondition,
+  PlatformAlertEvent,
+  PlatformAlertEventKind,
+  PlatformAlertFailingRun,
+  PlatformAlertSink,
+} from './platform-alert.js'
+export { PLATFORM_ALERT_EVENTS, isPlatformAlertEventKind } from './platform-alert.js'
 export type {
   SlackConnectionRecord,
   SlackConnectionRepository,
@@ -416,8 +912,21 @@ export type {
   SlackSettingsRepository,
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
-export type { MergePresetRepository } from './merge-preset-repositories.js'
+export type {
+  AccountRiskPolicy,
+  AccountRiskPolicyRepository,
+  RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
+  WorkspaceRiskPolicyReader,
+} from './risk-policy-repositories.js'
+export type {
+  MergeTrackRecordRepository,
+  MergeTrackRecordPatch,
+} from './merge-track-record-repositories.js'
+export type { SharedStackRepository, SharedStackSeeder } from './shared-stack-repositories.js'
 export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
+export type { TutorialProgressRepository } from './tutorial-progress-repositories.js'
+export type { UserSettingsRepository } from './user-settings-repositories.js'
 export type {
   SandboxPromptVersionRepository,
   SandboxFixtureRepository,
@@ -426,14 +935,56 @@ export type {
   SandboxGradeRepository,
 } from './sandbox-repositories.js'
 export type { ModelPresetRepository } from './model-preset-repositories.js'
+export type { AgentPromptRepository } from './agent-prompt-repositories.js'
+export type { WorkspaceAgentSettingsRepository } from './agent-settings-repositories.js'
+export type { TaskTypeSuppressionRepository } from './task-type-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
-export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'
+export type {
+  TrackerSettingsPatch,
+  TrackerSettingsRepository,
+} from './tracker-settings-repositories.js'
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
-export type { IssueWritebackProvider } from './issue-writeback.js'
+export type {
+  IssueWritebackProvider,
+  ReviewQuestionFinding,
+  ReviewQuestionPolicy,
+  ReviewQuestionPost,
+  ReviewQuestionPostOutcome,
+  ReviewQuestionSubject,
+  ReviewReplyAck,
+  ReviewReplyRejection,
+} from './issue-writeback.js'
+export { REVIEW_QUESTION_POLICIES } from './issue-writeback.js'
+export type {
+  ReviewQuestionPostClaimWindow,
+  ReviewQuestionPostKey,
+  ReviewQuestionPostRecord,
+  ReviewQuestionPostRepository,
+  ReviewQuestionPostStatus,
+} from './review-question-post-repositories.js'
+export { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from './review-question-post-repositories.js'
+export type {
+  TrackerCommentIngestClaimWindow,
+  TrackerCommentIngestKey,
+  TrackerCommentIngestRecord,
+  TrackerCommentIngestRepository,
+  TrackerCommentIngestStatus,
+} from './tracker-comment-ingest-repositories.js'
+export { TRACKER_COMMENT_INGEST_CLAIM_TTL_MS } from './tracker-comment-ingest-repositories.js'
 export {
   type NotificationChannel,
+  type NotificationDeliveryReason,
+  type NotificationRouter,
   type RaiseNotificationInput,
   CompositeNotificationChannel,
   NoopNotificationChannel,
+  NOTIFICATION_DELIVERY_REASONS,
+  RoutedNotificationChannel,
+  isAlertingDelivery,
+  isNotificationDeliveryReason,
 } from './notification-channel.js'
+export type {
+  NotificationSettingsRecord,
+  NotificationSettingsRepository,
+} from './notification-settings-repositories.js'

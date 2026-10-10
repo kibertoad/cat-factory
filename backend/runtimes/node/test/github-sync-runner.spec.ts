@@ -1,0 +1,255 @@
+import { NotFoundError, noopLogger } from '@cat-factory/kernel'
+import type { GitHubModule } from '@cat-factory/orchestration'
+import type { ServerContainer } from '@cat-factory/server'
+import type { Job, PgBoss } from 'pg-boss'
+import { describe, expect, it, vi } from 'vitest'
+import { createNodeGateways } from '../src/gateways.js'
+import {
+  type GitHubSyncJob,
+  GITHUB_SYNC_QUEUE,
+  applyGitHubSyncJob,
+  startGitHubSyncWorker,
+} from '../src/execution/githubSyncRunner.js'
+
+// Async GitHub ingest on Node (item 5 of the system-audit initiative): proves the gateway
+// seams enqueue onto the pg-boss `github.sync` queue when a boss is wired (so the request
+// acks fast) and fall back to the inline "not enabled" path when it isn't, and that the
+// worker applies each job kind to the SAME GitHubSyncService/WebhookService the inline path
+// used — the Node analogue of the Worker's GITHUB_SYNC_QUEUE consumer + GitHubBackfillWorkflow.
+
+const noopLog = noopLogger
+
+/** A fake pg-boss capturing every `send` and the handler registered via `work`. */
+function fakeBoss() {
+  const sends: { name: string; data: unknown }[] = []
+  let handler: ((jobs: Job<GitHubSyncJob>[]) => Promise<void>) | undefined
+  const boss = {
+    send: async (name: string, data: unknown) => {
+      sends.push({ name, data })
+      return 'job-id'
+    },
+    createQueue: async () => {},
+    work: async (_name: string, _opts: unknown, fn: typeof handler) => {
+      handler = fn
+      return 'worker-id'
+    },
+  } as unknown as PgBoss
+  return {
+    boss,
+    sends,
+    /** Run a job through the registered worker handler. */
+    run: (job: GitHubSyncJob) => {
+      if (!handler) throw new Error('worker not started')
+      return handler([{ data: job } as Job<GitHubSyncJob>])
+    },
+  }
+}
+
+/** A GitHub module recording which sync/webhook methods were applied. */
+function fakeGitHub() {
+  const calls: string[] = []
+  const github = {
+    webhookService: {
+      handle: async (eventName: string, _payload: unknown) => {
+        calls.push(`webhook:${eventName}`)
+      },
+    },
+    syncService: {
+      syncRepoById: async (workspaceId: string, repoGithubId: number) => {
+        calls.push(`resync:${workspaceId}:${repoGithubId}`)
+      },
+      backfillInstallation: async (installationId: number) => {
+        calls.push(`backfill:${installationId}`)
+      },
+    },
+  } as unknown as GitHubModule
+  return { github, calls }
+}
+
+/** A container carrying the given modules, for the apply/worker functions. */
+function fakeContainer(parts: {
+  github?: GitHubModule
+  skillSync?: (accountId: string, sourceId: string) => Promise<void>
+  foundationalSync?: (sourceId: string) => Promise<void>
+}): ServerContainer {
+  return {
+    github: parts.github,
+    skillLibrary: parts.skillSync ? { sourceService: { sync: parts.skillSync } } : undefined,
+    foundationalServices: parts.foundationalSync
+      ? { sourceService: { syncById: parts.foundationalSync } }
+      : undefined,
+  } as unknown as ServerContainer
+}
+
+describe('createNodeGateways async GitHub ingest', () => {
+  it('enqueues webhook / resync / backfill onto the queue and returns true when a boss is wired', async () => {
+    const { boss, sends } = fakeBoss()
+    const gw = createNodeGateways(process.env, boss)
+
+    await expect(gw.githubWebhook.enqueueWebhook('push', { a: 1 })).resolves.toBe(true)
+    await expect(gw.githubWebhook.queueRepoResync('ws-1', 42)).resolves.toBe(true)
+    await expect(gw.githubWebhook.queueSkillResync('acct-1', 'src-1')).resolves.toBe(true)
+    await expect(gw.githubWebhook.queueFoundationalResync('fndsrc-1')).resolves.toBe(true)
+    await expect(gw.githubBackfill.scheduleBackfill(99)).resolves.toBe(true)
+
+    expect(sends.map((s) => s.name)).toEqual(Array(5).fill(GITHUB_SYNC_QUEUE))
+    expect(sends.map((s) => s.data)).toEqual([
+      { kind: 'webhook', eventName: 'push', payload: { a: 1 } },
+      { kind: 'resync-repo', workspaceId: 'ws-1', repoGithubId: 42 },
+      { kind: 'skill-source-resync', accountId: 'acct-1', sourceId: 'src-1' },
+      // The foundational message carries the source id ALONE — the consumer resolves the owning
+      // tier off the stored row rather than trusting a copy that rode the queue.
+      { kind: 'foundational-source-resync', sourceId: 'fndsrc-1' },
+      { kind: 'backfill', installationId: 99 },
+    ])
+  })
+
+  it('reports "not enabled" (false) so the caller runs inline when no boss is wired', async () => {
+    const gw = createNodeGateways(process.env)
+    await expect(gw.githubWebhook.enqueueWebhook('push', {})).resolves.toBe(false)
+    await expect(gw.githubWebhook.queueRepoResync('ws-1', 42)).resolves.toBe(false)
+    await expect(gw.githubWebhook.queueSkillResync('acct-1', 'src-1')).resolves.toBe(false)
+    await expect(gw.githubWebhook.queueFoundationalResync('fndsrc-1')).resolves.toBe(false)
+    await expect(gw.githubBackfill.scheduleBackfill(99)).resolves.toBe(false)
+  })
+})
+
+describe('applyGitHubSyncJob', () => {
+  it('routes each kind to the matching sync/webhook service method', async () => {
+    const { github, calls } = fakeGitHub()
+    const skills: string[] = []
+    const container = fakeContainer({
+      github,
+      skillSync: async (accountId, sourceId) => {
+        skills.push(`skill:${accountId}:${sourceId}`)
+      },
+    })
+    await applyGitHubSyncJob(container, { kind: 'webhook', eventName: 'pull_request', payload: {} })
+    await applyGitHubSyncJob(container, {
+      kind: 'resync-repo',
+      workspaceId: 'ws-2',
+      repoGithubId: 7,
+    })
+    await applyGitHubSyncJob(container, { kind: 'backfill', installationId: 5 })
+    await applyGitHubSyncJob(container, {
+      kind: 'skill-source-resync',
+      accountId: 'acct-2',
+      sourceId: 'src-2',
+    })
+    expect(calls).toEqual(['webhook:pull_request', 'resync:ws-2:7', 'backfill:5'])
+    expect(skills).toEqual(['skill:acct-2:src-2'])
+  })
+
+  it('drops a skill-source-resync when the skill library is unwired', async () => {
+    const { github } = fakeGitHub()
+    const container = fakeContainer({ github })
+    await expect(
+      applyGitHubSyncJob(container, {
+        kind: 'skill-source-resync',
+        accountId: 'acct-3',
+        sourceId: 'src-3',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('swallows a NotFoundError from a skill-source-resync (source unlinked since enqueue)', async () => {
+    const container = fakeContainer({
+      skillSync: async () => Promise.reject(new NotFoundError('SkillSource', 'src-4')),
+    })
+    // Terminal, not transient — must NOT throw (else pg-boss retries a gone source forever).
+    await expect(
+      applyGitHubSyncJob(container, {
+        kind: 'skill-source-resync',
+        accountId: 'acct-4',
+        sourceId: 'src-4',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rethrows a transient skill-source-resync failure so pg-boss retries', async () => {
+    const container = fakeContainer({
+      skillSync: async () => Promise.reject(new Error('github 503')),
+    })
+    await expect(
+      applyGitHubSyncJob(container, {
+        kind: 'skill-source-resync',
+        accountId: 'acct-5',
+        sourceId: 'src-5',
+      }),
+    ).rejects.toThrow('github 503')
+  })
+
+  // The foundational-source twin. Its module is independently optional (a deployment can run
+  // either repo-sourced library), and it resolves by SOURCE ID alone.
+  it('routes a foundational-source-resync to the catalog source service', async () => {
+    const synced: string[] = []
+    const container = fakeContainer({
+      foundationalSync: async (sourceId) => {
+        synced.push(sourceId)
+      },
+    })
+    await applyGitHubSyncJob(container, {
+      kind: 'foundational-source-resync',
+      sourceId: 'fndsrc-2',
+    })
+    expect(synced).toEqual(['fndsrc-2'])
+  })
+
+  it('drops a foundational-source-resync when the catalog is unwired', async () => {
+    await expect(
+      applyGitHubSyncJob(fakeContainer({}), {
+        kind: 'foundational-source-resync',
+        sourceId: 'fndsrc-3',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('swallows a NotFoundError but rethrows a transient foundational-source failure', async () => {
+    const gone = fakeContainer({
+      foundationalSync: async () =>
+        Promise.reject(new NotFoundError('FoundationalServiceSource', 'fndsrc-4')),
+    })
+    await expect(
+      applyGitHubSyncJob(gone, { kind: 'foundational-source-resync', sourceId: 'fndsrc-4' }),
+    ).resolves.toBeUndefined()
+
+    const flaky = fakeContainer({
+      foundationalSync: async () => Promise.reject(new Error('github 503')),
+    })
+    await expect(
+      applyGitHubSyncJob(flaky, { kind: 'foundational-source-resync', sourceId: 'fndsrc-5' }),
+    ).rejects.toThrow('github 503')
+  })
+})
+
+describe('startGitHubSyncWorker', () => {
+  it('applies a dequeued job to the GitHub module', async () => {
+    const { boss, run } = fakeBoss()
+    const { github, calls } = fakeGitHub()
+    await startGitHubSyncWorker(boss, { github } as unknown as ServerContainer, noopLog)
+
+    await run({ kind: 'resync-repo', workspaceId: 'ws-3', repoGithubId: 11 })
+    expect(calls).toEqual(['resync:ws-3:11'])
+  })
+
+  it('drops a job without retrying when the GitHub module is unwired', async () => {
+    const { boss, run } = fakeBoss()
+    await startGitHubSyncWorker(boss, {} as unknown as ServerContainer, noopLog)
+    // No github module → the handler completes (no throw), so pg-boss does not retry.
+    await expect(run({ kind: 'webhook', eventName: 'push', payload: {} })).resolves.toBeUndefined()
+  })
+
+  it('rethrows an apply failure so pg-boss retries the job', async () => {
+    const { boss, run } = fakeBoss()
+    const github = {
+      webhookService: { handle: async () => Promise.reject(new Error('boom')) },
+      syncService: {},
+    } as unknown as GitHubModule
+    const error = vi.fn()
+    const log = { ...noopLogger, error }
+    await startGitHubSyncWorker(boss, { github } as unknown as ServerContainer, log)
+
+    await expect(run({ kind: 'webhook', eventName: 'push', payload: {} })).rejects.toThrow('boom')
+    expect(error).toHaveBeenCalledOnce()
+  })
+})

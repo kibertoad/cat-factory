@@ -1,4 +1,5 @@
 import type { KaizenGradingRepository } from '@cat-factory/kernel'
+import { KAIZEN_SETTLED_STATUSES } from '@cat-factory/contracts'
 import type { KaizenGrading, KaizenGradingStatus } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -18,6 +19,9 @@ interface KaizenGradingRow {
   recommendations: string
   grader_model: string | null
   error: string | null
+  acknowledged_at: number | null
+  acknowledged_by: string | null
+  acknowledgement_note: string | null
   created_at: number
   updated_at: number
 }
@@ -48,6 +52,9 @@ function rowToGrading(row: KaizenGradingRow): KaizenGrading {
     recommendations: parseStringArray(row.recommendations),
     graderModel: row.grader_model,
     error: row.error,
+    acknowledgedAt: row.acknowledged_at,
+    acknowledgedBy: row.acknowledged_by,
+    acknowledgementNote: row.acknowledgement_note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -66,13 +73,16 @@ export class D1KaizenGradingRepository implements KaizenGradingRepository {
   }
 
   async upsert(workspaceId: string, grading: KaizenGrading): Promise<void> {
+    // The acknowledgement columns are set on INSERT and deliberately absent from the conflict SET
+    // list: the sweep re-writes this row on every grader transition, and folding them in would
+    // erase a triage the moment a grading was re-run. `setAcknowledgement` is their only writer.
     await this.db
       .prepare(
         `INSERT INTO kaizen_gradings
            (workspace_id, id, execution_id, block_id, step_index, agent_kind, model,
             prompt_version, combo_key, status, grade, summary, recommendations, grader_model,
-            error, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            error, acknowledged_at, acknowledged_by, acknowledgement_note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            status = excluded.status,
            grade = excluded.grade,
@@ -98,6 +108,9 @@ export class D1KaizenGradingRepository implements KaizenGradingRepository {
         JSON.stringify(grading.recommendations),
         grading.graderModel,
         grading.error,
+        grading.acknowledgedAt,
+        grading.acknowledgedBy,
+        grading.acknowledgementNote,
         grading.createdAt,
         grading.updatedAt,
       )
@@ -149,6 +162,98 @@ export class D1KaizenGradingRepository implements KaizenGradingRepository {
       .bind(workspaceId, limit)
       .all<KaizenGradingRow>()
     return (results ?? []).map(rowToGrading)
+  }
+
+  async listPage(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      acknowledged?: boolean
+      settled?: boolean
+      status?: KaizenGradingStatus
+      agentKind?: string
+      since?: number
+    },
+  ): Promise<KaizenGrading[]> {
+    const where = ['workspace_id = ?']
+    const binds: (string | number)[] = [workspaceId]
+    if (opts.cursor) {
+      // The keyset is the composite the ORDER BY uses, so gradings sharing a millisecond (every
+      // step of one run is scheduled at once) page without losing the ties.
+      where.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(opts.cursor.createdAt, opts.cursor.createdAt, opts.cursor.id)
+    }
+    if (opts.acknowledged !== undefined) {
+      where.push(opts.acknowledged ? 'acknowledged_at IS NOT NULL' : 'acknowledged_at IS NULL')
+    }
+    if (opts.settled !== undefined) {
+      // The same set the acknowledge write is gated on, from the same constant, so the backlog a
+      // caller drains and the rows that write accepts cannot drift apart.
+      const settled = KAIZEN_SETTLED_STATUSES.map(() => '?').join(', ')
+      where.push(`status ${opts.settled ? 'IN' : 'NOT IN'} (${settled})`)
+      binds.push(...KAIZEN_SETTLED_STATUSES)
+    }
+    if (opts.status) {
+      where.push('status = ?')
+      binds.push(opts.status)
+    }
+    if (opts.agentKind) {
+      where.push('agent_kind = ?')
+      binds.push(opts.agentKind)
+    }
+    if (opts.since !== undefined) {
+      where.push('created_at >= ?')
+      binds.push(opts.since)
+    }
+    binds.push(opts.limit)
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM kaizen_gradings
+           WHERE ${where.join(' AND ')}
+           ORDER BY created_at DESC, id DESC LIMIT ?`,
+      )
+      .bind(...binds)
+      .all<KaizenGradingRow>()
+    return (results ?? []).map(rowToGrading)
+  }
+
+  async setAcknowledgement(
+    workspaceId: string,
+    id: string,
+    ack: { by: string | null; note: string | null } | null,
+    now: number,
+  ): Promise<KaizenGrading | null> {
+    if (ack) {
+      // Guarded in the statement rather than by a pre-check: `acknowledged_at IS NULL` makes a
+      // repeat acknowledgement a no-op (so the stamp keeps naming the FIRST triage), and the status
+      // list refuses a row the grader is still working on, with no window between check and write.
+      // `updated_at` moves with it, so a consumer watermarking on it sees triage state change.
+      const settled = KAIZEN_SETTLED_STATUSES.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `UPDATE kaizen_gradings
+             SET acknowledged_at = ?, acknowledged_by = ?, acknowledgement_note = ?, updated_at = ?
+             WHERE workspace_id = ? AND id = ? AND acknowledged_at IS NULL
+               AND status IN (${settled})`,
+        )
+        .bind(now, ack.by, ack.note, now, workspaceId, id, ...KAIZEN_SETTLED_STATUSES)
+        .run()
+    } else {
+      // Guarded on there being an acknowledgement to clear, so clearing one that was never
+      // recorded writes nothing at all rather than touching `updated_at` on a row (a `running`
+      // grading, say) whose staleness stamp the sweep reads to decide what to re-drive.
+      await this.db
+        .prepare(
+          `UPDATE kaizen_gradings
+             SET acknowledged_at = NULL, acknowledged_by = NULL, acknowledgement_note = NULL,
+                 updated_at = ?
+             WHERE workspace_id = ? AND id = ? AND acknowledged_at IS NOT NULL`,
+        )
+        .bind(now, workspaceId, id)
+        .run()
+    }
+    return this.get(workspaceId, id)
   }
 
   async listPending(

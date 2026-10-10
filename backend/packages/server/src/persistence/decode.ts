@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { DataIntegrityError, describeError, isDataIntegrityError } from '@cat-factory/kernel'
 import { logger } from '../observability/logger.js'
 
 // Validate-on-read guards for the persistence boundary.
@@ -17,21 +18,16 @@ import { logger } from '../observability/logger.js'
 //   - degrade (`decodeEnumOr` / `tryDecodeRow`) — for snapshot-facing reads where one bad
 //     row must not down a whole board load: log loudly + fall back / drop the single row.
 
-/**
- * A persisted row violated its own contract (an unknown enum value, malformed JSON, a
- * column that should never be null). A plain `Error` (not a {@link DomainError}) so the
- * HTTP error handler maps it to a logged 500 — this is internal data corruption, never a
- * client input fault.
- */
-export class DataIntegrityError extends Error {
-  constructor(
-    message: string,
-    readonly context: Record<string, unknown>,
-  ) {
-    super(message)
-    this.name = 'DataIntegrityError'
-  }
-}
+// The error these guards throw lives in kernel (`domain/data-integrity.ts`) and is re-exported
+// here, where every thrower and most catchers already look for it. It has to be visible to the
+// ENGINE as well as to this boundary: a run row that cannot be decoded is disposed of by the
+// execution service rather than re-driven forever, and orchestration cannot import this package.
+export { DataIntegrityError, isDataIntegrityError } from '@cat-factory/kernel'
+
+// Each throw below also states its `DataIntegrityFault`, which is what decides whether a reader
+// may DISPOSE of the row. The split runs along this file's own seam: a value that is not a member
+// of a picklist is `unrecognized_value` (this build's vocabulary may simply be older than the
+// writer's), while JSON that does not parse is `malformed` (no build can read it).
 
 /** Truncate a stored value for safe inclusion in a log/error message. */
 function preview(value: unknown): string {
@@ -52,10 +48,13 @@ export function decodeEnum<T>(
   const result = v.safeParse(schema, value)
   if (result.success) return result.output
   const ctx = { ...context, value: preview(value) }
-  logger.error(ctx, 'persistence: stored value is not a valid enum member')
+  logger.error('persistence: stored value is not a valid enum member', ctx)
   throw new DataIntegrityError(
     `Invalid stored value '${preview(value)}' for ${String(context.column ?? context.field ?? 'enum')}`,
     ctx,
+    // Not `malformed`: this build's picklist is the only thing that rejected the value, and a
+    // NEWER build's legitimate new member is indistinguishable from corruption from here.
+    'unrecognized_value',
   )
 }
 
@@ -72,10 +71,11 @@ export function decodeEnumOr<T>(
 ): T {
   const result = v.safeParse(schema, value)
   if (result.success) return result.output
-  logger.warn(
-    { ...context, value: preview(value), fallback },
-    'persistence: unknown enum value, falling back',
-  )
+  logger.warn('persistence: unknown enum value, falling back', {
+    ...context,
+    value: preview(value),
+    fallback,
+  })
   return fallback
 }
 
@@ -94,22 +94,31 @@ export function decodeJson<T>(
     parsed = JSON.parse(raw)
   } catch (err) {
     const ctx = { ...context, raw: preview(raw) }
-    logger.error({ ...ctx, err }, 'persistence: stored JSON failed to parse')
+    // `describeError`, not a bare `err`: the Worker's browser build stringifies a raw `Error`
+    // to `{}`, which would erase the parse failure's cause on precisely the corrupt-row path
+    // that exists to explain it.
+    logger.error('persistence: stored JSON failed to parse', { ...ctx, ...describeError(err) })
     throw new DataIntegrityError(
       `Malformed JSON for ${String(context.column ?? context.field ?? 'column')}`,
       ctx,
+      // Unparseable bytes are unparseable for every build there will ever be.
+      'malformed',
     )
   }
   const result = v.safeParse(schema, parsed)
   if (result.success) return result.output
   const ctx = { ...context, raw: preview(raw) }
-  logger.error(
-    { ...ctx, issues: result.issues.map((i) => i.message) },
-    'persistence: stored JSON does not match its contract',
-  )
+  logger.error('persistence: stored JSON does not match its contract', {
+    ...ctx,
+    issues: result.issues.map((i) => i.message),
+  })
   throw new DataIntegrityError(
     `Stored JSON for ${String(context.column ?? context.field ?? 'column')} violates its contract`,
     ctx,
+    // A blob that parses but misses its schema is most often a NESTED unknown member (a new agent
+    // kind, a new step field a newer build writes), and this branch cannot tell that from a
+    // genuinely garbled shape. Classified as the reversible half for that reason.
+    'unrecognized_value',
   )
 }
 
@@ -123,8 +132,13 @@ export function tryDecodeRow<T>(map: () => T, context: Record<string, unknown>):
   try {
     return map()
   } catch (err) {
-    if (err instanceof DataIntegrityError) {
-      logger.error({ ...context, ...err.context }, 'persistence: dropping corrupt row from list')
+    // `isDataIntegrityError`, never `instanceof`: while the class lived in this module, thrower and
+    // catcher could not disagree about it; now that it lives in kernel, a facade with two copies of
+    // that package in its tree would make `instanceof` false for the very same class and turn one
+    // corrupt row back into a failed board load. Same hazard as the engine's disposal check, and
+    // the reason the predicate exists at all.
+    if (isDataIntegrityError(err)) {
+      logger.error('persistence: dropping corrupt row from list', { ...context, ...err.context })
       return null
     }
     throw err

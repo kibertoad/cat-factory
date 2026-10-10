@@ -42,12 +42,21 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
     return (results ?? []).map(rowToMount)
   }
 
-  async listByService(serviceId: string): Promise<WorkspaceMount[]> {
-    const { results } = await this.db
-      .prepare(`SELECT * FROM workspace_services WHERE service_id = ? ORDER BY created_at`)
-      .bind(serviceId)
-      .all<MountRow>()
-    return (results ?? []).map(rowToMount)
+  async listByServiceIds(serviceIds: string[]): Promise<WorkspaceMount[]> {
+    if (serviceIds.length === 0) return []
+    const mounts: WorkspaceMount[] = []
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(serviceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM workspace_services WHERE service_id IN (${placeholders}) ORDER BY created_at`,
+        )
+        .bind(...chunk)
+        .all<MountRow>()
+      for (const row of results ?? []) mounts.push(rowToMount(row))
+    }
+    return mounts
   }
 
   async listWorkspaceIdsMountingBlock(

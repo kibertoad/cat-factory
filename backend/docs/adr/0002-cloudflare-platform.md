@@ -19,13 +19,13 @@ of infrastructure:
 - run a periodic reconciler/sweeper;
 - call LLMs from several providers and meter their spend.
 
-The conventional way to assemble this is a Node app — Express/Fastify + an ORM —
+The conventional way to assemble this is a Node app (Express/Fastify + an ORM)
 packaged into a Docker image and run "somewhere" (a VM, ECS/Fargate, a Kubernetes
 deployment, Fly, Render, etc.), wired to a managed Postgres, a Redis/queue broker
 for background work, a separate worker process or queue consumer for durable jobs,
 and a cron scheduler. That works, but every one of those is a separately
 provisioned, separately scaled, separately billed, separately monitored moving
-part — glue the team owns before writing a line of product code.
+part: glue the team owns before writing a line of product code.
 
 This ADR records why we instead chose the **Cloudflare developer platform** as a
 single, cohesive runtime, and what we accept in return.
@@ -48,7 +48,7 @@ independent ecosystem pieces inside a container:
 | Deploy artifact                | `wrangler deploy` (no image)                                  | build, push and run a Docker image            |
 
 The frontend is a Nuxt **SPA** (`ssr: false`) that talks to the Worker over its
-public API base — naturally hostable on Cloudflare Pages, so the same platform and
+public API base, naturally hostable on Cloudflare Pages, so the same platform and
 deploy story covers both tiers.
 
 ## Rationale
@@ -58,8 +58,8 @@ deploy story covers both tiers.
 There is no Dockerfile, no base-image patching, no registry, no orchestrator, and
 nothing to keep "running somewhere." `wrangler deploy` ships the code; bindings in
 `wrangler.toml` declare every dependency the Worker can reach. The set of moving
-parts a traditional deployment would provision separately — app server, database,
-queue broker, durable-job worker, cron scheduler, inference endpoint — collapses
+parts a traditional deployment would provision separately (app server, database,
+queue broker, durable-job worker, cron scheduler, inference endpoint) collapses
 into one configuration file and one deploy command. Local development mirrors
 production through `wrangler dev` and `wrangler d1 migrations apply --local`,
 including a real D1 instance, rather than a `docker-compose` stack of stand-ins.
@@ -77,14 +77,14 @@ fleet, no separate scaling axis.
 
 ### 3. Data and queues as bindings, not network services
 
-D1 is an in-platform SQLite database reached through a binding — no connection
+D1 is an in-platform SQLite database reached through a binding: no connection
 pool to size, no pool exhaustion under Workers' high concurrency, no separate
 database host to secure and back up. Queues are likewise a binding, letting the
 GitHub webhook endpoint verify-and-ack fast (`202`) and offload projection work
-asynchronously (see ADR 0001). Notably these are **opt-in**: when a queue binding
+asynchronously (see ADR 0001). These are **opt-in**: when a queue binding
 is absent (local/tests, or a smaller deployment) the Worker applies the same work
-inline. The architecture degrades to a single process without code changes —
-something a hard dependency on Redis/SQS would not allow.
+inline. The architecture degrades to a single process without code changes,
+which a hard dependency on Redis/SQS would not allow.
 
 ### 4. Provider-agnostic where it matters; native where it helps
 
@@ -114,7 +114,7 @@ add-on.
   monitoring/scaling/patching of each. The product gains nothing from owning that
   glue.
 - **Serverless functions (AWS Lambda et al.) + managed Postgres + SQS +
-  Step Functions.** Removes the container but not the _fragmentation_ — durable
+  Step Functions.** Removes the container but not the _fragmentation_: durable
   execution, queueing, scheduling, data and secrets are still distinct services
   stitched together with IAM, and Lambda's connection model fights relational
   pools. Cloudflare offers the same capabilities as one cohesive, binding-based
@@ -126,7 +126,7 @@ add-on.
 ## Consequences
 
 - **Runtime constraints are real and shape the code.** The Worker runtime is not
-  Node. We rely on `nodejs_compat` and deliberately prefer Web-standard APIs —
+  Node. We rely on `nodejs_compat` and deliberately prefer Web-standard APIs:
   e.g. `crypto.subtle` for RS256/HMAC instead of Node `crypto`, and a thin `fetch`
   GitHub client instead of Octokit (ADR 0001). Bundle size and CPU-time limits
   per request constrain what we pull in; heavyweight or Node-only libraries may not
@@ -141,6 +141,6 @@ add-on.
   them as platform constraints rather than something we can scale our way out of by
   resizing a container.
 - **Local/dev parity is high but not total.** `wrangler dev` runs the real runtime
-  and a local D1, which is closer to production than a mocked container stack — but
+  and a local D1, which is closer to production than a mocked container stack, but
   queue-consumer wiring differs in tests (consumers are opt-in; work runs inline),
   so that path is exercised by integration rather than by the default local run.

@@ -4,17 +4,46 @@ import type {
   BlockType,
   CloudProvider,
   ConsensusStepConfig,
+  DesignImageSet,
+  DocumentOrigin,
   EnvironmentAccessHandle,
+  EnvironmentReachabilityNote,
   EnvironmentStatus,
   FrontendConfig,
+  InjectedContextFile,
   InstanceSize,
+  ModelFlavor,
   PullRequestRef,
+  PeerPullRequest,
+  ReferenceRepo,
+  ReferenceScreenshotSet,
+  ReviewCommentSeverity,
+  AprioriBranch,
   ServiceProvisioning,
-  StepSubtasks,
-  StreamedFollowUp,
+  TestCredentialBrief,
   TaskEstimate,
+  TaskType,
   TaskTypeFields,
 } from '../domain/types.js'
+import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
+import type {
+  DeclaredToolServers,
+  ResolvedSkill,
+  ResolvedToolServer,
+  UnavailableToolServer,
+} from '../domain/agent-capabilities.js'
+import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
+import type { ResolvedServiceCredentials } from '../domain/foundational-services.js'
+import type { DesignImageDelivery } from '../domain/design-image-delivery.js'
+import type { DocumentFreshness } from '../domain/document-freshness.js'
+import type { OwnServiceContext } from '../domain/block-tree.js'
+import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
+import type { InputTokenClassCounts } from '../domain/llm-rollup.js'
+import type {
+  AgentEffortReport,
+  DispatchToolServers,
+  InitiativePresetPhaseTemplate,
+} from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a
@@ -24,6 +53,32 @@ import type {
 //   - a test fake             — deterministic, used by the integration tests
 // Modelling the work as a port keeps the engine free of LLM/infra concerns and
 // lets the integration tests drive it with a deterministic fake.
+
+/**
+ * One point a review left on a specific part of an agent's work, as a PROMPT needs it: what it
+ * targets, how urgently, and the note itself.
+ *
+ * The prompt-facing projection of the persisted `StepReviewComment`, carrying the two ways a point
+ * anchors and neither of the persisted re-anchoring internals (`srcStart` / `srcEnd`, which locate a
+ * block in a rendering no agent sees). BOTH anchors travel, because the two reviewers anchor
+ * differently and a producer told to fix a specific point must be able to find it: a human review
+ * quotes the verbatim `quotedSource` it targets, while a companion grading structured items names
+ * the item's `anchorId` and quotes nothing. Dropping the second one left every companion finding
+ * rendered against an empty target.
+ *
+ * Named rather than inlined at each site because three of them state the same shape and one of them
+ * silently stated a narrower one.
+ */
+export interface ReviewedPoint {
+  /** Verbatim source of the prose block the point targets, when the reviewed output was prose. */
+  quotedSource?: string
+  /** Id of the structured item it targets (a spec requirement, an acceptance criterion). */
+  anchorId?: string
+  /** The urgency it was graded at; absent on a person's comment, which carries no grading. */
+  severity?: ReviewCommentSeverity
+  /** The note itself. */
+  body: string
+}
 
 export interface AgentRunContext {
   agentKind: AgentKind
@@ -48,16 +103,16 @@ export interface AgentRunContext {
   /** Index of this step within the pipeline. */
   stepIndex: number
   /**
-   * Monotonic per-step dispatch counter, folded into the harness job id so a step that is
-   * RE-dispatched within one run (the Tester→Fixer loop's re-test, a fixer round, a polling
-   * gate's helper attempt) never collides with — and so never RE-ATTACHES to — a prior
-   * round's completed harness job. The harness keys its `JobRegistry` by the backend-supplied
-   * job id and re-attaches to an existing entry rather than re-running (replay idempotency),
-   * and a container-reusing transport (a warm local pool / a self-hosted runner pool) keeps
-   * that registry alive across rounds because reclaiming a pooled member does NOT destroy it.
-   * Without a per-round epoch the re-test would replay the first round's stale report. Derived
-   * from the step's own round counter; absent/0 for a step dispatched once (the id is then
-   * unsuffixed, so single-dispatch steps are unaffected).
+   * How many jobs of THIS agent kind the run has already dispatched, folded into the harness job
+   * id so no dispatch can collide with — and so never RE-ATTACHES to — an earlier one's completed
+   * job. The harness keys its `JobRegistry` by the backend-supplied job id and re-attaches to an
+   * existing entry rather than re-running (replay idempotency), and a container-reusing transport
+   * (a warm local pool / a self-hosted runner pool) keeps that registry alive across rounds
+   * because reclaiming a pooled member does NOT destroy it. So a reused id replays a finished job:
+   * the Tester re-test that returned the first round's stale report, a companion rework round
+   * re-grading a byte-identical artifact. Monotonic by construction (the engine reads the run's own
+   * per-kind dispatch record) and absent/0 for the run's FIRST job of a kind, whose id is then
+   * unsuffixed.
    */
   dispatchEpoch?: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
@@ -70,6 +125,65 @@ export interface AgentRunContext {
    */
   followUpCompanion?: boolean
   /**
+   * The base system prompt this dispatch runs instead of the kind's SHIPPED track prompt. Two
+   * tiers arrive through this ONE field, already folded together: the workspace's own edited
+   * prompt for the kind (from the pipeline builder) and the deployment-registered agent-kind
+   * VARIANT the step selected (`stepOptions.agentVariantId` — an alternate prompt for an existing
+   * kind, see `applyAgentVariant`). The workspace wins where both replace the prompt, being the
+   * narrower tier; a variant's `promptAddition` then folds on top of whatever survived.
+   *
+   * Either way the engine-enforced surface directives and trait guidance are still layered on top
+   * by `systemPromptFor`, so neither tier can delete the read-only guardrail or the
+   * answer-in-the-reply rule.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`) rather than by each
+   * executor, so the container, inline and consensus paths cannot disagree about which prompt
+   * a step ran under — and so a step's telemetry records the prompt that was actually sent. No
+   * executor branches on which tier produced the text, which is the point of folding both here.
+   * Absent ⇒ the kind's shipped prompt.
+   */
+  systemPromptOverride?: string
+  /**
+   * The output-token ceiling this dispatch runs under, when a workspace or the pipeline step
+   * configured one. Overrides the deployment routing default (`AgentModelConfig.maxOutputTokens`);
+   * absent ⇒ that default stands.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link systemPromptOverride}: the narrowest-tier-wins precedence (step option > workspace
+   * setting > deployment routing) is decided in one place, so the container, inline and consensus
+   * paths cannot disagree about the budget a step ran under.
+   *
+   * Only bites where the cap is genuinely ENFORCED — the metered provider path. The one-shot
+   * subscription CLIs treat it as advisory (see the harness's `InlineJob.maxOutputTokens`), so a
+   * value set here neither raises nor constrains an ambient `claude`/`codex` inline run.
+   */
+  maxOutputTokens?: number
+  /**
+   * The order this dispatch prefers a model's ROUTES in, from the model preset in force
+   * (`ModelPreset.providerPreference`): a compliance preset can put AWS Bedrock ahead of a
+   * model's own provider API, an everyday preset can put a flat-rate subscription first.
+   * Absent ⇒ the deployment's default order (`DEFAULT_PROVIDER_PREFERENCE`).
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link systemPromptOverride} and {@link maxOutputTokens}: the container, inline and consensus
+   * paths must not disagree about which route a step ran on, and the run's telemetry records the
+   * route that was actually used. It REORDERS and never filters, so a model whose only route the
+   * preset omitted still resolves — see kernel's `orderedProviderPreference`.
+   */
+  providerPreference?: readonly ModelFlavor[]
+  /**
+   * What the RUN INITIATOR declared about the locally-run models they enabled (Ollama / LM Studio
+   * / …), folded onto the resolved ref by `resolveStepModelRef`.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link providerPreference}, but for a second reason too, and it is the load-bearing one: a
+   * local model has NO catalog entry, so the per-flavour facts every other model's ref carries have
+   * nowhere else to come from, and the boot-time `resolveBlockModel` closure has no user in hand to
+   * read them for. Absent (a system run, a deployment with no local runners) ⇒ every local ref
+   * stays undeclared, which reads as `unknown_model_image_input` rather than as a text-only model.
+   */
+  localModelDeclarations?: readonly LocalModelDeclarations[]
+  /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
    * Read ONLY by the optional consensus executor (`@cat-factory/consensus`), which
@@ -77,6 +191,190 @@ export interface AgentRunContext {
    * process or delegate to the standard single-actor agent. Absent ⇒ standard agent.
    */
   consensus?: ConsensusStepConfig | null
+  /**
+   * The implementation approach a human chose in the optional fork-decision phase on the
+   * Coder step, folded into the Coder's prompt as a binding directive. Set by the engine
+   * from the step's `forkDecision.chosen` when dispatching the step's OWN coder kind (never
+   * on a helper dispatch like the proposer, and absent when the phase was skipped / a
+   * single path / not configured). `source` distinguishes a picked proposed fork from the
+   * human's own free-text approach; `alternativesConsidered` lists the titles of the
+   * rejected proposed forks so the Coder does not drift back into them.
+   */
+  implementationChoice?: {
+    source: 'proposed' | 'custom'
+    title: string
+    approach: string
+    note?: string
+    /** Titles of the rejected alternatives, so the coder doesn't drift into them. */
+    alternativesConsidered: string[]
+  }
+  /**
+   * Ralph-loop iteration parameters, set by the engine when dispatching a `ralph` step from
+   * its `step.ralph` state: the programmatic completion COMMAND the harness runs against the
+   * checkout AFTER the coding agent commits (exit 0 = the loop is done), the repo-relative
+   * progress-log path the harness maintains, and the 1-based iteration number. The container
+   * executor forwards these to the harness as the coding job's `validation` block; the
+   * harness runs the command and reports the verdict on the result (never the model — that is
+   * what keeps the exit condition a real programmatic check). Absent for every non-`ralph` step.
+   */
+  ralphValidation?: {
+    command: string
+    progressPath: string
+    iteration: number
+  }
+  /**
+   * The PRE-PR validation checks resolved for this run's service frame: the ordered shell
+   * commands the harness runs against the checkout after the coding agent settles and BEFORE
+   * opening a PR, plus the repair-round budget. Resolved by the engine (frame-chain walk over
+   * the service's `validation_configs` row) and forwarded by the container executor onto the
+   * coding job body — but ONLY for a dispatch that would open a PR, which is the whole point of
+   * "pre-PR". The harness runs them generically off the job body (no agent-kind switch), feeds a
+   * failure back to the agent, and refuses to open the PR while they are red. Absent when the
+   * service configured none ⇒ the harness's existing path, unchanged. See
+   * `docs/initiatives/pre-pr-validation.md`.
+   */
+  validationChecks?: {
+    checks: { label: string; command: string }[]
+    maxAttempts: number
+  }
+  /**
+   * DEPENDENCY PREPOPULATION: the install command the harness runs against the checkout BEFORE
+   * the agent's first turn, so a repo-aware agent reads a tree whose dependencies are actually
+   * present instead of inferring what a library can do from a manifest entry.
+   *
+   * Resolved from the SAME frame-chain read as {@link validationChecks} (so it costs a dispatch
+   * no extra round trip) but forwarded on the job body under a DIFFERENT rule: every dispatch
+   * that gets a checkout — explore kinds and in-place fixers included — not only a PR-opening
+   * one. A reviewer or an architect reading the tree needs the dependencies as much as a coder
+   * does, and neither opens a PR.
+   *
+   * Best-effort in the harness by construction: a failed install is reported to the agent (which
+   * may install what it needs itself) and the run continues. Absent ⇒ the harness's existing
+   * path, unchanged. See `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: string
+  /**
+   * The BUGFIX REPRODUCTION the harness must PROVE for this run: the command that runs the
+   * declared reproduction test(s), those test paths, and an optional setup command that makes a
+   * fresh worktree runnable. Resolved by the engine from the run's prior `repro-test` step
+   * declaration (gated on the task's `coder.reproductionProof` tri-state) and forwarded by the
+   * container executor onto the coding job body — but ONLY for a dispatch that would open a PR,
+   * the same rule as {@link validationChecks}, because the proof is published on that PR.
+   *
+   * The harness runs the command against the PRE-FIX tree and the FINAL tree in symmetric fresh
+   * worktrees and reports both exit codes: only red-then-green is proof. Absent when the run is
+   * not opted in or carries no declaration ⇒ the harness's existing path, unchanged. See
+   * `backend/docs/adr/0033-bugfix-reproduction-proof.md`.
+   */
+  reproduction?: {
+    command: string
+    testPaths: string[]
+    /**
+     * How many declared test paths the engine dropped while resolving (over the cap, absolute,
+     * traversing, over-long). Carried so the proof can state that the pre-fix tree was rebuilt
+     * from an incomplete reproduction rather than silently reporting a verdict about it.
+     */
+    omittedTestPaths?: number
+    setupCommand?: string
+    maxAttempts: number
+  }
+  /**
+   * The skills this dispatch applies, resolved by the engine (see {@link ResolvedSkill}). Two
+   * sources merge into one list, in this order:
+   *  - the running agent KIND's declared skills (`AgentKindDefinition.skills`) — bundled with the
+   *    deployment's package, or referenced from the account's synced catalog;
+   *  - the step's own picked skill (`stepOptions.skillId`), which is what the built-in `skill`
+   *    kind runs.
+   * Deduplicated by skill id, so a kind that declares the same skill a step picked carries it once.
+   *
+   * The container executor renders them HARNESS-AWARE: for the claude-code harness they travel as
+   * the dedicated top-level `skills` job-body field (the harness installs each under
+   * `CLAUDE_CONFIG_DIR/skills/<name>/` natively); for Pi/codex the instructions are folded into
+   * the prompt and the resources materialised as `.cat-context/skill/*` files. Absent ⇒ no skills.
+   */
+  skills?: ResolvedSkill[]
+  /**
+   * The tool servers (MCP) wired for this dispatch — the running agent kind's declared servers,
+   * minus any the running harness cannot serve or whose required credential did not resolve.
+   * PROMPT-FACING and non-secret by construction: credentials ride the job body's dedicated
+   * `mcpServers` field and never appear here (this object IS copied into the agent-context
+   * telemetry snapshot). Absent ⇒ the kind declared none.
+   */
+  toolServers?: ResolvedToolServer[]
+  /**
+   * The tool servers the DEPLOYMENT declares for this kind, resolved by the engine from a source
+   * that is not this process's registry: a mothership-mode node reads the mothership's capability
+   * layer over `GET /internal/agent-kinds`, because a playbook or MCP server the org assigned to a
+   * BUILT-IN kind is data its own build may be one release behind on.
+   *
+   * Carried on the context because the ENGINE owns the read (one per dispatch) while the EXECUTOR
+   * owns whether each server is SERVABLE here (the resolved harness, the facade-wired credential
+   * resolver) — the split ADR 0029 states. Non-secret by construction: a definition names a
+   * credential's KEY, never its value, which is the same bar {@link toolServers} already meets for
+   * the telemetry snapshot.
+   *
+   * Both halves ride, not only the resolved servers: an id the MOTHERSHIP could not resolve is a
+   * typo in the org's own package, and the node's dispatch warn is the only place an operator
+   * running locally sees it. Dropping it here would leave that typo reported nowhere, since a node
+   * boot-validates nothing it reads from the mothership.
+   *
+   * Absent ⇒ no deployment-level source is wired, and the executor reads its own registry exactly
+   * as before.
+   */
+  orgToolServers?: DeclaredToolServers
+  /**
+   * Tool servers the kind declared that were NOT wired for this dispatch, with the reason. The
+   * prompt states them so the agent plans around a tool it does not have rather than discovering
+   * that mid-run, and the run's snapshot records why. Absent ⇒ every declared server was wired.
+   */
+  unavailableToolServers?: UnavailableToolServer[]
+  /**
+   * The GENERATIVE BINARY INTEGRATIONS this step selected (`stepOptions.binaryOutput.generatorIds`),
+   * resolved by the ENGINE against the deployment's `BinaryGeneratorRegistry`. The container
+   * executor reads it to resolve each declared credential onto the job body; the agent's own
+   * instructions come from the injected `.cat-context/binary-output/brief.md`, so nothing here is
+   * a second copy of the prompt.
+   *
+   * Non-secret (a credential's KEY NAME, never its value), so the agent-context snapshot may
+   * record it. Absent ⇒ the step selected none, which is a real state: it generates through what
+   * its agent already has, and the brief says so.
+   */
+  binaryGenerators?: ResolvedBinaryGenerator[]
+  /**
+   * The catalog service this step stores its generated binaries THROUGH
+   * (`stepOptions.binaryOutput.storageServiceId`), resolved only for a dispatch whose effective
+   * kind carries the `binary-output` trait.
+   *
+   * The AGENT learns this from the injected brief, which names the service and carries its API
+   * contract; this field exists for the container EXECUTOR, which has one decision to make from
+   * it: whether the target is the platform's own asset storage, and therefore whether this job
+   * gets the in-container upload seam that reaches it. Neither the kind nor the brief can answer
+   * that (a deployment's own generator kind stores wherever its step points it), and the id is
+   * non-secret, so it rides here beside {@link binaryGenerators} rather than becoming a second
+   * copy of the selection somewhere else.
+   *
+   * Absent ⇒ this dispatch was not briefed to store anything.
+   */
+  binaryStorageServiceId?: string
+  /**
+   * The FOUNDATIONAL SERVICES this dispatch was briefed on that declare a credential, as the
+   * non-secret projection (id, name, and each credential's two NAMES) the container executor
+   * resolves values for onto the job body.
+   *
+   * The twin of {@link binaryGenerators}, one layer over: that one authenticates what MAKES an
+   * artifact, this one what the run READS and WRITES it through. Before it existed the platform
+   * had a credential seam for the first and none for the second, so an agent handed a storage
+   * contract whose every route is bearer-authenticated had no way to satisfy one, and the
+   * service's own description had to say so as a caveat.
+   *
+   * Resolved only for services this dispatch is actually briefed on (a binary-output step's
+   * storage and context selection; a `foundational-contracts` kind's declared set), because a
+   * credential delivered for a service the agent was never told about is a secret in a process
+   * with no instructions attached.
+   *
+   * Non-secret: key NAMES only, never values, so the agent-context snapshot may record it.
+   */
+  foundationalCredentials?: ResolvedServiceCredentials[]
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string
@@ -89,9 +387,15 @@ export interface AgentRunContext {
      * Fragment bodies the engine pre-resolved from the tenant fragment-library
      * (the merged catalog + relevance selection; ADR 0006). When present these
      * are folded into the system prompt verbatim, superseding `fragmentIds`'
-     * static resolution. Absent when the library module is not configured.
+     * static resolution. Absent when the library module is not configured. Each
+     * carries the fragment's human `title` (when it has one) so the prompt composer
+     * can render each standard as its own labelled block and a reviewer can cite it
+     * by title, plus the condensed `brief` an implementer kind folds INSTEAD of the body
+     * (the winning tier's linked one, or a generated condensation of it) when the
+     * resolver produced one — resolved alongside the body it condenses, never looked up
+     * by id here.
      */
-    resolvedFragments?: { id: string; body: string }[]
+    resolvedFragments?: { id: string; title?: string; body: string; brief?: string }[]
     /**
      * The task's resolved BUSINESS-vs-TECHNICAL label, when determined. `true` ⇒ purely
      * TECHNICAL (a refactor / non-functional / internal change): the implementer treats the
@@ -119,12 +423,24 @@ export interface AgentRunContext {
     contextDocs?: {
       title: string
       url: string
+      /**
+       * Where the document came from (`figma`, `notion`, …, or `upload`). Carried so a reader can
+       * tell a DESIGN document from prose — `isDesignSource` off this one field, rather than each
+       * reader re-guessing from the URL's host, which is how a self-hosted source would be missed.
+       */
+      origin: DocumentOrigin
       /** Short plain-text excerpt for list/preview rendering. */
       excerpt: string
       /** One-line summary rendered into the in-prompt summary index. */
       summary: string
       /** Full normalized-Markdown body, materialised as a file for the agent to explore. */
       body: string
+      /**
+       * What the dispatch-time refresh concluded about this body's currency. Absent when no
+       * refresher is wired, which the renderer treats exactly like "nothing to state" — the prior
+       * behaviour, byte for byte.
+       */
+      freshness?: DocumentFreshness
     }[]
     /**
      * Tracker issues (Jira, …) linked to this block, supplied as extra context.
@@ -161,6 +477,14 @@ export interface AgentRunContext {
      */
     pullRequest?: PullRequestRef
     /**
+     * PRs opened in CONNECTED services' repos during a multi-repo run (service-connections
+     * phase 3), one per involved-service repo the coder changed — lifted verbatim from the
+     * block. The `merger` reads these to score the COMBINED diff: it clones each peer PR's
+     * repo as a read-only sibling at its PR branch and assesses the whole cross-repo change
+     * together (phase 4). Absent for a single-repo task.
+     */
+    peerPullRequests?: PeerPullRequest[]
+    /**
      * The task-estimator's triage of this block (complexity / risk / impact), when
      * a `task-estimator` step has run earlier in the pipeline. Read by the consensus
      * executor to gate the (expensive) multi-model process against the step's
@@ -175,11 +499,107 @@ export interface AgentRunContext {
      * absent when no per-type fields were collected.
      */
     taskTypeFields?: TaskTypeFields
+    /**
+     * The task's type, so an executor can tell a pull request the task ATTACHED (one somebody
+     * else opened) from one its own run opened. Absent on a block that is not a typed task.
+     */
+    taskType?: TaskType
+    /**
+     * The raw Markdown of the workspace's linked TEMPLATE document for this task's `docKind`
+     * (WS1 item 3), resolved by the engine when a `role: 'template'` document is linked for the
+     * kind. The doc-authoring prompts parse it into the kind's effective template (its sections
+     * override the built-in skeleton), and the `doc-quality` gate checks against the same
+     * sections — one source of truth. Absent ⇒ the built-in `docTemplateFor(kind)` skeleton.
+     */
+    docTemplateBody?: string
+    /**
+     * The workspace's linked EXEMPLAR documents for this task's `docKind` (WS1 item 4) — "good
+     * examples to emulate" the author agents are pointed at, alongside the built-in curated
+     * exemplars. Each carries a short excerpt (not the full body) so the reference stays cheap.
+     * Absent ⇒ only the built-in exemplars (if any) are surfaced.
+     */
+    docExemplars?: { title: string; url: string; excerpt: string }[]
+    /**
+     * The synthesized authoring brief from the interactive document-interview session (WS5),
+     * present when the `doc-interviewer` step ran and converged for this task. The doc-writer
+     * folds it into its prompt as the refined spec to write from (in place of the raw outline).
+     * Absent ⇒ no interview ran (or none converged); the writer uses the outline/description.
+     */
+    docInterviewBrief?: string
   }
-  /** Outputs produced by earlier steps in the same run, in order. */
-  priorOutputs: { agentKind: AgentKind; output: string }[]
+  /**
+   * Outputs produced by earlier steps in the same run, in order.
+   *
+   * `openFindings` are the points a companion raised against THAT output and that nobody ever
+   * answered: its last verdict's non-nit comments, present only once the run has moved past the
+   * companion step. A companion can end a loop with points still open (a `major` stops holding
+   * the run after the first forced round, and a human may approve over a `blocker`), and until
+   * this existed the verdict was the only place they were ever written down, so the next agent
+   * was handed a design the platform already knew was defective with nothing saying so.
+   *
+   * It rides the OUTPUT rather than the run because that is what the findings are about: the
+   * caveat reaches exactly the steps that are shown the artifact, attributed to the producer whose
+   * artifact it is, and a pipeline that puts three steps between the two cannot drift apart from
+   * it. Absent when the companion left nothing open, when there is no companion, and on every
+   * dispatch that is still inside the loop (the grader has its own verdicts via
+   * {@link priorReview}, and the producer under rework has them via {@link revision}).
+   */
+  priorOutputs: { agentKind: AgentKind; output: string; openFindings?: ReviewedPoint[] }[]
   /** Decisions resolved earlier in this run, for context. */
   decisions: { question: string; chosen: string }[]
+  /**
+   * Files prepared for the agent to read up front — the engine materialises them into the
+   * container's `.cat-context/` alongside the linked-doc context (see {@link InjectedContextFile}),
+   * and folds them into the user prompt for an inline caller. The `pr-reviewer` preOps use this to
+   * hand the reviewer the PR diff + changed-file list so it skips the reconstruct-the-diff
+   * exploration turns. Absent when nothing was injected.
+   *
+   * Two producers, and they ACCUMULATE rather than replace one another: a registered kind's preOps
+   * contribute their {@link RepoOpResult.contextFiles} (repo-derived), and the context builder
+   * contributes files derived from run STATE a preOp cannot see — a resumed PR review's prior slice
+   * reports live on the step, not in the repo, and must not be gated on a resolved run repo.
+   */
+  injectedContextFiles?: InjectedContextFile[]
+  /**
+   * The reference design images this run's task already has (the frames its linked designs
+   * retained plus the images a person uploaded against it), for a kind that CAPTURES views
+   * (`agent.image === 'ui'`). The executor turns them into the manifest the harness downloads
+   * into `.cat-context/reference-screenshots/`, the directory the UI-tester prompt names.
+   *
+   * ABSENT and EMPTY say different things and both are reachable: absent means this dispatch
+   * never asked (a kind that captures nothing, or a deployment with no artifact storage), and an
+   * empty `files` means it asked and the task has no reference at all. Neither is an error (a
+   * tester with no references names its own views), but the executor only sends a manifest when
+   * the set says SOMETHING, so the container never creates an empty directory that reads as "the
+   * designs gave nothing".
+   */
+  referenceScreenshots?: ReferenceScreenshotSet
+  /**
+   * The pictures of this task's designs, for a kind that BUILDS or PLANS from one (the
+   * `design-images` trait). The frames the task's linked designs retained plus the images a person
+   * attached to it: the same reference set the capture path reads, put to the opposite use.
+   *
+   * Resolved by the ENGINE, which knows what the task holds. Whether they can actually reach the
+   * model is a DISPATCH fact (the harness and the resolved model), so it lands separately on
+   * {@link designImageDelivery} rather than gating this: the set has to survive an un-attachable
+   * dispatch, or the prompt has nothing to name when it states what was withheld.
+   *
+   * Absent when the kind carries no such trait, when the deployment stores no binaries, or when
+   * the task links no design.
+   */
+  designImages?: DesignImageSet
+  /**
+   * What THIS dispatch could do with {@link designImages}: attached, or refused with the cause.
+   *
+   * Set by the executor rather than the context builder, because both halves of the answer are
+   * resolved at dispatch (the harness the job runs on, the model the step resolved to) and neither
+   * is knowable while the context is being built. The same shape as `toolServers` /
+   * `unavailableToolServers`: the engine states the intent, the dispatch states what became of it.
+   *
+   * Never absent while `designImages` is present. A run holding pictures its agent was not shown
+   * must SAY so, or the agent reads the textual design description as everything the platform had.
+   */
+  designImageDelivery?: DesignImageDelivery
   /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment
@@ -191,6 +611,19 @@ export interface AgentRunContext {
     status: EnvironmentStatus
     access: EnvironmentAccessHandle | null
     expiresAt: number | null
+    /**
+     * What the platform proved about REACHING this environment, when it proved anything.
+     *
+     * Beside the URL because the two are different claims and only one of them was ever backed by
+     * evidence. An agent handed a name it cannot resolve has no way to tell a DNS gap from a dead
+     * environment, and the hypothesis its own task makes salient is the wrong one; this is the
+     * platform saying which layer it already checked, and naming the address that carried so the
+     * agent can dial it directly where its container was not given the mapping.
+     *
+     * Absent when nothing has probed, which is the ordinary state mid-provision. Never a
+     * provider's unverified claim.
+     */
+    reachability?: EnvironmentReachabilityNote
   }
   /**
    * Service-level (frame) configuration resolved by the engine from this run's
@@ -202,13 +635,35 @@ export interface AgentRunContext {
    */
   service?: {
     /**
+     * The resolved service-frame's block `type` (`service` / `frontend` / `library` / …). The
+     * source of the frame CAPABILITY PROFILE (`frameProfile`): the deployer no-ops and the
+     * tester runs in suite posture on a `library` frame regardless of its `provisioning`. Always
+     * set when a frame resolves for the run, so a `library` frame with no provisioning still
+     * carries its type to the deployer/tester prompt + infra spec.
+     */
+    type?: BlockType
+    /**
      * The service-owned provisioning config — the provision type it produces
      * (`kubernetes` / `docker-compose` / `custom` / `infraless`) plus the in-repo
      * specifics. The Tester reads the type to pick its run mode (compose stand-up for
      * `docker-compose`, the provisioned env URL for `kubernetes`/`custom`, nothing for
      * `infraless`); the deployer merges it with the workspace handler at provision time.
+     * On a `library` frame a declared `composePath` is repo-local TEST infra stood up on
+     * localhost (see `testerInfraSpec`), NOT a deployable environment.
      */
     provisioning?: ServiceProvisioning
+    /**
+     * The operator's freeform TESTING CONTEXT for this service, as written on the board: which
+     * flows matter, which test accounts exist and how to sign in as one, what the environment is
+     * seeded with. Standing knowledge no credential and no repository read supplies, so a tester
+     * that is not handed it re-derives it badly or reports the gap as the service's fault.
+     *
+     * Carried for every kind because it is service-frame configuration like its neighbours here,
+     * but RENDERED only into the tester prompts and the environment dry run's prober (which is
+     * told the same text, in the same words, so its verdict predicts the tester's). Absent when
+     * the service recorded none, which keeps every existing prompt byte-identical.
+     */
+    testingContext?: string
     cloudProvider?: CloudProvider
     instanceSize?: InstanceSize
   }
@@ -226,26 +681,261 @@ export interface AgentRunContext {
    */
   frontend?: {
     config: FrontendConfig
-    bindings: { envVar: string; serviceUrl?: string }[]
+    /**
+     * `serviceAddress` is the address PROVED to carry for `serviceUrl`'s host, when its name did
+     * not: a bound peer whose per-environment DNS record lives in an internal view fails the UI
+     * test on name resolution exactly as the run's own environment would, and the proof is on the
+     * handle this resolution already read.
+     */
+    bindings: { envVar: string; serviceUrl?: string; serviceAddress?: string }[]
   }
+  /**
+   * The connected services "directly involved" in this task beyond its own (see the service
+   * connections initiative) — resolved by the engine from the task's `involvedServiceIds`,
+   * read-time stale-filtered to ids that still resolve to a connected service frame. Each carries
+   * the frame's title, the connection `description` prose (folded into the agent prompt to explain
+   * the relationship), and — when the involved service has a LIVE ephemeral env provisioned in
+   * this run — its URL. The Tester turns these into its `peerEnvironments` infra map so a
+   * cross-service integration test can reach the peer's real environment. Absent when the task
+   * names no (still-valid) involved services.
+   */
+  involvedServices?: {
+    frameId: string
+    title: string
+    description?: string
+    envUrl?: string
+    /**
+     * What the platform proved about REACHING {@link envUrl}, when it proved anything.
+     *
+     * The whole note rather than the carrying address alone, and that is the point: a peer's
+     * environment fails in exactly the same way the run's own does and reads as exactly the same
+     * "the environment is down", so the peer leg owes the same evidence. Carrying only the address
+     * kept the ONE case where there is nothing to carry (the platform could not reach the peer at
+     * all) silent, handing a cross-service tester a URL that looks healthy and letting it spend
+     * its step concluding the peer was down: the misdiagnosis this all exists to retire, arriving
+     * one service over.
+     *
+     * Absent when nothing has probed the peer. Never a provider's unverified claim.
+     */
+    envReachability?: EnvironmentReachabilityNote
+  }[]
+  /**
+   * The service the work itself belongs to — the enclosing service FRAME's title and description,
+   * resolved by the engine from the block's ancestry. This is the agent's answer to "what system
+   * am I working on", and it was missing: a step's prompt named the pipeline, the block and every
+   * PEER service in {@link involvedServices}, but never the block's OWN service. A container agent
+   * could recover it by reading its checkout; an inline one (a reviewer, a panel participant) had
+   * no way to, so a task titled "implement webhooks" arrived with no identified subject at all —
+   * and a model asked for concrete output against an unidentified subject supplies one, commonly
+   * the most salient proper noun in its prompt (the orchestration platform's own name).
+   *
+   * A DISCRIMINATED result rather than a nullable value, because the two ways of having no
+   * service mean opposite things to the prompt: a frame-level run has none because the block IS
+   * the service (nothing to say), while a task outside any service has none because the platform
+   * genuinely does not know (which must be SAID — an unstated product may not read like an obvious
+   * one). Left undefined by a caller that does not populate it at all, e.g. a test fake, so no
+   * claim is rendered either way.
+   */
+  ownService?: OwnServiceContext
+  /**
+   * The per-case PARAMETERS a custom-typed task was invoked with: the create form's collected
+   * values joined with the registered descriptor's labels (see {@link describeCustomTaskType}).
+   * This is what turns a registered task type into a REUSABLE OPERATION: an org registers
+   * "introduce an API" with a small form, and the entity / operations / auth answers reach the
+   * agents that act on them. Without it the bag rode `block.taskTypeFields` and reached zero
+   * prompts, so the whole per-case brief was invisible to every agent in the pipeline.
+   *
+   * Resolved ONCE per dispatch, beside the prompt override and the output budget, so the
+   * container, inline and consensus paths cannot disagree about what the operation was asked for.
+   * Absent whenever the block collected no custom values, which is every run of a built-in type,
+   * so every existing prompt is byte-identical.
+   */
+  customTaskType?: CustomTaskTypeContext
+  /**
+   * The SENSITIVE test credentials configured for this run's service frame, as non-secret
+   * REFERENCES only (each key + its description), NEVER the values. Resolved from the service
+   * frame's sealed test-secret store; present only for the kinds that receive the values out of
+   * band (the testers). The prompt advertises the keys so the agent knows which environment
+   * variables are available and what each is for; the VALUES are decrypted at dispatch and
+   * injected into the container environment by the executor + harness, never rendered into the
+   * prompt or the telemetry snapshot.
+   *
+   * A STATE rather than a list, and the same state the environment dry run reports
+   * ({@link TestCredentialBrief}): "the store says none are configured", "the platform could not
+   * open its own store" and "this deployment has no store" are three different fixes, and a list
+   * makes all three render as silence. Absent only for a kind that is handed no credentials at
+   * all, which is what keeps every non-tester prompt byte-identical.
+   */
+  testSecrets?: TestCredentialBrief
+  /**
+   * Read-only reference repositories attached to a document-authoring task (the doc-writer
+   * agent) — lifted verbatim by the engine from the task block's `referenceRepos`. The
+   * executor turns these into read-only sibling checkouts the agent may read but never write
+   * to. Each carries its own provider-neutral clone identity (repoId/owner/name/defaultBranch/
+   * connectionId), so a repo outside the workspace's synced projection can still be cloned.
+   * Absent for non-doc tasks or a task with none attached.
+   */
+  referenceRepos?: ReferenceRepo[]
+  /**
+   * Pre-existing branches of the PRIMARY target repo attached to this task as run input
+   * (the apriori-branches initiative) — lifted verbatim by the engine from the task
+   * block's `aprioriBranches`. Two modes with disjoint semantics:
+   *  - a single `working` entry names the branch the run BUILDS INSIDE: the executor swaps
+   *    it in for the deterministic `cat-factory/<blockId>` work branch (the PR opens from it,
+   *    the CI gate polls it, the merger merges it), and it must already exist (a missing
+   *    working branch fails the dispatch loudly — it is never created).
+   *  - `reference` entries are read-only context branches the agent may inspect but never
+   *    commit to (consumed in a later slice via the harness `referenceBranches` fetch).
+   * Absent for a task with no apriori branches attached; a pure projection (self-contained),
+   * so no repo reads here.
+   */
+  aprioriBranches?: AprioriBranch[]
+  /**
+   * For a `conflict-resolver` the conflicts gate dispatched on a multi-repo
+   * (service-connections) task, which of the block's repos conflicted, set by the engine from
+   * the gate's `step.gate.conflictTarget`. The container executor resolves THAT repo and clones
+   * its PR (work) branch when it is a peer, and leaves the resolver on the own service when it
+   * is the own repo. Absent ⇒ the own-service repo (the single-repo default). Only the
+   * conflict-resolver reads it; every other kind ignores it.
+   *
+   * `repo` is what ADDRESSES the checkout and is always set. `frameId` rides along as
+   * attribution when the conflicted pull request recorded one, and seeds the repo resolution;
+   * nothing decides own-versus-peer on its presence, since a peer pull request recorded without
+   * its frames would then read as an own-repo conflict.
+   */
+  conflictTarget?: { repo: string; frameId?: string }
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.
    */
   resolvedDecision: { question: string; chosen: string } | null
   /**
-   * When a human reviewed this step's gated proposal and requested changes, the
-   * previous proposal plus their feedback. Present only on a re-run triggered by
-   * "Request changes"; the agent should revise its previous proposal to address
-   * the feedback rather than start from scratch. `comments` are GitHub-review-style
-   * notes on specific blocks of the proposal (a human review carries the verbatim
-   * `quotedSource` it targets; a companion's anchor-based comment omits it), folded
-   * into the prompt alongside the freeform `feedback`.
+   * When this step's previous proposal was reviewed and changes were requested, that proposal
+   * plus the feedback. Present only on the re-run it drove; the agent should revise its previous
+   * proposal to address the feedback rather than start from scratch. `comments` are
+   * GitHub-review-style notes on specific blocks of the proposal (a human review carries the
+   * verbatim `quotedSource` it targets; a companion's anchor-based comment names an `anchorId`
+   * instead), folded into the prompt alongside the freeform `feedback`. A reviewer's comment
+   * carries the `severity` it graded the point at, so a producer working through a long list knows
+   * which ones are holding the run rather than guessing from the prose; a person's carries none.
+   * See {@link ReviewedPoint}.
+   *
+   * `requestedBy` says which of the two loops this is — a person's "request changes" or an
+   * automatic reviewer's round — because the prompt has to say so and cannot infer it: BOTH arrive
+   * here, and a companion rework round framed as "a human reviewed your proposal" tells the agent
+   * somebody is waiting on work no person has read.
    */
   revision?: {
     previousProposal: string
     feedback: string
-    comments?: { quotedSource?: string; body: string }[]
+    comments?: ReviewedPoint[]
+    requestedBy: 'human' | 'reviewer'
+  }
+  /**
+   * The rounds this step's companion loop has ALREADY been through, oldest first — the memory
+   * that turns a repeated grading into a ratchet instead of independent draws.
+   *
+   * Both sides of the loop receive it, framed by `role`:
+   *  - `grader` (the companion itself): every verdict it has given so far. Without this it
+   *    re-grades a revised document with no idea what it asked for last time, so it cannot tell
+   *    "they fixed it" from "they never touched it", spends each round's attention on a fresh
+   *    subset, and returns a score drawn from the same distribution however much improved. That
+   *    is what makes a rework budget buy nothing, and it is the question the budget is spent to
+   *    answer. The JUDGE bucket has had this from the start (`JudgeSubject.previousFindings`);
+   *    this is the companion bucket catching up.
+   *  - `producer` (the step being reworked): the EARLIER rounds only, because the current one is
+   *    already in {@link revision} in the "here is what to fix" framing. It stops a producer from
+   *    regressing on a point raised two rounds ago, which nothing else tells it about.
+   *
+   * Absent on the first grading of a step, on every non-companion step, and on the human
+   * "request changes" path (one person's review is not a loop with a history).
+   */
+  priorReview?: {
+    role: 'grader' | 'producer'
+    /** The bar every round was judged against, so a score in the list is readable. */
+    threshold: number
+    rounds: {
+      /** 1-based, in the order they happened. */
+      round: number
+      rating: number
+      passed: boolean
+      summary: string
+      comments?: ReviewedPoint[]
+    }[]
+  }
+  /**
+   * The bar a COMPANION GRADER is scoring against on THIS dispatch, and how much rope is left.
+   *
+   * Separate from {@link priorReview} because it is the loop's live state rather than its history,
+   * and the difference is a defect: `priorReview` is absent on the FIRST grading of a step, so a
+   * companion asked for a 0..1 rating on an anchored scale was never told which number holds the
+   * work back until round two. It is present on every grader dispatch, so the scale and the bar it
+   * feeds arrive together every time.
+   *
+   * Grader only, and deliberately: a PRODUCER handed the number optimises for the number rather
+   * than for the work, which is why its own rendering states the bar COMPARISON per round and never
+   * the threshold itself (see the round-rendering rules in `@cat-factory/agents`).
+   *
+   * Absent on every non-companion step and on the human "request changes" path.
+   */
+  gradingBar?: {
+    /** The rating this round must reach, from the step's companion state. */
+    threshold: number
+    /** How many automatic rework rounds remain AFTER this one; 0 ⇒ this is the last. */
+    roundsRemaining: number
+  }
+  /**
+   * The initiative context a run carries, resolved by the engine from the block's `initiatives`
+   * entity. Two shapes:
+   *  - An initiative-LEVEL (planning) run carries the FULL planning context: the interviewer's
+   *    synthesized goal / constraints / non-goals + the Q&A digest, plus the analyst's codebase
+   *    analysis — so the analyst and planner prompts are grounded in the human's intent and the
+   *    prior step's findings.
+   *  - A run SPAWNED by an initiative (a task/module/frame carrying `block.initiativeId`) carries
+   *    a PRESET-ONLY context — just `preset` (label + the per-kind `promptAddition`) — so the org's
+   *    standing methodology reaches the child coder / tester / custom kind (D1). No goal/qa/analysis
+   *    is folded onto a spawned run: the item description is the child's task contract.
+   * Absent when no initiative entity is wired, the block is neither initiative-level nor
+   * initiative-spawned, or (spawned) the preset contributes no addition for the running kind.
+   */
+  initiative?: {
+    goal?: string
+    constraints?: string[]
+    nonGoals?: string[]
+    qa?: { question: string; answer: string }[]
+    analysisSummary?: string
+    /**
+     * Whether a stakeholder INTERVIEW step still lies ahead of the running step in THIS run's
+     * pipeline. Resolved from the pipeline's own shape, not from the preset: `pl_initiative` leads
+     * with the analyst and interviews after it (`true` for the analyst), while `pl_initiative_docs`
+     * and any other `interview: 'skip'` planning pipeline has no interviewer at all (`false`).
+     *
+     * It exists because the analyst is SHARED across those pipelines while the reason it must read
+     * rather than defer differs: with an interview ahead, every fact it establishes is one a human
+     * is not asked about their own codebase; with none, this analysis is the only reading of the
+     * repository the plan will ever get. Both motivate the same behaviour, and each is FALSE for
+     * the other pipeline — so the framing is selected here rather than asserted unconditionally.
+     *
+     * Present only on an initiative-LEVEL (planning) run; a spawned run carries preset steering
+     * alone. Reports the step's presence, not whether its interviewer is wired — an unwired
+     * interviewer passes through, which makes reading MORE important, never less.
+     */
+    interviewFollows?: boolean
+    /**
+     * The initiative PRESET's planning steering for THIS step, resolved by the engine from the
+     * entity's `presetId` against the registry. `label` names the preset; `promptAddition` is its
+     * per-agent-kind steering text (already resolved for the running kind); `phaseTemplate` is the
+     * preset's declarative plan shape (slice T1), which the planner prompt fold renders as a
+     * "required plan shape" section. Present ONLY when the preset contributes at least one of these
+     * for the running kind — the built-in generic preset registers neither, so this stays absent
+     * and the generic planning prompt is byte-for-byte today's. (The frozen form is surfaced via
+     * `qa`, not here.)
+     */
+    preset?: {
+      label: string
+      promptAddition?: string
+      phaseTemplate?: InitiativePresetPhaseTemplate
+    }
   }
 }
 
@@ -257,8 +947,27 @@ export interface AgentDecisionRequest {
 
 /** Token usage reported by the model for a single agent call. */
 export interface AgentTokenUsage {
+  /**
+   * TOTAL input across every billed class (fresh + cache read + cache write). This is the
+   * volume figure the usage ledger stores and the key-rotation window weights, so it stays a
+   * single count regardless of what {@link AgentTokenUsage.inputClasses} says about it.
+   */
   inputTokens: number
   outputTokens: number
+  /**
+   * How `inputTokens` splits across the three input classes, from a producer that can see the
+   * split (the agent CLI's own per-call telemetry, the AI SDK's input-token details). Present ⇒
+   * the meter prices each class at its own rate, so a cache read costs ~0.1x fresh input
+   * instead of 1x; the three always sum to `inputTokens` (build it with
+   * `partitionInputTokens`, which is what makes that unforgeable).
+   *
+   * ABSENT is a real state, not a zeroed one: it says the producer reported one lumped count,
+   * and the whole of it is then priced at the FRESH rate. That over-states a cached call and
+   * never under-states one, which is the only safe direction for a budget gate — so a producer
+   * that does not know its split leaves this off rather than defaulting the cache classes to 0,
+   * which would assert that nothing was cached.
+   */
+  inputClasses?: InputTokenClassCounts
 }
 
 export interface AgentRunResult {
@@ -276,6 +985,14 @@ export interface AgentRunResult {
    * a PR); the engine records it on the block so the board can link to it.
    */
   pullRequest?: PullRequestRef
+  /**
+   * PRs the container "implementer" opened in CONNECTED services' repos during a multi-repo
+   * run (service-connections phase 3) — one per involved-service repo it actually changed,
+   * attributed to the repo (`owner/name`) and its involved service frame. The own-service PR
+   * stays on {@link pullRequest}; the engine records these on the block's `peerPullRequests`
+   * beside it. Absent for a single-repo run.
+   */
+  peerPullRequests?: PeerPullRequest[]
   /**
    * The service → modules blueprint tree a Blueprinter step produced.
    * The engine strictly validates it and reconciles it onto the board (in place).
@@ -318,6 +1035,36 @@ export interface AgentRunResult {
    */
   testReport?: unknown
   /**
+   * A `ralph` step iteration's harness-computed validation verdict (whether the configured
+   * completion command exited 0, its exit code, and a bounded output tail). Produced by the
+   * executor-harness running the command — NOT model output — so the loop's exit condition
+   * stays a real programmatic check. The engine reads it to decide done / retry / exhausted.
+   * Carried as `unknown` so the port stays free of the contracts schema; the engine parses
+   * it before use. Absent for every non-`ralph` kind.
+   */
+  ralphVerdict?: unknown
+  /**
+   * A coding step's PRE-PR validation report: which of the service's configured check commands
+   * passed against the checkout, their exit codes and bounded/secret-scrubbed output tails, and
+   * how many agent+check rounds the harness spent. Produced by the executor-harness running the
+   * commands — NOT model output. The engine records it on the step (`PipelineStep.validation`)
+   * on both the passing path (the captured proof the PR was green before it opened) and the
+   * exhausted path (the evidence behind the failure). Carried as `unknown` so the port stays
+   * free of the contracts schema; the engine parses it before use. Absent when the service
+   * configured no checks.
+   */
+  validationReport?: unknown
+  /**
+   * A coding step's BUGFIX REPRODUCTION PROOF: the declared reproduction command run against the
+   * pre-fix tree and the final tree, with both exit codes and bounded/secret-scrubbed output —
+   * or the agent's structural declaration that reproduction was infeasible, with its reason and
+   * stated alternative verification. Produced by the executor-harness running the command, NOT
+   * model output. The engine records it on the step (`PipelineStep.reproduction`). Carried as
+   * `unknown` so the port stays free of the contracts schema; the engine parses it before use.
+   * Absent when the run carried no declaration or was not opted in.
+   */
+  reproductionReport?: unknown
+  /**
    * A `tester` step's in-container docker-compose dependency stand-up record (explore mode,
    * local infra): whether the dependencies came up and the captured (redacted, bounded)
    * `docker compose up` logs. The engine persists it on the Tester step so the test window
@@ -336,6 +1083,15 @@ export interface AgentRunResult {
    */
   onCallAssessment?: unknown
   /**
+   * The multi-phase initiative plan draft an `initiative-planner` step produced
+   * (phases, items with estimates + dependencies, the execution policy). The engine
+   * strictly validates it and ingests it into the block's `initiatives` entity;
+   * the committer step later renders + commits the in-repo tracker from that
+   * entity. Carried as `unknown` so the port stays free of the contracts schema;
+   * the engine parses it before use.
+   */
+  initiativePlan?: unknown
+  /**
    * A generic, manifest-driven `agent` step's structured output (the parsed JSON object
    * a `container-explore` structured agent returned). Carried as `unknown` so the port
    * stays free of any schema; the kind's post-op coerces/validates + renders artifact
@@ -345,15 +1101,63 @@ export interface AgentRunResult {
    */
   custom?: unknown
   /**
+   * The container agent's self-assessment of the work it did — how hard/easy it was, what
+   * reduced its effectiveness, the key obstacles — lifted by the harness from the agent's
+   * sentinel-file report. The engine records it on the step (`PipelineStep.effortReport`) for
+   * run details. Absent for inline agents / when the agent wrote no report / older harness.
+   */
+  effortReport?: AgentEffortReport
+  /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
-   * the spend safeguard can meter usage; absent for the container executor (whose
-   * proxy meters tokens itself, to avoid double-counting) and test fakes.
+   * the spend safeguard can meter usage; absent for the PROXY-metered container path
+   * (Pi, whose proxy meters tokens itself to avoid double-counting) and test fakes.
+   * ALSO reported by the container executor for a SUBSCRIPTION harness run (Claude
+   * Code / Codex, which bypass the proxy) — those are tagged {@link usageBilling}
+   * `'subscription'` so the engine records them for the usage report while the budget
+   * gate excludes them.
    */
   usage?: AgentTokenUsage
+  /**
+   * How {@link usage} should be metered: `'metered'` (a real per-token cost, summed by
+   * the budget gate — the default for inline executors) or `'subscription'` (a flat-rate
+   * quota harness call, counted for the usage report but excluded from every spend
+   * rollup). Only meaningful when `usage` is present. Absent ⇒ `'metered'`.
+   */
+  usageBilling?: 'metered' | 'subscription'
+  /**
+   * The subscription vendor (claude/codex/glm/kimi/deepseek) for a `'subscription'`
+   * {@link usageBilling} row, so the usage report can break usage down by vendor. Absent
+   * for metered usage.
+   */
+  usageVendor?: string
 }
 
 export interface AgentExecutor {
   run(context: AgentRunContext): Promise<AgentRunResult>
+  /**
+   * What an INLINE dispatch will do with the tool servers (MCP) the running agent kind declared,
+   * answered BEFORE the work, the counterpart of {@link AgentJobHandle.toolServers} on the path
+   * that returns a result instead of a handle.
+   *
+   * Its one producer today is the consensus executor: a diverted step runs as inline model calls
+   * with no agent CLI to wire a server into, so every declared server is WITHHELD, and the record
+   * is what stops that reading as a step whose kind declared none. An inline executor with nothing
+   * to withhold returns undefined rather than two empty lists: an inline surface never wires
+   * anything, so an all-empty resolution from one would state that a resolution happened where no
+   * wiring was ever possible.
+   *
+   * A PREVIEW rather than a field on {@link AgentRunResult}, for the same reason
+   * {@link AgentExecutor.resolveModel} is one: the container path records its resolution off the
+   * job handle at dispatch, so the record outlives a job that later fails, and a result-carried
+   * field is by construction absent on exactly the runs where a reader most needs to know what the
+   * agent could reach. Must be cheap and side-effect-free: the answer comes from the kind's
+   * DECLARATIONS, never from resolving credentials for a dispatch that has nowhere to send them.
+   *
+   * Carries no agent kind for the same reason the handle's does not: the engine stamps the
+   * DISPATCHED kind as it folds, so an executor cannot label a resolution with a kind other than
+   * the one that ran.
+   */
+  previewToolServers?(context: AgentRunContext): Promise<DispatchToolServers | undefined>
   /**
    * Resolve the concrete model this step will run (`provider:model`) WITHOUT doing
    * the work — no LLM call, no container dispatch. The engine calls it up front so a
@@ -376,132 +1180,14 @@ export interface AgentExecutor {
   isQuotaBased?(context: AgentRunContext): Promise<boolean>
 }
 
-/** A handle to an asynchronous agent job (e.g. a long-running container run). */
-export interface AgentJobHandle {
-  /** Opaque identifier the executor uses to address the running job when polled. */
-  jobId: string
-  /**
-   * The run (execution) the job belongs to. A run executes a sequence of jobs (one
-   * per pipeline step) that share one per-run container, so the poll/stop site needs
-   * the run id — alongside the per-step {@link jobId} — to address that container
-   * (and to reclaim it). Set by the executor at dispatch and re-supplied by the
-   * engine at the poll/stop site (it always has the execution id in scope). Absent ⇒
-   * the job IS its own run (a single-job flow), so callers fall back to {@link jobId}.
-   */
-  runId?: string
-  /**
-   * The model the job runs (`provider:model`), known at dispatch. Recorded on the
-   * step immediately so the board shows it even though the poll site — which maps
-   * the eventual result — has no access to the resolved model ref.
-   */
-  model?: string
-  /**
-   * The workspace the job belongs to. The engine sets this at the poll site (it is
-   * in scope there) so an executor that picks a per-workspace backend — e.g. the
-   * container executor choosing a self-hosted runner pool over Cloudflare
-   * Containers — can resolve the same backend when polling, given only the job id.
-   */
-  workspaceId?: string
-  /**
-   * For a subscription-harness job, the id of the pooled token leased for it, so
-   * the poll site can attribute the run's usage back to the right pool row
-   * (usage-aware rotation). Absent for proxy-metered Pi jobs.
-   */
-  subscriptionTokenId?: string
-  /**
-   * The model provider/vendor the job runs on (e.g. `claude`, `codex`, `openai`),
-   * known at dispatch. Carried so the poll site can stamp it on the per-call telemetry
-   * a subscription harness reports (which the proxy would otherwise supply). Absent ⇒
-   * telemetry falls back to the provider parsed from {@link model}.
-   */
-  provider?: string
-  /**
-   * The agent kind the job runs as (`coder`, `merger`, …). The poll site MUST supply it
-   * for any kind whose result is mapped kind-aware (e.g. a migrated `merger`/`on-call`,
-   * whose structured output is coerced into `mergeAssessment`/`onCallAssessment`); without
-   * it that coercion silently no-ops and the engine's gate sees no assessment. Also used to
-   * label the job's tool spans on the observability trace. Optional only because not every
-   * executor needs it — absent ⇒ no kind-aware mapping + spans grouped under the run unlabelled.
-   */
-  agentKind?: string
-}
-
-/** The outcome of polling an {@link AgentJobHandle}. */
-export type AgentJobUpdate =
-  /**
-   * Still working — the durable driver should keep polling. `subtasks`, when
-   * present, carries the job's latest subtask counts (the container agent reads
-   * these from the coding tool's todo list) so the driver can surface live
-   * "N/M done" progress on the step between polls. `followUps`, when present,
-   * carries the forward-looking items the Coder streamed since the last poll
-   * (drain-on-read) so the engine can append them to the run's step live (the
-   * Follow-up companion). `phase` carries the container's current lifecycle phase
-   * (clone / agent / push) and `container` its identity/address (id, url) once up,
-   * so the engine can surface what the container is doing + where it's running.
-   */
-  | {
-      state: 'running'
-      subtasks?: StepSubtasks
-      followUps?: StreamedFollowUp[]
-      phase?: string
-      container?: { id?: string; url?: string }
-    }
-  /**
-   * Finished successfully; `result` carries the work product. `followUps`, when present,
-   * carries any final burst of streamed items the harness drained on the SAME poll that
-   * observed completion (the tailer is flushed before the job is marked done), so the
-   * engine never loses the last items — notably a question that must hold the gate.
-   */
-  | { state: 'done'; result: AgentRunResult; followUps?: StreamedFollowUp[] }
-  /**
-   * Finished with a failure (agent error, inactivity/max-duration watchdog, …). When the
-   * harness reported a STRUCTURED `failureCause`, it is forwarded here so the driver can
-   * classify the failure (→ `AgentFailureKind`) without regex-matching `error`; absent on an
-   * older harness image (the driver falls back to the error-string regex). `detail` carries an
-   * extended, redacted diagnostic (phase timings, last-tool breadcrumb) distinct from the
-   * one-line `error`, surfaced as the failure detail on the board.
-   */
-  | { state: 'failed'; error: string; failureCause?: string; detail?: string }
-
-/**
- * An executor whose work can outlive a single request. Instead of `run()`
- * blocking until the work finishes — which would cap the work at one durable
- * step's timeout — the driver {@link startJob}s it and then {@link pollJob}s for
- * completion between durable sleeps. This lets a long coding job run for many
- * minutes while every individual driver step stays short and cheaply retriable.
- *
- * Implemented by the container executor (whose Pi coding run can take a long
- * time); inline LLM executors stay plain {@link AgentExecutor}s and run in one
- * shot. `run()` remains available (it dispatches then polls internally) for
- * non-durable callers and tests.
- */
-export interface AsyncAgentExecutor extends AgentExecutor {
-  /** Whether `context` should be driven as a polled job rather than run inline. */
-  runsAsync(context: AgentRunContext): boolean
-  /**
-   * Start the job for `context`, or re-attach to one already running for it. Must
-   * be idempotent per execution so a replayed dispatch never starts a duplicate.
-   */
-  startJob(context: AgentRunContext): Promise<AgentJobHandle>
-  /** Poll a previously-started job for its current state. */
-  pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate>
-  /**
-   * Best-effort: stop a running job and reclaim its backing resources (e.g. kill
-   * the per-run container), so a user cancel / block delete / orphan sweep does not
-   * leak a container that idles until its watchdog. Optional — backends with
-   * nothing to reclaim may omit it; callers must treat it as best-effort and must
-   * not let a failure here derail their own teardown. Idempotent: stopping an
-   * already-gone job is a no-op.
-   */
-  stopJob?(handle: AgentJobHandle): Promise<void>
-}
-
-/** Narrow an executor to the async-capable interface. */
-export function isAsyncAgentExecutor(executor: AgentExecutor): executor is AsyncAgentExecutor {
-  const candidate = executor as Partial<AsyncAgentExecutor>
-  return (
-    typeof candidate.runsAsync === 'function' &&
-    typeof candidate.startJob === 'function' &&
-    typeof candidate.pollJob === 'function'
-  )
-}
+// The ASYNC-JOB half of this port (the handle a poll addresses, the update it answers with, the
+// async executor interface and the run-level reclaim) lives in `agent-job.ts`. Re-exported here
+// because an executor implements both halves and every caller reaches for them together.
+export type {
+  AgentJobHandle,
+  AgentJobUpdate,
+  AsyncAgentExecutor,
+  RunReclaimReport,
+  RunReclaimTarget,
+} from './agent-job.js'
+export { isAsyncAgentExecutor } from './agent-job.js'

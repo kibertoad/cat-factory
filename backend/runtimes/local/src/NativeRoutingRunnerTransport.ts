@@ -1,7 +1,9 @@
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -41,10 +43,12 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const transport = await (spec.ambientAuth === true ? this.ambient() : this.managed())
     this.routed.set(refKey(ref), transport)
-    await transport.dispatch(ref, spec, kind, options)
+    // Forward the leg's capability handshake: the routing decorator picks WHICH harness serves
+    // the job, so it is also the only thing that can tell the dispatch site which image answered.
+    return (await transport.dispatch(ref, spec, kind, options)) ?? undefined
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
@@ -53,15 +57,21 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
       transport = await this.recoverTransport()
       // No container leg configured (Claude/Codex-only native) ⇒ nothing could have survived;
       // report the eviction so the sweeper re-drives (an idempotent re-dispatch re-routes).
-      if (!transport) return { state: 'failed', error: EVICTION_ERROR }
+      if (!transport) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
       // Remember the route so the follow-up polls hit the same backend with no rebuild.
       this.routed.set(refKey(ref), transport)
     }
     const view = await transport.poll(ref)
     // An evicted job never comes back on this transport — drop the route so the map can't
     // grow unboundedly on a long-lived dev server (a re-dispatch re-populates it anyway).
-    if (view.state === 'failed' && view.error === EVICTION_ERROR) this.routed.delete(refKey(ref))
-    return view
+    // Prefer the leg's STRUCTURED eviction verdict; the EVICTION_ERROR string is the fallback.
+    if (view.state === 'failed' && (view.evicted !== undefined || view.error === EVICTION_ERROR)) {
+      this.routed.delete(refKey(ref))
+    }
+    // Stamp WHICH leg served the job (native host process vs. per-run container) so the run
+    // diagnostics record the true backend — this router picks per job, so it can't declare a
+    // single static `backend` the shared job client would stamp.
+    return view.backend ? view : { ...view, backend: transport.backend }
   }
 
   async release(ref: RunnerJobRef): Promise<void> {
@@ -73,6 +83,21 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
     const transport = this.routed.get(refKey(ref)) ?? (await this.recoverTransport())
     this.routed.delete(refKey(ref))
     await transport?.release?.(ref)
+  }
+
+  /**
+   * Stop the job on the leg that dispatched it. The route is KEPT (unlike release, which is
+   * terminal): a stop is about one job, and the run may well go on to poll or reclaim the same
+   * backend afterwards.
+   *
+   * An unroutable ref falls back to the managed leg exactly as poll/release do, and a deployment
+   * with no container leg at all (Claude/Codex-only native) reports `unsupported` rather than a
+   * stop it never performed.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const transport = this.routed.get(refKey(ref)) ?? (await this.recoverTransport())
+    if (!transport?.stopJob) return 'unsupported'
+    return transport.stopJob(ref)
   }
 
   /**

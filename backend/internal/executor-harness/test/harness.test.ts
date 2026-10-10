@@ -1,26 +1,32 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import {
-  DEFAULT_PROGRESS_GUARD_LIMITS,
-  ProgressGuard,
-  type ProgressGuardLimits,
-  mergeGuardLimits,
-  parsePiOutput,
+  classifyLlmUpstreamError,
   parseTodoProgress,
-  progressGuardLimitsFromEnv,
-  runDiagnostics,
-  summarizePiRun,
-  terminalRunError,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
   writeAgentsContext,
   writeWebToolsConfig,
 } from '../src/pi.js'
+import {
+  parsePiOutput,
+  runDiagnostics,
+  summarizePiRun,
+  terminalRunError,
+} from '../src/pi-reduction.js'
+import {
+  DEFAULT_PROGRESS_GUARD_LIMITS,
+  ProgressGuard,
+  type ProgressGuardLimits,
+  type ProgressVerdict,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
+} from '../src/progress-guard.js'
 import {
   authenticatedCloneUrl,
   branchAheadOfBase,
@@ -33,7 +39,9 @@ import {
   refreshFromBaseIfClean,
   unmergedPaths,
 } from '../src/git.js'
-import { producedRepoContent } from '../src/agent.js'
+import { producedRepoContent } from '../src/bootstrap-mode.js'
+import { checkoutHasBlueprints } from '../src/pi-workspace.js'
+import { stubTempHome } from './helpers.js'
 
 const exec = promisify(execFile)
 
@@ -225,14 +233,61 @@ describe('terminalRunError', () => {
   })
 })
 
+describe('classifyLlmUpstreamError (F3: LLM-proxy auth/quota/rate-limit remedies)', () => {
+  it('classifies a 401/unauthorized → credential-refused remedy', () => {
+    expect(classifyLlmUpstreamError('proxy returned 401 Unauthorized: invalid api key')).toMatch(
+      /API credential was refused/i,
+    )
+    expect(classifyLlmUpstreamError('Error: authentication failed')).toMatch(
+      /API credential was refused/i,
+    )
+  })
+
+  it('classifies a 402/quota → out-of-credit remedy', () => {
+    expect(classifyLlmUpstreamError('HTTP 402 Payment Required')).toMatch(/out of quota or credit/i)
+    expect(classifyLlmUpstreamError('insufficient quota for this request')).toMatch(
+      /out of quota or credit/i,
+    )
+  })
+
+  it('classifies a 429/rate-limit → transient rate-limit remedy', () => {
+    expect(classifyLlmUpstreamError('429 Too Many Requests')).toMatch(/rate-limited the run/i)
+    expect(classifyLlmUpstreamError('upstream rate limit exceeded')).toMatch(/rate-limited/i)
+  })
+
+  it('prefers the quota remedy when a body carries both 402 and auth-ish words', () => {
+    expect(classifyLlmUpstreamError('402 Payment Required: unauthorized until you top up')).toMatch(
+      /out of quota or credit/i,
+    )
+  })
+
+  it('prefers the auth remedy over rate-limit when a 403 rides alongside a 429', () => {
+    expect(classifyLlmUpstreamError('429 rate limit; 403 Forbidden: key revoked')).toMatch(
+      /API credential was refused/i,
+    )
+  })
+
+  it('returns undefined for an unrelated model error (a bare agent failure stays generic)', () => {
+    expect(classifyLlmUpstreamError('502 model unreachable')).toBeUndefined()
+    expect(
+      classifyLlmUpstreamError('the agent failed after exhausting its retries'),
+    ).toBeUndefined()
+  })
+})
+
 describe('changedPathsFromPorcelain', () => {
-  it('extracts paths, follows renames to the new name, and unquotes', () => {
-    const status = [
+  // `git status --porcelain -z`: NUL after every field, and a rename spends a SECOND field on
+  // its original path. Nothing is quoted or escaped, which is the whole reason for `-z`.
+  const porcelainZ = (...fields: string[]): string => `${fields.join('\0')}\0`
+
+  it('extracts paths and follows a rename to the new name', () => {
+    const status = porcelainZ(
       'A  README.md',
       ' M src/index.ts',
-      'R  old.ts -> new.ts',
-      '?? "with space.ts"',
-    ].join('\n')
+      'R  new.ts',
+      'old.ts',
+      '?? with space.ts',
+    )
     expect(changedPathsFromPorcelain(status)).toEqual([
       'README.md',
       'src/index.ts',
@@ -241,9 +296,24 @@ describe('changedPathsFromPorcelain', () => {
     ])
   })
 
+  it('keeps a path git would have C-quoted exactly as it is on disk', () => {
+    // The default output renders these as `"caf\303\251.ts"` and `"a\tb.ts"` — seven and six
+    // characters of escape that name no file. Under `-z` there is nothing to unescape, so a
+    // consumer that stats or stages the path finds it.
+    const status = porcelainZ('?? café.ts', '?? a\tb.ts', '?? "quoted".ts')
+    expect(changedPathsFromPorcelain(status)).toEqual(['café.ts', 'a\tb.ts', '"quoted".ts'])
+  })
+
+  it('does not mistake a rename ORIGINAL for a changed path', () => {
+    // The original is a bare path, not an entry: read as one, its first three characters would be
+    // eaten as a status and `src/old.ts` would be reported as the nonexistent `old.ts`.
+    const status = porcelainZ('R  renamed.ts', 'src/old.ts', 'A  after.ts')
+    expect(changedPathsFromPorcelain(status)).toEqual(['renamed.ts', 'after.ts'])
+  })
+
   it('returns nothing for empty output', () => {
     expect(changedPathsFromPorcelain('')).toEqual([])
-    expect(changedPathsFromPorcelain('\n  \n')).toEqual([])
+    expect(changedPathsFromPorcelain('\0\0')).toEqual([])
   })
 })
 
@@ -623,13 +693,19 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     isError,
   })
 
+  // Every bound answers with a VERDICT now, because the no-edit one is provisional: it names the
+  // suspicion and leaves the decision to a workspace probe. These cases exercise the stream logic
+  // alone, so they read the diagnostic off whichever verdict came back; the provisional/settled
+  // distinction has its own describe below.
+  const reasonOf = (verdict: ProgressVerdict | null): string | null => verdict?.reason ?? null
+
   it('aborts a run that makes many tool calls without ever editing a file', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
-    for (let i = 0; i < 5; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 5; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
-    expect(reason).toMatch(/not one file edit/i)
+    expect(reason).toMatch(/no recognised file edit/i)
   })
 
   it('does not abort when the agent edits files (resets the no-edit risk)', () => {
@@ -637,7 +713,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     const seq = ['bash', 'read', 'edit', 'bash', 'read', 'bash', 'write', 'bash']
     let reason: string | null = null
-    for (const t of seq) reason = guard.observe(toolCall(t))
+    for (const t of seq) reason = reasonOf(guard.observe(toolCall(t)))
     expect(reason).toBeNull()
   })
 
@@ -648,7 +724,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // no-edit bound never trips even past its threshold.
     const seq = ['bash', 'read', 'Apply_Patch', 'bash', 'read', 'bash']
     let reason: string | null = null
-    for (const t of seq) reason = guard.observe(toolCall(t))
+    for (const t of seq) reason = reasonOf(guard.observe(toolCall(t)))
     expect(reason).toBeNull()
   })
 
@@ -658,10 +734,10 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     let reason: string | null = null
     // Ten todo updates are pure planning, not edits or probing — they must not trip
     // the no-edit guard even well past its threshold.
-    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('todo'))
+    for (let i = 0; i < 10; i++) reason = reasonOf(guard.observe(toolCall('todo')))
     expect(reason).toBeNull()
     // But real (non-planning) tool calls past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -673,11 +749,11 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // the environment-probing the no-edit bound targets — it must not trip even far
     // past the threshold.
     for (const t of ['read', 'grep', 'glob', 'ls', 'search', 'find', 'view']) {
-      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall(t))
+      for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall(t)))
     }
     expect(reason).toBeNull()
     // But "action" calls (bash) without an edit past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -688,11 +764,11 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // rpiv-web-tools research calls are read-only, like read/grep — they must not
     // trip the no-edit guard even far past its threshold.
     for (const t of ['web_search', 'web_fetch']) {
-      for (let i = 0; i < 5; i++) reason = guard.observe(toolCall(t))
+      for (let i = 0; i < 5; i++) reason = reasonOf(guard.observe(toolCall(t)))
     }
     expect(reason).toBeNull()
     // But "action" calls (bash) without an edit past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -706,22 +782,128 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     }
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_search'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('web_search')))
     expect(reason).toBeNull()
     // A non-web call resets the streak, so we don't trip on the next web call.
     guard.observe(toolCall('read'))
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_fetch'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('web_fetch')))
     expect(reason).toBeNull()
     // The 4th consecutive web call now trips the cap.
-    reason = guard.observe(toolCall('web_search'))
+    reason = reasonOf(guard.observe(toolCall('web_search')))
     expect(reason).toMatch(/researching/i)
+  })
+
+  it('does not count tool-server (mcp__*) calls toward the no-edit bound', () => {
+    // The bound targets the credential rabbit-hole: endless `bash` probing with nothing
+    // implemented. Reaching a registered tool server is the opposite — the platform's own prompt
+    // tells the agent to "prefer them over guessing" — so counting them would abort an
+    // edits-expected kind for doing exactly what it was told, before its first edit.
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const t of ['mcp__issues__search_issues', 'mcp__docs__lookup', 'MCP__Issues__Get']) {
+      for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall(t)))
+    }
+    expect(reason).toBeNull()
+    // But "action" calls (bash) without an edit past the threshold still trip it.
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
+    expect(reason).toMatch(/no progress/i)
+  })
+
+  it('does not let an mcp__* call SATISFY the no-edit bound either', () => {
+    // Neutral, like a subagent dispatch: a read-only lookup must not clear the suspicion the bound
+    // holds, or wiring a tool server would disable the guard for the kind.
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    const seq = ['mcp__issues__search', 'bash', 'mcp__issues__get', 'bash', 'bash']
+    for (const t of seq) reason = reasonOf(guard.observe(toolCall(t)))
+    expect(reason).toMatch(/no recognised file edit/i)
+  })
+
+  it('trips on an uninterrupted run of tool-server calls (lookup rabbit-hole)', () => {
+    // The counter-bound the exemption above owes: an exemption with no cap of its own is a loop
+    // the guard cannot see. Same shape as the web cap, for the same reason.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveMcpCalls: 4,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('mcp__issues__search')))
+    expect(reason).toBeNull()
+    // A non-MCP call resets the streak.
+    guard.observe(toolCall('read'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('mcp__docs__lookup')))
+    expect(reason).toBeNull()
+    reason = reasonOf(guard.observe(toolCall('mcp__issues__search')))
+    expect(reason).toMatch(/tool-server/i)
+  })
+
+  it('keeps the web and tool-server streaks separate', () => {
+    // Interleaving must not accumulate on either cap: each resets the other, because neither is
+    // evidence of the loop the other watches for. The combined backstop below is what keeps that
+    // from adding up to an unbounded run.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveWebCalls: 3,
+      maxConsecutiveMcpCalls: 3,
+      maxConsecutiveNonActionCalls: 99,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 6; i++) {
+      reason = reasonOf(guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search')))
+    }
+    expect(reason).toBeNull()
+  })
+
+  it('trips the combined backstop on interleaved exempt families that no family cap sees', () => {
+    // The hole every per-family exemption opens together: each cap resets on any call outside its
+    // own family, and a run that never makes an action call never reaches the no-edit bound either,
+    // so alternating two exempt families tripped NOTHING and only the job's wall-clock ceiling
+    // bounded it. Sequence deliberately alternates so both family caps stay at 1.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveWebCalls: 25,
+      maxConsecutiveMcpCalls: 40,
+      maxConsecutiveNonActionCalls: 6,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 5; i++) {
+      reason = reasonOf(guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search')))
+    }
+    expect(reason).toBeNull()
+    reason = reasonOf(guard.observe(toolCall('read')))
+    expect(reason).toMatch(/consecutive read-only calls/i)
+  })
+
+  it('lets an ACTION call reset the combined backstop, so read-up before an edit is unbounded', () => {
+    // The bound must not become a research judgement: reading a hundred files is legitimate work-up
+    // and any action call means the agent is doing something with what it read.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveNonActionCalls: 4,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let round = 0; round < 5; round++) {
+      for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('read')))
+      reason = reasonOf(guard.observe(toolCall('bash')))
+    }
+    expect(reason).toBeNull()
   })
 
   it('skips the no-edit bound for assess-only runs (expectsEdits=false)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits, false)
     let reason: string | null = null
-    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 10; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toBeNull()
   })
 
@@ -732,13 +914,65 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(guard.observe(toolCall('bash', false))).toBeNull() // resets the streak
     expect(guard.observe(toolCall('bash', true))).toBeNull()
     expect(guard.observe(toolCall('bash', true))).toBeNull()
-    expect(guard.observe(toolCall('bash', true))).toMatch(/consecutive failing tool calls/i)
+    expect(reasonOf(guard.observe(toolCall('bash', true)))).toMatch(
+      /consecutive failing tool calls/i,
+    )
   })
 
   it('ignores non-tool events', () => {
     const guard = new ProgressGuard({ maxToolCallsWithoutEdit: 1, maxConsecutiveErrors: 1 })
     expect(guard.observe({ type: 'message_end', message: { role: 'assistant' } })).toBeNull()
     expect(guard.observe({ type: 'agent_end', messages: [] })).toBeNull()
+  })
+
+  // The claude-code runner drives the SAME guard via observeSignal (it correlates a tool_use
+  // name with its tool_result's is_error), so Claude Code's tool names must classify the same
+  // way Pi's do: Read/Grep/Glob = exploration, TodoWrite = planning, WebSearch/WebFetch = web
+  // (all exempt from the no-edit bound), Bash = action, NotebookEdit = a file edit.
+  it('runs the same no-edit logic over claude-code tool signals (observeSignal)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const exempt = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const name of ['Read', 'Grep', 'Glob', 'TodoWrite', 'WebSearch', 'WebFetch']) {
+      for (let i = 0; i < 3; i++) reason = reasonOf(exempt.observeSignal({ name, isError: false }))
+    }
+    expect(reason).toBeNull()
+    // Bash (an action) without an edit past the threshold still trips the no-edit bound.
+    for (let i = 0; i < 3; i++)
+      reason = reasonOf(exempt.observeSignal({ name: 'Bash', isError: false }))
+    expect(reason).toMatch(/no progress/i)
+
+    // A NotebookEdit counts as a file edit, so the no-edit bound never trips.
+    const edits = new ProgressGuard(limits)
+    for (const name of ['Bash', 'Read', 'NotebookEdit', 'Bash', 'Bash', 'Bash', 'Bash']) {
+      reason = reasonOf(edits.observeSignal({ name, isError: false }))
+    }
+    expect(reason).toBeNull()
+  })
+
+  // A subagent dispatch is the one call whose EDITS the guard cannot see: the parent stream
+  // carries the dispatch and its terminal result, while every Edit/Write the subagent makes
+  // happens on a transcript this guard never reads. Counting those dispatches as actions would
+  // therefore kill a coder that is delegating its implementation and making real progress.
+  it('never trips the no-edit bound on subagent dispatches (their edits are invisible here)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    // Both the current (`Agent`) and legacy (`Task`) dispatch names, well past the bound.
+    for (const name of ['Agent', 'Task']) {
+      const guard = new ProgressGuard(limits)
+      let reason: string | null = null
+      for (let i = 0; i < 10; i++) reason = reasonOf(guard.observeSignal({ name, isError: false }))
+      expect(reason, `${name} dispatches must not trip the no-edit bound`).toBeNull()
+    }
+
+    // They are NEUTRAL, not edits: a dispatch does not satisfy the bound either, so genuine
+    // environment-probing after one is still caught (a read-only research subagent must not
+    // clear the suspicion the bound exists to hold).
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const name of ['Agent', 'Bash', 'Bash', 'Bash']) {
+      reason = reasonOf(guard.observeSignal({ name, isError: false }))
+    }
+    expect(reason).toMatch(/no progress/i)
   })
 
   it('reads limits from the environment, falling back to defaults', () => {
@@ -749,13 +983,21 @@ describe('ProgressGuard (anti-rabbithole)', () => {
         JOB_MAX_CONSECUTIVE_TOOL_ERRORS: '4',
       }),
     ).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
       maxToolCallsWithoutEdit: 7,
       maxConsecutiveErrors: 4,
-      maxConsecutiveWebCalls: DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
     })
     expect(progressGuardLimitsFromEnv({ JOB_MAX_CONSECUTIVE_WEB_CALLS: '6' })).toEqual({
       ...DEFAULT_PROGRESS_GUARD_LIMITS,
       maxConsecutiveWebCalls: 6,
+    })
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_CONSECUTIVE_MCP_CALLS: '9' })).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveMcpCalls: 9,
+    })
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS: '300' })).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveNonActionCalls: 300,
     })
     // Garbage values fall back rather than disabling the guard.
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
@@ -791,6 +1033,8 @@ describe('mergeGuardLimits (per-kind override over the base)', () => {
       maxToolCallsWithoutEdit: 1,
       maxConsecutiveErrors: 1,
       maxConsecutiveWebCalls: 1,
+      maxConsecutiveMcpCalls: 1,
+      maxConsecutiveNonActionCalls: 1,
     }
     expect(mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, tighter)).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
@@ -875,37 +1119,68 @@ describe('web search (rpiv-web-tools) configuration', () => {
   })
 
   it('writes only the provider id to the extension config (no secret on disk)', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'home-'))
-    const prevHome = process.env.HOME
-    process.env.HOME = home
-    try {
-      const path = await writeWebToolsConfig({ provider: 'exa' })
-      const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
-      // Only the provider — keys/base URLs come from the environment, never written here.
-      expect(written).toEqual({ provider: 'exa' })
-      expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
-    } finally {
-      if (prevHome === undefined) delete process.env.HOME
-      else process.env.HOME = prevHome
-      await rm(home, { recursive: true, force: true })
-    }
+    await stubTempHome()
+    const path = await writeWebToolsConfig({ provider: 'exa' })
+    const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+    // Only the provider — keys/base URLs come from the environment, never written here.
+    expect(written).toEqual({ provider: 'exa' })
+    expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
+  })
+})
+
+describe('checkoutHasBlueprints', () => {
+  let root: string
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'blueprints-test-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('detects blueprints/ at the checkout root', async () => {
+    expect(await checkoutHasBlueprints(root, false)).toBe(false)
+    await mkdir(join(root, 'blueprints'), { recursive: true })
+    expect(await checkoutHasBlueprints(root, false)).toBe(true)
+  })
+
+  // A multi-repo run's dir is the WORKSPACE ROOT with each repo checked out beside its siblings,
+  // so the root itself never holds `blueprints/` — checking only it would drop the orientation
+  // note for every multi-repo run, including ones whose legs are managed services.
+  it('detects blueprints/ in a leg of a multi-repo checkout', async () => {
+    await mkdir(join(root, 'service-a', 'src'), { recursive: true })
+    await mkdir(join(root, 'service-b', 'blueprints'), { recursive: true })
+    expect(await checkoutHasBlueprints(root, false)).toBe(false) // single-repo: root only
+    expect(await checkoutHasBlueprints(root, true)).toBe(true)
+  })
+
+  it('is false (never throws) for a directory that does not exist', async () => {
+    const missing = join(root, 'nope')
+    expect(await checkoutHasBlueprints(missing, false)).toBe(false)
+    expect(await checkoutHasBlueprints(missing, true)).toBe(false)
   })
 })
 
 describe('writeAgentsContext', () => {
-  async function readContext(opts?: { webSearch?: boolean; guidance?: string }): Promise<string> {
-    const home = await mkdtemp(join(tmpdir(), 'home-'))
-    const prevHome = process.env.HOME
-    process.env.HOME = home
-    try {
-      await writeAgentsContext('ROLE PROMPT', opts)
-      return await readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
-    } finally {
-      if (prevHome === undefined) delete process.env.HOME
-      else process.env.HOME = prevHome
-      await rm(home, { recursive: true, force: true })
-    }
+  async function readContext(opts?: {
+    webSearch?: boolean
+    guidance?: string
+    hasBlueprints?: boolean
+  }): Promise<string> {
+    const agentDir = await mkdtemp(join(tmpdir(), 'cf-pi-agent-test-'))
+    await writeAgentsContext('ROLE PROMPT', { ...opts, agentDir })
+    return readFile(join(agentDir, 'AGENTS.md'), 'utf8')
   }
+
+  it('appends the blueprint orientation note only when the checkout ships blueprints/', async () => {
+    expect(await readContext()).not.toMatch(/Service blueprint/i)
+    expect(await readContext({ hasBlueprints: true })).toMatch(/Service blueprint/i)
+  })
+
+  it('does not append its own spec-reading block (sourced from the backend spec-aware trait)', async () => {
+    // The harness used to emit a near-duplicate "Service specification" block; it is now
+    // contributed once by the spec-aware trait, so a spec-aware Pi run no longer carries it twice.
+    expect(await readContext({ hasBlueprints: true })).not.toMatch(/Service specification/i)
+  })
 
   it('omits the web-tools guidance by default', async () => {
     const md = await readContext()

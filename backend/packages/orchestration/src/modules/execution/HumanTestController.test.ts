@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type { AgentJobHandle, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { NotFoundError } from '@cat-factory/kernel'
 import { HumanTestController, type HumanTestControllerDeps } from './HumanTestController.js'
 
 // The controller owns the human-testing gate's control flow only; every engine primitive +
 // the env/branch/executor seams are injected. These fakes record the calls so each branch can
-// be asserted without a DB, a durable driver, an LLM or a real environment. The env provider
-// is intentionally omitted in most tests to drive the degraded (manual) mode.
+// be asserted without a DB, a durable driver, an LLM or a real environment. The gate NO LONGER
+// provisions its own env — it READS the one the upstream `deployer` step provisioned, and
+// rebuilds by LOOPING BACK to that deployer. `readEnvironment` is omitted in most tests to drive
+// the degraded (manual) mode.
 
 function step(over: Partial<PipelineStep> = {}): PipelineStep {
   return {
@@ -14,6 +18,10 @@ function step(over: Partial<PipelineStep> = {}): PipelineStep {
     progress: 0,
     ...over,
   } as unknown as PipelineStep
+}
+
+function deployerStep(over: Partial<PipelineStep> = {}): PipelineStep {
+  return { agentKind: 'deployer', state: 'done', progress: 1, ...over } as unknown as PipelineStep
 }
 
 function instance(steps: PipelineStep[], over: Partial<ExecutionInstance> = {}): ExecutionInstance {
@@ -36,6 +44,11 @@ const BLOCK = {
   pullRequest: { url: 'https://h/pr/1', number: 1, branch: 'feat/login' },
 } as unknown as Block
 
+/** A ready environment handle the deployer would have provisioned. */
+function readyEnv() {
+  return { id: 'env_1', url: 'https://preview.example.com', status: 'ready', expiresAt: 5000 }
+}
+
 /** An async fake executor whose `startJob` is a spy (so the helper dispatch can be asserted). */
 function fakeExecutor() {
   const startJob = vi.fn(async () => ({ jobId: 'job_1', model: 'fake:model' }))
@@ -48,15 +61,35 @@ function fakeExecutor() {
 }
 
 function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControllerDeps {
-  return {
+  const deps: HumanTestControllerDeps = {
     blockRepository: { get: vi.fn(async () => BLOCK) } as never,
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     agentExecutor: fakeExecutor(),
+    // The shared async dispatch: this suite drives no delegated kind, so it takes the container
+    // path and answers with the handle its fake executor returned.
+    startStepDispatch: async ({
+      step,
+      context,
+      executor,
+    }: {
+      step: PipelineStep
+      context: { agentKind?: string }
+      // The executor the controller resolved, so a suite that overrides it with a throwing
+      // `startJob` exercises the dispatch failure rather than this fake's happy path.
+      executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+    }) => {
+      // The cold boot the real seam commits before the executor is called.
+      step.container = { status: 'starting' }
+      const handle = await executor.startJob(context as never)
+      // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+      // these suites assert, and a hand-written stub of it would assert the stub.
+      return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
+    },
     contextBuilder: {
       buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
     } as never,
-    resolveMergePreset: vi.fn(async () => ({ ciMaxAttempts: 10 })),
+    resolveRiskPolicy: vi.fn(async () => ({ ciMaxAttempts: 10 })),
     // The spine primitives now come from the cohesive RunStateMachine + StepGraph
     // collaborators (debagged), so the fakes group under those two objects.
     stateMachine: {
@@ -68,8 +101,76 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
       updateBlockProgress: vi.fn(async () => {}),
       finalizeBlock: vi.fn(async () => {}),
       stopRunContainer: vi.fn(async () => {}),
-      persistInstance: vi.fn(async () => {}),
+      // OCC seams (race-audit 2.2 controller-half): `casPersist` for the driver-path writes;
+      // `mutateInstance` late-binds `deps.executionRepository` (tests override it) → runs the
+      // pure mutation → returns it, a faithful stand-in for the real load/CAS-retry.
+      casPersist: vi.fn(async () => {}),
+      mutateInstance: vi.fn(
+        async (
+          ws: string,
+          execId: string,
+          mutate: (i: ExecutionInstance) => void | Promise<void>,
+        ) => {
+          const repo = deps.executionRepository as unknown as {
+            get: (ws: string, id: string) => Promise<ExecutionInstance | null>
+          }
+          const inst = await repo.get(ws, execId)
+          if (!inst) throw new NotFoundError('Execution', execId)
+          await mutate(inst)
+          return inst
+        },
+      ),
       emitInstance: vi.fn(async () => {}),
+      // The pair helper the controllers now write through (persist under CAS, then emit, with
+      // the block-status write folded in). Faked faithfully so the sibling fakes still record
+      // the same calls the assertions read.
+      persistAndEmit: vi.fn(
+        async (
+          ws: string,
+          i: ExecutionInstance,
+          o: { blockStatus?: 'in_progress' | 'blocked' } = {},
+        ) => {
+          const sm = deps.stateMachine as unknown as {
+            updateBlockProgress: (ws: string, i: ExecutionInstance, s: string) => Promise<void>
+            casPersist: (ws: string, i: ExecutionInstance) => Promise<void>
+            emitInstance: (ws: string, i: ExecutionInstance) => Promise<void>
+          }
+          if (o.blockStatus) await sm.updateBlockProgress(ws, i, o.blockStatus)
+          await sm.casPersist(ws, i)
+          await sm.emitInstance(ws, i)
+        },
+      ),
+      // The shared settle helpers the controllers now delegate their terminal transition to.
+      // Faked FAITHFULLY (delegating to the sibling fakes) rather than as bare `vi.fn()`s, so the
+      // assertions below still observe the real sequence: a final step finalizes the block and
+      // reclaims the container, a non-final step advances the cursor and starts the next step.
+      finishHumanGateStep: vi.fn((s: PipelineStep, o: { clearPendingInterview?: boolean } = {}) => {
+        const graph = deps.stepGraph as unknown as { finishStep: (s: PipelineStep) => void }
+        graph.finishStep(s)
+        s.progress = 1
+        s.subtasks = undefined
+        s.approval = null
+        if (o.clearPendingInterview) s.pendingInterview = null
+      }),
+      settleStepAndAdvance: vi.fn(
+        async (_ws: string, i: ExecutionInstance, isFinalStep: boolean) => {
+          const sm = deps.stateMachine as unknown as {
+            finalizeBlock: () => Promise<void>
+            stopRunContainer: () => Promise<void>
+          }
+          const graph = deps.stepGraph as unknown as { startStep: (s: PipelineStep) => void }
+          if (isFinalStep) {
+            i.status = 'done'
+            await sm.finalizeBlock()
+            await sm.stopRunContainer()
+            return { kind: 'done' } as const
+          }
+          i.currentStep += 1
+          const next = i.steps[i.currentStep]
+          if (next) graph.startStep(next)
+          return { kind: 'continue' } as const
+        },
+      ),
     } as never,
     stepGraph: {
       finishStep: vi.fn((s: PipelineStep) => {
@@ -78,10 +179,28 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
       startStep: vi.fn((s: PipelineStep) => {
         s.state = 'working'
       }),
+      // Mimics the real StepGraph.rerunRange: reset the range + re-arm the from-step + move cursor.
+      rerunRange: vi.fn((inst: ExecutionInstance, from: number, through: number) => {
+        for (let i = from; i <= through; i++) {
+          const st = inst.steps[i]!
+          st.state = 'pending'
+          st.jobId = undefined
+        }
+        inst.steps[from]!.state = 'working'
+        inst.currentStep = from
+      }),
+      // Mimics StepGraph.nearestStepIndexBefore: nearest preceding step matching the predicate.
+      nearestStepIndexBefore: vi.fn(
+        (steps: PipelineStep[], index: number, predicate: (s: PipelineStep) => boolean) => {
+          for (let i = index - 1; i >= 0; i--) if (predicate(steps[i]!)) return i
+          return -1
+        },
+      ),
     } as never,
     clockNow: () => 1000,
     ...over,
   }
+  return deps
 }
 
 describe('HumanTestController', () => {
@@ -100,41 +219,74 @@ describe('HumanTestController', () => {
     expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
   })
 
-  it('provisions an env and parks when a provider is wired and the env is ready', async () => {
-    const provisionEnvironment = vi.fn(async () => ({
-      id: 'env_1',
-      url: 'https://preview.example.com',
-      status: 'ready',
-      expiresAt: 5000,
-    }))
-    const deps = fakeDeps({ provisionEnvironment: provisionEnvironment as never })
+  it('reads the deployer-provisioned env and parks the human when it is ready', async () => {
+    const readEnvironment = vi.fn(async () => readyEnv())
+    const deps = fakeDeps({ readEnvironment: readEnvironment as never })
     const c = new HumanTestController(deps)
     const s = step()
 
-    const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
+    const result = await c.evaluate(
+      'ws',
+      instance([deployerStep(), s], { currentStep: 1 }),
+      s,
+      BLOCK,
+      true,
+    )
 
-    expect(provisionEnvironment).toHaveBeenCalled()
+    expect(readEnvironment).toHaveBeenCalledWith('ws', BLOCK)
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
     expect(s.humanTest?.phase).toBe('awaiting_human')
     expect(s.humanTest?.environment?.url).toBe('https://preview.example.com')
+    expect(s.humanTest?.degradedReason ?? null).toBeNull()
   })
 
-  it('keeps polling while the env is still provisioning', async () => {
-    const provisionEnvironment = vi.fn(async () => ({
-      id: 'env_1',
-      url: null,
-      status: 'provisioning',
-      expiresAt: null,
-    }))
-    const deps = fakeDeps({ provisionEnvironment: provisionEnvironment as never })
+  it('degrades to manual mode when no env was provisioned (deployer skipped / infraless)', async () => {
+    const readEnvironment = vi.fn(async () => null)
+    const deps = fakeDeps({ readEnvironment: readEnvironment as never })
     const c = new HumanTestController(deps)
     const s = step()
 
     const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
 
-    expect(result).toEqual({ kind: 'awaiting_gate', stepIndex: 0 })
-    expect(s.humanTest?.phase).toBe('provisioning')
-    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(readEnvironment).toHaveBeenCalled()
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(s.humanTest?.phase).toBe('awaiting_human')
+    expect(s.humanTest?.environment ?? null).toBeNull()
+    expect(s.humanTest?.degradedReason).toBeTruthy()
+    // It NEVER provisions — the deployer is the single provisioner.
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
+  })
+
+  it('re-reads the freshly-rebuilt env on re-entry (repurposed provisioning phase)', async () => {
+    const readEnvironment = vi.fn(async () => readyEnv())
+    const deps = fakeDeps({ readEnvironment: readEnvironment as never })
+    const c = new HumanTestController(deps)
+    // A loop-back left the gate in `provisioning`; control returned after the deployer rebuilt.
+    const s = step({
+      state: 'pending',
+      humanTest: {
+        phase: 'provisioning',
+        environment: null,
+        attempts: 1,
+        maxAttempts: 10,
+        rounds: [],
+      },
+    })
+
+    const result = await c.evaluate(
+      'ws',
+      instance([deployerStep(), s], { currentStep: 1 }),
+      s,
+      BLOCK,
+      true,
+    )
+
+    expect(readEnvironment).toHaveBeenCalled()
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(s.humanTest?.phase).toBe('awaiting_human')
+    expect(s.humanTest?.environment?.url).toBe('https://preview.example.com')
+    // The fix-attempt budget carried across the loop-back.
+    expect(s.humanTest?.attempts).toBe(1)
   })
 
   it('dispatches the fixer (and records the round) on a request-fix action', async () => {
@@ -152,7 +304,13 @@ describe('HumanTestController', () => {
       },
     })
 
-    const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
+    const result = await c.evaluate(
+      'ws',
+      instance([deployerStep(), s], { currentStep: 1 }),
+      s,
+      BLOCK,
+      true,
+    )
 
     expect(
       (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob,
@@ -160,7 +318,7 @@ describe('HumanTestController', () => {
     const ctx = (deps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob
       .mock.calls[0]![0]
     expect(ctx.agentKind).toBe('fixer')
-    expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
+    expect(result).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 1 })
     expect(s.humanTest?.phase).toBe('fixing')
     expect(s.humanTest?.attempts).toBe(1)
     expect(s.humanTest?.rounds?.[0]).toMatchObject({
@@ -207,6 +365,86 @@ describe('HumanTestController', () => {
     expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
   })
 
+  it('loops back to the deployer when a fixer helper completes (rebuild the env)', async () => {
+    const deps = fakeDeps({ readEnvironment: vi.fn(async () => readyEnv()) as never })
+    const c = new HumanTestController(deps)
+    const dep = deployerStep()
+    const s = step({
+      state: 'working',
+      jobId: 'job_7',
+      humanTest: {
+        phase: 'fixing',
+        environment: null,
+        attempts: 1,
+        maxAttempts: 10,
+        rounds: [
+          { kind: 'fix', findings: 'x', helperKind: 'fixer', jobId: 'job_7', outcome: null, at: 1 },
+        ],
+      },
+    })
+    const inst = instance([dep, s], { currentStep: 1 })
+
+    const result = await c.onHelperComplete('ws', inst, s, { state: 'done' })
+
+    // Loops back to the deployer step: cursor moved, range reset, continue re-drives.
+    expect(result).toEqual({ kind: 'continue' })
+    expect(inst.currentStep).toBe(0)
+    expect(deps.stepGraph.rerunRange).toHaveBeenCalledWith(inst, 0, 1)
+    // The gate is re-seeded to re-read the env on re-entry, preserving the attempt budget.
+    expect(s.humanTest?.phase).toBe('provisioning')
+    expect(s.humanTest?.attempts).toBe(1)
+    expect(s.humanTest?.environment ?? null).toBeNull()
+  })
+
+  it('loops back to the deployer on a recreate action', async () => {
+    const deps = fakeDeps({ readEnvironment: vi.fn(async () => readyEnv()) as never })
+    const c = new HumanTestController(deps)
+    const dep = deployerStep()
+    const s = step({
+      state: 'waiting_decision',
+      humanTest: {
+        phase: 'awaiting_human',
+        environment: { id: 'env_1', url: 'https://old.example.com', status: 'ready' },
+        attempts: 2,
+        maxAttempts: 10,
+        rounds: [],
+        pendingAction: { type: 'recreate' },
+      },
+    })
+    const inst = instance([dep, s], { currentStep: 1 })
+
+    const result = await c.evaluate('ws', inst, s, BLOCK, true)
+
+    expect(result).toEqual({ kind: 'continue' })
+    expect(inst.currentStep).toBe(0)
+    expect(s.humanTest?.phase).toBe('provisioning')
+    expect(s.humanTest?.attempts).toBe(2)
+    expect(s.humanTest?.environment ?? null).toBeNull()
+  })
+
+  it('degrades to manual mode on recreate when no deployer precedes the gate', async () => {
+    const deps = fakeDeps({ readEnvironment: vi.fn(async () => readyEnv()) as never })
+    const c = new HumanTestController(deps)
+    // No deployer step before the gate → nothing to rebuild through.
+    const s = step({
+      state: 'waiting_decision',
+      humanTest: {
+        phase: 'awaiting_human',
+        environment: null,
+        attempts: 0,
+        maxAttempts: 10,
+        rounds: [],
+        pendingAction: { type: 'recreate' },
+      },
+    })
+
+    const result = await c.evaluate('ws', instance([s]), s, BLOCK, true)
+
+    expect(deps.stepGraph.rerunRange).not.toHaveBeenCalled()
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(s.humanTest?.degradedReason).toBeTruthy()
+  })
+
   it('refuses request-fix once the fix-attempt ceiling is reached', async () => {
     const s = step({
       state: 'waiting_decision',
@@ -231,50 +469,19 @@ describe('HumanTestController', () => {
     expect(deps.workRunner.signalDecision).not.toHaveBeenCalled()
   })
 
-  it('drops the destroyed env when a re-provision fails (no stale URL survives)', async () => {
-    const teardownEnvironment = vi.fn(async () => {})
-    const provisionEnvironment = vi.fn(async () => {
-      throw new Error('provider exploded')
-    })
-    const deps = fakeDeps({
-      teardownEnvironment,
-      provisionEnvironment: provisionEnvironment as never,
-    })
-    const c = new HumanTestController(deps)
-    const s = step({
-      state: 'waiting_decision',
-      humanTest: {
-        phase: 'awaiting_human',
-        environment: { id: 'env_1', url: 'https://old.example.com', status: 'ready' },
-        attempts: 0,
-        maxAttempts: 10,
-        rounds: [],
-        pendingAction: { type: 'recreate' },
-      },
-    })
-
-    await c.evaluate('ws', instance([s]), s, BLOCK, true)
-
-    expect(teardownEnvironment).toHaveBeenCalledWith('ws', 'env_1')
-    // The old (now torn-down) env must not linger — otherwise the window shows a live URL to
-    // a destroyed environment alongside the degraded-mode reason.
-    expect(s.humanTest?.environment ?? null).toBeNull()
-    expect(s.humanTest?.degradedReason).toBeTruthy()
-  })
-
-  it('destroys the env while still provisioning (drops it for the driver to degrade)', async () => {
+  it('destroys the env locally during a deployer rebuild (transient provisioning phase)', async () => {
     const teardownEnvironment = vi.fn(async () => {})
     const s = step({
-      state: 'working',
+      state: 'pending',
       humanTest: {
         phase: 'provisioning',
         environment: { id: 'env_9', url: null, status: 'provisioning' },
-        attempts: 0,
+        attempts: 1,
         maxAttempts: 10,
         rounds: [],
       },
     })
-    const inst = instance([s])
+    const inst = instance([deployerStep({ state: 'working' }), s], { currentStep: 0 })
     const deps = fakeDeps({
       teardownEnvironment,
       executionRepository: { get: vi.fn(async () => inst), upsert: vi.fn(async () => {}) } as never,
@@ -289,9 +496,14 @@ describe('HumanTestController', () => {
 
   it('advances the run (and tears the env down) on a confirm action', async () => {
     const teardownEnvironment = vi.fn(async () => {})
+    // The "ready for testing" card is settled through the indexed (block, type) seam, never by
+    // scanning the workspace inbox. Faked as FINDING a card, because the branch worth pinning is
+    // the one that settles it: a wrong type string, a wrong id or `dismiss` in place of `act`
+    // leaves the card open in the inbox, escalated red for a gate that already passed.
+    const clearOnBlock = vi.fn(async () => null)
     const deps = fakeDeps({
       teardownEnvironment,
-      notificationService: { listOpen: vi.fn(async () => []) } as never,
+      notificationService: { clearOnBlock } as never,
     })
     const c = new HumanTestController(deps)
     const s = step({
@@ -315,18 +527,14 @@ describe('HumanTestController', () => {
     expect(inst.status).toBe('done')
     expect(result).toEqual({ kind: 'done' })
     expect(s.humanTest?.phase).toBe('passed')
+    // `act`, not `dismiss`: the human did the thing the card asked for.
+    expect(clearOnBlock).toHaveBeenCalledWith('ws', 'blk_1', 'human_test_ready', 'act')
   })
 
-  it('dispatches the conflict-resolver when pull-main conflicts, else rebuilds the env', async () => {
-    const provisionEnvironment = vi.fn(async () => ({
-      id: 'env_2',
-      url: null,
-      status: 'provisioning',
-      expiresAt: null,
-    }))
+  it('dispatches the conflict-resolver when pull-main conflicts, else loops back to the deployer', async () => {
     // Conflict path: dispatch the resolver.
     const conflictDeps = fakeDeps({
-      provisionEnvironment: provisionEnvironment as never,
+      readEnvironment: vi.fn(async () => readyEnv()) as never,
       branchUpdater: { updateFromBase: vi.fn(async () => 'conflict') } as never,
     })
     const c1 = new HumanTestController(conflictDeps)
@@ -341,16 +549,22 @@ describe('HumanTestController', () => {
         pendingAction: { type: 'pull-main' },
       },
     })
-    const r1 = await c1.evaluate('ws', instance([s1]), s1, BLOCK, true)
+    const r1 = await c1.evaluate(
+      'ws',
+      instance([deployerStep(), s1], { currentStep: 1 }),
+      s1,
+      BLOCK,
+      true,
+    )
     const ctx = (conflictDeps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> })
       .startJob.mock.calls[0]![0]
     expect(ctx.agentKind).toBe('conflict-resolver')
-    expect(r1).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 0 })
+    expect(r1).toEqual({ kind: 'awaiting_job', jobId: 'job_1', stepIndex: 1 })
     expect(s1.humanTest?.phase).toBe('resolving_conflicts')
 
-    // Clean merge path: no helper, rebuild the env (→ provisioning poll).
+    // Clean merge path: no helper, loop back to the deployer to rebuild.
     const cleanDeps = fakeDeps({
-      provisionEnvironment: provisionEnvironment as never,
+      readEnvironment: vi.fn(async () => readyEnv()) as never,
       branchUpdater: { updateFromBase: vi.fn(async () => 'merged') } as never,
     })
     const c2 = new HumanTestController(cleanDeps)
@@ -365,10 +579,12 @@ describe('HumanTestController', () => {
         pendingAction: { type: 'pull-main' },
       },
     })
-    const r2 = await c2.evaluate('ws', instance([s2]), s2, BLOCK, true)
+    const inst2 = instance([deployerStep(), s2], { currentStep: 1 })
+    const r2 = await c2.evaluate('ws', inst2, s2, BLOCK, true)
     expect(
       (cleanDeps.agentExecutor as unknown as { startJob: ReturnType<typeof vi.fn> }).startJob,
     ).not.toHaveBeenCalled()
-    expect(r2).toEqual({ kind: 'awaiting_gate', stepIndex: 0 })
+    expect(r2).toEqual({ kind: 'continue' })
+    expect(inst2.currentStep).toBe(0)
   })
 })

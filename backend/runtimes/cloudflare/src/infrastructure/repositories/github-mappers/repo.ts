@@ -8,8 +8,9 @@ export interface GitHubRepoRow {
   name: string
   default_branch: string | null
   private: number
-  block_id: string | null
   is_monorepo: number
+  linked_via: string | null
+  provider: string | null
   synced_at: number
 }
 
@@ -21,8 +22,9 @@ export function rowToRepo(row: GitHubRepoRow): GitHubRepo {
     name: row.name,
     defaultBranch: row.default_branch,
     private: bool(row.private),
-    blockId: row.block_id,
     isMonorepo: bool(row.is_monorepo),
+    linkedVia: row.linked_via === 'user_pat' ? 'user_pat' : 'app',
+    provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
     syncedAt: row.synced_at,
   }
 }
@@ -36,9 +38,12 @@ export function repoValues(workspaceId: string, r: GitHubRepo): Record<string, u
     name: r.name,
     default_branch: r.defaultBranch,
     private: intBool(r.private),
-    // `is_monorepo` is board-owned (set via setMonorepo), so this insert seeds the
-    // default and the upsert's exclude list keeps sync from clobbering it.
+    // `is_monorepo` and `linked_via` are link-owned (set via setMonorepo / at link time),
+    // so this insert seeds the default and the upsert's exclude list keeps sync from
+    // clobbering them.
     is_monorepo: intBool(r.isMonorepo ?? false),
+    linked_via: r.linkedVia ?? 'app',
+    provider: r.provider ?? 'github',
     synced_at: r.syncedAt,
     deleted_at: null,
   }

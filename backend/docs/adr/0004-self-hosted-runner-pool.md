@@ -5,9 +5,9 @@
 - **Context layer:** backend (`@cat-factory/contracts`, `@cat-factory/core`, `@cat-factory/worker`)
 
 > **Update (2026-06-24).** The v1 scope below has since widened. A pool now serves
-> **every** asynchronous agent kind with no allow-list — `run`, `bootstrap`,
+> **every** asynchronous agent kind with no allow-list (`run`, `bootstrap`,
 > `blueprint`, `spec`, `explore`, `ci-fix`, `resolve-conflicts`, `merge`, `on-call`,
-> `test`, `fix-tests` — because it runs the same harness image as Cloudflare and
+> `test`, `fix-tests`), because it runs the same harness image as Cloudflare and
 > runtime parity is the default (the dispatch carries the harness `kind`). Only the
 > synchronous repo **scan** stays Cloudflare-Container-only. The interpolation scope
 > also gained `{{input.kind}}` (route-by-kind) and the provisioning hints
@@ -21,7 +21,7 @@ The repo-operating coding steps (`coder`, `mocker`, `playwright`) run the Pi
 coding agent in a real sandbox: by default a **per-run Cloudflare Container**
 (`ExecutionContainer`, a Durable-Object-backed container). The Worker
 addresses one instance per execution and speaks the `executor-harness` HTTP
-job protocol to it — `POST /run` to dispatch, `GET /jobs/{id}` to poll
+job protocol to it: `POST /run` to dispatch, `GET /jobs/{id}` to poll
 (`ContainerAgentExecutor`).
 
 Some organizations cannot or will not run this workload on Cloudflare Containers:
@@ -38,7 +38,7 @@ its _Alternatives considered_). We pick it up here.
 
 Reuse the proven pattern ADR 0003 established for ephemeral environments. The
 **harness job protocol is fixed and standard** (`/run`, `/jobs/{id}` → a known job
-view); what is org-specific is the **scheduler in front of the pool** — how a job
+view); what is org-specific is the **scheduler in front of the pool**: how a job
 is assigned to a runner, queued, scaled, and how status is read back. So an org
 describes its pool scheduler as a single, generic, **declarative manifest**
 (Valibot-validated, in `@cat-factory/contracts`), of HTTP request templates for
@@ -48,14 +48,14 @@ describes its pool scheduler as a single, generic, **declarative manifest**
   `{{input.jobId}}` / `{{input.job}}` interpolation (the latter is the full
   harness job spec as JSON, so a transparent scheduler forwards it verbatim);
 - an **auth scheme** for calling the scheduler API (none / api-key / bearer /
-  basic / OAuth2 client-credentials / custom headers) — the _same_ generic
+  basic / OAuth2 client-credentials / custom headers), the _same_ generic
   auth-scheme contract the environment manifest uses; and
 - a **dot-path response mapping** that projects the scheduler's arbitrary status
   response onto the canonical harness job view (state, subtask progress, the PR
   url / branch / summary result, and any error).
 
-One generic adapter — `HttpRunnerPoolProvider`
-(`worker/src/infrastructure/runners/`) — interprets **any** manifest, reusing the
+One generic adapter, `HttpRunnerPoolProvider`
+(`worker/src/infrastructure/runners/`), interprets **any** manifest, reusing the
 environment module's generic primitives (`{{var}}` interpolation, dot-path
 extraction, the SSRF guard). There are no per-provider presets and no per-org
 TypeScript: an org's integration is data, registered through the API, not code we
@@ -68,7 +68,7 @@ container, unchanged behaviour) and `RunnerPoolTransport` (the manifest-driven
 self-hosted pool). Backend selection is **per workspace**, resolved per job: a
 workspace with a registered pool (and `RUNNERS_ENABLED`) uses it; otherwise the
 job falls back to a Cloudflare Container when those are enabled. The whole feature
-is **opt-in**, assembled only when configured — exactly like the GitHub,
+is **opt-in**, assembled only when configured, exactly like the GitHub,
 Confluence and environment modules (`Core.runners?`).
 
 ### Addressing & idempotency
@@ -77,7 +77,7 @@ The pool is required to be **addressable by the cat-factory job id** (the
 execution id): `dispatch` is keyed on it and `poll`/`release` re-supply it as
 `{{input.jobId}}`. This mirrors how the Cloudflare container is one Durable Object
 per id, keeps dispatch idempotent (a Workflows replay re-attaches rather than
-duplicating), and — crucially — means **no per-job state** has to be persisted on
+duplicating), and means **no per-job state** has to be persisted on
 our side: the execution engine already tracks each job durably, and the poll site
 re-resolves the same backend from the job's workspace id (carried on the job
 handle). There is therefore only a connection table, no job registry.
@@ -94,8 +94,8 @@ modules by that `info`; the feature refuses to assemble without it (never a sile
 plaintext fallback).
 
 The **per-job** GitHub installation token and the model-locked LLM-proxy session
-token travel inside the interpolated dispatch payload — the runner needs them to
-clone/push and to reach models — but are never logged, and error bodies stay
+token travel inside the interpolated dispatch payload (the runner needs them to
+clone/push and to reach models) but are never logged, and error bodies stay
 length-capped and header-free.
 
 ## Rationale
@@ -107,12 +107,12 @@ length-capped and header-free.
 - **A transport seam, not a fork of the executor.** Putting the backend choice
   behind `RunnerTransport` means the prompt composition, model locking, token
   minting and result mapping in `ContainerAgentExecutor` are shared by both
-  backends — the only thing that varies is _where the job runs_.
+  backends; the only thing that varies is _where the job runs_.
 - **Addressable-by-job-id, so no job registry.** Requiring the pool to route by our
   job id keeps dispatch idempotent under Workflows replay and avoids persisting
   per-job dispatch state, which the durable driver would otherwise force.
 - **Encryption by construction.** Per-tenant scheduler secrets belong in D1,
-  encrypted at rest (and the feature refuses to start without a key) — matching the
+  encrypted at rest (and the feature refuses to start without a key), matching the
   environment module.
 
 ## Alternatives considered
@@ -147,4 +147,4 @@ length-capped and header-free.
   and the runner must reach back out to the Worker's LLM proxy and to GitHub. The
   network requirements are documented in `docs/runner-pool-integration.md`.
 - With BYO infra the org's pool/network handle the short-lived per-job GitHub +
-  proxy tokens — a trust boundary the integration doc calls out explicitly.
+  proxy tokens, a trust boundary the integration doc calls out explicitly.

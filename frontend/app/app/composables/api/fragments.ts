@@ -3,6 +3,7 @@ import {
   createPromptFragmentContract,
   deletePromptFragmentContract,
   fragmentSourceStatusContract,
+  generatePromptFragmentTitleContract,
   linkFragmentSourceContract,
   listFragmentCatalogContract,
   listFragmentSourcesContract,
@@ -17,6 +18,7 @@ import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
   FragmentOwnerKind,
+  GenerateFragmentTitleInput,
   LinkFragmentSourceInput,
   UpdatePromptFragmentInput,
 } from '~/types/domain'
@@ -56,6 +58,21 @@ export function fragmentsApi({ send, ws, scope }: ApiContext) {
       send(deletePromptFragmentContract, {
         pathPrefix: scope(kind, id),
         pathParams: { fragmentId },
+      }),
+
+    // Auto-generate a title for a hand-authored fragment from its content (an inline LLM call).
+    // At the account scope the backend resolves the model against `viaWorkspaceId`'s scope;
+    // ignored at the workspace scope (which uses the addressed workspace).
+    generateFragmentTitle: (
+      kind: FragmentOwnerKind,
+      id: string,
+      body: GenerateFragmentTitleInput,
+      viaWorkspaceId?: string,
+    ) =>
+      send(generatePromptFragmentTitleContract, {
+        pathPrefix: scope(kind, id),
+        queryParams: { viaWorkspaceId },
+        body,
       }),
 
     // Link an external document (Confluence/Notion/GitHub) as a living fragment.

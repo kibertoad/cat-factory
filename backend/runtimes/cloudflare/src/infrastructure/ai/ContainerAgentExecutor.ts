@@ -3,9 +3,8 @@
 // pool); re-exported here for existing Worker imports.
 export {
   ContainerAgentExecutor,
-  type ContainerAgentExecutorDependencies,
   type RepoTarget,
   type ResolveRepoTarget,
-  type MintInstallationToken,
+  type ResolveRepoTargets,
   type ResolveRunnerTransport,
 } from '@cat-factory/server'

@@ -21,13 +21,26 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const access = useWorkspaceAccess()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
+const { confirm } = useConfirm()
 const stopping = ref(false)
 
 const displayLabel = computed(() => props.label ?? t('board.stop.label'))
 
 async function stop() {
   if (stopping.value) return
+  // Killing a running container discards its in-flight work — gate it behind a confirm,
+  // matching the confirm-then-mutate contract the task reset path uses.
+  const ok = await confirm({
+    title: t('board.stop.confirm.title'),
+    description: t('board.stop.confirm.body'),
+    confirmLabel: t('board.stop.confirm.confirm'),
+    variant: 'destructive',
+    icon: 'i-lucide-circle-stop',
+  })
+  if (!ok) return
   stopping.value = true
   try {
     const kind = await agentRuns.stop(props.runId)
@@ -38,11 +51,7 @@ async function stop() {
       color: 'warning',
     })
   } catch (e) {
-    toast.add({
-      title: t('board.stop.stopFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'board.stop.stopFailed')
   } finally {
     stopping.value = false
   }
@@ -57,6 +66,8 @@ async function stop() {
     :size="size"
     icon="i-lucide-circle-stop"
     :loading="stopping"
+    :disabled="!access.canExecuteRuns.value"
+    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
     @click.stop="stop"
   >
     {{ displayLabel }}

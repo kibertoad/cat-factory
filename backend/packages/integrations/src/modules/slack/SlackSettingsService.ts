@@ -10,7 +10,7 @@ import { defaultSlackSettings } from './slack.logic.js'
 
 // SlackSettingsService: a workspace's Slack notification routing (which types
 // post, to which channel, and whether to @-mention). Per-workspace CRUD,
-// mirroring MergePresetService. A workspace that never configured Slack reads
+// mirroring RiskPolicyService. A workspace that never configured Slack reads
 // back the defaults (everything disabled/unrouted).
 
 export interface SlackSettingsServiceDependencies {

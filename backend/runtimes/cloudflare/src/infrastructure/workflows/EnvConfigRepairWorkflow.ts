@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -10,6 +11,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
 /** Params passed to an EnvConfigRepairWorkflow instance (its id is the repair job id). */
@@ -37,11 +39,16 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
   Env,
   EnvConfigRepairWorkflowParams
 > {
-  override async run(
+  override run(
     event: WorkflowEvent<EnvConfigRepairWorkflowParams>,
     step: WorkflowStep,
   ): Promise<void> {
-    const { workspaceId, jobId } = event.payload
+    // See BootstrapWorkflow: `run` is the wake's logging bracket, `drive` is the body.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: EnvConfigRepairWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, jobId } = params
     // One DI-graph assembly per wake (pure wiring over env bindings, no I/O) shared by
     // every poll in this invocation; a hibernation wake replays `run()` and rebuilds. Built
     // via `buildWorkflowRuntime` so a transient throw here can't kill the instance terminally
@@ -60,7 +67,10 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
     // healthy run.
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-      await step.sleep(`poll-wait-${p}`, pollInterval)
+      // Poll-first (matching the Node envConfigRepairRunner): the job was just
+      // dispatched, so the first status read runs immediately instead of after a full
+      // poll interval.
+      if (p > 0) await step.sleep(`poll-wait-${p}`, pollInterval)
       let result: EnvConfigRepairPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {
@@ -72,8 +82,8 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
       } catch (error) {
         pollReadFailures += 1
         log.warn(
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'env-config-repair poll could not read job status; treating as still running and retrying',
+          { err: getErrorMessage(error), pollReadFailures },
         )
         // Keep the instance ALIVE and keep polling — see BootstrapWorkflow (F2): returning on a
         // transient read failure would make the instance terminal and get the still-`running`
@@ -88,7 +98,7 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
         return
       }
       if (result.state === 'failed') {
-        log.warn({ error: result.error }, 'env-config-repair run failed')
+        log.warn('env-config-repair run failed', { error: result.error })
         return
       }
       // still running — loop and poll again after the next durable sleep.

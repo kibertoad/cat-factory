@@ -1,0 +1,14 @@
+-- Who an inbound public-API key acts for on the PROVISIONER's side, supplied at a headless mint
+-- (`POST /api/v1/keys`, `externalIdentity`). NULL for a key a person minted in the app, one
+-- provisioned without it, and every row predating the column.
+--
+-- Opaque to the platform: never parsed, never resolved against a user, never an authorization
+-- input (what a key may do is its own `scope`). It exists so an integration that mints one key per
+-- person can map a RUN back to that person without keeping a keyId table of its own — the run
+-- PINS its own copy of this value at admission, so the mapping survives the key being revoked and
+-- no run read joins back to this table. Mirrored on Node by the `external_identity` column on the
+-- Drizzle `public_api_keys` table.
+--
+-- No index: nothing queries by it. Both readers (the key resource and `GET /api/v1/me`) already
+-- have the row.
+ALTER TABLE public_api_keys ADD COLUMN external_identity TEXT;

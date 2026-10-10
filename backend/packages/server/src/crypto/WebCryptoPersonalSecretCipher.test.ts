@@ -14,9 +14,15 @@ describe('WebCryptoPersonalSecretCipher', () => {
     expect(await cipher.open(sealed, 'correct horse battery')).toBe('sk-ant-oat01-secret')
   })
 
-  it('throws on a wrong password', async () => {
+  it('throws an actionable error (not the raw DOMException) on a wrong password', async () => {
     const sealed = await cipher.seal('TOKEN', 'right-password')
-    await expect(cipher.open(sealed, 'wrong-password')).rejects.toThrow()
+    const err = (await cipher.open(sealed, 'wrong-password').catch((e: unknown) => e)) as Error
+    expect(err).toBeInstanceOf(Error)
+    // Names the cause + remedy, not the opaque Web Crypto "operation-specific reason"
+    // DOMException (which is preserved as `cause`).
+    expect(err.message).toMatch(/personal password does not match/i)
+    expect(err.message).not.toBe('The operation failed for an operation-specific reason')
+    expect(err.cause).toBeDefined()
   })
 
   it('uses a fresh salt/iv per seal (distinct ciphertext for the same input)', async () => {
@@ -27,7 +33,18 @@ describe('WebCryptoPersonalSecretCipher', () => {
     expect(await cipher.open(b, 'pw-pw-pw-pw')).toBe('TOKEN')
   })
 
-  it('rejects a malformed envelope', async () => {
-    await expect(cipher.open('not-an-envelope', 'pw')).rejects.toThrow()
+  it('rejects a malformed envelope with an actionable message', async () => {
+    await expect(cipher.open('not-an-envelope', 'pw')).rejects.toThrow(
+      /not a valid encryption envelope/i,
+    )
+  })
+
+  it('rejects a well-structured envelope with an undecodable (corrupt) segment', async () => {
+    // 4 segments + the right version prefix, but the base64url body is corrupt so `atob`
+    // rejects it. This must still surface the actionable envelope message (with the raw
+    // decode error kept as `cause`), not leak a bare `InvalidCharacterError` DOMException.
+    const err = (await cipher.open('pv1.@@@.@@@.@@@', 'pw').catch((e: unknown) => e)) as Error
+    expect(err.message).toMatch(/not a valid encryption envelope/i)
+    expect(err.cause).toBeDefined()
   })
 })

@@ -1,5 +1,7 @@
 import type {
   ConnectionTestResult,
+  ConnectionWarning,
+  ProviderConfigField,
   RunnerBackendConfig,
   RunnerPoolProvider,
   RunnerTransport,
@@ -15,6 +17,7 @@ import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
 import {
   assertManifestUrlsSafe,
+  manifestWarnings,
   referencedSecretKeys as manifestSecretKeys,
 } from './runners.logic.js'
 
@@ -50,7 +53,7 @@ export interface RunnerBackendContext {
 }
 
 /** Capabilities/policies a backend validates its config against at the write boundary. */
-export interface RunnerBackendSafetyOptions {
+interface RunnerBackendSafetyOptions {
   /** Manifest SSRF policy. Absent ⇒ strict. */
   urlPolicy?: UrlSafetyPolicy
   /**
@@ -63,6 +66,28 @@ export interface RunnerBackendSafetyOptions {
   customTlsSupported?: boolean
 }
 
+/**
+ * The typed-connect-form seam for a NATIVE runner backend (Kubernetes / EKS): the backend
+ * describes its flat form fields so the SPA renders a generic, provider-agnostic form instead
+ * of a hardcoded per-kind Vue component (the whole point — the UI stays unaware of which
+ * optional backends exist). A backend that rides the generic HTTP manifest (the `manifest`
+ * built-in + custom kinds) omits this and uses the manifest form/editor instead.
+ *
+ * The three pieces are exact inverses so the round-trip is lossless:
+ *  - `fields()` — the flat {@link ProviderConfigField}s (params + secrets) the SPA renders.
+ *  - `skeleton()` — the empty `{ kind, <payload>: {} }` the SPA overlays field values onto for
+ *    a FIRST connect (each non-secret field → the single non-`kind` payload key; each secret →
+ *    the write-only bundle). On an EDIT the SPA overlays onto the STORED config instead, so
+ *    advanced API-only fields the flat form never renders survive the re-save.
+ *  - `valuesFromConfig()` — invert a stored config back to the flat values (keyed by
+ *    `fields()[].key`) for prefill.
+ */
+interface RunnerBackendForm {
+  fields(): ProviderConfigField[]
+  skeleton(): RunnerBackendConfig
+  valuesFromConfig(config: RunnerBackendConfig): Record<string, string>
+}
+
 export interface RunnerBackendProvider {
   // `string`, not the contract's discriminated `kind`, so a CUSTOM third-party kind can
   // register. Pinned explicitly so a future contract re-narrowing can't re-lock the registry.
@@ -72,6 +97,11 @@ export interface RunnerBackendProvider {
    * has no stored config to derive a label from). Defaults to `kind` when omitted.
    */
   readonly displayLabel?: string
+  /**
+   * A native backend's typed flat-form descriptor (see {@link RunnerBackendForm}). Present ⇒
+   * the SPA renders the generic descriptor-driven form; absent ⇒ the manifest form/editor.
+   */
+  readonly form?: RunnerBackendForm
   /** Every secret-bundle key the config references (validated present at registration). */
   referencedSecretKeys(config: RunnerBackendConfig): string[]
   /** Non-secret metadata persisted on the connection row + shown in the UI. */
@@ -82,6 +112,14 @@ export interface RunnerBackendProvider {
   }
   /** Validate the config at the write boundary (SSRF / URL + runtime safety). Throws if unsafe. */
   assertConfigSafe(config: RunnerBackendConfig, opts?: RunnerBackendSafetyOptions): void
+  /**
+   * Non-fatal gaps in an otherwise-valid config: logged once at registration AND returned on
+   * the connection test, which is where the operator actually sees them (a deployment log line
+   * reaches whoever reads logs, not whoever pasted the config). A backend describes its own
+   * gaps because only it can read its config shape — the connection service stays
+   * kind-agnostic. Absent ⇒ this backend reports none.
+   */
+  warnings?(config: RunnerBackendConfig): ConnectionWarning[]
   /** Build the live transport the execution engine dispatches/polls/releases through. */
   buildTransport(config: RunnerBackendConfig, ctx: RunnerBackendContext): RunnerTransport
   /** Probe the backend without persisting anything. */
@@ -158,6 +196,7 @@ export const manifestRunnerBackend: RunnerBackendProvider = {
       assertManifestUrlsSafe(config.manifest, opts?.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
     }
   },
+  warnings: (config) => (config.kind === 'manifest' ? manifestWarnings(config.manifest) : []),
   buildTransport: (config, ctx) => {
     if (config.kind !== 'manifest') throw new Error('Expected a manifest runner config')
     const provider = ctx.runnerPoolProvider ?? defaultHttpProvider(ctx.urlPolicy)

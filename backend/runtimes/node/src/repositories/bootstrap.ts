@@ -1,14 +1,19 @@
 import type {
-  BootstrapFailure,
+  AdoptionPlan,
+  BootstrapDelivery,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
+  BootstrapPhase,
+  MonorepoBootstrapRef,
   ReferenceArchitectureRecord,
   ReferenceArchitectureRecordPatch,
   ReferenceArchitectureRepository,
-  StepSubtasks,
+  ResolvedAdoption,
+  SurveyClaim,
 } from '@cat-factory/kernel'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseSubtasks } from '@cat-factory/kernel'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { agentRuns, blocks, referenceArchitectures } from '../db/schema.js'
@@ -135,6 +140,7 @@ export class DrizzleReferenceArchitectureRepository implements ReferenceArchitec
 
 // ---- bootstrap jobs (kind='bootstrap' rows of agent_runs) -----------------
 
+/** Mirrors the D1 repository's `BootstrapDetail`; see the note there on why it is JSON. */
 interface BootstrapDetail {
   referenceArchitectureId: string | null
   referenceArchitectureName: string | null
@@ -142,76 +148,46 @@ interface BootstrapDetail {
   repoOwner: string | null
   repoUrl: string | null
   instructions: string
+  monorepo: MonorepoBootstrapRef | null
+  phase: BootstrapPhase | null
+  driveId: string | null
+  adoptionPlan: AdoptionPlan | null
+  adoptionReview: ResolvedAdoption | null
+  prUrl: string | null
+  delivery: BootstrapDelivery | null
+  workBranch: string | null
 }
 
-function parseSubtasks(raw: string | null): StepSubtasks | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (
-      typeof o.completed === 'number' &&
-      typeof o.inProgress === 'number' &&
-      typeof o.total === 'number'
-    ) {
-      type Item = NonNullable<StepSubtasks['items']>[number]
-      let items: Item[] | undefined
-      if (Array.isArray(o.items)) {
-        items = []
-        for (const it of o.items as unknown[]) {
-          if (!it || typeof it !== 'object') continue
-          const r = it as Record<string, unknown>
-          const status = r.status
-          if (
-            typeof r.label === 'string' &&
-            (status === 'pending' || status === 'in_progress' || status === 'completed')
-          ) {
-            items.push({ label: r.label, status })
-          }
-        }
-      }
-      return { completed: o.completed, inProgress: o.inProgress, total: o.total, items }
-    }
-  } catch {
-    // fall through
-  }
-  return null
-}
-
-function parseFailure(raw: string | null): BootstrapFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as BootstrapFailure
-    // LEGACY: drop a failure carrying a removed kind (e.g. `decision_timeout`); the obsolete
-    // value would fail the contract picklist and brick the snapshot. Remove after 2026-07-15.
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
+const EMPTY_DETAIL: BootstrapDetail = {
+  referenceArchitectureId: null,
+  referenceArchitectureName: null,
+  repoName: '',
+  repoOwner: null,
+  repoUrl: null,
+  instructions: '',
+  monorepo: null,
+  phase: null,
+  driveId: null,
+  adoptionPlan: null,
+  adoptionReview: null,
+  prUrl: null,
+  delivery: null,
+  workBranch: null,
 }
 
 function parseDetail(raw: string): BootstrapDetail {
   try {
     const o = JSON.parse(raw) as Partial<BootstrapDetail>
     return {
-      referenceArchitectureId: o.referenceArchitectureId ?? null,
-      referenceArchitectureName: o.referenceArchitectureName ?? null,
-      repoName: o.repoName ?? '',
-      repoOwner: o.repoOwner ?? null,
-      repoUrl: o.repoUrl ?? null,
-      instructions: o.instructions ?? '',
+      ...EMPTY_DETAIL,
+      // `null` is dropped alongside `undefined`, which is safe because every NULLABLE field's
+      // empty default already IS null: what it protects are the two fields typed as plain
+      // strings (`repoName`, `instructions`), where a row storing a null would otherwise flow
+      // one through as a string and reach a prompt as the word "null".
+      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value != null)),
     }
   } catch {
-    return {
-      referenceArchitectureId: null,
-      referenceArchitectureName: null,
-      repoName: '',
-      repoOwner: null,
-      repoUrl: null,
-      instructions: '',
-    }
+    return { ...EMPTY_DETAIL }
   }
 }
 
@@ -230,11 +206,37 @@ function rowToBootstrapJob(row: typeof agentRuns.$inferSelect): BootstrapJobReco
     blockId: row.block_id ?? null,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
+    monorepo: detail.monorepo,
+    phase: detail.phase,
+    // See the D1 mirror: a row predating the monorepo flow was driven under its own id, so the
+    // fallback is what that row's drive key actually was rather than a substitute for it.
+    driveId: detail.driveId ?? row.id,
+    adoptionPlan: detail.adoptionPlan,
+    adoptionReview: detail.adoptionReview,
+    prUrl: detail.prUrl,
+    // See the D1 mirror: a row predating the delivery toggle records what that run DID, which
+    // its target alone determined.
+    delivery: detail.delivery ?? (detail.monorepo ? 'pull_request' : 'direct_push'),
+    // A row predating the field recorded no branch; the run's own dispatch derived one off its
+    // id, so there is nothing to carry and null is the honest read.
+    workBranch: detail.workBranch,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
+
+/** Patch fields that live inside `detail` (the Drizzle mirror of D1's `DETAIL_FIELDS`). */
+const DETAIL_FIELDS = [
+  'repoOwner',
+  'repoUrl',
+  'phase',
+  'driveId',
+  'prUrl',
+  'monorepo',
+  'adoptionPlan',
+  'adoptionReview',
+] as const satisfies readonly (keyof BootstrapJobRecordPatch)[]
 
 /** Postgres-backed bootstrap runs, stored as kind='bootstrap' rows of agent_runs. */
 export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
@@ -254,6 +256,14 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       repoOwner: record.repoOwner,
       repoUrl: record.repoUrl,
       instructions: record.instructions,
+      monorepo: record.monorepo,
+      phase: record.phase,
+      driveId: record.driveId,
+      adoptionPlan: record.adoptionPlan,
+      adoptionReview: record.adoptionReview,
+      prUrl: record.prUrl,
+      delivery: record.delivery,
+      workBranch: record.workBranch,
     }
     await this.db.insert(agentRuns).values({
       workspace_id: record.workspaceId,
@@ -273,18 +283,44 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
     })
   }
 
+  /**
+   * The D1 mirror's conditional claim (see the port): stamp the survey claim only while the row
+   * carries none or carries a stale one, and let the number of updated rows decide the winner.
+   * `RETURNING` rather than a rowcount because the pg driver's affected-row count is not part of
+   * Drizzle's typed surface, and an empty result set says the same thing unambiguously.
+   */
+  async claimSurvey(workspaceId: string, id: string, claim: SurveyClaim): Promise<boolean> {
+    const claimed = sql`(${agentRuns.detail}::jsonb -> 'surveyClaimedAt')`
+    const rows = await this.db
+      .update(agentRuns)
+      .set({
+        detail: sql`(jsonb_set(${agentRuns.detail}::jsonb, '{surveyClaimedAt}', to_jsonb(${claim.at}::bigint)))::text`,
+      })
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          eq(agentRuns.id, id),
+          eq(agentRuns.kind, 'bootstrap'),
+          sql`(${claimed} IS NULL OR ${claimed} = 'null'::jsonb OR (${claimed})::bigint <= ${claim.staleBefore})`,
+        ),
+      )
+      .returning({ id: agentRuns.id })
+    return rows.length > 0
+  }
+
   async update(workspaceId: string, id: string, patch: BootstrapJobRecordPatch): Promise<void> {
     const set: Record<string, unknown> = {}
     // repoOwner/repoUrl live inside the `detail` JSON; patch them together with a
     // single jsonb_set chain so a partial patch leaves the other field untouched.
     let detailExpr = sql`${agentRuns.detail}::jsonb`
     let patchesDetail = false
-    if (patch.repoOwner !== undefined) {
-      detailExpr = sql`jsonb_set(${detailExpr}, '{repoOwner}', ${JSON.stringify(patch.repoOwner)}::jsonb)`
-      patchesDetail = true
-    }
-    if (patch.repoUrl !== undefined) {
-      detailExpr = sql`jsonb_set(${detailExpr}, '{repoUrl}', ${JSON.stringify(patch.repoUrl)}::jsonb)`
+    for (const field of DETAIL_FIELDS) {
+      const value = patch[field]
+      if (value === undefined) continue
+      // `JSON.stringify` of an object/`null` is valid JSON either way, so one chain covers the
+      // scalars and the plan/review objects alike; the D1 mirror needs the `json(?)` split only
+      // because SQLite's `json_set` would otherwise store the object's TEXT.
+      detailExpr = sql`jsonb_set(${detailExpr}, ${`{${field}}`}, ${JSON.stringify(value ?? null)}::jsonb)`
       patchesDetail = true
     }
     if (patchesDetail) set.detail = sql`(${detailExpr})::text`
@@ -336,15 +372,6 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       .select()
       .from(agentRuns)
       .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.kind, 'bootstrap')))
-      .orderBy(desc(agentRuns.created_at))
-    return rows.map(rowToBootstrapJob)
-  }
-
-  async listByService(serviceId: string): Promise<BootstrapJobRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(agentRuns)
-      .where(and(eq(agentRuns.service_id, serviceId), eq(agentRuns.kind, 'bootstrap')))
       .orderBy(desc(agentRuns.created_at))
     return rows.map(rowToBootstrapJob)
   }

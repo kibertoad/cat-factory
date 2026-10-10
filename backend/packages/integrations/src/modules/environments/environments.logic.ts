@@ -5,15 +5,16 @@ import type {
   EnvironmentManifest,
   EnvironmentStatus,
   ProviderConfigField,
+  TeardownConfirmation,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
-import {
-  getErrorMessage,
-  isBlockedPrivateHost,
-  STRICT_URL_SAFETY_POLICY,
-  ValidationError,
-} from '@cat-factory/kernel'
+import { connectionFailureResult, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import type { EnvironmentRouteCandidate, EnvironmentReachability } from '@cat-factory/contracts'
+import { environmentReachabilitySchema } from '@cat-factory/contracts'
+import * as v from 'valibot'
 import { safeFetch } from '../shared/safe-fetch.js'
+import { assertSafePublicUrl, publicUrlHost } from '../shared/url-guard.js'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
@@ -21,11 +22,21 @@ import { safeFetch } from '../shared/safe-fetch.js'
 // coercion. Keeping these pure makes the generic provider deterministic and
 // testable without a live management API.
 
-/** The agent kind that triggers deterministic provisioning. */
-export const DEPLOYER_AGENT_KIND = 'deployer'
-/** Board category for environment blocks (a deployer pipeline typically runs here). */
-export const ENVIRONMENT_BLOCK_TYPE = 'environment'
-
+/**
+ * The agent kind that triggers deterministic provisioning, and its counterpart that triggers the
+ * deterministic RECLAIM. Re-exported from `@cat-factory/contracts` rather than restated: the
+ * pipeline builder and the save boundary both reason about the pair (a Deployer without a
+ * Disposer leaves the environment to the TTL sweep), and the SPA has to name the same two kinds.
+ */
+export { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND } from '@cat-factory/contracts'
+import {
+  DEPLOYER_AGENT_KIND,
+  describeWildcardDnsShift,
+  describeWildcardDnsShiftProblem,
+  DISPOSER_AGENT_KIND,
+  wildcardDnsShiftRemedies,
+} from '@cat-factory/contracts'
+import type { WildcardDnsShift } from '@cat-factory/contracts'
 /**
  * Whether a pipeline step should provision an environment deterministically.
  * Keyed strictly on the `deployer` agent kind so that other steps in a pipeline
@@ -36,16 +47,111 @@ export function isDeployStep(agentKind: string): boolean {
 }
 
 /**
- * Whether `host` is exempt from the private/internal-host block under `policy`.
- * An allow-list entry matches the hostname case-insensitively, either exactly or as a
- * dot suffix when it begins with `.` (`.internal` matches `a.b.internal`).
+ * Whether a pipeline step should RECLAIM the run's environments deterministically. The mirror of
+ * {@link isDeployStep}: it lets an author decide WHEN the environment goes away (after the
+ * automated tester, or after a human has finished poking at it) instead of leaving that to the
+ * TTL sweep, which fires long after the run settled and therefore cannot close the run's own
+ * up → evidence → down proof.
  */
-function hostExempt(host: string, policy: UrlSafetyPolicy): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, '')
-  return policy.allowHosts.some((entry) => {
-    const e = entry.toLowerCase()
-    return e.startsWith('.') ? h === e.slice(1) || h.endsWith(e) : h === e
-  })
+export function isDisposeStep(agentKind: string): boolean {
+  return agentKind === DISPOSER_AGENT_KIND
+}
+
+/**
+ * Turn a provider's post-teardown {@link TeardownProbe} into the recorded verdict, plus the
+ * verbatim reason a human needs when it is anything but `confirmed`.
+ *
+ * The mapping is the whole point of the split: `gone` is the only probe that proves a reclaim,
+ * and each of the other answers becomes a DIFFERENT verdict rather than being flattened into one
+ * "not confirmed" bucket, because each is a different person's next action (see
+ * {@link TeardownConfirmation}). A `present` probe is split by `terminating` for the same
+ * reason — a namespace draining its finalizers is on its way out and will confirm on a later
+ * pass, where an `Active` one means the teardown did nothing and will never confirm on its own.
+ */
+export function classifyTeardownProbe(probe: TeardownProbe): {
+  confirmation: TeardownConfirmation
+  reason: string | null
+} {
+  switch (probe.state) {
+    case 'gone':
+      return { confirmation: 'confirmed', reason: null }
+    case 'present':
+      return probe.terminating
+        ? {
+            confirmation: 'unconfirmed',
+            reason:
+              probe.detail ??
+              'The environment is still shutting down; it was not gone when checked.',
+          }
+        : {
+            confirmation: 'still_standing',
+            reason:
+              probe.detail ??
+              'The environment was still running after the teardown, so nothing was reclaimed.',
+          }
+    case 'unknown':
+      // A permanent inability to verify is a CONFIGURATION fact and a transient one is an
+      // outage; only the second is worth waiting on, so they must not share a verdict.
+      return {
+        confirmation: probe.retryable ? 'unconfirmed' : 'unverifiable',
+        reason: probe.reason,
+      }
+    default:
+      return describeUnrecognisedProbe(probe)
+  }
+}
+
+/**
+ * A probe state this build does not define, reported as the unusable answer it is.
+ *
+ * {@link TeardownProbe} crosses a PUBLIC port, so the value is not the platform's to trust: a
+ * deployment's own provider can return anything, and adding a state to the union without a case
+ * here must fail the build (the argument stops being `never`). What it must NOT do is fall off
+ * the end of the switch — that returns `undefined`, which then rides into the confirmation row as
+ * a missing verdict and, being neither `confirmed` nor anything else a reader recognises, is the
+ * one outcome worse than an honest refusal to say.
+ *
+ * Never guessed onto `gone`: an answer nobody can interpret is the opposite of proof.
+ */
+function describeUnrecognisedProbe(probe: never): {
+  confirmation: TeardownConfirmation
+  reason: string
+} {
+  return {
+    confirmation: 'unconfirmed',
+    reason: `The provider reported a teardown probe state this deployment does not recognise (${JSON.stringify(probe)}), so the teardown could not be verified.`,
+  }
+}
+
+/** The provider-identity fields that decide whether a superseded env's real infra is reclaimed. */
+export interface EnvironmentIdentity {
+  provisionType: string | null
+  engine: string | null
+  /** The provider's external resource id (a k8s namespace, …); null when not yet known/provisioned. */
+  externalId: string | null
+}
+
+/**
+ * Whether a superseded environment's REAL infrastructure should be torn down when a new provision
+ * takes its place. `next` is the incoming env's identity, or `null` when NOTHING replaces it (an
+ * `infraless` flip / removed provisioning). Teardown fires only when the prior actually provisioned
+ * real infra (`externalId` set) AND the new target is a DIFFERENT provider resource — a different
+ * type/engine, or (when the new external id is known) a different external id. When the new external
+ * id is not yet known (the async `provisioning` placeholder insert), a matching type/engine is
+ * treated as the same deterministic resource (overwrite-in-place), so nothing is torn down and the
+ * TTL reaper stays the backstop. Same identity ⇒ keep the tombstone-only supersede (tearing a
+ * namespace down then re-applying it would churn/race).
+ */
+export function shouldTeardownSuperseded(
+  prior: EnvironmentIdentity,
+  next: EnvironmentIdentity | null,
+): boolean {
+  if (!prior.externalId) return false
+  if (next === null) return true
+  if (prior.provisionType !== next.provisionType) return true
+  if (prior.engine !== next.engine) return true
+  if (next.externalId != null && next.externalId !== prior.externalId) return true
+  return false
 }
 
 /**
@@ -53,38 +159,72 @@ function hostExempt(host: string, policy: UrlSafetyPolicy): boolean {
  * (STRICT_URL_SAFETY_POLICY) requires `https` and rejects internal/private hosts; a
  * trusted operator-installed adapter can pass a widened policy to permit specific
  * schemes/hosts (e.g. an internal env platform on a private/VPN host). Embedded
- * credentials are forbidden regardless of policy. Parsed by hand (no `URL` global) so
- * this stays in the platform-agnostic core.
+ * credentials are forbidden regardless of policy.
+ *
+ * The environment-labelled face of the SHARED {@link assertSafePublicUrl} guard, which the
+ * runner-pool and notification-webhook integrations also front with their own wording. Only the
+ * message differs — the host/scheme rules are one implementation, so an SSRF bypass is fixed once
+ * rather than per integration.
  */
 export function assertSafeEnvironmentUrl(
   url: string,
   label = 'URL',
   policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
 ): void {
-  const invalid = () => new ValidationError(`Environment ${label} is not a valid URL: '${url}'`)
-  const match = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/)
-  if (!match) throw invalid()
+  assertSafePublicUrl(url, { subject: 'Environment', label, policy })
+}
 
-  if (!policy.schemes.includes(match[1]!.toLowerCase())) {
-    const allowed = policy.schemes.join('/') || '(none)'
-    throw new ValidationError(`Environment ${label} must use ${allowed}`)
-  }
-  const authority = match[2]!
-  if (authority.includes('@')) {
-    throw new ValidationError(`Environment ${label} must not contain credentials`)
-  }
-  let host: string
-  if (authority.startsWith('[')) {
-    const end = authority.indexOf(']')
-    if (end === -1) throw invalid()
-    host = authority.slice(1, end)
-  } else {
-    host = authority.split(':')[0]!
-  }
-  if (host === '') throw invalid()
-  if (!hostExempt(host, policy) && isBlockedPrivateHost(host)) {
-    throw new ValidationError(`Environment ${label} must be a public host`)
-  }
+/**
+ * Refuse an environment URL whose wildcard-DNS host answers a DIFFERENT address than the one the
+ * operator wrote into it. `null` when there is nothing wrong, which is every ordinary host and
+ * every correctly-composed wildcard one.
+ *
+ * This is the one environment failure the platform can see coming and previously did not. An
+ * environment URL is a CLAIM: it is derived from config (or read back off a rendered Ingress),
+ * published as the environment's address, and nothing between here and the tester ever asks
+ * whether it points at this deployment. Readiness cannot catch it either, because readiness is
+ * workload readiness (the pods are fine; they are just unreachable through that name). So a run
+ * rolled out, reported `ready`, and spent a tester agent for eight minutes on an address
+ * belonging to someone else before failing with a connection error that named the cluster rather
+ * than the config.
+ *
+ * **Refusing is the honest disposition rather than a warning**, and it costs nothing that was
+ * working: a mis-resolving host makes the environment unreachable to every consumer, so there is
+ * no deployment this turns from green to red.
+ *
+ * It sits BESIDE {@link assertSafeEnvironmentUrl} because it answers the same kind of question
+ * about the same value, and because that pairing is what makes it provider-agnostic: the three
+ * places an environment URL is published (`EnvironmentProvisioningService`'s sync
+ * provision, its async finalize, and its status reconcile) all run the pair, so a URL rendered
+ * inside a deploy container or read off a live Ingress is graded exactly as one derived in
+ * process is. A check bolted to one provider's synchronous path would have covered a third of
+ * the ways this URL reaches a user.
+ */
+export function describeMisresolvingEnvironmentUrl(url: string): string | null {
+  const host = publicUrlHost(url)
+  // Not this rule's failure to report. A URL the platform cannot parse is already refused by the
+  // environment URL-safety policy, which says so far better than a DNS note would.
+  if (host === null) return null
+  const shift = describeWildcardDnsShift(host)
+  return shift ? describeMisresolvingHostProblem(shift) : null
+}
+
+/**
+ * The refusal wording, shared by this seam and by the Kubernetes provider's earlier one so the
+ * two do not become two accounts of the same fault.
+ *
+ * It names the manifests as CORRECT on purpose: the automated instinct on an environment failure
+ * is to send a fixer at the checkout, and the one thing that cannot help here is editing the
+ * files. The fix is a person editing the connection.
+ */
+export function describeMisresolvingHostProblem(shift: WildcardDnsShift): string {
+  return (
+    `The environment URL cannot reach this deployment: ${describeWildcardDnsShiftProblem(shift)}. ` +
+    `Fix the environment connection, not the manifests, which are correct. ` +
+    wildcardDnsShiftRemedies(shift)
+      .map((remedy, index) => `(${index + 1}) ${remedy}`)
+      .join(' ')
+  )
 }
 
 /** Validate every URL a manifest will fetch (defence against SSRF). */
@@ -166,15 +306,22 @@ export function missingRequiredConfigKeys(
 /**
  * A minimal, side-effect-free connection probe: an authed GET against the pool/env
  * management `baseUrl`. Any HTTP response means the host is reachable; a 401/403
- * means the credentials were rejected. Never throws — a network failure is reported
+ * means the credentials were rejected. Never throws: a network failure is reported
  * as `{ ok:false }`. Shared by the generic providers' `testConnection`.
+ *
+ * `options.subject` names what is being reached, purely so the failure hint can say "the runner
+ * pool API is most likely not running" instead of "the server". The URL-policy refusals thrown by
+ * `assertSafeEnvironmentUrl` pass through {@link connectionFailureResult} unchanged: they carry
+ * no error `code`, so they classify as `unknown` and are reported verbatim with no hint, which is
+ * right, since a refused host is a config decision and not a reachability problem.
  */
 export async function probeConnection(
   baseUrl: string,
   headers: Record<string, string>,
   policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
-  timeoutMs = 10_000,
+  options: { timeoutMs?: number; subject?: string } = {},
 ): Promise<ConnectionTestResult> {
+  const { timeoutMs = 10_000, subject } = options
   try {
     // Re-validate every redirect hop (not just the initial URL), so a permitted base
     // URL can't 302 the probe to an internal/metadata host with the creds attached.
@@ -193,7 +340,10 @@ export async function probeConnection(
     }
     return { ok: true, message: `Reachable (HTTP ${res.status})` }
   } catch (err) {
-    return { ok: false, message: getErrorMessage(err) }
+    return connectionFailureResult(err, {
+      ...(subject ? { subject } : {}),
+      target: baseUrl,
+    })
   }
 }
 
@@ -260,6 +410,91 @@ export function mapStatus(
   return fallback
 }
 
+/**
+ * Read a manifest's `addressesPath` (or `hostsPath`) off an arbitrary provider response.
+ *
+ * Three shapes are accepted because a self-rolled management API can reasonably return any of
+ * them, and refusing two would push an org into reshaping its API for us: a single string, an array
+ * of strings, or an array of objects. Anything else in the array is SKIPPED rather than coerced, so
+ * an unexpected element cannot become the literal `[object Object]` in an `--add-host` argument.
+ *
+ * `bare` is what a plain string in that path MEANS, and it comes from which manifest key was
+ * declared rather than from reading the value: a bare string is unlabelled, so nothing about it
+ * says whether `10.4.19.22` is an address or a name someone is about to resolve. An object entry
+ * states its own kind and is read as it is written, which is what lets ONE path interleave the two
+ * in a provider's preference order.
+ *
+ * Nothing here validates the values. Which addresses a bridge may name is kernel's rule
+ * (`isBridgeableAddress`), applied at plan time and again where the bridge is built, and what
+ * actually carries is the proof's answer; a provider stating a useless candidate gets a recorded
+ * failed attempt, which is the honest outcome.
+ */
+export function extractAddresses(
+  json: unknown,
+  path: string | undefined,
+  bare: 'address' | 'host' = 'address',
+): EnvironmentRouteCandidate[] {
+  if (!path) return []
+  const raw = extractByPath(json, path)
+  if (typeof raw === 'string') return raw.trim() ? [{ [bare]: raw.trim() }] : []
+  if (!Array.isArray(raw)) return []
+  const out: EnvironmentRouteCandidate[] = []
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      if (entry.trim()) out.push({ [bare]: entry.trim() })
+      continue
+    }
+    if (!entry || typeof entry !== 'object') continue
+    const record = entry as Record<string, unknown>
+    const address = typeof record.address === 'string' ? record.address.trim() : ''
+    const host = typeof record.host === 'string' ? record.host.trim() : ''
+    // Exactly one, on the schema's own rule: an entry stating both names two things with no way to
+    // tell which was meant, and is dropped here rather than carried to the plan as a candidate that
+    // could only ever be refused.
+    if ((address && host) || (!address && !host)) continue
+    const label = typeof record.label === 'string' ? record.label.trim() : ''
+    const target = address ? { address } : { host }
+    out.push(label ? { ...target, label } : target)
+  }
+  return out
+}
+
+/**
+ * Parse the stored reachability blob, or null when there is none and when what is there does not
+ * validate.
+ *
+ * The ONE parse of that column, which is why it is here rather than in each facade's repository:
+ * two implementations of one validator is how a D1 row and a Postgres row come to disagree about
+ * what they hold. A blob that fails validation reads as ABSENT rather than throwing, because the
+ * caller is a projection every environment read goes through and a stale shape written by an older
+ * build must not take the whole handle down with it: an unreadable proof and no proof are the same
+ * fact to every reader (nothing has been shown to carry).
+ */
+export function parseReachability(raw: string | null): EnvironmentReachability | null {
+  if (!raw) return null
+  try {
+    const parsed = v.safeParse(environmentReachabilitySchema, JSON.parse(raw))
+    return parsed.success ? parsed.output : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Serialize reachability for the row, or null when there is nothing worth a column.
+ *
+ * `probedAt` alone is worth one. It is the record that the platform has LOOKED at reaching this
+ * environment, which outlives both halves it sits beside (a proof about an address the provider
+ * has stopped stating is dropped, and the candidate list with it), and it is what the status
+ * poll's re-prove paces itself against. Dropping the value for want of the other two would make
+ * the first held re-prove permanent.
+ */
+export function serializeReachability(value: EnvironmentReachability | null): string | null {
+  if (!value) return null
+  if (value.candidates.length === 0 && !value.proof && value.probedAt === undefined) return null
+  return JSON.stringify(value)
+}
+
 /** Project a stored record onto the wire handle, optionally with decrypted access. */
 export function recordToHandle(
   record: EnvironmentRecord,
@@ -274,14 +509,47 @@ export function recordToHandle(
     providerId: record.providerId,
     externalId: record.externalId,
     url: record.url,
+    reachability: parseReachability(record.reachability),
     status: record.status,
     ...(access ? { access } : {}),
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
     lastError: record.lastError,
+    statusNote: record.statusNote,
+    lastPolledAt: record.lastPolledAt,
+    pollCount: record.pollCount,
     provisionType: record.provisionType as EnvironmentHandle['provisionType'],
     engine: record.engine as EnvironmentHandle['engine'],
   }
+}
+
+/**
+ * How much of a provider's status note is persisted. The note is provider-authored prose that
+ * lands in three places a sentence has to stay readable in: the step's Environment panel, the
+ * readiness ceiling's run-failure message, and the outcome card's environment row.
+ *
+ * `lastError` is deliberately uncapped beside it, and the asymmetry is the point: a fault is
+ * something a person opens and scrolls (the panel gives it its own scrollable block), while the
+ * note is one muted line beside an environment that is doing fine. A code adapter answering with
+ * a controller dump or an event list would otherwise push everything under it off the surface.
+ */
+const STATUS_NOTE_CAP = 400
+
+/**
+ * A provider's status note as it is stored: trimmed, blank-as-null, and bounded.
+ *
+ * A capped note SAYS it was capped rather than trailing off, so a reader never takes the prefix
+ * for the whole account (the same rule every other cap in the environment path follows).
+ */
+export function boundStatusNote(note: string | null | undefined): string | null {
+  const trimmed = note?.trim()
+  if (!trimmed) return null
+  if (trimmed.length <= STATUS_NOTE_CAP) return trimmed
+  const dropped = trimmed.length - STATUS_NOTE_CAP
+  return (
+    `${trimmed.slice(0, STATUS_NOTE_CAP)} ` +
+    `[note truncated: ${dropped} of ${trimmed.length} characters dropped]`
+  )
 }
 
 /** Coerce an extracted expiry (epoch-ms number, numeric string, or ISO) to ms. */

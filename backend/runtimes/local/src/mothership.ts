@@ -1,28 +1,52 @@
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { mkdirSync } from 'node:fs'
 import { type CoreRepositories, type DriveConfig, driveExecution } from '@cat-factory/node-server'
 import {
+  DelegatedAppTokenSource,
+  HttpMachineEventClient,
+  HttpMachineNotificationClient,
+  HttpMachineTelemetryClient,
+  HttpMachineTelemetryReadClient,
+  HttpBinaryGeneratorSource,
+  HttpFoundationalBuiltinSource,
+  HttpDeploymentDocumentResolver,
+  HttpAgentKindSource,
+  HttpPromptFragmentSource,
   HttpPersistenceRpcClient,
+  HttpSecretDelegate,
+  type LocalFirstPersistenceRepository,
   type Logger,
   type MothershipConnector,
+  RemoteNotificationChannel,
   createRemoteRepositoryRegistry,
+  logger,
 } from '@cat-factory/server'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
+import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
+import { withTelemetryReadThrough } from './telemetryReadThrough.js'
+import { MothershipEventSubscriber } from './mothershipSubscriber.js'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
+import { localDbPath } from './sqlite/db.js'
+import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
+import { type LocalTelemetryStore, createLocalTelemetryStore } from './sqlite/telemetryStore.js'
 import {
   type LocalMachineTokenStore,
   createLocalMachineTokenStore,
 } from './sqlite/machineTokenStore.js'
 import { SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
+import {
+  createGuidedReviewQueue,
+  type SqliteGuidedReviewQueue,
+} from './sqlite/guidedReviewQueue.js'
 
 // Mothership mode (docs/initiatives/mothership-mode.md): the local node keeps NO main
 // database. Org/durable state lives on a hosted "mothership" cat-factory (Node or Cloudflare)
 // and is reached over the authenticated `/internal/persistence` machine API; agent/model
 // CREDENTIALS stay on the laptop in a file-based `node:sqlite` store, sealed with the LOCAL
-// key (the mothership's ENCRYPTION_KEY never reaches the machine). This module composes those
-// two halves into the seams `buildLocalContainer` threads into `buildNodeContainer`, and
-// supplies the in-process work runner that replaces pg-boss when there is no Postgres.
+// key (the mothership's ENCRYPTION_KEY never reaches the machine); and run TELEMETRY is
+// local-first in a second `node:sqlite` store (append-heavy and hot-path, so it must never
+// ride the per-call RPC). This module composes those halves into the seams
+// `buildLocalContainer` threads into `buildNodeContainer`, and supplies the in-process work
+// runner that replaces pg-boss when there is no Postgres.
 
 /** True when this local node should boot in mothership mode (a mothership URL is configured). */
 export function isMothershipMode(env: NodeJS.ProcessEnv): boolean {
@@ -35,23 +59,11 @@ function validCachedToken(store: LocalMachineTokenStore): string | null {
   return cached && cached.exp > Date.now() ? cached.token : null
 }
 
-/**
- * Resolve a local SQLite file path: an explicit override wins (incl. `:memory:` for tests), else a
- * stable per-user file under `~/.cat-factory` so the store survives restarts (the whole point of a
- * durable local store). Ensures the directory exists.
- */
-function localDbPath(explicit: string | undefined, fileName: string): string {
-  const override = explicit?.trim()
-  if (override) return override
-  const dir = join(homedir(), '.cat-factory')
-  mkdirSync(dir, { recursive: true })
-  return join(dir, fileName)
-}
-
 /** The composed mothership persistence: remote org repos + the local credential store. */
 export interface MothershipComposition {
   /**
-   * The full {@link CoreRepositories} surface, every entry remote (RPC-backed). The server-side
+   * The full {@link CoreRepositories} surface, remote (RPC-backed) except the local-first
+   * TELEMETRY bucket layered over it from {@link telemetryStore}. The server-side
    * allow-list (`REMOTE_PERSISTENCE_METHODS`) gates which repo+method actually executes on the
    * mothership; an un-allow-listed call returns `unknown_method`. The allow-list covers the
    * board-load + run paths (resolved by the Phase-3 merge gate — see
@@ -61,10 +73,142 @@ export interface MothershipComposition {
    * local (the `node:sqlite` store), composed over the top of this registry by the facade.
    */
   repos: CoreRepositories
-  /** The local-sqlite credential store (kept on the laptop, sealed with the local key). */
+  /**
+   * The local-sqlite credential store (kept on the laptop, sealed with the local key). Beyond the
+   * direct-vendor API-key pool + local-model endpoints, it now also backs the subscription
+   * credentials the local container executor leases — `providerSubscriptionTokenRepository`,
+   * `personalSubscriptionRepository`, `subscriptionActivationRepository` — for the same reason
+   * (they never traverse the machine API to the mothership).
+   */
   credentialStore: LocalCredentialStore
+  /**
+   * The local-sqlite store for the local-mode operational settings singleton (warm-pool +
+   * checkout config for the local Docker runner). NOT org state — it configures the local
+   * facade's own differentiator — so it lives on the laptop, not the mothership.
+   */
+  localSettingsStore: LocalSettingsStore
+  /**
+   * The local-sqlite TELEMETRY store (product decision 5: telemetry/logs are local-first). Holds
+   * the per-call LLM metrics, agent-context snapshots, performed web searches, provisioning log
+   * and modeled subscription quota cycles a run produces on this machine — append-heavy,
+   * high-volume, short-retention state that must never ride the per-call persistence RPC. Layered
+   * over the remote registry in {@link repos}, so every consumer (recorders, the observability
+   * endpoints, the board's per-step rollups) resolves it with no per-consumer wiring; the local
+   * retention sweep prunes it to the deployment's configured window.
+   */
+  telemetryStore: LocalTelemetryStore
+  /**
+   * Delegated GitHub token source: installation tokens minted BY THE MOTHERSHIP over
+   * `POST /internal/github/installation-token` (the mothership owns the GitHub App; its
+   * private key never reaches this machine). The facade wires it as the push-token mint +
+   * the `FetchGitHubClient` token source when no local `GITHUB_PAT` is configured, so
+   * agent containers, gates/merge, RepoFiles ops — and the environment self-test's branch
+   * create/delete — reach GitHub through the org's App installation. Reads the SAME
+   * machine token as the persistence RPC (per request, so a post-boot login is picked up).
+   */
+  githubTokenSource: DelegatedAppTokenSource
+  /**
+   * The catalog's `builtin` tier, read from the MOTHERSHIP over
+   * `GET /internal/foundational-services` (+ the batched `POST .../contracts`) rather than from this node's own
+   * `FoundationalServiceRegistry`. A deployment's estate is org state: with only the registry as
+   * a route it had to be registered on both entry points, and a node one build behind — the
+   * normal state of a local node — silently resolved a catalog missing whatever the mothership
+   * had since added, which reads exactly like an Architect judging a service irrelevant. Reads
+   * the SAME per-request machine token as the persistence RPC. See
+   * backend/docs/adr/0031-foundational-services.md.
+   */
+  foundationalBuiltins: HttpFoundationalBuiltinSource
+  /**
+   * The deployment's GENERATIVE BINARY INTEGRATIONS, read from the MOTHERSHIP over
+   * `GET /internal/binary-generators` (+ the batched `POST .../contracts`) rather than from this
+   * node's own `BinaryGeneratorRegistry`. Same story as the estate above with a louder symptom:
+   * the pipeline builder's picker is fed by the MOTHERSHIP's registry, so a node resolving its
+   * own copy refuses a step somebody configured through the product itself — reporting
+   * `unknown_generator` against a configuration that is correct, with the half-wired deployment
+   * invisible in the message. Reads the SAME per-request machine token as the persistence RPC.
+   */
+  binaryGenerators: HttpBinaryGeneratorSource
+  /**
+   * The deployment's best-practice PROMPT-FRAGMENT pool (and the per-task-type default sets that
+   * select them), read from the MOTHERSHIP over `GET /internal/prompt-fragments` rather than from
+   * this node's own `PromptFragmentRegistry`. The same story as its two siblings above: what a run
+   * folds as its standards has to be what the deployment actually registered, and this node's build
+   * can only hold a second copy. The symptom here is the quietest of the three, which is why it
+   * matters: a run judged against a standard the org never wrote, or against nothing at all, and
+   * the reviewer's adherence report reads perfectly well either way. Reads the SAME per-request
+   * machine token as the persistence RPC.
+   */
+  promptFragments: HttpPromptFragmentSource
+  /**
+   * The deployment's AGENT-KIND CAPABILITY layer (the skills and tool servers it assigns to kinds,
+   * built-in ones included), read from the MOTHERSHIP over `GET /internal/agent-kinds`. The fourth
+   * of the same family, and the only one that MERGES with this node's own registry rather than
+   * replacing it: a kind's executable half cannot cross a wire, so the catalog stays local and a
+   * step naming an unknown kind still fails loudly at admission, while the deployment's
+   * assignments are pure data whose absence here is silent — the agent just works without the
+   * org's playbook. Reads the SAME per-request machine token as the persistence RPC.
+   */
+  agentKinds: HttpAgentKindSource
+  /**
+   * How a code-registered fragment's `documentRef` resolves on a node: over
+   * `POST /internal/prompt-fragments/document-bodies`, because the credentials that authenticate
+   * the fetch live in the MOTHERSHIP's environment and never reach a laptop. So the credential
+   * stays put and the resolved BODY crosses, which is the same shape the sealed-secret rule forces
+   * on a decrypting repository.
+   */
+  deploymentDocuments: HttpDeploymentDocumentResolver
+  /**
+   * The real-time UPSTREAM propagation adapter: forwards this local node's engine events to the
+   * mothership over `POST /internal/events/publish`, so a hosted teammate on the same shared board
+   * sees the local node's activity live. `buildLocalContainer` wraps the local hub in a
+   * {@link LayeredEventPropagator} with this adapter, so every event fans to the laptop's own SPA AND
+   * the mothership with no engine change. Reads the SAME per-request machine token as the persistence
+   * RPC (a post-boot login is picked up without a restart). This is the OUTBOUND half of "real-time
+   * both directions"; the inbound subscribe leg is a later slice (see the tracker).
+   */
+  realtimeAdapter: MothershipWebSocketPropagator
+  /**
+   * The real-time INBOUND subscriber: holds one machine-authed WebSocket to the mothership's
+   * `GET /internal/events/subscribe/:ws` per workspace someone is watching locally, and
+   * re-broadcasts what arrives into the laptop's own hub. Without it a mothership-mode board is
+   * write-only in real time — it animates for work this laptop drove and stays frozen for a hosted
+   * teammate's. `buildLocalContainer` binds it to the injected hub; a token-less node just doesn't
+   * connect until the login completes.
+   */
+  realtimeSubscriber: MothershipEventSubscriber
+  /**
+   * The mothership-delegated notification channel: asks the mothership to deliver a notification
+   * this node raised (by id) through the ORG's external transports — Slack today. The bot token is
+   * sealed with the mothership's key, which never reaches this machine (product decision 3), so
+   * external delivery cannot happen locally; `buildLocalContainer` composes this channel alongside
+   * the local in-app push, whose frame already reaches the mothership over the real-time upstream
+   * relay. Reads the SAME per-request machine token as the persistence RPC.
+   */
+  notificationChannel: RemoteNotificationChannel
+  /**
+   * The SECRET DELEGATION client: opens (and seals) the ORG-owned credentials this laptop holds no
+   * key for (a provisioned environment's access handle, an infra handler's secret bundle, a
+   * release-health connection) over `POST /internal/secrets/{unseal,seal}`. It is the mirror
+   * image of the local credential store beside it: that keeps the laptop's OWN secrets off the
+   * mothership; this makes the ORG's secrets usable here without the mothership's key ever
+   * moving. `buildLocalContainer` threads it into `buildNodeContainer`'s `secretDelegate` seam, so
+   * every service holding one of those rows composes it with its own cipher. Reads the SAME
+   * per-request machine token as the persistence RPC.
+   */
+  secretDelegate: HttpSecretDelegate
+  /**
+   * The telemetry INGEST client: uploads a quiesced run's locally captured rows to the mothership
+   * over `POST /internal/telemetry/ingest` (product decision 5's sync UP). Without it a run this
+   * laptop drove is observable ONLY on this laptop, and only until the local retention window
+   * passes. `buildLocalContainer` drives it from the background ingest sweep; a token-less node
+   * simply keeps the rows local until the login completes. Reads the SAME per-request machine
+   * token as the persistence RPC.
+   */
+  telemetryClient: HttpMachineTelemetryClient
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
+  /** The durable local-sqlite guided-review job queue (pg-boss's `guided-review.run` stand-in). */
+  guidedReviewQueue: SqliteGuidedReviewQueue
   /**
    * The local-sqlite cache of the mothership-minted machine token. The `/local/mothership/connect`
    * login flow writes it; the RPC client's token provider reads it per request (below). Kept
@@ -99,23 +243,144 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     localDbPath(env.LOCAL_MOTHERSHIP_TOKEN_DB, 'machine-token.sqlite'),
   )
   const envToken = env.LOCAL_MOTHERSHIP_TOKEN?.trim()
-  const client = new HttpPersistenceRpcClient({
-    baseUrl,
-    token: () => envToken || validCachedToken(machineTokenStore),
+  const machineToken = () => envToken || validCachedToken(machineTokenStore)
+  const client = new HttpPersistenceRpcClient({ baseUrl, token: machineToken })
+  // Telemetry is LOCAL-FIRST (product decision 5), so its repositories are layered over the
+  // remote registry rather than proxied: they are written on the hot path of every LLM call,
+  // dispatch and provisioning attempt, and none of their methods is (or should be) allow-listed
+  // on the machine API. Opened before the registry so the composition is a single expression.
+  const telemetryStore = createLocalTelemetryStore(
+    localDbPath(env.LOCAL_MOTHERSHIP_TELEMETRY_DB, 'telemetry.sqlite'),
+  )
+  // READ-THROUGH: the three RUN-SCOPED sinks answer a read the local store has no rows for from
+  // the mothership's copy (`POST /internal/telemetry/read`), so a run whose local rows were
+  // pruned — or that another node drove entirely — renders instead of reading as a run that
+  // spent nothing. Wrapped HERE rather than at each consumer for the same reason the bucket is
+  // declared once: the registry is the composition seam, so the recorders, the observability
+  // endpoints, the board rollups and the debug surface all get it with no per-consumer wiring.
+  // The other two sinks are deliberately NOT wrapped — a provisioning log and a quota cycle are
+  // never ingested, so there is nothing on the mothership to read through to.
+  const readThrough = withTelemetryReadThrough(telemetryStore, {
+    client: new HttpMachineTelemetryReadClient({ baseUrl, token: machineToken }),
+    // What lets it tell a WHOLE local answer from the suffix the prune left behind. Threaded from
+    // the store rather than defaulted, so a facade cannot compose a read-through that silently
+    // reports a partially pruned run's token total as the run's.
+    coverage: telemetryStore.coverage,
+    logger,
   })
-  const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
+  // Typed by `LocalFirstPersistenceRepository` (the server-side declaration of the bucket), so
+  // the map can never be HALF-wired: omitting an entry fails to typecheck rather than silently
+  // leaving that repository on a remote proxy the allow-list only ever answers `unknown_method`.
+  const localFirst: Record<LocalFirstPersistenceRepository, unknown> = {
+    llmCallMetricRepository: readThrough.llmCallMetricRepository,
+    agentContextSnapshotRepository: readThrough.agentContextSnapshotRepository,
+    agentSearchQueryRepository: readThrough.agentSearchQueryRepository,
+    agentToolCallRepository: readThrough.agentToolCallRepository,
+    provisioningLogRepository: telemetryStore.provisioningLogRepository,
+    subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
+  }
+  const repos = createRemoteRepositoryRegistry(client, localFirst) as unknown as CoreRepositories
+  // Same base URL + per-request token as the persistence RPC, so GitHub delegation follows
+  // the exact connect/expiry lifecycle of the rest of the machine API.
+  const githubTokenSource = new DelegatedAppTokenSource({ baseUrl, token: machineToken })
+  // The foundational-service catalog's `builtin` tier, read from the mothership on the same base
+  // URL + per-request token. It is the deployment's ESTATE — org state — and this node's own
+  // build can only hold a second copy of it, so the node does not consult its own registry at all
+  // (see the boot warning in `server.ts` when one is nonetheless registered).
+  const foundationalBuiltins = new HttpFoundationalBuiltinSource({ baseUrl, token: machineToken })
+  // The deployment's generative integrations, on the same base URL + per-request token and for
+  // the same reason: what a run resolves a step's `generatorIds` against has to be the set the
+  // builder offered them from, and this node's own build can only hold a second copy of it (see
+  // the boot warning in `server.ts` when one is nonetheless registered).
+  const binaryGenerators = new HttpBinaryGeneratorSource({ baseUrl, token: machineToken })
+  // …and the standards pool, on the same base URL + per-request token, for the same reason once
+  // more (see the boot warning in `server.ts` when a registry is nonetheless registered here).
+  const promptFragments = new HttpPromptFragmentSource({ baseUrl, token: machineToken })
+  // …and the capability layer the deployment assigns to agent kinds, on the same base URL +
+  // per-request token. Unlike the three above it is MERGED with this node's own registry, because
+  // the half that cannot cross (a kind's prompts, hooks and output parser) is the half its own
+  // build owns.
+  const agentKinds = new HttpAgentKindSource({ baseUrl, token: machineToken })
+  // …and the living documents those standards may name. No `configuredSources` here: a node cannot
+  // see the mothership's environment, so it assumes every deployment-scopable source may be served
+  // and lets the read decide. That direction costs one round trip that resolves nothing; the
+  // opposite would silently skip a document the mothership could have served.
+  const deploymentDocuments = new HttpDeploymentDocumentResolver({ baseUrl, token: machineToken })
+  // Real-time, BOTH directions, on the SAME base URL + per-request token, so the stream follows the
+  // same connect/expiry lifecycle as the rest of the machine API. A token-less node neither
+  // publishes nor subscribes (its own SPA still gets every locally produced event).
+  //
+  // The two legs share ONE stable per-process connection id: the subscriber connects with it as
+  // `?cid=`, the publisher stamps it as `originConnectionId`, and the mothership's fan-out skips
+  // that socket — so this node's own events never come back down and reach its browsers twice.
+  const nodeConnectionId = `mothership-node-${crypto.randomUUID()}`
+  const realtimeAdapter = new MothershipWebSocketPropagator(
+    new HttpMachineEventClient({ baseUrl, token: machineToken }),
+    nodeConnectionId,
+  )
+  const realtimeSubscriber = new MothershipEventSubscriber({
+    baseUrl,
+    token: machineToken,
+    connectionId: nodeConnectionId,
+    log: logger,
+  })
+  // Notification delivery delegation: same base URL + per-request token again, so the org's Slack
+  // reaches the team for a run this laptop drove. A token-less node simply doesn't delegate (the
+  // row is still persisted and the in-app card still renders).
+  const notificationChannel = new RemoteNotificationChannel({
+    client: new HttpMachineNotificationClient({ baseUrl, token: machineToken }),
+    onError: (error, ctx) =>
+      logger.warn('mothership notification delivery failed', {
+        err: getErrorMessage(error),
+        ...ctx,
+      }),
+  })
+  // Secret delegation: the org's sealed rows are opened (and this node's writes sealed) by the
+  // mothership, on the SAME base URL + per-request token. A token-less node simply cannot open
+  // them: the client REJECTS rather than answering an empty credential, because provisioning
+  // against an empty bundle would fail somewhere far less legible.
+  const secretDelegate = new HttpSecretDelegate({ baseUrl, token: machineToken })
+  // Telemetry sync UP: the local-first capture above stays on the laptop until this carries a
+  // quiesced run's rows to the mothership. Same base URL + per-request token again, so it follows
+  // the same connect/expiry lifecycle as the rest of the machine API.
+  const telemetryClient = new HttpMachineTelemetryClient({ baseUrl, token: machineToken })
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
   )
+  const localSettingsStore = createLocalSettingsStore(
+    localDbPath(env.LOCAL_MOTHERSHIP_SETTINGS_DB, 'local-settings.sqlite'),
+  )
   const workQueue = createWorkQueue(localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'))
+  // A second table in the work-queue file, so the one override (`:memory:` in tests) covers both.
+  const guidedReviewQueue = createGuidedReviewQueue(
+    localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'),
+  )
   return {
     repos,
+    githubTokenSource,
+    foundationalBuiltins,
+    binaryGenerators,
+    promptFragments,
+    agentKinds,
+    deploymentDocuments,
+    realtimeAdapter,
+    realtimeSubscriber,
+    notificationChannel,
+    secretDelegate,
+    telemetryClient,
     credentialStore,
+    localSettingsStore,
+    telemetryStore,
     workQueue,
+    guidedReviewQueue,
     machineTokenStore,
     close: () => {
+      realtimeSubscriber.stop()
       credentialStore.close()
+      localSettingsStore.close()
+      telemetryStore.close()
       workQueue.close()
+      guidedReviewQueue.close()
       machineTokenStore.close()
     },
   }
@@ -153,7 +418,7 @@ export function createMothershipConnector(opts: {
         return {
           ok: false,
           status: 502,
-          message: `Could not reach the mothership: ${err instanceof Error ? err.message : String(err)}`,
+          message: `Could not reach the mothership: ${getErrorMessage(err)}`,
         }
       }
       const body = (await res.json().catch(() => null)) as {
@@ -275,10 +540,9 @@ export class SqliteWorkRunner implements WorkRunner {
     // drives nothing yet), so reclaim it for an immediate re-drive.
     const orphans = this.queue.resetOrphans()
     if (orphans > 0) {
-      this.log.warn(
-        { orphans },
-        'mothership work queue: re-driving runs orphaned by a prior process',
-      )
+      this.log.warn('mothership work queue: re-driving runs orphaned by a prior process', {
+        orphans,
+      })
     }
     this.drain()
     // Boot-time storage reconciliation: re-enqueue any run `running` in storage with no queue row
@@ -378,10 +642,11 @@ export class SqliteWorkRunner implements WorkRunner {
       }
     } catch (err) {
       if (this.stopped) return
-      this.log.error(
-        { workspaceId, executionId, err: err instanceof Error ? err.message : String(err) },
-        'mothership in-process execution driver failed',
-      )
+      this.log.error('mothership in-process execution driver failed', {
+        workspaceId,
+        executionId,
+        err: getErrorMessage(err),
+      })
       // Hold the run for a backoff'd retry, bumping the consecutive-failure count; once it reaches
       // the cap the next drain evicts it (and fails it loudly) rather than re-driving forever.
       this.queue.deferFailure(executionId, this.now() + this.opts.errorBackoffMs)
@@ -411,10 +676,11 @@ export class SqliteWorkRunner implements WorkRunner {
     executionId: string,
     attempts: number,
   ): Promise<void> {
-    this.log.error(
-      { workspaceId, executionId, attempts },
-      'mothership work queue: evicting run after repeated drive failures',
-    )
+    this.log.error('mothership work queue: evicting run after repeated drive failures', {
+      workspaceId,
+      executionId,
+      attempts,
+    })
     try {
       await this.exec?.failRun(
         workspaceId,
@@ -424,10 +690,11 @@ export class SqliteWorkRunner implements WorkRunner {
         null,
       )
     } catch (err) {
-      this.log.error(
-        { workspaceId, executionId, err: err instanceof Error ? err.message : String(err) },
-        'mothership work queue: failed to mark an evicted run failed',
-      )
+      this.log.error('mothership work queue: failed to mark an evicted run failed', {
+        workspaceId,
+        executionId,
+        err: getErrorMessage(err),
+      })
     }
   }
 
@@ -457,8 +724,8 @@ export class SqliteWorkRunner implements WorkRunner {
     }
     if (recovered > 0) {
       this.log.warn(
-        { recovered },
         'mothership work queue: re-enqueued runs still running in storage with no queue row',
+        { recovered },
       )
       this.drain()
     }

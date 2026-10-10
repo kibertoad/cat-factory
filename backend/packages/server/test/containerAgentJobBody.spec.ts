@@ -7,6 +7,11 @@ import type {
   RunnerJobResult,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import {
+  CONTEXT_DOCUMENTS_OVER_BUDGET,
+  FOUNDATIONAL_CATALOG_FILE,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -14,6 +19,12 @@ import {
   type ContainerAgentExecutorDependencies,
 } from '../src/agents/ContainerAgentExecutor.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
+// Derived rather than spelled out: what these specs are about is that the prompt names the
+// sibling checkout for each repo, not what that name looks like. The NAME's shape is pinned
+// where it matters, against the harness that creates the directory, by the executor-harness's
+// `harness-contract.conformity.test.ts`. Hard-coding it here would put a third copy of the rule
+// in a spec that has no way to tell the harness it moved.
+import { siblingCheckoutDir } from '../src/agents/harnessContract.js'
 
 // Characterization snapshot of the harness job body `buildJobBody` produces for each
 // agent kind. `buildJobBody` is private, so we drive it through `startJob` and capture
@@ -21,6 +32,11 @@ import type { ContainerSessionService } from '../src/containers/ContainerSession
 // (ModelRouter + a common-body + per-kind delta table) is behaviour-preserving, so these
 // snapshots must be byte-identical before and after — they are the diff-the-bodies guard
 // the plan calls for.
+//
+// Two clusters that had subjects of their own were split out of here when this file hit its size
+// budget: the multi-repo LAYOUT of one dispatch (`containerAgentMultiRepo.spec`) and the
+// DIRECTIVES a dispatch composes around a kind's prompt, read-only guardrail through
+// PR-description sentinel (`containerAgentDispatchDirectives.spec`).
 
 const PI_REF: ModelRef = { provider: 'workers-ai', model: '@cf/test/model' }
 
@@ -35,7 +51,10 @@ interface Captured {
   kind: RunnerDispatchKind | undefined
 }
 
-function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[] } {
+function makeExecutor(depsOverride: Partial<ContainerAgentExecutorDependencies> = {}): {
+  executor: ContainerAgentExecutor
+  captured: Captured[]
+} {
   const captured: Captured[] = []
   const transport: RunnerTransport = {
     async dispatch(ref, spec, kind) {
@@ -57,6 +76,7 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',
@@ -65,10 +85,11 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
     sessionService,
     proxyBaseUrl: 'https://proxy.test/v1',
     githubApiBase: 'https://api.github.com',
-    resolveWebSearchEnabled: async () => true,
+    resolveWebSearchAvailability: async () => ({ available: true, provider: 'searxng' as const }),
     // Read-only agents only probe the work branch; return true so the read-only body
     // resolves to the shared work branch (the more interesting path).
     ensureWorkBranch: async () => true,
+    ...depsOverride,
   }
   return { executor: new ContainerAgentExecutor(deps), captured }
 }
@@ -77,6 +98,7 @@ function context(
   agentKind: string,
   overrides: Partial<AgentRunContext['block']> = {},
   service?: AgentRunContext['service'],
+  extra: Partial<AgentRunContext> = {},
 ): AgentRunContext {
   return {
     agentKind: agentKind as AgentRunContext['agentKind'],
@@ -96,6 +118,7 @@ function context(
     resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
+    ...extra,
   }
 }
 
@@ -129,6 +152,30 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('conflict-resolver', async () => {
     await executor.startJob(context('conflict-resolver', { pullRequest: PR }))
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  it('resolves an ATTACHED pull request on its own branch and creates no work branch', async () => {
+    const created: string[] = []
+    const made = makeExecutor({
+      ensureWorkBranch: async (_repo, branch, options) => {
+        if (options.create) created.push(branch)
+        return true
+      },
+    })
+    const attached = {
+      url: 'https://github.com/acme/widgets/pull/12',
+      number: 12,
+      branch: 'theirs',
+    }
+    await made.executor.startJob(
+      context('conflict-resolver', { taskType: 'resolve-conflicts', pullRequest: attached }),
+    )
+    expect(created).toEqual([])
+    expect(made.captured[0]!.spec).toMatchObject({
+      branch: 'theirs',
+      pushBranch: 'theirs',
+      mergeBase: 'main',
+    })
   })
 
   it('merger', async () => {
@@ -181,9 +228,121 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  // Trait guidance that NAMES an injected `.cat-context/` file is gated on that file arriving, and
+  // the snapshots above are dispatches that inject none: neither the architect nor the coder now
+  // carries the foundational reuse mandate there. Both directions have to be pinned, because a
+  // regression in either is silent — the gate stuck shut is a design that never hears about the
+  // shared services it should be reusing, and the gate stuck open is the ~200 words of dangling
+  // pointer this replaced.
+  it('gates the foundational guidance on the catalog file this dispatch actually injected', async () => {
+    await executor.startJob(context('architect'))
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain(FOUNDATIONAL_CATALOG_FILE)
+
+    await executor.startJob(
+      context('architect', {}, undefined, {
+        injectedContextFiles: [{ path: FOUNDATIONAL_CATALOG_FILE, content: '# services' }],
+      }),
+    )
+    const withCatalog = captured[1]!.spec.systemPrompt as string
+    expect(withCatalog).toContain(FOUNDATIONAL_CATALOG_FILE)
+    expect(withCatalog).toContain('Prefer an existing foundational service')
+  })
+
   it('default (coder)', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  // The `code-commenter` kind clones `pr-or-work`: it AMENDS the coder's PR in place when one
+  // exists (the BAU pipeline step), and OPENS its own PR when there is none (a standalone /
+  // initiative sweep). One kind, two behaviours resolved from the block's PR at dispatch.
+  it('code-commenter amends the coder PR in place when one exists (BAU pipeline step)', async () => {
+    await executor.startJob(context('code-commenter', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('cat-factory/blk_1') // clones the PR head
+    expect(spec.pushBranch).toBe('cat-factory/blk_1') // pushes comment-only edits back onto it
+    expect(spec.newBranch).toBeUndefined() // no new branch — edits in place
+    expect(spec.pr).toBeUndefined() // opens no new PR
+    expect(spec.noChangesIsError).toBe(false) // "comments already fine" is a clean non-event
+  })
+
+  it('code-commenter opens its own PR when the block has none (standalone / initiative sweep)', async () => {
+    await executor.startJob(context('code-commenter'))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('main') // branches off base
+    expect(spec.newBranch).toBe('cat-factory/blk_1') // onto a fresh work branch
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    expect(spec.pr).toBeDefined() // and opens a PR
+    expect(spec.noChangesIsError).toBe(false)
+  })
+
+  // Read-only reference repos (doc-writer): a doc task with reference repos attached dispatches a
+  // MULTI-REPO coding body carrying each reference as a READ-ONLY spec (repo only — no newBranch/pr)
+  // plus a "Reference repositories" system-prompt section naming the sibling directories.
+  const REFERENCE_REPOS: NonNullable<AgentRunContext['referenceRepos']> = [
+    { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' },
+  ]
+
+  it('doc-writer emits read-only referenceRepos + a reference section', async () => {
+    await executor.startJob({ ...context('doc-writer'), referenceRepos: REFERENCE_REPOS })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.referenceRepos).toEqual([
+      {
+        repo: {
+          owner: 'acme',
+          name: 'design-system',
+          baseBranch: 'trunk',
+          cloneUrl: 'https://github.com/acme/design-system.git',
+          provider: 'github',
+        },
+      },
+    ])
+    // Structurally unpushable: the reference leg carries no branch or PR.
+    expect(spec.referenceRepos).not.toMatchObject([{ newBranch: expect.anything() }])
+    expect(spec.referenceRepos).not.toMatchObject([{ pr: expect.anything() }])
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('## Reference repositories')
+    expect(systemPrompt).toContain(`${siblingCheckoutDir('acme', 'design-system')}/`)
+  })
+
+  it('doc-writer with NO reference repos emits no referenceRepos field', async () => {
+    await executor.startJob(context('doc-writer'))
+    expect(captured[0]!.spec.referenceRepos).toBeUndefined()
+    expect(captured[0]!.spec.systemPrompt).not.toContain('## Reference repositories')
+  })
+
+  it('a non-reference kind (coder) ignores referenceRepos on the context (kind gate)', async () => {
+    await executor.startJob({ ...context('coder'), referenceRepos: REFERENCE_REPOS })
+    expect(captured[0]!.spec.referenceRepos).toBeUndefined()
+  })
+
+  it('drops a reference that collides with the primary or another reference (sibling-dir dedup)', async () => {
+    // The primary repo is `acme/widgets`. A reference pointing at it — or a duplicate reference —
+    // would claim the same `owner__name` sibling directory as an existing leg, so the second clone
+    // would fail into a non-empty dir. The executor dedups by that key, keeping only `design-system`.
+    await executor.startJob({
+      ...context('doc-writer'),
+      referenceRepos: [
+        { repoId: 999, owner: 'ACME', name: 'Widgets', defaultBranch: 'main' }, // == primary, dropped
+        { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' },
+        { repoId: 112, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' }, // dup, dropped
+      ],
+    })
+    const spec = captured[0]!.spec
+    expect(spec.referenceRepos).toEqual([
+      {
+        repo: {
+          owner: 'acme',
+          name: 'design-system',
+          baseBranch: 'trunk',
+          cloneUrl: 'https://github.com/acme/design-system.git',
+          provider: 'github',
+        },
+      },
+    ])
   })
 
   it('folds a tuned kind’s loosen-only guard overrides into the job body', async () => {
@@ -201,6 +360,526 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('omits packageRegistries when no resolver is wired', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]!.spec.packageRegistries).toBeUndefined()
+  })
+
+  it('refuses the dispatch when the linked context overflows the byte budget', async () => {
+    // The unit test on `buildContextFiles` proves the throw; this proves it survives `startJob`
+    // — nothing reaches the transport, and the throw is a `DomainError` carrying the cause code,
+    // which is what makes `classifyDispatchFailure` file it as a `preflight` rejection rather
+    // than "the container failed to start".
+    const error = await executor
+      .startJob(
+        context('coder', {
+          contextDocs: [
+            {
+              title: 'Platform PRD',
+              url: 'https://wiki.test/prd',
+              origin: 'confluence' as const,
+              excerpt: 'x',
+              summary: 'x',
+              body: 'x'.repeat(300_000),
+            },
+          ],
+        }),
+      )
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details?.reason).toBe(CONTEXT_DOCUMENTS_OVER_BUDGET)
+    expect((error as ValidationError).message).toContain('"Platform PRD"')
+    // No partial corpus was shipped: the agent never got a half-context it could not detect.
+    expect(captured).toEqual([])
+  })
+})
+
+// Apriori WORKING branch: a task names an existing branch as the run's starting point, so the
+// executor swaps it in for the deterministic `cat-factory/<blockId>` work branch. The branch
+// must pre-exist (probe-only, never created); a missing one — or one equal to base — fails the
+// dispatch loudly.
+describe('ContainerAgentExecutor apriori working branch', () => {
+  const WORKING: NonNullable<AgentRunContext['aprioriBranches']> = [
+    { name: 'feature/spike', mode: 'working' },
+  ]
+
+  it('coder builds inside the apriori working branch (newBranch/pushBranch swapped, PR head = it)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('coder'), aprioriBranches: WORKING })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('main') // still branches off base…
+    expect(spec.newBranch).toBe('feature/spike') // …onto the user's branch, not cat-factory/*
+    expect(spec.pushBranch).toBe('feature/spike')
+    expect(spec.pr).toBeDefined() // opens the PR from the apriori branch
+  })
+
+  it('a read-only agent explores the apriori working branch (probe reports it ready)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('architect'), aprioriBranches: WORKING })
+    expect(captured[0]!.spec.branch).toBe('feature/spike')
+  })
+
+  it('probes the apriori branch (create: false), never creating it', async () => {
+    const calls: { branch: string; create: boolean }[] = []
+    const { executor } = makeExecutor({
+      ensureWorkBranch: async (_repo, branch, options) => {
+        calls.push({ branch, create: options.create })
+        return true
+      },
+    })
+    await executor.startJob({ ...context('coder'), aprioriBranches: WORKING })
+    expect(calls).toEqual([{ branch: 'feature/spike', create: false }])
+  })
+
+  it('fails the dispatch loudly when the apriori working branch does not exist', async () => {
+    const { executor } = makeExecutor({ ensureWorkBranch: async () => false })
+    await expect(
+      executor.startJob({ ...context('coder'), aprioriBranches: WORKING }),
+    ).rejects.toThrow(/feature\/spike.*does not exist/s)
+  })
+
+  it('rejects an apriori working branch equal to the repo base branch', async () => {
+    const { executor } = makeExecutor()
+    await expect(
+      executor.startJob({
+        ...context('coder'),
+        aprioriBranches: [{ name: 'main', mode: 'working' }],
+      }),
+    ).rejects.toThrow(/base branch/)
+  })
+
+  it('takes the ready path (no probe) once a PR is open on the apriori branch', async () => {
+    let probed = false
+    const { executor, captured } = makeExecutor({
+      ensureWorkBranch: async () => {
+        probed = true
+        return true
+      },
+    })
+    await executor.startJob({
+      ...context('coder', {
+        pullRequest: { url: 'https://gh/pr/5', number: 5, branch: 'feature/spike' },
+      }),
+      aprioriBranches: WORKING,
+    })
+    expect(probed).toBe(false) // the recorded PR head IS the work branch → skip the round-trip
+    // The work branch stays the apriori branch (a coder branches off base onto it).
+    expect(captured[0]!.spec.newBranch).toBe('feature/spike')
+    expect(captured[0]!.spec.pushBranch).toBe('feature/spike')
+  })
+
+  it('a reference-only apriori entry leaves the work branch as the platform default', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({
+      ...context('coder'),
+      aprioriBranches: [{ name: 'spike/prior-art', mode: 'reference' }],
+    })
+    expect(captured[0]!.spec.newBranch).toBe('cat-factory/blk_1')
+  })
+})
+
+// Apriori REFERENCE branches: a task names existing branches of its OWN repo as read-only
+// prior-art. The consumer kinds (coder / spec-writer / doc-writer / architect / analysis) receive
+// them as a `referenceBranches` job field (fetched into `origin/<b>` by the harness) + a "Reference
+// branches" system-prompt section; a missing one is DROPPED at dispatch (probe-only, asymmetric
+// with a missing WORKING branch, which fails loudly).
+describe('ContainerAgentExecutor apriori reference branches', () => {
+  const REFS: NonNullable<AgentRunContext['aprioriBranches']> = [
+    { name: 'spike/prior-art', mode: 'reference' },
+    { name: 'proto/v2', mode: 'reference' },
+  ]
+
+  it('coder (coding body) carries referenceBranches + a section, never a branch/PR for them', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+    // The work branch is unchanged — reference branches never become the run's HEAD.
+    expect(spec.newBranch).toBe('cat-factory/blk_1')
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('## Reference branches')
+    expect(systemPrompt).toContain('origin/spike/prior-art')
+    expect(systemPrompt).toContain('origin/proto/v2')
+  })
+
+  it('architect (explore body) carries referenceBranches + a section', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('architect'), aprioriBranches: REFS })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+    expect(spec.systemPrompt as string).toContain('## Reference branches')
+  })
+
+  it('spec-writer (structured explore) carries referenceBranches', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('spec-writer'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+  })
+
+  it('a non-consumer kind (merger) ignores reference branches (kind gate)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({
+      ...context('merger', { pullRequest: PR }),
+      aprioriBranches: REFS,
+    })
+    expect(captured[0]!.spec.referenceBranches).toBeUndefined()
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain('## Reference branches')
+  })
+
+  it('drops a reference branch that no longer exists (probe reports it missing)', async () => {
+    const { executor, captured } = makeExecutor({
+      ensureWorkBranch: async (_repo, branch) => branch !== 'proto/v2',
+    })
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toEqual(['spike/prior-art'])
+  })
+
+  it('emits no referenceBranches field when all named branches are missing', async () => {
+    const { executor, captured } = makeExecutor({ ensureWorkBranch: async () => false })
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toBeUndefined()
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain('## Reference branches')
+  })
+
+  it('never fetches the working branch as a reference (dedup vs the resolved work branch)', async () => {
+    // A working + reference pair where the reference happens to equal the resolved work branch is
+    // excluded from the fetch list (the agent already builds ON that branch).
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({
+      ...context('coder'),
+      aprioriBranches: [
+        { name: 'feature/spike', mode: 'working' },
+        { name: 'feature/spike', mode: 'reference' },
+        { name: 'proto/v2', mode: 'reference' },
+      ],
+    })
+    const spec = captured[0]!.spec
+    expect(spec.newBranch).toBe('feature/spike')
+    expect(spec.referenceBranches).toEqual(['proto/v2'])
+  })
+
+  it('forwards named branches unprobed when ensureWorkBranch is unwired (tests / no GitHub)', async () => {
+    const { executor, captured } = makeExecutor({ ensureWorkBranch: undefined })
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+  })
+})
+
+// The pr-reviewer (`clone.prHead`) reviews an EXISTING PR: the engine resolves that PR's number
+// from the review task's fields (`prNumber`/`prUrl`, the same source the diff pre-op uses) into the
+// job's `reviewPrNumber`, so the harness can prefetch `pull/<n>/head` into `origin/pr-head`. A kind
+// without `clone.prHead` never carries it, and an unresolvable number degrades to no prefetch.
+describe('ContainerAgentExecutor pr-reviewer PR-head prefetch (reviewPrNumber)', () => {
+  it('carries reviewPrNumber resolved from the review task prNumber field', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('pr-reviewer', { taskTypeFields: { prNumber: 4558 } }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.reviewPrNumber).toBe(4558)
+  })
+
+  it('resolves reviewPrNumber from a prUrl when prNumber is absent', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('pr-reviewer', {
+        taskTypeFields: { prUrl: 'https://github.com/acme/widgets/pull/321' },
+      }),
+    )
+    expect(captured[0]!.spec.reviewPrNumber).toBe(321)
+  })
+
+  it('omits reviewPrNumber when the review task carries no PR reference (degrades cleanly)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('pr-reviewer'))
+    expect(captured[0]!.spec.reviewPrNumber).toBeUndefined()
+  })
+
+  it('never carries reviewPrNumber for a kind without clone.prHead (architect), even with PR fields', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('architect', { taskTypeFields: { prNumber: 4558 } }))
+    expect(captured[0]!.spec.reviewPrNumber).toBeUndefined()
+  })
+})
+
+// The `task-reassessor` uses the same prefetch to read a change the RUN opened, so it DECLARES that
+// source (`clone.prHeadSource: 'run'`) rather than sharing a precedence with the reviewer, whose
+// subject is the pull request its task names. And because its whole job is that change, `requirePr`
+// turns an unresolvable number into a refusal instead of a base-branch checkout it would score as
+// though it were the change. In a real run that refusal is not reached: `runStepPreamble` skips such
+// a step (`no_pull_request`) before a dispatch is built, and this is the invariant's backstop.
+describe('ContainerAgentExecutor task-reassessor PR-head prefetch', () => {
+  it('resolves reviewPrNumber from the pull request the run opened', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('task-reassessor', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.reviewPrNumber).toBe(9)
+    // BASE, not the PR branch: a merge deletes that branch while `refs/pull/<n>/head` survives it.
+    expect(spec.branch).toBe('main')
+    expect(spec.full).toBe(true)
+  })
+
+  it('refuses the dispatch when the task has no pull request at all', async () => {
+    const { executor, captured } = makeExecutor()
+    await expect(executor.startJob(context('task-reassessor'))).rejects.toThrow(
+      /needs the pull request carrying this task's change/,
+    )
+    expect(captured).toHaveLength(0)
+  })
+
+  it('leaves the reviewer reading the pull request its TASK names', async () => {
+    // Each kind DECLARES its source (`clone.prHeadSource`) instead of sharing a `task ?? run`
+    // precedence. A precedence reads as harmless and silently widens the reviewer: a review task
+    // whose run also opened a pull request would start prefetching a head its review state knows
+    // nothing about, while the prompt and the diff preOp still described the declared one.
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('pr-reviewer', { taskTypeFields: { prNumber: 4558 }, pullRequest: PR }),
+    )
+    expect(captured[0]!.spec.reviewPrNumber).toBe(4558)
+  })
+
+  it('does not let a task declaration stand in for the change the run never landed', async () => {
+    // The mirror of the case above. The reassessor's subject is the run's own pull request, so a
+    // number the task declares is not a fallback for it — measuring an unrelated PR and recording
+    // the score as this task's is worse than recording nothing.
+    const { executor, captured } = makeExecutor()
+    await expect(
+      executor.startJob(context('task-reassessor', { taskTypeFields: { prNumber: 4558 } })),
+    ).rejects.toThrow(/needs the pull request carrying this task's change/)
+    expect(captured).toHaveLength(0)
+  })
+})
+
+describe('ContainerAgentExecutor job-token scope', () => {
+  // The job token is narrowed to the repos ONE dispatch resolved, so a fully compromised run
+  // reaches the repos the run was about rather than every repo the installation covers
+  // (`backend/docs/security-model.md`, Layer 3). What the executor owes is the SCOPE; turning
+  // it into GitHub's `repository_ids` is the facade's job (`buildDispatchTokenMint`).
+
+  const OWN = {
+    installationId: 7,
+    repoId: '1001',
+    owner: 'acme',
+    name: 'widgets',
+    baseBranch: 'main',
+  }
+  const PEER = {
+    installationId: 7,
+    repoId: '2002',
+    owner: 'acme',
+    name: 'billing',
+    baseBranch: 'develop',
+  }
+  // A peer the workspace reaches through a DIFFERENT installation: one job carries one token, so
+  // this repo is unreachable with or without scoping and naming it would only make GitHub reject
+  // the mint.
+  const FOREIGN = {
+    installationId: 99,
+    repoId: '3003',
+    owner: 'other',
+    name: 'shared',
+    baseBranch: 'main',
+  }
+
+  function captureScope(depsOverride: Partial<ContainerAgentExecutorDependencies> = {}) {
+    const scopes: (string[] | undefined)[] = []
+    const made = makeExecutor({
+      resolveRepoTarget: async () => OWN,
+      mintInstallationToken: async (_id, ctx) => {
+        scopes.push(ctx?.repoIds)
+        return 'GH-TOKEN'
+      },
+      ...depsOverride,
+    })
+    return { ...made, scopes }
+  }
+
+  it('scopes a single-repo dispatch to the primary repo alone', async () => {
+    const { executor, scopes } = captureScope()
+    await executor.startJob(context('coder'))
+    expect(scopes).toEqual([['1001']])
+  })
+
+  it('scopes a multi-repo fan-out to the primary plus every peer checkout', async () => {
+    const { executor, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('coder', {}, undefined, {
+        involvedServices: [{ frameId: 'frm_peer', name: 'billing' }],
+      } as never),
+    )
+    // The primary is FIRST and always present: a scope missing it would mint a token that cannot
+    // clone the repo the run is about.
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('drops a leg on another installation rather than asking for a token that cannot cover it', async () => {
+    const { executor, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: FOREIGN, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('coder', {}, undefined, {
+        involvedServices: [{ frameId: 'frm_peer', name: 'shared' }],
+      } as never),
+    )
+    expect(scopes).toEqual([['1001']])
+  })
+
+  it('scopes the merger to every peer PR repo it clones as a sibling', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('merger', {
+        pullRequest: PR,
+        peerPullRequests: [
+          {
+            repo: 'acme/billing',
+            frameIds: ['frm_peer'],
+            ref: {
+              url: 'https://github.com/acme/billing/pull/3',
+              number: 3,
+              branch: 'cat-factory/blk_1',
+            },
+          },
+        ],
+      }),
+    )
+    // Every repo the body tells the harness to clone is in the scope: a leg dropped from the
+    // scope is a clone the harness cannot make. (The converse does NOT hold, deliberately: the
+    // merger REPLACES the fan-out's peers in the body while their ids stay in the scope, so the
+    // scope is a superset. Widening beyond what the body names costs nothing; narrowing below it
+    // breaks the clone.)
+    expect(captured[0]!.spec.peerRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes the conflict-resolver to the peer repo it is retargeted onto', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      } as never),
+    )
+    // The resolver clones the PEER, not the primary. The primary stays in the scope anyway
+    // (`jobTokenRepoIds` always yields it), which is a token slightly wider than this one job
+    // needs and never one that cannot clone what the body names.
+    expect(captured[0]!.spec.repo).toMatchObject({ name: 'billing' })
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes a read-only reference repo the same as a writable leg', async () => {
+    const { executor, captured, scopes } = captureScope()
+    await executor.startJob({
+      ...context('doc-writer'),
+      referenceRepos: [{ repoId: 2002, owner: 'acme', name: 'billing', defaultBranch: 'develop' }],
+    } as never)
+    // A reference repo is cloned read-only, but a token that cannot READ it fails the clone
+    // exactly as one that cannot write does, so it belongs in the scope.
+    expect(captured[0]!.spec.referenceRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+})
+
+describe('ContainerAgentExecutor pre-PR validation checks (job-body gating)', () => {
+  // The commands ride the JOB BODY (containers have no DB access), and only for a dispatch that
+  // actually OPENS a pull request — that is what "pre-PR" means. An in-place fixer pushing onto
+  // an EXISTING PR head is deliberately excluded: the `ci` gate is already the loop there, so
+  // forwarding checks would run a second, redundant repair loop inside the fixer.
+  const validationChecks = {
+    checks: [{ label: 'lint', command: 'pnpm lint' }],
+    maxAttempts: 2,
+  }
+
+  it('forwards the service’s checks on a PR-opening coding dispatch', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder', {}, undefined, { validationChecks }))
+    expect(captured[0]!.spec.validationChecks).toEqual(validationChecks)
+  })
+
+  it('omits them for an in-place fixer, which pushes onto an existing PR head', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('ci-fixer', { pullRequest: PR }, undefined, { validationChecks }),
+    )
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+
+  it('omits them when the service configured none (the unconfigured path is unchanged)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder'))
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+})
+
+describe('ContainerAgentExecutor dependency prepopulation (job-body gating)', () => {
+  // The install rides the BASE job body, under a deliberately WIDER rule than the pre-PR checks
+  // above: every dispatch that gets a checkout, not only one that opens a pull request. These
+  // tests exist to pin that difference — folding the install in beside `validationChecks` would
+  // typecheck, pass every harness test, and silently leave every read-only agent (the ones whose
+  // complaint motivated the feature) reasoning about a manifest instead of the packages.
+  const dependencyInstall = 'pnpm install --frozen-lockfile'
+
+  it('forwards the install on a PR-opening coding dispatch', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder', {}, undefined, { dependencyInstall }))
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+  })
+
+  it('forwards it on a read-only EXPLORE dispatch, which opens no PR', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('architect', {}, undefined, { dependencyInstall }))
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+  })
+
+  it('forwards it to an in-place fixer, which the pre-PR checks deliberately skip', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('ci-fixer', { pullRequest: PR }, undefined, { dependencyInstall }),
+    )
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+    // The two gates are independent, and this is the case that proves it.
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+
+  it('omits it when the service declared none (the unconfigured path is unchanged)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder'))
+    // Absent, never an empty object: the harness keys the whole phase off the field's presence.
+    expect(captured[0]!.spec.dependencyInstall).toBeUndefined()
   })
 })
 
@@ -233,6 +912,7 @@ describe('ContainerAgentExecutor private package registries', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -287,6 +967,7 @@ describe('ContainerAgentExecutor private package registries', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -303,6 +984,141 @@ describe('ContainerAgentExecutor private package registries', () => {
       },
     })
     await expect(executor.startJob(context('coder'))).rejects.toThrow('decrypt failed')
+  })
+})
+
+describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
+  // The independent dispatch resolutions (work-branch ensure, the auxiliary-checkout resolution,
+  // auth, package registries, tester secrets, web-search availability) are fanned
+  // out in one wave once the repo target is resolved (audit item 4). This pins that they overlap
+  // rather than running one-after-another, and that a failing context-observability record still
+  // never breaks a dispatch.
+  //
+  // The installation-token mint is deliberately NOT in the wave: it is narrowed to the repos the
+  // auxiliary resolution produces, so it cannot start until the wave settles. That ordering is
+  // the security property (`jobTokenRepoIds`), so it is pinned here as its own assertion rather
+  // than left to be re-parallelised by a later latency pass.
+
+  // A deferred promise whose resolution we drive from the test, so we can observe which
+  // resolvers have STARTED before any of them finishes.
+  function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  it('starts the independent dispatch resolvers concurrently, and mints the token after them', async () => {
+    const started = { token: false, branch: false, registries: false, search: false }
+    const gates = {
+      token: deferred<string>(),
+      branch: deferred<boolean>(),
+      registries: deferred<never[]>(),
+      search: deferred<{ available: boolean; provider: null }>(),
+    }
+    const transport: RunnerTransport = {
+      async dispatch() {},
+      async poll() {
+        return { state: 'running' }
+      },
+    }
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: async () => transport,
+      agentRouting: routing,
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: async () => ({
+        installationId: 7,
+        repoId: '1001',
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+      }),
+      mintInstallationToken: () => {
+        started.token = true
+        return gates.token.promise
+      },
+      ensureWorkBranch: () => {
+        started.branch = true
+        return gates.branch.promise
+      },
+      resolvePackageRegistries: () => {
+        started.registries = true
+        return gates.registries.promise
+      },
+      resolveWebSearchAvailability: () => {
+        started.search = true
+        return gates.search.promise
+      },
+      sessionService: {
+        async mint() {
+          return 'SESSION-TOKEN'
+        },
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.test/v1',
+    })
+
+    const job = executor.startJob(context('coder'))
+    // Let the pending microtasks + a macrotask boundary drain so every resolver has been kicked
+    // off (the repo-target/model resolutions precede the wave). None has RESOLVED, so if the
+    // executor were serialising it would be parked on the first resolver only. The token mint is
+    // absent for the opposite reason: it is downstream of the whole wave by design.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(started).toEqual({ token: false, branch: true, registries: true, search: true })
+
+    gates.branch.resolve(true)
+    gates.registries.resolve([])
+    gates.search.resolve({ available: false, provider: null })
+    await new Promise((r) => setTimeout(r, 0))
+    // Only once the wave has settled, which is when the token's repo scope is known.
+    expect(started.token).toBe(true)
+
+    gates.token.resolve('GH-TOKEN')
+    await job
+  })
+
+  it('awaits the context-observability record but swallows a recorder failure', async () => {
+    let recordStarted = false
+    const transport: RunnerTransport = {
+      async dispatch() {},
+      async poll() {
+        return { state: 'running' }
+      },
+    }
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: async () => transport,
+      agentRouting: routing,
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: async () => ({
+        installationId: 7,
+        repoId: '1001',
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+      }),
+      mintInstallationToken: async () => 'GH-TOKEN',
+      ensureWorkBranch: async () => true,
+      sessionService: {
+        async mint() {
+          return 'SESSION-TOKEN'
+        },
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.test/v1',
+      agentContextObservability: {
+        // Reject: the record is best-effort. It is AWAITED (a bare `void` would be dropped on
+        // the Worker once the isolate hibernates on the next durable sleep), so the swallowing
+        // catch is what guarantees a recorder failure still never breaks the dispatch.
+        async record() {
+          recordStarted = true
+          throw new Error('telemetry DB down')
+        },
+      },
+    })
+
+    // Resolves with a handle despite the recorder throwing — the failure is swallowed.
+    const handle = await executor.startJob(context('coder'))
+    expect(handle.jobId).toBeDefined()
+    expect(recordStarted).toBe(true)
   })
 })
 
@@ -329,6 +1145,7 @@ function makeExecutorReturning(result: RunnerJobResult): ContainerAgentExecutor 
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',
@@ -337,7 +1154,7 @@ function makeExecutorReturning(result: RunnerJobResult): ContainerAgentExecutor 
     sessionService,
     proxyBaseUrl: 'https://proxy.test/v1',
     githubApiBase: 'https://api.github.com',
-    resolveWebSearchEnabled: async () => true,
+    resolveWebSearchAvailability: async () => ({ available: true, provider: 'searxng' as const }),
     ensureWorkBranch: async () => true,
   }
   return new ContainerAgentExecutor(deps)

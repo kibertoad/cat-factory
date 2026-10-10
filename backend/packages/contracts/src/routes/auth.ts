@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   forgotPasswordSchema,
@@ -6,13 +6,15 @@ import {
   resetPasswordSchema,
   signupSchema,
 } from '../auth.js'
+import { backendMisconfiguredSchema } from '../config.js'
+import { ssoConfigViewSchema } from '../sso.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Authentication route contracts. Mounted under `/auth`, so the paths here are
 // relative to that prefix. Public endpoints (no auth gate). The OAuth round-trip
 // routes (`/login`, `/callback`, `/google/*`) return a browser redirect (or an
-// inline error), so their success is modelled as `ContractNoBody`. The JSON
+// inline error), so their success is modelled as `noBodyResponse()`. The JSON
 // endpoints (`/config`, `/me`, `/signup`, `/password-login`, invitations) carry
 // proper response schemas. See AuthController in @cat-factory/server.
 // ---------------------------------------------------------------------------
@@ -58,17 +60,21 @@ export const localModeConfigSchema = v.object({
    */
   mothershipUrl: v.optional(v.string()),
   /**
-   * When local mode runs WITHOUT a GitHub PAT, a github.com URL with the needed scopes
-   * pre-selected so the developer can create one in a click. Absent once a PAT is set.
+   * When local mode holds NO source-control token, a github.com URL with the needed scopes
+   * pre-selected so the developer can create one in a click. Absent once one is configured.
    */
   githubPatSetupUrl: v.optional(v.string()),
   /**
    * Source-control PAT login methods the local facade can serve, so the login screen
-   * renders the right controls without probing. Absent on non-local facades. The PAT lives
-   * server-side in env — the SPA only selects a provider, it never sees a token.
-   *  - `configured` — providers with a PAT set server-side (env): a "Sign in with configured
-   *    &lt;provider&gt; PAT" button. The ONLY way to sign in (the operational token is the env
-   *    PAT too); a provider with no env PAT gets no button.
+   * renders the right controls without probing. Absent on non-local facades.
+   *  - `configured` — providers whose token the deployment already holds (from `.env` or a
+   *    previous install): a "Sign in with configured &lt;provider&gt; PAT" button. The token stays
+   *    server-side; the SPA only selects a provider, it never sees one.
+   *  - `installable` — providers whose token the user may INSTALL from this screen, because the
+   *    deployment's environment names none. Local mode's token is both the sign-in identity and
+   *    the operational credential, so pasting it here is what makes the deployment work at all;
+   *    empty ⇒ `.env` owns the credential (or nothing can seal one) and the screen must not offer
+   *    a box that would be ignored.
    *  - `setupUrls`  — per-provider "create a PAT" link with the right scopes pre-selected, so
    *    the "no token configured" notice can deep-link straight to the token page. The server
    *    owns the scopes (they differ per provider), so the SPA renders the link rather than
@@ -77,6 +83,7 @@ export const localModeConfigSchema = v.object({
   patLogin: v.optional(
     v.object({
       configured: v.array(vcsProviderSchema),
+      installable: v.optional(v.array(vcsProviderSchema)),
       setupUrls: v.optional(v.record(vcsProviderSchema, v.string())),
     }),
   ),
@@ -135,6 +142,14 @@ export const infrastructureCapabilitiesSchema = v.object({
    * preview; a specific frontend still opts in per-frame via `previewEnabled`.
    */
   frontendPreview: v.object({ supported: v.boolean() }),
+  /**
+   * Whether this deployment supports the account-wide model-family allow/block policy.
+   * `true` on the Cloudflare / remote-Node facades and in mothership mode; `false` in
+   * plain local mode (a single-developer machine has no account admin to govern). The SPA
+   * hides the "Model access policy" admin section when `false`, and the server refuses to
+   * store a non-`off` policy there.
+   */
+  modelPolicy: v.optional(v.object({ supported: v.boolean() })),
 })
 export type InfrastructureCapabilities = v.InferOutput<typeof infrastructureCapabilitiesSchema>
 
@@ -144,7 +159,18 @@ const authConfigViewSchema = v.object({
     github: v.boolean(),
     password: v.boolean(),
     google: v.boolean(),
+    /**
+     * Whether the deployment's OWN identity provider (enterprise SSO) is configured. Reported
+     * as a boolean beside its siblings so "which controls do I render" stays one uniform read;
+     * the operator's button label rides the `sso` object below, because only that varies.
+     */
+    sso: v.boolean(),
   }),
+  /**
+   * Presentation for the configured SSO provider (its operator-supplied label + protocol).
+   * Present exactly when `providers.sso` is true.
+   */
+  sso: v.optional(ssoConfigViewSchema),
   localMode: v.optional(localModeConfigSchema),
   /**
    * Source-control PAT login offered on a HOSTED facade (remote node): the user pastes their
@@ -160,6 +186,14 @@ const authConfigViewSchema = v.object({
    */
   testingNoAuth: v.optional(v.boolean()),
   infrastructure: v.optional(infrastructureCapabilitiesSchema),
+  /**
+   * Set ONLY by the misconfiguration fallback backend: a facade that failed to boot because a
+   * mandatory env var / binding is missing serves a minimal app whose `/auth/config` carries this
+   * list of problems (never any secret value — just each var's name, meaning, and remedy). Present
+   * ⇒ the SPA renders the dedicated "backend misconfigured" screen instead of the login/board.
+   * Absent ⇒ a normally-booted backend.
+   */
+  misconfigured: v.optional(backendMisconfiguredSchema),
 })
 
 const meViewSchema = v.object({
@@ -196,13 +230,13 @@ export const authConfigContract = defineApiContract({
 export const githubLoginContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/login',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 export const githubCallbackContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/callback',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Google OAuth (browser redirect) --------------------------------------
@@ -210,13 +244,33 @@ export const githubCallbackContract = defineApiContract({
 export const googleLoginContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/google/login',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 export const googleCallbackContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/google/callback',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
+})
+
+// ---- Enterprise SSO (browser redirect) ------------------------------------
+
+// The deployment's OWN identity provider. One pair of routes serves every OIDC IdP — Okta,
+// Entra ID, Auth0, Keycloak, PingFederate, a Shibboleth OP — because the provider is resolved
+// from its discovery document at runtime, not from a per-vendor code path. Both legs are pure
+// browser redirects (session token in the fragment on success, a machine-readable
+// `#sso_error=<reason>` on refusal), so their success is `noBodyResponse()` like the OAuth pair.
+
+export const ssoLoginContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/sso/login',
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
+})
+
+export const ssoCallbackContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/sso/callback',
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Email / password -----------------------------------------------------
@@ -240,7 +294,12 @@ export const passwordLoginContract = defineApiContract({
 // Log in as the account a source-control PAT belongs to. `token` omitted ⇒ use the
 // server-configured PAT for that provider (the one-click path); `token` present ⇒ the
 // user pasted one inline. Returns the same `{ token, user }` as password login. Served
-// only where an identity resolver is wired (local mode); 503 otherwise.
+// only where an identity resolver is wired (local mode + the hosted facades); 503 otherwise.
+//
+// In LOCAL mode a pasted token is also INSTALLED as the deployment's source-control credential
+// (`localMode.patLogin.installable` says when that is on offer): there, one token is both the
+// identity and what every agent step clones, pushes and merges with, so signing in with a token
+// the deployment cannot then use would be a sign-in into a product that does not work.
 export const patLoginContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/pat',
@@ -280,6 +339,68 @@ export const mintMachineTokenContract = defineApiContract({
   },
 })
 
+// The machine-node roster: every mint records the node against the minting user, and these
+// two endpoints are how that user sees and kills their nodes (SEC-5). Revocation is a
+// tombstone consulted by every `/internal/*` machine gate, so a leaked machine token stops
+// working everywhere at once instead of staying valid for its full TTL.
+export const machineNodeViewSchema = v.object({
+  nodeId: v.string(),
+  accountIds: v.array(v.string()),
+  createdAt: v.number(),
+  lastMintedAt: v.number(),
+  exp: v.number(),
+  revokedAt: v.nullable(v.number()),
+})
+export type MachineNodeView = v.InferOutput<typeof machineNodeViewSchema>
+
+export const listMachineNodesContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/machine-nodes',
+  responsesByStatusCode: {
+    200: v.object({ nodes: v.array(machineNodeViewSchema) }),
+    ...errorResponses,
+  },
+})
+
+// Owner-scoped: only the user a node was minted for may revoke it; anyone else's nodeId is a
+// 404 (the existence-non-leak policy). Idempotent: revoking an already-revoked node is 204.
+export const revokeMachineNodeContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: singleStringParam('nodeId'),
+  pathResolver: ({ nodeId }) => `/machine-nodes/${nodeId}/revoke`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
+})
+
+// ---------------------------------------------------------------------------
+// SESSION REVOCATION. Sessions are stateless signed tokens, so "log out" was a client-side drop
+// and a leaked bearer stayed good until it expired. Each user row now carries a generation that
+// every token is stamped with, and advancing it invalidates the lot in one write.
+//
+// This is the SELF-SERVE half ("sign out everywhere"), deliberately a POST with no body and no
+// target: a user may only ever revoke their OWN sessions here. The admin-forced half is an
+// account-scoped route beside the member roster, because withdrawing somebody else's access is an
+// account-admin action and belongs where the audit log can name the account it happened in.
+//
+// The caller's CURRENT token is revoked too, and that is the point of "all devices" rather than a
+// carve-out: a user reaching for this has usually lost a device and cannot say which session is
+// the one to keep. The response hands back a freshly minted token so the browser that asked stays
+// signed in without a round-trip through the identity provider.
+export const revokeMySessionsContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/sessions/revoke-all',
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: {
+    200: v.object({
+      /** A replacement session for the caller, stamped with the new generation. */
+      token: v.string(),
+      /** Absolute expiry (epoch ms) of the replacement session. */
+      exp: v.number(),
+    }),
+    ...errorResponses,
+  },
+})
+
 // Local-mode ONLY: hand the local node a mothership SESSION token (captured by the SPA from
 // the mothership OAuth redirect fragment). The node forwards it to the mothership's
 // `/auth/machine-token`, caches the returned opaque machine token in its local store, and
@@ -312,7 +433,7 @@ export const forgotPasswordContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/forgot-password',
   requestBodySchema: forgotPasswordSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // Redeem a reset token + set a new password (a 400 on an invalid/used/expired token).
@@ -320,7 +441,7 @@ export const resetPasswordContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/reset-password',
   requestBodySchema: resetPasswordSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Invitations (peek + accept) ------------------------------------------
@@ -352,5 +473,5 @@ export const logoutContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/logout',
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

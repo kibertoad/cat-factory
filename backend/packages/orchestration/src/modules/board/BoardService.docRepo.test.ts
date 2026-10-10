@@ -1,5 +1,8 @@
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
+import { registryPromptFragmentSource } from '@cat-factory/kernel'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 // A `document` repository frame is authored, not implemented: BoardService.addTask must accept
@@ -45,41 +48,119 @@ describe('BoardService document-repository task gating', () => {
         async llmCallObserved() {},
       },
     } as unknown as BoardServiceDependencies
-    return new BoardService(deps)
+    // The shipped standards pool, wired exactly as a facade wires it. The per-task-type defaults
+    // are read through the app-owned source rather than a module global, so a caller that wires
+    // none legitimately seeds none, which is why this has to be explicit here.
+    return new BoardService({
+      ...deps,
+      promptFragmentSource: registryPromptFragmentSource(promptFragmentRegistryWithBuiltins()),
+    })
   }
 
   it('rejects a feature task under a document repository', async () => {
     const service = build('document')
     await expect(
-      service.addTask(WS, 'frame_docs', { title: 'Ship it', taskType: 'feature' }),
+      service.addTask(
+        WS,
+        'frame_docs',
+        { title: 'Ship it', taskType: 'feature' },
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      ),
     ).rejects.toThrow(/document repository only accepts document or spike/i)
   })
 
   it('accepts a document task under a document repository', async () => {
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Write the RFC',
-      taskType: 'document',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+      },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     expect(task.taskType).toBe('document')
+  })
+
+  it('pre-selects the writing-style fragments on a new document task (default-on)', async () => {
+    // A document task starts with the universal style fragments pinned so the `doc-aware`
+    // authoring/review kinds fold them in by default; the user can remove them like any pin.
+    const service = build('document')
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+      },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
+    expect(task.fragmentIds).toEqual(['style.anti-llmisms', 'style.concise-actionable'])
   })
 
   it('accepts a spike task under a document repository', async () => {
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Investigate',
-      taskType: 'spike',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Investigate',
+        taskType: 'spike',
+      },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     expect(task.taskType).toBe('spike')
+    // A non-document task carries no default style pins.
+    expect(task.fragmentIds).toBeUndefined()
+  })
+
+  it('defaults a document task to the document-authoring pipeline (pl_document)', async () => {
+    // The full-build pipeline makes no sense for a document (no code / spec / tests), so a
+    // document task with no explicit pipeline is pinned to pl_document at creation.
+    const service = build('document')
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+      },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
+    expect(task.pipelineId).toBe('pl_document')
+  })
+
+  it('honours an explicit pipeline pick over the document default', async () => {
+    const service = build('document')
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+        pipelineId: 'pl_document_quick',
+      },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
+    expect(task.pipelineId).toBe('pl_document_quick')
   })
 
   it('still accepts a feature task under a normal service frame', async () => {
     const service = build('service')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Add endpoint',
-      taskType: 'feature',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Add endpoint',
+        taskType: 'feature',
+      },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     expect(task.taskType).toBe('feature')
+    expect(task.fragmentIds).toBeUndefined()
+    // A non-document task gets no type-default pipeline (falls through to the run-time picker).
+    expect(task.pipelineId).toBeUndefined()
   })
 })
 
@@ -151,13 +232,23 @@ describe('BoardService document-repository reparent gating', () => {
   it('rejects dragging a feature task into a document repository', async () => {
     const { service } = build('feature')
     await expect(
-      service.reparent(WS, 'task_1', { parentId: 'frame_docs', position: { x: 1, y: 1 } }),
+      service.reparent(
+        WS,
+        'task_1',
+        { parentId: 'frame_docs', position: { x: 1, y: 1 } },
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      ),
     ).rejects.toThrow(/document repository only accepts document or spike/i)
   })
 
   it('allows a document task into a document repository and re-stamps its type', async () => {
     const { service, patches } = build('document')
-    await service.reparent(WS, 'task_1', { parentId: 'frame_docs', position: { x: 1, y: 1 } })
+    await service.reparent(
+      WS,
+      'task_1',
+      { parentId: 'frame_docs', position: { x: 1, y: 1 } },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     const patch = patches.find((p) => p.id === 'task_1')?.patch
     expect(patch?.parentId).toBe('frame_docs')
     expect(patch?.type).toBe('document')

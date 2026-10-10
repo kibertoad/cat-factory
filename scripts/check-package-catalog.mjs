@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Guards the human/LLM-facing package MAP against drift from the actual workspace. The
-// root README's "Repository layout" tables are the catalog an LLM (or human) reads first
+// "Repository layout" tables in docs/repository-layout.md are the catalog an LLM (or human) reads first
 // to answer "what exists and where does X live?"; when a new package is added but the
 // table isn't, the package becomes invisible to anyone who trusts the map (this is exactly
 // how @cat-factory/consensus, provider-cloudflare and observability-langfuse ended up in
@@ -9,7 +9,7 @@
 // For every workspace package (resolved from pnpm-workspace.yaml's globs) it asserts:
 //   1. package.json has a non-empty `description` — the machine-readable one-line role the
 //      maps + per-package AGENTS.md derive from.
-//   2. the package `name` appears verbatim in the root README.md catalog.
+//   2. the package `name` appears verbatim in the docs/repository-layout.md catalog.
 //
 // Usage:  node scripts/check-package-catalog.mjs
 // Exit 0 = the map is complete; exit 1 = a package is missing a description or a README row.
@@ -23,6 +23,10 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The workspace globs from pnpm-workspace.yaml. Kept as a literal list (mirroring that
 // file's `packages:`) rather than parsing YAML — the set changes rarely and a mismatch
 // here would itself be caught by a package that resolves to no dir.
+//
+// `sdk/*` rather than `sdk/typescript`: the SDK family gains members (the MCP facade did), and
+// naming one of them is how a new package slips out of the map. The Python, Go and Java clients have
+// no package.json and drop out at read time; they are documented by `sdk/README.md`.
 const WORKSPACE_GLOBS = [
   'backend/packages/*',
   'backend/runtimes/*',
@@ -32,6 +36,8 @@ const WORKSPACE_GLOBS = [
   'deploy/frontend',
   'deploy/node',
   'deploy/local',
+  'deploy/gatekeeper',
+  'sdk/*',
 ]
 
 function expandGlob(glob) {
@@ -58,7 +64,7 @@ function readPackage(relDir) {
   }
 }
 
-const readmeCatalog = readFileSync(join(repoRoot, 'README.md'), 'utf8')
+const readmeCatalog = readFileSync(join(repoRoot, 'docs', 'repository-layout.md'), 'utf8')
 
 const packages = WORKSPACE_GLOBS.flatMap(expandGlob)
   .map(readPackage)
@@ -71,7 +77,7 @@ for (const pkg of packages) {
   }
   if (!readmeCatalog.includes(pkg.name)) {
     problems.push(
-      `${pkg.name} is not listed in the README.md repository-layout tables — add a row so the map stays complete.`,
+      `${pkg.name} is not listed in the docs/repository-layout.md tables — add a row so the map stays complete.`,
     )
   }
 }
@@ -85,5 +91,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `check-package-catalog: all ${packages.length} workspace packages are described and listed in README.md. ✅`,
+  `check-package-catalog: all ${packages.length} workspace packages are described and listed in docs/repository-layout.md. ✅`,
 )

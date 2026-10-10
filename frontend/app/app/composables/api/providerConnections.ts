@@ -56,14 +56,18 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
     // Branch on the kind so `send` sees a single concrete contract (a union contract can't
     // type-check the optional `queryParams`).
     describeProvider: (workspaceId: string, kind: ProviderConnectionKind, backendKind?: string) =>
+      // Only send the `kind` query when a concrete backend is requested. Passing
+      // `{ kind: undefined }` serializes to `?kind=` (an empty string), which the backend
+      // reads as a real — unknown — backend kind and rejects with 422; omitting the param
+      // lets it fall back to the workspace's stored/default kind as intended.
       kind === 'environment'
         ? send(CONTRACTS.environment.describe, {
             pathPrefix: ws(workspaceId),
-            queryParams: { kind: backendKind },
+            queryParams: backendKind ? { kind: backendKind } : {},
           })
         : send(CONTRACTS['runner-pool'].describe, {
             pathPrefix: ws(workspaceId),
-            queryParams: { kind: backendKind },
+            queryParams: backendKind ? { kind: backendKind } : {},
           }),
 
     getProviderConnection: (workspaceId: string, kind: ProviderConnectionKind) =>

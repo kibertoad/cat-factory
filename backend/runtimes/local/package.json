@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/local-server",
-  "version": "0.40.3",
+  "version": "0.155.0",
   "description": "Local-mode runtime facade for the Agent Architecture Board: the @cat-factory/node-server stack with agent jobs run as local Docker/Podman containers and GitHub accessed via a personal access token — a developer can run the whole product on their own machine.",
   "repository": {
     "type": "git",
@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
+    "@cat-factory/binary-generators": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/executor-harness": "workspace:*",
     "@cat-factory/gitlab": "workspace:*",
@@ -42,15 +43,18 @@
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/node-server": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/server": "workspace:*",
-    "@hono/node-server": "^2.0.6",
-    "drizzle-orm": "1.0.0-rc.4"
+    "@hono/node-server": "^2.1.3",
+    "drizzle-orm": "1.0.0-rc.4",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/gates": "workspace:*",
-    "@types/node": "^26.0.1",
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   }
 }

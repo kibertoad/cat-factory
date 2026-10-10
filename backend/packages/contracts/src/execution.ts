@@ -1,0 +1,1444 @@
+import * as v from 'valibot'
+import { runContainerSchema, runDelegationSchema } from './run-execution-surface.js'
+import { intakeOriginSchema, runDiagnosticsSchema, runModeSchema } from './run-provenance.js'
+import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
+import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
+import { followUpsStepStateSchema } from './followUp.js'
+import { forkDecisionStepStateSchema } from './forkDecision.js'
+import { judgeStepStateSchema } from './judge.js'
+import { agentFailureKindSchema } from './agent-failure-kinds.js'
+import { ralphStepStateSchema } from './ralph.js'
+import { validationReportSchema } from './validation-checks.js'
+import { reproductionReportSchema } from './reproduction.js'
+import { bugFishingStepStateSchema } from './bugFishing.js'
+import { prReviewStepStateSchema } from './prReview.js'
+import { runInputGateSchema } from './input-gate.js'
+import { stepSkipReasonSchema } from './step-conditions.js'
+import { fragmentAdherenceSchema } from './fragment-adherence.js'
+import { agentEffortReportSchema } from './agent-effort.js'
+import { foundationalServiceSelectionSchema } from './foundational-services.js'
+import { binaryOutputReportSchema } from './binary-outputs.js'
+import { binaryCandidateStepStateSchema } from './binary-candidates.js'
+import { stepToolServersSchema } from './tool-servers.js'
+import { stepContextDocumentSchema } from './documents.js'
+// The polling-GATE and the human-verdict-gate step-state clusters each live in their own
+// module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
+import { gateStepStateSchema } from './gate.js'
+import { deployFixStateSchema } from './deploy-fix.js'
+import { environmentInvestigationStateSchema } from './environment-investigation.js'
+import { deployEnvsSchema, deployWaitStateSchema, disposeEnvsSchema } from './deploy-envs.js'
+import { humanTestStepStateSchema, visualConfirmStepStateSchema } from './human-verdict-gates.js'
+import {
+  environmentStatusSchema,
+  infraEngineSchema,
+  provisionTypeSchema,
+  serviceProvisioningSchema,
+} from './environments.js'
+import { resolvedFrontendBindingSchema } from './frontend.js'
+import { agentKindSchema, agentStateSchema } from './primitives.js'
+import { stepOptionsSchema } from './entities.js'
+import { companionStateSchema } from './companion-state.js'
+import { decisionSchema, stepApprovalSchema, stepReviewCommentSchema } from './step-decisions.js'
+import { workspaceRoleSchema } from './workspace-members.js'
+
+// ---------------------------------------------------------------------------
+// Run / execution runtime state: the shapes that describe an in-flight run and
+// its steps' live state — subtasks, agent-run failures, the tester step-state
+// machine, per-step metrics, the pipeline STEP (the runtime instance of a
+// pipeline's step), and the execution instance itself. The gate (`gate.ts`),
+// human-verdict-gate (`human-verdict-gates.ts`) and human-decision
+// (`step-decisions.ts`: an agent's question, review comments, a companion
+// verdict, the approval gate) clusters live in their own modules and are
+// composed back into `PipelineStep` here.
+// Split out of entities.ts (which keeps the board / pipeline-definition / model
+// / workspace shapes); re-exported from the package barrel, so consumers are
+// unaffected. Depends on entities.ts (for stepOptionsSchema); entities.ts does
+// NOT depend back on this file.
+// ---------------------------------------------------------------------------
+
+/** One entry of a running step's todo list — its label and current status. */
+export const stepSubtaskItemSchema = v.object({
+  /** The task's human-readable subject, as the agent wrote it. */
+  label: v.string(),
+  status: v.picklist(['pending', 'in_progress', 'completed']),
+})
+export type StepSubtaskItem = v.InferOutput<typeof stepSubtaskItemSchema>
+
+/**
+ * Live subtask counts for a running step, reported by the container agent from
+ * the coding tool's own todo list (e.g. "3/8 done, 1 in progress"). Present only
+ * while an async job is in flight and the agent maintains a todo list; the board
+ * renders it as a finer-grained progress indicator than `progress` alone.
+ *
+ * `items` carries the individual todo entries (label + status) so a zoomed-in
+ * card can render the actual task list, not just the count. It is optional — an
+ * older agent/poll that only reported counts, or the simpler `todos[].done`
+ * fallback shape, still validates without it.
+ */
+export const stepSubtasksSchema = v.object({
+  completed: v.number(),
+  inProgress: v.number(),
+  total: v.number(),
+  items: v.optional(v.array(stepSubtaskItemSchema)),
+})
+export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
+
+/**
+ * The agent flows that produce an "agent run" (a container-backed job whose
+ * lifecycle, progress and failure the board surfaces uniformly):
+ *   - `bootstrap`  — a "bootstrap repo" run that scaffolds/adapts a new repo.
+ *   - `execution`  — a task pipeline run that implements a board task.
+ *   - `env-config-repair` — a coding agent that repairs an environment-provider
+ *     config file in an existing repo (no board block; surfaced on the infra window).
+ */
+export const agentRunKindSchema = v.picklist(['bootstrap', 'execution', 'env-config-repair'])
+export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
+
+/**
+ * Structured diagnostics captured when an agent run fails, stored on the run and
+ * surfaced on the board so a crash isn't just a one-line message. The container's
+ * stdout/stderr can't always be pulled into this record (an evicted container is
+ * gone), so for `evicted`/`timeout` failures the `hint` points at where to look.
+ */
+export const agentFailureSchema = v.object({
+  kind: agentFailureKindSchema,
+  /** Human-readable summary (mirrors the run's `error` for back-compat). */
+  message: v.string(),
+  /** Extended detail when available (the harness's reason, an HTTP body, …). */
+  detail: v.nullable(v.string()),
+  /** Where to look next (e.g. "check the container logs for this job id"). */
+  hint: v.nullable(v.string()),
+  /**
+   * Optional machine-readable cause code so the SPA can render precise, actionable guidance
+   * without string-matching the prose `message`/`detail` (the failure analogue of a
+   * {@link ConflictReason}). Kind-scoped: an `environment` failure carries an
+   * {@link EnvironmentFailureReason} (e.g. `deploy_runner_unwired`). Absent when the cause has
+   * no client-specific handling.
+   */
+  reason: v.optional(v.nullable(v.string())),
+  /** Epoch ms the failure was recorded. */
+  occurredAt: v.number(),
+  /** Last subtask counts seen before the failure, for context (null if none). */
+  lastSubtasks: v.nullable(stepSubtasksSchema),
+  /**
+   * Index of the pipeline step that was in flight when the run failed (the run's
+   * `currentStep` at fail time), so the per-attempt failure trail can be attributed to a
+   * specific step — the step-detail overlay filters its "execution history" to the failures
+   * recorded for that step. Absent on a bootstrap failure (no steps) and on legacy records.
+   */
+  stepIndex: v.optional(v.number()),
+})
+export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
+
+/**
+ * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
+ * schema, not just `kind`/`message`: the SPA re-validates the whole workspace snapshot
+ * against {@link agentFailureSchema} (both the `failure` field and the `failureHistory`
+ * array), so a structurally-incomplete record — a kind outside the picklist, OR a known
+ * kind missing `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire
+ * snapshot decode if surfaced.
+ */
+export function isUsableAgentFailure(value: unknown): value is AgentFailure {
+  return v.is(agentFailureSchema, value)
+}
+
+/**
+ * The stored `agent_runs.failure` TEXT column → a usable failure, tolerating a null column,
+ * an empty string and a malformed blob alike (all three mean "no structured failure
+ * recorded"). Dropping an unusable record keeps the run readable — its `status`/`error`
+ * still describe what happened — and, for the history, means a retry can't make a bad
+ * record permanent.
+ *
+ * Shared rather than reimplemented per caller because EVERY run kind's repositories on
+ * BOTH runtimes read this one column (execution, bootstrap, env-config-repair), and four
+ * hand-rolled parsers had already drifted to a weaker `typeof kind === 'string'` check —
+ * so one contract change left some stores surfacing a record the others dropped. It lives
+ * here, beside the schema it validates against, rather than in a persistence layer,
+ * because the runtimes' repositories must not have to reach into `@cat-factory/server` for
+ * it (kernel deliberately carries no valibot dependency).
+ */
+export function parseStoredAgentFailure(raw: string | null | undefined): AgentFailure | null {
+  if (!raw) return null
+  try {
+    const decoded: unknown = JSON.parse(raw)
+    return isUsableAgentFailure(decoded) ? decoded : null
+  } catch {
+    // A blob we cannot read is not a failure record: read it exactly as an absent column.
+    return null
+  }
+}
+
+/**
+ * A SUCCESSFUL step attempt whose output a restart later superseded — the positive
+ * complement of {@link agentFailureSchema}. When a run is restarted from a step, that
+ * step and every later one are reset and their `output` dropped; the ones that had
+ * already succeeded are recorded here so the step-detail overlay's "execution history"
+ * surfaces what a superseded attempt PRODUCED, not only the errors. Attributed to a
+ * `stepIndex` exactly like a failure, and rides in the run's `detail` JSON (no column).
+ */
+export const priorStepOutputSchema = v.object({
+  /** Index of the pipeline step that produced this output (see {@link agentFailureSchema} `stepIndex`). */
+  stepIndex: v.number(),
+  /** Epoch ms the superseded attempt finished (its `finishedAt`, else when it was recorded). */
+  occurredAt: v.number(),
+  /** The attempt's prose/JSON output, clipped to a stored-size bound when {@link truncated}. */
+  output: v.string(),
+  /** Whether {@link output} was clipped because the original exceeded the per-entry size bound. */
+  truncated: v.optional(v.boolean()),
+})
+export type PriorStepOutput = v.InferOutput<typeof priorStepOutputSchema>
+
+/**
+ * State a `tester` step carries while it runs the Tester → Fixer loop. Unlike `ci`,
+ * the gate's own work IS a container job (the Tester); on a withheld greenlight the
+ * engine loops a `fixer` container agent and re-tests.
+ *   - `phase: 'testing'` — a Tester job is in flight (tracked via the step's `jobId`).
+ *   - `phase: 'fixing'`  — a Fixer job is in flight; on completion the step returns to
+ *                          `testing` and a fresh Tester job is dispatched.
+ */
+/**
+ * One round of the Tester→Fixer loop, recorded when a `fixer` job finishes so the test
+ * window can show what each fixer attempt set out to fix and how it ended — the analogue of
+ * a polling gate's `gateAttemptSchema`, since a fixer run is otherwise an opaque
+ * sub-job with no surface of its own (only a bare `attempts` count).
+ */
+export const testerAttemptSchema = v.object({
+  /** 1-based fixer round (matches `attempts` after the fixer for this round was dispatched). */
+  attempt: v.number(),
+  /** Epoch ms when the fixer job finished. */
+  at: v.number(),
+  /** Whether the fixer container finished (`completed`) or errored/was evicted (`failed`). */
+  outcome: v.picklist(['completed', 'failed']),
+  /** The fixer's own summary (or the failure reason), naming what it changed / what failed. */
+  summary: v.optional(v.nullable(v.string())),
+  /**
+   * The concerns the fixer was handed for this round (from the Tester report that withheld
+   * its greenlight), so the window can show WHAT each round tried to address — not only that
+   * a round happened.
+   */
+  concerns: v.optional(v.nullable(v.array(testConcernSchema))),
+})
+export type TesterAttempt = v.InferOutput<typeof testerAttemptSchema>
+
+export const testerStepStateSchema = v.object({
+  phase: v.picklist(['testing', 'fixing']),
+  /** How many `fixer` attempts have been dispatched so far. */
+  attempts: v.number(),
+  /** Ceiling on fixer attempts, resolved from the task's merge preset at step start. */
+  maxAttempts: v.number(),
+  /** The most recent Tester report (what was tested, outcomes, concerns, greenlight). */
+  lastReport: v.optional(v.nullable(testReportSchema)),
+  /**
+   * Append-only history of the `fixer` rounds this Tester step looped through, each recorded
+   * when its job finished. Lets the test window surface an inspectable timeline of the fixer
+   * attempts (what each addressed, how it ended) instead of only a bare `attempts` count.
+   */
+  attemptLog: v.optional(v.nullable(v.array(testerAttemptSchema))),
+  /**
+   * The most recent in-container docker-compose dependency stand-up record (local-infra
+   * tester): whether the dependencies came up and the captured (redacted, bounded)
+   * `docker compose up` logs. Refreshed on each Tester round (it stands the infra up anew),
+   * so the test window can surface WHY local infra failed to come up — the failure-class
+   * artifact the orchestrator-side provisioning logs can't see. Absent for ephemeral /
+   * no-infra runs. See {@link testerInfraSetupSchema}.
+   */
+  infraSetup: v.optional(v.nullable(testerInfraSetupSchema)),
+})
+export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
+
+/**
+ * One test quality-control companion verdict, recorded per QC evaluation of a Tester
+ * report (in order; newest last). `adequate` is the QC's judgement that the report is
+ * complete enough to conclude testing / go to the fixer; when false, `gaps` lists the
+ * concrete things the Tester still needs to exercise and `feedback` is the prose the
+ * Tester is handed on its re-run.
+ */
+export const testerQualityVerdictSchema = v.object({
+  /** Whether the report is complete/coherent enough to proceed (no QC re-run needed). */
+  adequate: v.boolean(),
+  /** The QC's prose challenge / justification, folded into the Tester's re-run context. */
+  feedback: v.string(),
+  /** Concrete coverage gaps the Tester must still address (empty when adequate). */
+  gaps: v.array(v.string()),
+  /** Epoch ms the verdict was produced. */
+  at: v.number(),
+  /** The model that produced the verdict, for transparency. */
+  model: v.optional(v.nullable(v.string())),
+})
+export type TesterQualityVerdict = v.InferOutput<typeof testerQualityVerdictSchema>
+
+/**
+ * Live test quality-control loop state carried on a run's Tester step, copied from the
+ * pipeline's per-step `testerQualityConfigSchema` (see entities.ts) at run start. The QC companion reads
+ * each Tester report BEFORE the greenlight/fixer decision; when the report is inadequate and
+ * `attempts < maxAttempts` it loops the Tester (folding the prior report + `feedback` in),
+ * bounded independently of the fixer budget. `verdicts` records each evaluation for the UI.
+ */
+export const testerQualityStepStateSchema = v.object({
+  /** Whether the QC companion is active on this Tester step (the builder toggle). */
+  enabled: v.boolean(),
+  /** How many QC-driven Tester re-runs have been dispatched so far. */
+  attempts: v.optional(v.number(), 0),
+  /** Ceiling on QC-driven re-runs, from the task's merge preset (`maxTesterQualityIterations`). */
+  maxAttempts: v.number(),
+  /** Optional estimate gating copied from the pipeline; evaluated against the block estimate. */
+  gating: v.optional(v.nullable(stepGatingSchema)),
+  /** One verdict per QC evaluation, in order (newest last). Empty before the first grade. */
+  verdicts: v.array(testerQualityVerdictSchema),
+  /** Set true once the QC budget was spent with the report still judged inadequate. */
+  exceeded: v.optional(v.boolean()),
+})
+export type TesterQualityStepState = v.InferOutput<typeof testerQualityStepStateSchema>
+
+/**
+ * The compact ephemeral-environment view a `human-test` gate carries on its step, so the
+ * dedicated window can surface the live URL/status without a second fetch. The full record
+ * (with encrypted access creds) lives in the `environments` table; this is the non-secret
+ * projection. Null in degraded manual mode (no env provider wired) or after the human
+ * destroys the env from the gate.
+ */
+/**
+ * The compact, non-secret projection of the ephemeral environment a run's step is
+ * associated with — its lifecycle state, public URL, TTL, and (when failed) the
+ * exact provider error. Surfaced in a run's details (esp. the Tester step) so the
+ * env's spinning-up / running / shut-down / errored state is visible without a
+ * second fetch. The full record (with encrypted creds) lives in the `environments`
+ * table. {@link humanTestEnvironmentSchema} is the human-test gate's subset of this.
+ */
+export const runEnvironmentSchema = v.object({
+  /** The `environments` row id (lets a window fetch access creds / re-poll status). */
+  id: v.string(),
+  /** The provisioned public URL (null while still provisioning). */
+  url: v.nullable(v.string()),
+  /** The environment lifecycle status; see {@link environmentStatusSchema}. */
+  status: environmentStatusSchema,
+  /** Epoch ms the environment expires (TTL), when known. */
+  expiresAt: v.optional(v.nullable(v.number())),
+  /** The verbatim provider error when the environment failed/expired, else null. */
+  lastError: v.optional(v.nullable(v.string())),
+  /**
+   * The provider's own account of a state it has not left yet (why this environment is not
+   * ready), where it gave one. The counterpart of `lastError` for the non-terminal half of the
+   * lifecycle: it is what the Environment panel shows beside a parked deployer, so a readiness
+   * wait states what it is waiting on rather than only that it is waiting.
+   */
+  statusNote: v.optional(v.nullable(v.string())),
+  /**
+   * The service's declared provision type this environment was stood up for
+   * (`kubernetes` | `docker-compose` | `custom` | `infraless`), recorded at provision
+   * time so a run's details show exactly what was provisioned. Null for legacy rows /
+   * pre-resolution.
+   */
+  provisionType: v.optional(v.nullable(provisionTypeSchema)),
+  /**
+   * The resolved engine that handled the provisioning (`local-docker` | `local-k3s` |
+   * `remote-kubernetes` | `remote-custom` | `none`), surfaced in run details alongside the
+   * environment state. Null for legacy rows / pre-resolution.
+   */
+  engine: v.optional(v.nullable(infraEngineSchema)),
+})
+export type RunEnvironment = v.InferOutput<typeof runEnvironmentSchema>
+
+// WHERE a step's work runs: the per-run container, and the external delegation. Their own module
+// (see `run-execution-surface.ts`), re-exported here because a step carries both and every reader
+// of a step reaches for them through this one.
+export {
+  runContainerSchema,
+  runContainerStatusSchema,
+  runDelegationAttemptSchema,
+  runDelegationSchema,
+  runDelegationStatusSchema,
+  delegatedSpendUnreported,
+  isRunDelegationStatus,
+  type RunContainer,
+  type RunContainerStatus,
+  type RunDelegation,
+  type RunDelegationAttempt,
+  type RunDelegationStatus,
+} from './run-execution-surface.js'
+
+/** The web-search backend a run's container searches through, when search is available. */
+export const webSearchProviderSchema = v.picklist(['brave', 'searxng'])
+export type WebSearchProvider = v.InferOutput<typeof webSearchProviderSchema>
+
+/**
+ * Narrow a free-text stored value (a telemetry `provider` column, which is plain TEXT) back
+ * to the {@link WebSearchProvider} union, or null when it isn't one. The single source of
+ * truth both telemetry stores use to map their rows, so the union is defined once.
+ */
+export function isWebSearchProvider(value: unknown): value is WebSearchProvider {
+  return value === 'brave' || value === 'searxng'
+}
+
+/**
+ * Whether a container agent had web search available for its run, and — when it did —
+ * which upstream backend served it (resolved backend-side at dispatch from the run's
+ * account keys, else the deployment default). Surfaced on a container step so the run
+ * details can say "Web search: SearXNG" vs "Web search: unavailable"; it is a static
+ * dispatch-time fact, NOT gated by prompt-recording telemetry (the performed queries
+ * are — see the agent-search-query observability sink). `provider` is null when search
+ * was unavailable.
+ */
+export const webSearchAvailabilitySchema = v.object({
+  available: v.boolean(),
+  provider: v.nullable(webSearchProviderSchema),
+})
+export type WebSearchAvailability = v.InferOutput<typeof webSearchAvailabilitySchema>
+/**
+ * Per-step LLM observability rollup: a compact aggregate over every model call the
+ * step's container made, recorded by the LLM proxy and summed by the engine for the
+ * board. It surfaces, at a glance, token usage, how close the step ran to its
+ * output-token limit (truncation), the latency split between transport/proxy
+ * overhead and actual model execution, and any errors/warnings. The full per-call
+ * detail (prompts + responses) is fetched on demand for the drill-down panel.
+ * Absent when the observability sink is not wired.
+ */
+/**
+ * One PHASE's slice of a step's model spend — which part of the run's work the tokens went
+ * to (the agent's own edit loop, a pre-PR validation repair round, a reproduction-proof
+ * repair round, …), carried from the producer that owns the phase boundary. See
+ * `docs/initiatives/token-burn-instrumentation.md`.
+ */
+export const stepPhaseMetricsSchema = v.object({
+  /**
+   * The phase label. `''` is the UNATTRIBUTED slice — an older harness image, an inline call,
+   * the un-phased proxy path — and is a real row of the breakdown, never a gap: a run whose
+   * calls are all `''` was metered by a channel with no phase concept, not one that spent
+   * nothing outside the agent.
+   */
+  phase: v.string(),
+  /** Model calls (turns) this phase spent. */
+  calls: v.number(),
+  /** Fresh (uncached) input tokens. */
+  promptTokens: v.number(),
+  /** Input tokens served from the provider's prefix cache. */
+  cacheReadTokens: v.number(),
+  /** Input tokens written INTO the cache. */
+  cacheWriteTokens: v.number(),
+  /** Completion (output) tokens. */
+  completionTokens: v.number(),
+  /**
+   * Carry-cost proxy in token-turns: this phase's context summed against the turns that
+   * still had to re-send it. It separates "this phase read a lot" from "this phase made
+   * everything after it more expensive" — a large load early costs far more than the same
+   * load at the end, and a plain token sum cannot tell the two apart. Comparable BETWEEN a
+   * run's phases; meaningless as an absolute.
+   */
+  carryCostTokens: v.number(),
+  /** Calls that failed (non-2xx / refused / in-process error). */
+  errors: v.number(),
+  /**
+   * Estimated money this phase's tokens cost, in {@link stepMetricsSchema}'s `costCurrency`,
+   * priced per input CLASS (a cache read at ~0.1x fresh, a cache write at ~1.25x).
+   *
+   * `null` ⇒ the deployment could not price it (no rate for that model, or no price table
+   * wired); absent ⇒ a snapshot predating cost. Neither is `0`, which would claim the phase
+   * was free. A run whose phases are all null shows tokens without money rather than a
+   * confident zero.
+   */
+  costEstimate: v.optional(v.nullable(v.number())),
+})
+export type StepPhaseMetrics = v.InferOutput<typeof stepPhaseMetricsSchema>
+
+export const stepMetricsSchema = v.object({
+  /** Number of model calls recorded for this step. */
+  calls: v.number(),
+  /**
+   * Sum of FRESH (uncached) input tokens across the step's calls — exclusive of both
+   * cache classes, so the step's total input is
+   * `promptTokens + cacheReadTokens + cacheWriteTokens`.
+   */
+  promptTokens: v.number(),
+  /**
+   * Sum of input tokens served from the provider's prefix cache (~0.1× base input).
+   * 0 on a cache-less flavour (Workers AI). Absent ⇒ unknown (older snapshot).
+   */
+  cacheReadTokens: v.optional(v.number()),
+  /**
+   * Sum of input tokens written INTO the cache (1.25–2× base input, i.e. dearer than
+   * fresh). Kept apart from the reads because a repair loop that keeps re-writing the
+   * cache and one that only re-reads it look identical once they are summed. Absent ⇒
+   * unknown (older snapshot).
+   */
+  cacheWriteTokens: v.optional(v.number()),
+  /** Sum of completion (output) tokens across the step's calls. */
+  completionTokens: v.number(),
+  /** Largest single completion the model produced (closest approach to the limit). */
+  peakCompletionTokens: v.number(),
+  /** The output ceiling in effect (max requested `max_tokens`), or null when unknown. */
+  maxOutputTokens: v.nullable(v.number()),
+  /** Calls cut short by the output limit (`finish_reason === 'length'`). */
+  truncatedCalls: v.number(),
+  /** Sum of model execution time (ms) — the "actual prompt/tool execution" slice. */
+  upstreamMs: v.number(),
+  /** Sum of transport/proxy overhead (ms) — the interim-layer cost. */
+  overheadMs: v.number(),
+  /** Calls that failed (non-2xx / refused / in-process error). */
+  errors: v.number(),
+  /** Successful calls that warned (truncated or content-filtered). */
+  warnings: v.number(),
+  /**
+   * Carry-cost proxy in token-turns (see {@link stepPhaseMetricsSchema}), summed over the
+   * step's phases. Absent ⇒ unknown (a snapshot predating the per-phase rollup).
+   */
+  carryCostTokens: v.optional(v.number()),
+  /**
+   * Estimated money this step's tokens cost, in {@link stepMetricsSchema}'s `costCurrency`.
+   * See {@link stepPhaseMetricsSchema} for why `null` and absent are both kept apart from `0`.
+   *
+   * It is a LIST-PRICE estimate, not a bill: a subscription-harness step spent no per-token
+   * money at all, and this reports what the same tokens would have cost metered.
+   */
+  costEstimate: v.optional(v.nullable(v.number())),
+  /**
+   * ISO 4217 currency `costEstimate` is denominated in — the deployment's spend currency, since
+   * that is the currency its price table is written in. Carried BESIDE the amount rather than
+   * assumed by the reader: the built-in table is EUR, a deployment may configure another, and a
+   * bare number rendered under the wrong symbol is a wrong number.
+   *
+   * It labels every amount in this payload, so it is present whenever ANY of them exists: this
+   * step's own `costEstimate` or one of its `byPhase` rows. Absent ⇒ nothing here is priced,
+   * which is the only state where a reader has no amount to mislabel either. In particular a
+   * step whose total is null because ONE phase ran on an unpriced model still carries the
+   * currency, since its other phases carry real money.
+   */
+  costCurrency: v.optional(v.string()),
+  /**
+   * The step's burn split by the PHASE that spent it — the agent's own edit loop against a
+   * pre-PR validation repair round against a reproduction-proof repair round, and so on. Rolled
+   * up in SQL alongside the totals above (one `GROUP BY (agent_kind, phase)`), so it costs the
+   * emit nothing extra.
+   *
+   * Absent ⇒ the sink is not wired or the snapshot predates the breakdown; EMPTY is
+   * impossible whenever `calls > 0`, since an unattributable call lands in the `''` phase
+   * rather than being dropped.
+   */
+  byPhase: v.optional(v.array(stepPhaseMetricsSchema)),
+})
+export type StepMetrics = v.InferOutput<typeof stepMetricsSchema>
+
+export const pipelineStepSchema = v.object({
+  /**
+   * Id of the execution run (the {@link executionInstanceSchema} `id`) this step
+   * belongs to — surfaced on every step so a lone step in a log line or a detail view
+   * can name its run, for easier debugging. A projection that always equals the parent
+   * instance's `id`: stamped from the enclosing instance when the run is read or
+   * emitted, not persisted independently. Absent only on steps not yet round-tripped.
+   */
+  runId: v.optional(v.string()),
+  agentKind: agentKindSchema,
+  state: agentStateSchema,
+  progress: v.number(),
+  /** LLM observability rollup for this step; see {@link stepMetricsSchema}. */
+  metrics: v.optional(v.nullable(stepMetricsSchema)),
+  /**
+   * How this step's tokens were BILLED, as the engine filed them in the spend ledger:
+   * `'metered'` for a real per-token cost, `'subscription'` for a flat-rate quota harness call
+   * that cost no money at all.
+   *
+   * It is what makes `metrics.costEstimate` readable. That figure is priced the same way for
+   * both kinds (a subscription step is priced at what the same tokens WOULD have cost on the
+   * metered API), so on its own it reads as spend for a step that spent nothing, and a reader
+   * of one real run took it for money. Absent ⇒ the step recorded no usage, or the snapshot
+   * predates this field.
+   */
+  usageBilling: v.optional(v.picklist(['metered', 'subscription'])),
+  /**
+   * Live gate state while a polling gate step (`ci` / `conflicts`) runs its
+   * precheck-or-escalate loop; see {@link gateStepStateSchema}. The gate kind is
+   * `agentKind`.
+   */
+  gate: v.optional(v.nullable(gateStepStateSchema)),
+  /** Live Tester→Fixer loop state while a `tester` step runs/fixes; see {@link testerStepStateSchema}. */
+  test: v.optional(v.nullable(testerStepStateSchema)),
+  /**
+   * Live test quality-control companion state on a `tester-api`/`tester-ui` step, copied
+   * from the pipeline's per-step `testerQuality` config at run start. Drives the QC loop that
+   * gates each Tester report for completeness before the greenlight/fixer decision. Absent
+   * for non-Tester steps / when the companion is disabled. See {@link testerQualityStepStateSchema}.
+   */
+  testerQuality: v.optional(v.nullable(testerQualityStepStateSchema)),
+  /**
+   * Live state of a `human-test` gate (ephemeral env + human validation loop); see
+   * {@link humanTestStepStateSchema}. Absent for every other step kind.
+   */
+  humanTest: v.optional(v.nullable(humanTestStepStateSchema)),
+  /**
+   * Live state of a `visual-confirmation` gate (screenshot review + fix loop); see
+   * {@link visualConfirmStepStateSchema}. Absent for every other step kind.
+   */
+  visualConfirm: v.optional(v.nullable(visualConfirmStepStateSchema)),
+  /**
+   * The ephemeral environment this step runs against (when the block has one), so a
+   * run's details can show its spinning-up / running / shut-down / errored state +
+   * the exact error. Populated by the engine for container/deployer steps from the
+   * block's live environment; see {@link runEnvironmentSchema}. The `human-test` gate
+   * keeps its own richer `humanTest.environment` and is not double-populated here.
+   */
+  environment: v.optional(v.nullable(runEnvironmentSchema)),
+  /** Live subtask counts while an async (container) step runs; see {@link stepSubtasksSchema}. */
+  subtasks: v.optional(stepSubtasksSchema),
+  /**
+   * The per-run container this async (container) step runs in — its lifecycle status
+   * (starting / up / errored), the agent's current phase (clone / agent / push), and
+   * the container's id + reachable URL once up. Lets a run's details surface what the
+   * container is doing and where it lives, so the board shows an explicit "Spinning up
+   * container…" → live-phase progression instead of a blank "working" state. Set the
+   * moment the job is dispatched (the dispatch blocks until the container accepts the
+   * job) and refined on each poll. Only ever set on async (container) steps; absent on
+   * non-container steps and steps not yet dispatched. See {@link runContainerSchema}.
+   */
+  container: v.optional(v.nullable(runContainerSchema)),
+  /**
+   * The EXTERNAL work a delegated step dispatched: which registered executor, its status, the
+   * link to the executor's own logs, and the per-attempt log. Set the moment the dispatch claim
+   * is committed (before the executor is called) and refined on each poll. Only ever set on
+   * delegated steps; absent on every other step and on steps not yet dispatched. See
+   * {@link runDelegationSchema}.
+   */
+  delegated: v.optional(v.nullable(runDelegationSchema)),
+  /**
+   * Whether web search was available to this container step, and which upstream backend
+   * served it. Set at dispatch (a static per-run fact resolved from the account's
+   * web-search keys, else the deployment default). Only ever set on async (container)
+   * steps; absent on non-container steps and steps not yet dispatched. Distinct from the
+   * telemetry-gated per-query log — this is always surfaced. See {@link webSearchAvailabilitySchema}.
+   */
+  search: v.optional(v.nullable(webSearchAvailabilitySchema)),
+  decision: v.nullable(decisionSchema),
+  /**
+   * Whether a human approval gate fires after this step completes. Copied from
+   * the pipeline's `gates` at run start; absent means no gate.
+   */
+  requiresApproval: v.optional(v.boolean()),
+  /**
+   * The live approval gate for this step (see {@link stepApprovalSchema}). Set
+   * once the step's proposal is ready and `requiresApproval` is true; null/absent
+   * otherwise.
+   */
+  approval: v.optional(v.nullable(stepApprovalSchema)),
+  /** @see companionStateSchema. Absent for non-companion steps. */
+  companion: v.optional(v.nullable(companionStateSchema)),
+  /**
+   * The REVIEW-GATE sibling of `companion.capSettledByPolicy`: set on a `requirements-review` /
+   * clarity step whose iterative review spent its whole reviewer-pass budget and whose risk
+   * policy (`autonomy: 'unattended'`) then took the "proceed on the last clarified report"
+   * answer a person would have been offered.
+   *
+   * It lives on the STEP rather than on the review row for the same reason the companion's does:
+   * this is a fact about ONE run, the step is where whoever reviews the resulting pull request
+   * looks, and a review row outlives the run that settled it. Without it, a review whose findings
+   * were never answered reads exactly like one a product owner signed off.
+   *
+   * Absent on every other step and on every attended run. This records the ITERATION CAP only; its
+   * sibling {@link autoAnsweredByPolicy} records the other, narrower thing an unattended run may
+   * now do with a review that is still asking.
+   */
+  reviewCapSettledByPolicy: v.optional(v.boolean()),
+  /**
+   * Set on a review-gate step where an unattended run FOLDED IN the graded answers it had rather
+   * than parking: every finding was either settled by a person, or was one the reviewer itself
+   * classified as answerable without a product owner AND carried a Requirement-Writer suggestion at
+   * or above the policy's `minAutoAnswerConfidence`.
+   *
+   * A DIFFERENT fact from {@link reviewCapSettledByPolicy}, and kept apart for the reason the merge
+   * decision keeps its four reasons apart: that one means "the loop gave up and policy took the
+   * proceed", this one means "the loop converged on answers nobody read". A reviewer of the
+   * resulting pull request needs to know which, because only the second one has answers in it to
+   * check — they are on the review, with their grade and their provenance.
+   *
+   * Absent on every attended run, and on every unattended run that parked, which stays the normal
+   * outcome: a single finding needing a product owner, or one graded below the floor, holds the
+   * whole review.
+   */
+  autoAnsweredByPolicy: v.optional(v.boolean()),
+  /**
+   * Live Follow-up companion state while a `coder` step runs/parks: the items the Coder
+   * streamed (loose ends / side-tasks / questions), whether the companion is enabled, and
+   * the send-back loop budget. Items accrue live as the harness streams them (the blinking
+   * companion); at the step's completion the engine parks the run while any item is
+   * `pending`, then loops the Coder for any `queued` follow-up / `answered` question. See
+   * {@link followUpsStepStateSchema}. Absent for non-`coder` steps / when the companion is off.
+   */
+  followUps: v.optional(v.nullable(followUpsStepStateSchema)),
+  /**
+   * Live implementation-fork decision state while a `coder` step runs its optional
+   * two-phase flow: the proposer explore job (`proposing`), the human park
+   * (`awaiting_choice` / `answering`), the resolved choice (`chosen`), or one of the
+   * pass-through terminals (`single_path` / `skipped`). Created lazily by the engine
+   * when the phase activates — the config lives on the block + the risk policy, never
+   * on the step. Absent for non-`coder` steps / when the phase never activated. See
+   * {@link forkDecisionStepStateSchema}.
+   */
+  forkDecision: v.optional(v.nullable(forkDecisionStepStateSchema)),
+  /**
+   * Live JUDGE state on a judge step (the fourth taxonomy bucket): the rubric identity, the
+   * latest structured verdict, the per-task threshold it was compared against, the bounce
+   * budget, and the round history. Created lazily by the engine on first entry and — like
+   * `forkDecision` / `followUps` — deliberately PRESERVED across `resetStepForRerun`, so a
+   * bounce that re-runs the producer plus this step does not erase the verdict it is looping
+   * on. Absent for non-judge steps. See {@link judgeStepStateSchema}.
+   */
+  judge: v.optional(v.nullable(judgeStepStateSchema)),
+  /**
+   * Live "Ralph loop" state carried on a `ralph` step: the persistent retry-until-done
+   * loop's iteration count, budget, validation command, and per-iteration history. Seeded
+   * from the block's per-task agent config at step start, then advanced each iteration by
+   * the engine's `RalphController`. Because it rides the run's persisted `detail` blob, both
+   * durable drivers + both stale-run sweepers re-drive a mid-loop run from exactly this
+   * state after a restart. Absent for non-`ralph` steps. See {@link ralphStepStateSchema}.
+   */
+  ralph: v.optional(v.nullable(ralphStepStateSchema)),
+  /**
+   * The harness-computed PRE-PR VALIDATION report for a coding step whose service configured
+   * validation checks: the latest attempt's per-command outcomes (exit code + a bounded,
+   * secret-scrubbed output tail), how many agent+check rounds ran, and whether the checkout
+   * ended green. Recorded by the engine from the runner result on BOTH the passing path (the
+   * PR opened; this is the captured proof) and the exhausted path (the step failed; this is
+   * the evidence). Rides the run's persisted `detail` blob — no migration. Absent when the
+   * service configured no checks. See {@link validationReportSchema}.
+   */
+  validation: v.optional(v.nullable(validationReportSchema)),
+  /**
+   * Set when THIS dispatch could not READ the service frame's validation configuration (the
+   * store threw, or a mothership node's persistence RPC did). The dispatch degrades to "no
+   * checks and no dependency install" so a config-store outage cannot wedge every coding run,
+   * and that degradation is byte-for-byte what a service configuring NEITHER produces, which
+   * is exactly why the fact is recorded rather than only swallowed. Without it the PR
+   * verification report states "this service configures no check commands" about a service
+   * that may configure several, i.e. a fabricated fact about somebody's setup.
+   *
+   * Written at dispatch by `AgentContextBuilder`, and REWRITTEN on every dispatch of the step
+   * (a re-dispatch whose read succeeds clears it), so the flag always describes the read that
+   * produced the tree this step pushed. Rides the run's persisted `detail` blob, so no migration.
+   */
+  validationConfigUnreadable: v.optional(v.nullable(v.boolean())),
+  /**
+   * The harness-computed BUGFIX REPRODUCTION PROOF for a coding step that carried a declared
+   * reproduction: the declared command run against the pre-fix tree and the final tree, with
+   * both exit codes and captured output — or the agent's structural declaration that
+   * reproduction was infeasible, with its reason and stated alternative verification. The
+   * verdict is computed by the harness from exit codes, never self-reported by the model.
+   * Recorded by the engine from the runner result on every outcome (an `inconclusive` verdict
+   * never fails the step — see the initiative's D6). Rides the run's persisted `detail` blob —
+   * no migration. Absent when the run was not opted in or carried no declaration. See
+   * {@link reproductionReportSchema} and backend/docs/adr/0033-bugfix-reproduction-proof.md.
+   */
+  reproduction: v.optional(v.nullable(reproductionReportSchema)),
+  /**
+   * Transient re-entry marker carried on a parked `coder` step whose fork decision is
+   * `answering`: set when the human sends a chat message so the run is signalled to
+   * wake and the durable driver, on re-entering, runs the inline chat LLM and appends
+   * the assistant reply (the LLM work that must not block the HTTP request). Cleared
+   * once that async cycle completes. Documented beside `pendingIncorporation` /
+   * `pendingInterview`. Absent when no chat turn is pending.
+   */
+  pendingForkChat: v.optional(v.nullable(v.object({ messageId: v.string() }))),
+  /**
+   * Live PR deep-review state carried on a `pr-reviewer` step: the sliced, severity-ordered
+   * findings the read-only reviewer produced, the human's curated selection, and how it was
+   * resolved. Recorded by the engine when the reviewer container job completes; the run then
+   * parks (`awaiting_selection`) for the human to select findings through the dedicated
+   * window and resolve. Absent for non-`pr-reviewer` steps. See {@link prReviewStepStateSchema}.
+   */
+  prReview: v.optional(v.nullable(prReviewStepStateSchema)),
+  /**
+   * Live BUG-FISHING EXPEDITION state carried on a `bug-fisher` step: the planned angles, which
+   * of them have been fished, every finding they surfaced, and the bug-fix task each MARKED
+   * finding spawned. Created by the engine when the step first runs and extended by each phase's
+   * completion; the run parks (`awaiting_triage`) once every angle has settled, though findings
+   * are markable from the moment their phase lands. Deliberately PRESERVED across
+   * `resetStepForRerun`, exactly like `prReview` / `forkDecision` and for the same reason: the
+   * phase loop RE-ARMS this same step for each successive angle, so clearing it would throw away
+   * every earlier pass. Absent for non-`bug-fisher` steps. See {@link bugFishingStepStateSchema}.
+   */
+  bugFishing: v.optional(v.nullable(bugFishingStepStateSchema)),
+  /**
+   * The at-most-once driver marker for the PR-review "post" resolution: set when the human
+   * resolves a parked review with `post`, so the durable driver — on re-entry, off the HTTP
+   * request — publishes the selected findings as inline PR review comments (via
+   * `RepoFiles.createReview`) exactly once. Consumed (cleared + persisted) BEFORE the posting
+   * side effect so a Workflows retry/replay can't post the review twice. Cleared once posted.
+   */
+  pendingPrReviewPost: v.optional(v.nullable(v.boolean())),
+  /**
+   * The transient driver marker for a PR-review "challenge": set when a human challenges a
+   * finding, naming the finding + their optional specific concern, so the durable driver — on
+   * re-entry, off the HTTP request — dispatches the read-only Challenge Investigator against that
+   * finding exactly once. Consumed when the investigator's verdict is applied (the finding is
+   * strengthened or retracted) and the review re-parks. Absent when no challenge is in flight.
+   */
+  pendingChallenge: v.optional(
+    v.nullable(v.object({ findingId: v.string(), question: v.optional(v.nullable(v.string())) })),
+  ),
+  /**
+   * Transient rework feedback carried on a PRODUCER step while it is being re-run by
+   * a downstream reviewer (the analogue of an approval's `changes_requested`
+   * feedback for the automatic path). Folded into the agent's revision context on the
+   * re-run, then cleared. Absent when no rework is in flight.
+   */
+  rework: v.optional(
+    v.nullable(
+      v.object({
+        /** The producer's previous proposal the reviewer challenged. */
+        previousProposal: v.string(),
+        /** The reviewer's prose feedback driving the rework. */
+        feedback: v.string(),
+        /** Optional per-item / per-block challenges to address. */
+        comments: v.optional(v.array(stepReviewCommentSchema)),
+        /**
+         * WHO asked. Four paths write this field and they are not all automatic: a companion's
+         * below-threshold round and a judge's bounce are (`reviewer`), and so is a human GRANTING
+         * an extra companion round (the feedback being answered is still the companion's), but a
+         * human requesting changes on a companion's gate has their OWN feedback carried here
+         * (`human`). Required so a new rework driver has to answer the question rather than
+         * inherit whichever framing the prompt happened to use: telling an agent a person is
+         * waiting on work no person has looked at is a false attribution, and hiding a real one
+         * behind "your work was reviewed" loses the fact that somebody IS waiting.
+         */
+        requestedBy: v.picklist(['human', 'reviewer']),
+      }),
+    ),
+  ),
+  /**
+   * Transient incorporation intent carried on a parked `requirements-review` gate step.
+   * Set when the human answers the findings and asks to incorporate: the run is signalled
+   * to wake and the durable driver, on re-entering the gate, folds the answers into a
+   * document and re-reviews it (the LLM work that used to block the HTTP request). Cleared
+   * once that async cycle completes. `feedback` is the human's optional "do it differently"
+   * direction (a redo). Absent when no incorporation is pending.
+   */
+  pendingIncorporation: v.optional(v.nullable(v.object({ feedback: v.optional(v.string()) }))),
+  /**
+   * Transient recommendation intent carried on a parked `requirements-review` gate step.
+   * Set when the human asks the Requirement Writer to suggest answers for a batch of findings
+   * (or re-requests one): the run is signalled to wake and the durable driver, on re-entering
+   * the gate, runs the Writer per finding — filling in the `pending` placeholder
+   * recommendations — then re-parks (recommendations never advance the run). Cleared once that
+   * async batch completes. `itemIds` are the findings to recommend for; `note` steers the
+   * whole batch. Absent when no recommendation batch is pending.
+   */
+  pendingRecommendation: v.optional(
+    v.nullable(v.object({ itemIds: v.array(v.string()), note: v.optional(v.string()) })),
+  ),
+  /**
+   * Transient interview intent carried on a parked `initiative-interviewer` gate step. Set
+   * when the human has answered the planning questions and asked to continue (or proceed):
+   * the run is signalled to wake and the durable driver, on re-entering the gate, runs the
+   * interviewer LLM again against the answers — asking follow-ups (re-park) or synthesizing
+   * the goal/constraints brief and advancing. `proceed` skips any remaining questions.
+   * Cleared once that async re-entry completes. Absent when no continuation is pending.
+   */
+  pendingInterview: v.optional(v.nullable(v.object({ proceed: v.optional(v.boolean()) }))),
+  /**
+   * Consensus configuration for this step, copied from the pipeline's `consensus`
+   * array at run start. Present (with `enabled: true`) when this step should run
+   * through the multi-model consensus mechanism; read by the consensus executor
+   * (and to decide gating against the block estimate). Absent ⇒ standard agent.
+   * See {@link consensusStepConfigSchema}.
+   */
+  consensus: v.optional(v.nullable(consensusStepConfigSchema)),
+  /**
+   * Estimate-based gating for this step, copied from the pipeline's `gating` array at
+   * run start. When present (with `enabled: true`) the step is skipped at runtime unless
+   * the block's task estimate meets the threshold. Absent ⇒ always run. See
+   * {@link stepGatingSchema}.
+   */
+  gating: v.optional(v.nullable(stepGatingSchema)),
+  /**
+   * Per-step options bag copied from the pipeline's `stepOptions` array at run start (see
+   * {@link stepOptionsSchema}). Absent ⇒ all defaults for this step. Read by the engine —
+   * e.g. the requirements-review gate consults `stepOptions.autoRecommend`.
+   */
+  stepOptions: v.optional(v.nullable(stepOptionsSchema)),
+  /**
+   * True when this step was skipped at runtime rather than run. The step's `state` is `done`
+   * with no output; {@link skipReason} says which axis skipped it. Absent ⇒ the step ran
+   * normally.
+   */
+  skipped: v.optional(v.boolean()),
+  /**
+   * WHY a {@link skipped} step was skipped, as a machine-readable member the SPA maps to
+   * translated copy (`stepSkipReasonSchema`). Absent on a step that ran, and on a run that
+   * predates this field.
+   *
+   * A reason rather than a prose sentence, for two reasons that both bite. The backend does not
+   * localize prose, so a sentence composed here reaches every reader in English. And the only
+   * place a sentence could have lived is `output`, which is the step's PRODUCT: three separate
+   * aggregations select prior steps on `output` being non-empty and hand the text to a model
+   * (`priorOutputsFor`, the judge's prior-work fold, the doc interview's), so a skip note parked
+   * there is read downstream as the report of a step that never ran.
+   */
+  skipReason: v.optional(stepSkipReasonSchema),
+  /**
+   * Set `true` on a `spec-writer` step that determined the task is purely technical and
+   * produced no business specs (its result's `noBusinessSpecs`). Recorded on the step so
+   * the spec-companion's convergence — the one point both signals coexist — can combine it
+   * with the companion's `technicalCorroborated` verdict to infer the block's `technical`
+   * label. Absent for every other kind / a writer that produced specs.
+   */
+  noBusinessSpecs: v.optional(v.boolean()),
+  /**
+   * Set on a `spec-companion` step from its `technicalCorroborated` verdict (whether it
+   * agreed the task is purely technical). Recorded on the step — not just read off the
+   * live assessment — so the engine can infer the block's `technical` label both on the
+   * companion's automatic convergence AND on a human "proceed" past the iteration cap,
+   * where only the persisted step survives. Absent for every other kind / no opinion.
+   */
+  technicalCorroborated: v.optional(v.boolean()),
+  /** Text the agent produced for this step (when LLM execution is enabled). */
+  output: v.optional(v.string()),
+  /**
+   * Whether {@link output} is a DETERMINISTIC RENDERING of a structured artifact the step
+   * produced (the spec doc, the blueprint tree, the initiative plan) rather than the agent's
+   * own prose — see `reviewableArtifactOutput`. The artifact itself was already ingested into
+   * domain state (the spec files, the board frame, the `initiatives` entity), so the rendering
+   * is a VIEW of that state, not its source.
+   *
+   * That makes the difference load-bearing at the approval gate: "approve with corrections"
+   * overwrites `output` and flows it to downstream steps, which is exactly right for prose but
+   * silently discards an edit here — the committed artifact is the ingested one, so the human's
+   * corrections would never reach it. Both the SPA (hides the edit affordance) and
+   * `approveStep` (refuses an edited proposal) read this. Absent/false ⇒ the output IS the
+   * agent's own work product and stays editable.
+   */
+  outputIsRendered: v.optional(v.boolean()),
+  /**
+   * The structured JSON a registered CUSTOM kind's agent step returned (the generic
+   * manifest-driven `agent` dispatch's `custom` channel). Recorded so the SPA can render
+   * it in the `generic-structured` result view (and a post-op already consumed it
+   * server-side). Absent for built-in / prose kinds.
+   */
+  custom: v.optional(v.unknown()),
+  /**
+   * Whether the step HAS prose in {@link output}, stated separately so the board can render the
+   * "this step produced a reader" affordance without carrying the prose itself. Set only by the
+   * board snapshot's lean projection ({@link projectExecutionForBoard}), which WITHHOLDS `output`;
+   * an unprojected instance leaves it absent and the affordance reads `output` directly. Read
+   * through `stepHasOutput`, never either field alone.
+   */
+  hasOutput: v.optional(v.boolean()),
+  /** Identifier of the model that produced `output`, for transparency. */
+  model: v.optional(v.string()),
+  /**
+   * Subscription-usage attribution captured at DISPATCH, alongside {@link model}. An async
+   * container job settles on the durable poll path, which rebuilds the job handle from what the
+   * step persists — it cannot re-resolve any of this. Without these, the poll site attributes
+   * a subscription run to nobody: the pooled-token usage feedback (usage-aware rotation) is
+   * skipped outright and the quota-cycle counters resolve a null target, exactly as the model
+   * itself used to record 'unknown'.
+   *
+   * Neither is a secret: `subscriptionTokenId` identifies the pool ROW whose credential was
+   * leased (never the credential), and `initiatedByUserId` is the run's initiator, already
+   * carried elsewhere in the run. Absent for a proxy-metered (non-subscription) job, and for a
+   * run with no known initiator (system paths).
+   */
+  subscriptionTokenId: v.optional(v.string()),
+  initiatedByUserId: v.optional(v.string()),
+  /**
+   * Ids of the prompt-fragment library entries that were folded into this step's
+   * system prompt — the manual selection on the block unioned with the relevance
+   * selector's pick. Recorded for observability and replay-stability; absent when
+   * the fragment-library module is not configured.
+   */
+  selectedFragmentIds: v.optional(v.array(v.string())),
+  /**
+   * A code/PR review step's per-best-practice-standard adherence report: for each
+   * best-practice fragment folded into the reviewer's prompt, a 1..10 rating of how well the
+   * reviewed change/PR adheres plus the issues that standard surfaced. Recorded by the engine
+   * from the review agent's output and surfaced in run details / the PR-review window. Empty
+   * when the reviewer reported no reachable standards; absent for every non-review step.
+   */
+  fragmentAdherence: v.optional(fragmentAdherenceSchema),
+  /**
+   * A container agent's self-assessment of the work it just did — how hard/easy it was, what
+   * reduced its effectiveness, and the key obstacles it hit (see {@link agentEffortReportSchema}).
+   * Recorded by the engine from the agent's sentinel-file report and surfaced in run details.
+   * Absent for inline agents, non-container steps, and runs on an older harness image.
+   */
+  effortReport: v.optional(agentEffortReportSchema),
+  /**
+   * The repo-sourced Claude Skills this step was PINNED to at dispatch — the step's own picked
+   * skill (a `skill` step) AND any CATALOG skills the running agent kind declared (see
+   * `backend/docs/custom-agents.md` → agent capabilities). Recorded so a run executes a stable
+   * version of each skill even if its source resyncs mid-run, and so a later investigation knows
+   * exactly which skills (and at which commit / manifest blob) ran. `commit` is the source dir's
+   * head commit the resources were fetched at (null if the skill was never synced to a commit);
+   * `sha` is the `SKILL.md` blob sha. A BUNDLED skill (shipped in the deployment's own code) has
+   * no pin — its version is the deployment's — so it never appears here. Absent when the step ran
+   * no catalog skill.
+   */
+  skillVersions: v.optional(
+    v.array(
+      v.object({
+        skillId: v.string(),
+        commit: v.nullable(v.string()),
+        sha: v.string(),
+      }),
+    ),
+  ),
+  /**
+   * The tool servers (MCP) this dispatch wired for the agent, and the ones it declared and
+   * dropped. The sibling of {@link skillVersions}, for the other half of the capability model.
+   *
+   * The AUTHORITY, rather than the agent-context telemetry snapshot, which carried the same facts
+   * in its untyped `extras` bag and keeps serving them deprecated (projected from this, so the two
+   * cannot disagree; the removal window is in `backend/docs/public-api.md`). Two reasons, and the
+   * first is the deciding one: the snapshot is DOUBLE-GATED (`LLM_RECORD_PROMPTS` plus the
+   * per-workspace `storeAgentContext`), so a surface reading it would be blank on a deployment that
+   * simply has prompt recording off, while "which tools did this step actually have" is an ordinary
+   * question about a run, not an opt-in debugging artifact. And a step outlives a snapshot, which is
+   * pruned on the telemetry retention window.
+   *
+   * Absent for every non-container step, and for a step re-armed by a re-run until its next
+   * dispatch answers. See {@link stepToolServersSchema} for why the two lists are separate, why
+   * both-empty is its own state, why absent does not mean the step never ran, and why the record
+   * names the DISPATCHED kind.
+   */
+  toolServers: v.optional(stepToolServersSchema),
+  /**
+   * The linked context documents this dispatch put in front of the agent, each with the
+   * freshness verdict the dispatch reached about it — so "which revision of the design did this
+   * run build against" stays answerable once the run is over. The third member of the
+   * pinned-at-dispatch family beside {@link skillVersions} and {@link toolServers}, and recorded
+   * for the same reason: a later reader cannot re-derive it, because re-probing the source
+   * answers about the revision it is at NOW.
+   *
+   * Rewritten by each resolution that records a dispatch (the same gate `selectedFragmentIds`
+   * passes through), so it always describes the tree the step's last dispatch actually read.
+   *
+   * Absent means no linked document reached this step: a task with no attachments and no
+   * document URL in its description (the overwhelming default), a step whose context was
+   * resolved outside the dispatch builder (the inline requirements review assembles its own),
+   * or a run predating the field. All of them are "nothing was read", so absent and an empty
+   * list would state the same fact and the empty array is not written.
+   */
+  contextDocuments: v.optional(v.array(stepContextDocumentSchema)),
+  /**
+   * The workspace agent-prompt revision this step was PINNED to at dispatch — the sibling of
+   * {@link skillVersions}, and pinned for the same reason: what a step ran under must be
+   * recoverable afterwards, and the prompt log is append-only, so re-reading it later would
+   * answer about a revision that may have landed since.
+   *
+   * Absent when the kind ran the SHIPPED prompt — including after a deliberate revert, whose
+   * head revision means "follow the built-in" and so pins nothing. So absent reads as "the
+   * product's prompt", never as "unknown", which is what lets Kaizen treat an edited prompt as
+   * its own `(prompt, agent, model)` combo instead of inheriting a verification earned by text
+   * that is no longer running.
+   */
+  promptRevision: v.optional(v.number()),
+  /**
+   * The deployment-registered agent-kind VARIANT this step ran under, pinned at dispatch — the
+   * sibling of {@link promptRevision}, for the same reason and one more.
+   *
+   * `stepOptions.agentVariantId` records what the pipeline ASKED for; this records what the
+   * dispatch actually did with it, and the two genuinely differ. A variant's `systemPrompt` loses
+   * to a workspace override (the narrower tier), and an id can be withdrawn mid-run — so a reader
+   * shown only the ask would report a step as running a variation whose text never reached it.
+   * `applied` keeps those causes apart (see `AgentVariantApplication`).
+   *
+   * `fingerprint` covers the text the variant CONTRIBUTED, which is what lets Kaizen treat a
+   * re-worded variant as its own combo instead of inheriting a verification the previous wording
+   * earned — a bare id cannot express that, since re-registering an id is a supported way to
+   * re-word a variant. Absent when the variant contributed nothing, so it stays out of the key.
+   *
+   * Absent when the step named no variant, which is every step on the stock product.
+   */
+  promptVariant: v.optional(
+    v.object({
+      id: v.string(),
+      applied: v.picklist(['full', 'addition-only', 'superseded', 'withdrawn']),
+      fingerprint: v.optional(v.string()),
+    }),
+  ),
+  /**
+   * The FOUNDATIONAL SERVICES this step's agent declared its design consumes, read back from
+   * its reply's machine-readable block (see `parseFoundationalDeclaration`). Written only by a
+   * step whose kind carries the `foundational-catalog` trait — in the built-in catalog, the
+   * architect.
+   *
+   * `declared` are ids that resolved against the workspace's catalog; `unknown` are ids the
+   * agent named that did not. Kept apart because they need different downstream handling: the
+   * first get their API contracts injected for the consumer kinds, the second are STATED to
+   * those kinds as unavailable so nobody guesses at an interface the platform never had.
+   *
+   * ABSENT and `{declared: [], unknown: []}` are different states and both are load-bearing:
+   * absent means no design step declared anything (it was skipped by estimate gating, or the
+   * run predates the feature), while an empty selection means a design step ran and concluded
+   * that no shared service applies. A consumer told the wrong one of those would either invent
+   * a shared service or silently rebuild one.
+   */
+  foundationalServices: v.optional(foundationalServiceSelectionSchema),
+  /**
+   * What this step's agent DECLARED it stored, when its kind carries the `binary-output` trait
+   * (a generator whose deliverable is binary artifacts pushed into a foundational storage
+   * service, not a commit). Read back from the reply's fenced ```binary-outputs block by
+   * `parseBinaryOutputDeclaration` and recorded beside the other job facts, before any
+   * early-returning completion path.
+   *
+   * ABSENT means no binary-generating step settled here (the kind does not carry the trait, or
+   * the run predates the feature) — distinct from a present report whose `undeclared` flag says
+   * the agent never answered, and from an empty `stored`, which is the agent explicitly
+   * reporting it stored nothing. See {@link binaryOutputReportSchema} for the bookkeeping.
+   */
+  binaryOutputs: v.optional(binaryOutputReportSchema),
+  /**
+   * Live CANDIDATE-COMPARISON state on a binary-output step whose selection declares a
+   * `comparison`: the candidates the agent generated and staged, the human park while they are
+   * compared side by side, and the resolved choice of which to keep (and under which alternate
+   * ids). Created lazily by the engine when the first phase settles, never at start.
+   *
+   * Deliberately PRESERVED across `resetStepForRerun`, exactly like `forkDecision` and for the
+   * same reason: the second phase of the step is dispatched by re-running it, and the choice it
+   * has to honour is the thing being reset. Absent for every step that never compared.
+   * See {@link binaryCandidateStepStateSchema}.
+   */
+  binaryCandidates: v.optional(v.nullable(binaryCandidateStepStateSchema)),
+  /**
+   * Identifier of an in-flight asynchronous agent job (a container run polled by
+   * the durable driver). Set while the step is dispatched-but-not-yet-finished so
+   * a Workflows replay re-attaches to the running job instead of starting a new
+   * one; cleared once the job's result is recorded.
+   */
+  jobId: v.optional(v.string()),
+  /**
+   * Epoch ms the step first began executing (transitioned to `working`). Set once
+   * and never overwritten on subsequent state changes, so a re-run/replay keeps the
+   * original start. Absent until the step starts.
+   */
+  startedAt: v.optional(v.nullable(v.number())),
+  /**
+   * Epoch ms the step finished (transitioned to `done`). With {@link startedAt}
+   * this yields the step's execution duration. Absent until the step completes.
+   */
+  finishedAt: v.optional(v.nullable(v.number())),
+  /**
+   * Epoch ms the step began its FIRST attempt. Where {@link startedAt} is cleared and
+   * re-stamped by `resetStepForRerun` (so it always names the attempt in flight), this one
+   * survives the reset and never moves. It is what gives a re-run step a span covering
+   * everything it did: external-trace children name their parent by the run + agent kind
+   * alone, so attempt 1's generations hang under the same parent as attempt 3's, and a parent
+   * starting at the LAST attempt would begin after its own earliest child. Absent until the
+   * step starts.
+   */
+  firstStartedAt: v.optional(v.nullable(v.number())),
+  /**
+   * How many times this step has been STARTED (1 on a step that ran once, N after N-1
+   * re-runs). Incremented on each fresh start, never cleared by `resetStepForRerun`, so a
+   * cycle it drove is still countable after the fact. Distinct from the per-loop counters
+   * (`gate.attempts`, `ralph.attempts`), which count dispatches WITHIN one start.
+   */
+  attempts: v.optional(v.number()),
+  /**
+   * Every agent kind DISPATCHED against this step, in first-dispatch order, with how many
+   * times each ran.
+   *
+   * Usually just {@link agentKind} once, but a step routinely runs work under another kind: a
+   * gate escalating to its helper (`ci-fixer` / `conflict-resolver` / `on-call`), a Tester
+   * handing off to the fixer, a two-phase coder's `fork-proposer`. Those dispatches are what
+   * every telemetry row is tagged with, so the run's own record of "what actually ran here"
+   * cannot be `agentKind` alone. The COUNT is the cycle: a gate that dispatched its fixer four
+   * times is the difference between a run that converged and one that thrashed, and it is
+   * otherwise recoverable only from per-loop state each loop shapes differently.
+   *
+   * Written by `recordDispatchAttribution`, the one funnel every dispatch site already calls,
+   * and never cleared by `resetStepForRerun`. Absent on a step that dispatched no container
+   * agent (a gate whose precheck always passed, an inline-only step, a skipped step).
+   */
+  dispatches: v.optional(v.array(v.object({ agentKind: v.string(), count: v.number() }))),
+  /**
+   * Epoch ms of the container agent's last observed sign of life, forwarded from the harness
+   * heartbeat (job start, then every stdout chunk / subagent transcript tail) and persisted here
+   * THROTTLED — only re-stamped once the heartbeat has advanced by a bounded window, so a live
+   * container's poll cadence doesn't rewrite the run on every tick. Distinct from {@link startedAt}
+   * (a fixed clock) and from `subtasks`/`progress` (which only move when the agent ticks its todo
+   * list): a long, quiet phase — a reviewer reading hundreds of files — advances THIS but not the
+   * subtask counts, so the UI can surface "active Ns ago" and tell a genuinely-active-but-quiet run
+   * apart from a wedged one. Its persistence also keeps the run's `updated_at` fresh so the stale-run
+   * sweeper doesn't treat a live-but-quiet run as orphaned. Only ever set on async (container) steps;
+   * cleared on re-run; absent on non-container steps, steps not yet polled, and older harness images.
+   */
+  lastActivityAt: v.optional(v.nullable(v.number())),
+  /**
+   * Epoch ms the step parked on a human (an approval gate, a raised decision, or an
+   * iteration-cap gate), freezing its duration clock: while parked, elapsed time stops
+   * accruing — the symmetric counterpart of {@link finishedAt}'s terminal freeze, so a
+   * step waiting on input is not billed for the human's deliberation. Set once on park,
+   * cleared (null) when the step resumes working or finishes. Absent until first parked.
+   */
+  pausedAt: v.optional(v.nullable(v.number())),
+  /**
+   * How many times this step's container was evicted/crashed and recovered by
+   * automatically re-dispatching a fresh container (bounded by
+   * `MAX_EVICTION_RECOVERIES`). Once spent, a further eviction fails the run as
+   * `evicted` rather than looping. Absent/0 until the first eviction.
+   */
+  evictionRecoveries: v.optional(v.number()),
+  /**
+   * How many times this step's container was evicted by *transient infrastructure
+   * churn* — an event the runtime facade flags as not-a-crash (e.g. a deploy
+   * draining the sandbox) — and recovered by re-dispatching a fresh container.
+   * Counted separately from {@link evictionRecoveries} and bounded by a larger
+   * `MAX_TRANSIENT_EVICTION_RECOVERIES`, since such churn can recur several times in
+   * a short window, unlike a crash. Absent/0 until the first transient eviction.
+   */
+  transientEvictionRecoveries: v.optional(v.number()),
+  /**
+   * How many times this step's push to the work branch was refused because the branch had moved
+   * under it (the harness's `branch-contended` cause) and was recovered by re-dispatching the step,
+   * which resumes the branch as it now stands. Bounded by `MAX_BRANCH_CONTENTION_RECOVERIES`; past
+   * it the run fails with the harness's rejection and its remedy. Absent/0 until the first refusal.
+   */
+  branchContentionRecoveries: v.optional(v.number()),
+  /**
+   * How many times this step's DELEGATED work failed with a verdict its executor called survivable
+   * (a cancelled run, a runner-pool restart, a rate limit) and was recovered by dispatching it
+   * again. Bounded by `MAX_DELEGATED_RETRIES`; past it the run fails with the executor's own
+   * wording. Absent/0 until the first such failure.
+   *
+   * Its own counter rather than a read of `delegated.attempts.length`, because the attempt log is
+   * deliberately kept across a human re-run of the step: counted from it, a step someone re-ran
+   * twice would start its next run with the budget already spent.
+   */
+  delegatedRetries: v.optional(v.number()),
+  /**
+   * The transport's post-mortem of the FIRST container to die on this step (its exit state plus
+   * a tail of its own logs). Retained across recoveries: a re-dispatch removes the dead
+   * container immediately, so evidence from the first death — usually the informative one, the
+   * later attempts being a fresh container hitting the same wall — survives nowhere else. Folded
+   * into the run's failure `detail` once the eviction budget is spent. Absent when the transport
+   * reported no post-mortem (or the step was never evicted).
+   */
+  firstEvictionDetail: v.optional(v.string()),
+  /**
+   * The service-provisioning config a `deployer` step PINNED when it dispatched its async,
+   * container-backed deploy job, so the later poll/finalize maps the job against the same config
+   * the container was built from — NOT a fresh read of the service frame (which a person may have
+   * edited mid-flight, e.g. flipping it to `infraless`, which would otherwise fail a deploy whose
+   * container already succeeded). Absent for the synchronous raw-manifest path and the undeclared
+   * legacy single-connection path (re-resolution is harmless there). See {@link serviceProvisioningSchema}.
+   */
+  deployProvisioning: v.optional(serviceProvisioningSchema),
+  /**
+   * A `deployer` step fanning out over several service frames (the task's own frame + each
+   * involved-service frame; see the connections initiative) records each frame's TERMINAL
+   * outcome here, keyed by frame block id — so a durable replay knows which frames are already
+   * provisioned and only the remaining ones are dispatched. The in-flight frame is tracked by
+   * {@link deployFrameId} + {@link jobId} until it settles into this map. Absent for a
+   * single-frame deploy that never fanned out. See {@link deployEnvsSchema}.
+   */
+  deployEnvs: v.optional(deployEnvsSchema),
+  /**
+   * The service FRAME the deployer step's currently in-flight deploy job ({@link jobId}) is
+   * provisioning, during a multi-env fan-out — so the poll/finalize maps the settled job onto the
+   * right frame's {@link deployEnvs} entry. Cleared once that frame settles; absent when no deploy
+   * job is in flight or the step never fanned out.
+   */
+  deployFrameId: v.optional(v.string()),
+  /**
+   * The task's OWN (primary) service frame, pinned on the FIRST target resolution of a `deployer`
+   * fan-out and reused on every re-entry/replay. Keeps the primary classification STABLE against a
+   * mid-flight reparent (which would otherwise re-derive a different own frame and flip an
+   * own-service provisioning failure from terminal to a non-terminal peer failure — completing the
+   * run `done` despite a failed deploy). Absent until the first resolution / for a step that never
+   * fanned out.
+   */
+  deployPrimaryFrameId: v.optional(v.string()),
+  /**
+   * The frame whose environment a `deployer` step is currently WAITING to become ready, plus
+   * the wait's anchor and poll count. Set when a provider answers `provisioning` and cleared the
+   * moment that frame settles; absent whenever nothing is waiting. See {@link deployWaitStateSchema}.
+   */
+  deployWait: v.optional(deployWaitStateSchema),
+  /**
+   * The live state of a deployer step REMEDIATION loop: the deploy-fixer rounds dispatched
+   * against a repo-fixable provisioning failure. Absent on a deployer that never failed that way.
+   * See {@link deployFixStateSchema}.
+   */
+  deployFix: v.optional(deployFixStateSchema),
+  /**
+   * The live state of a deployer step INVESTIGATION loop: the rounds run against a provisioning
+   * failure no checkout edit can address, each carrying what was concluded and what (if anything)
+   * the platform did about it. Absent on a deployer that never failed that way. See
+   * {@link environmentInvestigationStateSchema}.
+   */
+  environmentInvestigation: v.optional(environmentInvestigationStateSchema),
+  /**
+   * A `disposer` step records each service frame's TERMINAL reclaim outcome here, keyed by frame
+   * block id — the mirror of {@link deployEnvs} at the other end of the lifecycle, and, like it,
+   * what lets a durable replay resume at the first un-settled frame instead of re-tearing down an
+   * environment that is already gone. Absent until the disposer runs. See {@link disposeEnvsSchema}.
+   */
+  disposeEnvs: v.optional(disposeEnvsSchema),
+})
+export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
+
+export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused', 'failed'])
+export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
+
+export const executionInstanceSchema = v.object({
+  /**
+   * Set when this instance is the board snapshot's LEAN PROJECTION
+   * ({@link projectExecutionForBoard}) rather than the whole run: the heavy captured text is
+   * WITHHELD, not absent. A reader that needs it (any step-detail overlay) must fetch the run
+   * by id first; a store reconciling a projection over a full cached run must carry the withheld
+   * fields forward rather than blanking them. Absent ⇒ the instance is complete.
+   */
+  projected: v.optional(v.boolean()),
+  id: v.string(),
+  blockId: v.string(),
+  pipelineId: v.string(),
+  pipelineName: v.string(),
+  steps: v.array(pipelineStepSchema),
+  currentStep: v.number(),
+  status: executionStatusSchema,
+  /**
+   * Structured failure diagnostics when `status` is `failed`; absent/null
+   * otherwise. Lets a failed task surface the same failure banner + retry as a
+   * failed bootstrap (shared {@link agentFailureSchema}).
+   */
+  failure: v.optional(v.nullable(agentFailureSchema)),
+  /**
+   * Failures from the run's PRIOR attempts, oldest→newest. Each retry/restart appends
+   * the then-current {@link failure} here and clears `failure` on the fresh attempt, so
+   * the top failure banner (keyed on `status === 'failed'`) disappears once the task is
+   * restarted while the full error trail stays viewable in the "previous errors" history.
+   * Absent/empty for a run that has never been failed-then-retried.
+   */
+  failureHistory: v.optional(v.array(agentFailureSchema)),
+  /**
+   * Successful outputs from the run's PRIOR attempts that a restart discarded, oldest→newest —
+   * the positive complement of {@link failureHistory}. A restart-from-step resets the chosen
+   * step and every later one, dropping their `output`; those that had already SUCCEEDED are
+   * recorded here (attributed by `stepIndex`) so the step-detail overlay's execution history
+   * surfaces the successful outputs a restart superseded, not only the errors. Bounded in count
+   * and per-entry size so the run's `detail` JSON doesn't bloat. Absent/empty for a run never
+   * restarted past a completed step (a plain retry re-runs only unfinished steps, so it records
+   * nothing).
+   */
+  outputHistory: v.optional(v.array(priorStepOutputSchema)),
+  /**
+   * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
+   * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live
+   * set of bound services where some fall back to WireMock). Mirrors the harness's own
+   * `buildInfraNotes` but surfaced on the RUN so the SPA renders it in the run/step detail
+   * (distinct from a `failure`, which aborts the run). Absent/empty when there is nothing to
+   * flag. Rides in the `detail` JSON column (no dedicated column), reflecting the start-time
+   * state even after the underlying envs change.
+   */
+  notes: v.optional(v.array(v.string())),
+  /**
+   * The frontend UI-test flow's backend bindings RESOLVED once at run start (env var → the bound
+   * service's live ephemeral URL, or absent ⇒ mocked; see {@link resolveFrontendBindings}). Stamped
+   * on the run so the SPA's run/step detail projects what the run ACTUALLY drove against — a frozen
+   * snapshot that stays truthful after the underlying envs are torn down, rather than re-resolving
+   * against current live state (which for a finished run could disagree with the co-located
+   * start-time {@link notes}). Rides in the `detail` JSON column; absent for a non-frontend run.
+   */
+  frontendBindings: v.optional(v.array(resolvedFrontendBindingSchema)),
+  /**
+   * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
+   * so the individual-usage restricted mode can use the initiator's OWN personal
+   * subscription (e.g. Claude) for the run's steps — a personal credential is never
+   * shared, so only its owner's runs may use it. Absent for runs started without a
+   * signed-in user (auth-disabled/local dev) and for legacy runs.
+   */
+  initiatedBy: v.optional(v.nullable(v.string())),
+  /**
+   * The workspace ROLE that initiator held at the moment the run was admitted, pinned here so the
+   * merge decision can be scoped to it (`classRulesByRole`, `dryRunRoles`).
+   *
+   * PINNED rather than re-resolved, for two reasons. The merge settles on the durable driver's
+   * path, which rebuilds its world from the run alone and has no request context to resolve a role
+   * from — the same constraint that made `recordDispatchAttribution` record at dispatch. And it is
+   * the honest fact: the authority a run was ADMITTED under is what the operator granted, so a
+   * role change mid-run retunes the next run rather than silently re-governing one already in
+   * flight.
+   *
+   * ABSENT is a real state, not a tier: a recurring-schedule fire, a public-API start and
+   * auth-disabled dev all have no workspace role to pin. Such a run stays on the preset's base
+   * `classRules` — the policy that governed it before role scoping existed — rather than being
+   * guessed onto a role. Guessing either way is wrong in a way the other is not: `admin` hands an
+   * unattributed run the widest rules in the preset, and `viewer` sandboxes a deployment's whole
+   * schedule the day it first authors a role entry.
+   */
+  initiatedByRole: v.optional(v.nullable(workspaceRoleSchema)),
+  /**
+   * Who the run was started FOR, on the CALLER's side: the `externalIdentity` of the public-API
+   * key that admitted it, as that key's provisioner named it. Absent for every run the public API
+   * did not start, and for one started by a key minted without an identity.
+   *
+   * Pinned at admission for the same reason {@link executionInstanceSchema.entries.initiatedByRole}
+   * is, plus one of its own. A key can be revoked (which is exactly what an integration does when
+   * a person leaves) and revocation must not erase who a finished run was for; re-reading the key
+   * per run would also put a credential lookup on every run projection, including paged ones.
+   *
+   * Provenance only, never an authorization input: it names an identity the platform cannot
+   * resolve and deliberately does not try to. What the run may do is its `initiatedByRole` and
+   * its {@link executionInstanceSchema.entries.mode}.
+   */
+  initiatedByExternalIdentity: v.optional(v.nullable(v.string())),
+  /**
+   * Whether this run may land its work ({@link runModeSchema}). Absent on legacy runs ⇒ `live`,
+   * which is what they were. Carried forward across retry/restart: a dry run stays a dry run, or
+   * the sandbox would be one retry deep.
+   */
+  mode: v.optional(runModeSchema),
+  /**
+   * HOW this run entered the system (`intakeOriginSchema`, which documents each member).
+   * Distinct from `initiatedBy`, which is `null` for a public-API run, a recurring-schedule fire
+   * AND auth-disabled dev alike, and from the launch-time `RunOrigin` (`manual`/`recurring`),
+   * which gates pipeline availability and is not persisted. Recorded because clarification
+   * behaviour diverges by intake: a headless run ({@link isHeadlessIntake}) pushes its parked
+   * questions out to the task's linked tracker issue, whereas a UI-started task's overseer is in
+   * the SPA and must keep behaving exactly as before. Carried forward across retry/restart.
+   * Absent on legacy runs ⇒ treated as `ui` (the safe reading: no outbound question writeback
+   * for a run whose intake we can't prove was headless).
+   */
+  intakeOrigin: v.optional(intakeOriginSchema),
+  /**
+   * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
+   * creation timestamp independent of when its first step actually starts (the public-API
+   * job view reports it as `createdAt`).
+   *
+   * On a run READ BACK from storage this is the `agent_runs.created_at` COLUMN — the value
+   * chronological reads order by — so a keyset cursor minted from a run names exactly the
+   * position the next query resumes at. The insert adopts whatever the instance was stamped with
+   * at start (`adoptCreatedAt`), so the in-memory run and its row never disagree. Optional only
+   * because a run assembled in memory has not been persisted yet.
+   */
+  createdAt: v.optional(v.number()),
+  /**
+   * Optimistic-concurrency token: a monotonic revision of the persisted run row,
+   * bumped on every write. Read back by the repository and used by
+   * `compareAndSwap` so a human-action write (resolve decision / approve /
+   * request changes) that raced another writer is detected and retried on fresh
+   * state instead of silently clobbering it. Defaults to 0 for a run that has
+   * never been persisted. The SPA's execution store also keys its monotonic
+   * reconcile on it, so a lagging snapshot refresh can't regress a run a live
+   * event already advanced.
+   */
+  rev: v.optional(v.number()),
+  /**
+   * After-the-fact investigation context: where/what the run's most recent step dispatched
+   * to (backend, model, repo), how that dispatch ended if it never reached a running job, plus
+   * the control-plane host. Rides in the `detail` JSON (see {@link runDiagnosticsSchema});
+   * absent on legacy runs and on a run that has not dispatched a step yet.
+   */
+  diagnostics: v.optional(runDiagnosticsSchema),
+  /**
+   * The PRE-DISPATCH INPUT GATE's verdict on the task this run implements (see
+   * {@link runInputGateSchema}): the structural check of the authored input that runs before
+   * the first agent step is dispatched, so a task nobody could act on parks having spent no
+   * tokens at all.
+   *
+   * ABSENT means the gate has not evaluated this run YET: the run has not reached its first
+   * dispatch. It never means "clean": a clean evaluation stamps `passed`, and a workspace with
+   * the gate off stamps `off`. Keeping those three apart is what makes the record idempotent
+   * under a durable replay (a re-driven run reads its settled verdict rather than re-judging a
+   * block a human has since edited) and what stops "the gate is off" from reading as "the input
+   * is fine".
+   */
+  inputGate: v.optional(runInputGateSchema),
+})
+export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>

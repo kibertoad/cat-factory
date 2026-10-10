@@ -1,4 +1,4 @@
-import type { ModelRef } from '@cat-factory/kernel'
+import type { AgentTokenUsage, ModelRef } from '@cat-factory/kernel'
 
 // Shared shapes for the benchmark matrix. A "cell" is one point in the
 // task × fixture × model × prompt-variant grid; running it yields a
@@ -66,7 +66,7 @@ export interface CandidateResult {
   input: string
   output: string
   latencyMs: number
-  usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number }
+  usage?: AgentTokenUsage & { cachedInputTokens?: number }
   costEur?: number
   error?: string
   /** Task-specific extras, e.g. the captured diff + Pi summary for implementation. */

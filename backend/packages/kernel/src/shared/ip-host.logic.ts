@@ -73,6 +73,53 @@ export function decodeIpv4(host: string): [number, number, number, number] | nul
 }
 
 /**
+ * Decode an IPv6 literal to its eight 16-bit groups, or null when it is not one.
+ *
+ * Exists because an IPv6 address has MANY spellings of one value and a rule that pattern-matches
+ * the canonical one is not a rule: `::1`, `0::1` and `0:0:0:0:0:0:0:1` are the same loopback
+ * address, and a check comparing against the literal `'::1'` admits the other two. Same for
+ * `fe80::/10`, where a `startsWith('fe80:')` test covers an eighth of the range and passes
+ * `fe90::1`. Callers that must classify an IPv6 target (link-local, multicast, loopback) decode
+ * first and judge the NUMBER, exactly as {@link decodeIpv4} exists so a guard never judges a v4
+ * spelling.
+ *
+ * Refused rather than decoded: a zone id (`fe80::1%eth0`), which names a local interface and can
+ * never be a routable target, and any group that is not 1-4 hex digits. A trailing dotted-quad is
+ * accepted, being the ordinary spelling of a mapped or translated address.
+ */
+export function decodeIpv6(hostname: string): number[] | null {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (!host.includes(':') || host.includes('%')) return null
+  const halves = host.split('::')
+  if (halves.length > 2) return null
+  const head = expandIpv6Groups(halves[0] ?? '')
+  const tail = halves.length === 2 ? expandIpv6Groups(halves[1] ?? '') : []
+  if (!head || !tail) return null
+  if (halves.length === 1) return head.length === 8 ? head : null
+  // `::` stands for at least one all-zero group, so a compression that saves nothing is malformed.
+  const filled = 8 - head.length - tail.length
+  return filled >= 1 ? [...head, ...Array.from({ length: filled }, () => 0), ...tail] : null
+}
+
+/** One colon-separated run of an IPv6 literal as 16-bit groups, or null when it is malformed. */
+function expandIpv6Groups(part: string): number[] | null {
+  if (part === '') return []
+  const chunks = part.split(':')
+  const groups: number[] = []
+  for (const [index, chunk] of chunks.entries()) {
+    if (index === chunks.length - 1 && chunk.includes('.')) {
+      const v4 = decimalV4(chunk)
+      if (!v4) return null
+      groups.push((v4[0] << 8) | v4[1], (v4[2] << 8) | v4[3])
+      continue
+    }
+    if (!/^[0-9a-f]{1,4}$/.test(chunk)) return null
+    groups.push(parseInt(chunk, 16))
+  }
+  return groups
+}
+
+/**
  * Whether a host resolves to a known cloud-metadata / link-local target — the endpoint
  * an SSRF would aim at for instance credentials. Covers the metadata hostnames plus the
  * whole link-local range (169.254.0.0/16, incl. 169.254.169.254 IMDS) and the per-vendor
@@ -94,6 +141,59 @@ export function isCloudMetadataHost(hostname: string): boolean {
     if (a === 100 && b === 100 && c === 100 && d === 200) return true
   }
   return false
+}
+
+/**
+ * Whether a hostname names THIS machine: `localhost`, any `127.x.x.x`, or the IPv6 `::1`.
+ *
+ * Narrower than {@link isBlockedPrivateHost} on purpose, and the two answer different questions.
+ * That one asks "could this reach something private" and so blocks the whole RFC1918 space; this
+ * one asks "is this the same machine", which a LAN address is not. A caller that relaxes a rule
+ * for a developer's own throwaway cluster wants exactly this narrow answer: a shared staging
+ * cluster on 10.x is somebody else's, however private its address.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
+}
+
+/**
+ * Hostnames that reach the machine this process runs on without being loopback ADDRESSES: the
+ * wildcard bind addresses a tool writes into a config when it listened on every interface, and
+ * the aliases a container runtime publishes for its host.
+ */
+const LOCAL_MACHINE_ALIASES = new Set([
+  // What k3d writes into the kubeconfig by default, and what Docker publishes for a port bound
+  // to every interface. It is not dialable as written, and it names this machine.
+  '0.0.0.0',
+  '::',
+  // Docker Desktop / Rancher Desktop publish these inside containers for the host; the second is
+  // the alias its bundled Kubernetes uses in the kubeconfig it installs.
+  'host.docker.internal',
+  'kubernetes.docker.internal',
+  'gateway.docker.internal',
+])
+
+/**
+ * Whether a hostname names THIS machine, over any of the spellings a local toolchain produces.
+ *
+ * Wider than {@link isLoopbackHost} and for a different question. That one asks whether the
+ * ADDRESS is loopback, which is what a URL policy needs. This asks whether the thing on the
+ * other end is the developer's own machine, which is also true of the wildcard bind address a
+ * local cluster writes into its kubeconfig and of the host aliases a container runtime
+ * publishes. A caller relaxing a rule for a developer's own throwaway cluster wants this one:
+ * gating on the narrow answer silently excludes the default k3d and Docker Desktop setups, which
+ * is most of the population the relaxation exists for.
+ *
+ * Still narrower than {@link isBlockedPrivateHost}: a shared staging cluster on 10.x is somebody
+ * else's machine however private its address, and RFC1918 stays out.
+ */
+export function isLocalMachineHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (isLoopbackHost(host)) return true
+  if (LOCAL_MACHINE_ALIASES.has(host)) return true
+  // RFC 6761 reserves the whole `.localhost` tree to loopback.
+  return host.endsWith('.localhost')
 }
 
 /**

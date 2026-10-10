@@ -6,8 +6,12 @@ import type {
   R2Bucket,
   Workflow,
 } from '@cloudflare/workers-types'
+import { ENV_HELP, configProblem } from '@cat-factory/server'
+import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { DeployContainer } from './containers/DeployContainer'
+import type { UiTesterContainer } from './containers/UiTesterContainer'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
+import type { CacheGenerationDirectory } from './durable-objects/CacheGenerationDirectory'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
 
 /** Message enqueued to bound the rate at which durable runs are started. */
@@ -19,12 +23,36 @@ export interface ExecutionStartMessage {
 /**
  * Work enqueued on GITHUB_SYNC_QUEUE so the webhook endpoint can ack fast and
  * apply projection updates asynchronously. A discriminated union: verified
- * webhook deliveries, and targeted repo resyncs (from the cron reconciler / the
- * on-demand resync endpoint).
+ * webhook deliveries, targeted repo resyncs (from the cron reconciler / the
+ * on-demand resync endpoint), and targeted skill-source resyncs (the push-webhook
+ * freshness fan-out, slice 4) — for the skill library and the foundational-services catalog
+ * alike.
  */
 export type GitHubSyncMessage =
   | { kind: 'webhook'; eventName: string; payload: unknown }
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
+  | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
+  | { kind: 'foundational-source-resync'; sourceId: string }
+
+/**
+ * Work enqueued on TRACKER_SYNC_QUEUE by the tracker webhook receiver so it can ack fast — a
+ * tracker expects a prompt 2xx and redelivers otherwise, while the handle may fire a whole
+ * pipeline (push-driven intake) or drive a parked review through an incorporation LLM call (a
+ * ticket reply).
+ *
+ * The message carries the already-VERIFIED, already-PARSED neutral event rather than the raw
+ * payload: verification and parsing both need the source's provider, which the receiver has
+ * resolved and the consumer would otherwise resolve again — and a queued message then carries no
+ * secret and no vendor shape.
+ *
+ * A separate queue from `GITHUB_SYNC_QUEUE` rather than a fourth `kind` on it: that queue's name,
+ * consumer concurrency and DLQ are all scoped to GitHub PROJECTION work, and a tracker delivery
+ * shares none of those properties.
+ */
+export interface TrackerSyncMessage {
+  workspaceId: string
+  event: TrackerWebhookEvent
+}
 
 /** Bindings and vars available to the Worker (declared in wrangler.toml). */
 export interface Env {
@@ -56,6 +84,16 @@ export interface Env {
    */
   PROVISIONING_DB?: D1Database
 
+  /**
+   * REQUIRED, dedicated D1 database for the account audit log, with its own migrations lineage
+   * (`audit-migrations/`). Separate from `DB` for RETENTION rather than write profile: audit is
+   * low-volume, but once run-lifecycle events land it is the only table that grows with run
+   * volume AND wants a multi-year window, and D1's ceiling is 10 GB PER DATABASE. Required for
+   * the same reason `TELEMETRY_DB` is: an unbound binding means no audit trail, which reads
+   * exactly like a deployment where nothing privileged ever happened.
+   */
+  AUDIT_DB: D1Database
+
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 
@@ -86,6 +124,24 @@ export interface Env {
    * isn't auto-driven — the cron sweep re-drives any run left running.
    */
   ENV_CONFIG_REPAIR_WORKFLOW?: Workflow
+  /**
+   * Workflows binding that durably drives each ephemeral-environment self-test run's stage
+   * machine (see EnvironmentTestWorkflow). Without it a self-test still starts (creates the
+   * branch + dispatches provisioning) but isn't auto-advanced.
+   */
+  ENV_TEST_WORKFLOW?: Workflow
+  /**
+   * Workflows binding that drives guided PR review jobs (see GuidedReviewWorkflow). Without it a
+   * question is stored but waits for the cron re-drive, which also needs this binding.
+   */
+  GUIDED_REVIEW_WORKFLOW?: Workflow
+  /**
+   * Emit threshold for the structured logger: `debug` | `info` | `warn` | `error`.
+   * Default `info`. Set it to `debug` (a `wrangler.toml` var, or `wrangler secret`-free
+   * `[vars]` edit) to turn on the verbose tier during an incident, then set it back —
+   * `debug` is deliberately chatty. An unrecognised value falls back to `info`.
+   */
+  LOG_LEVEL?: string
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
   /**
@@ -118,11 +174,31 @@ export interface Env {
    */
   CI_MAX_POLLS?: string
   /**
+   * Ceiling on ONE pipeline-step advance or status read, applied as the durable driver's
+   * `step.do` timeout here and raced in `driveExecution` on Node: the engine's hang bound, kept
+   * as one knob so a wedged call is waited out for the same length of time on both facades.
+   *
+   * A duration string ("30 minutes", the default), written as a whole number and one of
+   * seconds/minutes/hours/days/weeks. Both facades parse it with the same parser, so a value one
+   * accepts the other honours identically; an unusable one warns and falls back on both.
+   */
+  ADVANCE_TIMEOUT?: string
+  /**
    * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
    * changes to subscribed browsers in real time. When absent, the engine pushes
    * nothing (clients still get state on connect / refresh).
    */
   WORKSPACE_EVENTS?: DurableObjectNamespace<WorkspaceEventsHub>
+  /**
+   * Cross-isolate cache-coherency directory (Durable Object): one generation counter per
+   * (cache, group), sharded by group. Its presence is what selects the COHERENT app-cache
+   * profile: caches of our own mutable state get a real in-isolate TTL with a generation
+   * probe bounding cross-isolate staleness (see `appCachesHost.ts`). When absent, the
+   * Worker keeps the isolate-safe pass-through stance for those caches: prior behaviour,
+   * no boot failure, which is the safe direction for a deployment whose wrangler.toml
+   * predates the binding.
+   */
+  CACHE_GENERATIONS?: DurableObjectNamespace<CacheGenerationDirectory>
 
   // ---- Container-based implementation (see config.ts; opt-in) --------------
   /**
@@ -139,6 +215,18 @@ export interface Env {
    * REST path is unaffected).
    */
   DEPLOY_CONTAINER?: DurableObjectNamespace<DeployContainer>
+  /**
+   * Durable Object namespace backing per-run UI-TESTER containers: the heavier image that
+   * layers Playwright + Chromium, pnpm/yarn, `serve` and a headless JRE + WireMock onto the
+   * executor harness, which the `image: 'ui'` dispatch variant routes to. A run gets one
+   * ALONGSIDE its `EXEC_CONTAINER` instance, because a per-run container cannot change image
+   * mid-run and a browser-driven step sits between ordinary agent steps.
+   *
+   * Absent ⇒ a step declaring that image is REFUSED at dispatch, naming this binding. It is not
+   * served on the executor image instead: that image has no browser, and the refusal is the
+   * whole reason the variant exists.
+   */
+  UI_CONTAINER?: DurableObjectNamespace<UiTesterContainer>
   /**
    * Optional shared secret authenticating the Worker → harness HTTP calls. When set,
    * it is injected into each per-run container's env (so the harness requires it) and
@@ -171,6 +259,14 @@ export interface Env {
   // The spend safeguard (monthly limit / currency / per-model price overrides) is now
   // configured PER WORKSPACE in the UI (the `workspace_settings` row), not via env — see
   // `@cat-factory/contracts` `workspace-settings.ts` + `SpendService`.
+  /**
+   * Operator hard ceiling on the ACCOUNT-tier monthly budget (base pricing currency). When
+   * set, no account may configure a monthly budget above this, and it acts as the effective
+   * account budget when none is configured. See docs/environment-variables.md.
+   */
+  BUDGET_MAX_MONTHLY_PER_ACCOUNT?: string
+  /** Operator hard ceiling on the USER-tier monthly budget. Same semantics per user. */
+  BUDGET_MAX_MONTHLY_PER_USER?: string
 
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string
@@ -181,17 +277,66 @@ export interface Env {
   DEEPSEEK_API_KEY?: string
   /** Moonshot AI key (provider `moonshot`, direct Kimi; OpenAI-compatible). */
   MOONSHOT_API_KEY?: string
+  /** xAI key (provider `xai`, direct Grok; OpenAI-compatible). */
+  XAI_API_KEY?: string
 
-  // Optional base-URL overrides for the OpenAI-compatible providers (self-hosted
-  // gateway, regional endpoint, or a stub in tests). Default to the public APIs.
+  // Optional base-URL overrides for the direct providers (self-hosted gateway, regional
+  // endpoint, or a stub in tests). Default to the public APIs. Every one of these is read
+  // through `providerEndpoints.ts`'s override map, which is TOTAL over the shared
+  // `DirectProvider` union, so a field declared here and left unwired there fails to compile
+  // rather than reading as "no override configured" forever.
   QWEN_BASE_URL?: string
   DEEPSEEK_BASE_URL?: string
   MOONSHOT_BASE_URL?: string
+  XAI_BASE_URL?: string
   OPENAI_BASE_URL?: string
-  // OpenRouter override (defaults to the public gateway). LiteLLM is operator-hosted, so
-  // LITELLM_BASE_URL is REQUIRED to enable the `litellm` provider (no public default).
+  /**
+   * Anthropic override. Not OpenAI-compatible (its SDK speaks its own dialect), but a direct
+   * key-pooled provider all the same, so a deployment fronting Anthropic with a proxy repoints it
+   * here. Node reads env by NAME and has always honoured this; declaring it here is what keeps the
+   * two facades from disagreeing about the same deployment's configuration.
+   */
+  ANTHROPIC_BASE_URL?: string
+  // OpenRouter override (defaults to the public gateway). Bifrost and LiteLLM are
+  // operator-hosted, so their base URL is REQUIRED to enable the `bifrost` / `litellm` provider
+  // at all (self-hosted software, no public default).
   OPENROUTER_BASE_URL?: string
+  /**
+   * Whether OpenRouter may route to an upstream that RETAINS prompts. `allow` opts in; anything
+   * else (unset included) denies, which is the opposite of OpenRouter's own default and
+   * deliberate: an agent prompt is the customer's source tree. Parsed by
+   * `openRouterDataCollectionFrom`, shared with the Node facade.
+   */
+  OPENROUTER_DATA_COLLECTION?: string
+  /**
+   * Whether OpenRouter must keep the request off an upstream that does not advertise every
+   * parameter it carries. `false` opts out; anything else (unset included) requires them.
+   *
+   * The escape hatch for the pool this narrowing can empty: a model whose only upstreams
+   * advertise a subset of the body's parameters is refused outright rather than routed with one
+   * knob ignored, and a deployment that would rather have the call is the one that sets this.
+   * Parsed by `openRouterRequireParametersFrom`, shared with the Node facade.
+   */
+  OPENROUTER_REQUIRE_PARAMETERS?: string
+  BIFROST_BASE_URL?: string
   LITELLM_BASE_URL?: string
+
+  // ---- AWS Bedrock (opt-in) -----------------------------------------------
+  // The Worker does not bundle `@cat-factory/provider-bedrock` (a deployment mixes it in via
+  // the `registerModelRegistry` extension point in `infrastructure/ai/registries.ts`), but the
+  // per-model ENABLEMENT is read here so a deployment that did register it also gets the
+  // `bedrock` picker flavour the Node facade derives from these two vars. The vars alone do
+  // NOT grant it: `bedrockModelsCapability` also requires a registered registry serving
+  // `bedrock`, and warns when the vars are set without one, so the picker can never offer a
+  // route the deployment's own composite cannot dispatch.
+  /** AWS Region, e.g. `eu-central-1`. Unset ⇒ no `bedrock` flavour is offered. */
+  BEDROCK_REGION?: string
+  /**
+   * Comma-separated allow-list of the Bedrock ids this account may call, VERBATIM (each
+   * carrying whatever geo/global inference prefix the Region needs). This is the per-model
+   * enablement: an id absent from it is a model this account cannot call.
+   */
+  BEDROCK_MODELS?: string
 
   // ---- Inline agent web search (opt-in; design/research kinds) -------------
   // Provider-hosted web search for the INLINE architect/researcher steps (the
@@ -211,6 +356,18 @@ export interface Env {
   /** Cap on provider web searches per inline run (Anthropic `maxUses`; default 5). */
   INLINE_WEB_SEARCH_MAX_USES?: string
 
+  // ---- Container agent web search: deployment-wide default upstream (opt-in) ----
+  // Fallback web-search upstream for CONTAINER (Pi) agents whose account configured none of
+  // its own — the trusted counterpart to the per-account keys (see `createDefaultWebSearchUpstream`
+  // in @cat-factory/server). Public endpoints only here (no loopback-SearXNG story on workerd);
+  // when set, `web_search` is advertised to every run. Absent ⇒ account-keys-only, as before.
+  /** Brave Search key for the deployment-wide default upstream (preferred when set). */
+  WEB_SEARCH_BRAVE_API_KEY?: string
+  /** Self-hosted SearXNG base URL for the deployment-wide default upstream. */
+  WEB_SEARCH_SEARXNG_URL?: string
+  /** Optional bearer for the default SearXNG (only if it sits behind an auth proxy). */
+  WEB_SEARCH_SEARXNG_API_KEY?: string
+
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */
   GITHUB_APP_ID?: string
@@ -226,6 +383,12 @@ export interface Env {
   GITHUB_WEBHOOK_SECRET?: string
   /** Queue carrying webhook deliveries / resync jobs to the async consumer. */
   GITHUB_SYNC_QUEUE?: Queue<GitHubSyncMessage>
+  /**
+   * Queue carrying verified inbound TRACKER deliveries to the async consumer. Unbound ⇒ the
+   * receiver applies each delivery inline, which is fine for dev but blocks the tracker's HTTP
+   * request on the whole handle.
+   */
+  TRACKER_SYNC_QUEUE?: Queue<TrackerSyncMessage>
   /** Workflow that performs durable full-repo backfills. */
   GITHUB_BACKFILL_WORKFLOW?: Workflow
 
@@ -314,6 +477,29 @@ export interface Env {
   GOOGLE_OAUTH_CLIENT_SECRET?: string
   /** Explicit Google redirect_uri; derived from the request origin when unset. */
   GOOGLE_OAUTH_REDIRECT_URL?: string
+  // ---- Enterprise SSO (generic OIDC) --------------------------------------
+  // One adapter for every enterprise identity provider: the issuer's own discovery document
+  // supplies the endpoints, so Okta / Entra ID / Auth0 / Keycloak / PingFederate / a Shibboleth
+  // OP are configuration rather than code. All three of the first group are required together —
+  // a partial set REFUSES to boot rather than silently leaving the deployment on consumer
+  // logins. Parsing and validation live in `@cat-factory/server`'s `resolveSsoConfig`, which the
+  // Node facade calls too, so the two runtimes cannot drift on admission policy.
+  /** The provider's issuer URL, e.g. `https://acme.okta.com/oauth2/default`. */
+  AUTH_SSO_ISSUER_URL?: string
+  AUTH_SSO_CLIENT_ID?: string
+  AUTH_SSO_CLIENT_SECRET?: string
+  /** Sign-in button label; names the operator's IdP, so it is never localized. */
+  AUTH_SSO_LABEL?: string
+  /** Space-separated scopes; `openid` is added when absent. Default `openid profile email`. */
+  AUTH_SSO_SCOPES?: string
+  /** Explicit redirect_uri; derived from the request origin when unset. */
+  AUTH_SSO_REDIRECT_URL?: string
+  /** Optional narrowing: only these email domains may sign in via SSO. */
+  AUTH_SSO_ALLOWED_EMAIL_DOMAINS?: string
+  /** The claim group memberships arrive under (`groups` by default). */
+  AUTH_SSO_GROUPS_CLAIM?: string
+  /** Optional narrowing: the user must be in at least one of these directory groups. */
+  AUTH_SSO_REQUIRED_GROUPS?: string
   /** Optional dedicated master key for the per-account email API key (falls back to ENCRYPTION_KEY). */
   EMAIL_ENCRYPTION_KEY?: string
   /** Deployment-level system sender for auth emails (password reset): provider/from/key. */
@@ -349,6 +535,22 @@ export interface Env {
    */
   ENCRYPTION_KEY?: string
 
+  /**
+   * The redirect URL a vendor's authorization server sends an operator's browser back to when they
+   * connect a remote (`http`) MCP tool server: this deployment's public app URL followed by
+   * `/mcp-oauth-callback`, and the same string registered as the OAuth client's redirect URI at the
+   * vendor. It points at the SPA rather than at this Worker on purpose: the page there re-presents
+   * the vendor's `code` and `state` over the authenticated API, which is what lets the completion
+   * be gated on a session at all (a vendor's redirect carries no bearer token).
+   *
+   * Operator-set rather than derived from the request, because the vendor has this exact value on
+   * file: a `Host`-derived string differs behind every route a Worker is reachable by, and the
+   * exchange then fails at the vendor with `redirect_uri_mismatch`. Unset ⇒ the interactive grant
+   * refuses with a 503 naming this variable; the client-credentials grant needs no redirect and
+   * works without it.
+   */
+  MCP_OAUTH_REDIRECT_URL?: string
+
   // ---- Document-source integration (see config.ts; always on) -------------
   /**
    * Comma-separated allow-list of sources to register (e.g. `confluence,notion`).
@@ -361,13 +563,10 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
-  /**
-   * Enables the environment provider integration ('true'). Per-workspace provider
-   * manifests and their (encrypted) secret bundles live in D1, not here. Secrets are
-   * sealed with the shared `ENCRYPTION_KEY`.
-   */
-  ENVIRONMENTS_ENABLED?: string
+  // ---- Ephemeral environment integration (see config.ts) ------------------
+  // The integration assembles from the shared `ENCRYPTION_KEY` (which seals the
+  // per-workspace manifests/secret bundles in D1); there is no enable flag. Only the
+  // URL-guard escape hatches below are read from env.
   /**
    * Comma-separated hostnames exempt from the strict public-https URL guard, for a
    * TRUSTED in-house adapter pointing at an internal env platform (a private/VPN host).
@@ -376,6 +575,22 @@ export interface Env {
   ENVIRONMENTS_ALLOW_URL_HOSTS?: string
   /** `true` to permit `http` (not just `https`) for trusted env/provider URLs. */
   ENVIRONMENTS_ALLOW_HTTP_URLS?: string
+  /**
+   * ADDITIVE house-convention extensions to provisioning detection — a JSON object with any of
+   * `composeFiles` / `composeDirs` / `seedDirs` / `envTemplateDirs` string arrays. Only broadens
+   * what detection recognises (built-ins always win); malformed/unset ⇒ built-in behaviour.
+   */
+  ENVIRONMENTS_DETECTION_CONVENTIONS?: string
+
+  // ---- Locally-run model endpoints (per-user runners) ---------------------
+  /**
+   * `true` to let a user register a locally-run model endpoint (Ollama / LM Studio / …)
+   * on a private-LAN host (RFC1918 / ULA / mDNS `.local`) in addition to loopback. OFF
+   * by default: the LAN allow-list is an internal-network SSRF grant on a shared
+   * deployment (SEC-3). RFC1918 is unroutable from workerd, so on this facade the flag
+   * mostly governs what the write boundary accepts; kept symmetric with the Node facade.
+   */
+  LOCAL_MODELS_ALLOW_LAN?: string
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) -----------
   /**
@@ -391,10 +606,29 @@ export interface Env {
    * with the shared `ENCRYPTION_KEY`.
    */
   RUNNERS_ENABLED?: string
+  /**
+   * Comma-separated hostnames exempt from the strict public-https guard for the SERVICE CATALOG
+   * (developer portal) integration. Widening this is the normal case rather than an exception: a
+   * self-hosted Backstage usually lives on an internal host. Scoped to this integration alone.
+   */
+  SERVICE_CATALOG_ALLOW_URL_HOSTS?: string
+  /** `'true'` permits `http` for a trusted internal portal URL (see the host list above). */
+  SERVICE_CATALOG_ALLOW_HTTP_URLS?: string
   /** Comma-separated hostnames exempt from the strict public-https guard (see ENVIRONMENTS_ALLOW_URL_HOSTS). */
   RUNNERS_ALLOW_URL_HOSTS?: string
   /** `true` to permit `http` for a trusted internal pool scheduler URL. */
   RUNNERS_ALLOW_HTTP_URLS?: string
+
+  // ---- Outbound notification webhook (see config/notificationWebhooks.ts) -
+  /**
+   * Comma-separated hostnames exempt from the strict public-https guard on a workspace's
+   * outbound notification-webhook endpoint (see ENVIRONMENTS_ALLOW_URL_HOSTS). Scoped to
+   * webhooks alone: this is the one integration whose target URL a WORKSPACE chooses, so it
+   * must not ride another integration's operator-set allow-list.
+   */
+  NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS?: string
+  /** `true` to permit `http` for a plaintext receiver on a trusted internal network. */
+  NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS?: string
 
   // ---- Slack notification transport (see config/slack.ts; opt-in) ---------
   /**
@@ -460,6 +694,99 @@ export interface Env {
   /** Langfuse host; defaults to Langfuse Cloud when unset. */
   LANGFUSE_BASE_URL?: string
 
+  // ---- OpenTelemetry OTLP exporter (opt-in LLM observability) ---------------
+  /**
+   * Opt-in flag for exporting LLM generations (+ container tool spans) and metrics to an
+   * OTLP/HTTP backend. Enabled only when 'true' AND OTEL_EXPORTER_OTLP_ENDPOINT is set.
+   * The Worker uses a fetch-based OTLP exporter (workerd-safe); it composes alongside
+   * Langfuse when both are enabled.
+   */
+  OTEL_ENABLED?: string
+  /** OTLP/HTTP base URL, e.g. `http://collector:4318` (the `/v1/*` paths are appended). */
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string
+  /** Comma-separated `k=v` OTLP headers (auth tokens, tenant ids); a Worker secret. */
+  OTEL_EXPORTER_OTLP_HEADERS?: string
+  /** OTLP resource `service.name`; defaults to `cat-factory` when unset. */
+  OTEL_SERVICE_NAME?: string
+  /**
+   * Opt-in flag ('true') for the deployment-level (platform-operator) metrics sweep: pushes
+   * per-account run-health aggregates (outcomes, failures, live depth, duration percentiles)
+   * as OTLP GAUGE metrics to the same endpoint. A further opt-in on top of OTEL_ENABLED (it
+   * adds recurring DB rollup load); the `scheduled` cron drives it.
+   */
+  OTEL_PLATFORM_METRICS?: string
+  /** Trailing window each platform-metrics snapshot aggregates over (`1h`/`24h`/`7d`; default `1h`). */
+  OTEL_PLATFORM_METRICS_WINDOW?: string
+  /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
+  OTEL_PLATFORM_METRICS_INTERVAL_MS?: string
+  /**
+   * Opt-in flag ('true') for exporting the platform's own structured LOG lines to the same
+   * OTLP endpoint as OTLP log records. A further opt-in on top of OTEL_ENABLED (it adds an
+   * egress POST per batch of lines). `LOG_LEVEL` governs what is exported, exactly as it
+   * governs what is written locally.
+   */
+  OTEL_LOGS?: string
+  /** Lines per OTLP log POST (default 128); also bounds the exporter's in-memory buffer. */
+  OTEL_LOGS_MAX_BATCH_SIZE?: string
+  /**
+   * Node-only flush cadence (ms). The Worker flushes at the end of every invocation, since a
+   * per-isolate buffer has no later tick guaranteed to reach it, so it ignores this.
+   */
+  OTEL_LOGS_FLUSH_INTERVAL_MS?: string
+
+  // ---- Platform-health alerting (see docs/environment-variables.md) --------
+  /**
+   * Opt-in flag ('true') for platform-health alerting: a periodic sweep raises a
+   * `platform_health` notification when the deployment's OWN run health crosses a threshold
+   * (elevated failure rate, slow-run tail, backlog depth) per account, auto-clearing when it
+   * recovers. Independent of the OTel exporter — it fans out through the notification channel
+   * seam (in-app + Slack); the `scheduled` cron drives it. Off by default (recurring DB load).
+   */
+  PLATFORM_ALERTS?: string
+  /** Trailing window each evaluation aggregates over (`1h`/`24h`/`7d`; default `1h`). */
+  PLATFORM_ALERTS_WINDOW?: string
+  /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
+  PLATFORM_ALERTS_INTERVAL_MS?: string
+  /** Minimum terminal runs in the window before the failure-rate alert can fire (default 5). */
+  PLATFORM_ALERTS_MIN_RUNS?: string
+  /** Failure rate (0..1) at or above which the failure-rate alert fires (default 0.5). */
+  PLATFORM_ALERTS_MAX_FAILURE_RATE?: string
+  /** p99 run duration (minutes) at or above which the slow-run alert fires (default 60). */
+  PLATFORM_ALERTS_MAX_P99_MINUTES?: string
+  /** Live running/blocked/paused/pending depth at or above which the backlog alert fires (default 50). */
+  PLATFORM_ALERTS_MAX_BACKLOG?: string
+  PLATFORM_ALERTS_STALLED_BUCKETS?: string
+  PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS?: string
+  PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE?: string
+  PLATFORM_ALERTS_MAX_SWEEP_FAILURES?: string
+  /**
+   * Per-kind alert rules: `kind=share[:minCount]`, comma-separated (e.g. `evicted=0.05:3`). The
+   * dominant-kind ceiling above asks whether one cause is swamping the rest; these ask whether a
+   * NAMED cause reached what this deployment tolerates from it (the share is the trigger
+   * point, not a value to pass). Unset ⇒ no per-kind rules.
+   */
+  PLATFORM_ALERTS_FAILURE_KIND_RATES?: string
+
+  // ---- Infrastructure-reachability watcher (see docs/environment-variables.md) --
+  /**
+   * Opt-in flag ('true') for the infrastructure-reachability watcher: a periodic sweep probes each
+   * workspace's CONFIGURED infrastructure connections (the ephemeral-environment provider, the
+   * self-hosted runner pool) and reports a dead one as `unreachable` on the setup projection —
+   * raising an `infra_unreachable` notification and pushing an `infraSetup` event so the banner
+   * appears the moment it dies. The `scheduled` cron drives it. Off by default: it is the one sweep
+   * that makes an OUTBOUND call per workspace per pass.
+   */
+  INFRA_REACHABILITY_WATCH?: string
+  /**
+   * Sweep interval (ms, floor 30s, default 5min). Honoured here too, even though the Worker is
+   * cron-driven: the every-2-min `scheduled` tick runs this sweep only when the tick opens a new
+   * interval window (`shouldRunReachabilityPass`), so the cadence of the one sweep that makes an
+   * outbound call per workspace is the operator's to set on Cloudflare as well as on Node.
+   */
+  INFRA_REACHABILITY_INTERVAL_MS?: string
+  /** Per-probe timeout (ms, 1s..60s, default 5s). A timeout counts as unreachable. */
+  INFRA_REACHABILITY_PROBE_TIMEOUT_MS?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the
@@ -490,6 +817,23 @@ export interface Env {
    * aggressively. Default 14. 0 disables pruning.
    */
   PROVISIONING_LOG_RETENTION_DAYS?: string
+  /**
+   * Days of resolved (acted/dismissed) `notifications` to keep. Open cards (the
+   * actionable inbox) are never pruned. Generous by default so recent history survives.
+   * Default 90. 0 disables pruning.
+   */
+  NOTIFICATION_RETENTION_DAYS?: string
+  /** Settled-gate projection (`gate_outcomes`) retention, in days. Default 90; 0 disables. */
+  GATE_OUTCOME_RETENTION_DAYS?: string
+  /** Daily run rollup (`platform_run_days`) retention, in days. Default 400; 0 disables. */
+  PLATFORM_RUN_DAY_RETENTION_DAYS?: string
+  /**
+   * Days of account AUDIT LOG (`audit_events`, in AUDIT_DB) history to keep. The longest window
+   * of the lot by design — the log answers a compliance question long after anyone stopped
+   * watching. Default 730 (~2 years); 0 disables pruning entirely, for a deployment that exports
+   * the log elsewhere and wants nothing dropped locally.
+   */
+  AUDIT_EVENT_RETENTION_DAYS?: string
 }
 
 /**
@@ -501,10 +845,70 @@ export interface Env {
  */
 export function requireTelemetryDb(env: Env): D1Database {
   if (!env.TELEMETRY_DB) {
-    throw new Error(
-      'TELEMETRY_DB binding is required (the dedicated telemetry D1 database). ' +
-        'Add a [[d1_databases]] entry with binding = "TELEMETRY_DB" to wrangler.toml.',
-    )
+    throw configProblem({ key: 'TELEMETRY_DB', ...ENV_HELP.TELEMETRY_DB })
   }
   return env.TELEMETRY_DB
+}
+
+/**
+ * Resolve the required audit database, throwing a clear, actionable error when the binding is
+ * absent. The account audit log lives in its own D1 database; every entry point that touches it
+ * goes through this, so an unbound binding fails the same way with the same message instead of
+ * NPE-ing deep in a repository on the first privileged action.
+ */
+export function requireAuditDb(env: Env): D1Database {
+  if (!env.AUDIT_DB) {
+    throw configProblem({ key: 'AUDIT_DB', ...ENV_HELP.AUDIT_DB })
+  }
+  return env.AUDIT_DB
+}
+
+/**
+ * Resolve the required primary database, throwing a clear, actionable error when the `DB` binding
+ * is absent/misnamed. `DB` holds ALL transactional state, so an unbound binding otherwise NPEs
+ * deep inside the first repository call at container build (`const db = env.DB` → `undefined`)
+ * rather than failing at boot with a fixable message — mirroring {@link requireTelemetryDb}.
+ */
+export function requireDb(env: Env): D1Database {
+  if (!env.DB) {
+    throw configProblem({ key: 'DB', ...ENV_HELP.DB })
+  }
+  return env.DB
+}
+
+/**
+ * The Worker bindings read as an opaque key→value bag, for a runtime-neutral consumer that
+ * looks up its own keys by name.
+ *
+ * `Env` is an `interface`, so it carries no implicit index signature and cannot widen to a
+ * record without an assertion. The assertion is confined here, and values stay `unknown`
+ * because a binding is routinely not a scalar: `DB` is a D1 database, `GITHUB_SYNC_QUEUE` a
+ * queue, `WORKSPACE_EVENTS` a Durable Object namespace.
+ */
+export function envBag(env: Env): Record<string, unknown> {
+  return env as unknown as Record<string, unknown>
+}
+
+/**
+ * One plain string VAR off the bindings, by name; `undefined` when it is unset OR when the
+ * binding under that name is not a string.
+ *
+ * The `typeof` check is the point. Asserting `Env` to `Record<string, string | undefined>`, the
+ * shape this replaced, claims every binding is a string. That is false for every non-var binding
+ * on it, so a caller reading a mistyped or misnamed key was handed a D1 database where it
+ * expected a token and only found out several frames later.
+ */
+export function envVar(env: Env, key: string): string | undefined {
+  const value = envBag(env)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+/** Every plain string VAR on the bindings, for a consumer that wants the whole bag at once.
+ *  Non-string bindings are omitted, for the reason {@link envVar} states. */
+export function envVars(env: Env): Record<string, string | undefined> {
+  const vars: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(envBag(env))) {
+    if (typeof value === 'string') vars[key] = value
+  }
+  return vars
 }

@@ -2,10 +2,14 @@ import {
   ValidationError,
   type BlockRepository,
   type GitHubInstallationRepository,
+  type GitHubRepo,
+  type GroupCacheHandle,
   type RepoProjectionRepository,
   type ServiceRepository,
+  type VcsProvider,
+  type WorkspaceMountRepository,
 } from '@cat-factory/kernel'
-import type { ResolveRepoTarget } from './ContainerAgentExecutor.js'
+import type { RepoTarget, ResolveRepoTarget } from './ContainerAgentExecutor.js'
 
 // The (narrow) ports the repo-target resolution reads. Typed as `Pick`s so a facade
 // that only ever reads the projection (e.g. the Node service, which has no GitHub
@@ -16,19 +20,119 @@ export interface ResolveRepoTargetDependencies {
   repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>
   blockRepository: Pick<BlockRepository, 'get'>
   /**
-   * Resolves the {@link Service} owning a frame block, used to find which repo a
-   * frame targets AND (for a monorepo) the subdirectory the service pins. Optional:
-   * a facade/test without in-org services wired falls back to the repo-projection
-   * `block_id` link (one whole-repo service per repo, no subdirectory).
+   * Resolves the {@link Service} owning a frame block — the SOLE repo↔frame linkage: it
+   * yields which repo a frame targets AND (for a monorepo) the subdirectory the service
+   * pins. Every facade wires it whenever GitHub is configured.
    */
-  serviceRepository?: Pick<ServiceRepository, 'getByFrameBlock'>
+  serviceRepository: Pick<ServiceRepository, 'getByFrameBlock'>
+  /**
+   * Read-through cache for the workspace's whole repo projection
+   * (`AppCaches.repoProjection`, docs/initiatives/caching-layer.md slice 3), grouped
+   * AND keyed by workspace id. The unbounded `repoProjectionRepository.list` re-list
+   * this resolver runs on every dispatch and poll tick reads through it; the
+   * projection's write paths (GitHub sync/webhook, repo link/monorepo-flag, bootstrap)
+   * invalidate the workspace group after they commit. Absent (tests / the Worker's
+   * pass-through profile) ⇒ every resolve lists live.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
+}
+
+/** A repo the projection lists, plus the monorepo subdirectory a service pins in it (or null). */
+interface ResolvedRepo {
+  repo: GitHubRepo
+  directory: string | null
+}
+
+/** The projection indexed for lookup by GitHub id (the service→repo link). */
+interface RepoIndex {
+  byGithubId: Map<number, GitHubRepo>
+}
+
+function indexRepos(repos: GitHubRepo[]): RepoIndex {
+  return {
+    byGithubId: new Map(repos.map((r) => [r.githubId, r])),
+  }
+}
+
+/**
+ * Walk up a block's ancestry to the enclosing service frame and resolve its repo via the
+ * account-owned {@link Service} for that frame (`getByFrameBlock` → `repoGithubId`). This is
+ * the SOLE linkage: the only mechanism that supports a MONOREPO (several frames each owning a
+ * service pinned to a different subdirectory of the SAME repo), and the only one carrying the
+ * per-service `directory`. Returns undefined when nothing in the chain is linked (the caller
+ * decides whether that is fatal — a throw for the primary, a skip for an involved peer).
+ * Shared verbatim by the singular {@link buildResolveRepoTarget} and plural
+ * {@link buildResolveRepoTargets} so the security-sensitive walk can't drift.
+ */
+async function walkToRepo(
+  deps: Pick<ResolveRepoTargetDependencies, 'blockRepository' | 'serviceRepository'>,
+  workspaceId: string,
+  blockId: string,
+  index: RepoIndex,
+): Promise<ResolvedRepo | undefined> {
+  let cursor: string | null = blockId
+  const seen = new Set<string>()
+  while (cursor && !seen.has(cursor)) {
+    const service = await deps.serviceRepository.getByFrameBlock(cursor)
+    if (service?.repoGithubId != null) {
+      const repo = index.byGithubId.get(service.repoGithubId)
+      if (repo) return { repo, directory: service.directory ?? null }
+    }
+    seen.add(cursor)
+    const block = await deps.blockRepository.get(workspaceId, cursor)
+    cursor = block?.parentId ?? null
+  }
+  return undefined
+}
+
+/**
+ * Turn a resolved repo into a {@link RepoTarget}. The subdirectory is fed to agents ONLY
+ * when the repo is flagged a monorepo: a single-service repo's service may carry a
+ * stale/irrelevant directory, but its agents must keep operating on the repo root.
+ */
+function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarget {
+  const serviceDirectory =
+    resolved.repo.isMonorepo && resolved.directory ? resolved.directory : undefined
+  return {
+    installationId,
+    // The projection row's id IS the provider's repo id, stringified into the neutral
+    // `VcsRepoRef.repoId` vocabulary — the same shape a webhook delivery names.
+    repoId: String(resolved.repo.githubId),
+    ...(resolved.repo.provider ? { provider: resolved.repo.provider } : {}),
+    owner: resolved.repo.owner,
+    name: resolved.repo.name,
+    baseBranch: resolved.repo.defaultBranch ?? 'main',
+    ...(serviceDirectory ? { serviceDirectory } : {}),
+  }
+}
+
+/**
+ * The workspace's whole repo projection, read through the per-workspace cache when one is
+ * wired.
+ *
+ * Shared by BOTH builders below rather than open-coded in each: this is the hot, unbounded read
+ * on every dispatch, poll tick and report publish, and a resolver that misses the cache costs a
+ * full re-list every time while looking identical at the call site. The installation lookup and
+ * the ancestry walk stay live (both cheap / tree-depth-bounded), so a reparent or a service
+ * repo-link change needs no invalidation; only the projection's own writes do.
+ */
+async function listProjection(
+  deps: Pick<ResolveRepoTargetDependencies, 'repoProjectionRepository' | 'repoProjectionCache'>,
+  workspaceId: string,
+): Promise<GitHubRepo[]> {
+  const { repoProjectionRepository, repoProjectionCache } = deps
+  return repoProjectionCache
+    ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
+        repoProjectionRepository.list(workspaceId),
+      )
+    : await repoProjectionRepository.list(workspaceId)
 }
 
 /**
  * Resolve the repo linked to a running block's enclosing service, shared verbatim by
  * both runtime facades (Worker D1 + Node Drizzle/Postgres). Repos are linked at the
- * service-frame level (see `linkBlock`), but execution runs at the task/module level,
- * so we walk up the block's ancestry to find the frame's repo.
+ * service-frame level (via the account-owned {@link ServiceRepository}), but execution
+ * runs at the task/module level, so we walk up the block's ancestry to find the frame's repo.
  *
  * There is deliberately NO "first repo" fallback: a workspace can have many repos, and
  * guessing silently pushes work into the wrong one (this is how a simple-service task
@@ -42,52 +146,13 @@ export interface ResolveRepoTargetDependencies {
  * because each wires its own resolver).
  */
 export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): ResolveRepoTarget {
-  const { installationRepository, repoProjectionRepository, blockRepository, serviceRepository } =
-    deps
+  const { installationRepository } = deps
   return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
-    const repos = await repoProjectionRepository.list(workspaceId)
+    const repos = await listProjection(deps, workspaceId)
     if (repos.length === 0) return null
-    const reposByGithubId = new Map(repos.map((r) => [r.githubId, r]))
-    const reposByBlock = new Map(
-      repos.filter((r) => r.blockId).map((r) => [r.blockId as string, r]),
-    )
-
-    // Walk up the block's ancestry to the enclosing service frame, then resolve its
-    // repo. Two linkage mechanisms, checked in this order at each level:
-    //  1. The account-owned `Service` for the frame (`getByFrameBlock`) → its
-    //     `repoGithubId`. This is the only mechanism that supports a MONOREPO, where
-    //     several frames each own a service pinned to a different subdirectory of the
-    //     SAME repo (the projection's single `block_id` can't express that), and it is
-    //     the only one carrying the per-service `directory`.
-    //  2. The legacy repo-projection `block_id` link (one whole-repo service per repo),
-    //     for frames created before in-org services / without a service wired.
-    // There is deliberately NO "first repo" fallback: a workspace can have many repos,
-    // and guessing silently pushes work into the wrong one. If nothing in the chain is
-    // linked we throw so the misconfiguration surfaces instead of corrupting another repo.
-    let resolved: { repo: (typeof repos)[number]; directory: string | null } | undefined
-    let cursor: string | null = blockId
-    const seen = new Set<string>()
-    while (cursor && !seen.has(cursor)) {
-      const service = await serviceRepository?.getByFrameBlock(cursor)
-      if (service?.repoGithubId != null) {
-        const repo = reposByGithubId.get(service.repoGithubId)
-        if (repo) {
-          resolved = { repo, directory: service.directory ?? null }
-          break
-        }
-      }
-      const linked = reposByBlock.get(cursor)
-      if (linked) {
-        resolved = { repo: linked, directory: null }
-        break
-      }
-      seen.add(cursor)
-      const block = await blockRepository.get(workspaceId, cursor)
-      cursor = block?.parentId ?? null
-    }
-
+    const resolved = await walkToRepo(deps, workspaceId, blockId, indexRepos(repos))
     if (!resolved) {
       // A typed domain error (not a bare Error) so callers can tell this DELIBERATE
       // "block isn't under a repo-linked service" outcome apart from an unexpected
@@ -99,17 +164,222 @@ export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): Res
           `targets the right repository instead of guessing one.`,
       )
     }
-    const { repo, directory } = resolved
-    // The subdirectory is fed to agents ONLY when the repo is flagged a monorepo: a
-    // single-service repo's service may carry a stale/irrelevant directory, but its
-    // agents must keep operating on the repo root (the historical behaviour).
-    const serviceDirectory = repo.isMonorepo && directory ? directory : undefined
-    return {
-      installationId: installation.installationId,
-      owner: repo.owner,
-      name: repo.name,
-      baseBranch: repo.defaultBranch ?? 'main',
-      ...(serviceDirectory ? { serviceDirectory } : {}),
+    return toRepoTarget(installation.installationId, resolved)
+  }
+}
+
+// ── The workspace's whole run-target set ─────────────────────────────────────────────
+
+/** A repository some service on a board targets, with the provider it is reached through. */
+export interface WorkspaceRunRepo {
+  owner: string
+  name: string
+  /** Rows written before the column existed carry none; those predate GitLab, so `github`. */
+  provider: VcsProvider
+}
+
+/**
+ * Every repository this workspace's runs would push to, deduped, or empty when none would.
+ *
+ * The PLURAL, block-free counterpart of {@link ResolveRepoTarget}: where that answers "which
+ * repository does THIS block's work belong in", this answers "which repositories does work on
+ * this board reach at all", which is the question a credential check has to ask — a credential
+ * is judged before any block is picked.
+ */
+export type ListWorkspaceRunRepos = (workspaceId: string) => Promise<WorkspaceRunRepo[]>
+
+export interface ListWorkspaceRunReposDependencies extends Pick<
+  ResolveRepoTargetDependencies,
+  'repoProjectionRepository' | 'repoProjectionCache'
+> {
+  /** The services a board mounts: every frame it shows, its own homed ones included. */
+  workspaceMountRepository: Pick<WorkspaceMountRepository, 'listByWorkspace'>
+  /** Those services' repo links, in ONE query rather than a point-read per mount. */
+  serviceRepository: Pick<ServiceRepository, 'listByIds'>
+}
+
+/**
+ * Build {@link ListWorkspaceRunRepos}.
+ *
+ * It reads the SERVICES a board mounts rather than the repository projection alone, and the
+ * difference is the whole point: the projection lists every repository the workspace's
+ * connection can see, while a run can only ever target one a service frame is linked to
+ * (`resolveRepoTarget` walks to that service and refuses when the chain is unlinked, with no
+ * first-repo fallback). A consumer reading the projection directly is therefore answering a
+ * strictly wider question than the run path asks, and ordering that wider list by anything
+ * other than relevance — the projection is ordered by owner and name — makes any cap over it
+ * a sample of the alphabet rather than of the work.
+ *
+ * Empty is a meaningful answer, not a degraded one: a board with no repo-linked service starts
+ * no run that reaches a VCS, so there is nothing for a caller to judge or report.
+ */
+export function buildListWorkspaceRunRepos(
+  deps: ListWorkspaceRunReposDependencies,
+): ListWorkspaceRunRepos {
+  return async (workspaceId) => {
+    const mounts = await deps.workspaceMountRepository.listByWorkspace(workspaceId)
+    if (mounts.length === 0) return []
+    const services = await deps.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
+    const targeted = new Set(
+      services.map((service) => service.repoGithubId).filter((id): id is number => id != null),
+    )
+    if (targeted.size === 0) return []
+    // One repository, however many services target it: a monorepo hosting several services is
+    // still a single credential question.
+    return (await listProjection(deps, workspaceId))
+      .filter((repo) => targeted.has(repo.githubId))
+      .map((repo) => ({
+        owner: repo.owner,
+        name: repo.name,
+        provider: repo.provider ?? 'github',
+      }))
+  }
+}
+
+// ── Multi-repo resolution (service-connections phase 3) ──────────────────────────────
+
+/**
+ * A single repo checkout a multi-repo run creates. Deduped by repo, so a monorepo hosting
+ * several involved services is ONE checkout carrying all of them.
+ */
+export interface RepoCheckout {
+  target: RepoTarget
+  /** The task's OWN service repo (the singular {@link ResolveRepoTarget} result). */
+  primary: boolean
+  /**
+   * The involved service frames that live in THIS repo (their block id + the monorepo
+   * subdirectory each pins). Empty for a primary with no co-located involved service; ≥1
+   * for a peer; >1 when several involved services share one monorepo. Drives the multi-repo
+   * prompt section and the peer-PR frame attribution.
+   */
+  involved: { frameId: string; serviceDirectory?: string }[]
+}
+
+/** The deduped checkout set for a run, primary first. */
+export interface ResolvedRepoTargets {
+  checkouts: RepoCheckout[]
+}
+
+export type ResolveRepoTargets = (
+  workspaceId: string,
+  primaryBlockId: string,
+  involvedFrameIds: string[],
+  /**
+   * The task's OWN-service {@link RepoTarget}, when the caller already resolved it via the
+   * singular {@link ResolveRepoTarget} (the container executor does, to mint the push token).
+   * Passing it lets this resolver SKIP re-reading the installation and re-walking the primary
+   * block's ancestry — it reuses this as the primary checkout and only resolves the peers on
+   * top. Omit it and the primary is resolved from scratch (the ancestry walk), as before.
+   */
+  primaryTarget?: RepoTarget,
+) => Promise<ResolvedRepoTargets>
+
+export interface ResolveRepoTargetsDependencies extends ResolveRepoTargetDependencies {
+  /**
+   * The batched form of {@link ResolveRepoTargetDependencies.serviceRepository} — resolving
+   * N involved frames' repos in ONE query rather than a point-read per frame. Required (the
+   * `Service` is the SOLE repo↔frame linkage), so an involved frame with no linked service
+   * simply resolves no repo and is skipped for coding.
+   */
+  serviceRepository: Pick<ServiceRepository, 'getByFrameBlock' | 'listByFrameBlocks'>
+}
+
+/**
+ * Resolve every repo a multi-repo run touches: the task's OWN service (PRIMARY, via the same
+ * ancestry walk as {@link buildResolveRepoTarget}) plus one checkout per involved service
+ * frame — DEDUPED by repo. Two involved services in the same monorepo collapse into one
+ * checkout with BOTH subdirectories noted (the caller clones once and the agent edits both
+ * subtrees); an involved service sharing the primary's repo is folded into the primary
+ * checkout (no separate peer clone / PR — its changes ride the own-service PR).
+ *
+ * The invariant reads (installation + the whole projection) are hoisted ONCE and every
+ * involved frame's service is resolved in a single {@link ServiceRepository.listByFrameBlocks}
+ * batch (no point-read per frame). An involved frame with no linked repo is silently skipped
+ * for coding — it can still have provisioned an environment (the phase-2 asymmetry). The
+ * primary must resolve or we throw, exactly like the singular resolver.
+ */
+export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): ResolveRepoTargets {
+  const { installationRepository, serviceRepository } = deps
+  return async (workspaceId, primaryBlockId, involvedFrameIds, primaryTarget) => {
+    // The installation id: reuse the pre-resolved primary target's when provided (skips a second
+    // installation read), else read it here.
+    let installationId: number
+    if (primaryTarget) {
+      installationId = primaryTarget.installationId
+    } else {
+      const installation = await installationRepository.getByWorkspace(workspaceId)
+      if (!installation) {
+        throw new ValidationError(
+          `Workspace '${workspaceId}' has no GitHub installation, so a multi-repo run cannot ` +
+            `resolve its repositories.`,
+        )
+      }
+      installationId = installation.installationId
     }
+    const repos = await listProjection(deps, workspaceId)
+    const index = indexRepos(repos)
+
+    // The primary checkout: reuse the caller's already-resolved target when given (no ancestry
+    // walk), else walk the primary block's ancestry from scratch.
+    let primaryCheckout: RepoCheckout
+    if (primaryTarget) {
+      primaryCheckout = { target: primaryTarget, primary: true, involved: [] }
+    } else {
+      const primary = repos.length
+        ? await walkToRepo(deps, workspaceId, primaryBlockId, index)
+        : undefined
+      if (!primary) {
+        throw new ValidationError(
+          `Block '${primaryBlockId}' is not under a service linked to a GitHub repository ` +
+            `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
+            `targets the right repository instead of guessing one.`,
+        )
+      }
+      primaryCheckout = {
+        target: toRepoTarget(installationId, primary),
+        primary: true,
+        involved: [],
+      }
+    }
+    const checkouts: RepoCheckout[] = [primaryCheckout]
+    const key = (t: Pick<RepoTarget, 'owner' | 'name'>): string => `${t.owner}/${t.name}`
+    const byKey = new Map<string, RepoCheckout>([[key(primaryCheckout.target), primaryCheckout]])
+
+    // Resolve every involved frame's service in one batch (frames ARE service frame blocks,
+    // so no ancestry walk is needed — the frame's own service names its repo + directory).
+    const uniqueFrameIds = [...new Set(involvedFrameIds)]
+    const services = await serviceRepository.listByFrameBlocks(uniqueFrameIds)
+    const serviceByFrame = new Map(services.map((s) => [s.frameBlockId, s]))
+
+    for (const frameId of uniqueFrameIds) {
+      const service = serviceByFrame.get(frameId)
+      const resolved: ResolvedRepo | undefined =
+        service?.repoGithubId != null && index.byGithubId.has(service.repoGithubId)
+          ? {
+              repo: index.byGithubId.get(service.repoGithubId)!,
+              directory: service.directory ?? null,
+            }
+          : undefined
+      // An involved frame with no linked repo is skipped for coding (deliberate asymmetry:
+      // it may still have provisioned an environment in phase 2).
+      if (!resolved) continue
+      const target = toRepoTarget(installationId, resolved)
+      const entry = byKey.get(key(target))
+      const involvedEntry = {
+        frameId,
+        ...(target.serviceDirectory ? { serviceDirectory: target.serviceDirectory } : {}),
+      }
+      if (entry) {
+        // Same repo as the primary or an earlier peer (a shared monorepo) → one checkout,
+        // note this service's subdirectory alongside the others.
+        entry.involved.push(involvedEntry)
+      } else {
+        const checkout: RepoCheckout = { target, primary: false, involved: [involvedEntry] }
+        checkouts.push(checkout)
+        byKey.set(key(target), checkout)
+      }
+    }
+
+    return { checkouts }
   }
 }

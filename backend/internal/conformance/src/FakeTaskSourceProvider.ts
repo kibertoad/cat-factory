@@ -1,4 +1,7 @@
 import type {
+  BugCandidate,
+  IssueIntakeQuery,
+  TrackerBoard,
   TaskContent,
   TaskCredentials,
   TaskSearchResult,
@@ -6,18 +9,65 @@ import type {
   TaskSourceDiagnostic,
   TaskSourceKind,
   TaskSourceProvider,
+  TaskRepoScopeRules,
   NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import {
   GITHUB_ISSUES_DESCRIPTOR,
+  GITLAB_ISSUES_DESCRIPTOR,
   JIRA_DESCRIPTOR,
   LINEAR_TASK_DESCRIPTOR,
+  githubIssuesLogic,
+  gitlabIssuesLogic,
 } from '@cat-factory/integrations'
+import { fakeTrackerWebhookAdapter } from './fakeTrackerWebhook.js'
 
-const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
+/**
+ * The BUILT-IN descriptors, so a fake standing in for a shipped source presents exactly what the
+ * real one does. Keyed by string rather than exhaustively by `TaskSourceKind`, because the kind is
+ * an open vocabulary: a deployment-registered source has no entry here by construction, and
+ * {@link descriptorFor} synthesises one for it.
+ */
+const BUILTIN_DESCRIPTORS: Record<string, TaskSourceDescriptor> = {
   jira: JIRA_DESCRIPTOR,
   github: GITHUB_ISSUES_DESCRIPTOR,
+  gitlab: GITLAB_ISSUES_DESCRIPTOR,
   linear: LINEAR_TASK_DESCRIPTOR,
+}
+
+/**
+ * The built-in REPO-BACKED sources and the real matcher each one declares, for the same reason
+ * {@link BUILTIN_DESCRIPTORS} exists: a fake standing in for a shipped source has to present the
+ * same CAPABILITIES, not just the same labels. Repo-backing is routed on well before the provider
+ * is reached (the HTTP layer resolves the searching service's repository because of it, and the
+ * imported-issue list narrows because of it), so a fake that omits it exercises a path the real
+ * source never takes, and the assertion that a repo-backed search refuses an unlinked service
+ * would pass against a source the platform considers repo-less.
+ *
+ * Absent for the repo-LESS built-ins (Jira, Linear) and for any generated `<ns>:<name>` source,
+ * which is what makes their `null` scope legal.
+ */
+const BUILTIN_REPO_SCOPES: Record<string, TaskRepoScopeRules | undefined> = {
+  github: { matches: githubIssuesLogic.githubIssueInRepoScope },
+  gitlab: { matches: gitlabIssuesLogic.gitlabIssueInRepoScope },
+}
+
+/**
+ * A descriptor for any source kind: the shipped one for a built-in, else a minimal generated one
+ * so the suite can register a `<ns>:<name>` source and drive it end to end.
+ */
+function descriptorFor(kind: TaskSourceKind): TaskSourceDescriptor {
+  const builtin = BUILTIN_DESCRIPTORS[kind]
+  if (builtin) return builtin
+  return {
+    source: kind,
+    label: kind,
+    icon: 'i-lucide-circle-dot',
+    credentialFields: [{ key: 'token', label: 'Token', secret: true }],
+    refLabel: 'Issue key',
+    refPlaceholder: 'ISSUE-1',
+    searchable: true,
+  }
 }
 
 /**
@@ -30,11 +80,26 @@ const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
  */
 export class FakeTaskSourceProvider implements TaskSourceProvider {
   readonly descriptor: TaskSourceDescriptor
+  /** Repo-backing, mirrored from the shipped source this fake stands in for (see the map). */
+  readonly repoScope: TaskRepoScopeRules | undefined
+  /**
+   * Inbound-webhook capability, so the shared suite can drive the REAL receiver → gateway →
+   * `TrackerWebhookService` path on every facade (see `fakeTrackerWebhook.ts` for why the
+   * signature is real but the payload is the neutral event).
+   */
+  readonly webhook = fakeTrackerWebhookAdapter
   readonly issues = new Map<string, TaskContent>()
   readonly calls: { credentials: TaskCredentials; externalId: string }[] = []
   /** Canned search hits + recorded queries, for the search endpoint tests. */
   searchResults: TaskSearchResult[] = []
   readonly searchCalls: { credentials: TaskCredentials; query: string }[] = []
+  /** Recorded issue-intake (`bug-intake`) queries, for the intake-step tests. */
+  readonly intakeCalls: { credentials: TaskCredentials; query: IssueIntakeQuery }[] = []
+  /** Canned hunt boards + recorded calls, for the bug-hunt board picker. */
+  boards: TrackerBoard[] = [{ id: 'PROJ', name: 'Platform', key: 'PROJ' }]
+  readonly boardCalls: { credentials: TaskCredentials }[] = []
+  /** Recorded bug-hunt candidate queries, so the suite can assert the pushed-down predicates. */
+  readonly candidateCalls: { credentials: TaskCredentials; query: IssueIntakeQuery }[] = []
   /** Canned setup-check verdict + recorded calls, for the diagnostics endpoint tests. */
   diagnostic: Omit<TaskSourceDiagnostic, 'source'> = { ok: true, status: 'ready', message: 'ok' }
   readonly diagnoseCalls: { workspaceId: string; credentials: TaskCredentials | null }[] = []
@@ -43,7 +108,8 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
     readonly kind: TaskSourceKind = 'jira',
     issues: Record<string, Partial<TaskContent>> = {},
   ) {
-    this.descriptor = DESCRIPTORS[kind]
+    this.descriptor = descriptorFor(kind)
+    this.repoScope = BUILTIN_REPO_SCOPES[kind]
     for (const [externalId, partial] of Object.entries(issues)) this.set(externalId, partial)
   }
 
@@ -98,6 +164,88 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
     this.searchCalls.push({ credentials, query })
     return this.searchResults
+  }
+
+  /**
+   * Issue-intake predicate search (the `bug-intake` step): derive hits from the registered
+   * issues in insertion (oldest-first) order, honouring the exclusion list + the title/label
+   * predicates, capped at `limit`. Deterministic and network-free, so the shared conformance
+   * suite can drive intake pickup + the no-match no-op against a controlled backlog.
+   */
+  async searchIssues(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<TaskSearchResult[]> {
+    this.intakeCalls.push({ credentials, query })
+    const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toUpperCase()))
+    const hits: TaskSearchResult[] = []
+    for (const issue of this.issues.values()) {
+      if (excluded.has(issue.externalId.toUpperCase())) continue
+      if (
+        query.titleFragment &&
+        !issue.title.toLowerCase().includes(query.titleFragment.toLowerCase())
+      ) {
+        continue
+      }
+      if (query.labels?.length && !query.labels.every((l) => issue.labels.includes(l))) continue
+      hits.push({
+        source: this.kind,
+        externalId: issue.externalId,
+        title: issue.title,
+        url: issue.url,
+        status: issue.status,
+        excerpt: '',
+      })
+      if (hits.length >= query.limit) break
+    }
+    return hits
+  }
+
+  /** The boards the hunt's picker lists — canned, so the suite controls what a source offers. */
+  async listBoards(credentials: TaskCredentials): Promise<TrackerBoard[]> {
+    this.boardCalls.push({ credentials })
+    return this.boards
+  }
+
+  /**
+   * Bug-hunt candidate search: the richer sibling of {@link searchIssues}, over the same
+   * registered issues and the same predicates, plus the `unassignedOnly` filter the hunt sets
+   * (honoured here against each issue's `assignee`, so the suite can prove an owned bug is
+   * never offered as free to take).
+   */
+  async listBugCandidates(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<BugCandidate[]> {
+    this.candidateCalls.push({ credentials, query })
+    const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toUpperCase()))
+    const out: BugCandidate[] = []
+    for (const issue of this.issues.values()) {
+      if (excluded.has(issue.externalId.toUpperCase())) continue
+      if (query.unassignedOnly && issue.assignee) continue
+      if (
+        query.titleFragment &&
+        !issue.title.toLowerCase().includes(query.titleFragment.toLowerCase())
+      ) {
+        continue
+      }
+      if (query.labels?.length && !query.labels.every((l) => issue.labels.includes(l))) continue
+      out.push({
+        source: this.kind,
+        externalId: issue.externalId,
+        title: issue.title,
+        url: issue.url,
+        status: issue.status,
+        type: issue.type,
+        priority: issue.priority,
+        labels: issue.labels,
+        description: issue.description,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        commentCount: issue.comments.length,
+      })
+      if (out.length >= query.limit) break
+    }
+    return out
   }
 
   async diagnose(input: {

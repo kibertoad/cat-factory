@@ -3,7 +3,10 @@ name: Docker publish (runner image)
 # Publishes the container images to public registries (GHCR + Docker Hub) as multi-arch
 # (amd64 + arm64) images so anyone can `docker pull` them instead of building locally:
 #   - the executor-harness (Pi coding-agent) runner image, referenced from a backend
-#     deployment's wrangler.toml or a self-hosted runner pool; and
+#     deployment's wrangler.toml or a self-hosted runner pool;
+#   - the UI-TESTER image, that same harness with Playwright + Chromium, pnpm/yarn, `serve` and
+#     a headless JRE + WireMock layered on, which the `image: 'ui'` dispatch variant routes to;
+#     and
 #   - the deploy-harness (kubectl/kustomize/helm) image, the container-backed Kubernetes
 #     deploy adapter.
 # The manual counterpart for each is `scripts/publish-image.sh` in its package.
@@ -22,6 +25,8 @@ on:
     paths:
       - 'backend/internal/executor-harness/src/**'
       - 'backend/internal/executor-harness/Dockerfile'
+      - 'backend/internal/executor-harness/Dockerfile.ui'
+      - 'backend/internal/executor-harness/entrypoint.sh'
       - 'backend/internal/executor-harness/tsconfig.json'
       - 'backend/internal/executor-harness/package.json'
       - 'backend/internal/deploy-harness/src/**'
@@ -55,18 +60,33 @@ jobs:
       contents: read
     outputs:
       executor: ${{ steps.filter.outputs.executor }}
+      executorUi: ${{ steps.filter.outputs.executorUi }}
       deploy: ${{ steps.filter.outputs.deploy }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: filter
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           filters: |
             executor:
               - 'backend/internal/executor-harness/src/**'
               - 'backend/internal/executor-harness/Dockerfile'
+              - 'backend/internal/executor-harness/entrypoint.sh'
+              - 'backend/internal/executor-harness/tsconfig.json'
+              - 'backend/internal/executor-harness/package.json'
+              - '.github/workflows/docker-publish.yml'
+              - '.github/actions/**'
+            # The UI image is the executor image plus tooling, so ANY executor source change
+            # republishes it too: they carry one version, and a UI image left behind on an older
+            # base would be a pairing the tag says is impossible. Every list here is held to its
+            # `scripts/runner-images.mjs` descriptor by `scripts/check-runner-image-paths.mjs`.
+            executorUi:
+              - 'backend/internal/executor-harness/src/**'
+              - 'backend/internal/executor-harness/Dockerfile'
+              - 'backend/internal/executor-harness/Dockerfile.ui'
+              - 'backend/internal/executor-harness/entrypoint.sh'
               - 'backend/internal/executor-harness/tsconfig.json'
               - 'backend/internal/executor-harness/package.json'
               - '.github/workflows/docker-publish.yml'
@@ -79,16 +99,45 @@ jobs:
               - '.github/workflows/docker-publish.yml'
               - '.github/actions/**'
 
+  # The PR lane (ci.yml's repo-guards) is the primary image-tag enforcement, but it never
+  # runs on push. This is the publisher-side backstop: a push to main that changed image
+  # sources without bumping the tag (an admin hotfix or revert that bypassed a PR) would
+  # otherwise republish over the live `<image>:<version>` tag below, silently mutating an
+  # immutable tag downstream deployments pin. `github.event.before` is the pushed range's
+  # base; when it is unusable (force push, dispatch) the script still runs its consistency
+  # half, which needs no base.
+  guard:
+    name: Guard image tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the guard can diff against the pushed range's base.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Guard runner image tag
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BEFORE}" ] && git cat-file -e "${BEFORE}" 2>/dev/null; then
+            node scripts/check-runner-image-tag.mjs --since "${BEFORE}"
+          else
+            node scripts/check-runner-image-tag.mjs
+          fi
+
   publish:
     name: Build, test & push
-    needs: changes
+    needs: [changes, guard]
     if: needs.changes.outputs.executor == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write # push to GHCR
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -153,7 +202,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -161,28 +210,142 @@ jobs:
 
       - name: Log in to Docker Hub
         if: steps.cfg.outputs.dockerhub == 'true'
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # arm64 emulation so the multi-arch build can produce an arm64 layer too.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # The published image must not be assembled from layers a less-trusted
       # workflow run could have poisoned, so build it fresh (no-cache) here even
       # though the acceptance step already built one locally.
       - name: Build & push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ env.CONTEXT }}
           file: ${{ env.CONTEXT }}/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          no-cache: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+  # The UI-TESTER image: the executor image plus Playwright + Chromium, pnpm/yarn, `serve` and a
+  # headless JRE + WireMock. It LAYERS on the executor image published by the job above, so it
+  # runs after it and pulls that exact `:<version>` tag as its base.
+  #
+  # `needs: publish` with a skipped-tolerant condition: a change to Dockerfile.ui alone leaves the
+  # executor job skipped, and the base it needs is then the already-published image at the
+  # unchanged version. Requiring a successful `publish` would make the UI image unpublishable on
+  # its own; ignoring `publish` entirely would race it and layer on the PREVIOUS base.
+  publish-ui:
+    name: Build, smoketest & push (UI image)
+    needs: [changes, guard, publish]
+    if: >-
+      !cancelled()
+      && needs.guard.result == 'success'
+      && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+      && (needs.changes.outputs.executorUi == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+    env:
+      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-executor-ui
+      DOCKERHUB_IMAGE: docker.io/${{ vars.DOCKERHUB_ORG || github.repository_owner }}/cat-factory-executor-ui
+      CONTEXT: backend/internal/executor-harness
+      PLATFORMS: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve config
+        id: cfg
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "dockerhub=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dockerhub=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve image tags
+        id: tags
+        env:
+          DOCKERHUB_ENABLED: ${{ steps.cfg.outputs.dockerhub }}
+          EXECUTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/cat-factory-executor
+        run: |
+          version="$(node -p "require('./${CONTEXT}/package.json').version")"
+          short_sha="${GITHUB_SHA::7}"
+          # The base is pinned to the SAME version, never :latest: the two images carry one
+          # version by design, and a :latest base would silently pair this build with whatever
+          # landed most recently.
+          echo "base=${EXECUTOR_IMAGE}:${version}" >> "$GITHUB_OUTPUT"
+          emit() {
+            echo "${1}:${version}"
+            echo "${1}:sha-${short_sha}"
+            echo "${1}:latest"
+          }
+          {
+            echo "tags<<EOF"
+            emit "${GHCR_IMAGE}"
+            if [ "${DOCKERHUB_ENABLED}" = "true" ]; then
+              emit "${DOCKERHUB_IMAGE}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # BOOT the image before publishing it, on the host architecture. Everything this image
+      # exists for is runtime behaviour (Chromium launching, the harness user owning its own npm
+      # cache, the WireMock jar being a jar), and a green `docker build` says nothing about any
+      # of it. Runs against the same base ref the multi-arch push below builds on.
+      # Invoked directly rather than through pnpm: the script needs only Docker and node, both
+      # already on the runner, so this lane skips a whole workspace install.
+      - name: Boot & smoketest the UI image
+        working-directory: backend/internal/executor-harness
+        env:
+          BASE_IMAGE: ${{ steps.tags.outputs.base }}
+        run: bash scripts/smoketest-ui-image.sh
+
+      - name: Log in to Docker Hub
+        if: steps.cfg.outputs.dockerhub == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build & push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ env.CONTEXT }}
+          file: ${{ env.CONTEXT }}/Dockerfile.ui
+          build-args: |
+            BASE_IMAGE=${{ steps.tags.outputs.base }}
           platforms: ${{ env.PLATFORMS }}
           push: true
           no-cache: true
@@ -193,7 +356,7 @@ jobs:
   # unit tests only), so this validates with `test:run` before publishing.
   publish-deploy:
     name: Build & push (deploy image)
-    needs: changes
+    needs: [changes, guard]
     if: needs.changes.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -205,7 +368,7 @@ jobs:
       CONTEXT: backend/internal/deploy-harness
       PLATFORMS: linux/amd64,linux/arm64
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -216,9 +379,10 @@ jobs:
         with:
           node-modules-cache: 'false'
 
-      # Pure-logic unit tests (no Docker / cluster needed) — the pre-publish gate.
+      # Pure-logic unit tests (no Docker / cluster needed): the pre-publish gate. Through Turbo so
+      # `^build` builds @cat-factory/contracts, whose `dist` the conformity test imports.
       - name: Unit tests
-        run: pnpm --filter @cat-factory/deploy-harness run test:run
+        run: pnpm exec turbo run test:run --filter=@cat-factory/deploy-harness
 
       - name: Resolve config
         id: cfg
@@ -254,7 +418,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -262,21 +426,21 @@ jobs:
 
       - name: Log in to Docker Hub
         if: steps.cfg.outputs.dockerhub == 'true'
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build & push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ env.CONTEXT }}
           file: ${{ env.CONTEXT }}/Dockerfile
@@ -284,3 +448,40 @@ jobs:
           push: true
           no-cache: true
           tags: ${{ steps.tags.outputs.tags }}
+
+  # The per-PR preview environments (preview-env.yml) pull the executor image from the
+  # PREVIEW account's managed registry, because Cloudflare Containers cannot pull the GHCR
+  # image published above and Docker Hub publishing is optional. Keep that registry stocked:
+  # after a successful publish, mirror the freshly pinned tag into the preview account with
+  # the same `image:publish` script a real deployment's operator runs. Runs AFTER `publish`
+  # so a tag that failed the acceptance suite is never mirrored, and skips cleanly when the
+  # `preview` environment was never configured (previews are opt-in infrastructure).
+  mirror-preview-registry:
+    name: Mirror into the preview registry
+    needs: [changes, publish]
+    if: needs.changes.outputs.executor == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: preview
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup # zizmor: ignore[cache-poisoning]
+        with:
+          node-modules-cache: 'false'
+
+      - name: Mirror the executor image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::notice::Preview environments are not configured (no Cloudflare credentials in the preview environment); skipping the mirror. See deploy/preview/README.md."
+            exit 0
+          fi
+          pnpm --filter @cat-factory/deploy-backend image:publish

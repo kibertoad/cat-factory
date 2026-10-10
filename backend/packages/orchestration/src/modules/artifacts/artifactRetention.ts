@@ -9,10 +9,17 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
  * one's own window: an artifact is pruned — bytes AND metadata — once it ages past its
  * workspace's cutoff. The blob backend is configured per-account, so the store is resolved
  * per workspace via {@link ResolveBinaryArtifactStore} (which caches per account, so the many
- * workspaces under one account reuse a single store); a workspace whose account configured no
- * storage resolves to null and is skipped. Driven from the Cloudflare retention cron and the
- * Node retention timer (kept symmetric); the per-runtime wiring supplies the workspace list +
- * per-workspace day lookup as closures so this stays free of any repo/runtime types.
+ * workspaces under one account reuse a single store). Driven from the Cloudflare retention cron
+ * and the Node retention timer (kept symmetric); the per-runtime wiring supplies the workspace
+ * list + per-workspace day lookup as closures so this stays free of any repo/runtime types.
+ *
+ * A workspace whose store resolves to null is SKIPPED, and the two reasons that can happen are
+ * reported by the resolver rather than here, because only it can tell them apart: an account that
+ * configured no storage (nothing to reclaim, the normal case on a stock deployment) and an
+ * account whose configured backend THIS PROCESS cannot build (bytes that exist and stay). The
+ * second is the one a mothership deployment hits when its custom stores are registered on the
+ * nodes that write them and not on the mothership that sweeps them; `makeResolveBinaryArtifactStore`
+ * names the account and the store id once per pass-through of that config.
  */
 export async function sweepBinaryArtifactRetention(deps: {
   resolveStore:

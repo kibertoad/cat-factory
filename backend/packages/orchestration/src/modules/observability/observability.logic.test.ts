@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { LlmCallMetric } from '@cat-factory/kernel'
 import {
   buildLlmMetricsExport,
-  classifyCall,
   computeStoredPrompt,
   hashPrompt,
-  isWarningFinishReason,
   outputHeadroomRatio,
   reconstructPrompts,
   transportOverheadRatio,
@@ -20,11 +18,15 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     model: 'm',
     createdAt: 1,
     streaming: false,
+    phase: 'agent',
+    turnIndex: null,
+    spendOnly: false,
     messageCount: 2,
     toolCount: 1,
     requestMaxTokens: 1000,
     promptTokens: 100,
-    cachedPromptTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',
@@ -39,33 +41,11 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     promptHash: '',
     responseText: 'ok',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
     ...overrides,
   }
 }
-
-describe('classifyCall', () => {
-  it('flags a failed call as an error', () => {
-    expect(classifyCall({ ok: false, finishReason: null })).toBe('error')
-    expect(classifyCall({ ok: false, finishReason: 'length' })).toBe('error')
-  })
-  it('flags a truncated or filtered (but ok) call as a warning', () => {
-    expect(classifyCall({ ok: true, finishReason: 'length' })).toBe('warning')
-    expect(classifyCall({ ok: true, finishReason: 'content_filter' })).toBe('warning')
-  })
-  it('treats a normal completion as ok', () => {
-    expect(classifyCall({ ok: true, finishReason: 'stop' })).toBe('ok')
-    expect(classifyCall({ ok: true, finishReason: null })).toBe('ok')
-  })
-})
-
-describe('isWarningFinishReason', () => {
-  it('matches only length / content_filter', () => {
-    expect(isWarningFinishReason('length')).toBe(true)
-    expect(isWarningFinishReason('content_filter')).toBe(true)
-    expect(isWarningFinishReason('stop')).toBe(false)
-    expect(isWarningFinishReason(null)).toBe(false)
-  })
-})
 
 describe('outputHeadroomRatio', () => {
   it('is the peak fraction of the ceiling, capped at 1', () => {
@@ -94,7 +74,8 @@ describe('buildLlmMetricsExport', () => {
         id: 'a',
         agentKind: 'coder',
         promptTokens: 200,
-        cachedPromptTokens: 50,
+        cacheReadTokens: 150,
+        cacheWriteTokens: 50,
         completionTokens: 50,
         requestMaxTokens: 1000,
         upstreamMs: 100,
@@ -104,7 +85,8 @@ describe('buildLlmMetricsExport', () => {
         id: 'b',
         agentKind: 'coder',
         promptTokens: 200,
-        cachedPromptTokens: 150,
+        cacheReadTokens: 400,
+        cacheWriteTokens: 50,
         completionTokens: 990,
         requestMaxTokens: 1000,
         finishReason: 'length',
@@ -144,10 +126,14 @@ describe('buildLlmMetricsExport', () => {
     expect(coder.outputHeadroomRatio).toBe(0.99)
     expect(coder.truncatedCalls).toBe(1)
     expect(coder.warnings).toBe(1)
-    // 200 cached / 400 prompt tokens across the two coder calls = 0.5
-    expect(coder.cachedPromptTokens).toBe(200)
-    expect(coder.cacheHitRate).toBeCloseTo(0.5, 5)
-    expect(out.totals.cachedPromptTokens).toBe(200)
+    // The two cache classes stay APART in the rollup — summing them would make a run that
+    // re-writes its prefix every turn read identically to one riding a warm cache.
+    expect(coder.cacheReadTokens).toBe(550)
+    expect(coder.cacheWriteTokens).toBe(100)
+    // (550 read + 100 write) / (400 fresh + 550 read + 100 write) across the two coder calls.
+    expect(coder.cacheHitRate).toBeCloseTo(650 / 1050, 5)
+    expect(out.totals.cacheReadTokens).toBe(550)
+    expect(out.totals.cacheWriteTokens).toBe(100)
 
     const reviewer = out.insights.find((i) => i.agentKind === 'reviewer')!
     expect(reviewer.errors).toBe(1)
@@ -269,5 +255,48 @@ describe('computeStoredPrompt', () => {
     const rebuilt = reconstructPrompts(calls)
     // `rebuilt` preserves input order, so each call still maps to its original full prompt.
     rebuilt.forEach((c, i) => expect(c.promptText).toBe(fulls[i]))
+  })
+})
+
+describe('buildLlmMetricsExport — pricing', () => {
+  const rates = () => ({
+    inputPerMillion: 1_000_000,
+    cacheReadPerMillion: 100_000,
+    cacheWritePerMillion: 1_250_000,
+    outputPerMillion: 5_000_000,
+  })
+  const calls = [
+    metric({
+      id: 'a',
+      agentKind: 'coder',
+      promptTokens: 1,
+      cacheReadTokens: 1,
+      cacheWriteTokens: 1,
+      completionTokens: 1,
+    }),
+  ]
+
+  it('prices each input class at its own tier', () => {
+    // 1 + 0.1 + 1.25 + 5, the same arithmetic (kernel's `costOfTokenClasses`) the rollup and
+    // the ledger use, so the export cannot disagree with the surfaces beside it.
+    const out = buildLlmMetricsExport('exec-1', calls, 1, { rates })
+    expect(out.totals.costEstimate).toBeCloseTo(7.35, 10)
+    expect(out.truncated).toBe(false)
+  })
+
+  it('declines to price a TRUNCATED bundle rather than costing a slice as the whole run', () => {
+    // The cap is what makes this necessary: the slice's sum is a smaller number that still
+    // reads as a total, and this bundle exists to be handed to a model that would quote it.
+    const out = buildLlmMetricsExport('exec-1', calls, 1, { rates, truncated: true })
+    expect(out.truncated).toBe(true)
+    expect(out.totals.costEstimate).toBeNull()
+    expect(out.insights.every((i) => i.costEstimate === null)).toBe(true)
+    // The token counts are still reported — partial, and now labelled as such.
+    expect(out.totals.completionTokens).toBe(1)
+  })
+
+  it('reports null costs when nothing prices the calls', () => {
+    const out = buildLlmMetricsExport('exec-1', calls, 1)
+    expect(out.totals.costEstimate).toBeNull()
   })
 })
