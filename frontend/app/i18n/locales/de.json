@@ -2696,7 +2696,8 @@
         "workspace_admin": "Ein Board-Admin kann das beheben.",
         "account_admin": "Ein Konto-Admin kann das beheben.",
         "operator": "Nur der Betreiber des Deployments kann das beheben."
-      }
+      },
+      "fullSurface": "Sie können das selbst beheben: Wechseln Sie Ihre Rolle oben in der Seitenleiste."
     },
     "spendWarningBanner": {
       "title": "Ausgabenlimit erreicht, Agentenausführung pausiert",
@@ -7996,7 +7997,7 @@
     "connect": {
       "or": "oder",
       "noneConfigured": "Für dieses Deployment ist keine Quellcodeverbindung konfiguriert. Bitten Sie einen Betreiber, eine GitHub App oder einen GitLab-Zugang einzurichten.",
-      "adminRequired": "Nur ein Board-Admin kann einen Repository-Host verbinden. Bitten Sie einen Admin dieses Boards darum, oder wechseln Sie zu einem Board, das Sie verwalten.",
+      "adminRequired": "Nur ein Board-Admin kann einen Repository-Host verbinden. Bitten Sie einen Admin dieses Boards darum.",
       "gitlab": {
         "intro": "Fügen Sie ein persönliches GitLab-Zugriffstoken ein, um diesen Workspace zu verbinden. cat-factory nutzt es, um Ihre Projekte aufzulisten, Branches zu pushen und Merge Requests zu öffnen.",
         "tokenLabel": "Persönliches Zugriffstoken",

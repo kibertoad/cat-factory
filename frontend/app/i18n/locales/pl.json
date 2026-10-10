@@ -2569,7 +2569,8 @@
         "workspace_admin": "Może to naprawić administrator tablicy.",
         "account_admin": "Może to naprawić administrator konta.",
         "operator": "Może to naprawić tylko operator wdrożenia."
-      }
+      },
+      "fullSurface": "Możesz to naprawić sam: zmień rolę u góry panelu bocznego."
     },
     "spendWarningBanner": {
       "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
@@ -7996,7 +7997,7 @@
     "connect": {
       "or": "lub",
       "noneConfigured": "W tym wdrożeniu nie skonfigurowano połączenia z systemem kontroli źródeł. Poproś operatora o skonfigurowanie aplikacji GitHub lub dostępu do GitLab.",
-      "adminRequired": "Tylko administrator tablicy może podłączyć hosta repozytoriów. Poproś administratora tej tablicy albo przełącz się na tablicę, którą zarządzasz.",
+      "adminRequired": "Tylko administrator tablicy może podłączyć hosta repozytoriów. Poproś o to administratora tej tablicy.",
       "gitlab": {
         "intro": "Wklej osobisty token dostępu GitLab, aby połączyć ten obszar roboczy. cat-factory używa go do wyświetlania Twoich projektów, wypychania gałęzi i otwierania merge requestów.",
         "tokenLabel": "Osobisty token dostępu",

@@ -35,6 +35,13 @@ export const useAccountsStore = defineStore(
     )
     /** Whether accounts exist (auth on); gates the switcher UI. */
     const enabled = computed(() => accounts.value.length > 0)
+    /**
+     * Whether the caller is an admin of the ACTIVE account. The one reading of it, so the nav gates,
+     * the setup prompts and the account panels cannot disagree about who the account admin is.
+     */
+    const isActiveAccountAdmin = computed(
+      () => activeAccount.value?.roles?.includes('admin') ?? false,
+    )
 
     /** Load the user's accounts and resolve the active one (persisted or first). */
     async function load() {
@@ -209,6 +216,7 @@ export const useAccountsStore = defineStore(
       activeAccountId,
       activeAccount,
       enabled,
+      isActiveAccountAdmin,
       ready,
       members,
       invitations,

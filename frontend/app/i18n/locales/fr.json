@@ -2569,7 +2569,8 @@
         "workspace_admin": "Un administrateur du tableau peut corriger cela.",
         "account_admin": "Un administrateur du compte peut corriger cela.",
         "operator": "Seul l'opérateur du déploiement peut corriger cela."
-      }
+      },
+      "fullSurface": "Vous pouvez corriger cela vous-même : changez de rôle en haut de la barre latérale."
     },
     "spendWarningBanner": {
       "title": "Limite de dépense atteinte, exécution des agents en pause",
@@ -7996,7 +7997,7 @@
     "connect": {
       "or": "ou",
       "noneConfigured": "Aucune connexion de gestion de code n'est configurée pour ce déploiement. Demandez à un opérateur de configurer une GitHub App ou un accès GitLab.",
-      "adminRequired": "Seul un administrateur du tableau peut connecter un hébergeur de dépôts. Demandez-le à un administrateur de ce tableau, ou passez à un tableau que vous gérez.",
+      "adminRequired": "Seul un administrateur du tableau peut connecter un hébergeur de dépôts. Demandez-le à un administrateur de ce tableau.",
       "gitlab": {
         "intro": "Collez un jeton d'accès personnel GitLab pour connecter cet espace de travail. cat-factory l'utilise pour lister vos projets, pousser des branches et ouvrir des merge requests.",
         "tokenLabel": "Jeton d'accès personnel",

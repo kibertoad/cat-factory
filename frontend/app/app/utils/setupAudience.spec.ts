@@ -5,11 +5,14 @@ import { blockingSetupNotice, canActOnSetup, type SetupActor } from './setupAudi
 const admin: SetupActor = {
   fullSurface: true,
   canManageIntegrations: true,
+  canExecuteRuns: true,
   isAccountAdmin: false,
   accountsEnabled: true,
 }
 const member: SetupActor = { ...admin, canManageIntegrations: false }
+const viewer: SetupActor = { ...member, canExecuteRuns: false }
 const designerAdmin: SetupActor = { ...admin, fullSurface: false }
+const designerMember: SetupActor = { ...member, fullSurface: false }
 
 const owners: InfraSetupOwners = {
   agentExecutor: 'workspace_admin',
@@ -25,6 +28,8 @@ function status(patch: Partial<InfraSetup>): InfraSetup {
     ...patch,
   }
 }
+
+const noRunner = status({ agentExecutor: 'not_defined' })
 
 describe('canActOnSetup', () => {
   it('lets a workspace admin act on the workspace areas, and not a member', () => {
@@ -50,18 +55,22 @@ describe('canActOnSetup', () => {
     expect(canActOnSetup('operator', { ...admin, isAccountAdmin: true })).toBe(false)
   })
 
-  it('falls back to the workspace admin when an older backend reports no owner', () => {
-    expect(canActOnSetup(undefined, admin)).toBe(true)
-    expect(canActOnSetup(undefined, member)).toBe(false)
+  it('falls back to the workspace admin for an absent owner or one this build does not know', () => {
+    // An older backend sends nothing; a newer one may send a value past the compiled union. Both
+    // read as the workspace admin, and neither throws inside the banner's render.
+    for (const owner of [undefined, 'board_owner']) {
+      expect(canActOnSetup(owner, admin)).toBe(true)
+      expect(canActOnSetup(owner, member)).toBe(false)
+    }
   })
 })
 
 describe('blockingSetupNotice', () => {
   it('tells a member that agents cannot run, and who can fix it', () => {
-    expect(blockingSetupNotice(status({ agentExecutor: 'not_defined' }), owners, member)).toEqual({
+    expect(blockingSetupNotice(noRunner, owners, member)).toEqual({
       area: 'agentExecutor',
       kind: 'setup',
-      owner: 'workspace_admin',
+      remedy: 'workspace_admin',
     })
   })
 
@@ -72,7 +81,17 @@ describe('blockingSetupNotice', () => {
   })
 
   it('says nothing to the admin, who gets the full card instead', () => {
-    expect(blockingSetupNotice(status({ agentExecutor: 'not_defined' }), owners, admin)).toBeNull()
+    expect(blockingSetupNotice(noRunner, owners, admin)).toBeNull()
+  })
+
+  it('says nothing to a viewer, whose work the gap does not stop', () => {
+    expect(blockingSetupNotice(noRunner, owners, viewer)).toBeNull()
+  })
+
+  it('tells an admin on the designer surface to switch surface, not to find an admin', () => {
+    expect(blockingSetupNotice(noRunner, owners, designerAdmin)?.remedy).toBe('full_surface')
+    // A designer without the grant is still pointed at the owner.
+    expect(blockingSetupNotice(noRunner, owners, designerMember)?.remedy).toBe('workspace_admin')
   })
 
   it('says nothing about gaps that only degrade some runs', () => {
@@ -88,9 +107,9 @@ describe('blockingSetupNotice', () => {
     expect(blockingSetupNotice(null, owners, member)).toBeNull()
   })
 
-  it('names the workspace admin when an older backend reports no owners', () => {
-    expect(blockingSetupNotice(status({ agentExecutor: 'not_defined' }), null, member)?.owner).toBe(
-      'workspace_admin',
-    )
+  it('names the workspace admin when the backend reports no owner, or one it does not know', () => {
+    expect(blockingSetupNotice(noRunner, null, member)?.remedy).toBe('workspace_admin')
+    const unknown = { ...owners, agentExecutor: 'board_owner' } as unknown as InfraSetupOwners
+    expect(blockingSetupNotice(noRunner, unknown, member)?.remedy).toBe('workspace_admin')
   })
 })

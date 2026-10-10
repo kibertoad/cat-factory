@@ -2696,7 +2696,8 @@
         "workspace_admin": "Un amministratore della board può risolvere il problema.",
         "account_admin": "Un amministratore dell'account può risolvere il problema.",
         "operator": "Solo l'operatore del deployment può risolvere il problema."
-      }
+      },
+      "fullSurface": "Puoi risolverlo tu: cambia ruolo dall'alto della barra laterale."
     },
     "spendWarningBanner": {
       "title": "Limite di spesa raggiunto, esecuzione degli agenti sospesa",
@@ -7996,7 +7997,7 @@
     "connect": {
       "or": "oppure",
       "noneConfigured": "Per questo deployment non è configurata alcuna connessione al controllo del codice. Chiedi a un operatore di configurare una GitHub App o l'accesso a GitLab.",
-      "adminRequired": "Solo un amministratore della board può connettere un host di repository. Chiedilo a un amministratore di questa board, oppure passa a una board che gestisci.",
+      "adminRequired": "Solo un amministratore della board può connettere un host di repository. Chiedilo a un amministratore di questa board.",
       "gitlab": {
         "intro": "Incolla un token di accesso personale GitLab per collegare questo workspace. cat-factory lo usa per elencare i tuoi progetti, inviare branch e aprire merge request.",
         "tokenLabel": "Token di accesso personale",

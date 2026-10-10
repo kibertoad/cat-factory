@@ -2724,7 +2724,8 @@
         "workspace_admin": "A board admin can fix this.",
         "account_admin": "An account admin can fix this.",
         "operator": "Only the deployment operator can fix this."
-      }
+      },
+      "fullSurface": "You can fix this yourself: switch your role at the top of the sidebar."
     },
     "spendWarningBanner": {
       "title": "Spend limit reached, agent execution paused",
@@ -8300,7 +8301,7 @@
     "connect": {
       "or": "or",
       "noneConfigured": "No source-control connection is configured for this deployment. Ask an operator to set up a GitHub App or GitLab access.",
-      "adminRequired": "Only a board admin can connect a repository host. Ask an admin of this board, or switch to a board you manage.",
+      "adminRequired": "Only a board admin can connect a repository host. Ask an admin of this board.",
       "gitlab": {
         "intro": "Paste a GitLab personal access token to connect this workspace. cat-factory uses it to list your projects, push branches and open merge requests.",
         "tokenLabel": "Personal access token",

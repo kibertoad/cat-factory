@@ -163,13 +163,16 @@ const visible = computed<AreaCard[]>(() => {
   }))
 })
 
-// The one line for a caller who cannot act on a gap that stops every run. It honours the same
-// session dismissal as the card it stands in for, so closing either keeps the claim quiet.
+// The one line for a caller who cannot act on a gap that stops every run. It honours BOTH
+// dismissals of the card it stands in for, keyed by the same claim: someone who said "don't
+// notify me again" on the card (before their role changed, say) is not nagged again by the line.
 const notice = computed(() => {
   const found = blockingSetupNotice(workspace.infraSetup, workspace.infraSetupOwners, actor.value)
   if (!found) return null
-  const key = infraSetupDismissalKey(found.area, found.kind)
-  return ui.infraSetupSessionDismissed.includes(key) ? null : found
+  if (ui.infraSetupSessionDismissed.includes(infraSetupDismissalKey(found.area, found.kind))) {
+    return null
+  }
+  return found.kind === 'setup' && dismissedForUser.value.includes(found.area) ? null : found
 })
 
 /** Which card an area's status raises, or null when it raises none (`configured`/`not_applicable`). */
@@ -189,7 +192,7 @@ function titleKey(card: AreaCard): string {
  * The dismiss dropdown: the product wants the user asked WHICH kind of dismissal on close. An
  * outage offers the session option ONLY — see the fork note at the top of this file.
  */
-function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
+function dismissMenu(card: Pick<AreaCard, 'area' | 'kind'>): DropdownMenuItem[][] {
   const session = {
     label: t('layout.infraSetupBanner.dismiss.session'),
     icon: 'i-lucide-clock',
@@ -220,11 +223,7 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
       role="status"
       aria-live="polite"
     >
-      <InfraSetupNotice
-        v-if="notice"
-        :notice="notice"
-        @dismiss="ui.dismissInfraSetupForSession(notice.area, notice.kind)"
-      />
+      <InfraSetupNotice v-if="notice" :notice="notice" :dismiss-menu="dismissMenu(notice)" />
       <!-- An OUTAGE reads red, a setup gap amber: one is something breaking now, the other is
            something never switched on, and a reader has to be able to tell at a glance. -->
       <div

@@ -38,12 +38,26 @@ const { confirmAction, toastDone } = useConfirmAction()
 const isAccount = computed(() => !!props.accountId)
 
 /**
- * Which store the form writes to: the shared workspace keys or the user's own. Opens on the
- * workspace for whoever may write it (`secrets.manage`) and on "My keys" for everyone else, so a
- * member's first save lands instead of being refused.
+ * Which store the form writes to: the shared workspace keys or the user's own. The DEFAULT follows
+ * the caller's grant on the active board: the workspace for whoever may write it (`secrets.manage`)
+ * and "My keys" for everyone else, so a first save lands instead of being refused. It is derived,
+ * not captured once, because this section stays mounted while the board (and so the grant)
+ * changes. A scope the user picks by hand wins until they move to another board.
  */
 const { canManageSecrets } = useWorkspaceAccess()
-const scope = ref<'workspace' | 'user'>(canManageSecrets.value ? 'workspace' : 'user')
+const pickedScope = ref<'workspace' | 'user' | null>(null)
+const scope = computed<'workspace' | 'user'>({
+  get: () => pickedScope.value ?? (canManageSecrets.value ? 'workspace' : 'user'),
+  set: (value) => {
+    pickedScope.value = value
+  },
+})
+watch(
+  () => workspace.workspaceId,
+  () => {
+    pickedScope.value = null
+  },
+)
 
 // "My keys" (user scope) are stored per-user, so they need a signed-in user. Block just
 // that scope when there's none (a deployment without sign-in); workspace/account keys are

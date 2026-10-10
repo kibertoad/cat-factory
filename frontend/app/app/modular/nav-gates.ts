@@ -75,7 +75,6 @@ export function createNavGates(): NavGates {
       providerConnections.isAvailable('runner-pool') ||
       providerConnections.isAvailable('environment'),
   )
-  const isAccountAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
 
   return {
     get canWriteBoard() {
@@ -105,7 +104,7 @@ export function createNavGates(): NavGates {
       return accounts.enabled
     },
     get isAccountAdmin() {
-      return isAccountAdmin.value
+      return accounts.isActiveAccountAdmin
     },
     get advancedMode() {
       return uiMode.isAdvanced

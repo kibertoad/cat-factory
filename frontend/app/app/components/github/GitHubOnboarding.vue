@@ -44,7 +44,7 @@ const title = computed(() =>
 
       <div class="mt-6 border-t border-default pt-4" data-testid="vcs-onboarding-switch-board">
         <p class="mb-2 text-xs text-muted">{{ t('vcs.onboarding.switchBoard') }}</p>
-        <BoardSwitcher />
+        <BoardSwitcher standalone />
       </div>
 
       <p

@@ -2569,7 +2569,8 @@
         "workspace_admin": "Un administrador del tablero puede solucionarlo.",
         "account_admin": "Un administrador de la cuenta puede solucionarlo.",
         "operator": "Solo el operador del despliegue puede solucionarlo."
-      }
+      },
+      "fullSurface": "Puedes solucionarlo tú: cambia tu rol desde la parte superior de la barra lateral."
     },
     "spendWarningBanner": {
       "title": "Límite de gasto alcanzado, ejecución de agentes en pausa",
@@ -7996,7 +7997,7 @@
     "connect": {
       "or": "o",
       "noneConfigured": "Este despliegue no tiene configurada ninguna conexión de control de código. Pide a un operador que configure una GitHub App o el acceso a GitLab.",
-      "adminRequired": "Solo un administrador del tablero puede conectar un host de repositorios. Pídeselo a un administrador de este tablero o cambia a un tablero que gestiones.",
+      "adminRequired": "Solo un administrador del tablero puede conectar un host de repositorios. Pídeselo a un administrador de este tablero.",
       "gitlab": {
         "intro": "Pega un token de acceso personal de GitLab para conectar este espacio de trabajo. cat-factory lo usa para listar tus proyectos, subir ramas y abrir solicitudes de fusión.",
         "tokenLabel": "Token de acceso personal",
