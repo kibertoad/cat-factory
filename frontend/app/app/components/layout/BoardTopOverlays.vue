@@ -7,6 +7,7 @@ import GitHubPatPermissionsBanner from '~/components/layout/GitHubPatPermissions
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
 import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
+import KaizenModelBanner from '~/components/layout/KaizenModelBanner.vue'
 import DefaultTestEnvBanner from '~/components/layout/DefaultTestEnvBanner.vue'
 
 // The single owner of the board's top overlay region: the toolbar pill, the corner nav
@@ -77,6 +78,8 @@ const ui = useUiStore()
          - Infrastructure provider: env/runner-pool wired but missing mandatory config.
          - Infra setup: an executor / test env / storage this deployment needs is undefined, so
            a class of agents cannot run.
+         - Kaizen model: grading is on but its resolved model can't drive the inline grader, so
+           the backend skips grading.
          - Default test environment: this BOARD has never chosen the provisioning mechanism its
            new services should default to. Last, because it asks for a convenience default and
            so yields to the prompts about things that are outright broken. -->
@@ -91,6 +94,7 @@ const ui = useUiStore()
     <AiProvidersBanner />
     <ProviderConfigBanner />
     <InfraSetupBanner />
+    <KaizenModelBanner />
     <DefaultTestEnvBanner />
   </div>
 </template>

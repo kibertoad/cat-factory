@@ -2493,6 +2493,11 @@
         "action": "プリセットを確認"
       }
     },
+    "kaizenModelBanner": {
+      "title": "Kaizen は現在のモデルでは評価できません",
+      "body": "Kaizen エージェントは有効ですが、そのモデルはこのデプロイがインライン呼び出しに使えないサブスクリプションでのみ動作するため、評価を実行できません。プロバイダー経由のモデルを Kaizen に指定するまで、評価はスキップされます。",
+      "action": "Kaizen のモデルを設定"
+    },
     "githubPatBanner": {
       "title": "GitHub PAT が未設定です",
       "body": "ローカルモードでは個人アクセストークンを使って GitHub に接続します。トークンがないと、クローン、プッシュ、PR作成、CIゲート、マージを行うエージェントステップが失敗します。",
@@ -2942,6 +2947,7 @@
         "baseModelLabel": "ベースモデル (全エージェントに適用)",
         "makeDefault": "これをワークスペースのデフォルトにする",
         "perAgentOverrides": "エージェントごとの上書き",
+        "kaizenNotInlineWarning": "Kaizen には {model} が設定されていますが、このモデルはこのデプロイがインライン呼び出しに使えないサブスクリプションでのみ動作します。Kaizen の評価はインライン呼び出しのため、評価はスキップされます。Kaizen にはプロバイダー経由のモデル（直接キー、OpenRouter、Cloudflare AI）を割り当ててください。",
         "filterPlaceholder": "エージェントを絞り込み…",
         "noAgentsMatch": "\"{filter}\" に一致するエージェントはありません。",
         "saveChanges": "変更を保存",

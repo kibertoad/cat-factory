@@ -2493,6 +2493,11 @@
         "action": "Ön ayarı incele"
       }
     },
+    "kaizenModelBanner": {
+      "title": "Kaizen mevcut modeliyle değerlendirme yapamıyor",
+      "body": "Kaizen ajanı açık, ancak modeli yalnızca bu dağıtımın satır içi çağrılar için kullanamadığı bir abonelikle çalıştığından değerlendiriciyi çalıştıramıyor. Kaizen'e sağlayıcı destekli bir model atayana kadar değerlendirme atlanır.",
+      "action": "Kaizen modelini ayarla"
+    },
     "githubPatBanner": {
       "title": "GitHub PAT yapılandırılmadı",
       "body": "Yerel mod GitHub'a kişisel erişim belirteciyle erişir. Belirteç olmadan klonlayan, push eden, PR açan, CI'da geçit yapan veya birleştiren ajan adımları başarısız olur.",
@@ -2942,6 +2947,7 @@
         "baseModelLabel": "Temel model (her ajana uygulanır)",
         "makeDefault": "Bunu çalışma alanı varsayılanı yap",
         "perAgentOverrides": "Ajan başına geçersiz kılmalar",
+        "kaizenNotInlineWarning": "Kaizen {model} modeline ayarlı; bu model yalnızca bu dağıtımın satır içi çağrılar için kullanamadığı bir abonelikle çalışıyor. Kaizen değerlendiricisi satır içi bir çağrı olduğundan değerlendirme atlanacak. Kaizen'e sağlayıcı destekli bir model atayın (doğrudan anahtar, OpenRouter veya Cloudflare AI).",
         "filterPlaceholder": "Ajanları filtrele…",
         "noAgentsMatch": "\"{filter}\" ile eşleşen ajan yok.",
         "saveChanges": "Değişiklikleri kaydet",

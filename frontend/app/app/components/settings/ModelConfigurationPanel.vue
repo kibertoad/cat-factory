@@ -250,6 +250,18 @@ function overrideLabel(kind: AgentKind): string {
   return id ? modelLabel(id) : t('settings.modelConfiguration.editor.baseModel')
 }
 
+// The model Kaizen grading resolves to under the preset being edited (`overrides.kaizen ??
+// base`). The Kaizen grader is an inline LLM call, so a model that is usable ONLY via a
+// subscription this deployment can't run inline can't drive it, and grading is skipped for such
+// a model. Warn the user so they pick a provider-backed model for the Kaizen override.
+const kaizenModelId = computed(() =>
+  editor.value ? (editor.value.overrides['kaizen'] ?? editor.value.baseModelId) : undefined,
+)
+const kaizenModelNotInline = computed(() => {
+  const m = models.getModel(kaizenModelId.value)
+  return !!m && m.available === true && m.inlineUsable === false
+})
+
 async function save() {
   const e = editor.value
   if (!e) return
@@ -516,6 +528,20 @@ async function save() {
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
                   </SectionLabel>
                   <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
+                </div>
+                <div
+                  v-if="kaizenModelNotInline"
+                  class="mb-3 flex items-start gap-2 rounded-lg border border-app-warning-500/40 bg-app-warning-950/40 p-3 text-sm text-app-warning-200/90"
+                >
+                  <UIcon
+                    name="i-lucide-triangle-alert"
+                    class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400"
+                  />
+                  <span>{{
+                    t('settings.modelConfiguration.editor.kaizenNotInlineWarning', {
+                      model: modelLabel(kaizenModelId),
+                    })
+                  }}</span>
                 </div>
                 <UInput
                   v-model="filter"

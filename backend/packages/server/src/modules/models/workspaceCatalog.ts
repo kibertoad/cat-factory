@@ -1,6 +1,7 @@
 import type { ModelCatalog } from '@cat-factory/contracts'
 import {
   effectiveCatalogWith,
+  isModelUsableInline,
   localSelectableModels,
   openRouterSelectableModels,
 } from '@cat-factory/kernel'
@@ -66,9 +67,18 @@ export async function resolveWorkspaceModelCatalog(
     ? await container.openRouterCatalog.capabilitiesFor(workspaceId)
     : []
   const costFor = modelCostResolver(withDynamicPrices(container.config.spend, openRouter))
+  // Each option also says whether it can drive an INLINE call (the reviewers, brainstorm, the
+  // estimator, the Kaizen grader). A subscription-only model this deployment can't run inline is
+  // `available` but not `inlineUsable`. The predicate is the deployment's inline-harness seam (set
+  // only by local mode's ambient CLI), so subscription models stay inline-usable there. The public
+  // read projects its own fields, so this flag stays off `/api/v1`.
+  const runsInline = container.config.agents.inlineHarnessRef
   return effectiveCatalogWith(
     [...localSelectableModels(local), ...openRouterSelectableModels(openRouter)],
     caps,
     costFor,
-  )
+  ).map((option) => ({
+    ...option,
+    inlineUsable: isModelUsableInline(option.id, caps, runsInline),
+  }))
 }

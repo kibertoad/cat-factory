@@ -2493,6 +2493,11 @@
         "action": "Vérifier le préréglage"
       }
     },
+    "kaizenModelBanner": {
+      "title": "Kaizen ne peut pas évaluer avec son modèle actuel",
+      "body": "L'agent Kaizen est activé, mais son modèle ne fonctionne qu'avec un abonnement que ce déploiement ne peut pas utiliser pour les appels en ligne, il ne peut donc pas exécuter l'évaluateur. L'évaluation est ignorée tant que vous n'attribuez pas à Kaizen un modèle adossé à un fournisseur.",
+      "action": "Définir le modèle de Kaizen"
+    },
     "githubPatBanner": {
       "title": "PAT GitHub non configuré",
       "body": "Le mode local accède à GitHub avec un jeton d'accès personnel. Sans lui, les étapes d'agent qui clonent, poussent, ouvrent des PR, contrôlent la CI ou fusionnent échoueront.",
@@ -2942,6 +2947,7 @@
         "baseModelLabel": "Modèle de base (appliqué à chaque agent)",
         "makeDefault": "En faire le préréglage par défaut de l'espace de travail",
         "perAgentOverrides": "Remplacements par agent",
+        "kaizenNotInlineWarning": "Kaizen utilise {model}, qui ne fonctionne qu'avec un abonnement que ce déploiement ne peut pas utiliser pour les appels en ligne. L'évaluateur Kaizen est un appel en ligne, l'évaluation sera donc ignorée. Attribuez à Kaizen un modèle adossé à un fournisseur (une clé directe, OpenRouter ou Cloudflare AI).",
         "filterPlaceholder": "Filtrer les agents…",
         "noAgentsMatch": "Aucun agent ne correspond à \"{filter}\".",
         "saveChanges": "Enregistrer les modifications",

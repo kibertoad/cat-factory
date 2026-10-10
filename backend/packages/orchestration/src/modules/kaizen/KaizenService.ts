@@ -11,16 +11,20 @@ import type {
   KaizenVerifiedComboRepository,
   LlmCallMetric,
   LlmCallMetricRepository,
+  Logger,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
+  OperationalMetrics,
   PipelineStep,
+  ProviderCapabilities,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   extractJson,
   getErrorMessage,
+  isModelUsableInline,
   resolveInlineScope,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
@@ -74,6 +78,22 @@ export interface KaizenServiceDependencies {
    * states, from ONE read. Absent ⇒ block pin plus the routing default, on the default order.
    */
   resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
+  /**
+   * Resolve what a workspace (and, when known, the run initiator) has configured: direct keys,
+   * subscriptions, Cloudflare AI, local runners. Used to check that the grader's resolved model
+   * can run the INLINE grading call before anything is scheduled: a subscription-only model with
+   * no inline harness, or a model with no usable provider, would otherwise degrade to the routing
+   * default and fail. Absent ⇒ the fitness check is skipped and grading is scheduled as before.
+   */
+  resolveProviderCapabilities?: (
+    workspaceId: string,
+    initiatedBy?: string | null,
+    modelPresetId?: string,
+  ) => Promise<ProviderCapabilities>
+  /** Records a skipped grading. Absent (tests) ⇒ nothing logged. */
+  logger?: Logger
+  /** Counts skipped gradings (`kaizen.grading_skipped`). Absent (tests) ⇒ nothing counted. */
+  metrics?: OperationalMetrics
 }
 
 /**
@@ -124,6 +144,14 @@ export class KaizenService {
     // flood the table (and the run-window event stream) with rows for a disabled grader.
     if (!this.enabled) return
     if (!(await this.kaizenEnabled(workspaceId))) return
+    // The grader is an inline LLM call. When the workspace's Kaizen model resolves to a
+    // subscription-only model this deployment can't run inline, or to a model with no usable
+    // provider, the call would degrade to the routing default and fail, filling the table with
+    // `failed` rows that blame a model nobody configured. Skip the run instead; the SPA shows a
+    // banner asking the user to point Kaizen at a compatible model. Resolved lazily, at the first
+    // step that would actually be scheduled, so a run whose steps are all verified or already
+    // graded pays for no capability resolution.
+    let modelReady: Promise<boolean> | undefined
     for (let stepIndex = 0; stepIndex < instance.steps.length; stepIndex++) {
       const step = instance.steps[stepIndex]
       if (!step || !this.isGradeable(step) || !step.model) continue
@@ -150,6 +178,18 @@ export class KaizenService {
         stepIndex,
       )
       if (existing) continue
+      modelReady ??= this.isModelReady(workspaceId, instance.blockId)
+      if (!(await modelReady)) {
+        // Stated, not silent: the banner reads only the workspace DEFAULT preset, so a task under
+        // another preset or with its own pin is skipped with nothing in the SPA to say so.
+        this.deps.metrics?.increment('kaizen.grading_skipped')
+        this.deps.logger?.info('kaizen grading skipped: the Kaizen model cannot run inline', {
+          workspaceId,
+          executionId: instance.id,
+          blockId: instance.blockId,
+        })
+        return
+      }
       const now = this.deps.clock.now()
       const grading: KaizenGrading = {
         id: this.deps.idGenerator.next('kzn'),
@@ -224,6 +264,19 @@ export class KaizenService {
     }
 
     try {
+      // A row scheduled while the model WAS fit, whose configuration changed since: refuse to run
+      // rather than degrade to the routing default and surface a confusing provider error. Inside
+      // the `try` so a capability-resolution failure settles the row `failed` instead of leaving
+      // it `running` until the stale sweep re-claims it.
+      if (!(await this.isModelReady(workspaceId, grading.blockId))) {
+        await this.fail(
+          workspaceId,
+          running,
+          'No compatible model is configured for the Kaizen agent. Point Kaizen at a provider-backed model in Model Configuration.',
+        )
+        return
+      }
+
       // Fetch only THIS step kind's calls (filtered in SQL) so the cap is spent on the
       // graded kind rather than being crowded out by a long run's other kinds. The metric
       // store keys calls by (execution, agentKind) — there is no per-step discriminator —
@@ -383,6 +436,36 @@ export class KaizenService {
       ...(block?.modelId ? { modelId: block.modelId } : {}),
       ...(block?.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
     })
+  }
+
+  /**
+   * Whether a model that can drive the inline grader is configured for this workspace. Resolves
+   * the grader's model id with the precedence {@link modelFor} uses (block pin, else the preset's
+   * default for the `kaizen` kind, under the preset's route order) and checks it with
+   * {@link isModelUsableInline}. Returns `true` when no capability resolver is wired, or when
+   * neither a pin nor a preset names a model, so grading behaviour there is unchanged.
+   */
+  private async isModelReady(workspaceId: string, blockId: string): Promise<boolean> {
+    if (!this.deps.resolveProviderCapabilities) return true
+    const block = await this.deps.blockRepository.get(workspaceId, blockId)
+    const [caps, routing] = await Promise.all([
+      // No initiator: the grader runs after the run settled, on the run's WORKSPACE scope (see
+      // `resolveModel`), so a model reachable only through the initiator's personal key,
+      // subscription or local endpoint is not one the grader can use. Checking with the initiator
+      // would schedule rows that `runGrading` then fails.
+      this.deps.resolveProviderCapabilities(workspaceId, undefined, block?.modelPresetId),
+      this.deps.resolvePresetRouting?.(workspaceId, KAIZEN_AGENT_KIND, block?.modelPresetId),
+    ])
+    // A stale block pin falls through to the preset default, as it does in `modelFor`.
+    const pinned =
+      block?.modelId && this.deps.resolveBlockModel?.(block.modelId, routing?.providerPreference)
+        ? block.modelId
+        : undefined
+    const modelId = pinned ?? routing?.modelId
+    // No pin and no preset routing wired: the grader runs on the routing default, exactly as it
+    // did before this check existed, so there is no configured Kaizen model to judge.
+    if (!modelId) return true
+    return isModelUsableInline(modelId, caps, this.deps.runsInline)
   }
 
   private async updateCombo(

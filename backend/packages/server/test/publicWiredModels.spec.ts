@@ -64,7 +64,8 @@ function build(
     workspaceService: { accountOf: async () => null },
     // The real pricing table: the catalog projects a list price per row, so a stub without one
     // fails every model rather than the one under test.
-    config: { spend: DEFAULT_SPEND_PRICING },
+    // `agents` carries the inline-harness seam the catalog reads to flag `inlineUsable`; none here.
+    config: { spend: DEFAULT_SPEND_PRICING, agents: {} },
   } as unknown as ServerContainer
   app.use('*', async (c, next) => {
     c.set('container', container)

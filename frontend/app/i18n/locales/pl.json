@@ -2493,6 +2493,11 @@
         "action": "Przejrzyj zestaw"
       }
     },
+    "kaizenModelBanner": {
+      "title": "Kaizen nie może oceniać przy obecnym modelu",
+      "body": "Agent Kaizen jest włączony, ale jego model działa tylko w ramach subskrypcji, której to wdrożenie nie może użyć do wywołań inline, więc nie może uruchomić oceny. Ocena jest pomijana, dopóki nie przypiszesz Kaizenowi modelu obsługiwanego przez dostawcę.",
+      "action": "Ustaw model Kaizen"
+    },
     "githubPatBanner": {
       "title": "Nie skonfigurowano tokenu PAT GitHub",
       "body": "Tryb lokalny łączy się z GitHub za pomocą osobistego tokenu dostępu. Bez niego kroki agenta, które klonują, wypychają, otwierają PR-y, sprawdzają CI lub scalają, zakończą się niepowodzeniem.",
@@ -2942,6 +2947,7 @@
         "baseModelLabel": "Model bazowy (stosowany do każdego agenta)",
         "makeDefault": "Ustaw jako domyślne dla obszaru roboczego",
         "perAgentOverrides": "Nadpisania dla poszczególnych agentów",
+        "kaizenNotInlineWarning": "Kaizen ma ustawiony model {model}, który działa tylko w ramach subskrypcji, której to wdrożenie nie może użyć do wywołań inline. Oceniający Kaizen to wywołanie inline, więc ocena zostanie pominięta. Przypisz Kaizenowi model obsługiwany przez dostawcę (klucz bezpośredni, OpenRouter lub Cloudflare AI).",
         "filterPlaceholder": "Filtruj agentów…",
         "noAgentsMatch": "Żaden agent nie pasuje do \"{filter}\".",
         "saveChanges": "Zapisz zmiany",

@@ -2493,6 +2493,11 @@
         "action": "Revisar preajuste"
       }
     },
+    "kaizenModelBanner": {
+      "title": "Kaizen no puede evaluar con su modelo actual",
+      "body": "El agente Kaizen está activado, pero su modelo solo funciona con una suscripción que este despliegue no puede usar para llamadas en línea, así que no puede ejecutar el evaluador. La evaluación se omite hasta que asignes a Kaizen un modelo respaldado por un proveedor.",
+      "action": "Configurar modelo de Kaizen"
+    },
     "githubPatBanner": {
       "title": "PAT de GitHub no configurado",
       "body": "El modo local accede a GitHub con un token de acceso personal. Sin uno, los pasos de los agentes que clonan, hacen push, abren PR, validan CI o fusionan fallarán.",
@@ -2942,6 +2947,7 @@
         "baseModelLabel": "Modelo base (aplicado a cada agente)",
         "makeDefault": "Hacer que este sea el predeterminado del espacio de trabajo",
         "perAgentOverrides": "Anulaciones por agente",
+        "kaizenNotInlineWarning": "Kaizen está configurado con {model}, que solo funciona con una suscripción que este despliegue no puede usar para llamadas en línea. El evaluador de Kaizen es una llamada en línea, así que se omitirá la evaluación. Asigna a Kaizen un modelo respaldado por un proveedor (una clave directa, OpenRouter o Cloudflare AI).",
         "filterPlaceholder": "Filtrar agentes…",
         "noAgentsMatch": "Ningún agente coincide con \"{filter}\".",
         "saveChanges": "Guardar cambios",
