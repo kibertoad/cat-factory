@@ -80,7 +80,6 @@ async function resume() {
             <div class="mt-4 flex items-center gap-3">
               <UButton
                 color="error"
-                variant="solid"
                 icon="i-lucide-play"
                 :loading="resuming"
                 :disabled="!access.canExecuteRuns.value"

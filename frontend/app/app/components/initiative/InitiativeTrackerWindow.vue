@@ -329,7 +329,7 @@ const { requestClose } = useUnsavedGuard({
           {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
         </span>
       </div>
-      <UBadge v-if="initiative" color="primary" variant="subtle" size="sm">
+      <UBadge v-if="initiative" variant="subtle" size="sm">
         {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}
       </UBadge>
     </template>

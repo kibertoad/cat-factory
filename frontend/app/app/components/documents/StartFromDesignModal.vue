@@ -221,7 +221,6 @@ function stage() {
             {{ t('common.cancel') }}
           </UButton>
           <UButton
-            color="primary"
             icon="i-lucide-arrow-right"
             :disabled="!row || !target"
             data-testid="start-from-design-continue"

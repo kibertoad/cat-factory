@@ -145,14 +145,7 @@ async function clear() {
         <UInput v-model="draft.envTag" placeholder="prod" size="sm" class="w-full" />
       </UFormField>
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="busy"
-          @click="save"
-        >
+        <UButton variant="soft" size="xs" icon="i-lucide-save" :loading="busy" @click="save">
           {{ t('inspector.releaseHealth.saveMonitoring') }}
         </UButton>
       </div>

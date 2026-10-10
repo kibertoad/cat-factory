@@ -44,6 +44,11 @@ agent loads as instructions when it reads a file here.
   `UForm`, `ULink`), never the raw element; an icon-only button is `common/IconButton.vue`, which
   owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
   `scripts/check-frontend-primitives.mjs`.
+- **Buttons and badges state only what differs from Nuxt UI's default** (`primary solid md`,
+  stated in `app.config.ts`): a primary action carries no props, one per view, and quiet chrome
+  says `color="neutral" variant="ghost" size="xs"`.
+  [Rule](./README.md#buttons-and-badges-follow-one-variant-policy), guarded by
+  `scripts/check-frontend-variants.mjs`.
 
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches
 WHEN to use which component and HOW to build well; the [`nuxt-ui` MCP server](../../.mcp.json)
@@ -66,8 +71,8 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
 - `pnpm --filter @cat-factory/app i18n:check` and `i18n:parity` when you touch copy or the catalog.
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
-  `node scripts/check-frontend-primitives.mjs`, `node scripts/check-file-size.mjs` from the repo
-  root (install-free guards CI runs).
+  `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
+  `node scripts/check-file-size.mjs` from the repo root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),
 [`@cat-factory/contracts`](../../backend/packages/contracts/AGENTS.md) (the shared wire types).

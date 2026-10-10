@@ -114,7 +114,6 @@ const disabledTitle = computed(() => (props.canExecute ? undefined : t('access.n
     />
     <div class="mt-2 flex flex-wrap items-center gap-2">
       <UButton
-        color="primary"
         size="xs"
         icon="i-lucide-check"
         data-testid="initiative-plan-approve"

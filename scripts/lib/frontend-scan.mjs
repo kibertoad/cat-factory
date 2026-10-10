@@ -1,6 +1,7 @@
-// The tree walk and the comment rule shared by the SPA guards (`check-frontend-palette.mjs`,
-// `check-frontend-radius.mjs`, `check-frontend-type-scale.mjs`). The three must scan the same files
-// with the same idea of what a comment is, so both live here once.
+// The tree walk, the comment rule and the template reader shared by the SPA guards
+// (`check-frontend-palette.mjs`, `check-frontend-radius.mjs`, `check-frontend-type-scale.mjs`,
+// `check-frontend-primitives.mjs`, `check-frontend-variants.mjs`). They must scan the same files
+// with the same idea of what a comment and an opening tag are, so each lives here once.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -107,4 +108,59 @@ function blankComments(line, state) {
     i = open.index + open[0].length
   }
   return code
+}
+
+// How far an opening tag is followed for its attributes. The longest in the tree is well under
+// this; the cap is only so a file with an unbalanced `<` cannot make the scan quadratic.
+export const MAX_TAG_LINES = 40
+
+/**
+ * The opening tag that starts at `from` on `lines[index]`, up to its first `>`.
+ *
+ * A guard that reads ATTRIBUTES has to read the whole tag, and the formatter breaks any tag
+ * carrying more than a couple of them across lines. Reading one line saw only the tags short
+ * enough to fit on one, which is not the shape this repo writes: when the primitives guard read
+ * one line, every `<a href>` and every `IconButton` in the SPA was wrapped, so its attribute rules
+ * matched nothing at all.
+ *
+ * A `>` inside a QUOTED attribute value does not end the tag, because that `>` is how this tree
+ * writes a condition: `v-if="total > 1"`, `v-if="s.depth >= 2"`, `v-if="x.length > 0"`. Ending
+ * there truncated the tag before the attribute a guard was looking for, so the rule matched
+ * nothing at exactly the sites it exists for. The quote state carries ACROSS lines: the
+ * formatter breaks a long binding expression mid-value.
+ */
+export function openingTag(lines, index, from = 0) {
+  let text = ''
+  let quote = null
+  for (let i = index; i < lines.length && i - index < MAX_TAG_LINES; i++) {
+    const slice = i === index ? lines[i].slice(from) : lines[i]
+    for (let c = 0; c < slice.length; c++) {
+      const char = slice[c]
+      if (quote) {
+        if (char === quote) quote = null
+      } else if (char === '"' || char === "'") {
+        quote = char
+      } else if (char === '>') {
+        return text + slice.slice(0, c + 1)
+      }
+    }
+    text += `${slice}\n`
+  }
+  return text
+}
+
+/**
+ * The template half of a `.vue` file, with the script and style blocks and the HTML comments
+ * blanked out so offsets (and therefore line numbers) are preserved.
+ *
+ * Blanking rather than slicing is what makes `<template #slot>` safe: a `.vue` file nests template
+ * tags for named slots, so matching the outer pair non-greedily stops at the first inner close and
+ * silently skips everything after it.
+ */
+export function templateHalf(source) {
+  const blank = (s) => s.replace(/[^\n]/g, ' ')
+  return source
+    .replace(/<script[\s\S]*?<\/script>/g, blank)
+    .replace(/<style[\s\S]*?<\/style>/g, blank)
+    .replace(/<!--[\s\S]*?-->/g, blank)
 }

@@ -238,7 +238,7 @@ const { requestClose } = useUnsavedGuard({
           <template #label="{ item }">
             <span class="flex items-center gap-2">
               <span class="min-w-0 flex-1 text-sm font-medium text-app-100">{{ item.label }}</span>
-              <UBadge v-if="item.fork?.recommended" color="primary" variant="subtle" size="sm">
+              <UBadge v-if="item.fork?.recommended" variant="subtle" size="sm">
                 {{ t('forkDecision.recommended') }}
               </UBadge>
             </span>
@@ -382,7 +382,6 @@ const { requestClose } = useUnsavedGuard({
       </UButton>
       <UButton
         data-testid="fork-option-choose"
-        color="primary"
         size="sm"
         icon="i-lucide-check"
         :loading="forkDecision.choosing"

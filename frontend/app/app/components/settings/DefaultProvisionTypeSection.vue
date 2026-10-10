@@ -156,7 +156,6 @@ async function save() {
     <div class="flex items-center gap-2">
       <UButton
         size="xs"
-        color="primary"
         icon="i-lucide-check"
         :loading="saving"
         :disabled="!canSave"

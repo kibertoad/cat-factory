@@ -140,13 +140,7 @@ async function toggleEnabled(enabled: boolean) {
         <div v-else-if="!connected" class="space-y-3">
           <!-- OAuth source (Linear): the redirect button, with the manual key form below. -->
           <template v-if="oauth">
-            <UButton
-              block
-              color="primary"
-              icon="i-lucide-plug"
-              :loading="oauthStarting"
-              @click="startOAuth"
-            >
+            <UButton block icon="i-lucide-plug" :loading="oauthStarting" @click="startOAuth">
               {{ t('tasks.connect.oauthButton', { label: descriptor.label }) }}
             </UButton>
             <p class="text-center text-2xs text-dimmed">
@@ -208,7 +202,6 @@ async function toggleEnabled(enabled: boolean) {
           <div v-else />
           <UButton
             v-if="!credentialless"
-            color="primary"
             icon="i-lucide-plug"
             :loading="saving"
             :disabled="!canSubmit"

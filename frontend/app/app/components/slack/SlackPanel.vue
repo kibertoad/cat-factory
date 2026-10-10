@@ -219,7 +219,6 @@ async function saveMapping() {
         <div v-if="!slack.connected" class="space-y-3 rounded-lg border border-muted p-3">
           <UButton
             v-if="slack.oauthEnabled"
-            color="primary"
             icon="i-lucide-slack"
             :loading="connectingOAuth"
             @click="connectViaOAuth"
@@ -233,7 +232,6 @@ async function saveMapping() {
             <div class="flex gap-2">
               <SecretInput v-model="tokenInput" size="sm" class="flex-1" placeholder="xoxb-…" />
               <UButton
-                color="primary"
                 variant="soft"
                 size="sm"
                 :loading="slack.connecting"
@@ -302,7 +300,6 @@ async function saveMapping() {
 
             <div class="flex justify-end">
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-save"
@@ -365,7 +362,6 @@ async function saveMapping() {
                 {{ t('slack.members.add') }}
               </UButton>
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-save"

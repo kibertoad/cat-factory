@@ -305,13 +305,7 @@ const technicalLabel = computed(() => {
         </PipelinePicker>
       </div>
       <div v-if="selectedPipeline" class="flex items-center gap-1">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="setPipeline('')"
-        >
+        <UBadge variant="subtle" size="sm" class="cursor-pointer" @click="setPipeline('')">
           {{ selectedPipeline.name }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
@@ -615,13 +609,7 @@ const technicalLabel = computed(() => {
         </UDropdownMenu>
       </div>
       <div v-if="responsibleLabel" class="flex items-center gap-1">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="setResponsible('')"
-        >
+        <UBadge variant="subtle" size="sm" class="cursor-pointer" @click="setResponsible('')">
           {{ responsibleLabel }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>

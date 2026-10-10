@@ -80,7 +80,6 @@ function submit(number = prNumber.value): void {
           />
         </UFormField>
         <UButton
-          color="primary"
           icon="i-lucide-scan-search"
           :loading="opening"
           :disabled="!repo || !prNumber"

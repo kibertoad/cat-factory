@@ -95,7 +95,6 @@ function take(tourId: string) {
       <div class="mt-2 flex justify-end">
         <UButton
           size="xs"
-          color="primary"
           variant="soft"
           data-testid="tutorial-nudge-start"
           @click="take(offered.id)"

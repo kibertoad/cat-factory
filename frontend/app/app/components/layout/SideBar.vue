@@ -258,7 +258,6 @@ watch(
               v-for="item in section.items"
               :key="item.id"
               :block="!railed"
-              color="primary"
               variant="soft"
               size="sm"
               :icon="item.icon"

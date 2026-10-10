@@ -353,7 +353,6 @@ const canDestroy = computed(
         :failure-at="instance?.failure?.occurredAt"
       />
       <UButton
-        color="primary"
         icon="i-lucide-circle-check"
         :loading="busy"
         :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"

@@ -65,7 +65,6 @@ const undecided = computed(() => tutorial.decision === null)
             </div>
             <UButton
               size="sm"
-              color="primary"
               :variant="actionFor(tour.id) === 'restart' ? 'soft' : 'solid'"
               :data-testid="`tutorial-start-${tour.id}`"
               @click="launch(tour.id)"

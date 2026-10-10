@@ -234,7 +234,6 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
           <USelect v-model="addRole" :items="ROLE_ITEMS" value-key="value" class="w-32" />
           <UButton
             type="submit"
-            color="primary"
             icon="i-lucide-user-plus"
             :loading="busy"
             :disabled="!addUserId"

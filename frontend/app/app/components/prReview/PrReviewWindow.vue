@@ -588,7 +588,6 @@ const { requestClose } = useUnsavedGuard({
                 {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
               </span>
               <UButton
-                color="primary"
                 variant="link"
                 class="p-0 text-2xs text-primary hover:underline"
                 @click="selectAll"
@@ -596,7 +595,6 @@ const { requestClose } = useUnsavedGuard({
                 {{ t('prReview.selectAll') }}
               </UButton>
               <UButton
-                color="primary"
                 variant="link"
                 class="p-0 text-2xs text-primary hover:underline"
                 @click="clearAll"
@@ -760,7 +758,6 @@ const { requestClose } = useUnsavedGuard({
                       class="mt-1.5 flex items-center gap-3 text-2xs"
                     >
                       <UButton
-                        color="primary"
                         variant="link"
                         v-if="!isRetracted(f)"
                         data-testid="pr-review-finding-challenge"
@@ -880,7 +877,6 @@ const { requestClose } = useUnsavedGuard({
         {{ postReport ? t('prReview.postReport.retry') : t('prReview.post') }}
       </UButton>
       <UButton
-        color="primary"
         :loading="prReview.resolving"
         :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
         :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"

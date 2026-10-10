@@ -265,7 +265,6 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
             <div class="mt-4">
               <UButton
                 :color="card.kind === 'outage' ? 'error' : 'warning'"
-                variant="solid"
                 icon="i-lucide-settings"
                 :data-testid="`infra-setup-configure-${card.area}`"
                 @click="AREA_META[card.area].onConfigure()"

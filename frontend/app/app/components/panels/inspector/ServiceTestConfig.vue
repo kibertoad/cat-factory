@@ -467,7 +467,6 @@ function setSize(value: InstanceSize) {
       <UButton
         size="xs"
         variant="soft"
-        color="primary"
         icon="i-lucide-flask-conical"
         data-testid="env-setup-nudge-open"
         @click="ui.openEnvironmentSetup(props.block.id)"
@@ -484,7 +483,6 @@ function setSize(value: InstanceSize) {
         <UButton
           size="xs"
           variant="soft"
-          color="primary"
           icon="i-lucide-wand-sparkles"
           :loading="detecting"
           @click="detectFromRepo"
@@ -811,7 +809,6 @@ function setSize(value: InstanceSize) {
           <UButton
             size="xs"
             variant="soft"
-            color="primary"
             icon="i-lucide-file-cog"
             :loading="generating"
             :disabled="!customManifestPath && !selectedCustomType?.defaultManifestPath"
@@ -877,7 +874,7 @@ function setSize(value: InstanceSize) {
               </template>
               <template v-else>{{ t('inspector.testConfig.noFileSelected') }}</template>
             </p>
-            <UButton size="xs" color="primary" :disabled="!pickedPath" @click="applyPicked">
+            <UButton size="xs" :disabled="!pickedPath" @click="applyPicked">
               {{ t('inspector.testConfig.useThisFile') }}
             </UButton>
           </div>

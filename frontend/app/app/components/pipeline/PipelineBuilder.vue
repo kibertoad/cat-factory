@@ -428,13 +428,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             <SectionLabel as="h3">
               {{ t('pipeline.builder.agentPalette') }}
             </SectionLabel>
-            <UButton
-              color="primary"
-              variant="soft"
-              size="xs"
-              icon="i-lucide-plus"
-              @click="openAddAgent"
-            >
+            <UButton variant="soft" size="xs" icon="i-lucide-plus" @click="openAddAgent">
               {{ t('pipeline.builder.addAgent') }}
             </UButton>
           </div>
@@ -1243,7 +1237,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                        concealed-setting failure. -->
                   <UBadge
                     v-if="p.isDefault"
-                    color="primary"
                     variant="subtle"
                     size="xs"
                     class="shrink-0"
@@ -1396,7 +1389,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           {{ pipelines.editingId ? t('pipeline.builder.cancelEdit') : t('pipeline.builder.clear') }}
         </UButton>
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :disabled="pipelines.draft.length === 0 || stepsDisallowedByPurpose.length > 0"
@@ -1465,7 +1457,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           {{ t('common.cancel') }}
         </UButton>
         <UButton
-          color="primary"
           icon="i-lucide-plus"
           size="sm"
           :disabled="!newAgentName.trim()"

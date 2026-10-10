@@ -60,7 +60,7 @@ function addTask() {
   >
     <template #actions>
       <ReviewDebtBadge />
-      <UButton size="xs" variant="soft" color="primary" icon="i-lucide-plus" @click="addTask">
+      <UButton size="xs" variant="soft" icon="i-lucide-plus" @click="addTask">
         {{ t('inspector.container.addTask') }}
       </UButton>
     </template>

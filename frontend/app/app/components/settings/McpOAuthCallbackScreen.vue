@@ -86,7 +86,7 @@ function backToApp() {
         <p class="mb-6 text-sm text-muted">
           {{ t('settings.toolServers.oauth.callback.doneHint') }}
         </p>
-        <UButton block color="primary" @click="backToApp">
+        <UButton block @click="backToApp">
           {{ t('settings.toolServers.oauth.callback.back') }}
         </UButton>
       </template>

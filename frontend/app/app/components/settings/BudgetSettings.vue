@@ -167,13 +167,7 @@ function saveUser() {
         }}
       </div>
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          icon="i-lucide-save"
-          size="sm"
-          :loading="savingWorkspace"
-          @click="saveWorkspace"
-        >
+        <UButton icon="i-lucide-save" size="sm" :loading="savingWorkspace" @click="saveWorkspace">
           {{ t('settings.workspaceSettings.budget.saveTier') }}
         </UButton>
       </div>
@@ -222,7 +216,6 @@ function saveUser() {
       </p>
       <div v-if="canEditAccount" class="flex justify-end">
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :loading="savingAccount"
@@ -273,7 +266,6 @@ function saveUser() {
       </div>
       <div class="flex justify-end">
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :loading="savingUser"

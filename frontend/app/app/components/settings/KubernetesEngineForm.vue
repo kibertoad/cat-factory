@@ -604,13 +604,7 @@ async function copyAutoSetupCommand() {
       <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-app-error-400">
         {{ connectBlockedReason }}
       </p>
-      <UButton
-        color="primary"
-        size="sm"
-        :loading="busy"
-        :disabled="!canSave"
-        @click="emit('save', buildPayload())"
-      >
+      <UButton size="sm" :loading="busy" :disabled="!canSave" @click="emit('save', buildPayload())">
         {{ connected ? t('common.save') : t('settings.providerConnection.form.connect') }}
       </UButton>
     </div>

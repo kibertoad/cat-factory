@@ -87,7 +87,6 @@ const reseedableCount = computed(
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-plus"
                 :loading="isBusy(i.id)"
@@ -130,7 +129,6 @@ const reseedableCount = computed(
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-rotate-ccw"
                 :loading="isBusy(i.id)"
@@ -149,7 +147,6 @@ const reseedableCount = computed(
       <div class="flex w-full items-center justify-between gap-2">
         <UButton
           v-if="reseedableCount > 1"
-          color="primary"
           variant="ghost"
           icon="i-lucide-rotate-ccw"
           :loading="anyBusy"

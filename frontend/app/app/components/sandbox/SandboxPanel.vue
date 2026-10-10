@@ -457,7 +457,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 </span>
               </span>
               <UButton
-                color="primary"
                 icon="i-lucide-play"
                 size="sm"
                 :loading="store.launching"
@@ -632,7 +631,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 <IconButton
                   v-if="canPromote(p)"
                   icon="i-lucide-rocket"
-                  color="primary"
                   variant="ghost"
                   size="xs"
                   :loading="promoting === p.id"
@@ -674,7 +672,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 icon="i-lucide-save"
                 size="sm"
                 :loading="savingPrompt"

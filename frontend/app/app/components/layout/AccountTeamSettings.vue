@@ -214,7 +214,7 @@ async function disconnectEmail() {
           :placeholder="t('layout.accountTeam.org.namePlaceholder')"
           class="flex-1"
         />
-        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-plus">
+        <UButton type="submit" :loading="busy" icon="i-lucide-plus">
           {{ t('layout.accountTeam.org.create') }}
         </UButton>
       </UForm>
@@ -280,7 +280,7 @@ async function disconnectEmail() {
           class="flex-1"
         />
         <USelect v-model="inviteRoles" multiple :items="ROLE_ITEMS" class="w-44" />
-        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-send">
+        <UButton type="submit" :loading="busy" icon="i-lucide-send">
           {{ t('layout.accountTeam.invite.submit') }}
         </UButton>
       </UForm>
@@ -345,7 +345,7 @@ async function disconnectEmail() {
             :placeholder="t('layout.accountTeam.email.apiKeyPlaceholder')"
             class="w-full"
           />
-          <UButton type="submit" color="primary" :loading="busy">
+          <UButton type="submit" :loading="busy">
             {{ t('layout.accountTeam.email.connect') }}
           </UButton>
         </UForm>

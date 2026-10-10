@@ -689,13 +689,7 @@ async function add() {
         <UButton color="neutral" variant="ghost" @click="requestClose()">{{
           t('common.cancel')
         }}</UButton>
-        <UButton
-          color="primary"
-          icon="i-lucide-repeat"
-          :loading="saving"
-          :disabled="!canAdd"
-          @click="add"
-        >
+        <UButton icon="i-lucide-repeat" :loading="saving" :disabled="!canAdd" @click="add">
           {{ t('board.recurring.submit') }}
         </UButton>
       </div>

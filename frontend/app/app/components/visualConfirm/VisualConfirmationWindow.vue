@@ -490,7 +490,6 @@ watch(pendingUpload, async (file) => {
           {{ t('visualConfirm.recapture') }}
         </UButton>
         <UButton
-          color="primary"
           icon="i-lucide-circle-check"
           :loading="busy"
           :disabled="!canApprove || !access.canExecuteRuns.value"

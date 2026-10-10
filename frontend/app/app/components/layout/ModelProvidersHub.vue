@@ -225,12 +225,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                   <span v-else class="text-2xs text-dimmed">{{
                     t('layout.modelProvidersHub.status.notConnected')
                   }}</span>
-                  <UBadge
-                    v-if="!anyConnected && item.recommended"
-                    color="primary"
-                    variant="subtle"
-                    size="sm"
-                  >
+                  <UBadge v-if="!anyConnected && item.recommended" variant="subtle" size="sm">
                     {{ t('layout.modelProvidersHub.status.recommended') }}
                   </UBadge>
                 </div>

@@ -134,7 +134,6 @@ function openApprovalFor(approvalId: string) {
         <!-- An initiative has one legal pipeline, so it gets the button, not the picker. -->
         <UButton
           v-if="isInitiative"
-          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-play"
@@ -177,7 +176,6 @@ function openApprovalFor(approvalId: string) {
         >
           <template #trigger>
             <UButton
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-play"

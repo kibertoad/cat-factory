@@ -319,7 +319,6 @@ async function clear() {
             {{ t('inspector.validationChecks.addCheck') }}
           </UButton>
           <UButton
-            color="primary"
             variant="soft"
             size="xs"
             icon="i-lucide-save"
