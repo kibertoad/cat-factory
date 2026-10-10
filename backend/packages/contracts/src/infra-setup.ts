@@ -123,10 +123,10 @@ export function isInfraSetupProbedArea(area: InfraSetupArea): area is InfraSetup
 /**
  * Who can close a setup gap in one area, so the SPA can show the prompt to the people who can act
  * on it and tell everyone else whom to ask:
- *  - `workspace_admin` — a holder of `integrations.manage` on the board (the runner-pool and
+ *  - `workspace_admin`: a holder of `integrations.manage` on the board (the runner-pool and
  *    environment connections are per workspace).
- *  - `account_admin`   — an admin of the board's account (content storage is an account setting).
- *  - `operator`        — nobody in the app: the deployment itself must change (for example content
+ *  - `account_admin`: an admin of the board's account (content storage is an account setting).
+ *  - `operator`: nobody in the app. The deployment itself must change (for example content
  *    storage on a deployment whose account settings can select no backend).
  *
  * A separate projection from {@link infraSetupSchema} because it answers a different question
@@ -135,6 +135,15 @@ export function isInfraSetupProbedArea(area: InfraSetupArea): area is InfraSetup
  */
 export const infraSetupOwnerSchema = v.picklist(['workspace_admin', 'account_admin', 'operator'])
 export type InfraSetupOwner = v.InferOutput<typeof infraSetupOwnerSchema>
+
+/**
+ * Whether a value is an owner THIS build knows, derived from the schema rather than restated. The
+ * SPA does not validate the snapshot, so a newer server can send an owner an older bundle has
+ * never seen; a consumer narrows with this and falls back instead of trusting the type.
+ */
+export function isInfraSetupOwner(value: unknown): value is InfraSetupOwner {
+  return (infraSetupOwnerSchema.options as readonly unknown[]).includes(value)
+}
 
 /** The per-area {@link InfraSetupOwner} projection carried on the snapshot beside the status. */
 export const infraSetupOwnersSchema = v.object({
