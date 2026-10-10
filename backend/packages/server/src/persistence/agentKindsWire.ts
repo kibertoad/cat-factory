@@ -3,12 +3,13 @@ import type {
   BundledSkillDefinition,
   NormalizedSkillRefs,
 } from '@cat-factory/agents'
-import type {
-  McpHttpTransport,
-  McpOAuthConfig,
-  McpSecretRef,
-  McpServerDefinition,
-  McpStdioTransport,
+import {
+  type McpHttpTransport,
+  type McpOAuthConfig,
+  type McpSecretRef,
+  type McpServerDefinition,
+  type McpStdioTransport,
+  isHarnessKind,
 } from '@cat-factory/kernel'
 import { isRecord } from '../shared/guards.js'
 
@@ -168,105 +169,108 @@ function isInlineShapeView(entry: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Definition checks. Each is a table with ONE entry per field of the type it checks, optional
-// fields included (`-?`), so a field added to the type fails to compile here until it is given a
-// check. That is what keeps "every field the harness reads is checked" true as the types grow.
+// Definition checks. Each is a table with ONE guard per field of the type it checks, optional fields
+// included, and each guard is typed for that field's own type. So a field ADDED to the type, a field
+// whose type CHANGES, and a field that becomes required or optional each fail to compile here until
+// the check is updated. That is what keeps "every field the harness reads is checked" true as the
+// types grow.
 // ---------------------------------------------------------------------------
 
-type Check = (value: unknown) => boolean
-type FieldChecks<T> = { [K in keyof T]-?: Check }
+type Guard<V> = (value: unknown) => value is V
+/** One guard per field. `keyof Required<T>` lists optional fields too, and `T[K]` keeps their `undefined`. */
+type FieldChecks<T> = { [K in keyof Required<T>]: Guard<T[K]> }
 
 function matches<T>(value: unknown, checks: FieldChecks<T>): value is T {
   return (
     isRecord(value) &&
-    Object.entries(checks).every(([field, check]) => (check as Check)(value[field]))
+    Object.entries<Guard<unknown>>(checks).every(([field, check]) => check(value[field]))
   )
 }
 
-const CATALOG_REF: FieldChecks<NormalizedSkillRefs['catalog'][number]> = {
+/** A guard for a value built from field guards, for use as a field guard itself. */
+function shape<T>(checks: FieldChecks<T>): Guard<T> {
+  return (value): value is T => matches(value, checks)
+}
+
+const isCatalogRef = shape<NormalizedSkillRefs['catalog'][number]>({
   skillId: isString,
   optional: isBoolean,
-}
-
-const SKILL_RESOURCE: FieldChecks<NonNullable<BundledSkillDefinition['resources']>[number]> = {
-  relPath: isString,
-  content: isString,
-}
+})
 
 /** The skill directory name, the frontmatter description, the body, and each resource file. */
-const BUNDLED_SKILL: FieldChecks<BundledSkillDefinition> = {
+const isBundledSkill = shape<BundledSkillDefinition>({
   id: isString,
   name: isString,
   description: isString,
   instructions: isString,
-  resources: optional(listOf((resource) => matches(resource, SKILL_RESOURCE))),
-}
+  resources: absentOr(listOf(shape({ relPath: isString, content: isString }))),
+})
 
-const STDIO_TRANSPORT: FieldChecks<McpStdioTransport> = {
-  kind: (value) => value === 'stdio',
+const isStdioTransport = shape<McpStdioTransport>({
+  kind: literal('stdio'),
   command: isString,
-  args: optional(isStringList),
-  env: optional(isStringMap),
-}
+  args: absentOr(listOf(isString)),
+  env: absentOr(isStringMap),
+})
 
-const HTTP_TRANSPORT: FieldChecks<McpHttpTransport> = {
-  kind: (value) => value === 'http',
+const isHttpTransport = shape<McpHttpTransport>({
+  kind: literal('http'),
   url: isString,
-  headers: optional(isStringMap),
-}
+  headers: absentOr(isStringMap),
+})
 
-const SECRET_REF: FieldChecks<McpSecretRef> = {
+const isSecretRef = shape<McpSecretRef>({
   key: isString,
-  envName: optional(isString),
-  header: optional(isString),
-  headerTemplate: optional(isString),
-  required: optional(isBoolean),
-  usage: optional(isString),
-}
+  envName: absentOr(isString),
+  header: absentOr(isString),
+  headerTemplate: absentOr(isString),
+  required: absentOr(isBoolean),
+  usage: absentOr(isString),
+})
 
-const OAUTH_CONFIG: FieldChecks<McpOAuthConfig> = {
-  grant: (value) => value === 'authorization_code' || value === 'client_credentials',
+const isOAuthConfig = shape<McpOAuthConfig>({
+  grant: oneOf('authorization_code', 'client_credentials'),
   clientId: isString,
-  clientSecretKey: optional(isString),
-  authorizationUrl: optional(isString),
-  tokenUrl: optional(isString),
-  scopes: optional(isStringList),
-  resource: optional(isString),
-  header: optional(isString),
-  headerTemplate: optional(isString),
-}
+  clientSecretKey: absentOr(isString),
+  authorizationUrl: absentOr(isString),
+  tokenUrl: absentOr(isString),
+  scopes: absentOr(listOf(isString)),
+  resource: absentOr(isString),
+  header: absentOr(isString),
+  headerTemplate: absentOr(isString),
+})
 
 /** An id to name its tools under, a transport to reach it, and every string the harness renders. */
-const TOOL_SERVER: FieldChecks<McpServerDefinition> = {
+const isToolServer = shape<McpServerDefinition>({
   id: isString,
-  label: optional(isString),
-  guidance: optional(isString),
-  transport: (value) => matches(value, STDIO_TRANSPORT) || matches(value, HTTP_TRANSPORT),
-  allowedTools: optional(isStringList),
-  harnesses: optional(isStringList),
-  secretKeys: optional(listOf((ref) => matches(ref, SECRET_REF))),
-  oauth: optional((config) => matches(config, OAUTH_CONFIG)),
-}
-
-function isCatalogRef(entry: unknown): boolean {
-  return matches(entry, CATALOG_REF)
-}
-
-function isBundledSkill(entry: unknown): entry is BundledSkillDefinition {
-  return matches(entry, BUNDLED_SKILL)
-}
-
-function isToolServer(entry: unknown): entry is McpServerDefinition {
-  return matches(entry, TOOL_SERVER)
-}
+  label: absentOr(isString),
+  guidance: absentOr(isString),
+  transport: either(isStdioTransport, isHttpTransport),
+  allowedTools: absentOr(listOf(isString)),
+  harnesses: absentOr(listOf(isHarnessKind)),
+  secretKeys: absentOr(listOf(isSecretRef)),
+  oauth: absentOr(isOAuthConfig),
+})
 
 /** An optional field: absent, or present and valid. */
-function optional(check: Check): Check {
-  return (value) => value === undefined || check(value)
+function absentOr<V>(check: Guard<V>): Guard<V | undefined> {
+  return (value): value is V | undefined => value === undefined || check(value)
 }
 
-function listOf(check: Check): Check {
-  return (value) => Array.isArray(value) && value.every(check)
+function listOf<V>(check: Guard<V>): Guard<V[]> {
+  return (value): value is V[] => Array.isArray(value) && value.every(check)
+}
+
+function either<A, B>(first: Guard<A>, second: Guard<B>): Guard<A | B> {
+  return (value): value is A | B => first(value) || second(value)
+}
+
+function literal<V extends string>(expected: V): Guard<V> {
+  return (value): value is V => value === expected
+}
+
+function oneOf<V extends string>(...allowed: V[]): Guard<V> {
+  return (value): value is V => allowed.includes(value as V)
 }
 
 function isString(value: unknown): value is string {
@@ -277,7 +281,7 @@ function isBoolean(value: unknown): value is boolean {
   return typeof value === 'boolean'
 }
 
-function isStringMap(value: unknown): boolean {
+function isStringMap(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every(isString)
 }
 
@@ -285,6 +289,4 @@ function isIndexList(value: unknown): value is number[] {
   return Array.isArray(value) && value.every(Number.isInteger)
 }
 
-function isStringList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(isString)
-}
+const isStringList = listOf(isString)

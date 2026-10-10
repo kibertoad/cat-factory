@@ -1,4 +1,10 @@
-import { defaultAgentKindRegistry, mergeKindCapabilities } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  mergeKindCapabilities,
+  NUXT_UI_SKILL_ID,
+  NUXT_UI_TOOL_SERVER_ID,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 import type { AgentKindCapabilityView } from '@cat-factory/agents'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
@@ -154,6 +160,58 @@ describe('mothership-mode agent-kind capability layer', () => {
       expect(views.get(kind)!.skills.bundled).toEqual([PLAYBOOK])
     }
     expect(views.get('fixer')!.toolServers.servers).toEqual([TRACKER_SERVER])
+  })
+
+  it('carries an http server with every optional field, byte for byte', async () => {
+    // Every other server here is stdio. The fields an http server adds (headers, OAuth, secret refs
+    // that become headers) are exactly what a too-strict check would refuse, and a refusal fails
+    // every dispatch on the node.
+    const remote = {
+      id: 'org.remote',
+      label: 'Remote tracker',
+      guidance: 'Search issues before you file one.',
+      transport: {
+        kind: 'http' as const,
+        url: 'https://mcp.example.test',
+        headers: { 'X-Org': 'acme' },
+      },
+      allowedTools: ['search_issues'],
+      harnesses: ['claude-code' as const],
+      secretKeys: [
+        {
+          key: 'ORG_TENANT',
+          header: 'X-Tenant',
+          headerTemplate: '{value}',
+          required: true,
+          usage: 'Tenant id.',
+        },
+      ],
+      oauth: {
+        grant: 'authorization_code' as const,
+        clientId: 'client',
+        authorizationUrl: 'https://auth.example.test/authorize',
+        tokenUrl: 'https://auth.example.test/token',
+        scopes: ['read'],
+      },
+    }
+    const source = await node(
+      mothership((registry) => {
+        registry.registerToolServer(remote)
+        registry.assignToolServers('coder', [remote.id])
+      }),
+    )
+    const [view] = await source.capabilities()
+    expect(view!.toolServers.servers).toEqual([remote])
+  })
+
+  it('carries the shipped Nuxt UI capability, the case #2269 was opened for', async () => {
+    const source = await node(mothership(registerNuxtUiCapability))
+    const views = await source.capabilities()
+    expect(views.length).toBeGreaterThan(0)
+    for (const view of views) {
+      expect(view.skills.bundled.map((skill) => skill.id)).toEqual([NUXT_UI_SKILL_ID])
+      expect(view.toolServers.servers.map((server) => server.id)).toEqual([NUXT_UI_TOOL_SERVER_ID])
+    }
   })
 
   it('keeps two INLINE definitions sharing an id apart, rather than swapping one in', async () => {
