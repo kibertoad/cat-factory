@@ -218,6 +218,7 @@ const title = computed(() =>
               <span class="max-w-48 truncate">{{ threadTitle(tab) }}</span>
             </UButton>
             <UButton
+              color="neutral"
               v-if="!draftOpen"
               size="sm"
               variant="ghost"

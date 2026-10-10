@@ -114,7 +114,13 @@ async function discard(): Promise<void> {
         <UButton size="sm" :loading="saving" @click="save">
           {{ t('guidedReview.drafts.save') }}
         </UButton>
-        <UButton size="sm" variant="ghost" :disabled="saving" @click="editing = false">
+        <UButton
+          color="neutral"
+          size="sm"
+          variant="ghost"
+          :disabled="saving"
+          @click="editing = false"
+        >
           {{ t('guidedReview.drafts.cancel') }}
         </UButton>
       </div>
@@ -126,13 +132,19 @@ async function discard(): Promise<void> {
         {{ t('guidedReview.drafts.postFailed') }}: {{ draft.postError }}
       </p>
       <div v-if="editable" class="mt-2 flex gap-2">
-        <UButton size="xs" variant="ghost" icon="i-lucide-pencil" @click="startEdit">
+        <UButton
+          color="neutral"
+          size="xs"
+          variant="ghost"
+          icon="i-lucide-pencil"
+          @click="startEdit"
+        >
           {{ t('guidedReview.drafts.edit') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           size="xs"
-          variant="ghost"
-          color="neutral"
           icon="i-lucide-trash-2"
           :loading="saving"
           @click="discard"

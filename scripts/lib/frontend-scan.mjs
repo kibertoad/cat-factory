@@ -174,13 +174,20 @@ export function isWaived(line, prevLine, marker) {
 }
 
 /**
- * Whether the line directly above a TAG is a comment carrying the waiver `marker`. A tag-scoped
- * waiver: unlike {@link isWaived} it cannot leak onto a second tag that starts on the same line or
- * the one after, because it has to sit on its own line, above the tag it justifies.
+ * Whether the comment directly above a TAG carries the waiver `marker`. `lines` are the raw source
+ * lines and `tagLine` is the tag's 1-based line. The comment has to END on the line above the tag:
+ * a one-line `<!-- … -->` or `// …`, or a block comment that wraps (`<!-- reason …` on one line,
+ * `… -->` on the next) and is read whole. A tag-scoped waiver: unlike {@link isWaived} it cannot
+ * leak onto a second tag that starts on the same line or the one after.
  */
-export function isWaivedAbove(prevLine, marker) {
-  const trimmed = prevLine.trim()
-  return (trimmed.startsWith('<!--') || trimmed.startsWith('//')) && trimmed.includes(marker)
+export function isWaivedAbove(lines, tagLine, marker) {
+  let i = tagLine - 2
+  const last = (lines[i] ?? '').trim()
+  if (last.startsWith('//')) return last.includes(marker)
+  if (!last.endsWith('-->')) return false
+  let block = last
+  while (!block.includes('<!--') && i > 0) block = `${lines[--i].trim()} ${block}`
+  return block.includes('<!--') && block.includes(marker)
 }
 
 // Elements that never have children, so they open no frame in {@link walkTemplate}.

@@ -356,6 +356,7 @@ function fieldHelp(key: string): string | undefined {
     <div class="flex items-start justify-between gap-3">
       <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
+        color="neutral"
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
         size="xs"

@@ -752,6 +752,7 @@ async function unlinkSource(id: string) {
               <!-- Editing a repo-SOURCED fragment locally would be overwritten on the next sync,
                    so only hand-authored fragments are editable here. -->
               <IconButton
+                color="neutral"
                 v-if="!f.source"
                 icon="i-lucide-pencil"
                 size="xs"
@@ -868,6 +869,7 @@ async function unlinkSource(id: string) {
           </div>
           <div class="ms-auto flex gap-1">
             <IconButton
+              color="neutral"
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
@@ -1026,6 +1028,7 @@ async function unlinkSource(id: string) {
           </UBadge>
           <div class="ms-auto flex gap-1">
             <UButton
+              color="neutral"
               icon="i-lucide-search-check"
               size="xs"
               variant="ghost"
@@ -1033,6 +1036,7 @@ async function unlinkSource(id: string) {
               @click="checkSource(s.id)"
             />
             <UButton
+              color="neutral"
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"

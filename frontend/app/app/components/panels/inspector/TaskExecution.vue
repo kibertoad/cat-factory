@@ -347,7 +347,7 @@ async function mergePr() {
           <UButton
             icon="i-lucide-trash-2"
             color="error"
-            variant="ghost"
+            variant="soft"
             size="xs"
             :loading="resetting"
             :disabled="stopping || !access.canExecuteRuns.value"

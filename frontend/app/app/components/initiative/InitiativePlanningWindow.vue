@@ -343,7 +343,7 @@ async function onDiscard() {
       <UButton
         v-if="canDiscard"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="sm"
         icon="i-lucide-trash-2"
         :loading="resetting"

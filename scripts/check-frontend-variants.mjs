@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Bans a button or badge prop that restates the app's default (issue #2250).
+// Bans a button or badge prop that restates the app's default, and two solid buttons side by side
+// (issue #2250).
 //
 // `frontend/app/app/app.config.ts` states the app's default `color`, `variant` and `size` for
 // `UButton` and `UBadge` (`ui.<component>.defaultVariants`, Nuxt UI's own `primary solid md`). A
@@ -21,9 +22,15 @@
 // The defaults are READ from `app.config.ts`, not restated here, so the guard and the app cannot
 // disagree. A config the parser cannot read fails the guard loudly rather than passing everything.
 //
+// SECOND RULE: no element holds two solid buttons as direct children (`findSolidSiblings` says how
+// `<template>` wrappers, `v-if` chains and `v-for` count). It is the checkable half of "one solid
+// primary per view": a file holding several forms that each end in a Save is several views, and a
+// guard that counted per file would need a waiver on most of them.
+//
 // Policy: ZERO offenders. A site that must keep the literal (for example, to hold its size when a
 // theme changes the default) says why with a `variant-default-ok:` comment on its own line,
-// directly above the tag. It waives that tag only.
+// directly above the tag, and a second solid button with a `solid-ok:` comment the same way. Each
+// waives that tag only.
 //
 // Usage:  node scripts/check-frontend-variants.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
@@ -40,6 +47,7 @@ import {
 
 const APP_CONFIG = join(repoRoot, 'frontend', 'app', 'app', 'app.config.ts')
 const DEFAULT_OK = 'variant-default-ok:'
+const SOLID_OK = 'solid-ok:'
 const PROPS = ['color', 'variant', 'size']
 
 /** The Nuxt UI components this guard reads, each with the `ui.<key>` whose defaults govern it. */
@@ -155,24 +163,115 @@ export function findDefaultProps(tag, own, inSizeGroup = false) {
   return found
 }
 
+const CONDITIONAL_ELSE = /\sv-else(?:-if)?(?=[\s=/>])/
+const DYNAMIC_VARIANT = /\s(?::|v-bind:)variant=/
+const OBJECT_VARIANT_KEY = /(?:^|[{,\s])variant\s*:/
+const NON_OBJECT_SPREAD = /\sv-bind=(?:"(?!\s*\{)|'(?!\s*\{))/
+// Components that render no element of their own around their default slot, so the buttons in
+// that slot are DOM siblings of whatever sits beside the component. A slot `<template #name>` is
+// the exception: it is its own region (a popover's content, a dropdown's items).
+const RENDERLESS = new Set([
+  'template',
+  'UTooltip',
+  'UPopover',
+  'UDropdownMenu',
+  'UContextMenu',
+  'ClientOnly',
+  'Transition',
+  'KeepAlive',
+  'Suspense',
+])
+
 /**
- * Every offender in the template half of one `.vue` source, as `{ line, matches }`. `tagKeys`
- * maps each component name this guard reads (the Nuxt UI pair plus the derived wrappers) to its
- * config key.
+ * Whether an opening tag renders a solid button: `'solid'`, `'other'`, or `'unknown'` when the
+ * variant is decided at runtime (a computed `:variant`, a non-constant `variant` key in a
+ * `v-bind="{ … }"` object, or a `v-bind="props"` spread that may carry one).
  */
-export function findInTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+function variantOf(tag, defaults) {
+  const stated = statedValue(tag, 'variant')
+  if (stated !== undefined) return stated === 'solid' ? 'solid' : 'other'
+  const spread = OBJECT_SPREAD.exec(tag)
+  const dynamicKey = spread && OBJECT_VARIANT_KEY.test(spread[1] ?? spread[2])
+  if (DYNAMIC_VARIANT.test(tag) || dynamicKey || NON_OBJECT_SPREAD.test(tag)) return 'unknown'
+  return defaults.button.variant === 'solid' ? 'solid' : 'other'
+}
+
+/**
+ * Both rules over one `.vue` source in ONE walk of its template, as `{ restated, solids }`, each a
+ * list of `{ line, matches }`. `tagKeys` maps each component name this guard reads (the Nuxt UI
+ * pair plus the derived wrappers) to its config key.
+ *
+ * `restated`: a prop equal to its component's default (see the file header).
+ *
+ * `solids`: an element holding TWO OR MORE solid buttons as direct children, reported at the
+ * SECOND button, where its `solid-ok:` waiver goes. This is the checkable half of "one solid
+ * primary per view": two solid buttons side by side compete for the same attention, while two
+ * forms in one file that each end in a Save are two views. What counts as a sibling follows the
+ * DOM, not the markup:
+ * - a plain `<template>` and the renderless components in `RENDERLESS` (`UTooltip`, `UPopover`,
+ *   `ClientOnly`, …) add no element, so what they render joins the place they took in the
+ *   enclosing element; a slot `<template #name>` is its own region;
+ * - a `v-if` / `v-else-if` / `v-else` chain renders one branch, so it counts as its largest branch;
+ * - a `v-for` button counts once: it renders a list of equal alternatives, not a competing action.
+ * A button whose variant is decided at runtime is not counted.
+ */
+export function scanTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
   const raw = source.split('\n')
-  const out = []
+  const restated = []
+  const solids = []
+  const root = { data: { groups: [] } }
+  // The solid buttons a frame renders side by side: per group of siblings, its largest branch.
+  const rendered = (node) =>
+    node.data.groups.flatMap((group) =>
+      group.alternatives.reduce((best, alt) => (alt.length > best.length ? alt : best), []),
+    )
+  const report = (lines) => {
+    if (lines.length >= 2) solids.push({ line: lines[1], matches: lines.map((l) => `solid@${l}`) })
+  }
   walkTemplate(source, {
     open(node, ancestors) {
       const key = tagKeys[node.name]
-      if (!key || isWaivedAbove(raw[node.line - 2] ?? '', DEFAULT_OK)) return
-      const inSizeGroup = ancestors.some((a) => SIZE_GROUPS.has(a.name))
-      const matches = findDefaultProps(node.tag, defaults[key], inSizeGroup)
-      if (matches.length) out.push({ line: node.line, matches: [`<${node.name}>`, ...matches] })
+      // The defaults rule.
+      if (key && !isWaivedAbove(raw, node.line, DEFAULT_OK)) {
+        const inSizeGroup = ancestors.some((a) => SIZE_GROUPS.has(a.name))
+        const matches = findDefaultProps(node.tag, defaults[key], inSizeGroup)
+        if (matches.length)
+          restated.push({ line: node.line, matches: [`<${node.name}>`, ...matches] })
+      }
+      // The sibling rule: find the place this element takes among its parent's children.
+      const groups = (ancestors[ancestors.length - 1] ?? root).data.groups
+      if (CONDITIONAL_ELSE.test(node.tag) && groups.length) {
+        groups[groups.length - 1].alternatives.push([])
+      } else {
+        groups.push({ alternatives: [[]] })
+      }
+      const group = groups[groups.length - 1]
+      node.data.place = group.alternatives[group.alternatives.length - 1]
+      node.data.groups = []
+      node.data.renderless = RENDERLESS.has(node.name) && !/\s(?:#|v-slot)/.test(node.tag)
+      if (key === 'button' && variantOf(node.tag, defaults) === 'solid') {
+        if (!isWaivedAbove(raw, node.line, SOLID_OK)) node.data.place.push(node.line)
+      }
+    },
+    close(node) {
+      const lines = rendered(node)
+      if (node.data.renderless) node.data.place.push(...lines)
+      else report(lines)
     },
   })
-  return out
+  report(rendered(root))
+  solids.sort((a, b) => a.line - b.line)
+  return { restated, solids }
+}
+
+/** The defaults rule alone: every restated default in one `.vue` source. */
+export function findInTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+  return scanTemplate(source, defaults, tagKeys).restated
+}
+
+/** The sibling rule alone: every element with competing solid buttons in one `.vue` source. */
+export function findSolidSiblings(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+  return scanTemplate(source, defaults, tagKeys).solids
 }
 
 function main() {
@@ -184,9 +283,13 @@ function main() {
     ...BASE_CONFIG_KEYS,
     ...deriveWrappers(files.map((f) => ({ name: basename(f.rel, '.vue'), source: f.source }))),
   }
-  const offenders = files.flatMap((file) =>
-    findInTemplate(file.source, defaults, tagKeys).map((hit) => ({ file: file.rel, ...hit })),
-  )
+  const offenders = []
+  const solids = []
+  for (const file of files) {
+    const { restated, solids: competing } = scanTemplate(file.source, defaults, tagKeys)
+    for (const hit of restated) offenders.push({ file: file.rel, ...hit })
+    for (const hit of competing) solids.push({ file: file.rel, ...hit })
+  }
 
   if (offenders.length) {
     const describe = (key) => PROPS.map((prop) => `${prop}="${defaults[key][prop]}"`).join(' ')
@@ -200,11 +303,25 @@ function main() {
         'Delete the prop. See frontend/app/README.md, "Buttons and badges follow one variant policy".\n',
     )
     for (const o of offenders) console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
-    console.error(`\n${offenders.length} tag(s) restating a default.`)
-    process.exit(1)
+    console.error(`\n${offenders.length} tag(s) restating a default.\n`)
   }
+  if (solids.length) {
+    console.error('Two solid buttons share one parent element (issue #2250).')
+    console.error(
+      'A view has ONE solid primary action; a second action beside it takes a lighter variant\n' +
+        '(`soft` for a send-back or destructive action, `outline` for a real secondary action, `ghost`\n' +
+        'for a dismissal). The location is the SECOND solid button: if the pair is genuinely needed,\n' +
+        'say why in a `<!-- solid-ok: … -->` comment directly above it.\n' +
+        'See frontend/app/README.md, "Buttons and badges follow one variant policy".\n',
+    )
+    for (const o of solids) console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
+    console.error(`\n${solids.length} element(s) with competing solid buttons.`)
+  }
+  if (offenders.length || solids.length) process.exit(1)
 
-  console.log('check-frontend-variants: no button or badge restates the app default.')
+  console.log(
+    'check-frontend-variants: no button or badge restates the app default, and no two solid buttons are siblings.',
+  )
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.

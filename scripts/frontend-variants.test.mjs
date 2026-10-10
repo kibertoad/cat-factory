@@ -5,7 +5,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { deriveWrappers, findInTemplate, readDefaults } from './check-frontend-variants.mjs'
+import {
+  deriveWrappers,
+  findInTemplate,
+  findSolidSiblings,
+  readDefaults,
+} from './check-frontend-variants.mjs'
 import { repoRoot } from './lib/frontend-scan.mjs'
 
 // A synthetic config whose button and badge defaults DIFFER, so the per-component lookup is
@@ -163,6 +168,173 @@ describe('deriveWrappers', () => {
         { name: 'CopyButton', source: wrapper('<UButton :size="size" />') },
       ]),
       { IconButton: 'button', ChipBadge: 'badge' },
+    )
+  })
+})
+
+describe('findSolidSiblings', () => {
+  // The real defaults: an unvariant button is solid.
+  const nuxt = readDefaults(
+    CONFIG.replace("variant: 'ghost', size: 'xs'", "variant: 'solid', size: 'md'"),
+  )
+  const solids = (template) =>
+    findSolidSiblings(sfc(template), nuxt, TAG_KEYS).map((hit) => hit.matches.join(' '))
+
+  it('flags two solid buttons under one parent, explicit or by default', () => {
+    assert.deepEqual(
+      solids('<div>\n  <UButton>A</UButton>\n  <UButton variant="solid">B</UButton>\n</div>'),
+      ['solid@3 solid@4'],
+    )
+  })
+
+  it('accepts one solid beside lighter siblings', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton color="neutral" variant="ghost">Cancel</UButton>\n  <UButton>Save</UButton>\n</div>',
+      ),
+      [],
+    )
+  })
+
+  it('counts each parent separately, so two forms in one file are two views', () => {
+    assert.deepEqual(
+      solids('<form><UButton>Save</UButton></form>\n<form><UButton>Save</UButton></form>'),
+      [],
+    )
+  })
+
+  it('counts a v-if chain as its largest branch', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton v-if="a">A</UButton>\n  <UButton v-else-if="b">B</UButton>\n  <UButton v-else>C</UButton>\n</div>',
+      ),
+      [],
+    )
+  })
+
+  it('looks through a plain template wrapper but not a slot template', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <template v-if="x"><UButton>A</UButton></template>\n  <UButton>B</UButton>\n</div>',
+      ),
+      ['solid@3 solid@4'],
+    )
+    assert.deepEqual(
+      solids(
+        '<UModal>\n  <template #body><UButton>A</UButton></template>\n  <template #footer><UButton>B</UButton></template>\n</UModal>',
+      ),
+      [],
+    )
+  })
+
+  it('counts a v-for button once and skips a bound variant', () => {
+    assert.deepEqual(
+      solids('<div>\n  <UButton v-for="p in ps" :key="p">{{ p }}</UButton>\n</div>'),
+      [],
+    )
+    assert.deepEqual(
+      solids(
+        `<div>\n  <UButton>A</UButton>\n  <UButton :variant="on ? 'solid' : 'ghost'">B</UButton>\n</div>`,
+      ),
+      [],
+    )
+  })
+
+  it('reads a wrapped tag whose condition holds a >', () => {
+    assert.deepEqual(
+      solids('<div>\n  <UButton\n    v-if="n > 1"\n  >A</UButton>\n  <UButton>B</UButton>\n</div>'),
+      ['solid@3 solid@6'],
+    )
+  })
+
+  it('counts a v-if chain inside a plain template as one button', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <template v-if="x">\n    <UButton v-if="a">A</UButton>\n    <UButton v-else>B</UButton>\n  </template>\n</div>',
+      ),
+      [],
+    )
+    // ...while two buttons the template renders together are still siblings of the one after it.
+    assert.deepEqual(
+      solids(
+        '<div>\n  <template v-if="x"><UButton>A</UButton></template>\n  <template v-else><UButton>B</UButton></template>\n  <UButton>C</UButton>\n</div>',
+      ),
+      ['solid@3 solid@5'],
+    )
+  })
+
+  it('does not read a < inside a binding or a mustache as a tag', () => {
+    // An unclosed phantom `Item` element would swallow the last button and hide the pair.
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <UButton :x="y as Array<Item>" variant="ghost" />\n  <UButton>B</UButton>\n</div>',
+      ),
+      ['solid@3 solid@5'],
+    )
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <span>{{ n<max ? 1 : 2 }}</span>\n  <UButton>B</UButton>\n</div>',
+      ),
+      ['solid@3 solid@5'],
+    )
+  })
+
+  it('looks through a renderless component such as UTooltip, but not its slot templates', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UTooltip text="x"><UButton>Approve</UButton></UTooltip>\n  <UButton>Bounce</UButton>\n</div>',
+      ),
+      ['solid@3 solid@4'],
+    )
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UPopover>\n    <UButton>Open</UButton>\n    <template #content><UButton>Go</UButton></template>\n  </UPopover>\n</div>',
+      ),
+      [],
+    )
+  })
+
+  it('counts a constant bound variant and skips any runtime one', () => {
+    assert.deepEqual(
+      solids(`<div>\n  <UButton>A</UButton>\n  <UButton :variant="'solid'">B</UButton>\n</div>`),
+      ['solid@3 solid@4'],
+    )
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <UButton v-bind="{ variant: kind }">B</UButton>\n</div>',
+      ),
+      [],
+    )
+    assert.deepEqual(
+      solids('<div>\n  <UButton>A</UButton>\n  <UButton v-bind="props">B</UButton>\n</div>'),
+      [],
+    )
+  })
+
+  it('reports the second button, where the waiver goes', () => {
+    const hits = findSolidSiblings(
+      sfc('<div>\n  <UButton>A</UButton>\n  <UButton>B</UButton>\n</div>'),
+      nuxt,
+      TAG_KEYS,
+    )
+    assert.equal(hits[0].line, 4)
+  })
+
+  it('reads a waiver comment that wraps onto two lines', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <!-- solid-ok: the banner CTA and\n       the confirm are separate steps -->\n  <UButton>B</UButton>\n</div>',
+      ),
+      [],
+    )
+  })
+
+  it('honours the waiver on the second button', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <!-- solid-ok: why -->\n  <UButton>B</UButton>\n</div>',
+      ),
+      [],
     )
   })
 })

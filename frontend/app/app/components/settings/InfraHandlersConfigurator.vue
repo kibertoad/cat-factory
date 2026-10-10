@@ -540,7 +540,7 @@ function toastRemoved() {
             <UButton
               icon="i-lucide-trash-2"
               color="error"
-              variant="ghost"
+              variant="soft"
               size="xs"
               :disabled="busy"
               @click="removeKubeOverride"

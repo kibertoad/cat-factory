@@ -657,6 +657,7 @@ async function copyOutput() {
                provider error, behind a toggle (most useful on a failed-to-start run) -->
           <div v-if="executionId">
             <UButton
+              color="neutral"
               :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
               variant="ghost"
               size="xs"
@@ -685,6 +686,7 @@ async function copyOutput() {
                superseded and the FAILED attempts, scoped to the step being looked at -->
           <div v-if="hasStepHistory">
             <UButton
+              color="neutral"
               :icon="showHistory ? 'i-lucide-chevron-up' : 'i-lucide-history'"
               variant="ghost"
               size="xs"
