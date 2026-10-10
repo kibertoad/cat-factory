@@ -120,9 +120,10 @@ section as `DirectoryWebhookDelivery`.
 
 Delivery is a sweep over the feed, every two minutes on both facades (the Worker's frequent cron
 and a Node timer), rather than an emission inside each writer: the feed already orders every write,
-so one reader replaces instrumenting every service that touches the directory. Each endpoint's
-`delivered_seq` is claimed by compare-and-swap before a push and moved back after a failed one, so
-two sweepers never push the same page and a failure is retried. Management stays on the deployment:
+so one reader replaces instrumenting every service that touches the directory. A sweeper takes a
+per-endpoint lease (a token plus an expiry) before a push and moves `delivered_seq` only after the
+push succeeds, so two sweepers never push overlapping pages, pages arrive in feed order, a failure
+is retried, and a page whose sweeper died is sent again once the lease expires. Management stays on the deployment:
 a mothership-mode node wires none of it, because the role-blind machine token may not reach
 account-admin configuration.
 

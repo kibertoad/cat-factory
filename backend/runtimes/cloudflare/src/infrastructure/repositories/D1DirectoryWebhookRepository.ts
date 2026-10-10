@@ -3,7 +3,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 // Directory webhook endpoints over D1 (migration 0109). Mirror of the Node facade's
 // `DrizzleDirectoryWebhookRepository`; `defineDirectoryWebhookSuite` holds the two to one
-// behaviour, the cap race and the delivery compare-and-swap included.
+// behaviour, the cap race and the delivery lease included.
 
 interface Row {
   account_id: string
@@ -98,14 +98,43 @@ export class D1DirectoryWebhookRepository implements DirectoryWebhookRepository 
     return results.map(toRecord)
   }
 
-  async advance(accountId: string, id: string, fromSeq: number, toSeq: number): Promise<boolean> {
+  async claim(
+    accountId: string,
+    id: string,
+    token: string,
+    now: number,
+    leaseUntil: number,
+  ): Promise<number | null> {
+    const row = await this.db
+      .prepare(
+        `UPDATE directory_webhooks SET lease_token = ?, lease_until = ?
+          WHERE account_id = ? AND id = ? AND enabled = 1
+            AND (lease_until IS NULL OR lease_until <= ?)
+          RETURNING delivered_seq`,
+      )
+      .bind(token, leaseUntil, accountId, id, now)
+      .first<{ delivered_seq: number }>()
+    return row ? row.delivered_seq : null
+  }
+
+  async complete(accountId: string, id: string, token: string, toSeq: number): Promise<boolean> {
     const result = await this.db
       .prepare(
-        `UPDATE directory_webhooks SET delivered_seq = ?
-          WHERE account_id = ? AND id = ? AND delivered_seq = ?`,
+        `UPDATE directory_webhooks SET delivered_seq = ?, lease_token = NULL, lease_until = NULL
+          WHERE account_id = ? AND id = ? AND lease_token = ?`,
       )
-      .bind(toSeq, accountId, id, fromSeq)
+      .bind(toSeq, accountId, id, token)
       .run()
     return (result.meta.changes ?? 0) > 0
+  }
+
+  async release(accountId: string, id: string, token: string): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE directory_webhooks SET lease_token = NULL, lease_until = NULL
+          WHERE account_id = ? AND id = ? AND lease_token = ?`,
+      )
+      .bind(accountId, id, token)
+      .run()
   }
 }

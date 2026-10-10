@@ -51,6 +51,11 @@ export class DirectoryService implements DirectoryFeedReader {
     return this.deps.directoryRepository.headSeq(accountId)
   }
 
+  /** Each account's newest feed position, in one read. */
+  headSeqs(accountIds: string[]): Promise<Map<string, number>> {
+    return this.deps.directoryRepository.headSeqs(accountIds)
+  }
+
   /**
    * Changes after `after`, each carrying its entity's current state (or `null` once it is gone or
    * outside the reader's reach). Refuses a cursor whose following changes were pruned, and one

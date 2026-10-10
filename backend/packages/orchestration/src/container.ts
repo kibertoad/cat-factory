@@ -777,6 +777,7 @@ export function createCore(injected: CoreDependencies): Core {
         feed: directory,
         clock: dependencies.clock,
         logger,
+        operationalMetrics,
       })
     : undefined
   // The optional-module registry: every feature that is wired only when its prerequisites are

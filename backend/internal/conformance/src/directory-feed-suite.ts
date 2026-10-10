@@ -117,6 +117,16 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
 
       expect(await entries(r, acc, head)).toEqual([['user', null, usr]])
       expect(await entries(r, acc2, head2)).toEqual([['user', null, usr]])
+
+      // The batched head read agrees with the per-account one, and answers 0 for an empty account.
+      const empty = `${acc}-none`
+      expect(await r.changes.headSeqs([acc, acc2, empty])).toEqual(
+        new Map([
+          [acc, await r.changes.headSeq(acc)],
+          [acc2, await r.changes.headSeq(acc2)],
+          [empty, 0],
+        ]),
+      )
     })
 
     it('records workspace and workspace-membership writes against the owning account', async () => {

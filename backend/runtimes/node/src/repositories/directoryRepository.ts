@@ -197,6 +197,18 @@ export class DrizzleDirectoryRepository implements DirectoryRepository {
     return row?.head ?? 0
   }
 
+  async headSeqs(accountIds: string[]): Promise<Map<string, number>> {
+    const heads = new Map(accountIds.map((id) => [id, 0]))
+    if (accountIds.length === 0) return heads
+    const rows = await this.db
+      .select({ accountId: directoryChanges.account_id, head: max(directoryChanges.seq) })
+      .from(directoryChanges)
+      .where(inArray(directoryChanges.account_id, accountIds))
+      .groupBy(directoryChanges.account_id)
+    for (const row of rows) heads.set(row.accountId, row.head ?? 0)
+    return heads
+  }
+
   async oldestSeq(accountId: string): Promise<number | null> {
     const [row] = await this.db
       .select({ oldest: min(directoryChanges.seq) })

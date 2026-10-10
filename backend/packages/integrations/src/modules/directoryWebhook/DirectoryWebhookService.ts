@@ -1,6 +1,7 @@
 import {
   type DirectoryWebhook,
   type DirectoryWebhookDelivery,
+  directoryWebhookIdSchema,
   MAX_DIRECTORY_WEBHOOKS_PER_ACCOUNT,
   type PutDirectoryWebhookInput,
 } from '@cat-factory/contracts'
@@ -13,11 +14,13 @@ import {
   DomainError,
   type Logger,
   noopLogger,
+  type OperationalMetrics,
   type SecretCipher,
   type UrlSafetyPolicy,
   ValidationError,
   describeError,
 } from '@cat-factory/kernel'
+import * as v from 'valibot'
 import { fanOutSignedWebhook } from '../notificationWebhook/signedDelivery.js'
 import { assertSafeNotificationWebhookUrl } from '../notificationWebhook/webhookUrl.js'
 
@@ -27,9 +30,11 @@ import { assertSafeNotificationWebhookUrl } from '../notificationWebhook/webhook
 //
 // Delivery is a SWEEP rather than an emission inside each write: the feed already orders every
 // directory write across every writer, so one reader of it replaces instrumenting a dozen services.
-// Each endpoint keeps the feed position it was delivered through, claimed by compare-and-swap
-// BEFORE a push and released after a failed one, so concurrent sweepers never send the same page
-// and a failed page is sent again (at-least-once; a receiver dedupes on `deliveryId`). The feed is
+// Each endpoint keeps the feed position it was delivered through and a lease a sweeper takes
+// BEFORE a push. The position moves only after the push succeeds, so concurrent sweepers never send
+// overlapping pages, pages arrive in feed order, a failed page is sent again, and a page whose
+// sweeper died is sent again once its lease expires (at-least-once; a receiver dedupes on
+// `deliveryId`). The feed is
 // still what guarantees completeness: a receiver that lost a push catches up by polling.
 
 /** HKDF info tag for sealing endpoint signing secrets; distinct from every other sealed secret. */
@@ -41,6 +46,12 @@ const PUSH_PAGE_SIZE = 100
 const MAX_PUSHES_PER_SWEEP = 5
 /** Endpoints delivered to at once. */
 const SWEEP_CONCURRENCY = 4
+/**
+ * How long a sweeper holds an endpoint's lease for one push: a feed read plus a signed POST whose
+ * budget is a few seconds, with ample margin. A sweeper that dies mid-push blocks the endpoint for
+ * at most this long, after which the page is offered again.
+ */
+const LEASE_MS = 60_000
 
 export interface DirectoryWebhookServiceDependencies {
   repository: DirectoryWebhookRepository
@@ -50,6 +61,7 @@ export interface DirectoryWebhookServiceDependencies {
   urlSafetyPolicy?: UrlSafetyPolicy
   fetchImpl?: typeof fetch
   logger?: Logger
+  operationalMetrics?: OperationalMetrics
 }
 
 export interface DirectoryWebhookSweepResult {
@@ -77,6 +89,7 @@ export class DirectoryWebhookService {
     id: string,
     input: PutDirectoryWebhookInput,
   ): Promise<DirectoryWebhook> {
+    assertValidWebhookId(id)
     const existing = await this.deps.repository.get(accountId, id)
     const url = input.url ?? existing?.url
     if (!url) {
@@ -84,7 +97,11 @@ export class DirectoryWebhookService {
         reason: 'webhook_url_required',
       })
     }
-    assertSafeNotificationWebhookUrl(url, this.deps.urlSafetyPolicy)
+    // Guarded on a SUPPLIED url only, as the notification webhooks are: a stored url was vouched for
+    // when it was set, and re-checking it would let a narrowed allow-list block the disable or
+    // secret rotation an operator makes in response. Delivery re-applies the guard on every push.
+    if (input.url !== undefined)
+      assertSafeNotificationWebhookUrl(input.url, this.deps.urlSafetyPolicy)
     const record: DirectoryWebhookRecord = {
       accountId,
       id,
@@ -115,9 +132,15 @@ export class DirectoryWebhookService {
   /** Push whatever each enabled endpoint has not been sent yet. Never throws. */
   async deliverPending(): Promise<DirectoryWebhookSweepResult> {
     const result: DirectoryWebhookSweepResult = { pushed: 0, failed: 0 }
-    let endpoints: DirectoryWebhookRecord[]
+    let due: { endpoint: DirectoryWebhookRecord; head: number }[]
     try {
-      endpoints = await this.deps.repository.listEnabled()
+      const endpoints = await this.deps.repository.listEnabled()
+      const heads = await this.deps.feed.headSeqs([...new Set(endpoints.map((e) => e.accountId))])
+      // The listed position is a hint that saves a lease write for an endpoint already at the head;
+      // the position actually delivered after is the one `claim` returns.
+      due = endpoints
+        .map((endpoint) => ({ endpoint, head: heads.get(endpoint.accountId) ?? 0 }))
+        .filter(({ endpoint, head }) => head > endpoint.deliveredSeq)
     } catch (error) {
       this.logger.warn('directory webhook sweep could not list endpoints', describeError(error))
       return result
@@ -125,27 +148,29 @@ export class DirectoryWebhookService {
     let next = 0
     const worker = async (): Promise<void> => {
       for (;;) {
-        const endpoint = endpoints[next]
+        const item = due[next]
         next += 1
-        if (!endpoint) return
-        await this.deliverTo(endpoint, result)
+        if (!item) return
+        await this.deliverTo(item.endpoint, item.head, result)
       }
     }
-    await Promise.all(Array.from({ length: Math.min(SWEEP_CONCURRENCY, endpoints.length) }, worker))
+    await Promise.all(Array.from({ length: Math.min(SWEEP_CONCURRENCY, due.length) }, worker))
     return result
   }
 
   private async deliverTo(
     endpoint: DirectoryWebhookRecord,
+    head: number,
     result: DirectoryWebhookSweepResult,
   ): Promise<void> {
-    let from = endpoint.deliveredSeq
+    let knownHead = head
     for (let pushes = 0; pushes < MAX_PUSHES_PER_SWEEP; pushes++) {
       try {
-        const pushed = await this.pushOnce(endpoint, from)
+        const pushed = await this.pushOnce(endpoint, knownHead)
         if (pushed === null) return
         result.pushed += 1
-        from = pushed
+        if (!pushed.more) return
+        knownHead = pushed.headSeq
       } catch (error) {
         result.failed += 1
         this.logger.warn('directory webhook delivery failed', {
@@ -153,59 +178,102 @@ export class DirectoryWebhookService {
           webhookId: endpoint.id,
           ...describeError(error),
         })
+        // The channel is the only dimension: account and webhook ids are unbounded.
+        this.deps.operationalMetrics?.increment('notification.delivery_failed', {
+          channel: 'directory_webhook',
+        })
         return
       }
     }
   }
 
   /**
-   * One claimed push starting after `from`. Returns the new position, or null when there was
-   * nothing to send or another sweeper holds the claim. Throws after releasing the claim when the
-   * push fails, so the same page is offered again next sweep.
+   * One push under the endpoint's lease. Returns whether the feed holds more after the page, or
+   * null when another sweeper holds the lease or there was nothing to send. Throws after dropping
+   * the lease when the push fails, leaving the position where it was, so the same page is offered
+   * again next sweep.
    */
-  private async pushOnce(endpoint: DirectoryWebhookRecord, from: number): Promise<number | null> {
+  private async pushOnce(
+    endpoint: DirectoryWebhookRecord,
+    head: number,
+  ): Promise<{ more: boolean; headSeq: number } | null> {
     const { accountId, id } = endpoint
-    const head = await this.deps.feed.headSeq(accountId)
-    if (head <= from) return null
-    let delivery: DirectoryWebhookDelivery
-    let to: number
-    try {
-      const page = await this.deps.feed.changes(
-        { accountId, workspaceIds: null },
-        from,
-        PUSH_PAGE_SIZE,
-      )
-      to = page.nextAfter
-      delivery = {
-        deliveryId: `${id}:${from}-${to}`,
-        sentAt: this.deps.clock.now(),
-        accountId,
-        event: 'directory.changed',
-        changes: page.changes,
-        nextAfter: page.nextAfter,
-        headSeq: page.headSeq,
-      }
-    } catch (error) {
-      if (!isCursorExpired(error)) throw error
-      // The endpoint fell further behind than the feed keeps. Resume from the head and say so,
-      // rather than pushing a page that silently starts after a gap.
-      to = head
-      delivery = {
-        deliveryId: `${id}:${from}-${to}:resync`,
-        sentAt: this.deps.clock.now(),
-        accountId,
-        event: 'directory.resync_required',
-        headSeq: head,
-      }
+    const token = globalThis.crypto.randomUUID()
+    const now = this.deps.clock.now()
+    const from = await this.deps.repository.claim(accountId, id, token, now, now + LEASE_MS)
+    if (from === null) return null
+    if (from >= head) {
+      await this.release(endpoint, token)
+      return null
     }
-    if (!(await this.deps.repository.advance(accountId, id, from, to))) return null
+    let to = head
+    let more = false
+    let headSeq = head
     try {
+      let delivery: DirectoryWebhookDelivery
+      try {
+        const page = await this.deps.feed.changes(
+          { accountId, workspaceIds: null },
+          from,
+          PUSH_PAGE_SIZE,
+        )
+        to = page.nextAfter
+        more = page.nextAfter < page.headSeq
+        headSeq = page.headSeq
+        delivery = {
+          deliveryId: `${id}:${from}-${to}`,
+          sentAt: this.deps.clock.now(),
+          accountId,
+          event: 'directory.changed',
+          changes: page.changes,
+          nextAfter: page.nextAfter,
+          headSeq: page.headSeq,
+        }
+      } catch (error) {
+        if (!isCursorExpired(error)) throw error
+        // The endpoint fell further behind than the feed keeps. Resume from the head and say so,
+        // rather than pushing a page that silently starts after a gap.
+        delivery = {
+          deliveryId: `${id}:${from}-${to}:resync`,
+          sentAt: this.deps.clock.now(),
+          accountId,
+          event: 'directory.resync_required',
+          headSeq: head,
+        }
+      }
       await this.post(endpoint, delivery)
     } catch (error) {
-      await this.deps.repository.advance(accountId, id, to, from)
+      await this.release(endpoint, token)
       throw error
     }
-    return to
+    if (!(await this.deps.repository.complete(accountId, id, token, to))) {
+      // The push outlived its lease and another sweeper took over, so that sweeper sends this page
+      // again: a duplicate the receiver drops on `deliveryId`.
+      this.logger.warn('directory webhook lease expired during a push', {
+        accountId,
+        webhookId: id,
+        from,
+        to,
+      })
+      return null
+    }
+    return { more, headSeq }
+  }
+
+  /**
+   * Drop the lease after a failed push. A release that throws leaves the lease to expire, after
+   * which the page is offered again; it is logged and never replaces the push's own error.
+   */
+  private async release(endpoint: DirectoryWebhookRecord, token: string): Promise<void> {
+    try {
+      await this.deps.repository.release(endpoint.accountId, endpoint.id, token)
+    } catch (error) {
+      this.logger.warn('directory webhook lease release failed; it expires on its own', {
+        accountId: endpoint.accountId,
+        webhookId: endpoint.id,
+        ...describeError(error),
+      })
+    }
   }
 
   private async post(
@@ -227,6 +295,16 @@ export class DirectoryWebhookService {
       },
     )
     if (failure !== null) throw failure
+  }
+}
+
+/** Refuse an id that is not a lowercase slug, derived from the contract's own schema. */
+function assertValidWebhookId(id: string): void {
+  const parsed = v.safeParse(directoryWebhookIdSchema, id)
+  if (!parsed.success) {
+    throw new ValidationError(parsed.issues[0]?.message ?? 'Invalid webhook id', {
+      reason: 'invalid_webhook_id',
+    })
   }
 }
 
