@@ -68,7 +68,7 @@ per-endpoint lease (`lease_token`, held until `lease_until`, 60 seconds) before 
 `delivered_seq` only after the push succeeds, so two sweepers never push overlapping pages, pages
 arrive in feed order, a failed push is retried, and a page whose sweeper died is sent again once
 the lease expires. A failed push is counted on `notification.delivery_failed` with
-`channel: directory_webhook`. A malformed endpoint id is `400 invalid_webhook_id`.
+`channel: directory_webhook`. A malformed endpoint id is `422` with `details.reason: invalid_webhook_id`.
 
 **5. Two hand-written packages make a receiver cheap.** `@cat-factory/webhooks` verifies any signed
 delivery (Web Crypto only; `gatekeeper-worker` re-exports it). `@cat-factory/directory-sync`
