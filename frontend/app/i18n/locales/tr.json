@@ -830,6 +830,9 @@
       "title": "Bu görünüm yüklenemedi",
       "body": "Kodu yüklenemedi. Bu genellikle bu sekme açıkken uygulamanın güncellendiği anlamına gelir; sayfanın istediği dosyalar artık sunucuda değildir. Geçerli sürümü almak için yeniden yükleyin.",
       "reload": "Yeniden yükle"
+    },
+    "reported": {
+      "description": "İşlem çalıştı ve bir hata bildirdi. Ne bildirdiğini görmek için ayrıntıları gösterin."
     }
   },
   "personalSubscriptions": {

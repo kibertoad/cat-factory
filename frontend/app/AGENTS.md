@@ -74,6 +74,7 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
   `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
+  `node scripts/check-frontend-feedback.mjs`,
   `node scripts/check-file-size.mjs` from the repo root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),

@@ -30,7 +30,7 @@ const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const board = useBoardStore()
 const actionToast = useActionToast()
-const { present } = usePipelineErrorToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -423,8 +423,8 @@ async function launch() {
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
       // repo isn't empty) — surfaced synchronously, before any board frame.
-      actionToast.error('bootstrap.toast.failed', {
-        description: job.error ?? t('bootstrap.toast.failedFallback'),
+      presentReported(job.error, 'bootstrap.toast.failed', {
+        descriptionKey: 'bootstrap.toast.failedFallback',
       })
     } else {
       // Running: the container is spinning up. A provisional service card now

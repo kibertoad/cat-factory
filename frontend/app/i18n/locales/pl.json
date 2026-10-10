@@ -830,6 +830,9 @@
       "title": "Nie udało się wczytać tego widoku",
       "body": "Nie udało się wczytać jego kodu. Zwykle oznacza to, że aplikacja została zaktualizowana, gdy ta karta była otwarta, więc plików żądanych przez tę stronę nie ma już na serwerze. Odśwież, aby pobrać aktualną wersję.",
       "reload": "Odśwież"
+    },
+    "reported": {
+      "description": "Operacja została wykonana i zgłosiła błąd. Pokaż szczegóły, aby zobaczyć, co zgłosiła."
     }
   },
   "personalSubscriptions": {

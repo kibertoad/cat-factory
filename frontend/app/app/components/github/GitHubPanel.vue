@@ -81,6 +81,12 @@ const PULL_TERMS = {
   },
 } as const satisfies Record<VcsProvider, Record<string, string>>
 const pullTerms = computed(() => PULL_TERMS[github.provider])
+// Skeleton rows only while there is nothing to show yet. `github.loading` is also set by every
+// refresh (after a resync, on re-open), and blanking lists the reader is looking at to skeletons
+// and back loses their place for no gain.
+const firstLoad = computed(
+  () => github.loading && !github.repos.length && !github.pulls.length && !github.issues.length,
+)
 
 // What the repo picker can offer, and why a repo might be missing from it, differ by how the
 // workspace authenticates rather than by provider: an App installation is shared across the
@@ -356,7 +362,7 @@ async function merge(pr: GitHubPullRequest) {
             </UButton>
           </div>
 
-          <div v-if="github.loading" class="space-y-2">
+          <div v-if="firstLoad" class="space-y-2">
             <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
           </div>
 

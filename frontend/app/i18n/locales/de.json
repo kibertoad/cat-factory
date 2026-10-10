@@ -6504,6 +6504,9 @@
       "title": "Diese Ansicht konnte nicht geladen werden",
       "body": "Ihr Code konnte nicht geladen werden. Meist wurde die Anwendung aktualisiert, während dieser Tab geöffnet war, sodass die angeforderten Dateien nicht mehr auf dem Server liegen. Laden Sie neu, um die aktuelle Version zu erhalten.",
       "reload": "Neu laden"
+    },
+    "reported": {
+      "description": "Der Vorgang lief und meldete einen Fehler. „Details anzeigen“ zeigt, was er gemeldet hat."
     }
   },
   "slack": {

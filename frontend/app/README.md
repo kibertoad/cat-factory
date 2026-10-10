@@ -258,7 +258,10 @@ answered, so a local check that never left the browser must not be dressed up as
 `new Error(t('...'))` has no envelope and no status, which is precisely the input `describeGenericFailure`
 reads as a network fault. A blank required field then renders as "The server could not be reached",
 with the real sentence hidden behind a disclosure. Client-side validation is
-`useActionToast().error(titleKey, { description })` instead (see below).
+`useActionToast().error(titleKey, { description })` instead (see below). A failure the backend
+reports as DATA (a job row with `status: 'failed'` and its `error`, a probe verdict's `message`) is
+`presentReported(detail, titleKey, { descriptionKey })`: translated copy as the headline, the
+backend's prose behind "Show details" and in the copied report, the same as a failed call.
 
 The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
 `testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
@@ -273,12 +276,12 @@ site picks a TONE and supplies a title KEY; the tone fixes the colour, the icon 
 two toasts of one tone render identically wherever they come from. Before this, some success toasts
 were green with a check and the next was grey with no icon, depending on who wrote the site.
 
-| Tone      | For                                                                                      | Dismisses   |
-| --------- | ---------------------------------------------------------------------------------------- | ----------- |
-| `success` | The action the user asked for completed (saved, connected, removed, copied, moved).      | After 5s    |
-| `info`    | Progress or a state report that asks nothing ("drafting", "up to date").                 | After 5s    |
-| `warning` | The action ran, but the outcome is partial or needs a look.                              | When closed |
-| `error`   | A refusal that is NOT a failed call: client-side validation, a failure reported as data. | When closed |
+| Tone      | For                                                                                                      | Dismisses   |
+| --------- | -------------------------------------------------------------------------------------------------------- | ----------- |
+| `success` | The action the user asked for completed (saved, connected, removed, copied, moved).                      | After 5s    |
+| `info`    | Progress or a state report that asks nothing ("drafting", "up to date").                                 | After 5s    |
+| `warning` | The action ran, but the outcome is partial or needs a look.                                              | When closed |
+| `error`   | A refusal in translated copy that is NOT a failed call: client-side validation, a mapped refusal reason. | When closed |
 
 `warning` and `error` stay for the same reason the failure funnel's toast does: they ask the reader
 to do something. Options are content, never styling: `params` and `plural` for the title key, a

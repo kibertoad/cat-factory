@@ -6504,6 +6504,9 @@
       "title": "Impossibile caricare questa vista",
       "body": "Il suo codice non è stato caricato. Di solito significa che l'applicazione è stata aggiornata mentre questa scheda era aperta, quindi i file richiesti da questa pagina non sono più sul server. Ricarica per ottenere la versione attuale.",
       "reload": "Ricarica"
+    },
+    "reported": {
+      "description": "L'operazione è stata eseguita e ha segnalato un errore. Mostra i dettagli per vedere cosa ha riportato."
     }
   },
   "slack": {

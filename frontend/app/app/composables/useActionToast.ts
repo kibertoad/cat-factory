@@ -15,10 +15,12 @@
  *   date"). Dismisses after the default.
  * - `warning`: the action ran, but the outcome is partial or nothing changed in a way the reader
  *   should know about. Stays until closed, because it asks the reader to look at something.
- * - `error`: a refusal that is NOT a failed call: a client-side validation that never left the
- *   browser, or a failure the backend reported as DATA (a job row with `status: 'failed'`). It
- *   has no envelope, so the funnel would misread it as a network fault (README, "Every failure
- *   toast goes through ONE funnel"). Stays until closed, like every failure.
+ * - `error`: a refusal in TRANSLATED copy that is not a failed call: a client-side validation that
+ *   never left the browser, or a recognised refusal reason the site maps to its own key. It has no
+ *   envelope, so `present` would misread it as a network fault (README, "Every failure toast goes
+ *   through ONE funnel"). Stays until closed, like every failure. A failure the backend reported
+ *   as DATA with its own prose (a job row's `error`) is `presentReported` on the failure funnel
+ *   instead, which keeps that prose as copyable detail rather than the headline.
  *
  * Titles are i18n KEYS, resolved here (the same contract as `present`), so a call site cannot hand
  * in untranslated prose as the headline. A `description` is already-resolved text, because it

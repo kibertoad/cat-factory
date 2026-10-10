@@ -54,7 +54,7 @@ const hunt = useBugHuntStore()
 const board = useBoardStore()
 const github = useGitHubStore()
 const actionToast = useActionToast()
-const { present } = usePipelineErrorToast()
+const { present, presentReported } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.bugHunt !== null,
@@ -279,9 +279,13 @@ async function runHunt() {
   // `repo_not_linked` is worded by the panel itself beside the scope it invalidates.
   const attempt = await hunt.hunt(source.value, input)
   if (attempt === 'failed' && !huntNeedsRepo.value) {
-    actionToast.error('bugHunt.huntFailed', {
-      description: refusalText(hunt.huntErrorReason, hunt.huntError) ?? undefined,
-    })
+    // A recognised refusal reads in translated copy; anything else is the backend's prose, which
+    // is detail behind the disclosure rather than the headline.
+    const reasonKey = hunt.huntErrorReason
+      ? REFUSAL_KEYS[hunt.huntErrorReason as TaskSourceReadReason]
+      : undefined
+    if (reasonKey) actionToast.error('bugHunt.huntFailed', { description: t(reasonKey) })
+    else presentReported(hunt.huntError, 'bugHunt.huntFailed')
   }
 }
 

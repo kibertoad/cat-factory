@@ -380,15 +380,21 @@ async function save() {
                 </UButton>
               </div>
 
-              <EmptyState
+              <UAlert
                 v-if="catalogFailed"
+                color="error"
+                variant="subtle"
                 icon="i-lucide-triangle-alert"
                 :title="t('settings.modelConfiguration.list.catalogFailed')"
-              >
-                <UButton color="neutral" variant="outline" size="sm" @click="loadCatalog">
-                  {{ t('common.retry') }}
-                </UButton>
-              </EmptyState>
+                :actions="[
+                  {
+                    label: t('common.retry'),
+                    color: 'neutral',
+                    variant: 'outline',
+                    onClick: loadCatalog,
+                  },
+                ]"
+              />
 
               <div v-else-if="!models.loaded" class="space-y-3">
                 <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />

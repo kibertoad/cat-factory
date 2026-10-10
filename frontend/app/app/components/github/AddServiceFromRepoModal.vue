@@ -414,15 +414,16 @@ async function addServices() {
     const lastBlockId = created.at(-1)?.blockId
     if (lastBlockId) await focusFrame(lastBlockId)
     selectedDirectories.value = []
-    const show = wiringLanded ? actionToast.success : actionToast.warning
-    show('github.addService.toast.servicesAddedTitle', {
+    const added = {
       description: [
         t('github.addService.toast.servicesAddedDescription', { count: dirs.length }, dirs.length),
         frontendNote(designatedDirectory, wiringLanded),
       ]
         .filter(Boolean)
         .join(' '),
-    })
+    }
+    if (wiringLanded) actionToast.success('github.addService.toast.servicesAddedTitle', added)
+    else actionToast.warning('github.addService.toast.servicesAddedTitle', added)
   } catch (e) {
     present(e, 'github.addService.toast.addFailedTitle')
   } finally {

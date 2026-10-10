@@ -188,11 +188,12 @@ async function sync(id: string) {
       if (coverage) notes.push(coverage)
       // A folder we could not fully see, or could not find at all, is the one sync outcome a
       // human has to act on: the counts alone would read as an ordinary quiet success.
-      const show = coverage ? actionToast.warning : actionToast.success
-      show('foundational.toast.synced', {
+      const synced = {
         params: { updated: result.upserted, removed: result.tombstoned },
         ...(notes.length ? { description: notes.join(' ') } : {}),
-      })
+      }
+      if (coverage) actionToast.warning('foundational.toast.synced', synced)
+      else actionToast.success('foundational.toast.synced', synced)
     } catch (e) {
       present(e, 'foundational.toast.syncFailed')
     }

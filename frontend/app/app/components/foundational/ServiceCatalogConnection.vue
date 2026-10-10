@@ -23,7 +23,7 @@ import {
 
 const catalog = useFoundationalServicesStore()
 const actionToast = useActionToast()
-const { present } = usePipelineErrorToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -157,7 +157,7 @@ async function probe() {
       if (result.ok) {
         actionToast.success('serviceCatalog.toast.probeOk', { description: result.message })
       } else {
-        actionToast.error('serviceCatalog.toast.probeFailed', { description: result.message })
+        presentReported(result.message, 'serviceCatalog.toast.probeFailed')
       }
     } catch (error) {
       present(error, 'serviceCatalog.toast.probeFailed')
@@ -173,14 +173,15 @@ async function importNow() {
 async function runImport(): Promise<void> {
   try {
     const result = await catalog.importServiceCatalog()
-    const show = result.status === 'ok' ? actionToast.success : actionToast.warning
-    show('serviceCatalog.toast.imported', {
+    const imported = {
       description: t('serviceCatalog.toast.importedDetail', {
         upserted: result.upserted,
         unchanged: result.unchanged,
         tombstoned: result.tombstoned,
       }),
-    })
+    }
+    if (result.status === 'ok') actionToast.success('serviceCatalog.toast.imported', imported)
+    else actionToast.warning('serviceCatalog.toast.imported', imported)
   } catch (error) {
     present(error, 'serviceCatalog.toast.importFailed')
   }

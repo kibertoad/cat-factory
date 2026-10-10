@@ -16,7 +16,7 @@ import type {
 const { t } = useI18n()
 const store = useSharedStacksStore()
 const actionToast = useActionToast()
-const { present } = usePipelineErrorToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const stacks = computed(() => store.stacks)
@@ -223,9 +223,7 @@ async function start(stack: SharedStack) {
     // surface that as an error toast too — not only a thrown transport/unavailable error.
     const updated = await store.ensureUp(stack.id)
     if (updated.status === 'failed') {
-      actionToast.error('settings.sharedStacks.toast.startFailed', {
-        description: updated.lastError ?? undefined,
-      })
+      presentReported(updated.lastError, 'settings.sharedStacks.toast.startFailed')
     }
   } catch (e) {
     present(e, 'settings.sharedStacks.toast.startFailed')

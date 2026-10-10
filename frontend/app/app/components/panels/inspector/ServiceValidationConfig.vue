@@ -105,7 +105,11 @@ async function detect() {
     if (result.status !== 'ok') {
       // The backend distinguishes "no repo linked" from "the repo could not be read"; say
       // which, because they send the operator to different places.
-      actionToast.warning(`inspector.validationChecks.detect.${result.status}`)
+      actionToast.warning(
+        result.status === 'repo_unavailable'
+          ? 'inspector.validationChecks.detect.repo_unavailable'
+          : 'inspector.validationChecks.detect.failed',
+      )
       return
     }
     const merged = mergeDetectedChecks(rows.value, result.checks, VALIDATION_MAX_CHECKS)
@@ -129,24 +133,25 @@ async function detect() {
     // An install-only detection fills nothing but the install field, and reporting it as
     // "0 checks added" would read as a failed press on the one repo shape prepopulation is
     // most for (dependencies to install, nothing declared to verify).
-    const addedKey =
+    actionToast.success(
       merged.added === 0
         ? 'inspector.validationChecks.detect.installOnly'
-        : 'inspector.validationChecks.detect.added'
-    actionToast.success(addedKey, {
-      params: { count: merged.added },
-      plural: merged.added === 0 ? undefined : merged.added,
-      // Name what was recognised AND what was left out: a cap that silently swallowed a
-      // suggestion reads as "that is everything your repo has".
-      description: [
-        names ? t('inspector.validationChecks.detect.found', { ecosystems: names }) : '',
-        merged.dropped > 0 || result.truncated
-          ? t('inspector.validationChecks.detect.capped', { max: VALIDATION_MAX_CHECKS })
-          : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-    })
+        : 'inspector.validationChecks.detect.added',
+      {
+        params: { count: merged.added },
+        plural: merged.added === 0 ? undefined : merged.added,
+        // Name what was recognised AND what was left out: a cap that silently swallowed a
+        // suggestion reads as "that is everything your repo has".
+        description: [
+          names ? t('inspector.validationChecks.detect.found', { ecosystems: names }) : '',
+          merged.dropped > 0 || result.truncated
+            ? t('inspector.validationChecks.detect.capped', { max: VALIDATION_MAX_CHECKS })
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      },
+    )
   } catch (e) {
     present(e, 'inspector.validationChecks.detect.failed')
   } finally {
