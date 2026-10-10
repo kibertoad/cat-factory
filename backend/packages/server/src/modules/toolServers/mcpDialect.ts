@@ -1,3 +1,5 @@
+import { isRecord } from '../../shared/guards.js'
+
 // ---------------------------------------------------------------------------
 // What an MCP request LOOKS like, per protocol era, and how a refusal tells the two eras apart.
 //
@@ -244,8 +246,4 @@ export function readEraVerdict(frame: Record<string, unknown> | undefined): EraV
     return { verdict: 'report', error: `the server refused the request: ${message}` }
   }
   return { verdict: 'legacy' }
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

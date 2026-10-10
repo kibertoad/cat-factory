@@ -12,8 +12,8 @@ import {
   requestParams,
   type McpEra,
   type ServerIdentity,
-  isRecord,
 } from './mcpDialect.js'
+import { isRecord } from '../../shared/guards.js'
 
 // ---------------------------------------------------------------------------
 // A minimal Streamable-HTTP MCP CLIENT, for one purpose: ask a declared `http` tool server whether

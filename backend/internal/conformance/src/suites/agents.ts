@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { defineAgentFragmentConformance } from './agent-fragments.js'
 import { defineAgentGateConformance } from './agent-gates.js'
 import { defineTaskTypeConformance } from './agent-task-types.js'
+import { defineAgentKindLayerConformance } from './agent-kind-layer.js'
 import { defineToolServerConformance } from './agent-tool-servers.js'
 import { defineSandboxConformance } from './sandbox.js'
 import { defineValidationChecksConformance } from './validation-checks.js'
@@ -22,6 +23,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
     registerCustomKindTests(harness)
     registerKindCapabilityTests(harness)
     defineToolServerConformance(harness)
+    defineAgentKindLayerConformance(harness)
     defineTaskTypeConformance(harness)
     registerSpikeAndPostOpTests(harness)
     registerEstimatorAndGateTests(harness)

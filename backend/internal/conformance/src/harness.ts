@@ -157,6 +157,8 @@ export interface ConformanceApp {
    * RBAC suite can drive requests AS a specific member/viewer/admin. Requires {@link authEnabled}.
    */
   session(user: { id: string; login?: string; name?: string | null }): Promise<string>
+  /** Mint a real signed machine token for the `/internal/*` machine API. Requires {@link authEnabled}. */
+  machineToken(): Promise<string>
   /**
    * Create a workspace owned by `ownerUserId` inside `accountId`, straight through the facade's
    * `WorkspaceService` — the seam the RBAC suite needs to place a board in a SPECIFIC account

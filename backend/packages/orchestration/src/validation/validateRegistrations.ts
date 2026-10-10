@@ -43,6 +43,7 @@ import {
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
 } from '@cat-factory/contracts'
+import { checkSkillDefinitions } from './validateSkillDefinitions.js'
 import { checkKindToolServers, checkToolServerDefinitions } from './validateToolServers.js'
 
 // ---------------------------------------------------------------------------
@@ -841,6 +842,7 @@ function checkAgentCapabilities(registry: AgentKindRegistry): RegistrationProble
     // it. A shared tool server is one registration and one edit, so reporting it per kind reported
     // one defect as several, all carrying the same `subject`.
     ...checkToolServerDefinitions(kinds, registry),
+    ...checkSkillDefinitions(kinds, registry),
   ]
 }
 

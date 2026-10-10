@@ -1,5 +1,5 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { runsInContainer } from '@cat-factory/agents'
+import { definitionIssues, mcpServerDefinitionSchema, runsInContainer } from '@cat-factory/agents'
 import type { AgentKind, McpSecretRef, McpServerDefinition } from '@cat-factory/kernel'
 import {
   MCP_OAUTH_DEFAULT_HEADER,
@@ -129,7 +129,7 @@ export function checkToolServerDefinitions(
  * whose blast radius is those five, and a message naming one of them reads as a narrower fault than
  * it is.
  */
-function declaredOn(kinds: readonly AgentKind[]): string {
+export function declaredOn(kinds: readonly AgentKind[]): string {
   const names = kinds.map((kind) => `"${kind}"`).join(', ')
   return kinds.length === 1 ? `(on agent kind ${names})` : `(on agent kinds ${names})`
 }
@@ -202,6 +202,21 @@ function checkToolServerBudget(
  *   it here only moves the failure to a place with no registration to point at.
  */
 function checkToolServerDefinition(on: string, server: McpServerDefinition): RegistrationProblem[] {
+  // The SHAPE first, and alone: every check below reads fields by their declared types, and a
+  // malformed definition is also one a mothership-mode node refuses to read at all.
+  const issues = definitionIssues(mcpServerDefinitionSchema, server)
+  if (issues.length) {
+    return [
+      {
+        severity: 'error',
+        code: 'invalid_tool_server_definition',
+        message:
+          `Tool server "${String(server.id)}" ${on} does not match the McpServerDefinition ` +
+          `shape: ${issues.join('; ')}. A mothership-mode node refuses the whole capability ` +
+          `layer that carries it, so fix the field rather than relying on this process running it.`,
+      },
+    ]
+  }
   const problems: RegistrationProblem[] = []
   if (!isValidMcpServerId(server.id)) {
     problems.push({
