@@ -8,15 +8,26 @@
 // `aria-label` stays on the button itself, because the tooltip is a hover/focus affordance and
 // the accessible NAME has to be there whether or not one ever opens.
 //
-// All other UButton props/listeners (icon, color, variant, size, @click, :loading, :disabled)
-// pass straight through via `$attrs`; `label` is declared as a prop so it strips off before
-// reaching UButton (whose own `label` prop would otherwise render visible text). Mirrors the
-// shape of `common/CopyButton.vue`.
+// All other UButton props/listeners (icon, color, variant, size, `ui`, @click, :loading,
+// :disabled) pass straight through via `$attrs`; `label` is declared as a prop so it strips off
+// before reaching UButton (whose own `label` prop would otherwise render visible text).
+//
+// `class` and `style` land on the WRAPPER, not the button: the wrapper is the box the parent lays
+// out, so `ms-auto`, `shrink-0` or Vue Flow's `nodrag` only work there. The button's own look is
+// its props, and `:ui="{ base: '…' }"` for anything they do not cover.
+import { computed, useAttrs } from 'vue'
+
 defineProps<{
-  /** Accessible name + tooltip. Required — the whole point of the primitive. */
+  /** Accessible name + tooltip. Required: the whole point of the primitive. */
   label: string
 }>()
 defineOptions({ inheritAttrs: false })
+
+const attrs = useAttrs()
+const buttonAttrs = computed(() => {
+  const { class: _class, style: _style, ...rest } = attrs
+  return rest
+})
 </script>
 
 <template>
@@ -26,8 +37,8 @@ defineOptions({ inheritAttrs: false })
          where the hint is the only thing explaining why the control does nothing (a blocked
          delete naming its reason) was exactly the state that lost it. The span is
          `inline-flex` so it adds no box of its own. -->
-    <span class="inline-flex">
-      <UButton v-bind="$attrs" :aria-label="label" />
+    <span class="inline-flex" :class="$attrs.class" :style="$attrs.style">
+      <UButton v-bind="buttonAttrs" :aria-label="label" />
     </span>
   </UTooltip>
 </template>
