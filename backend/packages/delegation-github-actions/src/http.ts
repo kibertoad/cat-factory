@@ -55,13 +55,12 @@ export async function apiPost(
     body: JSON.stringify(request.body),
   })
   if (!response.ok) throw new GitHubActionsApiError(response.status, await tail(response))
-  const text = await response.text()
-  if (!text) return undefined
   try {
-    return JSON.parse(text) as unknown
+    const text = await response.text()
+    return text ? (JSON.parse(text) as unknown) : undefined
   } catch {
-    // silent-catch-ok: the call SUCCEEDED, and a 2xx body that is not JSON carries nothing this
-    // helper reads. Throwing would fail a dispatch that queued a run.
+    // silent-catch-ok: the call SUCCEEDED, and a 2xx body that cannot be read or is not JSON
+    // carries nothing this helper reads. Throwing would fail a dispatch that queued a run.
     return undefined
   }
 }

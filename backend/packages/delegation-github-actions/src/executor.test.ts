@@ -29,7 +29,9 @@ interface Call {
 }
 
 /** A fetch double: routes by URL, records every call. */
-function fakeFetch(routes: Record<string, () => { status?: number; body?: unknown }>): {
+function fakeFetch(
+  routes: Record<string, () => { status?: number; body?: unknown; raw?: string }>,
+): {
   fetchImpl: DelegatedFetch
   calls: Call[]
 } {
@@ -41,13 +43,17 @@ function fakeFetch(routes: Record<string, () => { status?: number; body?: unknow
       ...(init?.body ? { body: JSON.parse(init.body) as unknown } : {}),
     })
     const route = Object.keys(routes).find((key) => url.includes(key))
-    const answer = route ? routes[route]!() : { status: 404, body: { message: 'no route' } }
+    const answer: { status?: number; body?: unknown; raw?: string } = route
+      ? routes[route]!()
+      : { status: 404, body: { message: 'no route' } }
     const status = answer.status ?? 200
     return {
       ok: status >= 200 && status < 300,
       status,
       headers: { get: () => null },
-      text: async () => JSON.stringify(answer.body ?? {}),
+      // A route with no body answers an EMPTY one, as a real `204` does.
+      text: async () =>
+        answer.raw ?? (answer.body === undefined ? '' : JSON.stringify(answer.body)),
       json: async () => answer.body ?? {},
     }
   }
@@ -143,6 +149,7 @@ describe('start: idempotency', () => {
         listed++
         return { body: { workflow_runs: [] } }
       },
+      '/actions/runs/4242': () => ({ body: { ...RUN, status: 'queued', conclusion: null } }),
     })
     const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
     const start = await executor.start(brief(), CREDS)
@@ -153,6 +160,64 @@ describe('start: idempotency', () => {
     expect(calls.filter((c) => c.url.includes('/dispatches'))).toHaveLength(1)
     // The one scan is the idempotency look BEFORE the dispatch, which a replay still needs.
     expect(listed).toBe(1)
+  })
+
+  it('states on the record when the answered run does not carry the marker', async () => {
+    // The answer settles the id with no name match, so a workflow whose `run-name:` drops the
+    // marker would work on every fresh dispatch and only fail on a replay, which then cannot
+    // find its run and queues a second one.
+    const recording = createRecordingLogger()
+    const { fetchImpl } = fakeFetch({
+      '/dispatches': () => ({ body: { workflow_run_id: 4242 } }),
+      '/runs?': () => ({ body: { workflow_runs: [] } }),
+      '/actions/runs/4242': () => ({
+        body: { ...RUN, display_title: 'Implement', status: 'queued', conclusion: null },
+      }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, {
+      ...deps(fetchImpl),
+      logger: recording,
+    })
+    const start = await executor.start(brief(), CREDS)
+    expect(start.externalId).toBe('4242')
+    expect(start.note).toContain(correlationRunName('ex_1-acme:impl'))
+    expect(recording.lines).toContainEqual(
+      expect.objectContaining({ level: 'warn', fields: expect.objectContaining({ runId: 4242 }) }),
+    )
+  })
+
+  it('keeps the answered run when the marker read-back fails', async () => {
+    // The dispatch queued the run, so a failed check must not fail the start.
+    const recording = createRecordingLogger()
+    const { fetchImpl } = fakeFetch({
+      '/dispatches': () => ({ body: { workflow_run_id: 4242 } }),
+      '/runs?': () => ({ body: { workflow_runs: [] } }),
+      '/actions/runs/4242': () => ({ status: 502, body: { message: 'bad gateway' } }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, {
+      ...deps(fetchImpl),
+      logger: recording,
+    })
+    const start = await executor.start(brief(), CREDS)
+    expect(start.externalId).toBe('4242')
+    expect(start.note).toBeUndefined()
+    expect(recording.lines).toContainEqual(
+      expect.objectContaining({ level: 'warn', fields: expect.objectContaining({ runId: 4242 }) }),
+    )
+  })
+
+  it('falls back to the scan when a 2xx answer is not JSON', async () => {
+    let listed = 0
+    const { fetchImpl } = fakeFetch({
+      '/dispatches': () => ({ raw: '<html>accepted</html>' }),
+      '/runs?': () => ({
+        body: { workflow_runs: listed++ === 0 ? [] : [{ ...RUN, status: 'queued' }] },
+      }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
+    const start = await executor.start(brief(), CREDS)
+    expect(start.externalId).toBe('4242')
+    expect(listed).toBe(2)
   })
 
   it('falls back to the scan when the answer carries no usable run id', async () => {

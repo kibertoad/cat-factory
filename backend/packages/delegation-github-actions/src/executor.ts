@@ -6,9 +6,15 @@ import type {
   DelegationResult,
   DelegationStart,
   DelegationUpdate,
+  Logger,
 } from '@cat-factory/kernel'
-import { getErrorMessage } from '@cat-factory/kernel'
-import { findRunByCorrelation, type ActionsRunSummary } from './correlation.js'
+import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
+import {
+  correlationRunName,
+  findRunByCorrelation,
+  runCarriesCorrelation,
+  type ActionsRunSummary,
+} from './correlation.js'
 import { apiGet, apiPost } from './http.js'
 import { pullRequestForBranch } from './result.js'
 import {
@@ -114,29 +120,58 @@ export interface GitHubActionsExecutorDescription {
  * github.com answers `200` with `workflow_run_id`, which settles the id without a scan. The
  * `html_url` is optional here because the id alone is enough to poll by; a start without a url
  * gains one on the first running poll.
+ *
+ * A run known from the answer was never matched by its `run-name:`, so the run is read back once
+ * to confirm it carries the marker. A workflow that drops the marker still runs, which is why a
+ * miss is stated on the record and logged rather than refused: the cost lands only on a replay,
+ * which then cannot find this run and dispatches a second one.
  */
 async function dispatch(
   fetchImpl: DelegatedExecutorDeps['fetchImpl'],
+  log: Logger,
   input: {
     apiBase: string
     token: string
     workflow: GitHubActionsWorkflowLocation
     inputs: Record<string, string>
+    correlationKey: string
   },
 ): Promise<DelegationStart | undefined> {
   const { workflow } = input
+  const actions = `/repos/${workflow.owner}/${workflow.repo}/actions`
   const answer = await apiPost(fetchImpl, {
     apiBase: input.apiBase,
     token: input.token,
-    path:
-      `/repos/${workflow.owner}/${workflow.repo}/actions/workflows/` +
-      `${encodeURIComponent(workflow.workflowFile)}/dispatches`,
+    path: `${actions}/workflows/${encodeURIComponent(workflow.workflowFile)}/dispatches`,
     body: { ref: workflow.ref, inputs: input.inputs },
   })
   if (typeof answer !== 'object' || answer === null) return undefined
   const { workflow_run_id: id, html_url: url } = answer as Record<string, unknown>
   if (typeof id !== 'number' || !Number.isSafeInteger(id)) return undefined
-  return { externalId: String(id), ...(typeof url === 'string' ? { url } : {}) }
+  const started = { externalId: String(id), ...(typeof url === 'string' ? { url } : {}) }
+  // The dispatch already queued the run, so a failed read-back must not fail the start: the id
+  // is enough to poll by, and the warn names the check that was skipped.
+  const run = await runBestEffort(
+    log,
+    'workflow run marker check',
+    () =>
+      apiGet<GitHubActionsRunView>(fetchImpl, {
+        apiBase: input.apiBase,
+        token: input.token,
+        path: `${actions}/runs/${id}`,
+      }),
+    { runId: id },
+  )
+  if (!run || runCarriesCorrelation(run, input.correlationKey)) return started
+  const marker = correlationRunName(input.correlationKey)
+  log.warn('dispatched workflow run does not carry the correlation marker in its run-name', {
+    runId: id,
+    marker,
+  })
+  return {
+    ...started,
+    note: `The run's name does not carry ${marker}, so a replay cannot re-attach to it.`,
+  }
 }
 
 /** The `workflow_dispatch` input this helper adds, carrying the platform's correlation key. */
@@ -217,7 +252,9 @@ export function githubActionsDelegatedExecutor(
         }
       }
       const inputs = { [CORRELATION_INPUT]: brief.correlationKey, ...description.inputs(brief) }
-      const dispatched = await dispatch(deps.fetchImpl, { apiBase, token, workflow, inputs })
+      const { correlationKey } = brief
+      const request = { apiBase, token, workflow, inputs, correlationKey }
+      const dispatched = await dispatch(deps.fetchImpl, logFor(workflow), request)
       if (dispatched) return dispatched
       // A server that answers 204 queued a run that may not exist yet. Look once (it usually does
       // by now) and, failing that, answer with the correlation key as the external id so the step

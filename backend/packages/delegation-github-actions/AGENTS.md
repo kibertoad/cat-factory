@@ -30,8 +30,10 @@ resolver that reads a config map or counts a metric sees one addressing decision
   predates the change answers `204` with no id while the run does not exist yet. `correlation.ts`
   solves both with the brief's `correlationKey`: the caller workflow renders
   `correlationRunName(key)` into its own `run-name:`, and the run becomes findable by a string the
-  platform chose. **The marker is matched
-  against `display_title`**, which is where GitHub puts an evaluated `run-name:`; `name` keeps the
+  platform chose. A run known from the dispatch answer was never matched by name, so `start` reads
+  it back once and states on the record (and logs) when it lacks the marker: such a workflow works
+  on every fresh dispatch and duplicates only on a replay. **The marker is matched against
+  `display_title`**, which is where GitHub puts an evaluated `run-name:`; `name` keeps the
   workflow's own `name:` and is read only as a fallback for an Enterprise release with no
   `display_title`. **`start` is idempotent because it looks first**, which is the whole point: both
   durable drivers replay, and a second dispatch means two workflows on one branch and two pull

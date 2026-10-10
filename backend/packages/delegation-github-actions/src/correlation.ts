@@ -65,6 +65,18 @@ function runCarriesMarker(run: ActionsRunSummary, marker: string): boolean {
 }
 
 /**
+ * Whether a run already known by id carries the marker for `correlationKey`.
+ *
+ * A run found through the dispatch answer was never matched by name, so this is the one check
+ * that the caller workflow renders its `run-name:`. Without it a workflow that drops the marker
+ * works on every fresh dispatch and only fails on a replay, which then cannot find its run and
+ * dispatches a second one.
+ */
+export function runCarriesCorrelation(run: ActionsRunSummary, correlationKey: string): boolean {
+  return runCarriesMarker(run, correlationRunName(correlationKey))
+}
+
+/**
  * Find the workflow run carrying `correlationKey` in its name, or null when it has not appeared
  * yet.
  *
