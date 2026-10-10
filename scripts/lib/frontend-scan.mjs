@@ -4,7 +4,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -67,6 +67,13 @@ export function codeLines(text, file = '<input>') {
     )
   }
   return out
+}
+
+/** Whether the module at `moduleUrl` is the CLI entry point. A guard runs its filesystem scan only
+ * then, so importing it for tests has no side effects. `process.argv[1]` is undefined in the REPL
+ * and under `node -e`, where an import must still work. */
+export function isCliEntry(moduleUrl) {
+  return Boolean(process.argv[1]) && moduleUrl === pathToFileURL(process.argv[1]).href
 }
 
 /** Read and split one file through `codeLines`. */

@@ -44,8 +44,7 @@
 // Usage:  node scripts/check-frontend-palette.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { pathToFileURL } from 'node:url'
-import { readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 /** Every Tailwind hue: a status hue rides an alias, a category hue rides `app-hue-<h>`, so no raw
  * numbered hue utility has a place left. */
@@ -192,4 +191,4 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (isCliEntry(import.meta.url)) main()

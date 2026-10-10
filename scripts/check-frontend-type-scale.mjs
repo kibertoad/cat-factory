@@ -35,8 +35,7 @@
 // Usage:  node scripts/check-frontend-type-scale.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { pathToFileURL } from 'node:url'
-import { readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 // `(?<![\w-])` is a LEFT boundary on each spelling, so a utility that merely ENDS in `text-`, or a
 // property that merely ends in `font`, does not match out of the middle of a longer token. A
@@ -97,4 +96,4 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (isCliEntry(import.meta.url)) main()

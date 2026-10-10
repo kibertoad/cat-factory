@@ -38,8 +38,7 @@
 // Usage:  node scripts/check-frontend-radius.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { pathToFileURL } from 'node:url'
-import { readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 // An arbitrary radius in either v4 syntax, behind any side or corner prefix. `(?<![\w-])` is a LEFT
 // boundary, so `group-rounded-[…]` does not match on a substring. Neither bracket form is a word,
@@ -139,4 +138,4 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (isCliEntry(import.meta.url)) main()
