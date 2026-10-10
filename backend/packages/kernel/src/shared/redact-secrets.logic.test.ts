@@ -178,39 +178,42 @@ describe('redactSecrets', () => {
     // and each body keeps its fastest sample. This suite shares a CI runner with other
     // packages' suites, and a contention burst there can cover several consecutive samples.
     // Interleaved, a burst must slow the same body in EVERY round to survive the minimum, so
-    // a sustained slowdown hits both sides of the ratio. The start rotates per round so no
-    // body always runs after the same neighbour (and its garbage).
-    // Index 0 is the baseline, held by position rather than by name so no shape can replace it.
-    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
-    // a millisecond's granularity is noise against samples an order of magnitude larger.
-    const bodies = [prose, ...Object.values(shapes)].map((body, index) => ({ body, index }))
-    // A body the loop never times keeps Infinity, so its ratio below fails instead of passing.
-    const fastest = bodies.map(() => Number.POSITIVE_INFINITY)
-    for (let round = 0; round < 7; round++) {
-      const start = round % bodies.length
-      for (const { body, index } of [...bodies.slice(start), ...bodies.slice(0, start)]) {
+    // a sustained slowdown hits both sides of the ratio. Odd rounds run in reverse, so each
+    // body follows a different neighbour (and its garbage) on alternate rounds, and the even
+    // round count gives both orders the same weight.
+    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone. Its
+    // 1ms step is not noise against prose's ~8ms on a fast machine: the best-of minimum can
+    // round the baseline down and a shape up, which moves a ratio by up to ~1.3x. Parity sits
+    // near 1x, so that still leaves the 4x bound well clear.
+    const baseline = { name: 'prose', body: prose, best: Number.POSITIVE_INFINITY }
+    const measured = Object.entries(shapes).map(([name, body]) => ({
+      name,
+      body,
+      best: Number.POSITIVE_INFINITY,
+    }))
+    const forward = [baseline, ...measured]
+    const reverse = [...forward].reverse()
+    for (let round = 0; round < 2 * forward.length; round++) {
+      for (const entry of round % 2 === 0 ? forward : reverse) {
         const started = Date.now()
-        redactSecrets(body)
-        fastest[index] = Math.min(fastest[index] ?? Number.POSITIVE_INFINITY, Date.now() - started)
+        redactSecrets(entry.body)
+        entry.best = Math.min(entry.best, Date.now() - started)
       }
     }
-    const baseline = fastest[0] ?? 0
     // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
     // with no hint of why, so it is asserted as its own condition. 2MB of prose takes several
     // milliseconds, so this only trips if the body stopped being scrubbed at all.
     expect(
-      baseline,
+      baseline.best,
       'prose baseline must be measurable at millisecond granularity',
     ).toBeGreaterThan(0)
-    // An untimed baseline stays Infinity, which would turn every ratio below into 0 and pass.
-    expect(Number.isFinite(baseline), 'prose baseline must have been timed').toBe(true)
-    for (const [offset, name] of Object.keys(shapes).entries()) {
-      // A shape with no sample is Infinity, so it fails rather than passing at 0x.
-      const ratio = (fastest[offset + 1] ?? Number.POSITIVE_INFINITY) / baseline
+    for (const { name, best } of measured) {
+      const ratio = best / baseline.best
       // Parity is ~1x once no rule rescans per offset or per marker; both regressions above
       // are an order of magnitude away, so 4x separates them without riding on absolute
-      // timings. Measured worst case under 2x CPU oversubscription is 1.13x.
-      expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline}ms)`).toBeLessThan(4)
+      // timings. Measured worst case under 2x CPU oversubscription, with the suite's coverage
+      // instrumentation on, is 1.1x.
+      expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline.best}ms)`).toBeLessThan(4)
     }
   })
 })
