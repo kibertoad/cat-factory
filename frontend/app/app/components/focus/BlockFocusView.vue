@@ -68,7 +68,7 @@ function openApprovalFor(approvalId: string) {
     aria-modal="true"
   >
     <!-- header / breadcrumb -->
-    <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
+    <header class="flex flex-wrap items-center gap-3 border-b border-slate-800 px-6 py-4">
       <UButton
         icon="i-lucide-arrow-left"
         :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
@@ -86,7 +86,7 @@ function openApprovalFor(approvalId: string) {
       >
         <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
       </div>
-      <div>
+      <div class="min-w-0">
         <h1 class="text-lg font-semibold text-white">{{ block.title }}</h1>
         <div class="text-xs text-slate-500">
           {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
@@ -122,7 +122,7 @@ function openApprovalFor(approvalId: string) {
     >
       <!-- main: pipeline flow -->
       <section
-        class="flex flex-col overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-6"
+        class="flex flex-col rounded-2xl border border-slate-800 bg-slate-900/60 p-6 lg:overflow-auto"
       >
         <div class="mb-4 flex items-center gap-2">
           <UIcon name="i-lucide-workflow" class="h-4 w-4 text-slate-500" />
@@ -148,7 +148,7 @@ function openApprovalFor(approvalId: string) {
 
       <!-- side: details -->
       <aside
-        class="space-y-4 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
+        class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 lg:overflow-auto"
       >
         <div>
           <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">

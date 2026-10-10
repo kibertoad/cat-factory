@@ -88,6 +88,9 @@ const incorporating = computed(() => status.value === 'incorporating')
 const reReviewing = computed(() => status.value === 'reviewing')
 const working = computed(() => incorporating.value || reReviewing.value)
 const frozen = computed(() => incorporated.value || working.value)
+// The rail statuses that render an action block (or the incorporated footer). Below `lg` the
+// stats are hidden, so with none of these the bottom bar would be an empty bordered strip.
+const hasRailAction = computed(() => status.value === 'ready' || merged.value || incorporated.value)
 const canIncorporate = computed(() => !!session.value && brainstorm.canIncorporate(session.value))
 const canProceed = computed(() => !!session.value && brainstorm.canProceed(session.value))
 const iteration = computed(() => session.value?.iteration ?? 1)
@@ -499,10 +502,13 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action rail: a right-hand column on wide screens, a bottom action bar below
-               `lg` (never hidden — the informational stats collapse away below `lg`, but the
-               actions themselves must stay reachable on a phone). -->
+               `lg`. The informational stats collapse away below `lg`, but the actions must stay
+               reachable on a phone. The bar is capped and scrolls on its own so an expanded
+               redo form cannot squeeze the main column away or clip its own buttons, and it
+               hides below `lg` while the session's status offers no action. -->
           <aside
-            class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+            class="max-h-[50dvh] w-full shrink-0 flex-col overflow-y-auto border-t border-slate-800 lg:flex lg:max-h-none lg:w-72 lg:border-s lg:border-t-0"
+            :class="hasRailAction ? 'flex' : 'hidden'"
           >
             <div class="flex flex-col gap-4 px-4 py-5">
               <div v-if="session" class="hidden space-y-2 text-xs text-slate-400 lg:block">
@@ -527,7 +533,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               <!-- action: ready (choose → incorporate / proceed) -->
               <div
                 v-if="session && status === 'ready'"
-                class="space-y-2 border-t border-slate-800 pt-4"
+                class="space-y-2 border-slate-800 lg:border-t lg:pt-4"
               >
                 <UButton
                   v-if="canProceed"
@@ -565,7 +571,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               </div>
 
               <!-- action: merged (inspect → re-run / redo) -->
-              <div v-if="session && merged" class="space-y-2 border-t border-slate-800 pt-4">
+              <div v-if="session && merged" class="space-y-2 border-slate-800 lg:border-t lg:pt-4">
                 <UButton
                   color="primary"
                   size="sm"
@@ -619,7 +625,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
               <div
                 v-if="session && incorporated"
-                class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+                class="border-slate-800 text-[11px] leading-relaxed text-slate-500 lg:border-t lg:pt-4"
               >
                 {{ t('brainstorm.incorporatedFooter') }}
               </div>
