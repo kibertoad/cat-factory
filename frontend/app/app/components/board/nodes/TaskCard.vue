@@ -406,10 +406,6 @@ function selectTask() {
       class="mt-1.5"
     />
 
-    <!-- spatial drill-down: build steps (at `steps` zoom) and each step's live
-         subtask todos (one band deeper, at `subtasks` zoom) -->
-    <TaskPipelineMini :task-id="taskId" />
-
     <!-- dependencies (run order) -->
     <div v-if="deps.length" class="mt-1.5 flex flex-wrap items-center gap-1">
       <UIcon
@@ -561,6 +557,14 @@ function selectTask() {
         </UButton>
       </template>
     </div>
+
+    <!-- Spatial drill-down: build steps (at `steps` zoom, or while the card is hovered) and each
+         step's live subtask todos (one band deeper, at `subtasks` zoom). It sits BELOW the action
+         row on purpose. Hovering expands it, and the hover grant lands on the next frame after the
+         pointer arrives; above the row, that pushed the buttons down between `pointerdown` and
+         `pointerup`, so the click resolved to the card root and selected the task instead of
+         acting (UXA-01). Below the row, expanding never moves a button. -->
+    <TaskPipelineMini :task-id="taskId" />
 
     <!-- Structural metadata: assigned module. Dropped while the lanes are GROUPED by module,
          where the group header above the card already names it — two chips saying the same thing
