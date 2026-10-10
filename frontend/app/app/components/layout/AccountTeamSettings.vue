@@ -53,7 +53,7 @@ function invitationStatusLabel(status: InvitationStatus): string {
 }
 
 /** Whether the signed-in caller is an admin of this account (drives edit affordances). */
-const isAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
+const isAdmin = computed(() => accounts.isActiveAccountAdmin)
 /**
  * Members / roles / invitations are org-scoped — the backend rejects membership on a
  * personal account. For a personal account we show a "create an organization" CTA in

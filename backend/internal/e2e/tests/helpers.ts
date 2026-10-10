@@ -114,6 +114,10 @@ export async function seedTeamScenario(
     principals?: TeamPrincipalSpec[]
     /** Also seed a second, empty board in the account (see the backend seam's own note). */
     spareBoard?: boolean
+    /** Leave the primary board without a repository-host connection (see the backend seam). */
+    githubConnected?: boolean
+    /** Load the sample architecture onto the primary board (default: true; see the backend seam). */
+    seed?: boolean
   },
 ): Promise<TeamScenario> {
   const res = await request.post(`${CONTROL_URL}/team-seed`, { data: spec })

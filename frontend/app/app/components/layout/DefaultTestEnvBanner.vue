@@ -22,14 +22,17 @@ const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const settingsStore = useWorkspaceSettingsStore()
 const { canManageSettings } = useWorkspaceAccess()
+const uiRole = useUiRoleStore()
 
 // Only prompt someone who can actually answer. A member/viewer cannot write workspace settings
 // (the endpoint is `settings.manage`-gated), so for them this would be an un-actionable nag
-// pointing at a screen that would refuse their save.
+// pointing at a screen that would refuse their save. The designer surface never configures the
+// platform, so it is kept off there too, whatever the grant.
 const show = computed(
   () =>
     workspace.ready &&
     canManageSettings.value &&
+    uiRole.fullSurface &&
     needsDefaultProvisioningChoice(settingsStore.settings) &&
     !ui.defaultProvisionDismissed,
 )

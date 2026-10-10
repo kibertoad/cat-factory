@@ -2560,6 +2560,18 @@
         "action": "Comprobar conexión"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Los agentes aún no pueden ejecutarse en este tablero: no hay ningún pool de runners conectado.",
+        "outage": "Los agentes no pueden ejecutarse ahora mismo: el pool de runners de este tablero no está accesible."
+      },
+      "owner": {
+        "workspace_admin": "Un administrador del tablero puede solucionarlo.",
+        "account_admin": "Un administrador de la cuenta puede solucionarlo.",
+        "operator": "Solo el operador del despliegue puede solucionarlo."
+      },
+      "fullSurface": "Puedes solucionarlo tú: cambia tu rol desde la parte superior de la barra lateral."
+    },
     "spendWarningBanner": {
       "title": "Límite de gasto alcanzado, ejecución de agentes en pausa",
       "body": "El gasto de tokens de este mes ha alcanzado el presupuesto configurado, por lo que las canalizaciones en curso se pausaron para evitar más costes. La ejecución se reanuda automáticamente cuando el presupuesto se renueva el mes que viene, o una vez que se aumente el límite.",
@@ -7985,6 +7997,7 @@
     "connect": {
       "or": "o",
       "noneConfigured": "Este despliegue no tiene configurada ninguna conexión de control de código. Pide a un operador que configure una GitHub App o el acceso a GitLab.",
+      "adminRequired": "Solo un administrador del tablero puede conectar un host de repositorios. Pídeselo a un administrador de este tablero.",
       "gitlab": {
         "intro": "Pega un token de acceso personal de GitLab para conectar este espacio de trabajo. cat-factory lo usa para listar tus proyectos, subir ramas y abrir solicitudes de fusión.",
         "tokenLabel": "Token de acceso personal",
@@ -8002,7 +8015,8 @@
     "onboarding": {
       "title": "Conecta cat-factory con {provider}",
       "titleAny": "Conecta cat-factory con tus repositorios",
-      "intro": "cat-factory funciona abriendo solicitudes de incorporación de cambios en tus repositorios. Conecta tu proveedor de repositorios para continuar."
+      "intro": "cat-factory funciona abriendo solicitudes de incorporación de cambios en tus repositorios. Conecta tu proveedor de repositorios para continuar.",
+      "switchBoard": "¿No es el tablero que buscabas? Cambia a otro o crea uno propio."
     },
     "addService": {
       "intro": "Elige un repositorio de {provider} existente para añadirlo como servicio del tablero. Sin arranque inicial: el repositorio se vincula tal cual a un nuevo marco de servicio, y las tareas que ejecutes en él apuntan a ese repositorio.",
