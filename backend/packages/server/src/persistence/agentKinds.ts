@@ -1,6 +1,10 @@
 import type { AgentKindCapabilityView, AgentKindSource } from '@cat-factory/agents'
 import { UnavailableError, describeError } from '@cat-factory/kernel'
-import { decodeAgentKindLayer } from './agentKindsWire.js'
+import {
+  AGENT_KINDS_WIRE_VERSION,
+  type UnreadableAgentKindLayer,
+  decodeAgentKindLayer,
+} from './agentKindsWire.js'
 
 // The client half of the mothership-mode agent-kind CAPABILITY read (see
 // `../modules/agentKinds/AgentKindsController.ts` for why only that half of the registry crosses
@@ -41,10 +45,13 @@ import { decodeAgentKindLayer } from './agentKindsWire.js'
  * - `err` / `errKind`: the request never got an answer; the cause chain, through `describeError`;
  * - `status`: the mothership answered with this non-2xx HTTP status (404 from a mothership older
  *   than this route);
- * - `field`: the reply parsed but this part of it was unreadable;
- * - `cause: 'mothership_version_mismatch'`: the reply is in the shape an OLDER mothership sends
- *   (`agentKindsWire.ts`), so the fix is to run the same build on both sides. The only `cause`
- *   value; a new one is added here, next to the other keys.
+ * - `field` / `issue` / `definitionId`: the reply parsed but this field was unreadable, why, and
+ *   the id of the skill or tool server it is in (one malformed definition refuses the whole layer,
+ *   so this is how an operator finds it; boot validation on the mothership refuses it first);
+ * - `cause: 'mothership_version_mismatch'` with `expected` / `received`: the reply's `version` is
+ *   not this build's (`agentKindsWire.ts`; `received: null` is the unversioned reply before it),
+ *   so the fix is to run the same build on both sides. The only `cause` value; a new one is added
+ *   here, next to the other keys.
  *
  * The bound holds in BYTES too because a `bundled` skill rides by reference (`agentKindsWire.ts`):
  * each distinct body is sent once however many kinds declare it, and this client denormalises it
@@ -96,37 +103,42 @@ export class HttpAgentKindSource implements AgentKindSource {
     // that must never be reachable is answering an unknown layer with an empty one. An empty layer
     // is spelled `kinds: []`, which no honest server omits.
     const decoded = decodeAgentKindLayer(body)
-    if ('versionMismatch' in decoded) throw versionMismatch()
+    if ('versionMismatch' in decoded) throw versionMismatch(decoded.versionMismatch.received)
     if ('unreadable' in decoded) throw unreadable(decoded.unreadable)
     return decoded.views
   }
 }
 
 /**
- * The unreadable-reply refusal. One helper rather than two literals because they are one FACT (the
- * mothership answered with something this node cannot resolve a capability layer from), and the
- * whole point of this class is that every route to "we do not know the org's capabilities" ends at
- * a throw. `field` names which part failed.
+ * The unreadable-reply refusal. One helper rather than several literals because every case is one
+ * FACT (the mothership answered with something this node cannot resolve a capability layer from),
+ * and the whole point of this class is that every route to "we do not know the org's capabilities"
+ * ends at a throw. The details name the field, what was wrong with it and, when the field is inside
+ * a definition, that definition's id, so an operator can find it among many.
  */
-function unreadable(field: string): UnavailableError {
+function unreadable({ field, issue, definitionId }: UnreadableAgentKindLayer): UnavailableError {
   return new UnavailableError(
-    'The mothership returned an unreadable agent-kind capability layer',
+    `The mothership returned an unreadable agent-kind capability layer (${field}: ${issue})`,
     'agent_kinds_unreachable',
-    { field },
+    { field, issue, ...(definitionId ? { definitionId } : {}) },
   )
 }
 
 /**
- * The refusal for a reply in the shape an OLDER mothership sends. The same `reason` as every other
+ * The refusal for a reply whose `version` is not this build's. The same `reason` as every other
  * failure of this read (it is still an unreachable capability layer), with a `cause` and a message
  * that name the fix: run the same build on the node and the mothership
- * (`docs/initiatives/mothership-mode.md`). The message says "different" rather than "older",
- * because the node knows only that the shape is not its own.
+ * (`docs/initiatives/mothership-mode.md`). "Different" rather than "older", because a version
+ * says only that the two builds disagree.
  */
-function versionMismatch(): UnavailableError {
+function versionMismatch(received: unknown): UnavailableError {
   return new UnavailableError(
     'The mothership runs a different build, whose agent-kind capability reply this node cannot read. Update the mothership and its nodes to the same build.',
     'agent_kinds_unreachable',
-    { cause: 'mothership_version_mismatch' },
+    {
+      cause: 'mothership_version_mismatch',
+      expected: AGENT_KINDS_WIRE_VERSION,
+      received: received ?? null,
+    },
   )
 }

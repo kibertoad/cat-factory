@@ -13,6 +13,7 @@ import { TOKEN_AUDIENCE, signerFor } from '../src/auth/signing.js'
 import type { AppEnv } from '../src/http/env.js'
 import { agentKindsController } from '../src/modules/agentKinds/AgentKindsController.js'
 import { HttpAgentKindSource } from '../src/persistence/agentKinds.js'
+import { AGENT_KINDS_WIRE_VERSION } from '../src/persistence/agentKindsWire.js'
 
 /**
  * The mothership-mode agent-kind CAPABILITY read, end to end: the real client driving the real
@@ -91,6 +92,15 @@ function sourceOver(payload: unknown) {
   })
 }
 
+/** The one index at which `value` appears in `table`, failing when it appears zero or several times. */
+function onlyIndexOf(table: readonly unknown[], value: unknown): number {
+  const at = table.flatMap((entry, index) =>
+    JSON.stringify(entry) === JSON.stringify(value) ? [index] : [],
+  )
+  expect(at).toHaveLength(1)
+  return at[0]!
+}
+
 describe('mothership-mode agent-kind capability layer', () => {
   it('serves what a deployment ASSIGNED to a built-in kind, which `all()` would not list', async () => {
     // The commonest shape by far, and the one an enumeration over registered kinds misses: nobody
@@ -126,6 +136,8 @@ describe('mothership-mode agent-kind capability layer', () => {
   })
 
   it('serves a definition on several kinds ONCE, and hands every kind the whole body', async () => {
+    // Relations, not totals: the default registry's built-in kinds contribute their own
+    // declarations, which this test does not own.
     const app = mothership((registry) => {
       registry.registerSkill(PLAYBOOK)
       registry.assignSkills('coder', [PLAYBOOK.id])
@@ -140,27 +152,33 @@ describe('mothership-mode agent-kind capability layer', () => {
         headers: { authorization: `Bearer ${await machineToken()}` },
       })
     ).json()) as {
+      version: number
       bundledSkills: unknown[]
       toolServers: unknown[]
-      kinds: { kind: string; skills: object; toolServers: { serverRefs: number[] } }[]
+      kinds: {
+        kind: string
+        skills: { bundledRefs: number[] }
+        toolServers: { serverRefs: number[] }
+      }[]
     }
-    expect(wire.bundledSkills).toEqual([PLAYBOOK])
-    expect(wire.toolServers).toEqual([TRACKER_SERVER])
-    const refs = new Map(wire.kinds.map((view) => [view.kind, view]))
+    expect(wire.version).toBe(AGENT_KINDS_WIRE_VERSION)
+    const playbookAt = onlyIndexOf(wire.bundledSkills, PLAYBOOK)
+    const trackerAt = onlyIndexOf(wire.toolServers, TRACKER_SERVER)
+    const byKind = new Map(wire.kinds.map((view) => [view.kind, view]))
     for (const kind of ['coder', 'fixer', 'ci-fixer']) {
-      expect(refs.get(kind)!.skills).toMatchObject({ bundledRefs: [0] })
+      expect(byKind.get(kind)!.skills.bundledRefs).toContain(playbookAt)
       // The pre-reference field is GONE, so a node one build behind refuses this reply instead of
       // reading the indexes as skill definitions.
-      expect(refs.get(kind)!.skills).not.toHaveProperty('bundled')
+      expect(byKind.get(kind)!.skills).not.toHaveProperty('bundled')
     }
-    expect(refs.get('coder')!.toolServers.serverRefs).toEqual([0])
-    expect(refs.get('ci-fixer')!.toolServers.serverRefs).toEqual([])
+    expect(byKind.get('coder')!.toolServers.serverRefs).toContain(trackerAt)
+    expect(byKind.get('ci-fixer')!.toolServers.serverRefs).not.toContain(trackerAt)
 
     const views = new Map((await (await node(app)).capabilities()).map((v) => [v.kind, v]))
     for (const kind of ['coder', 'fixer', 'ci-fixer']) {
-      expect(views.get(kind)!.skills.bundled).toEqual([PLAYBOOK])
+      expect(views.get(kind)!.skills.bundled).toContainEqual(PLAYBOOK)
     }
-    expect(views.get('fixer')!.toolServers.servers).toEqual([TRACKER_SERVER])
+    expect(views.get('fixer')!.toolServers.servers).toContainEqual(TRACKER_SERVER)
   })
 
   it('carries an http server with every optional field, byte for byte', async () => {
@@ -201,19 +219,18 @@ describe('mothership-mode agent-kind capability layer', () => {
         registry.assignToolServers('coder', [remote.id])
       }),
     )
-    const [view] = await source.capabilities()
-    expect(view!.toolServers.servers).toEqual([remote])
+    const coder = (await source.capabilities()).find((view) => view.kind === 'coder')
+    expect(coder!.toolServers.servers).toContainEqual(remote)
   })
 
   it('carries the shipped Nuxt UI capability, the case #2269 was opened for', async () => {
     // Derived from the capability's own kind list, so a wire that drops a kind fails here rather
     // than leaving that kind to dispatch without its playbook.
     const source = await node(mothership(registerNuxtUiCapability))
-    const views = await source.capabilities()
-    expect(views.map((view) => view.kind).sort()).toEqual([...NUXT_UI_CAPABILITY_KINDS].sort())
-    for (const view of views) {
-      expect(view.skills.bundled).toEqual([nuxtUiSkill])
-      expect(view.toolServers.servers).toEqual([nuxtUiToolServer])
+    const byKind = new Map((await source.capabilities()).map((view) => [view.kind, view]))
+    for (const kind of NUXT_UI_CAPABILITY_KINDS) {
+      expect(byKind.get(kind)?.skills.bundled).toContainEqual(nuxtUiSkill)
+      expect(byKind.get(kind)?.toolServers.servers).toContainEqual(nuxtUiToolServer)
     }
   })
 
@@ -228,8 +245,10 @@ describe('mothership-mode agent-kind capability layer', () => {
       }),
     )
     const byKind = new Map((await source.capabilities()).map((v) => [v.kind, v.skills.bundled]))
-    expect(byKind.get('coder')).toEqual([PLAYBOOK])
-    expect(byKind.get('fixer')).toEqual([other])
+    expect(byKind.get('coder')).toContainEqual(PLAYBOOK)
+    expect(byKind.get('coder')).not.toContainEqual(other)
+    expect(byKind.get('fixer')).toContainEqual(other)
+    expect(byKind.get('fixer')).not.toContainEqual(PLAYBOOK)
   })
 
   it('reports a deployment that assigns NONE as empty, which is the stock product', async () => {
@@ -282,6 +301,7 @@ describe('mothership-mode agent-kind capability layer', () => {
       ...over,
     })
     const reply = (over: object) => ({
+      version: AGENT_KINDS_WIRE_VERSION,
       kinds: [coder()],
       bundledSkills: [],
       toolServers: [],
@@ -321,8 +341,16 @@ describe('mothership-mode agent-kind capability layer', () => {
       }),
       reply({ toolServers: [{ ...TRACKER_SERVER, oauth: { grant: 'implicit', clientId: 'c' } }] }),
       reply({ toolServers: [{ ...TRACKER_SERVER, guidance: 7 }] }),
-      // Both tables missing, but a kind in NEITHER shape: unreadable, not a version mismatch.
+      // No version, and a kind in NEITHER shape: unreadable, not a version mismatch.
       { kinds: [{ kind: 'coder' }] },
+      // One kind referencing two definitions with one id, or one definition twice: the harness
+      // would write one skill directory or register one MCP server name twice.
+      reply({
+        bundledSkills: [PLAYBOOK, { ...PLAYBOOK, instructions: 'other' }],
+        kinds: [coder({ skills: skills([0, 1]) })],
+      }),
+      reply({ toolServers: [TRACKER_SERVER], kinds: [coder({ toolServers: tools([0, 0]) })] }),
+      reply({ kinds: [coder({ skills: skills([-1]) })] }),
       // A catalog ref with no id would reach the resolver as skill `undefined`.
       reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [{}], unknown: [] } })] }),
       reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [], unknown: [1] } })] }),
@@ -334,9 +362,9 @@ describe('mothership-mode agent-kind capability layer', () => {
     }
   })
 
-  it('names a reply from an OLDER mothership as a version mismatch, not as damage', async () => {
-    // The shape a mothership sent before definitions rode by reference. Refused like any other
-    // unreadable reply, but the cause says what to fix: run the same build on both sides.
+  it('names a reply of another version as a version mismatch, not as damage', async () => {
+    // The unversioned reply before this one, with a kind in its inline shape, and a reply from a
+    // later build. Refused like any unreadable reply, but the cause says what to fix.
     const inline = {
       kinds: [
         {
@@ -346,14 +374,51 @@ describe('mothership-mode agent-kind capability layer', () => {
         },
       ],
     }
-    // The stock product's empty layer too: the commonest reply an older mothership sends, and one
-    // with no inline kind to recognise it by.
-    for (const payload of [inline, { kinds: [] }]) {
+    const later = {
+      version: AGENT_KINDS_WIRE_VERSION + 1,
+      kinds: [],
+      bundledSkills: [],
+      toolServers: [],
+    }
+    for (const [payload, received] of [
+      [inline, null],
+      [later, AGENT_KINDS_WIRE_VERSION + 1],
+    ] as const) {
       await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
         code: 'unavailable',
-        details: { reason: 'agent_kinds_unreachable', cause: 'mothership_version_mismatch' },
+        details: {
+          reason: 'agent_kinds_unreachable',
+          cause: 'mothership_version_mismatch',
+          expected: AGENT_KINDS_WIRE_VERSION,
+          received,
+        },
       })
     }
+  })
+
+  it("reads an older mothership's EMPTY layer as empty, since it carries nothing to misread", async () => {
+    // The stock product's reply, so a node updated before its mothership keeps dispatching there.
+    await expect(sourceOver({ kinds: [] }).capabilities()).resolves.toEqual([])
+  })
+
+  it('names the field and the definition when one definition is malformed', async () => {
+    // One malformed definition refuses the whole layer, so the refusal must say which one.
+    const payload = {
+      version: AGENT_KINDS_WIRE_VERSION,
+      kinds: [],
+      bundledSkills: [],
+      toolServers: [
+        { ...TRACKER_SERVER, id: 'org.fine' },
+        { ...TRACKER_SERVER, transport: { ...TRACKER_SERVER.transport, env: { PORT: 3000 } } },
+      ],
+    }
+    await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
+      details: {
+        reason: 'agent_kinds_unreachable',
+        field: 'toolServers.1.transport.env.PORT',
+        definitionId: TRACKER_SERVER.id,
+      },
+    })
   })
 
   it('THROWS on a transport failure, with the cause scrubbed onto the details', async () => {

@@ -48,13 +48,24 @@ export function defineAgentKindLayerConformance(harness: ConformanceHarness): vo
       })
 
       expect(res.status).toBe(200)
-      expect(res.body.bundledSkills).toEqual([PLAYBOOK])
-      expect(res.body.toolServers).toEqual([TRACKER])
+      // Relations, not totals: the default registry's built-in kinds contribute their own
+      // declarations, which this suite does not own.
+      const playbookAt = onlyIndexOf(res.body.bundledSkills, PLAYBOOK)
+      const trackerAt = onlyIndexOf(res.body.toolServers, TRACKER)
       for (const kind of ['coder', 'pr-reviewer']) {
         const view = res.body.kinds.find((entry) => entry.kind === kind)
-        expect(view?.skills.bundledRefs).toEqual([0])
-        expect(view?.toolServers.serverRefs).toEqual([0])
+        expect(view?.skills.bundledRefs).toContain(playbookAt)
+        expect(view?.toolServers.serverRefs).toContain(trackerAt)
       }
     })
   })
+}
+
+/** The one index at which `value` appears in `table`, failing when it appears zero or several times. */
+function onlyIndexOf(table: readonly unknown[], value: unknown): number {
+  const at = table.flatMap((entry, index) =>
+    JSON.stringify(entry) === JSON.stringify(value) ? [index] : [],
+  )
+  expect(at).toHaveLength(1)
+  return at[0]!
 }

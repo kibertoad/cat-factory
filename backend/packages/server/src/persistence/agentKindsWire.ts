@@ -1,17 +1,12 @@
-import type {
-  AgentKindCapabilityView,
-  BundledSkillDefinition,
-  NormalizedSkillRefs,
-} from '@cat-factory/agents'
 import {
-  type McpHttpTransport,
-  type McpOAuthConfig,
-  type McpSecretRef,
-  type McpServerDefinition,
-  type HarnessKind,
-  type McpStdioTransport,
-  isHarnessKind,
-} from '@cat-factory/kernel'
+  type AgentKindCapabilityView,
+  bundledSkillDefinitionSchema,
+  catalogSkillRefSchema,
+  exactly,
+  mcpServerDefinitionSchema,
+} from '@cat-factory/agents'
+import type { DeclaredToolServers } from '@cat-factory/kernel'
+import * as v from 'valibot'
 import { isRecord } from '../shared/guards.js'
 
 // The wire shape of `GET /internal/agent-kinds`, shared by the controller that encodes it and the
@@ -26,55 +21,102 @@ import { isRecord } from '../shared/guards.js'
 // definitions under one id, and keying by id would silently hand one kind the other's playbook or
 // server. An index rather than an id for the same reason.
 //
-// The per-kind fields are RENAMED (`bundledRefs`, `serverRefs`) on purpose. An older node checks
-// only that `skills.bundled` and `toolServers.servers` are arrays, so an array of indexes under the
-// old name would reach the harness as definitions with no body. Under the new names an older node
-// refuses the reply as unreadable, which is loud. A mothership and its nodes therefore run the
-// same build (`docs/initiatives/mothership-mode.md`).
+// The reply carries an explicit `version`. A node refuses any version but its own as a named
+// mismatch, so every LATER change to this shape names itself in both directions. The reply before
+// this one had no version; see `decodeAgentKindLayer` for how it is read. A mothership and its
+// nodes run the same build (`docs/initiatives/mothership-mode.md`).
 
-/** One kind's capability view with every definition replaced by an index into the reply's tables. */
-interface AgentKindWireView {
-  kind: AgentKindCapabilityView['kind']
+/** The reply version this build encodes and the only one it decodes. Bump on any shape change. */
+export const AGENT_KINDS_WIRE_VERSION = 2
+
+/**
+ * One kind's view on the wire: the domain view with each definition list replaced by indexes.
+ * DERIVED from the domain types, so a field added to them rides through the encoder untouched and
+ * fails to compile against {@link kindViewSchema} until the decoder reads it too.
+ */
+type AgentKindWireView = Omit<AgentKindCapabilityView, 'skills' | 'toolServers'> & {
   skills: Omit<AgentKindCapabilityView['skills'], 'bundled'> & { bundledRefs: number[] }
-  toolServers: { serverRefs: number[]; unknown: string[] }
+  toolServers: Omit<DeclaredToolServers, 'servers'> & { serverRefs: number[] }
 }
 
-/** The `GET /internal/agent-kinds` reply body. */
-interface AgentKindsWire {
-  kinds: AgentKindWireView[]
-  bundledSkills: BundledSkillDefinition[]
-  toolServers: McpServerDefinition[]
-}
+const indexSchema = v.pipe(v.number(), v.integer(), v.minValue(0))
+
+const kindViewSchema = v.object({
+  kind: v.string(),
+  skills: v.object({
+    bundledRefs: v.array(indexSchema),
+    catalog: v.array(catalogSkillRefSchema),
+    unknown: v.array(v.string()),
+  }),
+  toolServers: v.object({ serverRefs: v.array(indexSchema), unknown: v.array(v.string()) }),
+})
+
+const replySchema = v.object({
+  version: v.literal(AGENT_KINDS_WIRE_VERSION),
+  kinds: v.array(kindViewSchema),
+  bundledSkills: v.array(bundledSkillDefinitionSchema),
+  toolServers: v.array(mcpServerDefinitionSchema),
+})
+
+type AgentKindsWire = v.InferOutput<typeof replySchema>
+
+exactly<v.InferOutput<typeof kindViewSchema>, AgentKindWireView>(true)
 
 /** Encode a capability layer, emitting each distinct definition once. */
 export function encodeAgentKindLayer(views: readonly AgentKindCapabilityView[]): AgentKindsWire {
-  const skills = definitionTable<BundledSkillDefinition>()
-  const servers = definitionTable<McpServerDefinition>()
-  const kinds = views.map(({ kind, skills: { bundled, catalog, unknown }, toolServers }) => ({
-    kind,
-    skills: { bundledRefs: bundled.map(skills.ref), catalog, unknown },
-    toolServers: { serverRefs: toolServers.servers.map(servers.ref), unknown: toolServers.unknown },
-  }))
-  return { kinds, bundledSkills: skills.entries, toolServers: servers.entries }
+  const skills = definitionTable<AgentKindsWire['bundledSkills'][number]>()
+  const servers = definitionTable<AgentKindsWire['toolServers'][number]>()
+  const kinds = views.map(
+    ({
+      skills: { bundled, ...skillsRest },
+      toolServers: { servers: declared, ...serversRest },
+      ...view
+    }) => ({
+      ...view,
+      skills: { ...skillsRest, bundledRefs: bundled.map(skills.ref) },
+      toolServers: { ...serversRest, serverRefs: declared.map(servers.ref) },
+    }),
+  )
+  return {
+    version: AGENT_KINDS_WIRE_VERSION,
+    kinds,
+    bundledSkills: skills.entries,
+    toolServers: servers.entries,
+  }
 }
 
 /**
- * A table that hands out one index per distinct definition. The identity map answers the common
- * case (the registry returns the same object for a registered id) without serialising the body;
- * the content key only runs for an object it has not seen.
+ * A table that hands out one index per distinct definition, without serialising a body unless it
+ * must. The same object always gets the same index (the registry returns one object per
+ * registered id). A NEW object whose id no earlier entry has gets a new index straight away. Only
+ * an object that shares its id with an earlier, different object is compared by content, which is
+ * the inline-collision case the content dedup exists for.
  */
-function definitionTable<T extends object>() {
+function definitionTable<T extends { id: string }>() {
   const entries: T[] = []
   const byIdentity = new Map<T, number>()
-  const byContent = new Map<string, number>()
+  const byId = new Map<string, number[]>()
+  const contents = new Map<number, string>()
+  const contentOf = (index: number): string => {
+    let content = contents.get(index)
+    if (content === undefined) {
+      content = JSON.stringify(entries[index])
+      contents.set(index, content)
+    }
+    return content
+  }
   const ref = (definition: T): number => {
     const known = byIdentity.get(definition)
     if (known !== undefined) return known
-    const content = JSON.stringify(definition)
-    let index = byContent.get(content)
+    const sameId = byId.get(definition.id) ?? []
+    let index: number | undefined
+    if (sameId.length) {
+      const content = JSON.stringify(definition)
+      index = sameId.find((candidate) => contentOf(candidate) === content)
+    }
     if (index === undefined) {
       index = entries.push(definition) - 1
-      byContent.set(content, index)
+      byId.set(definition.id, [...sameId, index])
     }
     byIdentity.set(definition, index)
     return index
@@ -82,80 +124,72 @@ function definitionTable<T extends object>() {
   return { entries, ref }
 }
 
+/** Why a reply could not be read: the field, what was wrong with it, and the definition it is in. */
+export interface UnreadableAgentKindLayer {
+  field: string
+  issue: string
+  definitionId?: string
+}
+
 /**
- * Decode a reply into complete per-kind views, or name the FIELD that could not be read. Returns
- * rather than throws so the caller owns the refusal, which must be a throw: an unreadable reply is
- * a capability layer this node does not know, never an empty one.
+ * Decode a reply into complete per-kind views, or say why it cannot be read. Returns rather than
+ * throws so the caller owns the refusal, which must be a throw: an unreadable reply is a capability
+ * layer this node does not know, never an empty one.
  */
 export function decodeAgentKindLayer(
   body: unknown,
-): { views: AgentKindCapabilityView[] } | { unreadable: string } | { versionMismatch: true } {
-  const { kinds, bundledSkills, toolServers } = (body ?? {}) as {
-    kinds?: unknown
-    bundledSkills?: unknown
-    toolServers?: unknown
+):
+  | { views: AgentKindCapabilityView[] }
+  | { unreadable: UnreadableAgentKindLayer }
+  | { versionMismatch: { received: unknown } } {
+  if (!isRecord(body)) return { unreadable: { field: '(root)', issue: 'not a JSON object' } }
+  if (body.version === undefined) return decodeUnversioned(body)
+  // Named apart from a damaged reply because the fix is different: run the same build on both
+  // sides, not look for corruption.
+  if (body.version !== AGENT_KINDS_WIRE_VERSION) {
+    return { versionMismatch: { received: body.version } }
   }
-  if (!Array.isArray(kinds)) return { unreadable: 'kinds' }
-  // Named apart from a corrupt reply because the fix is different: this node is newer than its
-  // mothership, and the remedy is to run the same build on both, not to look for damage. Both
-  // tables missing AND every kind in the inline shape is the older reply. `every` holds for the
-  // stock product's empty layer (`{ kinds: [] }`), the commonest reply an older mothership sends,
-  // while a reply in neither shape stays an unreadable `kinds[]`.
-  if (bundledSkills === undefined && toolServers === undefined && kinds.every(isInlineShapeView)) {
-    return { versionMismatch: true }
-  }
-  if (!Array.isArray(bundledSkills) || !bundledSkills.every(isBundledSkill)) {
-    return { unreadable: 'bundledSkills' }
-  }
-  if (!Array.isArray(toolServers) || !toolServers.every(isToolServer)) {
-    return { unreadable: 'toolServers' }
-  }
-  // The ELEMENTS too, and shallowly enough to matter: an entry whose `kind` is not a string can be
-  // matched against no dispatch, so a reply carrying one is a reply whose layer this node cannot
-  // apply.
-  if (!kinds.every(isWireView)) return { unreadable: 'kinds[]' }
-  // A reference past the end would resolve to `undefined` and reach the harness as a definition
-  // with no body, so it is refused here with the rest of the unreadable replies.
+  const parsed = v.safeParse(replySchema, body)
+  if (!parsed.success) return { unreadable: describeIssue(body, parsed.issues[0]) }
+  const { kinds, bundledSkills, toolServers } = parsed.output
   const views: AgentKindCapabilityView[] = []
-  for (const { kind, skills, toolServers: kindServers } of kinds) {
-    const bundled = dereference(skills.bundledRefs, bundledSkills)
-    if (!bundled) return { unreadable: 'kinds[].skills.bundledRefs' }
-    const servers = dereference(kindServers.serverRefs, toolServers)
-    if (!servers) return { unreadable: 'kinds[].toolServers.serverRefs' }
+  for (const [position, { skills, toolServers: kindServers, ...view }] of kinds.entries()) {
+    const { bundledRefs, ...skillsRest } = skills
+    const bundled = dereference(bundledRefs, bundledSkills)
+    if (typeof bundled === 'string') {
+      return { unreadable: { field: `kinds.${position}.skills.bundledRefs`, issue: bundled } }
+    }
+    const { serverRefs, ...serversRest } = kindServers
+    const servers = dereference(serverRefs, toolServers)
+    if (typeof servers === 'string') {
+      return { unreadable: { field: `kinds.${position}.toolServers.serverRefs`, issue: servers } }
+    }
     views.push({
-      kind,
-      skills: { bundled, catalog: skills.catalog, unknown: skills.unknown },
-      toolServers: { servers, unknown: kindServers.unknown },
+      ...view,
+      skills: { ...skillsRest, bundled },
+      toolServers: { ...serversRest, servers },
     })
   }
   return { views }
 }
 
-/** Resolve indexes against a table, or null when one points past its end. */
-function dereference<T>(refs: readonly number[], table: readonly T[]): T[] | null {
-  const resolved: T[] = []
-  for (const index of refs) {
-    const entry = table[index]
-    if (entry === undefined) return null
-    resolved.push(entry)
+/**
+ * The reply before `version` existed. An EMPTY `kinds` list is read as the empty layer it is: it
+ * carries no definition to misread, and it is the stock product's reply, so a node updated before
+ * its mothership keeps working there. A list whose every kind is in that reply's inline shape is a
+ * named mismatch. Anything else is not a reply from any build, so it is unreadable, not a mismatch.
+ */
+function decodeUnversioned(
+  body: Record<string, unknown>,
+):
+  | { views: [] }
+  | { versionMismatch: { received: unknown } }
+  | { unreadable: UnreadableAgentKindLayer } {
+  if (Array.isArray(body.kinds) && body.kinds.length === 0) return { views: [] }
+  if (Array.isArray(body.kinds) && body.kinds.every(isInlineShapeView)) {
+    return { versionMismatch: { received: undefined } }
   }
-  return resolved
-}
-
-/** The shape one entry must have for a dispatch to be able to apply it. */
-function isWireView(entry: unknown): entry is AgentKindWireView {
-  if (!isRecord(entry) || typeof entry.kind !== 'string') return false
-  const { skills, toolServers } = entry
-  return (
-    isRecord(skills) &&
-    isIndexList(skills.bundledRefs) &&
-    Array.isArray(skills.catalog) &&
-    skills.catalog.every(isCatalogRef) &&
-    isStringList(skills.unknown) &&
-    isRecord(toolServers) &&
-    isIndexList(toolServers.serverRefs) &&
-    isStringList(toolServers.unknown)
-  )
+  return { unreadable: { field: 'version', issue: 'missing, and the reply is in no known shape' } }
 }
 
 /** A kind entry in the shape a mothership sent before definitions rode by reference. */
@@ -169,123 +203,40 @@ function isInlineShapeView(entry: unknown): boolean {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Definition checks. Each is a table with ONE guard per field of the type it checks, optional fields
-// included, and each guard is typed EXACTLY for that field's own type. So a field that is added,
-// removed, narrowed, widened (a new union member) or moved between required and optional fails to
-// compile here until the check is updated. That is what keeps "every field the harness reads is
-// checked" true as the types grow.
-// ---------------------------------------------------------------------------
-
 /**
- * A type guard that is INVARIANT in `V`. A bare `(value: unknown) => value is V` is covariant, so
- * a guard for `'a' | 'b'` would type-check where `'a' | 'b' | 'c'` is required and then refuse
- * every legal `'c'`. The optional `exact` member uses `V` as a parameter too, which makes `V`
- * invariant. Every guard below is DECLARED with this type for the same reason: a plain function
- * would carry no `exact` member and pass the check as covariant again.
+ * Resolve one kind's indexes against a table, or say what is wrong. A reference past the end would
+ * reach the harness as a definition with no body. Two references to one id would make the harness
+ * write the same skill directory, or register the same MCP server name, twice: the in-process
+ * normaliser never produces that, so the reply is damaged.
  */
-type Guard<V> = ((value: unknown) => value is V) & { readonly exact?: (value: V) => V }
-
-/** One guard per field. `keyof Required<T>` lists optional fields too, and `T[K]` keeps their `undefined`. */
-type FieldChecks<T> = { [K in keyof Required<T>]: Guard<T[K]> }
-
-const isString: Guard<string> = (value): value is string => typeof value === 'string'
-
-const isBoolean: Guard<boolean> = (value): value is boolean => typeof value === 'boolean'
-
-const isHarness: Guard<HarnessKind> = (value): value is HarnessKind => isHarnessKind(value)
-
-const isStringMap: Guard<Record<string, string>> = (value): value is Record<string, string> =>
-  isRecord(value) && Object.values(value).every(isString)
-
-const isIndexList: Guard<number[]> = (value): value is number[] =>
-  Array.isArray(value) && value.every(Number.isInteger)
-
-/** An optional field: absent, or present and valid. */
-function absentOr<V>(check: Guard<V>): Guard<V | undefined> {
-  return (value): value is V | undefined => value === undefined || check(value)
+function dereference<T extends { id: string }>(
+  refs: readonly number[],
+  table: readonly T[],
+): T[] | string {
+  const resolved: T[] = []
+  const ids = new Set<string>()
+  for (const index of refs) {
+    const entry = table[index]
+    if (entry === undefined)
+      return `index ${index} is past the end of a ${table.length}-entry table`
+    if (ids.has(entry.id)) return `references id "${entry.id}" twice`
+    ids.add(entry.id)
+    resolved.push(entry)
+  }
+  return resolved
 }
 
-function listOf<V>(check: Guard<V>): Guard<V[]> {
-  return (value): value is V[] => Array.isArray(value) && value.every(check)
+/** The first schema issue as a field path, its message, and the id of the definition it is in. */
+function describeIssue(
+  body: Record<string, unknown>,
+  issue: v.BaseIssue<unknown>,
+): UnreadableAgentKindLayer {
+  const field = v.getDotPath(issue) ?? '(root)'
+  const [table, position] = (issue.path ?? []).map((item) => item.key)
+  const definition =
+    (table === 'bundledSkills' || table === 'toolServers') && typeof position === 'number'
+      ? (body[table] as unknown[] | undefined)?.[position]
+      : undefined
+  const id = isRecord(definition) && typeof definition.id === 'string' ? definition.id : undefined
+  return { field, issue: issue.message, ...(id ? { definitionId: id } : {}) }
 }
-
-function either<A, B>(first: Guard<A>, second: Guard<B>): Guard<A | B> {
-  return (value): value is A | B => first(value) || second(value)
-}
-
-function oneOf<V extends string>(...allowed: V[]): Guard<V> {
-  return (value): value is V => allowed.includes(value as V)
-}
-
-/** A guard for a value built from field guards, for use as a field guard itself. */
-function shape<T>(checks: FieldChecks<T>): Guard<T> {
-  return (value): value is T =>
-    isRecord(value) &&
-    // Read as plain predicates: an invariant guard does not widen to `Guard<unknown>`.
-    Object.entries(checks as Record<string, (value: unknown) => boolean>).every(([field, check]) =>
-      check(value[field]),
-    )
-}
-
-const isStringList = listOf(isString)
-
-const isCatalogRef = shape<NormalizedSkillRefs['catalog'][number]>({
-  skillId: isString,
-  optional: isBoolean,
-})
-
-/** The skill directory name, the frontmatter description, the body, and each resource file. */
-const isBundledSkill = shape<BundledSkillDefinition>({
-  id: isString,
-  name: isString,
-  description: isString,
-  instructions: isString,
-  resources: absentOr(listOf(shape({ relPath: isString, content: isString }))),
-})
-
-const isStdioTransport = shape<McpStdioTransport>({
-  kind: oneOf('stdio'),
-  command: isString,
-  args: absentOr(isStringList),
-  env: absentOr(isStringMap),
-})
-
-const isHttpTransport = shape<McpHttpTransport>({
-  kind: oneOf('http'),
-  url: isString,
-  headers: absentOr(isStringMap),
-})
-
-const isSecretRef = shape<McpSecretRef>({
-  key: isString,
-  envName: absentOr(isString),
-  header: absentOr(isString),
-  headerTemplate: absentOr(isString),
-  required: absentOr(isBoolean),
-  usage: absentOr(isString),
-})
-
-const isOAuthConfig = shape<McpOAuthConfig>({
-  grant: oneOf('authorization_code', 'client_credentials'),
-  clientId: isString,
-  clientSecretKey: absentOr(isString),
-  authorizationUrl: absentOr(isString),
-  tokenUrl: absentOr(isString),
-  scopes: absentOr(isStringList),
-  resource: absentOr(isString),
-  header: absentOr(isString),
-  headerTemplate: absentOr(isString),
-})
-
-/** An id to name its tools under, a transport to reach it, and every string the harness renders. */
-const isToolServer = shape<McpServerDefinition>({
-  id: isString,
-  label: absentOr(isString),
-  guidance: absentOr(isString),
-  transport: either(isStdioTransport, isHttpTransport),
-  allowedTools: absentOr(isStringList),
-  harnesses: absentOr(listOf(isHarness)),
-  secretKeys: absentOr(listOf(isSecretRef)),
-  oauth: absentOr(isOAuthConfig),
-})

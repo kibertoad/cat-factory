@@ -227,6 +227,7 @@ describe('composeMothership', () => {
       seen.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') })
       return new Response(
         JSON.stringify({
+          version: 2,
           kinds: [
             {
               kind: 'coder',

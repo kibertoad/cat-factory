@@ -522,19 +522,32 @@
   is SERVABLE here (harness, credentials), which is the split ADR 0029 states. Resolving in both
   places would have meant two network reads per dispatch.
 
-  **Definitions ride by reference, and the reply has NO cross-build compatibility.** Each distinct
-  bundled skill and tool server is emitted once (`bundledSkills`, `toolServers`) and each kind
-  lists indexes into them (`bundledRefs`, `serverRefs`), deduplicated by content because two kinds
-  may declare different inline definitions under one id. The Nuxt UI capability alone is ~99 KB on
-  three kinds, and this read runs per dispatch. The per-kind fields were renamed so a node and a
-  mothership on opposite sides of that change REFUSE each other's reply rather than misread it, and
-  `resolveKindCapabilities` does not catch that refusal: **every container dispatch on a node whose
-  build disagrees with its mothership on this shape fails with `agent_kinds_unreachable` until the
-  node is updated.** A new node that reads an older mothership's reply reports
-  `details.cause: 'mothership_version_mismatch'`, so the fix is named; an older node cannot tell
-  that case apart from damage. This was chosen over serving both shapes (#2269): the shape is pre-1.0
-  internal state, so the operator step is to update nodes together with the mothership. Shape:
-  `packages/server/src/persistence/agentKindsWire.ts`.
+  **Definitions ride by reference, and the reply carries a `version`.** Each distinct bundled
+  skill and tool server is emitted once (`bundledSkills`, `toolServers`) and each kind lists
+  indexes into them (`bundledRefs`, `serverRefs`), deduplicated by content because two kinds may
+  declare different inline definitions under one id. The Nuxt UI capability alone is ~99 KB on
+  three kinds, and this read runs per dispatch. Every definition is checked against a valibot
+  schema held equal to its type (`@cat-factory/agents`' `definition-schemas.ts`), at boot on the
+  mothership and again by the node, so a malformed definition fails the mothership's boot by name
+  rather than reaching a node. Shape: `packages/server/src/persistence/agentKindsWire.ts`.
+
+  **Build skew across this change, per direction.** `resolveKindCapabilities` does not catch a
+  refused read, so a refusal fails every container dispatch on that node until the builds match.
+  - A node NEWER than its mothership: an empty layer (`{ kinds: [] }`, the stock product) is read
+    as empty and dispatches normally. Any other reply is refused with
+    `details.cause: 'mothership_version_mismatch'`, which names the fix.
+  - A node OLDER than its mothership: an empty layer passes the older node's check and dispatches
+    normally. A non-empty layer is refused as unreadable, and the older node cannot name the cause.
+  - From this change on, every reply carries `version`, and a node refuses any version but its own
+    with the named cause, so a LATER shape change names itself in both directions.
+
+  **Why this break is accepted against "a node one build behind is NORMAL".** That rule (AGENTS.md)
+  forbids designs that only work when both processes run the same build, and this one does not
+  silently misbehave under skew: it refuses, by name where the node can know it. Serving both
+  shapes for one release would be the dual-format shim the pre-1.0 rule bans, kept alive on the
+  hottest read in mothership mode. The cost is bounded to deployments with assigned capabilities,
+  for the one release window in which nodes lag their mothership, and the operator step is stated
+  here and in the changeset: update the nodes together with the mothership (#2269, #2313).
 
   Transport mirrors its three siblings exactly: machine-token pin checked FIRST, no account scope
   (the layer is one deployment-wide set), its own endpoint rather than a persistence hole, reads
