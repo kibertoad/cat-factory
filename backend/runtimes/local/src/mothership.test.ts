@@ -230,7 +230,11 @@ describe('composeMothership', () => {
           kinds: [
             {
               kind: 'coder',
-              skills: { bundledRefs: [], catalog: [{ skillId: 'src:s1:playbook' }], unknown: [] },
+              skills: {
+                bundledRefs: [],
+                catalog: [{ skillId: 'src:s1:playbook', optional: false }],
+                unknown: [],
+              },
               toolServers: { serverRefs: [], unknown: [] },
             },
           ],
@@ -246,7 +250,7 @@ describe('composeMothership', () => {
     )
     try {
       const views = await agentKinds.capabilities()
-      expect(views[0]?.skills.catalog).toEqual([{ skillId: 'src:s1:playbook' }])
+      expect(views[0]?.skills.catalog).toEqual([{ skillId: 'src:s1:playbook', optional: false }])
       // Same base URL and same per-request machine token as the persistence RPC.
       expect(seen).toEqual([
         { url: 'https://m.test/internal/agent-kinds', auth: 'Bearer machine-tok' },

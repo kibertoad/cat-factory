@@ -530,7 +530,9 @@
   mothership on opposite sides of that change REFUSE each other's reply rather than misread it, and
   `resolveKindCapabilities` does not catch that refusal: **every container dispatch on a node whose
   build disagrees with its mothership on this shape fails with `agent_kinds_unreachable` until the
-  node is updated.** This was chosen over serving both shapes (#2269): the shape is pre-1.0
+  node is updated.** A new node that reads an older mothership's reply reports
+  `details.cause: 'mothership_version_mismatch'`, so the fix is named; an older node cannot tell
+  that case apart from damage. This was chosen over serving both shapes (#2269): the shape is pre-1.0
   internal state, so the operator step is to update nodes together with the mothership. Shape:
   `packages/server/src/persistence/agentKindsWire.ts`.
 

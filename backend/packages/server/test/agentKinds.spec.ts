@@ -234,8 +234,6 @@ describe('mothership-mode agent-kind capability layer', () => {
       reply({ kinds: [{ skills: skills(), toolServers: tools() }] }),
       reply({ kinds: [coder({ skills: {} })] }),
       reply({ kinds: [coder({ toolServers: undefined })] }),
-      // The pre-reference shape: an older mothership inlined each definition per kind.
-      reply({ kinds: [coder({ skills: { bundled: [PLAYBOOK], catalog: [], unknown: [] } })] }),
       // A non-index reference, or one with nothing behind it: either would reach the harness as a
       // definition with no body.
       reply({ kinds: [coder({ skills: skills([PLAYBOOK]) })] }),
@@ -245,12 +243,37 @@ describe('mothership-mode agent-kind capability layer', () => {
       reply({ bundledSkills: [{ ...PLAYBOOK, name: undefined }] }),
       reply({ bundledSkills: [{ ...PLAYBOOK, resources: [{ relPath: 'a.md' }] }] }),
       reply({ toolServers: [{ id: TRACKER_SERVER.id }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, transport: { kind: 'stdio' } }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, transport: { kind: 'http' } }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, allowedTools: [1] }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, secretKeys: [{}] }] }),
+      // A catalog ref with no id would reach the resolver as skill `undefined`.
+      reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [{}], unknown: [] } })] }),
+      reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [], unknown: [1] } })] }),
     ]) {
       await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
         code: 'unavailable',
         details: { reason: 'agent_kinds_unreachable' },
       })
     }
+  })
+
+  it('names a reply from an OLDER mothership as a version mismatch, not as damage', async () => {
+    // The shape a mothership sent before definitions rode by reference. Refused like any other
+    // unreadable reply, but the cause says what to fix: run the same build on both sides.
+    const inline = {
+      kinds: [
+        {
+          kind: 'coder',
+          skills: { bundled: [PLAYBOOK], catalog: [], unknown: [] },
+          toolServers: { servers: [TRACKER_SERVER], unknown: [] },
+        },
+      ],
+    }
+    await expect(sourceOver(inline).capabilities()).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'agent_kinds_unreachable', cause: 'mothership_version_mismatch' },
+    })
   })
 
   it('THROWS on a transport failure, with the cause scrubbed onto the details', async () => {

@@ -1,5 +1,6 @@
 import type { AgentKindCapabilityView, BundledSkillDefinition } from '@cat-factory/agents'
 import type { McpServerDefinition } from '@cat-factory/kernel'
+import { isRecord } from '../modules/toolServers/mcpDialect.js'
 
 // The wire shape of `GET /internal/agent-kinds`, shared by the controller that encodes it and the
 // `HttpAgentKindSource` that decodes it, so the two halves cannot drift.
@@ -20,14 +21,14 @@ import type { McpServerDefinition } from '@cat-factory/kernel'
 // same build (`docs/initiatives/mothership-mode.md`).
 
 /** One kind's capability view with every definition replaced by an index into the reply's tables. */
-export interface AgentKindWireView {
+interface AgentKindWireView {
   kind: AgentKindCapabilityView['kind']
   skills: Omit<AgentKindCapabilityView['skills'], 'bundled'> & { bundledRefs: number[] }
   toolServers: { serverRefs: number[]; unknown: string[] }
 }
 
 /** The `GET /internal/agent-kinds` reply body. */
-export interface AgentKindsWire {
+interface AgentKindsWire {
   kinds: AgentKindWireView[]
   bundledSkills: BundledSkillDefinition[]
   toolServers: McpServerDefinition[]
@@ -76,13 +77,18 @@ function definitionTable<T extends object>() {
  */
 export function decodeAgentKindLayer(
   body: unknown,
-): { views: AgentKindCapabilityView[] } | { unreadable: string } {
+): { views: AgentKindCapabilityView[] } | { unreadable: string; versionMismatch?: true } {
   const { kinds, bundledSkills, toolServers } = (body ?? {}) as {
     kinds?: unknown
     bundledSkills?: unknown
     toolServers?: unknown
   }
   if (!Array.isArray(kinds)) return { unreadable: 'kinds' }
+  // Named apart from a corrupt reply because the fix is different: this node is newer than its
+  // mothership, and the remedy is to run the same build on both, not to look for damage.
+  if (bundledSkills === undefined && toolServers === undefined && kinds.some(isInlineShapeView)) {
+    return { unreadable: 'kinds[]', versionMismatch: true }
+  }
   if (!Array.isArray(bundledSkills) || !bundledSkills.every(isBundledSkill)) {
     return { unreadable: 'bundledSkills' }
   }
@@ -129,11 +135,28 @@ function isWireView(entry: unknown): entry is AgentKindWireView {
     isRecord(skills) &&
     isIndexList(skills.bundledRefs) &&
     Array.isArray(skills.catalog) &&
-    Array.isArray(skills.unknown) &&
+    skills.catalog.every(isCatalogRef) &&
+    isStringList(skills.unknown) &&
     isRecord(toolServers) &&
     isIndexList(toolServers.serverRefs) &&
-    Array.isArray(toolServers.unknown)
+    isStringList(toolServers.unknown)
   )
+}
+
+/** A kind entry in the shape a mothership sent before definitions rode by reference. */
+function isInlineShapeView(entry: unknown): boolean {
+  return (
+    isRecord(entry) &&
+    isRecord(entry.skills) &&
+    Array.isArray(entry.skills.bundled) &&
+    isRecord(entry.toolServers) &&
+    Array.isArray(entry.toolServers.servers)
+  )
+}
+
+/** A catalog ref the engine resolves later: the skill id, and whether a miss may be skipped. */
+function isCatalogRef(entry: unknown): boolean {
+  return isRecord(entry) && typeof entry.skillId === 'string' && typeof entry.optional === 'boolean'
 }
 
 /**
@@ -153,15 +176,38 @@ function isBundledSkill(entry: unknown): entry is BundledSkillDefinition {
   )
 }
 
-/** A server the executor can wire: an id to name its tools under, and a transport to reach it. */
+/**
+ * Every field the executor READS to wire a server: its id, a transport it can reach (a stdio
+ * command with string arguments, or an http URL), and the string lists it renders into the
+ * harness config. A missing one would reach the container as an `undefined` command or URL.
+ */
 function isToolServer(entry: unknown): entry is McpServerDefinition {
-  return isRecord(entry) && typeof entry.id === 'string' && isRecord(entry.transport)
+  if (!isRecord(entry) || typeof entry.id !== 'string' || !isTransport(entry.transport)) {
+    return false
+  }
+  const { allowedTools, secretKeys } = entry
+  return (
+    (allowedTools === undefined || isStringList(allowedTools)) &&
+    (secretKeys === undefined ||
+      (Array.isArray(secretKeys) &&
+        secretKeys.every((ref) => isRecord(ref) && typeof ref.key === 'string')))
+  )
+}
+
+function isTransport(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  if (value.kind === 'stdio') {
+    return (
+      typeof value.command === 'string' && (value.args === undefined || isStringList(value.args))
+    )
+  }
+  return value.kind === 'http' && typeof value.url === 'string'
 }
 
 function isIndexList(value: unknown): value is number[] {
   return Array.isArray(value) && value.every(Number.isInteger)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }

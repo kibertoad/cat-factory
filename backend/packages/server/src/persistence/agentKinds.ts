@@ -84,7 +84,9 @@ export class HttpAgentKindSource implements AgentKindSource {
     // that must never be reachable is answering an unknown layer with an empty one. An empty layer
     // is spelled `kinds: []`, which no honest server omits.
     const decoded = decodeAgentKindLayer(body)
-    if ('unreadable' in decoded) throw unreadable(decoded.unreadable)
+    if ('unreadable' in decoded) {
+      throw decoded.versionMismatch ? versionMismatch() : unreadable(decoded.unreadable)
+    }
     return decoded.views
   }
 }
@@ -100,5 +102,19 @@ function unreadable(field: string): UnavailableError {
     'The mothership returned an unreadable agent-kind capability layer',
     'agent_kinds_unreachable',
     { field },
+  )
+}
+
+/**
+ * The refusal for a reply in the shape an OLDER mothership sends. The same `reason` as every other
+ * failure of this read (it is still an unreachable capability layer), with a `cause` and a message
+ * that name the fix: run the same build on the node and the mothership
+ * (`docs/initiatives/mothership-mode.md`).
+ */
+function versionMismatch(): UnavailableError {
+  return new UnavailableError(
+    'The mothership runs an older build whose agent-kind capability reply this node cannot read. Update the mothership and its nodes to the same build.',
+    'agent_kinds_unreachable',
+    { cause: 'mothership_version_mismatch' },
   )
 }

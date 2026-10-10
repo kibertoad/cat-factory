@@ -11,4 +11,5 @@ dispatch).
 
 Internal wire break, with no compatibility path: update mothership-mode nodes together with the
 mothership. Until then, every container dispatch on a node whose build disagrees with its
-mothership fails with `agent_kinds_unreachable`.
+mothership fails with `agent_kinds_unreachable`. A node newer than its mothership reports
+`details.cause: 'mothership_version_mismatch'`.
