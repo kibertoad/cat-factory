@@ -1,5 +1,17 @@
 # @cat-factory/server
 
+## 0.332.1
+
+### Patch Changes
+
+- 3c04dfa: A mothership-mode node now rebuilds a remote repository's `unavailable`, `unauthorized` and `rate_limited` refusals as `DomainError`s. They used to come back as plain errors, so the node answered 500 and dropped `details.reason`. The rebuilt-code table is a `Record` over `DomainErrorCode`, so a new code fails the typecheck until someone decides how the client treats it.
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/orchestration@0.320.1
+  - @cat-factory/spend@0.23.10
+
 ## 0.332.0
 
 ### Minor Changes

@@ -1,5 +1,19 @@
 # @cat-factory/orchestration
 
+## 0.320.1
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/caching@0.20.99
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/prompt-fragments@1.1.61
+  - @cat-factory/sandbox@0.12.74
+  - @cat-factory/spend@0.23.10
+  - @cat-factory/workspaces@0.29.22
+
 ## 0.320.0
 
 ### Minor Changes
