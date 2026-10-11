@@ -140,7 +140,7 @@ export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'
 export { definePublicKeyReachSuite } from './public-key-reach-suite.js'
 export { definePublicDirectorySuite } from './public-directory-suite.js'
-export { mintSession } from './session.js'
+export { mintMachineToken, mintSession } from './session.js'
 export {
   seedFrameRepoLink,
   type FrameRepoLink,

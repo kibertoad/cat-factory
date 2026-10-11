@@ -11,6 +11,7 @@ import AccountFragmentSettings from '~/components/layout/AccountFragmentSettings
 import AccountSkillSettings from '~/components/layout/AccountSkillSettings.vue'
 import AccountFoundationalSettings from '~/components/layout/AccountFoundationalSettings.vue'
 import AccountRiskPolicySettings from '~/components/layout/AccountRiskPolicySettings.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -60,9 +61,11 @@ const tabs = computed(() => [
 <template>
   <UModal v-model:open="open" :title="t('settings.account.title')" :ui="{ content: 'max-w-3xl' }">
     <template #body>
-      <p v-if="!accounts.activeAccountId" class="text-sm text-muted">
-        {{ t('settings.account.noAccount') }}
-      </p>
+      <EmptyState
+        v-if="!accounts.activeAccountId"
+        icon="i-lucide-building-2"
+        :title="t('settings.account.noAccount')"
+      />
       <UTabs
         v-else
         v-model="activeTab"

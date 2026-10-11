@@ -24,7 +24,7 @@ import {
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const settingsStore = useWorkspaceSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 onMounted(() => {
@@ -90,7 +90,7 @@ async function save() {
       defaultProvisionType: selection.value.type,
       defaultProvisionManifestId: selection.value.manifestId,
     })
-    toast.add({ title: t('settings.defaultProvision.saved'), color: 'success' })
+    actionToast.success('settings.defaultProvision.saved')
   } catch (e) {
     present(e, 'settings.defaultProvision.saveFailed')
   } finally {
@@ -156,7 +156,6 @@ async function save() {
     <div class="flex items-center gap-2">
       <UButton
         size="xs"
-        color="primary"
         icon="i-lucide-check"
         :loading="saving"
         :disabled="!canSave"

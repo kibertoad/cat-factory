@@ -11,7 +11,7 @@ import { UNDO_WINDOW_MS } from './context'
  * stays internal — it is only wired into the delete toast's undo action.
  */
 export function createBoardRemoval(ctx: BoardWriteContext) {
-  const { blocks, getBlock, pendingRemovals, pendingDoomed, api, toast, tr, present } = ctx
+  const { blocks, getBlock, pendingRemovals, pendingDoomed, api, actionToast, present } = ctx
 
   /**
    * Optimistically drop a block and its descendants from the cache, returning a
@@ -148,18 +148,9 @@ export function createBoardRemoval(ctx: BoardWriteContext) {
     const timer = setTimeout(() => void finalize(), UNDO_WINDOW_MS)
     pendingRemovals.set(id, { snap, timer, wsId })
 
-    toast.add({
-      title: tr('board.toast.deleted', { name: block.title }),
-      icon: 'i-lucide-trash-2',
-      color: 'neutral',
-      duration: UNDO_WINDOW_MS,
-      actions: [
-        {
-          label: tr('common.undo'),
-          icon: 'i-lucide-undo-2',
-          onClick: () => undoRemove(id),
-        },
-      ],
+    actionToast.success('board.toast.deleted', {
+      params: { name: block.title },
+      undo: { run: () => undoRemove(id), windowMs: UNDO_WINDOW_MS },
     })
   }
 

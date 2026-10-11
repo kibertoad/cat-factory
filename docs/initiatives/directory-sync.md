@@ -152,7 +152,7 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
 - [x] **Slice 3: public directory read API** ([#2309](https://github.com/kibertoad/cat-factory/pull/2309); website: [cat-factory-website#101](https://github.com/kibertoad/cat-factory-website/pull/101)). `DirectoryRepository`
       (feed reads, keyset snapshots, batched hydration, prune) on both runtimes and in the
       mothership allow-list, `DirectoryService`, `/api/v1/directory/*`,
-      `DIRECTORY_CHANGE_RETENTION_DAYS` on both sweeps, OpenAPI 1.80.0,
+      `DIRECTORY_CHANGE_RETENTION_DAYS` on both sweeps, OpenAPI 1.81.0,
       `definePublicDirectorySuite`.
 - [ ] **Slice 4: `directory.*` webhooks.** Account-level endpoints, post-commit fan-out, delivery
       envelopes in the OpenAPI `webhooks` section.

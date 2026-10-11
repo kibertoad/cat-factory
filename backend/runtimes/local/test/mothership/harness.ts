@@ -368,6 +368,20 @@ function buildMothershipOverrides(
 }
 
 /**
+ * The mothership harness routes persistence over the RPC and runs auth-DISABLED, so it does not run
+ * the auth-enabled suites; these fields satisfy the type with auth reported off.
+ */
+const AUTH_DISABLED: Pick<ConformanceApp, 'authEnabled' | 'session' | 'machineToken'> = {
+  authEnabled: false,
+  session: async () => {
+    throw new Error('mothership harness does not run the auth-enabled workspace-RBAC suite')
+  },
+  machineToken: async () => {
+    throw new Error('mothership harness runs auth-disabled, so it can mint no machine token')
+  },
+}
+
+/**
  * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
  * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
  * agent + no-op runner let the suite advance runs itself via `drive`.
@@ -574,12 +588,7 @@ export function makeMothershipConformanceApp(
     callBinary,
     createWorkspace,
     createOrgWorkspace,
-    // The mothership harness routes persistence over the RPC and does not run the auth-enabled
-    // workspace-RBAC suite; expose the fields to satisfy the type, with auth reported off.
-    authEnabled: false,
-    session: async () => {
-      throw new Error('mothership harness does not run the auth-enabled workspace-RBAC suite')
-    },
+    ...AUTH_DISABLED,
     createWorkspaceInAccount: (accountId, ownerUserId, options) =>
       container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },

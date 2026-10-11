@@ -242,7 +242,7 @@ async function runProbe(id: string) {
           <UButton
             v-if="server.oauth.connected"
             size="xs"
-            variant="ghost"
+            variant="soft"
             color="error"
             :loading="store.connecting === server.id"
             :disabled="store.connecting !== null"

@@ -38,6 +38,12 @@ export const useGitHubStore = defineStore('github', () => {
 
   /** null = unknown (not probed yet), true/false = integration on/off. */
   const available = ref<boolean | null>(null)
+  /**
+   * Why `available` is false: the deployment switched the integration off (a 503), or the probe
+   * itself failed. Both hide the GitHub UI, but only the first is a fact about the deployment;
+   * the second is an unanswered question. Null while `available` is not false.
+   */
+  const unavailableCause = ref<'disabled' | 'failed' | null>(null)
   /** The workspace's VCS connection (App installation or PAT), or null when not connected. */
   const connection = ref<GitHubConnection | null>(null)
   /** The connect surfaces this deployment serves; resolved by the probe alongside `connection`. */
@@ -160,6 +166,7 @@ export const useGitHubStore = defineStore('github', () => {
     api,
     workspace,
     available,
+    unavailableCause,
     connection,
     connectOptions,
     installations,
@@ -207,6 +214,7 @@ export const useGitHubStore = defineStore('github', () => {
    */
   function reset() {
     available.value = null
+    unavailableCause.value = null
     connection.value = null
     connectOptions.value = []
     patCheck.value = null
@@ -221,6 +229,7 @@ export const useGitHubStore = defineStore('github', () => {
 
   return {
     available,
+    unavailableCause,
     connection,
     connectOptions,
     patCheck,

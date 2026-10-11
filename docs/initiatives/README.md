@@ -106,6 +106,7 @@ a tracker document](../../AGENTS.md).
 
 ### Frontend and UX
 
+- [A delivery surface shaped like the job (queue view, intake, setup checklist)](./delivery-surface.md)
 - [Error-message coverage](./error-message-coverage.md)
 - [Frontend extension mechanism](./frontend-extension-mechanism.md)
 - [GitLab product-surface parity](./gitlab-ui-parity.md)

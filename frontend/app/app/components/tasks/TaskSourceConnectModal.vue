@@ -16,7 +16,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -63,10 +63,8 @@ async function submit() {
   saving.value = true
   try {
     await tasks.connect(source.value, credentials)
-    toast.add({
-      title: t('tasks.connect.connectedToast', { label: descriptor.value!.label }),
-      icon: 'i-lucide-check',
-      color: 'success',
+    actionToast.success('tasks.connect.connectedToast', {
+      params: { label: descriptor.value!.label },
     })
     // Re-probe so `available`/`enabled` reflect the new connection.
     await tasks.probe()
@@ -93,12 +91,14 @@ async function disconnect() {
   if (!source.value) return
   const label = descriptor.value?.label ?? t('tasks.connect.sourceFallback')
   if (!(await confirmAction('disconnect', label))) return
-  await tasks.disconnect(source.value)
-  await tasks.probe()
-  toast.add({
-    title: t('tasks.connect.disconnectedToast', { label }),
-    icon: 'i-lucide-unplug',
-  })
+  try {
+    await tasks.disconnect(source.value)
+    await tasks.probe()
+  } catch (e) {
+    present(e, 'tasks.connect.disconnectFailed')
+    return
+  }
+  actionToast.success('tasks.connect.disconnectedToast', { params: { label } })
   ui.closeTaskConnect()
 }
 
@@ -140,13 +140,7 @@ async function toggleEnabled(enabled: boolean) {
         <div v-else-if="!connected" class="space-y-3">
           <!-- OAuth source (Linear): the redirect button, with the manual key form below. -->
           <template v-if="oauth">
-            <UButton
-              block
-              color="primary"
-              icon="i-lucide-plug"
-              :loading="oauthStarting"
-              @click="startOAuth"
-            >
+            <UButton block icon="i-lucide-plug" :loading="oauthStarting" @click="startOAuth">
               {{ t('tasks.connect.oauthButton', { label: descriptor.label }) }}
             </UButton>
             <p class="text-center text-2xs text-dimmed">
@@ -199,7 +193,7 @@ async function toggleEnabled(enabled: boolean) {
           <UButton
             v-if="connected"
             color="error"
-            variant="ghost"
+            variant="soft"
             icon="i-lucide-unplug"
             @click="disconnect"
           >
@@ -208,7 +202,6 @@ async function toggleEnabled(enabled: boolean) {
           <div v-else />
           <UButton
             v-if="!credentialless"
-            color="primary"
             icon="i-lucide-plug"
             :loading="saving"
             :disabled="!canSubmit"
