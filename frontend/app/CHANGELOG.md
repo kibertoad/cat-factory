@@ -1,5 +1,11 @@
 # @cat-factory/app
 
+## 0.312.0
+
+### Minor Changes
+
+- 1f02937: Add a queue view beside the board (issue #2258). The queue lists every task across every service in the column that says what it needs (Needs you, In flight, Ready to merge), and each card carries the one action its state implies. The sidebar's new Views switcher, the palette and a `?view=queue` link move between the queue and the canvas. The SPA opens on the view each person used last; a person who has not chosen lands on the queue. The canvas's decision counter now opens the queue view instead of a dropdown, on every service, and the queue lists a decision or approval on an initiative or a frame too. The queue's Done list follows the workspace's Done-lane settings, as each frame's Done lane does. A click anywhere on a queue card opens the task, and on a wide screen the queue's columns make room for the inspector instead of sitting under it. Starting a tour moves to the canvas, which every tour walks, and the Board basics tour gains a step on the two views. A Board basics tour broken off before this change resumes one step early. The board card and the frame swimlanes share their action and classification code with the queue (`useTaskActions`, `useTaskLaneClassifier`), so a member without `runs.execute` now sees the board card's Start and Merge disabled with the reason, as Retry already was.
+
 ## 0.311.3
 
 ### Patch Changes
