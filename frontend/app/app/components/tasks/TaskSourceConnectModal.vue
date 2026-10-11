@@ -91,8 +91,13 @@ async function disconnect() {
   if (!source.value) return
   const label = descriptor.value?.label ?? t('tasks.connect.sourceFallback')
   if (!(await confirmAction('disconnect', label))) return
-  await tasks.disconnect(source.value)
-  await tasks.probe()
+  try {
+    await tasks.disconnect(source.value)
+    await tasks.probe()
+  } catch (e) {
+    present(e, 'tasks.connect.disconnectFailed')
+    return
+  }
   actionToast.success('tasks.connect.disconnectedToast', { params: { label } })
   ui.closeTaskConnect()
 }

@@ -3894,9 +3894,7 @@
       "toast": {
         "connected": "מפתח OpenRouter מחובר",
         "connectFailed": "לא ניתן היה לחבר מפתח",
-        "rejected": "OpenRouter דחה את המפתח.",
         "unreachable": "לא ניתן היה להגיע ל-OpenRouter",
-        "connectFirst": "חבר תחילה מפתח OpenRouter.",
         "saved": "קטלוג OpenRouter נשמר",
         "saveFailed": "לא ניתן היה לשמור קטלוג"
       }
@@ -4861,7 +4859,8 @@
         "scopes": "תתבקשו לאשר את ההרשאות: {scopes}",
         "fallback": "מעדיפים אסימון? השתמשו בשדות שלמטה.",
         "failed": "לא ניתן היה להתחיל את ההתחברות ל-{source}"
-      }
+      },
+      "disconnectFailed": "לא ניתן היה לנתק"
     },
     "spawn": {
       "title": "תצוגה מקדימה של מבנה",
@@ -5009,7 +5008,8 @@
       "updateConnection": "עדכן חיבור",
       "connect": "חבר",
       "oauthButton": "התחבר עם {label}",
-      "oauthOr": "או התחבר עם מפתח API"
+      "oauthOr": "או התחבר עם מפתח API",
+      "disconnectFailed": "לא ניתן היה לנתק"
     }
   },
   "bugHunt": {

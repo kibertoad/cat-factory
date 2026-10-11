@@ -3753,9 +3753,7 @@
       "toast": {
         "connected": "Ключ OpenRouter підключено",
         "connectFailed": "Не вдалося підключити ключ",
-        "rejected": "OpenRouter відхилив ключ.",
         "unreachable": "Не вдалося зв'язатися з OpenRouter",
-        "connectFirst": "Спершу підключіть ключ OpenRouter.",
         "saved": "Каталог OpenRouter збережено",
         "saveFailed": "Не вдалося зберегти каталог"
       }
@@ -4861,7 +4859,8 @@
         "scopes": "Буде запитано такі дозволи: {scopes}",
         "fallback": "Волієш токен? Скористайся полями нижче.",
         "failed": "Не вдалося розпочати вхід до {source}"
-      }
+      },
+      "disconnectFailed": "Не вдалося відключити"
     },
     "spawn": {
       "title": "Перегляд структури",
@@ -5009,7 +5008,8 @@
       "updateConnection": "Оновити підключення",
       "connect": "Підключити",
       "oauthButton": "Підключити через {label}",
-      "oauthOr": "або підключіться за допомогою ключа API"
+      "oauthOr": "або підключіться за допомогою ключа API",
+      "disconnectFailed": "Не вдалося відключити"
     }
   },
   "bugHunt": {

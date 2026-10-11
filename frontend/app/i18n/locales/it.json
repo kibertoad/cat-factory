@@ -1024,9 +1024,7 @@
       "toast": {
         "connected": "Chiave OpenRouter connessa",
         "connectFailed": "Impossibile connettere la chiave",
-        "rejected": "OpenRouter ha rifiutato la chiave.",
         "unreachable": "Impossibile raggiungere OpenRouter",
-        "connectFirst": "Connetti prima una chiave OpenRouter.",
         "saved": "Catalogo OpenRouter salvato",
         "saveFailed": "Impossibile salvare il catalogo"
       }
@@ -4330,7 +4328,8 @@
         "scopes": "Ti verranno chiesti questi permessi: {scopes}",
         "fallback": "Preferisci un token? Usa i campi qui sotto.",
         "failed": "Impossibile avviare l'accesso a {source}"
-      }
+      },
+      "disconnectFailed": "Impossibile scollegare"
     },
     "spawn": {
       "title": "Anteprima struttura",
@@ -4478,7 +4477,8 @@
       "updateConnection": "Aggiorna connessione",
       "connect": "Collega",
       "oauthButton": "Collega con {label}",
-      "oauthOr": "oppure collega con una chiave API"
+      "oauthOr": "oppure collega con una chiave API",
+      "disconnectFailed": "Impossibile scollegare"
     }
   },
   "bugHunt": {

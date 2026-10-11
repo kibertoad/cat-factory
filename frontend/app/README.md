@@ -293,7 +293,11 @@ the window. A toast is action feedback. Something the reader must act on later b
 #### Loading: the component's `loading` prop, `USkeleton` for content, `Spinner` for a glyph
 
 - **A Nuxt UI component with a `loading` prop takes `:loading`.** Never spin its icon by hand
-  (`:ui="{ leadingIcon: 'animate-spin' }"`, or an `:icon` swapped to a loader while busy).
+  (`:ui="{ leadingIcon: 'animate-spin' }"`, or an `:icon` swapped to a loader while busy). One
+  exception: `UButton`'s `loading` also DISABLES it (`disabled || isLoading`). A button that must
+  stay clickable while its work runs (a tab whose thread is mid-reply, a "planning in progress"
+  button that opens the planning window) puts `<Spinner>` in its `#leading` slot instead, with a
+  comment saying why. `UInput` and the other inputs do not disable on `loading`.
 - **A panel or list waiting on its first fetch shows `USkeleton` rows sized like the content they
   replace**, so it does not show nothing and then everything. Its fill is `bg-accented`, set once
   in `app.config.ts`: Nuxt UI's default `bg-elevated` is the same neutral as the light-mode overlay

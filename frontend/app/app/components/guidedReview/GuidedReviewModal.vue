@@ -7,6 +7,7 @@ import type { OpenGuidedReviewInput } from '~/types/domain'
 import GuidedReviewOverview from '~/components/guidedReview/GuidedReviewOverview.vue'
 import GuidedReviewThread from '~/components/guidedReview/GuidedReviewThread.vue'
 import GuidedReviewPicker from '~/components/guidedReview/GuidedReviewPicker.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import {
   NEW_THREAD_TAB,
   isStale,
@@ -216,10 +217,14 @@ const title = computed(() =>
               :aria-selected="tab === activeTab"
               :variant="tab === activeTab ? 'soft' : 'ghost'"
               :color="tab === activeTab ? 'primary' : 'neutral'"
-              :loading="threadBusy(tab)"
               :data-testid="`guided-review-tab-${tab}`"
               @click="activeTab = tab"
             >
+              <!-- Not `:loading`: that disables the tab, and a reader switches back to a thread
+                   precisely while its reply is pending. -->
+              <template v-if="threadBusy(tab)" #leading>
+                <Spinner class="size-4 shrink-0" />
+              </template>
               <span class="max-w-48 truncate">{{ threadTitle(tab) }}</span>
             </UButton>
             <UButton

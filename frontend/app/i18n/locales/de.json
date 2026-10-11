@@ -1024,9 +1024,7 @@
       "toast": {
         "connected": "OpenRouter-Schlüssel verbunden",
         "connectFailed": "Schlüssel konnte nicht verbunden werden",
-        "rejected": "OpenRouter hat den Schlüssel abgelehnt.",
         "unreachable": "OpenRouter konnte nicht erreicht werden",
-        "connectFirst": "Verbinde zuerst einen OpenRouter-Schlüssel.",
         "saved": "OpenRouter-Katalog gespeichert",
         "saveFailed": "Katalog konnte nicht gespeichert werden"
       }
@@ -4330,7 +4328,8 @@
         "scopes": "Du wirst um folgende Berechtigungen gebeten: {scopes}",
         "fallback": "Lieber ein Token? Nutze stattdessen die Felder unten.",
         "failed": "Die Anmeldung bei {source} konnte nicht gestartet werden"
-      }
+      },
+      "disconnectFailed": "Trennen nicht möglich"
     },
     "spawn": {
       "title": "Struktur-Vorschau",
@@ -4478,7 +4477,8 @@
       "updateConnection": "Verbindung aktualisieren",
       "connect": "Verbinden",
       "oauthButton": "Mit {label} verbinden",
-      "oauthOr": "oder mit einem API-Schlüssel verbinden"
+      "oauthOr": "oder mit einem API-Schlüssel verbinden",
+      "disconnectFailed": "Trennen nicht möglich"
     }
   },
   "bugHunt": {

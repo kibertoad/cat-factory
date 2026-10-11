@@ -196,8 +196,12 @@ const REFUSAL_KEYS: Partial<Record<TaskSourceReadReason, string>> = {
   board_from_service: 'bugHunt.refusal.boardFromService',
   missing_board: 'bugHunt.refusal.missingBoard',
 }
+/** The translated key for a refusal reason this modal recognises, or undefined. */
+function refusalKey(reason: string | null): string | undefined {
+  return reason ? REFUSAL_KEYS[reason as TaskSourceReadReason] : undefined
+}
 function refusalText(reason: string | null, fallback: string | null): string | null {
-  const key = reason ? REFUSAL_KEYS[reason as TaskSourceReadReason] : undefined
+  const key = refusalKey(reason)
   return key ? t(key) : fallback
 }
 
@@ -281,9 +285,7 @@ async function runHunt() {
   if (attempt === 'failed' && !huntNeedsRepo.value) {
     // A recognised refusal reads in translated copy; anything else is the backend's prose, which
     // is detail behind the disclosure rather than the headline.
-    const reasonKey = hunt.huntErrorReason
-      ? REFUSAL_KEYS[hunt.huntErrorReason as TaskSourceReadReason]
-      : undefined
+    const reasonKey = refusalKey(hunt.huntErrorReason)
     if (reasonKey) actionToast.error('bugHunt.huntFailed', { description: t(reasonKey) })
     else presentReported(hunt.huntError, 'bugHunt.huntFailed')
   }

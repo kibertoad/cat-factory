@@ -155,9 +155,9 @@ async function connectKey() {
         if (scope === 'workspace') await apiKeys.removeWorkspaceKey(created.id).catch(() => {})
         else await apiKeys.removeUserKey(created.id).catch(() => {})
       }
-      presentReported(store.refreshError, 'settings.openRouterCatalog.toast.connectFailed', {
-        descriptionKey: 'settings.openRouterCatalog.toast.rejected',
-      })
+      // `!reachable` covers an outage or a network fault as well as a refused key, and the probe
+      // does not say which, so the description stays the generic "it reported a failure" line.
+      presentReported(store.refreshError, 'settings.openRouterCatalog.toast.connectFailed')
       return
     }
     keyValue.value = ''
@@ -174,9 +174,7 @@ async function refresh() {
   if (!workspace.workspaceId) return
   const result = await store.refresh(workspace.workspaceId)
   if (!result.reachable) {
-    presentReported(store.refreshError, 'settings.openRouterCatalog.toast.unreachable', {
-      descriptionKey: 'settings.openRouterCatalog.toast.connectFirst',
-    })
+    presentReported(store.refreshError, 'settings.openRouterCatalog.toast.unreachable')
   }
 }
 

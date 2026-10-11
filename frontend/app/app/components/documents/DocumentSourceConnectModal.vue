@@ -97,7 +97,12 @@ async function disconnect() {
   if (!source.value) return
   const label = descriptor.value?.label ?? t('documents.connect.sourceFallback')
   if (!(await confirmAction('disconnect', label))) return
-  await documents.disconnect(source.value)
+  try {
+    await documents.disconnect(source.value)
+  } catch (e) {
+    present(e, 'documents.connect.disconnectFailed')
+    return
+  }
   actionToast.success('documents.connect.disconnected', { params: { source: label } })
   ui.closeDocumentConnect()
 }

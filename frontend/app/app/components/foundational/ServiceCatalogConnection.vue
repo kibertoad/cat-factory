@@ -155,7 +155,9 @@ async function probe() {
     try {
       const result = await catalog.probeServiceCatalog(buildInput())
       if (result.ok) {
-        actionToast.success('serviceCatalog.toast.probeOk', { description: result.message })
+        // The probe's `message` is backend prose: on a failure it is detail behind the disclosure,
+        // and on a success the translated title is the whole of what the reader needs.
+        actionToast.success('serviceCatalog.toast.probeOk')
       } else {
         presentReported(result.message, 'serviceCatalog.toast.probeFailed')
       }

@@ -105,7 +105,7 @@ async function detect() {
     if (result.status !== 'ok') {
       // The backend distinguishes "no repo linked" from "the repo could not be read"; say
       // which, because they send the operator to different places.
-      actionToast.warning(
+      actionToast.error(
         result.status === 'repo_unavailable'
           ? 'inspector.validationChecks.detect.repo_unavailable'
           : 'inspector.validationChecks.detect.failed',

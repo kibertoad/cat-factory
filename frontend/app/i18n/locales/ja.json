@@ -3894,9 +3894,7 @@
       "toast": {
         "connected": "OpenRouter キーを接続しました",
         "connectFailed": "キーを接続できませんでした",
-        "rejected": "OpenRouter がキーを拒否しました。",
         "unreachable": "OpenRouter に接続できませんでした",
-        "connectFirst": "まず OpenRouter キーを接続してください。",
         "saved": "OpenRouter カタログを保存しました",
         "saveFailed": "カタログを保存できませんでした"
       }
@@ -4861,7 +4859,8 @@
         "scopes": "次の権限が求められます: {scopes}",
         "fallback": "トークンを使いますか？下のフィールドをご利用ください。",
         "failed": "{source} へのサインインを開始できませんでした"
-      }
+      },
+      "disconnectFailed": "切断できませんでした"
     },
     "spawn": {
       "title": "構造をプレビュー",
@@ -5009,7 +5008,8 @@
       "updateConnection": "接続を更新",
       "connect": "接続",
       "oauthButton": "{label} で接続",
-      "oauthOr": "または API キーで接続"
+      "oauthOr": "または API キーで接続",
+      "disconnectFailed": "切断できませんでした"
     }
   },
   "bugHunt": {

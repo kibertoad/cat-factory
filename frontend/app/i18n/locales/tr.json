@@ -3894,9 +3894,7 @@
       "toast": {
         "connected": "OpenRouter anahtarı bağlandı",
         "connectFailed": "Anahtar bağlanamadı",
-        "rejected": "OpenRouter anahtarı reddetti.",
         "unreachable": "OpenRouter'a ulaşılamadı",
-        "connectFirst": "Önce bir OpenRouter anahtarı bağlayın.",
         "saved": "OpenRouter kataloğu kaydedildi",
         "saveFailed": "Katalog kaydedilemedi"
       }
@@ -4861,7 +4859,8 @@
         "scopes": "Şu izinler istenecek: {scopes}",
         "fallback": "Belirteç mi tercih edersin? Aşağıdaki alanları kullan.",
         "failed": "{source} oturumu başlatılamadı"
-      }
+      },
+      "disconnectFailed": "Bağlantı kesilemedi"
     },
     "spawn": {
       "title": "Yapıyı önizle",
@@ -5009,7 +5008,8 @@
       "updateConnection": "Bağlantıyı güncelle",
       "connect": "Bağla",
       "oauthButton": "{label} ile bağlan",
-      "oauthOr": "veya bir API anahtarıyla bağlan"
+      "oauthOr": "veya bir API anahtarıyla bağlan",
+      "disconnectFailed": "Bağlantı kesilemedi"
     }
   },
   "bugHunt": {

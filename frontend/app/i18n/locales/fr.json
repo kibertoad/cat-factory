@@ -3753,9 +3753,7 @@
       "toast": {
         "connected": "Clé OpenRouter connectée",
         "connectFailed": "Impossible de connecter la clé",
-        "rejected": "OpenRouter a rejeté la clé.",
         "unreachable": "Impossible de joindre OpenRouter",
-        "connectFirst": "Connectez d'abord une clé OpenRouter.",
         "saved": "Catalogue OpenRouter enregistré",
         "saveFailed": "Impossible d'enregistrer le catalogue"
       }
@@ -4861,7 +4859,8 @@
         "scopes": "Les autorisations demandées seront : {scopes}",
         "fallback": "Vous préférez un jeton ? Utilisez plutôt les champs ci-dessous.",
         "failed": "Impossible de lancer la connexion à {source}"
-      }
+      },
+      "disconnectFailed": "Impossible de déconnecter"
     },
     "spawn": {
       "title": "Aperçu de la structure",
@@ -5009,7 +5008,8 @@
       "updateConnection": "Mettre à jour la connexion",
       "connect": "Connecter",
       "oauthButton": "Se connecter avec {label}",
-      "oauthOr": "ou connectez-vous avec une clé API"
+      "oauthOr": "ou connectez-vous avec une clé API",
+      "disconnectFailed": "Impossible de déconnecter"
     }
   },
   "bugHunt": {

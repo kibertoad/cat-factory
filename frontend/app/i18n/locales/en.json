@@ -4061,9 +4061,7 @@
       "toast": {
         "connected": "OpenRouter key connected",
         "connectFailed": "Could not connect key",
-        "rejected": "OpenRouter rejected the key.",
         "unreachable": "Could not reach OpenRouter",
-        "connectFirst": "Connect an OpenRouter key first.",
         "saved": "OpenRouter catalog saved",
         "saveFailed": "Could not save catalog"
       }
@@ -5046,7 +5044,8 @@
         "scopes": "You will be asked to grant: {scopes}",
         "fallback": "Prefer a token? Use the fields below instead.",
         "failed": "Could not start the {source} sign-in"
-      }
+      },
+      "disconnectFailed": "Could not disconnect"
     },
     "spawn": {
       "title": "Preview structure",
@@ -5197,7 +5196,8 @@
       "updateConnection": "Update connection",
       "connect": "Connect",
       "oauthButton": "Connect with {label}",
-      "oauthOr": "or connect with an API key"
+      "oauthOr": "or connect with an API key",
+      "disconnectFailed": "Could not disconnect"
     }
   },
   "bugHunt": {

@@ -226,6 +226,13 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                   </span>
                 </div>
               </template>
+              <!-- UTable draws its loading row only through this slot; without it an empty first
+                   load falls through to #empty and claims there is no history. -->
+              <template #loading>
+                <div class="space-y-2">
+                  <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
+                </div>
+              </template>
               <template #empty>
                 <EmptyState compact icon="i-lucide-history" :title="t('kaizen.history.empty')" />
               </template>

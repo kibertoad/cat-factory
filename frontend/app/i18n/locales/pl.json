@@ -3753,9 +3753,7 @@
       "toast": {
         "connected": "Klucz OpenRouter połączony",
         "connectFailed": "Nie udało się połączyć klucza",
-        "rejected": "OpenRouter odrzucił klucz.",
         "unreachable": "Nie udało się połączyć z OpenRouter",
-        "connectFirst": "Najpierw połącz klucz OpenRouter.",
         "saved": "Katalog OpenRouter zapisany",
         "saveFailed": "Nie udało się zapisać katalogu"
       }
@@ -4861,7 +4859,8 @@
         "scopes": "Zostaniesz poproszony o uprawnienia: {scopes}",
         "fallback": "Wolisz token? Skorzystaj z pól poniżej.",
         "failed": "Nie udało się rozpocząć logowania do {source}"
-      }
+      },
+      "disconnectFailed": "Nie można rozłączyć"
     },
     "spawn": {
       "title": "Podgląd struktury",
@@ -5009,7 +5008,8 @@
       "updateConnection": "Zaktualizuj połączenie",
       "connect": "Połącz",
       "oauthButton": "Połącz z {label}",
-      "oauthOr": "lub połącz za pomocą klucza API"
+      "oauthOr": "lub połącz za pomocą klucza API",
+      "disconnectFailed": "Nie można rozłączyć"
     }
   },
   "bugHunt": {
