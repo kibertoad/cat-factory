@@ -1418,8 +1418,7 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   from a sentence and a service, titled by the first sentence; pipeline, merge policy and model
   preset sit behind one disclosure that opens by itself when a value is set (`showOverrideField`).
   It rebuilds no other kind: "More kinds" and "Attach context" hand the text to `AddTaskModal`,
-  which stays the one home of those rules. Both share `utils/reviewFriction.ts` for the review-debt
-  409.
+  which stays the one home of those rules. Both share `utils/reviewFriction.ts` for the review-debt 409.
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task

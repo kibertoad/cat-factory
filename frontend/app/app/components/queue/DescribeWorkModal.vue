@@ -62,8 +62,7 @@ onModalOpen(
     // The service the reader came from, else the only one there is. With several and no context,
     // nothing is preselected: guessing a service once pushed a task into the wrong repository.
     serviceId.value =
-      ui.describeWorkServiceId ??
-      (services.value.length === 1 ? services.value[0]!.id : undefined)
+      ui.describeWorkServiceId ?? (services.value.length === 1 ? services.value[0]!.id : undefined)
   },
 )
 
