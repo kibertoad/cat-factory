@@ -39,6 +39,7 @@ test.describe('describe new work', () => {
     await dialog.getByTestId('describe-work-text').fill(text)
     await dialog.getByTestId('describe-work-service').click()
     await page.getByRole('option', { name: 'Auth Service' }).click()
+    await dialog.getByTestId('describe-work-kind-bug').click()
     await dialog.getByTestId('describe-work-more-kinds').click()
 
     const full = page.getByTestId('add-task-modal')
@@ -47,8 +48,10 @@ test.describe('describe new work', () => {
     await expect(full.getByTestId('add-task-title')).toHaveValue(
       'Spike: compare two rate-limit libraries',
     )
-    // Nothing the person wrote is dropped: the whole text is the description.
+    // Nothing the person wrote or chose is dropped: the whole text is the description, and the
+    // kind they picked is the one selected.
     await expect(full.getByTestId('add-task-description')).toHaveValue(text)
+    await expect(full.getByTestId('task-type-bug')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('closing with typed text asks first, and keeping it keeps the text', async ({

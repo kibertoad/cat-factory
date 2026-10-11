@@ -35,12 +35,16 @@ function firstSentence(line: string): string {
   for (let i = 0; i < chars.length; i++) {
     const c = chars[i]!
     const next = chars[i + 1]
+    // A run of dots ("this... later") is ONE mark: only its last dot can end the sentence, and
+    // the whole run is cut with it.
+    if (c === '.' && next === '.') continue
     const ends =
       FULL_WIDTH_END.has(c) || ('.!?'.includes(c) && (next === undefined || /\s/.test(next)))
     if (!ends) continue
     if (c === '.' && isAbbreviation(chars.slice(0, i).join(''))) continue
-    const sentence = chars.slice(0, KEPT_END.has(c) ? i + 1 : i).join('')
-    return sentence.trim()
+    let end = KEPT_END.has(c) ? i + 1 : i
+    while (c === '.' && end > 0 && chars[end - 1] === '.') end--
+    return chars.slice(0, end).join('').trim()
   }
   return line
 }

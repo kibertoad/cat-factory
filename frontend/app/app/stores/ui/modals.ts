@@ -27,6 +27,14 @@ export interface AddTaskPrefill {
   description?: string
   /** Context items staged on the new task (e.g. the source issue), linked once created. */
   context?: PendingContext[]
+  /**
+   * Choices a person already made on another surface (the one-sentence intake), carried over so
+   * the hand-off does not quietly reset them. Absent means the form's own defaults.
+   */
+  taskType?: 'feature' | 'bug'
+  pipelineId?: string
+  riskPolicyId?: string
+  modelPresetId?: string
 }
 
 /**
@@ -90,6 +98,11 @@ export interface ReviewFrictionModalContext {
    * started a second pipeline run against the same request.
    */
   pending?: () => boolean
+  /**
+   * Close the form that raised the friction. "Go review" and each debt row leave for a waiting
+   * task, and the form must not stay open over it; only the opener knows which form it is.
+   */
+  onLeave: () => void
 }
 
 /** Clears both hub came-from markers; injected into the slices whose `open*` handlers reset them. */

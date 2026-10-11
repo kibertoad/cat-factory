@@ -43,6 +43,13 @@ describe('splitDescribedWork', () => {
     )
   })
 
+  it('treats a run of dots as one mark', () => {
+    expect(splitDescribedWork('Fix this... later, after the release.').title).toBe('Fix this')
+    expect(splitDescribedWork('Use a cache, e.g. Redis, for sessions.').title).toBe(
+      'Use a cache, e.g. Redis, for sessions',
+    )
+  })
+
   it('ends a sentence at a full-width mark, with or without a space after it', () => {
     const text = '修复登录重定向。记录每次登录。'
     expect(splitDescribedWork(text)).toEqual({ title: '修复登录重定向', description: text })

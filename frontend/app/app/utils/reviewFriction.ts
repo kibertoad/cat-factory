@@ -15,12 +15,13 @@ export function isReviewDebtConflict(conflict: ParsedConflict | null): conflict 
  * Shared by every surface that creates a task, so the friction reads the same whichever form
  * raised it. `retry` re-submits with `acknowledgeReviewDebt` and is offered only on the soft
  * `warn` tier; `pending` is a GETTER over the opener's own in-flight flag, for the reason the
- * context type documents.
+ * context type documents; `leave` closes the opener when the person leaves to review.
  */
 export function reviewFrictionContext(
   conflict: ParsedConflict,
   retry: () => void,
   pending: () => boolean,
+  leave: () => void,
 ): ReviewFrictionModalContext {
   const details = conflict.details
   const rawDebt = Array.isArray(details.debt) ? details.debt : []
@@ -41,5 +42,6 @@ export function reviewFrictionContext(
     debt,
     onConfirm: isWarn ? retry : null,
     pending,
+    onLeave: leave,
   }
 }

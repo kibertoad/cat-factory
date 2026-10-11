@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { NAV_CONTRIBUTIONS, navItemVisible } from '~/modular/nav-contributions'
+import { createNavGates } from '~/modular/nav-gates'
 import type { QueueEntry } from '~/utils/queueSections'
 import QueueCard from '~/components/queue/QueueCard.vue'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
@@ -28,7 +30,6 @@ const doneSince = computed(() => {
 })
 const queueStore = useWorkspaceQueueStore()
 const ui = useUiStore()
-const access = useWorkspaceAccess()
 
 const sections = computed(() => queueStore.queue.sections)
 const doneOpen = ref(false)
@@ -67,6 +68,12 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
   in_flight: 'text-primary',
   ready_to_merge: 'text-success',
 }
+
+// The header button is the nav entry's twin, so it follows that entry's visibility rule (board
+// write, and a service to put the task in) rather than a copy of it.
+const navGates = createNavGates()
+const describeWorkEntry = NAV_CONTRIBUTIONS.find((c) => c.id === 'describe-work')!
+const canDescribeWork = computed(() => navItemVisible(describeWorkEntry, navGates))
 </script>
 
 <template>
@@ -100,11 +107,11 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
         <NotificationsInbox />
         <!-- The one-sentence intake, opened on the service the queue is filtered to, if any. -->
         <UButton
-          v-if="access.canWriteBoard.value"
+          v-if="canDescribeWork"
           icon="i-lucide-plus"
           size="sm"
           data-testid="queue-describe-work"
-          @click="ui.openDescribeWork(queueStore.serviceFilter)"
+          @click="ui.openDescribeWork(queueStore.activeFilter)"
         >
           {{ t('queue.describeWork') }}
         </UButton>

@@ -527,6 +527,8 @@ function defaultPipelineIdFor(type: TaskTypeChoice): string {
   return offered ? preset : ''
 }
 
+// Set while a prefill's type is being seeded with a carried pipeline (see `onModalOpen` below).
+let seedingPrefill = false
 watch(taskType, (next) => {
   const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
   // A custom type owns a fresh field bag on every switch (its descriptors differ per type), seeded
@@ -534,6 +536,10 @@ watch(taskType, (next) => {
   customFieldValues.value = descriptorFieldDefaults(custom?.fields ?? [])
   // An unresolvable preset leaves the current selection alone rather than blanking it: a type
   // switch is an edit to a form the user is already filling in, not a reset.
+  if (seedingPrefill) {
+    seedingPrefill = false
+    return
+  }
   const preset = defaultPipelineIdFor(next)
   if (preset) pipelineId.value = preset
 })
@@ -668,13 +674,23 @@ onModalOpen(open, () => {
   agentConfigValues.value = {}
   pendingContext.value = []
   // Seed from a prefill when opened from another surface (e.g. "create task from
-  // issue" sets the title + stages the issue as linked context). Pipeline / preset
-  // are intentionally left at their defaults so the user confirms them here.
+  // issue" sets the title + stages the issue as linked context). Pipeline / preset stay at their
+  // defaults unless the opener carries a choice the person already made (the one-sentence
+  // intake's kind and overrides), which the hand-off must not reset.
   const prefill = ui.addTaskPrefill
   if (prefill) {
     if (prefill.title) title.value = prefill.title
     if (prefill.description) description.value = prefill.description
     if (prefill.context?.length) pendingContext.value = [...prefill.context]
+    if (prefill.taskType && prefill.taskType !== taskType.value) {
+      taskType.value = prefill.taskType
+      // The type watcher runs after this block and would replace a carried pipeline with the
+      // new type's default; a seeded type is not the edit that watcher is for.
+      seedingPrefill = !!prefill.pipelineId
+    }
+    if (prefill.pipelineId) pipelineId.value = prefill.pipelineId
+    if (prefill.riskPolicyId) riskPolicyId.value = prefill.riskPolicyId
+    if (prefill.modelPresetId) modelPresetId.value = prefill.modelPresetId
   }
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
@@ -840,6 +856,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
           conflict,
           () => void submitCreate(true),
           () => saving.value,
+          () => ui.closeAddTask(),
         ),
       )
       return
@@ -942,6 +959,7 @@ function createRefusalMessage(error: unknown): string | null {
                   :icon="ty.icon"
                   size="xs"
                   :title="ty.description"
+                  :aria-pressed="taskType === ty.value"
                   :data-testid="`task-type-${ty.value}`"
                   @click="
                     () => {

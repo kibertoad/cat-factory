@@ -24,7 +24,6 @@ import { showOverrideField } from '~/utils/uiMode'
 const { t } = useI18n()
 const board = useBoardStore()
 const ui = useUiStore()
-const execution = useExecutionStore()
 const pipelines = usePipelinesStore()
 const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
@@ -33,6 +32,7 @@ const uiMode = useUiModeStore()
 const toast = useToast()
 const { present } = usePipelineErrorToast()
 const pipelineFor = useStartPipelineResolver()
+const { startTask } = useStartWithFeedback()
 
 const text = ref('')
 const serviceId = ref<string | undefined>(undefined)
@@ -57,8 +57,15 @@ onModalOpen(
     modelPresetId.value = ''
     // The service the reader came from, else the only one there is. With several and no context,
     // nothing is preselected: guessing a service once pushed a task into the wrong repository.
+    // The opener's service is taken only when this dialog offers it: a document repository is a
+    // frame too, and the queue's filter can name one, but it takes no feature or bug.
+    const asked = ui.describeWorkServiceId
     serviceId.value =
-      ui.describeWorkServiceId ?? (services.value.length === 1 ? services.value[0]!.id : undefined)
+      asked && services.value.some((s) => s.id === asked)
+        ? asked
+        : services.value.length === 1
+          ? services.value[0]!.id
+          : undefined
   },
 )
 
@@ -155,9 +162,17 @@ const modelPresetValue = computed({
 function openFullForm() {
   if (!service.value) return
   const { title, description } = split.value
-  // Nothing is discarded: the text moves to the full form, so this closes without the guard.
+  // Nothing is discarded: the text and every choice move to the full form, so this closes without
+  // the guard.
   ui.closeDescribeWork()
-  ui.openAddTask(service.value.id, { title, description })
+  ui.openAddTask(service.value.id, {
+    title,
+    description,
+    taskType: kind.value,
+    ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
+    ...(riskPolicyId.value ? { riskPolicyId: riskPolicyId.value } : {}),
+    ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
+  })
 }
 
 async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
@@ -177,11 +192,10 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
     if (!block) return
     ui.closeReviewFriction()
     ui.closeDescribeWork()
-    const pipeline = startNow ? pipelineFor(block) : undefined
-    // `execution.start` reports a refused start itself. A start that did not happen for any other
-    // reason (no pipeline to run, a cancelled credential prompt) still added the task, so the
-    // reader is told it is in the queue under "Not started".
-    const started = pipeline ? await execution.start(block.id, pipeline) : false
+    // The card's own Start, with its feedback (started, sandboxed, no pipeline). A start that did
+    // not happen still added the task, so the reader is told it is in the queue under "Not
+    // started".
+    const started = startNow ? await startTask(block) : false
     if (!started) {
       toast.add({
         title: t('describeWork.addedToast', { title: block.title }),
@@ -197,6 +211,7 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
           conflict,
           () => void submit(startNow, true),
           () => saving.value,
+          () => ui.closeDescribeWork(),
         ),
       )
       return
