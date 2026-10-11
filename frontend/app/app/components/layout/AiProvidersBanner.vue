@@ -8,6 +8,7 @@ import { computed } from 'vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const remedies = useSetupRemedies()
 const { ready, hasUsableModel, defaultPresetBroken } = useAiReadiness()
 
 const showSetup = computed(() => ready.value && !hasUsableModel.value && !ui.aiSetupDismissed)
@@ -47,7 +48,7 @@ const show = computed(() => showSetup.value || showPreset.value)
               {{ t('layout.aiProvidersBanner.setup.body') }}
             </p>
             <div class="mt-4">
-              <UButton color="warning" icon="i-lucide-settings" @click="ui.openAiProviderSetup()">
+              <UButton color="warning" icon="i-lucide-settings" @click="remedies.openModelSetup()">
                 {{ t('layout.aiProvidersBanner.setup.action') }}
               </UButton>
             </div>
@@ -88,7 +89,7 @@ const show = computed(() => showSetup.value || showPreset.value)
                 size="sm"
                 color="warning"
                 icon="i-lucide-cpu"
-                @click="ui.openAiPresetMismatch()"
+                @click="remedies.openPresetMismatch()"
               >
                 {{ t('layout.aiProvidersBanner.preset.action') }}
               </UButton>

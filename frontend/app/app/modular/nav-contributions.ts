@@ -211,6 +211,7 @@ export const NAV_ACTIONS = [
   'foundationalServices',
   'mergeThresholds',
   'workspaceSettings',
+  'setupChecklist',
   'modelConfiguration',
   'serviceFragmentDefaults',
   'localModels',
@@ -557,6 +558,30 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       order: 30,
       labelKey: 'layout.commandBar.cmd.workspaceSettings',
       keywordsKey: 'layout.commandBar.keywords.workspaceSettings',
+    },
+  },
+  {
+    // Every prerequisite for "a task can run and merge", composed from the probes the setup
+    // banners already read (issue #2258). First in Configuration, because a workspace that cannot
+    // run a task yet needs it before anything else there. Both tiers: getting to green is not an
+    // advanced job. Gated on either permission, since its rows open both kinds of surface. Not
+    // `intake`: the designer surface never configures the platform, and the setup banners give it
+    // no actionable card either. Each row still applies the banners' per-owner rule
+    // (`utils/setupAudience.ts`), because holding one of these permissions does not make a caller
+    // the owner of every gap.
+    id: 'setup-checklist',
+    labelKey: 'nav.setupChecklist',
+    icon: 'i-lucide-list-checks',
+    surfaces: S('sidebar', 'command'),
+    gate: (g) => g.canManageIntegrations || g.canManageSettings,
+    action: 'setupChecklist',
+    testId: 'nav-setup-checklist',
+    sidebar: { group: 'configuration', order: 5 },
+    command: {
+      group: 'workspace',
+      order: 120,
+      labelKey: 'layout.commandBar.cmd.setupChecklist',
+      keywordsKey: 'layout.commandBar.keywords.setupChecklist',
     },
   },
   {

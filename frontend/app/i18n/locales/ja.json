@@ -150,7 +150,8 @@
     "reports": "レポート",
     "foundationalServices": "基盤サービス",
     "tutorials": "チュートリアル",
-    "help": "ヘルプ"
+    "help": "ヘルプ",
+    "setupChecklist": "セットアップ チェックリスト"
   },
   "board": {
     "toast": {
@@ -2646,6 +2647,7 @@
         "chooseRole": "役割を変更",
         "foundationalServices": "基盤サービス",
         "notificationSettings": "通知ルーティングを管理",
+        "setupChecklist": "セットアップ チェックリスト",
         "queueView": "キュー ビューを開く",
         "boardView": "ボード ビューを開く"
       },
@@ -2676,6 +2678,7 @@
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
         "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
         "notificationSettings": "通知 メール ルーティング チャネル 受信箱",
+        "setupChecklist": "セットアップ チェックリスト setup ランナー モデル github ストレージ 環境",
         "queueView": "キュー ビュー 対応待ち 一覧",
         "boardView": "ボード キャンバス マップ ビュー 計画",
         "describeWork": "新しい作業 説明 タスク 追加 作成 機能 バグ"
@@ -8742,6 +8745,73 @@
         "presetShorthand": "このリンクは、このアプリが知らない Nuxt UI エディターのプリセット名を指しています。エディターでいずれかの設定を変えてリンクにテーマ全体を含め、もう一度コピーしてください。",
         "unsupportedVersion": "このテーマは、このアプリが対応していない新しいエディター形式で作成されています。"
       }
+    }
+  },
+  "setup": {
+    "title": "セットアップ",
+    "progress": "{total} 件中 {done} 件完了",
+    "intro": "このワークスペースでタスクを実行してマージするために必要なものです。",
+    "required": "必須",
+    "optional": "任意",
+    "action": {
+      "change": "変更",
+      "connect": "設定",
+      "fix": "修正",
+      "review": "確認",
+      "retry": "再試行"
+    },
+    "rows": {
+      "checking": "確認中…",
+      "notNeeded": "このデプロイでは使用しません。",
+      "model": {
+        "title": "モデル",
+        "done": "利用できるモデルがあります。",
+        "missing": "利用可能なモデルがありません。プロバイダーを接続するまで、どのエージェントも実行できません。"
+      },
+      "sourceControl": {
+        "title": "ソース管理",
+        "done": "接続済み。エージェントはブランチをプッシュし、プルリクエストを作成できます。",
+        "missing": "未接続。エージェントはプルリクエストを作成できません。"
+      },
+      "agentExecutor": {
+        "title": "エージェントの実行場所",
+        "done": "ランナーが設定されています。",
+        "missing": "ランナーが設定されていません。接続するまで何も実行できません。",
+        "notNeeded": "このデプロイでは、ランナーなしでエージェントを実行します。"
+      },
+      "ephemeralEnvironments": {
+        "title": "テスト環境",
+        "done": "設定済み。テスターはライブプレビューを使用できます。",
+        "missing": "未設定。ライブプレビューが必要なテスターは実行されません。それ以外のエージェントは実行されます。"
+      },
+      "binaryStorage": {
+        "title": "スクリーンショットの保存先",
+        "done": "設定済み。ビジュアルチェックは有効です。",
+        "missing": "未設定。ビジュアルチェックは無効です。"
+      }
+    },
+    "causes": {
+      "unreachable": "設定済みですが、現在到達できません。",
+      "incomplete": "接続済みですが、必須の設定が不足しています。",
+      "rejected": "GitHub がアクセストークンを拒否しました。",
+      "underscoped": "アクセストークンでは、プッシュもプルリクエストの作成もできません。",
+      "presetBroken": "既定のモデルプリセットが、利用できないモデルを指しています。",
+      "probeFailed": "確認の応答がありませんでした。",
+      "notReported": "このデプロイメントはこの項目を報告しません。"
+    },
+    "also": {
+      "title": "その他",
+      "pipelines": "パイプライン",
+      "riskPolicies": "マージポリシー",
+      "modelPresets": "モデルプリセット",
+      "counts": {
+        "repair": "修復が必要: {count} 件",
+        "outdated": "古いもの: {count} 件",
+        "new": "新規: {count} 件"
+      },
+      "settings": "設定と接続",
+      "workspaceSettings": "ワークスペース設定",
+      "integrations": "連携"
     }
   },
   "queue": {

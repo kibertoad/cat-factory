@@ -65,6 +65,8 @@ const ui = useUiStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
 const { actor } = useSetupActor()
+// Where each area is configured: the map the setup checklist opens through too.
+const remedies = useSetupRemedies()
 
 // Severity order: no executor blocks EVERY agent, so it leads; a missing test environment blocks
 // only testing agents; missing storage only degrades the UI-tester's screenshots.
@@ -73,32 +75,29 @@ const AREAS: InfraSetupArea[] = ['agentExecutor', 'ephemeralEnvironments', 'bina
 // Exhaustive per-area presentation (an exhaustive `Record<InfraSetupArea, …>`, so adding an area
 // without a meta entry fails typecheck — the tier-2 guard). The i18n keys are resolved
 // dynamically (`t(AREA_META[area].titleKey)`), so tier-1 typed-key checking doesn't cover them;
-// the `i18n:check` drift guard (tier 3) catches any that are absent from the catalog. `action`
-// deep-links into the relevant setup surface.
+// the `i18n:check` drift guard (tier 3) catches any that are absent from the catalog. The action
+// opens the area's setup surface through `useSetupRemedies`.
 const AREA_META: Record<
   InfraSetupArea,
-  { icon: string; titleKey: string; bodyKey: string; actionKey: string; onConfigure: () => void }
+  { icon: string; titleKey: string; bodyKey: string; actionKey: string }
 > = {
   agentExecutor: {
     icon: 'i-lucide-server-cog',
     titleKey: 'layout.infraSetupBanner.agentExecutor.title',
     bodyKey: 'layout.infraSetupBanner.agentExecutor.body',
     actionKey: 'layout.infraSetupBanner.agentExecutor.action',
-    onConfigure: () => ui.openProviderConnection('runner-pool'),
   },
   ephemeralEnvironments: {
     icon: 'i-lucide-flask-conical',
     titleKey: 'layout.infraSetupBanner.ephemeralEnvironments.title',
     bodyKey: 'layout.infraSetupBanner.ephemeralEnvironments.body',
     actionKey: 'layout.infraSetupBanner.ephemeralEnvironments.action',
-    onConfigure: () => ui.openProviderConnection('environment'),
   },
   binaryStorage: {
     icon: 'i-lucide-hard-drive',
     titleKey: 'layout.infraSetupBanner.binaryStorage.title',
     bodyKey: 'layout.infraSetupBanner.binaryStorage.body',
     actionKey: 'layout.infraSetupBanner.binaryStorage.action',
-    onConfigure: () => ui.openContentStorageSettings(),
   },
 }
 
@@ -291,7 +290,7 @@ function dismissMenu(card: Pick<AreaCard, 'area' | 'kind'>): DropdownMenuItem[][
                 :color="card.kind === 'outage' ? 'error' : 'warning'"
                 icon="i-lucide-settings"
                 :data-testid="`infra-setup-configure-${card.area}`"
-                @click="AREA_META[card.area].onConfigure()"
+                @click="remedies.openInfraArea(card.area)"
               >
                 {{
                   card.kind === 'outage'

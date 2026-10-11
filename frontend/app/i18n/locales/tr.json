@@ -150,7 +150,8 @@
     "reports": "Raporlar",
     "foundationalServices": "Temel hizmetler",
     "tutorials": "Eğitimler",
-    "help": "Yardım"
+    "help": "Yardım",
+    "setupChecklist": "Kurulum kontrol listesi"
   },
   "board": {
     "toast": {
@@ -2646,6 +2647,7 @@
         "chooseRole": "Rolünüzü değiştirin",
         "foundationalServices": "Temel hizmetler",
         "notificationSettings": "Bildirim yönlendirmesini yönet",
+        "setupChecklist": "Kurulum kontrol listesi",
         "queueView": "Kuyruk görünümünü aç",
         "boardView": "Pano görünümünü aç"
       },
@@ -2676,6 +2678,7 @@
         "tutorial": "eğitim tur rehber yardım öğren tanıtım",
         "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog",
         "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu",
+        "setupChecklist": "kurulum kontrol listesi setup runner model github depolama ortam",
         "queueView": "kuyruk görünüm liste bekleyen",
         "boardView": "pano tuval harita görünüm planlama",
         "describeWork": "yeni iş tanımla görev ekle oluştur özellik hata"
@@ -8742,6 +8745,73 @@
         "presetShorthand": "Bu bağlantı, bu uygulamanın tanımadığı bir Nuxt UI düzenleyici ön ayarını adlandırıyor. Bağlantının tüm temayı taşıması için düzenleyicide herhangi bir ayarı değiştirin ve yeniden kopyalayın.",
         "unsupportedVersion": "Bu tema, bu uygulamanın anladığından daha yeni bir düzenleyici biçimiyle oluşturulmuş."
       }
+    }
+  },
+  "setup": {
+    "title": "Kurulum",
+    "progress": "{done} / {total} tamamlandı",
+    "intro": "Bu çalışma alanının bir görevi çalıştırıp birleştirebilmesi için gerekenler.",
+    "required": "zorunlu",
+    "optional": "isteğe bağlı",
+    "action": {
+      "change": "Değiştir",
+      "connect": "Kur",
+      "fix": "Düzelt",
+      "review": "İncele",
+      "retry": "Yeniden dene"
+    },
+    "rows": {
+      "checking": "Denetleniyor…",
+      "notNeeded": "Bu dağıtım bunu kullanmıyor.",
+      "model": {
+        "title": "Model",
+        "done": "Kullanılabilir bir model var.",
+        "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz."
+      },
+      "sourceControl": {
+        "title": "Kaynak denetimi",
+        "done": "Bağlı. Ajanlar dal gönderip pull request açabilir.",
+        "missing": "Bağlı değil. Ajanlar pull request açamaz."
+      },
+      "agentExecutor": {
+        "title": "Ajanların çalıştığı yer",
+        "done": "Bir runner yapılandırıldı.",
+        "missing": "Yapılandırılmış runner yok. Bir tane bağlayana kadar hiçbir şey çalışamaz.",
+        "notNeeded": "Bu dağıtım ajanları runner olmadan çalıştırıyor."
+      },
+      "ephemeralEnvironments": {
+        "title": "Test ortamları",
+        "done": "Yapılandırıldı. Test ajanları canlı önizleme kullanabilir.",
+        "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır."
+      },
+      "binaryStorage": {
+        "title": "Ekran görüntüsü depolama",
+        "done": "Yapılandırıldı. Görsel denetimler açık.",
+        "missing": "Kurulmadı. Görsel denetimler kapalı."
+      }
+    },
+    "causes": {
+      "unreachable": "Yapılandırılmış, ancak şu anda ulaşılamıyor.",
+      "incomplete": "Bağlı, ancak gerekli bir ayar eksik.",
+      "rejected": "GitHub erişim belirtecini reddetti.",
+      "underscoped": "Erişim belirteci dal gönderemiyor ve pull request açamıyor.",
+      "presetBroken": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor.",
+      "probeFailed": "Denetim yanıt vermedi.",
+      "notReported": "Bu dağıtım bunu bildirmiyor."
+    },
+    "also": {
+      "title": "Burada ayrıca",
+      "pipelines": "Pipeline'lar",
+      "riskPolicies": "Birleştirme ilkeleri",
+      "modelPresets": "Model ön ayarları",
+      "counts": {
+        "repair": "Onarılacak: {count}",
+        "outdated": "Eski: {count}",
+        "new": "Yeni: {count}"
+      },
+      "settings": "Ayarlar ve bağlantılar",
+      "workspaceSettings": "Çalışma alanı ayarları",
+      "integrations": "Entegrasyonlar"
     }
   },
   "queue": {

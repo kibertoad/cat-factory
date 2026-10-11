@@ -492,6 +492,7 @@ describe('nav grouping helpers', () => {
     expect(integrations?.items.map((i) => i.id)).toEqual(['integrations-hub'])
     const configuration = groups.find((g) => g.group === 'configuration')
     expect(configuration?.items.map((i) => i.id)).toEqual([
+      'setup-checklist',
       'workspace-settings',
       'account-settings',
       'operator-dashboard',
@@ -525,6 +526,7 @@ describe('nav grouping helpers', () => {
       'ui-role',
       'tutorial',
       'foundational-services',
+      'setup-checklist',
       'queue-view',
       'board-view',
     ])

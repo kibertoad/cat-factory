@@ -150,7 +150,8 @@
     "infrastructure": "Infraestructura",
     "foundationalServices": "Servicios fundamentales",
     "tutorials": "Tutoriales",
-    "help": "Ayuda"
+    "help": "Ayuda",
+    "setupChecklist": "Lista de configuración"
   },
   "board": {
     "toast": {
@@ -2646,6 +2647,7 @@
         "chooseRole": "Cambiar tu rol",
         "foundationalServices": "Servicios fundamentales",
         "notificationSettings": "Gestionar el enrutamiento de notificaciones",
+        "setupChecklist": "Lista de configuración",
         "queueView": "Abrir la vista de cola",
         "boardView": "Abrir la vista de tablero"
       },
@@ -2676,6 +2678,7 @@
         "tutorial": "tutorial recorrido guía ayuda aprender introducción",
         "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo",
         "notificationSettings": "notificaciones correo enrutamiento canales bandeja",
+        "setupChecklist": "configuración lista setup runner modelo github almacenamiento entorno",
         "queueView": "cola vista te necesita lista pendiente",
         "boardView": "tablero lienzo mapa vista planificar",
         "describeWork": "describir nuevo trabajo tarea añadir crear funcionalidad error"
@@ -8742,6 +8745,73 @@
         "presetShorthand": "Este enlace nombra un preajuste del editor de Nuxt UI que esta aplicación no conoce. Cambia cualquier ajuste en el editor para que el enlace lleve el tema completo y cópialo de nuevo.",
         "unsupportedVersion": "Este tema se creó con un formato del editor más nuevo del que esta aplicación entiende."
       }
+    }
+  },
+  "setup": {
+    "title": "Configuración",
+    "progress": "{done} de {total} hechas",
+    "intro": "Lo que este workspace necesita para que una tarea se ejecute y se fusione.",
+    "required": "obligatorio",
+    "optional": "opcional",
+    "action": {
+      "change": "Cambiar",
+      "connect": "Configurar",
+      "fix": "Corregir",
+      "review": "Revisar",
+      "retry": "Reintentar"
+    },
+    "rows": {
+      "checking": "Comprobando…",
+      "notNeeded": "Este despliegue no lo usa.",
+      "model": {
+        "title": "Modelo",
+        "done": "Hay un modelo disponible.",
+        "missing": "No hay ningún modelo disponible. Ningún agente puede ejecutarse hasta que conectes un proveedor."
+      },
+      "sourceControl": {
+        "title": "Control de código fuente",
+        "done": "Conectado. Los agentes pueden subir ramas y abrir pull requests.",
+        "missing": "No conectado. Los agentes no pueden abrir pull requests."
+      },
+      "agentExecutor": {
+        "title": "Dónde se ejecutan los agentes",
+        "done": "Hay un runner configurado.",
+        "missing": "No hay ningún runner configurado. Nada puede ejecutarse hasta que conectes uno.",
+        "notNeeded": "Este despliegue ejecuta agentes sin runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Entornos de prueba",
+        "done": "Configurado. Los probadores pueden usar una vista previa en vivo.",
+        "missing": "Sin configurar. Los probadores que necesitan una vista previa en vivo no se ejecutan. Los demás agentes sí."
+      },
+      "binaryStorage": {
+        "title": "Almacenamiento de capturas",
+        "done": "Configurado. Las comprobaciones visuales están activas.",
+        "missing": "Sin configurar. Las comprobaciones visuales están desactivadas."
+      }
+    },
+    "causes": {
+      "unreachable": "Configurado, pero ahora mismo no responde.",
+      "incomplete": "Conectado, pero falta un ajuste obligatorio.",
+      "rejected": "GitHub rechazó el token de acceso.",
+      "underscoped": "El token de acceso no puede subir cambios ni abrir pull requests.",
+      "presetBroken": "El preajuste de modelo predeterminado nombra un modelo que no está disponible.",
+      "probeFailed": "La comprobación no respondió.",
+      "notReported": "Este despliegue no lo informa."
+    },
+    "also": {
+      "title": "También aquí",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Políticas de fusión",
+      "modelPresets": "Preajustes de modelo",
+      "counts": {
+        "repair": "Por reparar: {count}",
+        "outdated": "Desactualizados: {count}",
+        "new": "Nuevos: {count}"
+      },
+      "settings": "Ajustes y conexiones",
+      "workspaceSettings": "Ajustes del workspace",
+      "integrations": "Integraciones"
     }
   },
   "queue": {

@@ -2774,6 +2774,7 @@
         "chooseRole": "Rolle wechseln",
         "foundationalServices": "Basisdienste",
         "notificationSettings": "Benachrichtigungs-Routing verwalten",
+        "setupChecklist": "Einrichtungs-Checkliste",
         "queueView": "Warteschlangen-Ansicht öffnen",
         "boardView": "Board-Ansicht öffnen"
       },
@@ -2804,6 +2805,7 @@
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
         "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
         "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang",
+        "setupChecklist": "einrichtung checkliste setup runner modell github speicher umgebung konfigurieren",
         "queueView": "warteschlange ansicht wartet auf dich liste",
         "boardView": "board canvas karte ansicht planen",
         "describeWork": "neue arbeit beschreiben aufgabe hinzufügen erstellen feature bug"
@@ -6299,7 +6301,8 @@
     "reports": "Berichte",
     "foundationalServices": "Basisdienste",
     "tutorials": "Tutorials",
-    "help": "Hilfe"
+    "help": "Hilfe",
+    "setupChecklist": "Einrichtungs-Checkliste"
   },
   "errors": {
     "generic": {
@@ -8742,6 +8745,73 @@
         "presetShorthand": "Dieser Link nennt eine Vorlage des Nuxt UI Editors, die diese App nicht kennt. Ändere eine beliebige Einstellung im Editor, damit der Link das ganze Design enthält, und kopiere ihn erneut.",
         "unsupportedVersion": "Dieses Design stammt aus einem neueren Editor-Format, als diese App versteht."
       }
+    }
+  },
+  "setup": {
+    "title": "Einrichtung",
+    "progress": "{done} von {total} erledigt",
+    "intro": "Was dieser Workspace braucht, damit eine Aufgabe laufen und gemergt werden kann.",
+    "required": "erforderlich",
+    "optional": "optional",
+    "action": {
+      "change": "Ändern",
+      "connect": "Einrichten",
+      "fix": "Beheben",
+      "review": "Prüfen",
+      "retry": "Erneut versuchen"
+    },
+    "rows": {
+      "checking": "Wird geprüft…",
+      "notNeeded": "Diese Bereitstellung nutzt das nicht.",
+      "model": {
+        "title": "Modell",
+        "done": "Ein Modell ist verfügbar.",
+        "missing": "Kein Modell verfügbar. Kein Agent kann laufen, bis du einen Anbieter verbindest."
+      },
+      "sourceControl": {
+        "title": "Quellcodeverwaltung",
+        "done": "Verbunden. Agenten können Branches pushen und Pull Requests öffnen.",
+        "missing": "Nicht verbunden. Agenten können keine Pull Requests öffnen."
+      },
+      "agentExecutor": {
+        "title": "Wo Agenten laufen",
+        "done": "Ein Runner ist konfiguriert.",
+        "missing": "Kein Runner konfiguriert. Nichts kann laufen, bis du einen verbindest.",
+        "notNeeded": "Diese Bereitstellung führt Agenten ohne Runner aus."
+      },
+      "ephemeralEnvironments": {
+        "title": "Testumgebungen",
+        "done": "Konfiguriert. Tester können eine Live-Vorschau nutzen.",
+        "missing": "Nicht eingerichtet. Tester, die eine Live-Vorschau brauchen, laufen nicht. Alle anderen Agenten laufen."
+      },
+      "binaryStorage": {
+        "title": "Screenshot-Speicher",
+        "done": "Konfiguriert. Visuelle Prüfungen sind aktiv.",
+        "missing": "Nicht eingerichtet. Visuelle Prüfungen sind aus."
+      }
+    },
+    "causes": {
+      "unreachable": "Eingerichtet, aber gerade nicht erreichbar.",
+      "incomplete": "Verbunden, aber eine erforderliche Einstellung fehlt.",
+      "rejected": "GitHub hat den Zugriffstoken abgelehnt.",
+      "underscoped": "Der Zugriffstoken kann weder pushen noch Pull Requests öffnen.",
+      "presetBroken": "Das Standard-Modell-Preset nennt ein Modell, das nicht verfügbar ist.",
+      "probeFailed": "Die Prüfung hat nicht geantwortet.",
+      "notReported": "Diese Bereitstellung meldet es nicht."
+    },
+    "also": {
+      "title": "Außerdem hier",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Merge-Richtlinien",
+      "modelPresets": "Modell-Presets",
+      "counts": {
+        "repair": "Zu reparieren: {count}",
+        "outdated": "Veraltet: {count}",
+        "new": "Neu: {count}"
+      },
+      "settings": "Einstellungen und Verbindungen",
+      "workspaceSettings": "Workspace-Einstellungen",
+      "integrations": "Integrationen"
     }
   },
   "queue": {

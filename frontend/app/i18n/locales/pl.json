@@ -150,7 +150,8 @@
     "infrastructure": "Infrastruktura",
     "foundationalServices": "Usługi fundamentalne",
     "tutorials": "Samouczki",
-    "help": "Pomoc"
+    "help": "Pomoc",
+    "setupChecklist": "Lista konfiguracji"
   },
   "board": {
     "toast": {
@@ -2646,6 +2647,7 @@
         "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
         "notificationSettings": "Zarządzaj routingiem powiadomień",
+        "setupChecklist": "Lista konfiguracji",
         "queueView": "Otwórz widok kolejki",
         "boardView": "Otwórz widok tablicy"
       },
@@ -2676,6 +2678,7 @@
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
         "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
+        "setupChecklist": "konfiguracja lista setup runner model github magazyn środowisko",
         "queueView": "kolejka widok lista oczekuje",
         "boardView": "tablica kanwa mapa widok planowanie",
         "describeWork": "opisz nową pracę zadanie dodaj utwórz funkcja błąd"
@@ -8742,6 +8745,73 @@
         "presetShorthand": "Ten link wskazuje ustawienie wstępne edytora Nuxt UI, którego ta aplikacja nie zna. Zmień dowolny parametr w edytorze, aby link zawierał cały motyw, i skopiuj go ponownie.",
         "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
       }
+    }
+  },
+  "setup": {
+    "title": "Konfiguracja",
+    "progress": "{done} z {total} gotowe",
+    "intro": "Czego ten workspace potrzebuje, aby zadanie mogło działać i zostać scalone.",
+    "required": "wymagane",
+    "optional": "opcjonalne",
+    "action": {
+      "change": "Zmień",
+      "connect": "Skonfiguruj",
+      "fix": "Napraw",
+      "review": "Sprawdź",
+      "retry": "Spróbuj ponownie"
+    },
+    "rows": {
+      "checking": "Sprawdzanie…",
+      "notNeeded": "To wdrożenie tego nie używa.",
+      "model": {
+        "title": "Model",
+        "done": "Model jest dostępny.",
+        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy."
+      },
+      "sourceControl": {
+        "title": "Kontrola wersji",
+        "done": "Połączono. Agenci mogą wypychać gałęzie i otwierać pull requesty.",
+        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów."
+      },
+      "agentExecutor": {
+        "title": "Gdzie działają agenci",
+        "done": "Runner jest skonfigurowany.",
+        "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
+        "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
+      },
+      "ephemeralEnvironments": {
+        "title": "Środowiska testowe",
+        "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
+        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają."
+      },
+      "binaryStorage": {
+        "title": "Magazyn zrzutów ekranu",
+        "done": "Skonfigurowano. Kontrole wizualne są włączone.",
+        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone."
+      }
+    },
+    "causes": {
+      "unreachable": "Skonfigurowane, ale teraz nieosiągalne.",
+      "incomplete": "Połączone, ale brakuje wymaganego ustawienia.",
+      "rejected": "GitHub odrzucił token dostępu.",
+      "underscoped": "Token dostępu nie może wypychać zmian ani otwierać pull requestów.",
+      "presetBroken": "Domyślny preset modelu wskazuje model, który nie jest dostępny.",
+      "probeFailed": "Sprawdzenie nie odpowiedziało.",
+      "notReported": "To wdrożenie tego nie zgłasza."
+    },
+    "also": {
+      "title": "Także tutaj",
+      "pipelines": "Pipeline'y",
+      "riskPolicies": "Zasady scalania",
+      "modelPresets": "Presety modeli",
+      "counts": {
+        "repair": "Do naprawy: {count}",
+        "outdated": "Nieaktualne: {count}",
+        "new": "Nowe: {count}"
+      },
+      "settings": "Ustawienia i połączenia",
+      "workspaceSettings": "Ustawienia workspace'u",
+      "integrations": "Integracje"
     }
   },
   "queue": {
