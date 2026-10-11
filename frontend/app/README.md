@@ -1492,6 +1492,11 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
 - **Palettes** (`components/palettes`): drag blocks, pipelines and agents onto
   the board.
+- **Setup checklist** (`components/setup/SetupChecklistPanel.vue`, `utils/setupChecklist.ts`):
+  every prerequisite for "a task can run and merge" in one list, for people who can change the
+  setup. It adds no probe of its own: each row reads what its banner or startup dialog already
+  reads (`useSetupChecklist`) and opens the same surface. "Checking" and "missing" are separate
+  states, because an unanswered probe and an absent capability are opposite facts.
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task

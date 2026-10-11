@@ -180,7 +180,8 @@
     "reports": "Reports",
     "foundationalServices": "Foundational services",
     "tutorials": "Tutorials",
-    "help": "Help"
+    "help": "Help",
+    "setupChecklist": "Setup checklist"
   },
   "board": {
     "toast": {
@@ -2801,6 +2802,7 @@
         "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
         "notificationSettings": "Manage notification routing",
+        "setupChecklist": "Setup checklist",
         "queueView": "Open the queue view",
         "boardView": "Open the board view"
       },
@@ -2831,6 +2833,7 @@
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
         "notificationSettings": "notifications email routing channels inbox",
+        "setupChecklist": "setup checklist runner model github storage environment configure",
         "queueView": "queue view needs you inbox list waiting",
         "boardView": "board canvas map view plan"
       }
@@ -9072,6 +9075,73 @@
         "presetShorthand": "This link names a Nuxt UI editor preset this app does not know. Change any setting in the editor so the link carries the whole theme, then copy it again.",
         "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
       }
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "progress": "{done} of {total} done",
+    "intro": "What this workspace needs before a task can run and merge.",
+    "required": "required",
+    "optional": "optional",
+    "action": {
+      "change": "Change",
+      "connect": "Set up",
+      "fix": "Fix",
+      "review": "Review",
+      "retry": "Try again"
+    },
+    "rows": {
+      "checking": "Checking…",
+      "notNeeded": "This deployment does not use it.",
+      "model": {
+        "title": "Model",
+        "done": "A model is available.",
+        "missing": "No model is available. No agent can run until you connect a provider."
+      },
+      "sourceControl": {
+        "title": "Source control",
+        "done": "Connected. Agents can push branches and open pull requests.",
+        "missing": "Not connected. Agents cannot open pull requests."
+      },
+      "agentExecutor": {
+        "title": "Where agents run",
+        "done": "A runner is configured.",
+        "missing": "No runner is configured. Nothing can run until you connect one.",
+        "notNeeded": "This deployment runs agents without a runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Test environments",
+        "done": "Configured. Testers can use a live preview.",
+        "missing": "Not set up. Testers that need a live preview do not run. All other agents run."
+      },
+      "binaryStorage": {
+        "title": "Screenshot storage",
+        "done": "Configured. Visual checks are on.",
+        "missing": "Not set up. Visual checks are off."
+      }
+    },
+    "causes": {
+      "unreachable": "Configured, but unreachable right now.",
+      "incomplete": "Connected, but a required setting is missing.",
+      "rejected": "GitHub rejected the access token.",
+      "underscoped": "The access token cannot push or open pull requests.",
+      "presetBroken": "The default model preset names a model that is not available.",
+      "probeFailed": "The check did not answer.",
+      "notReported": "This deployment does not report it."
+    },
+    "also": {
+      "title": "Also here",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Merge policies",
+      "modelPresets": "Model presets",
+      "counts": {
+        "repair": "To repair: {count}",
+        "outdated": "Outdated: {count}",
+        "new": "New: {count}"
+      },
+      "settings": "Settings and connections",
+      "workspaceSettings": "Workspace settings",
+      "integrations": "Integrations"
     }
   },
   "queue": {

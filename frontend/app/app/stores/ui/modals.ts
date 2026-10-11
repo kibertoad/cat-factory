@@ -728,6 +728,17 @@ function createSettingsModals(resetHubReturn: ResetHubReturn) {
   // so a later plain open doesn't re-scroll. Null when no section was requested.
   const accountSettingsScrollTarget = ref<string | null>(null)
 
+  // Setup checklist: every prerequisite for "a task can run and merge" in one list, composed
+  // from the probes the setup banners already read (issue #2258).
+  const setupChecklistOpen = ref(false)
+  function openSetupChecklist() {
+    resetHubReturn()
+    setupChecklistOpen.value = true
+  }
+  function closeSetupChecklist() {
+    setupChecklistOpen.value = false
+  }
+
   function openWorkspaceSettings(tab = 'workspace') {
     resetHubReturn()
     workspaceSettingsTab.value = tab
@@ -765,6 +776,9 @@ function createSettingsModals(resetHubReturn: ResetHubReturn) {
   }
 
   return {
+    setupChecklistOpen,
+    openSetupChecklist,
+    closeSetupChecklist,
     workspaceSettingsOpen,
     workspaceSettingsTab,
     accountSettingsOpen,
