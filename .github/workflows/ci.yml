@@ -546,6 +546,13 @@ jobs:
       - name: Guard SPA feedback states
         run: node scripts/check-frontend-feedback.mjs
 
+      # Bans a hand-written full-screen `fixed` surface in the SPA. A full-screen overlay binds a
+      # root class from `utils/safeArea.ts`, which carries the safe-area padding and the `100dvh`
+      # cap, so a phone's notch cannot cover its header or close button. Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard SPA safe-area overlays
+        run: node scripts/check-frontend-safe-area.mjs
+
       # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
       # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
       # apply the same text a local Claude Code session does. This fails if the two have drifted, so

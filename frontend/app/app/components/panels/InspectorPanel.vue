@@ -340,6 +340,7 @@ const showOriginalDescription = ref(false)
        NOT `data-block-id`: that attribute is the board's card selector, which the canvas drivers
        measure geometry through (`utils/blockRects.ts`), and a panel answering to it would offer
        the arrows a rect that is not on the canvas at all. -->
+  <!-- safe-area-ok: a bottom sheet below lg; its scroller pads the bottom and side insets -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
@@ -353,7 +354,7 @@ const showOriginalDescription = ref(false)
          On compact viewports the panel is a bottom sheet capped to the visible
          height (dvh excludes mobile browser chrome). -->
     <div
-      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-7rem)]"
+      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain pt-4 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(1rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] lg:max-h-[calc(100vh-7rem)]"
     >
       <!-- header -->
       <div class="flex items-start justify-between gap-2">

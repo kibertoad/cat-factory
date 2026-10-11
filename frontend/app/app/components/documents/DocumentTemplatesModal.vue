@@ -139,7 +139,7 @@ async function unlink(doc: SourceDocument) {
             </p>
             <div
               v-if="template"
-              class="mt-2 flex items-center justify-between gap-2 rounded-md bg-default/70 px-3 py-2"
+              class="mt-2 flex items-center justify-between gap-2 rounded-md bg-elevated/70 px-3 py-2"
             >
               <DocumentOriginLink
                 :url="template.url"
@@ -176,7 +176,7 @@ async function unlink(doc: SourceDocument) {
               <div
                 v-for="doc in exemplars"
                 :key="`${doc.source}:${doc.externalId}`"
-                class="flex items-center justify-between gap-2 rounded-md bg-default/70 px-3 py-2"
+                class="flex items-center justify-between gap-2 rounded-md bg-elevated/70 px-3 py-2"
               >
                 <DocumentOriginLink
                   :url="doc.url"

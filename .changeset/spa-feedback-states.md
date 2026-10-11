@@ -13,7 +13,7 @@ uncoloured "disconnected" or "attached" toast is now a green success).
 Loading uses the Nuxt UI `loading` prop where a component has one, `USkeleton` rows while an async
 panel or list waits on its first fetch, and the new `common/Spinner.vue` for a bare loading glyph.
 The spinner honours reduced motion. The skeleton fill is `bg-accented` app-wide, because the
-default `bg-elevated` matched the light-mode overlay surface and could not be seen inside a modal.
+default `bg-elevated` disappears on the `bg-elevated` and `app-950` surfaces many windows paint.
 Empty lists and panels render `common/EmptyState.vue`, which now wraps Nuxt UI's `UEmpty`.
 
 `scripts/check-frontend-feedback.mjs` bans `toast.add(` outside the two toast composables and
