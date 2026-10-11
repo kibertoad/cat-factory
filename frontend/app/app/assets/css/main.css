@@ -84,6 +84,16 @@ body,
   height: 100%;
 }
 
+/* No pull-to-refresh and no scroll chaining out of the app. The SPA is a full-screen canvas whose
+ * body never scrolls, so a vertical overscroll that reaches the viewport (from a modal's header,
+ * the end of a list, a gutter) has nothing to scroll and on a phone would reload the app instead,
+ * dropping whatever was open. Setting it on the root once covers every overlay, and inner scrollers
+ * still chain to the scroller around them. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
 body {
   margin: 0;
   overflow: hidden;

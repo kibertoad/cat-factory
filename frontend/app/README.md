@@ -321,6 +321,15 @@ That is the whole mechanism, and it is why there is no rule here about WHICH ste
 
 The default `radius` lives on the `Cat Factory` document in `app/utils/theme/builtins.ts`. It equals `THEME_DEFAULTS.radius` and so writes no CSS, which is the point: changing the number there is the whole edit.
 
+### Full-screen overlays bind their root class
+
+A phone's notch and home indicator cover whatever sits at the screen edge, and on a screen without them nothing looks wrong. So a full-screen overlay never spells `fixed inset-0` itself. Its root binds one of the two class lists in [`utils/safeArea.ts`](./app/utils/safeArea.ts), which carry the positioning, the `100dvh` cap and the safe-area padding, and the site adds only its stacking, direction and backdrop:
+
+- **`FULL_BLEED_TAKEOVER_CLASS`** for a takeover that fills the screen (`AgentStepDetail`, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, the artifact lightbox). It pads by the inset alone, so a screen without one keeps the edge-to-edge layout.
+- **`WINDOWED_OVERLAY_CLASS`** for a window on a backdrop (`ResultWindowShell`). Its gutter is 1rem or the inset, whichever is larger.
+
+`scripts/check-frontend-safe-area.mjs` (CI) refuses any other `fixed` surface that spans a whole side of the viewport, in `.vue`, `.ts` and `.css`. A surface with no edge content (a scrim, a drawing layer) or one that pads its own edges (the sidebar drawer, the inspector's bottom sheet) says why with a `safe-area-ok:` comment, on the line or the one above it, or above the element's opening tag.
+
 ### A control is its Nuxt UI component
 
 Every CONTROL in the SPA is the Nuxt UI component for it, never the raw HTML element. A raw `<button>` beside a `UButton` is the same control rendered twice, and only one of the two follows the theme, the focus ring, the disabled state and the size scale; the SPA carried 152 of them, 24 raw `<input>`, five hand-built tables and six hand-rolled `<details>`, each with its own border, background and hover recipe.
@@ -611,6 +620,14 @@ The seams, and what a new feature should use rather than reading the store ad ho
 - **A surface that narrows inline** reads `useUiRoleStore().fullSurface` (the frame header's bug-hunt
   button, the palette's per-connection integration commands). Same rule as the tier: what remains
   must be exactly what the full surface would have shown, only less of it.
+- **A setup prompt** (a "configure this" card over the board) goes through `canActOnSetup`
+  (`app/utils/setupAudience.ts`) with the caller from `useSetupActor()`: it combines the role's
+  surface with the board and account grants and the owner the server reports for the gap
+  (`infraSetupOwners`). A caller who cannot act gets no card. If the gap stops runs they could start,
+  it reaches them as one line saying how it gets fixed (`blockingSetupNotice`): the owner to ask, or
+  the role switch when they hold the grant and only the designer surface hides the card. A viewer
+  gets nothing, and the line honours the card's dismissals. Never a button that opens a screen the
+  caller's save is refused on.
 - **A tutorial tour whose step clicks a non-`intake` nav entry declares
   `TUTORIAL_REQUIREMENTS.fullSurface`.** Which tours those are is not a judgement call:
   `tutorial-tours.spec.ts` derives the pairing from `navItemVisible`, so a tour that gains such a
@@ -1477,7 +1494,7 @@ the same list, plus the install-free frontend guards.
 ```bash
 # From the repo root:
 pnpm install
-pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running Worker
+pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running backend
 pnpm exec turbo run typecheck --filter=@cat-factory/app   # typecheck goes through Turbo
 pnpm lint                                            # oxlint + oxfmt over the whole tree
 
@@ -1486,6 +1503,10 @@ pnpm exec vitest run <file>                          # run the spec your change 
 pnpm i18n:check                                      # catalog is well-formed
 pnpm i18n:parity                                     # locales are in parity
 ```
+
+To see the SPA with data while you work on it, run it against the e2e backend: it needs only a
+Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards. See
+[Running the SPA against the e2e backend](https://github.com/kibertoad/cat-factory/blob/main/backend/internal/e2e/README.md#running-the-spa-against-the-e2e-backend-ui-development).
 
 > Building/deploying the static site is covered in the deployment docs: see the
 > [top-level README → Deployment](https://github.com/kibertoad/cat-factory/blob/main/README.md#deployment) and

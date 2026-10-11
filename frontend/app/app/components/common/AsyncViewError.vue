@@ -9,6 +9,7 @@ function reload() {
 </script>
 
 <template>
+  <!-- safe-area-ok: a scrim with one card centred on it, so no content reaches an edge -->
   <div
     data-testid="async-view-error"
     class="fixed inset-0 z-50 grid place-items-center bg-elevated/75 p-6 backdrop-blur-sm"

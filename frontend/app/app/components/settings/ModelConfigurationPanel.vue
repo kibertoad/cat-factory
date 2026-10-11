@@ -24,6 +24,7 @@ import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEd
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -300,7 +301,8 @@ async function save() {
     <Transition name="reader-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
+        class="z-50 flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
       >

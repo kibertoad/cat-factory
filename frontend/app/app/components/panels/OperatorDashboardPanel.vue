@@ -7,6 +7,7 @@ import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -122,24 +123,29 @@ watch(
     <Transition name="obs-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
         data-testid="operator-dashboard"
       >
-        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+        <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
           >
             <UIcon name="i-lucide-gauge" class="h-5 w-5 text-app-info-400" />
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('platformObservability.title') }}
             </h1>
             <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
-          <div class="ms-auto flex items-center gap-1.5">
+          <!-- Below lg the window tabs take their own row, so refresh and close stay on screen.
+               The row scrolls sideways when the tabs are wider than the phone. -->
+          <div
+            class="order-last flex w-full min-w-0 items-center gap-1.5 overflow-x-auto lg:order-none lg:w-auto"
+          >
             <UTabs
               :model-value="platform.window"
               :items="WINDOWS"
@@ -154,31 +160,33 @@ watch(
                 <span :data-testid="`operator-window-${item.value}`">{{ item.label }}</span>
               </template>
             </UTabs>
-            <IconButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-refresh-cw"
-              :label="t('platformObservability.refresh')"
-              :ui="{
-                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
-              }"
-              data-testid="operator-refresh"
-              @click="refresh"
-            />
-            <IconButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              :label="t('platformObservability.close')"
-              :ui="{
-                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: 'h-4 w-4',
-              }"
-              data-testid="operator-close"
-              @click="close"
-            />
           </div>
+          <IconButton
+            class="lg:-ms-1.5"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-refresh-cw"
+            :label="t('platformObservability.refresh')"
+            :ui="{
+              base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+              leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+            }"
+            data-testid="operator-refresh"
+            @click="refresh"
+          />
+          <IconButton
+            class="-ms-1.5"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            :label="t('platformObservability.close')"
+            :ui="{
+              base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
+            data-testid="operator-close"
+            @click="close"
+          />
         </header>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
