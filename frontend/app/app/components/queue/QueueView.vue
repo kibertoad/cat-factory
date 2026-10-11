@@ -59,7 +59,9 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
 <template>
   <div class="flex h-full flex-col overflow-hidden" data-testid="queue-view">
     <!-- `ps-14` below lg leaves room for the drawer's menu button in the corner. -->
-    <header class="flex flex-wrap items-center gap-x-4 gap-y-2 ps-14 pe-4 pt-4 pb-3 sm:pe-6 lg:ps-6">
+    <header
+      class="flex flex-wrap items-center gap-x-4 gap-y-2 ps-14 pe-4 pt-4 pb-3 sm:pe-6 lg:ps-6"
+    >
       <div class="flex items-baseline gap-2">
         <h1 class="text-xl font-semibold text-highlighted">{{ t('queue.title') }}</h1>
         <span class="text-sm text-muted" data-testid="queue-summary">
@@ -85,7 +87,6 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
         <NotificationsInbox />
       </div>
     </header>
-
 
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto px-4 pb-6 sm:px-6 md:grid-cols-3 md:overflow-hidden"

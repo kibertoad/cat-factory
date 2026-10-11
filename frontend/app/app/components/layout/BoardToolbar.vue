@@ -114,7 +114,6 @@ const spendLabel = computed(() => {
   return `${fmt(s.costSpent)} / ${fmt(s.costLimit)}`
 })
 const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
-
 </script>
 
 <template>
