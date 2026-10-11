@@ -8760,17 +8760,14 @@
     "title": "Kurulum",
     "progress": "{done} / {total} tamamlandı",
     "intro": "Bu çalışma alanının bir görevi çalıştırıp birleştirebilmesi için gerekenler.",
-    "noAccess": {
-      "title": "Kurulumu değiştiremezsin",
-      "body": "Kurulumu bir çalışma alanı yöneticisi tamamlayabilir."
-    },
     "required": "zorunlu",
     "optional": "isteğe bağlı",
     "action": {
       "change": "Değiştir",
       "connect": "Kur",
       "fix": "Düzelt",
-      "review": "İncele"
+      "review": "İncele",
+      "retry": "Yeniden dene"
     },
     "rows": {
       "checking": "Denetleniyor…",
@@ -8778,40 +8775,48 @@
       "model": {
         "title": "Model",
         "done": "Bir model kullanılabilir ve varsayılan ön ayar onu kullanıyor.",
-        "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz.",
-        "attention": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor."
+        "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz."
       },
       "sourceControl": {
         "title": "Kaynak denetimi",
         "done": "Bağlı. Ajanlar dal gönderip pull request açabilir.",
-        "missing": "Bağlı değil. Ajanlar pull request açamaz.",
-        "attention": "Erişim belirteci dal gönderemiyor ve pull request açamıyor."
+        "missing": "Bağlı değil. Ajanlar pull request açamaz."
       },
       "agentExecutor": {
         "title": "Ajanların çalıştığı yer",
         "done": "Bir runner yapılandırıldı.",
         "missing": "Yapılandırılmış runner yok. Bir tane bağlayana kadar hiçbir şey çalışamaz.",
-        "attention": "Runner'a ulaşılamıyor veya gerekli bir ayar eksik.",
         "notNeeded": "Bu dağıtım ajanları runner olmadan çalıştırıyor."
       },
       "testEnvironments": {
         "title": "Test ortamları",
         "done": "Yapılandırıldı. Test ajanları canlı önizleme kullanabilir.",
-        "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır.",
-        "attention": "Ortam sağlayıcısına ulaşılamıyor veya gerekli bir ayar eksik."
+        "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır."
       },
       "contentStorage": {
         "title": "Ekran görüntüsü depolama",
         "done": "Yapılandırıldı. Görsel denetimler açık.",
-        "missing": "Kurulmadı. Görsel denetimler kapalı.",
-        "attention": "Depolamaya ulaşılamıyor."
+        "missing": "Kurulmadı. Görsel denetimler kapalı."
       }
+    },
+    "causes": {
+      "unreachable": "Yapılandırılmış, ancak şu anda ulaşılamıyor.",
+      "incomplete": "Bağlı, ancak gerekli bir ayar eksik.",
+      "rejected": "GitHub erişim belirtecini reddetti.",
+      "underscoped": "Erişim belirteci dal gönderemiyor ve pull request açamıyor.",
+      "presetBroken": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor.",
+      "probeFailed": "Denetim yanıt vermedi."
     },
     "also": {
       "title": "Burada ayrıca",
-      "pipelines": "Pipeline'lar: onarılacak {count}, yeni yerleşik {fresh}",
-      "riskPolicies": "Birleştirme ilkeleri: {count} eski, {fresh} yeni",
-      "modelPresets": "Model ön ayarları: {count} eski, {fresh} yeni",
+      "pipelines": "Pipeline'lar",
+      "riskPolicies": "Birleştirme ilkeleri",
+      "modelPresets": "Model ön ayarları",
+      "counts": {
+        "repair": "Onarılacak: {count}",
+        "outdated": "Eski: {count}",
+        "new": "Yeni: {count}"
+      },
       "settings": "Ayarlar ve bağlantılar",
       "workspaceSettings": "Çalışma alanı ayarları",
       "integrations": "Entegrasyonlar"

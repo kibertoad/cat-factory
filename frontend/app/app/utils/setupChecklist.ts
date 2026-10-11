@@ -1,6 +1,12 @@
-import type { InfraSetup, InfraSetupStatus } from '@cat-factory/contracts'
+import type { InfraSetup, InfraSetupOwners, InfraSetupStatus } from '@cat-factory/contracts'
 import { isInfraSetupHealthStatus } from '@cat-factory/contracts'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
+import {
+  canActOnSetup,
+  effectiveOwner,
+  type SetupActor,
+  type SetupRemedy,
+} from '~/utils/setupAudience'
 
 // ---------------------------------------------------------------------------
 // The setup checklist: what this workspace needs before a task can run and merge, as ONE list.
@@ -9,6 +15,7 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 // startup dialog (`useAiReadiness`, the GitHub probe, `workspace.infraSetup`, the provider
 // connections' missing-required fields). The checklist adds no probe of its own: it states the
 // same facts in one place, with a finish line, instead of one interruption per missing piece.
+// Who may act on a row is the banners' rule too (`utils/setupAudience.ts`).
 // ---------------------------------------------------------------------------
 
 export const SETUP_ROWS = [
@@ -26,18 +33,30 @@ export type SetupRowId = (typeof SETUP_ROWS)[number]
  * - `done`: nothing to do.
  * - `missing`: never set up. The fix is to connect something.
  * - `attention`: set up, but broken, unreachable or incomplete. The fix is to repair it, and
- *   saying "connect" would send the reader to create a second one.
+ *   saying "connect" would send the reader to create a second one. Its {@link SetupRowCause} says
+ *   which, because each needs a different fix.
  * - `checking`: the probe has not answered. Never rendered as missing: an unanswered probe and
  *   an absent capability are opposite facts.
  * - `not_needed`: this deployment does not use the area at all. Left out of the count.
  */
 export type SetupRowStatus = 'done' | 'missing' | 'attention' | 'checking' | 'not_needed'
 
-/**
- * Whether a task can run without the row. A required row that is not `done` is what the queue's
- * one-line "this workspace cannot run tasks yet" is about; an optional one only switches off the
- * agents that use it.
- */
+/** Why a row needs attention. Each one names a different fix. */
+export type SetupRowCause =
+  /** Configured, and its live probe says it cannot be reached. */
+  | 'unreachable'
+  /** Connected, but a mandatory provider field is unset. */
+  | 'incomplete'
+  /** GitHub refused the access token outright. */
+  | 'rejected'
+  /** The token authenticates but cannot push or open pull requests. */
+  | 'underscoped'
+  /** Usable models exist, but the default preset names one that is not. */
+  | 'presetBroken'
+  /** The probe itself failed, so the answer is unknown. The fix is to ask again. */
+  | 'probeFailed'
+
+/** Whether a task can run without the row. An optional row only switches off the agents that use it. */
 export const SETUP_ROW_REQUIRED: Record<SetupRowId, boolean> = {
   model: true,
   sourceControl: true,
@@ -51,29 +70,46 @@ export interface SetupProbeInput {
   readonly model: {
     /** The per-workspace model catalog has loaded for this workspace. */
     readonly loaded: boolean
+    /** The last attempt to load it failed. */
+    readonly loadFailed: boolean
     readonly usable: boolean
     /** Usable models exist, but the default preset names one that is not. */
     readonly presetBroken: boolean
   }
   readonly sourceControl: {
-    /** Null while the GitHub probe is in flight; false when the deployment has it switched off. */
+    /** Null while the GitHub probe is in flight. */
     readonly available: boolean | null
+    /** Why `available` is false: switched off by the deployment, or the probe failed. */
+    readonly unavailableCause: 'disabled' | 'failed' | null
     readonly connected: boolean
     /** Local mode with no personal access token set. */
     readonly patMissing: boolean
-    /** A token is set but GitHub rejected it, or it cannot push or open pull requests. */
-    readonly patNeedsAttention: boolean
+    /** The token check's verdict, when it needs attention. */
+    readonly patProblem: 'rejected' | 'underscoped' | null
   }
   /** Null until the workspace snapshot has delivered it. */
   readonly infra: InfraSetup | null
-  /** Provider connections that are wired but miss a mandatory field. */
-  readonly needingConfig: readonly ProviderConnectionKind[]
+  /** Who can close each infrastructure gap; null from a backend that does not report it. */
+  readonly infraOwners: InfraSetupOwners | null
+  readonly providers: {
+    /** The provider connections have loaded, so `needingConfig` is an answer. */
+    readonly loaded: boolean
+    /** Provider connections that are wired but miss a mandatory field. */
+    readonly needingConfig: readonly ProviderConnectionKind[]
+  }
+  readonly actor: SetupActor
 }
 
-export interface SetupRow {
+/** A row's state and, exactly when it needs attention, why. */
+export type SetupRowState =
+  | { readonly status: Exclude<SetupRowStatus, 'attention'>; readonly cause: null }
+  | { readonly status: 'attention'; readonly cause: SetupRowCause }
+
+export type SetupRow = SetupRowState & {
   readonly id: SetupRowId
-  readonly status: SetupRowStatus
   readonly required: boolean
+  /** Null when this caller can act on the row; otherwise how the gap gets fixed. */
+  readonly remedy: SetupRemedy | null
 }
 
 export interface SetupChecklist {
@@ -81,56 +117,107 @@ export interface SetupChecklist {
   /** Rows that count toward the finish line (everything except `not_needed`). */
   readonly total: number
   readonly done: number
-  /** A required row is known to be not done, so no task can run yet. */
-  readonly blocking: boolean
+  /** A counted row has not answered yet, so `done` is not a count of the finished rows yet. */
+  readonly checking: boolean
 }
 
-function infraRow(status: InfraSetupStatus | undefined, incomplete: boolean): SetupRowStatus {
-  if (status === undefined) return 'checking'
-  if (status === 'not_applicable') return 'not_needed'
-  if (status === 'not_defined') return 'missing'
-  if (isInfraSetupHealthStatus(status) || incomplete) return 'attention'
-  return 'done'
+type RowState = SetupRowState
+const state = (status: Exclude<SetupRowStatus, 'attention'>): RowState => ({ status, cause: null })
+const attention = (cause: SetupRowCause): RowState => ({ status: 'attention', cause })
+
+function infraRow(
+  status: InfraSetupStatus | undefined,
+  provider: { loaded: boolean; incomplete: boolean } | null,
+): RowState {
+  if (status === undefined) return state('checking')
+  if (status === 'not_applicable') return state('not_needed')
+  if (status === 'not_defined') return state('missing')
+  if (isInfraSetupHealthStatus(status)) return attention('unreachable')
+  // Configured. Whether a mandatory field is unset is known only once the providers load; until
+  // then the row has not answered, rather than claiming done.
+  if (provider && !provider.loaded) return state('checking')
+  return provider?.incomplete ? attention('incomplete') : state('done')
 }
 
-function modelRow(m: SetupProbeInput['model']): SetupRowStatus {
-  if (!m.loaded) return 'checking'
-  if (!m.usable) return 'missing'
-  return m.presetBroken ? 'attention' : 'done'
+function modelRow(m: SetupProbeInput['model']): RowState {
+  if (!m.loaded) return m.loadFailed ? attention('probeFailed') : state('checking')
+  if (!m.usable) return state('missing')
+  return m.presetBroken ? attention('presetBroken') : state('done')
 }
 
-function sourceControlRow(s: SetupProbeInput['sourceControl']): SetupRowStatus {
-  if (s.patMissing) return 'missing'
-  if (s.patNeedsAttention) return 'attention'
-  if (s.connected) return 'done'
-  if (s.available === null) return 'checking'
-  return 'missing'
+function sourceControlRow(s: SetupProbeInput['sourceControl']): RowState {
+  if (s.patMissing) return state('missing')
+  if (s.patProblem) return attention(s.patProblem)
+  if (s.connected) return state('done')
+  if (s.available === null) return state('checking')
+  if (s.available === false) {
+    if (s.unavailableCause === 'disabled') return state('not_needed')
+    if (s.unavailableCause === 'failed') return attention('probeFailed')
+  }
+  return state('missing')
+}
+
+/**
+ * Who closes a row's gap. Infrastructure follows its reported owner. A personal access token is
+ * fixed by whoever holds it: the remedy is a token page, not a workspace setting, so every caller
+ * gets the link. A model or a GitHub connection is a workspace setting.
+ */
+function rowOwner(id: SetupRowId, input: SetupProbeInput): unknown {
+  switch (id) {
+    case 'agentExecutor':
+      return input.infraOwners?.agentExecutor
+    case 'testEnvironments':
+      return input.infraOwners?.ephemeralEnvironments
+    case 'contentStorage':
+      return input.infraOwners?.binaryStorage
+    case 'model':
+      return 'workspace_admin'
+    case 'sourceControl':
+      return input.sourceControl.patMissing || input.sourceControl.patProblem
+        ? null
+        : 'workspace_admin'
+    default: {
+      const unreachable: never = id
+      return unreachable
+    }
+  }
+}
+
+function remedyFor(owner: unknown, actor: SetupActor): SetupRemedy | null {
+  if (owner === null) return null
+  if (canActOnSetup(owner, actor)) return null
+  return canActOnSetup(owner, { ...actor, fullSurface: true })
+    ? 'full_surface'
+    : effectiveOwner(owner)
 }
 
 export function deriveSetupChecklist(input: SetupProbeInput): SetupChecklist {
-  const statuses: Record<SetupRowId, SetupRowStatus> = {
+  const { loaded, needingConfig } = input.providers
+  const states: Record<SetupRowId, RowState> = {
     model: modelRow(input.model),
     sourceControl: sourceControlRow(input.sourceControl),
-    agentExecutor: infraRow(
-      input.infra?.agentExecutor,
-      input.needingConfig.includes('runner-pool'),
-    ),
-    testEnvironments: infraRow(
-      input.infra?.ephemeralEnvironments,
-      input.needingConfig.includes('environment'),
-    ),
-    contentStorage: infraRow(input.infra?.binaryStorage, false),
+    agentExecutor: infraRow(input.infra?.agentExecutor, {
+      loaded,
+      incomplete: needingConfig.includes('runner-pool'),
+    }),
+    testEnvironments: infraRow(input.infra?.ephemeralEnvironments, {
+      loaded,
+      incomplete: needingConfig.includes('environment'),
+    }),
+    // Storage has no provider connection, so nothing about it waits on the providers.
+    contentStorage: infraRow(input.infra?.binaryStorage, null),
   }
   const rows = SETUP_ROWS.map((id) => ({
     id,
-    status: statuses[id],
+    ...states[id],
     required: SETUP_ROW_REQUIRED[id],
+    remedy: remedyFor(rowOwner(id, input), input.actor),
   }))
   const counted = rows.filter((r) => r.status !== 'not_needed')
   return {
     rows,
     total: counted.length,
     done: counted.filter((r) => r.status === 'done').length,
-    blocking: rows.some((r) => r.required && (r.status === 'missing' || r.status === 'attention')),
+    checking: counted.some((r) => r.status === 'checking'),
   }
 }

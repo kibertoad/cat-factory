@@ -26,6 +26,7 @@ export interface GitHubStoreContext {
   api: ReturnType<typeof useApi>
   workspace: ReturnType<typeof useWorkspaceStore>
   available: Ref<boolean | null>
+  unavailableCause: Ref<'disabled' | 'failed' | null>
   connection: Ref<GitHubConnection | null>
   /** The connect surfaces this deployment can serve (GitHub App / GitLab PAT / …). */
   connectOptions: Ref<VcsConnectOption[]>

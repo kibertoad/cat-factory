@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { SetupRowId, SetupRowStatus } from '~/utils/setupChecklist'
+import type { SetupRow, SetupRowCause, SetupRowId, SetupRowStatus } from '~/utils/setupChecklist'
+import type { SetupRemedy } from '~/utils/setupAudience'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /**
@@ -7,27 +8,56 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
  * action per row (issue #2258).
  *
  * The probes and the surfaces each row opens are the ones the setup banners, the AI-provider
- * dialogs and the startup health advisories already use (`useSetupChecklist`). What it adds is
+ * dialogs and the startup health advisories already use (`useSetupChecklist`), and so is the rule
+ * for who may act: a row the caller cannot fix shows who can instead of a button. What it adds is
  * the whole list in one place, with a finish line, instead of one interruption per missing piece.
  * Opening a row's surface closes the checklist, so the two never stack.
  */
 const { t } = useI18n()
 const ui = useUiStore()
-const { checklist, act: openRow, canAct } = useSetupChecklist()
+const { checklist, actionFor, refresh } = useSetupChecklist()
 
 const open = computed({
   get: () => ui.setupChecklistOpen,
   set: (v: boolean) => (v ? ui.openSetupChecklist() : ui.closeSetupChecklist()),
 })
+watch(
+  () => ui.setupChecklistOpen,
+  (isOpen) => {
+    if (isOpen) refresh()
+  },
+  { immediate: true },
+)
 
 /** Open a surface from the checklist: close the checklist first, so the two never stack. */
 function go(fn: () => void) {
   ui.closeSetupChecklist()
   fn()
 }
-function act(id: SetupRowId) {
-  go(() => openRow(id))
+function act(row: SetupRow) {
+  const action = actionFor(row)
+  if (!action) return
+  // Asking a probe again keeps the checklist open: its answer lands here.
+  if (row.cause === 'probeFailed') action()
+  else go(action)
 }
+
+/** The rows this caller can act on, with the action to show. */
+function canAct(row: SetupRow): boolean {
+  return row.remedy === null && actionFor(row) !== null
+}
+
+/**
+ * The ONE solid button in the view: the first required row that is not done and that this caller
+ * can act on. Every other open row takes a lighter variant, so the list reads in order.
+ */
+const primaryRowId = computed<SetupRowId | null>(
+  () =>
+    checklist.value.rows.find(
+      (r) => r.required && (r.status === 'missing' || r.status === 'attention') && canAct(r),
+    )?.id ?? null,
+)
+
 const pipelineHealth = usePipelineHealth()
 const riskPolicyHealth = useRiskPolicyHealth()
 const modelPresetHealth = useModelPresetHealth()
@@ -52,13 +82,24 @@ const STATUS_META: Record<SetupRowStatus, { icon: string; class: string; actionK
   },
 }
 
-/** Each row's title and one line per status. Exhaustive, so a new row or status must say what it means. */
-const ROW_COPY: Record<SetupRowId, { title: string } & Record<SetupRowStatus, string>> = {
+function actionLabel(row: SetupRow): string {
+  return row.cause === 'probeFailed'
+    ? t('setup.action.retry')
+    : t(STATUS_META[row.status].actionKey)
+}
+
+/**
+ * Each row's title and its line for the states that are about the row. An `attention` row's line
+ * is its CAUSE (`CAUSE_KEYS`): the title already names the area, and each cause needs its own fix.
+ */
+const ROW_COPY: Record<
+  SetupRowId,
+  { title: string } & Record<Exclude<SetupRowStatus, 'attention'>, string>
+> = {
   model: {
     title: 'setup.rows.model.title',
     done: 'setup.rows.model.done',
     missing: 'setup.rows.model.missing',
-    attention: 'setup.rows.model.attention',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.notNeeded',
   },
@@ -66,7 +107,6 @@ const ROW_COPY: Record<SetupRowId, { title: string } & Record<SetupRowStatus, st
     title: 'setup.rows.sourceControl.title',
     done: 'setup.rows.sourceControl.done',
     missing: 'setup.rows.sourceControl.missing',
-    attention: 'setup.rows.sourceControl.attention',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.notNeeded',
   },
@@ -74,7 +114,6 @@ const ROW_COPY: Record<SetupRowId, { title: string } & Record<SetupRowStatus, st
     title: 'setup.rows.agentExecutor.title',
     done: 'setup.rows.agentExecutor.done',
     missing: 'setup.rows.agentExecutor.missing',
-    attention: 'setup.rows.agentExecutor.attention',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.agentExecutor.notNeeded',
   },
@@ -82,7 +121,6 @@ const ROW_COPY: Record<SetupRowId, { title: string } & Record<SetupRowStatus, st
     title: 'setup.rows.testEnvironments.title',
     done: 'setup.rows.testEnvironments.done',
     missing: 'setup.rows.testEnvironments.missing',
-    attention: 'setup.rows.testEnvironments.attention',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.notNeeded',
   },
@@ -90,37 +128,75 @@ const ROW_COPY: Record<SetupRowId, { title: string } & Record<SetupRowStatus, st
     title: 'setup.rows.contentStorage.title',
     done: 'setup.rows.contentStorage.done',
     missing: 'setup.rows.contentStorage.missing',
-    attention: 'setup.rows.contentStorage.attention',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.notNeeded',
   },
 }
+const CAUSE_KEYS: Record<SetupRowCause, string> = {
+  unreachable: 'setup.causes.unreachable',
+  incomplete: 'setup.causes.incomplete',
+  rejected: 'setup.causes.rejected',
+  underscoped: 'setup.causes.underscoped',
+  presetBroken: 'setup.causes.presetBroken',
+  probeFailed: 'setup.causes.probeFailed',
+}
+function rowLine(row: SetupRow): string {
+  return row.status === 'attention' ? t(CAUSE_KEYS[row.cause]) : t(ROW_COPY[row.id][row.status])
+}
 
-/** The secondary list: advisories that used to open as startup dialogs. Only rows with work. */
+// The same "who can fix this" lines the infrastructure notice shows a caller who cannot act.
+const REMEDY_KEYS: Record<SetupRemedy, string> = {
+  workspace_admin: 'layout.infraSetupNotice.owner.workspace_admin',
+  account_admin: 'layout.infraSetupNotice.owner.account_admin',
+  operator: 'layout.infraSetupNotice.owner.operator',
+  full_surface: 'layout.infraSetupNotice.fullSurface',
+}
+
+/**
+ * The secondary list: advisories that used to open as startup dialogs, each count on its own so
+ * no sentence has to agree with a number. Only rows with work.
+ */
 const also = computed(() =>
   [
     {
       id: 'pipelines',
       labelKey: 'setup.also.pipelines',
-      count: pipelineHealth.health.value.length + pipelineHealth.retired.value.length,
-      fresh: pipelineHealth.newPipelines.value.length,
+      counts: [
+        {
+          key: 'setup.also.counts.repair',
+          n:
+            pipelineHealth.health.value.filter((h) => h.invalid).length +
+            pipelineHealth.retired.value.length,
+        },
+        {
+          key: 'setup.also.counts.outdated',
+          n: pipelineHealth.health.value.filter((h) => !h.invalid && h.outdated).length,
+        },
+        { key: 'setup.also.counts.new', n: pipelineHealth.newPipelines.value.length },
+      ],
       open: () => go(() => ui.openPipelineHealth()),
     },
     {
       id: 'riskPolicies',
       labelKey: 'setup.also.riskPolicies',
-      count: riskPolicyHealth.outdated.value.length,
-      fresh: riskPolicyHealth.newPresets.value.length,
+      counts: [
+        { key: 'setup.also.counts.outdated', n: riskPolicyHealth.outdated.value.length },
+        { key: 'setup.also.counts.new', n: riskPolicyHealth.newPresets.value.length },
+      ],
       open: () => go(() => ui.openRiskPolicyHealth()),
     },
     {
       id: 'modelPresets',
       labelKey: 'setup.also.modelPresets',
-      count: modelPresetHealth.outdated.value.length,
-      fresh: modelPresetHealth.newPresets.value.length,
+      counts: [
+        { key: 'setup.also.counts.outdated', n: modelPresetHealth.outdated.value.length },
+        { key: 'setup.also.counts.new', n: modelPresetHealth.newPresets.value.length },
+      ],
       open: () => go(() => ui.openModelPresetHealth()),
     },
-  ].filter((row) => row.count + row.fresh > 0),
+  ]
+    .map((row) => ({ ...row, counts: row.counts.filter((c) => c.n > 0) }))
+    .filter((row) => row.counts.length > 0),
 )
 </script>
 
@@ -129,8 +205,13 @@ const also = computed(() =>
     <template #title>
       <span class="flex items-baseline gap-3">
         {{ t('setup.title') }}
+        <!-- While a probe has not answered, the count is not one yet, so the badge says so. -->
         <UBadge color="neutral" variant="subtle" data-testid="setup-progress">
-          {{ t('setup.progress', { done: checklist.done, total: checklist.total }) }}
+          {{
+            checklist.checking
+              ? t('setup.rows.checking')
+              : t('setup.progress', { done: checklist.done, total: checklist.total })
+          }}
         </UBadge>
       </span>
     </template>
@@ -138,17 +219,7 @@ const also = computed(() =>
       <div data-testid="setup-checklist">
         <p class="text-sm text-muted">{{ t('setup.intro') }}</p>
 
-        <UAlert
-          v-if="!canAct"
-          class="mt-6"
-          color="neutral"
-          variant="subtle"
-          icon="i-lucide-lock"
-          :title="t('setup.noAccess.title')"
-          :description="t('setup.noAccess.body')"
-        />
-
-        <ul v-else class="mt-6 space-y-3">
+        <ul class="mt-6 space-y-3">
           <li
             v-for="row in checklist.rows"
             :key="row.id"
@@ -156,6 +227,8 @@ const also = computed(() =>
             data-testid="setup-row"
             :data-row="row.id"
             :data-status="row.status"
+            :data-cause="row.cause ?? undefined"
+            :data-remedy="row.remedy ?? undefined"
           >
             <UIcon
               :name="STATUS_META[row.status].icon"
@@ -169,56 +242,70 @@ const also = computed(() =>
                   {{ row.required ? t('setup.required') : t('setup.optional') }}
                 </UBadge>
               </div>
-              <p class="mt-0.5 text-xs text-muted">
-                {{ t(ROW_COPY[row.id][row.status]) }}
+              <p class="mt-0.5 text-xs text-muted">{{ rowLine(row) }}</p>
+              <!-- A gap this caller cannot close: who can, in place of a button their save would
+                   be refused on. A done row needs neither. -->
+              <p
+                v-if="row.remedy && row.status !== 'done' && row.status !== 'not_needed'"
+                class="mt-0.5 text-xs text-dimmed"
+                data-testid="setup-row-remedy"
+              >
+                {{ t(REMEDY_KEYS[row.remedy]) }}
               </p>
             </div>
             <UButton
-              v-if="row.status !== 'checking'"
+              v-if="canAct(row)"
               size="sm"
-              :color="row.status === 'done' || row.status === 'not_needed' ? 'neutral' : 'primary'"
-              :variant="row.status === 'done' || row.status === 'not_needed' ? 'outline' : 'solid'"
+              :color="row.status === 'done' ? 'neutral' : 'primary'"
+              :variant="
+                row.id === primaryRowId ? 'solid' : row.status === 'done' ? 'outline' : 'soft'
+              "
               data-testid="setup-row-action"
-              @click="act(row.id)"
+              @click="act(row)"
             >
-              {{ t(STATUS_META[row.status].actionKey) }}
+              {{ actionLabel(row) }}
             </UButton>
           </li>
         </ul>
 
-        <template v-if="canAct">
-          <USeparator class="my-6" />
-          <SectionLabel as="h2" class="mb-3">{{ t('setup.also.title') }}</SectionLabel>
-          <ul class="space-y-2 text-sm">
-            <li v-for="row in also" :key="row.id" class="flex items-center gap-3">
-              <span class="flex-1 text-muted">
-                {{ t(row.labelKey, { count: row.count, fresh: row.fresh }) }}
-              </span>
-              <UButton size="xs" color="neutral" variant="outline" @click="row.open()">
-                {{ t('setup.action.review') }}
-              </UButton>
-            </li>
-            <li class="flex flex-wrap items-center gap-2 text-muted">
-              <span class="flex-1">{{ t('setup.also.settings') }}</span>
-              <UButton
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                @click="go(() => ui.openWorkspaceSettings())"
-              >
-                {{ t('setup.also.workspaceSettings') }}
-              </UButton>
-              <UButton
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                @click="go(() => ui.openIntegrations())"
-              >
-                {{ t('setup.also.integrations') }}
-              </UButton>
-            </li>
-          </ul>
-        </template>
+        <USeparator class="my-6" />
+        <SectionLabel as="h2" class="mb-3">{{ t('setup.also.title') }}</SectionLabel>
+        <ul class="space-y-2 text-sm">
+          <li v-for="row in also" :key="row.id" class="flex flex-wrap items-center gap-2">
+            <span class="text-muted">{{ t(row.labelKey) }}</span>
+            <UBadge v-for="c in row.counts" :key="c.key" size="sm" color="neutral" variant="subtle">
+              {{ t(c.key, { count: c.n }) }}
+            </UBadge>
+            <UButton
+              class="ms-auto"
+              size="xs"
+              color="neutral"
+              variant="outline"
+              @click="row.open()"
+            >
+              {{ t('setup.action.review') }}
+            </UButton>
+          </li>
+          <li class="flex flex-wrap items-center gap-2 text-muted">
+            <span class="flex-1">{{ t('setup.also.settings') }}</span>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              @click="go(() => ui.openWorkspaceSettings())"
+            >
+              {{ t('setup.also.workspaceSettings') }}
+            </UButton>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              @click="go(() => ui.openIntegrations())"
+            >
+              {{ t('setup.also.integrations') }}
+            </UButton>
+          </li>
+        </ul>
       </div>
     </template>
   </UModal>

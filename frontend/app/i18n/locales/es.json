@@ -8760,17 +8760,14 @@
     "title": "Configuración",
     "progress": "{done} de {total} hechas",
     "intro": "Lo que este workspace necesita para que una tarea se ejecute y se fusione.",
-    "noAccess": {
-      "title": "No puedes cambiar la configuración",
-      "body": "Un administrador del workspace puede terminar la configuración."
-    },
     "required": "obligatorio",
     "optional": "opcional",
     "action": {
       "change": "Cambiar",
       "connect": "Configurar",
       "fix": "Corregir",
-      "review": "Revisar"
+      "review": "Revisar",
+      "retry": "Reintentar"
     },
     "rows": {
       "checking": "Comprobando…",
@@ -8778,40 +8775,48 @@
       "model": {
         "title": "Modelo",
         "done": "Hay un modelo disponible y el preajuste predeterminado lo usa.",
-        "missing": "No hay ningún modelo disponible. Ningún agente puede ejecutarse hasta que conectes un proveedor.",
-        "attention": "El preajuste de modelo predeterminado nombra un modelo que no está disponible."
+        "missing": "No hay ningún modelo disponible. Ningún agente puede ejecutarse hasta que conectes un proveedor."
       },
       "sourceControl": {
         "title": "Control de código fuente",
         "done": "Conectado. Los agentes pueden subir ramas y abrir pull requests.",
-        "missing": "No conectado. Los agentes no pueden abrir pull requests.",
-        "attention": "El token de acceso no puede subir cambios ni abrir pull requests."
+        "missing": "No conectado. Los agentes no pueden abrir pull requests."
       },
       "agentExecutor": {
         "title": "Dónde se ejecutan los agentes",
         "done": "Hay un runner configurado.",
         "missing": "No hay ningún runner configurado. Nada puede ejecutarse hasta que conectes uno.",
-        "attention": "El runner no responde, o falta un ajuste obligatorio.",
         "notNeeded": "Este despliegue ejecuta agentes sin runner."
       },
       "testEnvironments": {
         "title": "Entornos de prueba",
         "done": "Configurado. Los probadores pueden usar una vista previa en vivo.",
-        "missing": "Sin configurar. Los probadores que necesitan una vista previa en vivo no se ejecutan. Los demás agentes sí.",
-        "attention": "El proveedor de entornos no responde, o falta un ajuste obligatorio."
+        "missing": "Sin configurar. Los probadores que necesitan una vista previa en vivo no se ejecutan. Los demás agentes sí."
       },
       "contentStorage": {
         "title": "Almacenamiento de capturas",
         "done": "Configurado. Las comprobaciones visuales están activas.",
-        "missing": "Sin configurar. Las comprobaciones visuales están desactivadas.",
-        "attention": "El almacenamiento no responde."
+        "missing": "Sin configurar. Las comprobaciones visuales están desactivadas."
       }
+    },
+    "causes": {
+      "unreachable": "Configurado, pero ahora mismo no responde.",
+      "incomplete": "Conectado, pero falta un ajuste obligatorio.",
+      "rejected": "GitHub rechazó el token de acceso.",
+      "underscoped": "El token de acceso no puede subir cambios ni abrir pull requests.",
+      "presetBroken": "El preajuste de modelo predeterminado nombra un modelo que no está disponible.",
+      "probeFailed": "La comprobación no respondió."
     },
     "also": {
       "title": "También aquí",
-      "pipelines": "Pipelines: {count} por reparar, {fresh} integrados nuevos",
-      "riskPolicies": "Políticas de fusión: {count} desactualizadas, {fresh} nuevas",
-      "modelPresets": "Preajustes de modelo: {count} desactualizados, {fresh} nuevos",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Políticas de fusión",
+      "modelPresets": "Preajustes de modelo",
+      "counts": {
+        "repair": "Por reparar: {count}",
+        "outdated": "Desactualizados: {count}",
+        "new": "Nuevos: {count}"
+      },
       "settings": "Ajustes y conexiones",
       "workspaceSettings": "Ajustes del workspace",
       "integrations": "Integraciones"

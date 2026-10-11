@@ -8760,17 +8760,14 @@
     "title": "Configurazione",
     "progress": "{done} su {total} completati",
     "intro": "Ciò che serve a questo workspace perché un’attività possa essere eseguita e unita.",
-    "noAccess": {
-      "title": "Non puoi modificare la configurazione",
-      "body": "Un amministratore del workspace può completare la configurazione."
-    },
     "required": "obbligatorio",
     "optional": "facoltativo",
     "action": {
       "change": "Modifica",
       "connect": "Configura",
       "fix": "Correggi",
-      "review": "Verifica"
+      "review": "Verifica",
+      "retry": "Riprova"
     },
     "rows": {
       "checking": "Verifica in corso…",
@@ -8778,40 +8775,48 @@
       "model": {
         "title": "Modello",
         "done": "Un modello è disponibile e il preset predefinito lo usa.",
-        "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider.",
-        "attention": "Il preset di modello predefinito indica un modello non disponibile."
+        "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider."
       },
       "sourceControl": {
         "title": "Controllo del codice sorgente",
         "done": "Collegato. Gli agenti possono fare push dei branch e aprire pull request.",
-        "missing": "Non collegato. Gli agenti non possono aprire pull request.",
-        "attention": "Il token di accesso non può fare push né aprire pull request."
+        "missing": "Non collegato. Gli agenti non possono aprire pull request."
       },
       "agentExecutor": {
         "title": "Dove vengono eseguiti gli agenti",
         "done": "Un runner è configurato.",
         "missing": "Nessun runner configurato. Nulla può essere eseguito finché non ne colleghi uno.",
-        "attention": "Il runner non è raggiungibile, oppure manca un’impostazione obbligatoria.",
         "notNeeded": "Questo deployment esegue gli agenti senza runner."
       },
       "testEnvironments": {
         "title": "Ambienti di test",
         "done": "Configurato. I tester possono usare un’anteprima live.",
-        "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì.",
-        "attention": "Il provider degli ambienti non è raggiungibile, oppure manca un’impostazione obbligatoria."
+        "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì."
       },
       "contentStorage": {
         "title": "Archiviazione degli screenshot",
         "done": "Configurato. I controlli visivi sono attivi.",
-        "missing": "Non configurato. I controlli visivi sono disattivati.",
-        "attention": "L’archiviazione non è raggiungibile."
+        "missing": "Non configurato. I controlli visivi sono disattivati."
       }
+    },
+    "causes": {
+      "unreachable": "Configurato, ma al momento non raggiungibile.",
+      "incomplete": "Connesso, ma manca un’impostazione obbligatoria.",
+      "rejected": "GitHub ha rifiutato il token di accesso.",
+      "underscoped": "Il token di accesso non può fare push né aprire pull request.",
+      "presetBroken": "Il preset di modello predefinito indica un modello non disponibile.",
+      "probeFailed": "La verifica non ha risposto."
     },
     "also": {
       "title": "Anche qui",
-      "pipelines": "Pipeline: {count} da riparare, {fresh} nuove predefinite",
-      "riskPolicies": "Policy di merge: {count} obsolete, {fresh} nuove",
-      "modelPresets": "Preset di modello: {count} obsoleti, {fresh} nuovi",
+      "pipelines": "Pipeline",
+      "riskPolicies": "Policy di merge",
+      "modelPresets": "Preset di modello",
+      "counts": {
+        "repair": "Da riparare: {count}",
+        "outdated": "Obsoleti: {count}",
+        "new": "Nuovi: {count}"
+      },
       "settings": "Impostazioni e connessioni",
       "workspaceSettings": "Impostazioni del workspace",
       "integrations": "Integrazioni"

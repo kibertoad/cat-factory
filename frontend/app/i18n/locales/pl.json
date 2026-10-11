@@ -8760,17 +8760,14 @@
     "title": "Konfiguracja",
     "progress": "{done} z {total} gotowe",
     "intro": "Czego ten workspace potrzebuje, aby zadanie mogło działać i zostać scalone.",
-    "noAccess": {
-      "title": "Nie możesz zmieniać konfiguracji",
-      "body": "Administrator workspace'u może dokończyć konfigurację."
-    },
     "required": "wymagane",
     "optional": "opcjonalne",
     "action": {
       "change": "Zmień",
       "connect": "Skonfiguruj",
       "fix": "Napraw",
-      "review": "Sprawdź"
+      "review": "Sprawdź",
+      "retry": "Spróbuj ponownie"
     },
     "rows": {
       "checking": "Sprawdzanie…",
@@ -8778,40 +8775,48 @@
       "model": {
         "title": "Model",
         "done": "Model jest dostępny i domyślny preset go używa.",
-        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy.",
-        "attention": "Domyślny preset modelu wskazuje model, który nie jest dostępny."
+        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy."
       },
       "sourceControl": {
         "title": "Kontrola wersji",
         "done": "Połączono. Agenci mogą wypychać gałęzie i otwierać pull requesty.",
-        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów.",
-        "attention": "Token dostępu nie może wypychać zmian ani otwierać pull requestów."
+        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów."
       },
       "agentExecutor": {
         "title": "Gdzie działają agenci",
         "done": "Runner jest skonfigurowany.",
         "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
-        "attention": "Runner jest nieosiągalny albo brakuje wymaganego ustawienia.",
         "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
       },
       "testEnvironments": {
         "title": "Środowiska testowe",
         "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
-        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają.",
-        "attention": "Dostawca środowisk jest nieosiągalny albo brakuje wymaganego ustawienia."
+        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają."
       },
       "contentStorage": {
         "title": "Magazyn zrzutów ekranu",
         "done": "Skonfigurowano. Kontrole wizualne są włączone.",
-        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone.",
-        "attention": "Magazyn jest nieosiągalny."
+        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone."
       }
+    },
+    "causes": {
+      "unreachable": "Skonfigurowane, ale teraz nieosiągalne.",
+      "incomplete": "Połączone, ale brakuje wymaganego ustawienia.",
+      "rejected": "GitHub odrzucił token dostępu.",
+      "underscoped": "Token dostępu nie może wypychać zmian ani otwierać pull requestów.",
+      "presetBroken": "Domyślny preset modelu wskazuje model, który nie jest dostępny.",
+      "probeFailed": "Sprawdzenie nie odpowiedziało."
     },
     "also": {
       "title": "Także tutaj",
-      "pipelines": "Pipeline'y: {count} do naprawy, {fresh} nowych wbudowanych",
-      "riskPolicies": "Zasady scalania: {count} nieaktualnych, {fresh} nowych",
-      "modelPresets": "Presety modeli: {count} nieaktualnych, {fresh} nowych",
+      "pipelines": "Pipeline'y",
+      "riskPolicies": "Zasady scalania",
+      "modelPresets": "Presety modeli",
+      "counts": {
+        "repair": "Do naprawy: {count}",
+        "outdated": "Nieaktualne: {count}",
+        "new": "Nowe: {count}"
+      },
       "settings": "Ustawienia i połączenia",
       "workspaceSettings": "Ustawienia workspace'u",
       "integrations": "Integracje"
