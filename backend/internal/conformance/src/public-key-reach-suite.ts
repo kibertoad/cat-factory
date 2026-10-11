@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
 
-// Cross-runtime conformance for account-level public-API keys (docs/initiatives/directory-sync.md,
-// slice 2): a key belongs to an account, may be limited to some of its workspaces, and each
+// Cross-runtime conformance for account-level public-API keys (backend/docs/adr/0067-directory-sync.md,
+// ADR 0067): a key belongs to an account, may be limited to some of its workspaces, and each
 // workspace-scoped call names the workspace it acts on. What a facade could get wrong, and what a
 // unit test over a fake container cannot see, is the end-to-end chain: the grant rows written on
 // mint, the per-request resolution reading them back, the account boundary on an unrestricted key,

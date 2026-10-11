@@ -8,7 +8,7 @@ import { workspaceAccessModeSchema, workspaceRoleSchema } from './workspace-memb
 // ---------------------------------------------------------------------------
 // Directory sync vocabulary: the entities an external system mirrors from an account (who is in
 // it, which boards they reach, which repositories each board links). Design and slice plan:
-// docs/initiatives/directory-sync.md.
+// backend/docs/adr/0067-directory-sync.md.
 //
 // The entity type is persisted on every change-feed row and published on the wire, so this list
 // is append-only: retiring a member strands rows that still carry it.
@@ -29,7 +29,7 @@ export function isDirectoryEntityType(value: string): value is DirectoryEntityTy
 }
 
 // ---------------------------------------------------------------------------
-// The public directory read surface (`/api/v1/directory/*`, slice 3). Each entity is the CURRENT
+// The public directory read surface (`/api/v1/directory/*`). Each entity is the CURRENT
 // state of a row; a change names an entity and carries its current state, or `null` once it no
 // longer exists or is no longer visible to the calling key. Nothing here is a history: a change
 // replayed late carries the state at the time it is read, so a consumer applying changes in `seq`
@@ -190,7 +190,7 @@ export const DIRECTORY_REFUSAL_REASONS = [
 export type DirectoryRefusalReason = (typeof DIRECTORY_REFUSAL_REASONS)[number]
 
 // ---------------------------------------------------------------------------
-// Directory webhooks (slice 4): account-level endpoints that receive the change feed as signed
+// Directory webhooks: account-level endpoints that receive the change feed as signed
 // pushes, so a mirror learns of a change within a couple of minutes instead of its next poll.
 // Delivery is at-least-once and best-effort: the feed stays the guarantee of completeness, and a
 // receiver that missed a push catches up by polling `GET /api/v1/directory/changes`.

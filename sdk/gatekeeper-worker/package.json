@@ -47,6 +47,7 @@
   "dependencies": {
     "@cat-factory/gatekeeper-bindings": "workspace:*",
     "@cat-factory/sdk": "workspace:*",
+    "@cat-factory/webhooks": "workspace:*",
     "capnweb": "^0.12.0"
   },
   "devDependencies": {

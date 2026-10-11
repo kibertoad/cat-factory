@@ -1,4 +1,4 @@
--- The directory change feed (docs/initiatives/directory-sync.md): an append-only, per-account
+-- The directory change feed (backend/docs/adr/0067-directory-sync.md): an append-only, per-account
 -- ordered record of which directory entity changed. Rows name an entity and never carry its state.
 -- `seq` is assigned as MAX(seq) + ROW_NUMBER() inside the writer's batch, which SQLite serializes,
 -- so commit order equals seq order. No foreign keys: a row must outlive the entity it names.

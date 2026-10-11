@@ -1,5 +1,5 @@
 -- Public-API keys become account-level credentials that may be limited to a subset of the account's
--- workspaces (docs/initiatives/directory-sync.md, slice 2). A key with `all_workspaces = 1` reaches
+-- workspaces (backend/docs/adr/0067-directory-sync.md). A key with `all_workspaces = 1` reaches
 -- every workspace in its account, including later ones; otherwise it reaches exactly the workspaces
 -- granted in `public_api_key_workspaces`. Every existing key keeps the one workspace it had. The
 -- grant table carries `workspace_id`, so deleting a board removes its grants through the shared

@@ -1,5 +1,5 @@
 // The DIRECTORY tag's operation docs and the OpenAPI 3.1 `webhooks` entry for the directory push
-// (docs/initiatives/directory-sync.md). generate-openapi.mjs spreads both in; they live here so
+// (backend/docs/adr/0067-directory-sync.md). generate-openapi.mjs spreads both in; they live here so
 // that file stays inside its size budget.
 
 /** Operation docs for `/api/v1/directory/*`, keyed by operationId like `OPERATION_DOCS`. */

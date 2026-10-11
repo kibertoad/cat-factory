@@ -36,8 +36,12 @@ convention. It emits a second file beside the table, `session-types.generated.ts
 method signature per operation, which a front-end composes into the `.d.ts` a granted capability
 serves. See [its README](./gatekeeper/README.md).
 
-[`sdk/gatekeeper-worker`](./gatekeeper-worker) (`@cat-factory/gatekeeper-worker`) is the ONE
-package in this tree that the generator does not touch: the Gatekeeper Worker machinery itself,
+Three packages here are hand-written rather than generated, each a library built on the clients
+above. [`sdk/webhooks`](./webhooks) (`@cat-factory/webhooks`) verifies a signed outbound delivery,
+and is the one verifier every receiver here uses. [`sdk/directory-sync`](./directory-sync)
+(`@cat-factory/directory-sync`) keeps a copy of an account's directory in sync over a storage
+adapter the integrator writes. [`sdk/gatekeeper-worker`](./gatekeeper-worker)
+(`@cat-factory/gatekeeper-worker`) is the Gatekeeper Worker machinery itself,
 hand-written on top of that table and the TypeScript client. It lives here rather than under
 `deploy/` because it is a published library an outside deployment installs, and the split it makes
 is the point: `deploy/gatekeeper` keeps the policy and the bindings an operator edits, this keeps

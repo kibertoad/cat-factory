@@ -1,7 +1,7 @@
 import type { Logger } from '@cat-factory/kernel'
 import type { ServerContainer } from '../http/env.js'
 
-// The directory webhook delivery sweep (docs/initiatives/directory-sync.md, slice 4), shared by
+// The directory webhook delivery sweep (backend/docs/adr/0067-directory-sync.md), shared by
 // the Worker's frequent cron and the Node timer so both facades push on the same terms. A no-op
 // when the facade wired no webhook support (no `ENCRYPTION_KEY`).
 

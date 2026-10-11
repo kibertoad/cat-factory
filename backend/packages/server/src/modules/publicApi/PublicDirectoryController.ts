@@ -21,7 +21,7 @@ import { authorizeAccount, refuse } from './publicApiAuth.js'
 // memberships and linked repositories, and the change feed that keeps a mirror of them current.
 // Account-scoped, so no workspace header is read; the key's workspace reach becomes the reader's
 // filter. The rules (visibility, cursor expiry, the snapshot watermark) are `DirectoryService`'s.
-// Design: docs/initiatives/directory-sync.md.
+// Design: backend/docs/adr/0067-directory-sync.md.
 
 export function publicDirectoryController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()

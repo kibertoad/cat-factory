@@ -1,7 +1,7 @@
 import type { DirectoryWebhookRecord, DirectoryWebhookRepository } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
-// Cross-runtime parity for the directory webhook endpoints (directory sync slice 4). The two
+// Cross-runtime parity for the directory webhook endpoints (ADR 0067). The two
 // properties a sequential test cannot see are the ones this suite races: the per-account cap under
 // concurrent registrations (atomic in one SQLite statement on D1, an advisory lock on Postgres),
 // and the delivery lease that keeps two sweepers from pushing overlapping pages.

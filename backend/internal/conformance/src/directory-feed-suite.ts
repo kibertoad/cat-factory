@@ -10,7 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
-// Cross-runtime parity for the directory change feed (docs/initiatives/directory-sync.md). The
+// Cross-runtime parity for the directory change feed (backend/docs/adr/0067-directory-sync.md). The
 // feed rows are appended INSIDE each facade's repository writes, in each facade's own SQL, so the
 // two things most likely to drift are exactly what a single-runtime test cannot see: which writes
 // record which entities, and the per-account `seq` staying gap-free and unique when writers race.

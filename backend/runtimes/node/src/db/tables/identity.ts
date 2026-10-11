@@ -273,7 +273,7 @@ export const machineNodes = pgTable(
   ],
 )
 
-// The directory change feed (docs/initiatives/directory-sync.md): which directory entity changed,
+// The directory change feed (backend/docs/adr/0067-directory-sync.md): which directory entity changed,
 // ordered per account. Rows are appended by the repositories that write users, memberships,
 // workspaces and the repo projection, inside the same transaction and after a per-account advisory
 // lock, so commit order equals `seq` order. No foreign keys: a row must outlive the entity it
