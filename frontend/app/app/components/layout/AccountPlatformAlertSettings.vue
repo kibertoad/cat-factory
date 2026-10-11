@@ -25,7 +25,7 @@ import {
 const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -187,14 +187,12 @@ const ruleFaults = computed(() => failureKindRuleFaults(failureKindRules.value ?
 
 async function save() {
   if (!loaded.value) {
-    toast.add({ title: t('settings.platformAlerts.notLoaded'), color: 'error' })
+    actionToast.error('settings.platformAlerts.notLoaded')
     return
   }
   if (invalidFields.value.length > 0) {
-    toast.add({
-      title: t('settings.platformAlerts.invalidNumbers'),
+    actionToast.error('settings.platformAlerts.invalidNumbers', {
       description: invalidFields.value.join(', '),
-      color: 'error',
     })
     return
   }
@@ -203,14 +201,12 @@ async function save() {
   // two faults describe themselves differently because they are fixed differently — a row
   // number is useless advice for a list that is simply too long.
   if (hasFailureKindRuleFaults(ruleFaults.value)) {
-    toast.add({
-      title: t('settings.platformAlerts.failureKinds.invalidTitle'),
+    actionToast.error('settings.platformAlerts.failureKinds.invalidTitle', {
       description: ruleFaults.value.tooMany
         ? t('settings.platformAlerts.failureKinds.tooManyRules', { max: MAX_FAILURE_KIND_RULES })
         : t('settings.platformAlerts.failureKinds.invalidRows', {
             rows: ruleFaults.value.rows.join(', '),
           }),
-      color: 'error',
     })
     return
   }
@@ -229,11 +225,7 @@ async function save() {
     await store.save(props.accountId, {
       config: { ...store.view?.config, platformAlerts: settings },
     })
-    toast.add({
-      title: t('settings.platformAlerts.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.platformAlerts.saved')
   } catch (e) {
     present(e, 'settings.platformAlerts.saveFailed')
   } finally {

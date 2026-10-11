@@ -2,6 +2,7 @@
 // Pick a linked repository and one of its pull requests (an open one from the synced list, or any
 // number typed in) to open a guided review on.
 import type { OpenGuidedReviewInput } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 defineProps<{ opening: boolean; loading: boolean }>()
 const emit = defineEmits<{ open: [target: OpenGuidedReviewInput] }>()
@@ -34,13 +35,15 @@ function submit(number = prNumber.value): void {
 <template>
   <div class="mx-auto max-w-xl space-y-4" data-testid="guided-review-picker">
     <p class="text-sm text-muted">{{ t('guidedReview.picker.intro') }}</p>
-    <p v-if="loading" class="flex items-center gap-2 text-sm text-muted">
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-      {{ t('guidedReview.picker.loading') }}
-    </p>
-    <p v-else-if="!github.repos.length" class="text-sm text-toned">
-      {{ t('guidedReview.picker.noRepos') }}
-    </p>
+    <div v-if="loading" class="space-y-4">
+      <USkeleton class="h-8 w-full" />
+      <USkeleton class="h-8 w-full" />
+    </div>
+    <EmptyState
+      v-else-if="!github.repos.length"
+      icon="i-lucide-folder-git-2"
+      :title="t('guidedReview.picker.noRepos')"
+    />
     <template v-else>
       <UFormField :label="t('guidedReview.picker.repo')">
         <USelectMenu

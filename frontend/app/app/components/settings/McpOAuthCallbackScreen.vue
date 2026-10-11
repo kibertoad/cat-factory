@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // Where a vendor's authorization server sends the operator's browser back to after they approve a
 // remote MCP tool server (`/mcp-oauth-callback?code=…&state=…`).
@@ -69,7 +70,7 @@ function backToApp() {
       class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 text-center backdrop-blur"
     >
       <template v-if="state === 'working'">
-        <UIcon name="i-lucide-loader" class="mx-auto mb-3 h-10 w-10 animate-spin text-primary" />
+        <Spinner class="mx-auto mb-3 h-10 w-10 text-primary" />
         <h1 class="mb-1 text-lg font-semibold text-highlighted">
           {{ t('settings.toolServers.oauth.callback.working') }}
         </h1>

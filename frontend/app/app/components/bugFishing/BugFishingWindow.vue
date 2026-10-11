@@ -29,6 +29,8 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -304,11 +306,12 @@ const PHASE_ICON: Record<string, string> = {
                 :data-testid="`bug-fishing-phase-${phase.id}`"
                 @click="selectedPassKey = passKey(phase)"
               >
-                <UIcon
+                <Spinner
                   :name="PHASE_ICON[phase.status] ?? 'i-lucide-circle-dashed'"
+                  :spinning="phase.status === 'fishing'"
                   class="mt-0.5 h-3.5 w-3.5 shrink-0"
                   :class="{
-                    'animate-spin text-app-info-300': phase.status === 'fishing',
+                    'text-app-info-300': phase.status === 'fishing',
                     'text-app-success-400': phase.status === 'completed',
                     'text-app-warning-400': phase.status === 'failed',
                     'text-app-600': phase.status === 'pending',
@@ -379,7 +382,7 @@ const PHASE_ICON: Record<string, string> = {
           data-testid="bug-fishing-in-progress"
           class="mb-4 flex items-center gap-2 rounded-lg border border-app-info-500/25 bg-app-info-500/5 px-3 py-2 text-xs text-app-info-200"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+          <Spinner class="h-4 w-4 shrink-0" />
           <span>
             {{
               t('bugFishing.stillFishing', {
@@ -459,20 +462,19 @@ const PHASE_ICON: Record<string, string> = {
           {{ bugFishing.error }}
         </p>
 
-        <!-- An expedition that caught nothing is a real answer, not an empty state. The copy
-             says which of the two it is, because "nothing found" and "nothing left to triage"
-             are different things to be told. -->
-        <div
+        <!-- An expedition that caught nothing is a real answer. The copy says which of the two it
+             is, because "nothing found" and "nothing left to triage" are different things to be
+             told. -->
+        <EmptyState
           v-if="visibleFindings.length === 0"
           data-testid="bug-fishing-empty"
-          class="rounded-lg border border-default bg-default/40 px-4 py-8 text-center text-xs text-muted"
-        >
-          {{
+          :icon="findings.length === 0 ? 'i-lucide-fish' : 'i-lucide-check-check'"
+          :title="
             findings.length === 0
               ? t('bugFishing.empty.nothingCaught')
               : t('bugFishing.empty.allTriaged')
-          }}
-        </div>
+          "
+        />
 
         <ul v-else class="space-y-2">
           <li
@@ -591,7 +593,7 @@ const PHASE_ICON: Record<string, string> = {
               data-testid="bug-fishing-finding-spawning"
               class="mt-2 flex flex-wrap items-center gap-2 text-2xs text-muted"
             >
-              <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+              <Spinner class="h-3.5 w-3.5" />
               <span>{{ t('bugFishing.finding.spawning') }}</span>
             </div>
 

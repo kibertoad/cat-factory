@@ -23,6 +23,13 @@ export default defineAppConfig({
     badge: {
       defaultVariants: { color: 'primary', variant: 'solid', size: 'md' },
     },
+    // A skeleton is one step darker than Nuxt UI's `bg-elevated`, which is also the default
+    // skeleton fill. Many windows paint their body or inner cards `bg-elevated` or `app-950`
+    // (neutral-100 in light mode, the same colour), and a default skeleton there is invisible.
+    // `bg-accented` reads on those, on `bg-default`, and in dark mode.
+    skeleton: {
+      base: 'animate-pulse rounded-md bg-accented',
+    },
     // The toaster's scroll region is the ONE `[data-slot='viewport']` the app's own
     // CSS may target: Nuxt UI reuses that attribute for the item list of every menu
     // component too. This marker class is what `main.css` hangs the safe-area offset

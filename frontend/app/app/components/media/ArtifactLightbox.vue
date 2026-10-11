@@ -10,6 +10,7 @@ import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
 import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 interface LightboxItem {
@@ -273,10 +274,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           @pointercancel="onPointerUp"
         />
         <div v-else class="flex flex-col items-center gap-2 text-dimmed">
-          <UIcon
-            :name="state === 'error' ? 'i-lucide-image-off' : 'i-lucide-loader'"
+          <Spinner
+            :name="state === 'error' ? 'i-lucide-image-off' : undefined"
+            :spinning="state !== 'error'"
             class="h-8 w-8"
-            :class="state === 'error' ? '' : 'animate-spin'"
           />
           <p class="text-xs">
             {{ state === 'error' ? t('media.lightbox.failed') : t('media.lightbox.loading') }}

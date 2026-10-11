@@ -4,6 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { KaizenGrading } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import EmptyState from '~/components/common/EmptyState.vue'
 import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // The Kaizen screen: a full-panel overlay listing the workspace's grading history and
@@ -123,7 +124,16 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
             <p class="mb-3 text-2xs text-dimmed">
               {{ t('kaizen.verifiedCombos.hint') }}
             </p>
-            <ul class="space-y-2">
+            <div v-if="kaizen.loadingOverview && kaizen.verified.length === 0" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-14 w-full rounded-lg" />
+            </div>
+            <EmptyState
+              v-else-if="kaizen.verified.length === 0"
+              compact
+              icon="i-lucide-badge-check"
+              :title="t('kaizen.verifiedCombos.empty')"
+            />
+            <ul v-else class="space-y-2">
               <li
                 v-for="c in kaizen.verified"
                 :key="c.comboKey"
@@ -156,9 +166,6 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                   }}
                 </div>
               </li>
-              <li v-if="kaizen.verified.length === 0" class="text-xs text-app-600">
-                {{ t('kaizen.verifiedCombos.empty') }}
-              </li>
             </ul>
           </section>
 
@@ -171,6 +178,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
             <UTable
               :data="kaizen.history"
               :columns="historyColumns"
+              :loading="kaizen.loadingOverview"
               :ui="{
                 root: 'overflow-hidden rounded-lg border border-default',
                 base: 'text-xs',
@@ -220,8 +228,15 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                   </span>
                 </div>
               </template>
+              <!-- UTable draws its loading row only through this slot; without it an empty first
+                   load falls through to #empty and claims there is no history. -->
+              <template #loading>
+                <div class="space-y-2">
+                  <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
+                </div>
+              </template>
               <template #empty>
-                <span class="text-app-600">{{ t('kaizen.history.empty') }}</span>
+                <EmptyState compact icon="i-lucide-history" :title="t('kaizen.history.empty')" />
               </template>
             </UTable>
           </section>

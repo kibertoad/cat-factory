@@ -145,9 +145,14 @@ function backToApp() {
     data-testid="mcp-authorize"
   >
     <div class="w-full max-w-md rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
-      <template v-if="screen === 'loading'">
-        <UIcon name="i-lucide-loader" class="mx-auto h-10 w-10 animate-spin text-primary" />
-      </template>
+      <div v-if="screen === 'loading'" class="flex flex-col items-center">
+        <USkeleton class="mb-3 h-10 w-10 rounded-full" />
+        <USkeleton class="mb-2 h-6 w-3/4" />
+        <USkeleton class="mb-6 h-4 w-full" />
+        <USkeleton class="mb-4 h-8 w-full" />
+        <USkeleton class="mb-6 h-16 w-full" />
+        <USkeleton class="h-8 w-full" />
+      </div>
 
       <template v-else-if="screen === 'failed'">
         <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-app-error-400" />

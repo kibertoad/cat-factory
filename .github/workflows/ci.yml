@@ -539,6 +539,13 @@ jobs:
       - name: Guard SPA variant defaults
         run: node scripts/check-frontend-variants.mjs
 
+      # Bans `toast.add(` outside the two toast funnels (`usePipelineErrorToast` for a failed call,
+      # `useActionToast` for everything else) and `animate-spin` outside `common/Spinner.vue`, so a
+      # toast of one tone and a loading glyph render the same everywhere (#2252). Its fixtures run
+      # in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA feedback states
+        run: node scripts/check-frontend-feedback.mjs
+
       # Bans a hand-written full-screen `fixed` surface in the SPA. A full-screen overlay binds a
       # root class from `utils/safeArea.ts`, which carries the safe-area padding and the `100dvh`
       # cap, so a phone's notch cannot cover its header or close button. Its fixtures run in the

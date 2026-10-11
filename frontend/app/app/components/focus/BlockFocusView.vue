@@ -7,6 +7,7 @@ import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -214,12 +215,12 @@ function openApprovalFor(approvalId: string) {
           @open-approval="openApprovalFor"
         />
 
-        <div
+        <EmptyState
           v-else
-          class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-muted text-sm text-dimmed"
-        >
-          {{ t('focus.emptyPipelineHint') }}
-        </div>
+          class="flex-1"
+          icon="i-lucide-workflow"
+          :title="t('focus.emptyPipelineHint')"
+        />
       </section>
 
       <!-- side: details -->

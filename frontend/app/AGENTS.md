@@ -25,8 +25,10 @@ agent loads as instructions when it reads a file here.
 - **Import a layer component by path before using it**, never a bare tag; auto-registration is a
   coincidence and an unresolved tag renders nothing. [Rule](./README.md#always-import-a-layer-component-explicitly),
   guarded by `scripts/check-component-imports.mjs`.
-- **Report a failed call through `usePipelineErrorToast().present`**, never a hand-built
-  `toast.add`. [Rule](./README.md#every-failure-toast-goes-through-one-funnel).
+- **Report a failed call through `usePipelineErrorToast().present`, every other toast through
+  `useActionToast()`**, never a hand-built `toast.add`; loading is `:loading`, `USkeleton` or
+  `<Spinner>`, empty is `<EmptyState>`. [Rule](./README.md#every-failure-toast-goes-through-one-funnel),
+  guarded by `scripts/check-frontend-feedback.mjs`.
 - **Seed modal-open state with `onModalOpen`**, never a bare `watch(open)`.
   [Rule](./README.md#a-panel-that-seeds-state-on-open-uses-onmodalopen-never-a-bare-watchopen).
 - **Colour through theme tokens**, never a raw Tailwind hue or a fixed numbered alias.
@@ -72,6 +74,7 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
   `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
+  `node scripts/check-frontend-feedback.mjs`,
   `node scripts/check-file-size.mjs` from the repo root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),

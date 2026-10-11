@@ -12,6 +12,7 @@
 // convention); only the chrome around them is i18n.
 import { onMounted, ref } from 'vue'
 import type { TaskTypeSuppression } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -65,12 +66,15 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
       {{ t('settings.taskTypeSuppressions.intro') }}
     </p>
 
-    <p v-if="loading" class="text-2xs text-dimmed">
-      {{ t('settings.taskTypeSuppressions.loading') }}
-    </p>
-    <p v-else-if="!rows.length" class="text-2xs text-dimmed">
-      {{ t('settings.taskTypeSuppressions.empty') }}
-    </p>
+    <div v-if="loading" class="space-y-2">
+      <USkeleton v-for="n in 3" :key="n" class="h-12 w-full" />
+    </div>
+    <EmptyState
+      v-else-if="!rows.length"
+      compact
+      icon="i-lucide-list-checks"
+      :title="t('settings.taskTypeSuppressions.empty')"
+    />
     <ul v-else class="space-y-2" data-testid="task-type-suppressions">
       <li
         v-for="row in rows"
