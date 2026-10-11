@@ -368,6 +368,9 @@ importers:
       '@cat-factory/example-custom-agent':
         specifier: workspace:*
         version: link:../example-custom-agent
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
       '@cat-factory/node-server':
         specifier: workspace:*
         version: link:../../runtimes/node

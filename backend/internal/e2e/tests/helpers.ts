@@ -391,15 +391,22 @@ async function json<T>(res: {
 /**
  * Create a workspace seeded with the sample architecture (frames + the runnable `task_login`).
  *
- * Also connects the (faked) GitHub App for the new workspace. The e2e backend runs with the
- * GitHub App faked ON (see `src/fakeGitHub.ts`), and the SPA HARD-GATES the board behind a
- * `GitHubOnboarding` screen whenever the App is enabled backend-side but the workspace has no
- * installation (`pages/index.vue` — `needsGitHubInstall`). So a GitHub-connected workspace is
- * now the e2e baseline: without this seed EVERY board-opening spec would sit on the onboarding
- * gate and `openBoard` would time out. Seeding it here (the single workspace factory every spec
- * and the `seededBoard` fixture route through) keeps the board reachable; it adds NO board block
- * (only the installation + repo/branch projection rows), so the seeded architecture is unchanged.
- * Idempotent, so a spec that also calls `seedGitHub` explicitly (e.g. `github.spec.ts`) is safe.
+ * The recipe lives in ONE place, the control channel's `/seeded-workspace` (`src/testServer.ts`), so
+ * this factory and a developer seeding a board from a shell (README, "Running the SPA against the
+ * e2e backend") cannot drift apart. Besides the board it:
+ *
+ * - connects the (faked) GitHub App. The e2e backend runs with the App faked ON (see
+ *   `src/fakeGitHub.ts`), and the SPA HARD-GATES the board behind a `GitHubOnboarding` screen
+ *   whenever the App is enabled backend-side but the workspace has no installation
+ *   (`pages/index.vue`, `needsGitHubInstall`). Without it EVERY board-opening spec would sit on the
+ *   onboarding gate and `openBoard` would time out. It adds NO board block (only the installation +
+ *   repo/branch projection rows), and it is idempotent, so a spec that also calls `seedGitHub`
+ *   explicitly (e.g. `github.spec.ts`) is safe.
+ * - records `infraless` as the default test-environment provisioning mechanism, so
+ *   `DefaultTestEnvBanner` (an advisory top overlay that would intercept clicks on the board
+ *   chrome the specs drive) legitimately doesn't fire. `infraless` is what this backend really
+ *   does: e2e fakes the agent executor and wires no environment provider. A spec that wants to
+ *   drive the banner creates its workspace directly and records no choice.
  */
 export async function createSeededWorkspace(
   request: APIRequestContext,
@@ -410,22 +417,11 @@ export async function createSeededWorkspace(
    */
   name?: string,
 ): Promise<WorkspaceSnapshot> {
-  const snapshot = await json<WorkspaceSnapshot>(
-    await request.post(`${BACKEND_URL}/workspaces`, {
-      data: { seed: true, ...(name ? { name } : {}) },
-    }),
-  )
-  await seedGitHub(request, snapshot.workspace.id)
-  // Record a default test-environment provisioning mechanism, so `DefaultTestEnvBanner` — an
-  // advisory top overlay that would otherwise render on every seeded board and intercept clicks
-  // on the board chrome the specs drive — legitimately doesn't fire. `infraless` is the ACCURATE
-  // answer for this backend, not a mute button: e2e fakes the agent executor and wires no
-  // environment provider, so its services genuinely stand up no environment. A future spec that
-  // wants to drive the banner creates its workspace directly and records no choice.
-  await request.put(`${BACKEND_URL}/workspaces/${snapshot.workspace.id}/settings`, {
-    data: { defaultProvisionType: 'infraless' },
-  })
-  return snapshot
+  const res = await request.post(`${CONTROL_URL}/seeded-workspace`, { data: name ? { name } : {} })
+  // The control route's status names the failing layer (502: the app, 500: the GitHub seed), so
+  // report it as the control channel's answer rather than through `json()`'s "backend" prefix.
+  if (!res.ok()) throw new Error(`seeded-workspace control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as WorkspaceSnapshot
 }
 
 /**
