@@ -2,7 +2,11 @@
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
-import { NOTIFICATION_GO_TO_KEYS } from '~/utils/notificationVerbs'
+import {
+  notificationTarget,
+  notificationVerbKey,
+  type NotificationRouteDeps,
+} from '~/utils/notificationRoutes'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -134,16 +138,30 @@ function actionLabel(n: Notification): string {
   return te(key) ? t(key) : t('layout.notifications.action.markRead')
 }
 
+// The store reads and openers every route uses (`utils/notificationRoutes.ts`).
+const routeDeps: NotificationRouteDeps = {
+  getInstance: (id) => execution.getInstance(id),
+  select: (id) => ui.select(id),
+  openStepDetail: (id, index) => ui.openStepDetail(id, index),
+  openDecision: (id, decisionId) => ui.openDecision(id, decisionId),
+  openFollowUps: (id) => ui.openFollowUps(id),
+  openForkDecision: (id) => ui.openForkDecision(id),
+  openPrReview: (id) => ui.openPrReview(id),
+  openBugFishing: (id) => ui.openBugFishing(id),
+  openRequirementReview: (id) => ui.openRequirementReview(id),
+  openClarityReview: (id) => ui.openClarityReview(id),
+  openInitiativeTracker: (id) => ui.openInitiativeTracker(id),
+  openOperatorDashboard: () => ui.openOperatorDashboard(),
+}
+
 /**
- * The primary verb for a card whose act button only marks it read: the route the title click
- * already takes, named (see `utils/notificationVerbs.ts`). Null when the act button is itself the
- * action, or when there is no block to go to.
+ * The primary verb for a card whose act button only marks it read, from the same resolution its
+ * click takes. `te()`-guarded like the act label: a locale missing the key gets no button rather
+ * than a raw key path.
  */
 function goToLabel(n: Notification): string | null {
-  if (!n.blockId) return null
-  const key = NOTIFICATION_GO_TO_KEYS[n.type]
-  if (n.type === 'decision_required' && !parkedStep(n)) return t('layout.notifications.goTo.open')
-  return key ? t(key) : null
+  const key = notificationVerbKey(n, routeDeps)
+  return key && te(key) ? t(key) : null
 }
 
 /** Each open card's go-to label, computed once per change rather than once per binding. */
@@ -251,120 +269,9 @@ async function dismiss(n: Notification) {
   }
 }
 
-/**
- * Clicking a notification's title takes the user where they can act on it. A
- * `requirement_review` / `clarity_review` summons them straight back into the matching review
- * window (the async incorporate/re-review raised new findings or hit the cap); every other
- * type just focuses the related block on the board.
- */
+/** Clicking a notification's title, or its verb, takes the user where they can act on it. */
 function reveal(n: Notification) {
-  // A `platform_health` card is deployment-scoped (no block) — send the operator to the
-  // dashboard where the live aggregate numbers behind the alert live.
-  if (n.type === 'platform_health') return ui.openOperatorDashboard()
-  if (!n.blockId) return
-  if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
-  else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)
-  else if (n.type === 'decision_required') revealDecision(n)
-  else if (n.type === 'human_test_ready') revealHumanTest(n)
-  else if (n.type === 'visual_confirmation_ready') revealVisualConfirm(n)
-  else if (n.type === 'human_review') revealHumanReview(n)
-  else if (n.type === 'followup_pending') revealFollowUps(n)
-  else if (n.type === 'fork_decision_pending') revealForkDecision(n)
-  else if (n.type === 'judge_review') revealJudge(n)
-  else if (n.type === 'pr_review_ready') revealPrReview(n)
-  else if (n.type === 'bug_fishing_triage') revealBugFishing(n)
-  else if (n.type === 'initiative') ui.openInitiativeTracker(n.blockId)
-  else ui.select(n.blockId)
-}
-
-/**
- * Open the gate window for a parked `human-review` gate: find the run's human-review step and
- * open it through the universal step dispatch (its archetype declares the `gate` result view,
- * where the human can request a freeform fix). Falls back to focusing the block.
- */
-function revealHumanReview(n: Notification) {
-  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const idx = instance?.steps.findIndex((s) => s.agentKind === 'human-review') ?? -1
-  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the Follow-up companion window for a run whose Coder parked on undecided items.
- * Falls back to focusing the block when the run isn't loaded.
- */
-function revealFollowUps(n: Notification) {
-  if (n.executionId && execution.getInstance(n.executionId)) ui.openFollowUps(n.executionId)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the implementation-fork decision window for a run parked awaiting a fork choice.
- * Falls back to focusing the block when the run isn't loaded.
- */
-function revealForkDecision(n: Notification) {
-  if (n.executionId && execution.getInstance(n.executionId)) ui.openForkDecision(n.executionId)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the judge window for a run parked on a rubric verdict: find the step carrying the parked
- * verdict and open it through the universal step dispatch (a registered judge declares the
- * `judge` result view). Falls back to focusing the block when the run isn't loaded.
- */
-function revealJudge(n: Notification) {
-  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const idx = instance?.steps.findIndex((s) => s.judge?.status === 'awaiting_decision') ?? -1
-  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the PR deep-review window for a run parked awaiting a finding selection.
- * Falls back to focusing the block when the run isn't loaded.
- */
-function revealPrReview(n: Notification) {
-  if (n.executionId && execution.getInstance(n.executionId)) ui.openPrReview(n.executionId)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the bug-fishing expedition window for a run whose angles have all settled. Falls back to
- * focusing the block when the run is not loaded, exactly like its PR-review sibling.
- */
-function revealBugFishing(n: Notification) {
-  if (n.executionId && execution.getInstance(n.executionId)) ui.openBugFishing(n.executionId)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the human-testing window for a parked `human-test` gate: find the run's parked
- * human-test step and open it through the universal step dispatch (its archetype declares
- * the `human-test` result view). Falls back to focusing the block.
- */
-function revealHumanTest(n: Notification) {
-  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const idx =
-    instance?.steps.findIndex(
-      (s) => s.agentKind === 'human-test' && s.state === 'waiting_decision',
-    ) ?? -1
-  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
-  else if (n.blockId) ui.select(n.blockId)
-}
-
-/**
- * Open the visual-confirmation window for a parked `visual-confirmation` gate: find the run's
- * parked step and open it through the universal step dispatch (its archetype declares the
- * `visual-confirm` result view). Falls back to focusing the block.
- */
-function revealVisualConfirm(n: Notification) {
-  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const idx =
-    instance?.steps.findIndex(
-      (s) => s.agentKind === 'visual-confirmation' && s.state === 'waiting_decision',
-    ) ?? -1
-  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
-  else if (n.blockId) ui.select(n.blockId)
+  notificationTarget(n, routeDeps)?.open()
 }
 
 /**
@@ -403,34 +310,6 @@ function canOpenFailingRun(run: { executionId: string; blockId: string | null })
 function revealFailingRun(run: { executionId: string; blockId: string | null }) {
   if (execution.getInstance(run.executionId)) ui.openObservability(run.executionId)
   else if (run.blockId) ui.select(run.blockId)
-}
-
-/**
- * Open the decision surface for a parked iteration-cap run: find the run's step that is
- * waiting on a human and open it through the universal step dispatch — which routes a
- * `requirements-review` step to the review window and a companion step to its detail
- * panel (where the iteration-cap prompt lives). Falls back to focusing the block.
- */
-function revealDecision(n: Notification) {
-  const parked = parkedStep(n)
-  if (!parked) {
-    if (n.blockId) ui.select(n.blockId)
-    return
-  }
-  // An agent-raised question is answered in the decision window, as from the task card and the
-  // toolbar. The step detail only shows it read-only; it is the surface for the other parks (an
-  // approval gate, an iteration cap).
-  const decision = parked.step.decision
-  if (decision && !decision.chosen) ui.openDecision(parked.instanceId, decision.id)
-  else ui.openStepDetail(parked.instanceId, parked.index)
-}
-
-/** The step a `decision_required` card's run is parked on, when that run is loaded. */
-function parkedStep(n: Notification) {
-  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const index = instance?.steps.findIndex((s) => s.state === 'waiting_decision') ?? -1
-  const step = instance?.steps[index]
-  return instance && step ? { instanceId: instance.id, index, step } : null
 }
 </script>
 
@@ -567,7 +446,7 @@ function parkedStep(n: Notification) {
                 <UButton
                   data-testid="notification-act"
                   :color="goToLabels.get(n.id) ? 'neutral' : accent(n)"
-                  :variant="goToLabels.get(n.id) ? 'ghost' : 'soft'"
+                  :variant="goToLabels.get(n.id) ? 'outline' : 'soft'"
                   size="xs"
                   :loading="busy === n.id"
                   :disabled="!access.canExecuteRuns.value"

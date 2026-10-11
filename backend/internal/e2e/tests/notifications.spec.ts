@@ -9,10 +9,11 @@ import {
   taskCard,
 } from './helpers'
 
-// A merger-less pipeline that reaches `pr_ready` raises a `pipeline_complete` notification —
-// a first-class, human-actionable surface pushed live over the same WebSocket the board uses.
-// These specs drive a real run to `pr_ready`, then exercise the inbox END-TO-END in the real
-// SPA: the bell appears live, the item is the right type, and acting / dismissing resolves it.
+// The inbox END-TO-END in the real SPA, over notifications pushed live on the same WebSocket the
+// board uses. Each spec drives a real run to the state that raises its card: `pr_ready` (a
+// merger-less pipeline raises `pipeline_complete`), or a park on a decision or an approval gate
+// (`decision_required`). It then checks that the bell appears live, the item has the right type,
+// and that acting, dismissing or the card's verb does what it says.
 //
 // NOTE on scope: the e2e backend has GitHub OFF, so "Confirm & merge" can't perform a real
 // merge (there is no PR) — the task is NOT expected to flip to `done` here. The merge SIDE-
@@ -82,8 +83,9 @@ test.describe('notifications inbox', () => {
     )
     await expect(item).toBeVisible()
 
-    // The card's primary button is the action, not "Mark read". An agent's question opens the
-    // decision window, where it can be answered, and the inbox closes behind it.
+    // The card's primary button reads "Answer". Its label waits for the run to be parked in the
+    // store (until then it reads "Open"), so the click below cannot land before the decision has.
+    // It opens the decision window, where the question is answered, and the inbox closes.
     const goTo = item.getByTestId('notification-go-to')
     await expect(goTo).toHaveText('Answer')
     await goTo.click()
