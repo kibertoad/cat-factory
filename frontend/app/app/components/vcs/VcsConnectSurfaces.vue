@@ -27,6 +27,12 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const github = useGitHubStore()
+const { canManageIntegrations } = useWorkspaceAccess()
+
+// Connecting is an `integrations.manage` write, and the connect-options read is gated the same way,
+// so for anyone else the options come back empty. That empty list says nothing about the
+// deployment: name the board admin instead of telling a member the operator configured nothing.
+const adminRequired = computed(() => !canManageIntegrations.value)
 
 // Whether the deployment serves neither surface. Rendered as a statement rather than an empty
 // box: "nothing is configured" and "we couldn't read what is configured" both land here, and a
@@ -36,23 +42,33 @@ const nothingConfigured = computed(() => !github.canConnectGitHubApp && !github.
 
 <template>
   <div class="space-y-3">
-    <template v-if="github.canConnectGitHubApp">
-      <p v-if="props.appIntro" class="text-sm text-muted">{{ props.appIntro }}</p>
-      <GitHubConnect />
-    </template>
-
-    <USeparator
-      v-if="github.canConnectGitHubApp && github.canConnectGitLabPat"
-      :label="t('vcs.connect.or')"
-    />
-
-    <GitLabConnect v-if="github.canConnectGitLabPat" />
-
     <p
-      v-if="nothingConfigured"
+      v-if="adminRequired"
       class="rounded-md border border-dashed border-default px-3 py-3 text-sm text-muted"
+      data-testid="vcs-connect-admin-required"
     >
-      {{ t('vcs.connect.noneConfigured') }}
+      {{ t('vcs.connect.adminRequired') }}
     </p>
+
+    <template v-else>
+      <template v-if="github.canConnectGitHubApp">
+        <p v-if="props.appIntro" class="text-sm text-muted">{{ props.appIntro }}</p>
+        <GitHubConnect />
+      </template>
+
+      <USeparator
+        v-if="github.canConnectGitHubApp && github.canConnectGitLabPat"
+        :label="t('vcs.connect.or')"
+      />
+
+      <GitLabConnect v-if="github.canConnectGitLabPat" />
+
+      <p
+        v-if="nothingConfigured"
+        class="rounded-md border border-dashed border-default px-3 py-3 text-sm text-muted"
+      >
+        {{ t('vcs.connect.noneConfigured') }}
+      </p>
+    </template>
   </div>
 </template>

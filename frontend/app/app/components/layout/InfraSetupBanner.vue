@@ -6,6 +6,11 @@
 // runtime whose account picked no backend — incl. Cloudflare without an ARTIFACT_BUCKET binding;
 // ephemeral test environments on any runtime that wires the integration).
 //
+// Audience: a card renders only for a caller who can act on its area, per the server-reported
+// owner (`infraSetupOwners`) and `canActOnSetup`. A caller who cannot (a member, a viewer, the
+// designer surface, or anyone when the operator owns the gap) sees one compact line instead, and
+// only for a gap that stops every run (`InfraSetupNotice`).
+//
 // Positioning/stacking against the sibling advisory banners (AI-readiness, provider-config) is
 // owned by the shared, click-through banner column in `pages/index.vue` — so concurrent prompts
 // stack vertically instead of drawing on top of each other. This component only stacks its OWN
@@ -52,11 +57,14 @@ import {
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { InfraSetupArea, InfraSetupStatus } from '~/types/domain'
 import { infraSetupDismissalKey, type InfraSetupCardKind } from '~/utils/infraSetup'
+import { blockingSetupNotice, canActOnSetup } from '~/utils/setupAudience'
+import InfraSetupNotice from '~/components/layout/InfraSetupNotice.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
+const { actor } = useSetupActor()
 
 // Severity order: no executor blocks EVERY agent, so it leads; a missing test environment blocks
 // only testing agents; missing storage only degrades the UI-tester's screenshots.
@@ -140,6 +148,9 @@ const visible = computed<AreaCard[]>(() => {
   return AREAS.filter((area) => {
     const kind = cardKind(status[area])
     if (!kind) return false
+    // A card is for the people who can act on it. Everyone else hears about a gap only when it
+    // stops their own work, through the one line below (`blockingSetupNotice`).
+    if (!canActOnSetup(workspace.infraSetupOwners?.[area], actor.value)) return false
     // Both dismissals are keyed by the CLAIM, not by the area: silencing "you haven't configured
     // this" must not also silence "you configured it and it is now down". The permanent dismissal
     // only ever covers a setup gap (`dismissPermanently` is offered nowhere else).
@@ -150,6 +161,18 @@ const visible = computed<AreaCard[]>(() => {
     kind: cardKind(status[area])!,
     ...(workspace.infraSetupDetails[area] ? { detail: workspace.infraSetupDetails[area] } : {}),
   }))
+})
+
+// The one line for a caller who cannot act on a gap that stops every run. It honours BOTH
+// dismissals of the card it stands in for, keyed by the same claim: someone who said "don't
+// notify me again" on the card (before their role changed, say) is not nagged again by the line.
+const notice = computed(() => {
+  const found = blockingSetupNotice(workspace.infraSetup, workspace.infraSetupOwners, actor.value)
+  if (!found) return null
+  if (ui.infraSetupSessionDismissed.includes(infraSetupDismissalKey(found.area, found.kind))) {
+    return null
+  }
+  return found.kind === 'setup' && dismissedForUser.value.includes(found.area) ? null : found
 })
 
 /** Which card an area's status raises, or null when it raises none (`configured`/`not_applicable`). */
@@ -169,7 +192,7 @@ function titleKey(card: AreaCard): string {
  * The dismiss dropdown: the product wants the user asked WHICH kind of dismissal on close. An
  * outage offers the session option ONLY — see the fork note at the top of this file.
  */
-function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
+function dismissMenu(card: Pick<AreaCard, 'area' | 'kind'>): DropdownMenuItem[][] {
   const session = {
     label: t('layout.infraSetupBanner.dismiss.session'),
     icon: 'i-lucide-clock',
@@ -195,11 +218,12 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
          than an assertive `role="alert"` per card — an advisory setup nag shouldn't interrupt a
          screen reader, and up to three stacked alerts would spam it. -->
     <div
-      v-if="visible.length > 0"
+      v-if="visible.length > 0 || notice"
       class="flex w-full flex-col items-center gap-2"
       role="status"
       aria-live="polite"
     >
+      <InfraSetupNotice v-if="notice" :notice="notice" :dismiss-menu="dismissMenu(notice)" />
       <!-- An OUTAGE reads red, a setup gap amber: one is something breaking now, the other is
            something never switched on, and a reader has to be able to tell at a glance. -->
       <div
