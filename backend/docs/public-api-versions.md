@@ -480,3 +480,16 @@ the key's grant on it. `ConflictError` reasons gain `cursor_expired`, for a feed
 the feed's retention.
 
 The number is 1.81.0 because 1.80.0 went to account-level keys while this branch was in flight.
+
+## 1.82.0
+
+Directory webhooks: `GET /api/v1/directory/webhooks`, `PUT` and `DELETE
+/api/v1/directory/webhooks/{webhookId}` register account-level endpoints the directory change feed
+is pushed to, every couple of minutes, signed like the notification webhooks. The document gains an
+OpenAPI 3.1 `webhooks` section naming every push body: `DirectoryWebhookDelivery`, and the existing
+`NotificationWebhookDelivery`, `RunWebhookDelivery` and `PlatformAlertWebhookDelivery`, which become
+generated types in every client.
+
+Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
+at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
+completeness.

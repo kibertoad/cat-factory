@@ -39,6 +39,9 @@ from .models import (
     DirectoryChangePage,
     DirectoryRepoPage,
     DirectoryUserPage,
+    DirectoryWebhook,
+    DirectoryWebhookDelivery,
+    DirectoryWebhookList,
     DirectoryWorkspaceMembershipPage,
     DirectoryWorkspacePage,
     EditGuidedReviewDraft,
@@ -133,6 +136,7 @@ from .models import (
     PublicTask,
     PublicTaskList,
     PublicUsage,
+    PutDirectoryWebhook,
     PutNotificationWebhook,
     RequestGuidedReviewDrafts,
     RunStatus,
@@ -2762,6 +2766,19 @@ class DirectoryResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
+    def delete_webhook(self, webhook_id: str, *, timeout: float | None = None) -> None:
+        """Remove a directory webhook
+        Stop pushing to an endpoint. Idempotent.
+        `DELETE /api/v1/directory/webhooks/{webhookId}` (operation
+        `deleteDirectoryWebhook`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/directory/webhooks/{_quote(webhook_id)}",
+            query=None,
+            timeout=timeout,
+        )
+
     def list_account_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryAccountMembershipPage:
         """List the account's memberships
         A keyset-paged snapshot of the account’s memberships, each with the member’s account
@@ -2883,6 +2900,23 @@ class DirectoryResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
+    def list_webhooks(self, *, timeout: float | None = None) -> DirectoryWebhookList:
+        """List the account's directory webhooks
+        The endpoints the directory change feed is pushed to, each with the feed position
+        delivered through. The signing secret is write-only: `hasSecret` says whether one is
+        set. Requires an `admin` key that reaches every workspace (`403` with `reason:
+        "account_scope_required"` otherwise), because an endpoint receives every change in
+        the account.
+        `GET /api/v1/directory/webhooks` (operation `listDirectoryWebhooks`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/webhooks",
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryWebhookList.from_dict(raw)
+
     def list_workspace_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryWorkspaceMembershipPage:
         """List workspace memberships
         A keyset-paged snapshot of the explicit workspace memberships in the account’s
@@ -2946,6 +2980,25 @@ class DirectoryResource:
             if page.next_cursor == page_cursor:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
+
+    def put_webhook(self, webhook_id: str, body: PutDirectoryWebhook | None = None, *, timeout: float | None = None) -> DirectoryWebhook:
+        """Register or edit a directory webhook
+        Register an endpoint the directory change feed is pushed to, or edit one; an omitted
+        field keeps its stored value, and `url` is required only when registering. A new
+        endpoint starts at the feed head: it is pushed what changes from now on, and its
+        receiver bootstraps the past from the snapshots. Pushes run every couple of minutes,
+        signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account
+        holds at most 10 (`409` with `reason: "webhook_limit_reached"`).
+        `PUT /api/v1/directory/webhooks/{webhookId}` (operation `putDirectoryWebhook`).
+        """
+        raw = self._transport.request(
+            "PUT",
+            f"/api/v1/directory/webhooks/{_quote(webhook_id)}",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryWebhook.from_dict(raw)
 
 
 class KaizenResource:

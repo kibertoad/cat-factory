@@ -787,8 +787,11 @@ export type {
 export { noopAuditRecorder } from './audit.js'
 export type {
   DirectoryChangeRecord,
+  DirectoryFeedReader,
   DirectoryRepoKey,
   DirectoryRepository,
+  DirectoryWebhookRecord,
+  DirectoryWebhookRepository,
   WorkspaceMembershipKey,
 } from './directory-changes.js'
 export type {

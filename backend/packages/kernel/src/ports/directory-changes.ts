@@ -1,5 +1,6 @@
 import type {
   DirectoryAccountMembership,
+  DirectoryChangePage,
   DirectoryEntityType,
   DirectoryRepo,
   DirectoryUser,
@@ -67,6 +68,8 @@ export interface DirectoryRepository {
   ): Promise<DirectoryChangeRecord[]>
   /** The account's highest assigned `seq`, or 0 when nothing was ever recorded. */
   headSeq(accountId: string): Promise<number>
+  /** `headSeq` for many accounts in one read; an account with no rows maps to 0. */
+  headSeqs(accountIds: string[]): Promise<Map<string, number>>
   /** The account's lowest retained `seq`, or null when it has no rows. */
   oldestSeq(accountId: string): Promise<number | null>
   /**
@@ -117,4 +120,70 @@ export interface DirectoryRepository {
     keys: WorkspaceMembershipKey[],
   ): Promise<DirectoryWorkspaceMembership[]>
   getRepos(accountId: string, keys: DirectoryRepoKey[]): Promise<DirectoryRepo[]>
+}
+
+/**
+ * The read the directory webhook sweeper needs: the same pages `GET /api/v1/directory/changes`
+ * serves, so a push and a poll can never disagree about what a change carries.
+ */
+export interface DirectoryFeedReader {
+  headSeq(accountId: string): Promise<number>
+  /** Each account's newest feed position in one read; an account with no rows maps to 0. */
+  headSeqs(accountIds: string[]): Promise<Map<string, number>>
+  /** Throws a `ConflictError` with reason `cursor_expired` when `after` is out of the feed. */
+  changes(
+    reader: { accountId: string; workspaceIds: string[] | null },
+    after: number,
+    limit?: number,
+  ): Promise<DirectoryChangePage>
+}
+
+/** A registered directory webhook endpoint. */
+export interface DirectoryWebhookRecord {
+  accountId: string
+  id: string
+  url: string
+  enabled: boolean
+  /** The signing secret sealed under the deployment key, or null for an unsigned endpoint. */
+  secretSealed: string | null
+  /** The feed position delivered through. Owned by the sweeper (`claim`/`complete`) once the row exists. */
+  deliveredSeq: number
+  updatedAt: number
+}
+
+export interface DirectoryWebhookRepository {
+  /** The account's endpoints, ordered by id. */
+  list(accountId: string): Promise<DirectoryWebhookRecord[]>
+  get(accountId: string, id: string): Promise<DirectoryWebhookRecord | null>
+  /**
+   * Insert or update an endpoint. An update writes `url`, `enabled`, `secretSealed` and
+   * `updatedAt` and leaves `deliveredSeq` to the sweeper. A NEW endpoint is admitted only while the
+   * account holds fewer than `limit`, checked atomically with the insert in the store.
+   */
+  put(record: DirectoryWebhookRecord, limit: number): Promise<'stored' | 'limit_reached'>
+  delete(accountId: string, id: string): Promise<void>
+  /** Every enabled endpoint across accounts, for the delivery sweep. */
+  listEnabled(): Promise<DirectoryWebhookRecord[]>
+  /**
+   * Take the endpoint's delivery lease under `token` when no live lease is held (none, or one whose
+   * `leaseUntil` is at or before `now`) and the endpoint is enabled. Returns the position to deliver
+   * after, or null when another sweeper holds the lease or the endpoint is gone or disabled. The
+   * lease is what keeps two sweepers from pushing the same or overlapping pages, and its expiry is
+   * what lets a page whose sweeper died mid-push be offered again.
+   */
+  claim(
+    accountId: string,
+    id: string,
+    token: string,
+    now: number,
+    leaseUntil: number,
+  ): Promise<number | null>
+  /**
+   * After a successful push: set `deliveredSeq` to `toSeq` and drop the lease, only while `token`
+   * still holds it. False when the lease expired and was taken over, in which case the next holder
+   * sends the page again.
+   */
+  complete(accountId: string, id: string, token: string, toSeq: number): Promise<boolean>
+  /** After a failed push: drop the lease without moving `deliveredSeq`, only while `token` holds it. */
+  release(accountId: string, id: string, token: string): Promise<void>
 }

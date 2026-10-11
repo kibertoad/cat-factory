@@ -11,6 +11,7 @@ import type {
 import {
   ConflictError,
   type DirectoryChangeRecord,
+  type DirectoryFeedReader,
   type DirectoryRepoKey,
   type DirectoryRepository,
   ForbiddenError,
@@ -43,8 +44,18 @@ export interface DirectoryServiceDependencies {
 /** Page size when the caller names none; the contract caps an explicit one at the same value. */
 const DEFAULT_PAGE_SIZE = 100
 
-export class DirectoryService {
+export class DirectoryService implements DirectoryFeedReader {
   constructor(private readonly deps: DirectoryServiceDependencies) {}
+
+  /** The account's newest feed position. */
+  headSeq(accountId: string): Promise<number> {
+    return this.deps.directoryRepository.headSeq(accountId)
+  }
+
+  /** Each account's newest feed position, in one read. */
+  headSeqs(accountIds: string[]): Promise<Map<string, number>> {
+    return this.deps.directoryRepository.headSeqs(accountIds)
+  }
 
   /**
    * Changes after `after`, each carrying its entity's current state (or `null` once it is gone or

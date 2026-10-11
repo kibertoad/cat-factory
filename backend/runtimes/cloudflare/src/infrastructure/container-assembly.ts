@@ -160,6 +160,7 @@ import { selectGitHubDeps } from './github-deps.js'
 import { selectTasksDeps } from './tasks-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
+  buildDirectoryWebhooksForWorker,
   buildExternalNotificationChannel,
   buildWorkerNotificationDelivery,
   selectSlackDeps,
@@ -718,6 +719,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,
     ...selectWorkerCorePersistence({ db, clock }),
+    ...buildDirectoryWebhooksForWorker(env, config, db),
     ...selectWorkerObservabilityDeps({
       config,
       db,

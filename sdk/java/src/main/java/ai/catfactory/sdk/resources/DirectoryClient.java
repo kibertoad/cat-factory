@@ -27,6 +27,16 @@ public final class DirectoryClient {
     }
 
     /**
+     * Remove a directory webhook
+     * Stop pushing to an endpoint. Idempotent.
+     * {@code DELETE /api/v1/directory/webhooks/{webhookId}} (operation {@code
+     * deleteDirectoryWebhook}).
+     */
+    public void deleteWebhook(String webhookId) {
+        transport.requestNoContent("DELETE", "/api/v1/directory/webhooks/" + Transport.pathSegment(webhookId), null, Map.of());
+    }
+
+    /**
      * List the account's memberships (no query parameters).
      */
     public DirectoryAccountMembershipPage listAccountMemberships() {
@@ -168,6 +178,18 @@ public final class DirectoryClient {
     }
 
     /**
+     * List the account's directory webhooks
+     * The endpoints the directory change feed is pushed to, each with the feed position delivered
+     * through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an
+     * `admin` key that reaches every workspace (`403` with `reason: "account_scope_required"`
+     * otherwise), because an endpoint receives every change in the account.
+     * {@code GET /api/v1/directory/webhooks} (operation {@code listDirectoryWebhooks}).
+     */
+    public DirectoryWebhookList listWebhooks() {
+        return transport.request("GET", "/api/v1/directory/webhooks", null, Map.of(), new TypeReference<DirectoryWebhookList>() {});
+    }
+
+    /**
      * List workspace memberships (no query parameters).
      */
     public DirectoryWorkspaceMembershipPage listWorkspaceMemberships() {
@@ -241,5 +263,26 @@ public final class DirectoryClient {
                 return new Page<>(page.items(), page.nextCursor());
             }
         };
+    }
+
+    /**
+     * Register or edit a directory webhook (no body).
+     */
+    public DirectoryWebhook putWebhook(String webhookId) {
+        return putWebhook(webhookId, PutDirectoryWebhook.builder().build());
+    }
+
+    /**
+     * Register or edit a directory webhook
+     * Register an endpoint the directory change feed is pushed to, or edit one; an omitted field
+     * keeps its stored value, and `url` is required only when registering. A new endpoint starts
+     * at the feed head: it is pushed what changes from now on, and its receiver bootstraps the
+     * past from the snapshots. Pushes run every couple of minutes, signed like the notification
+     * webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with
+     * `reason: "webhook_limit_reached"`).
+     * {@code PUT /api/v1/directory/webhooks/{webhookId}} (operation {@code putDirectoryWebhook}).
+     */
+    public DirectoryWebhook putWebhook(String webhookId, PutDirectoryWebhook body) {
+        return transport.request("PUT", "/api/v1/directory/webhooks/" + Transport.pathSegment(webhookId), body, Map.of(), new TypeReference<DirectoryWebhook>() {});
     }
 }

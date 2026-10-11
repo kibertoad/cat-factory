@@ -763,3 +763,9 @@ export {
   toBase64,
   toBase64Url,
 } from './modules/shared/base64.js'
+export {
+  DIRECTORY_WEBHOOK_CIPHER_INFO,
+  DirectoryWebhookService,
+  type DirectoryWebhookServiceDependencies,
+  type DirectoryWebhookSweepResult,
+} from './modules/directoryWebhook/DirectoryWebhookService.js'

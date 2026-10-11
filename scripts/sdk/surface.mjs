@@ -227,6 +227,9 @@ const SURFACE = {
     paginates: 'items',
   },
   listDirectoryRepos: { group: 'directory', method: 'listRepos', paginates: 'items' },
+  listDirectoryWebhooks: { group: 'directory', method: 'listWebhooks' },
+  putDirectoryWebhook: { group: 'directory', method: 'putWebhook' },
+  deleteDirectoryWebhook: { group: 'directory', method: 'deleteWebhook' },
   getPublicKaizenEntry: { group: 'kaizen', method: 'getEntry' },
   acknowledgePublicKaizenEntry: { group: 'kaizen', method: 'acknowledgeEntry' },
   // ---- Guided PR review (`read` to follow a session, `write` to open, ask or draft) ---------
@@ -361,6 +364,8 @@ export const MCP_TOOL_HINTS = {
   // whole subtree and every run recorded under it. Idempotent in EFFECT (a second call finds
   // nothing left to remove and 404s), which says nothing about the first one being recoverable.
   deletePublicService: { destructive: true, idempotent: true },
+  deleteDirectoryWebhook: { destructive: true, idempotent: true },
+  putDirectoryWebhook: { destructive: true, idempotent: true },
   // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
   // both overwrite state whose previous value cannot be recovered through this API: the endpoint
   // someone else's integration is registered at, and a signing secret that is never readable back.

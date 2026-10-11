@@ -1,15 +1,18 @@
-import { defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   directoryAccountMembershipPageSchema,
   directoryChangePageSchema,
   directoryRepoPageSchema,
   directoryUserPageSchema,
+  directoryWebhookListSchema,
+  directoryWebhookSchema,
   directoryWorkspaceMembershipPageSchema,
   directoryWorkspacePageSchema,
   listDirectoryChangesQuerySchema,
   listDirectorySnapshotQuerySchema,
+  putDirectoryWebhookSchema,
 } from '../directory.js'
-import { errorResponses, withMinScope } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Route contracts for the public DIRECTORY surface (`/api/v1/directory/*`): the account's
@@ -80,5 +83,39 @@ export const listDirectoryReposContract = withMinScope(
     requestQuerySchema: listDirectorySnapshotQuerySchema,
     pathResolver: () => '/api/v1/directory/repos',
     responsesByStatusCode: { 200: directoryRepoPageSchema, ...errorResponses },
+  }),
+)
+
+// ---- Directory webhooks: account-level push endpoints (`admin`, account-wide keys only) --------
+
+const webhookIdParams = singleStringParam('webhookId')
+
+export const listDirectoryWebhooksContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/directory/webhooks',
+    responsesByStatusCode: { 200: directoryWebhookListSchema, ...errorResponses },
+  }),
+)
+
+export const putDirectoryWebhookContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'put',
+    requestPathParamsSchema: webhookIdParams,
+    requestBodySchema: putDirectoryWebhookSchema,
+    pathResolver: ({ webhookId }) => `/api/v1/directory/webhooks/${webhookId}`,
+    responsesByStatusCode: { 200: directoryWebhookSchema, ...errorResponses },
+  }),
+)
+
+export const deleteDirectoryWebhookContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'delete',
+    requestPathParamsSchema: webhookIdParams,
+    pathResolver: ({ webhookId }) => `/api/v1/directory/webhooks/${webhookId}`,
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )

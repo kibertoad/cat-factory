@@ -182,7 +182,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { DirectoryRepository } from '@cat-factory/kernel'
+import type { DirectoryRepository, DirectoryWebhookRepository } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 import type { TesterQualityReviewer } from '../modules/execution/TesterQualityReviewService.js'
 import type { AgentContextObservabilityService } from '../modules/observability/AgentContextObservabilityService.js'
@@ -218,6 +218,16 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * reader would publish an API that 503s over data it is recording anyway.
    */
   directoryRepository: DirectoryRepository
+  /**
+   * Directory webhook endpoints and the cipher sealing their signing secrets. Present only when the
+   * facade has an `ENCRYPTION_KEY` to seal with; absent, the management routes 503 and nothing is
+   * pushed (the change feed still serves every change to a poller).
+   */
+  directoryWebhooks?: {
+    repository: DirectoryWebhookRepository
+    secretCipher: SecretCipher
+    urlSafetyPolicy?: UrlSafetyPolicy
+  }
   /** Hashes/verifies email-password credentials (WebCrypto PBKDF2). */
   passwordHasher: PasswordHasher
   /** Account invitations (email-based org onboarding). Optional: opt-in feature. */

@@ -195,5 +195,78 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
       expect(forged.status).toBe(422)
       expect(forged.body.error.details?.reason).toBe('invalid_cursor')
     })
+
+    it('manages directory webhooks with an account-wide admin key only', async () => {
+      const app = harness.makeApp()
+      const { w1, adminAuth } = await scenario(app)
+      const mintAdmin = async (workspaceIds: string[] | null) => {
+        const created = await app.call<{ secret: string }>(
+          'POST',
+          `/workspaces/${w1}/public-api-keys`,
+          { label: 'directory-admin', scope: 'admin', workspaceIds },
+          adminAuth,
+        )
+        return bearer(created.body.secret)
+      }
+      const accountAdmin = await mintAdmin(null)
+      const w1Admin = await mintAdmin([w1])
+      const head = (
+        await app.call<DirectoryChangePage>(
+          'GET',
+          '/api/v1/directory/changes',
+          undefined,
+          accountAdmin,
+        )
+      ).body.headSeq
+
+      const registered = await app.call<{ id: string; deliveredSeq: number; hasSecret: boolean }>(
+        'PUT',
+        '/api/v1/directory/webhooks/mirror',
+        { url: 'https://hooks.example.com/directory', secret: 'a-signing-secret-of-length' },
+        accountAdmin,
+      )
+      expect(registered.status).toBe(200)
+      // A new endpoint starts at the head: it is pushed what changes from now on.
+      expect(registered.body).toMatchObject({ id: 'mirror', deliveredSeq: head, hasSecret: true })
+      expect(JSON.stringify(registered.body)).not.toContain('a-signing-secret-of-length')
+
+      const listed = await app.call<{ webhooks: { id: string }[] }>(
+        'GET',
+        '/api/v1/directory/webhooks',
+        undefined,
+        accountAdmin,
+      )
+      expect(listed.body.webhooks.map((w) => w.id)).toEqual(['mirror'])
+
+      // Every change in the account would reach the endpoint, so a narrower key may not manage one.
+      const narrow = await app.call<Refusal>(
+        'GET',
+        '/api/v1/directory/webhooks',
+        undefined,
+        w1Admin,
+      )
+      expect(narrow.status).toBe(403)
+      expect(narrow.body.error.details?.reason).toBe('account_scope_required')
+
+      const insecure = await app.call<Refusal>(
+        'PUT',
+        '/api/v1/directory/webhooks/plain',
+        { url: 'http://hooks.example.com/directory' },
+        accountAdmin,
+      )
+      expect(insecure.status).toBeGreaterThanOrEqual(400)
+
+      expect(
+        (await app.call('DELETE', '/api/v1/directory/webhooks/mirror', undefined, accountAdmin))
+          .status,
+      ).toBe(204)
+      const empty = await app.call<{ webhooks: unknown[] }>(
+        'GET',
+        '/api/v1/directory/webhooks',
+        undefined,
+        accountAdmin,
+      )
+      expect(empty.body.webhooks).toEqual([])
+    })
   })
 }
