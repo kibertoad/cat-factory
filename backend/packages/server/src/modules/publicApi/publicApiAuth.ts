@@ -125,48 +125,7 @@ export async function authorizeAccount<E extends AppEnv>(
       },
     }
   }
-  const workspace = await resolveWorkspace(c, result.auth)
-  if ('fail' in workspace) return workspace
-  return { auth: { ...result.auth, workspaceId: workspace.workspaceId } }
-}
-
-/**
- * The workspace a request acts on: the one the {@link PUBLIC_API_WORKSPACE_HEADER} header names, or
- * the key's only workspace when it has exactly one (every key minted before keys could span
- * workspaces). A restricted key's grants were checked against its account at mint, and a board
- * never leaves an account once linked, so only an unrestricted key naming a board needs the
- * ownership read. Absent and out of reach answer the same 404, so a key cannot probe for
- * workspaces it was not granted.
- */
-async function resolveWorkspace<E extends AppEnv>(
-  c: Context<E>,
-  key: PublicApiKeyIdentity,
-): Promise<{ workspaceId: string } | { fail: KeyFailure }> {
-  const named = c.req.header(PUBLIC_API_WORKSPACE_HEADER)?.trim()
-  const implied = key.workspaceIds?.length === 1 ? key.workspaceIds[0] : undefined
-  const workspaceId = named || implied
-  if (!workspaceId) {
-    return {
-      fail: {
-        status: 422,
-        code: 'validation',
-        message: `This key reaches several workspaces; name one in the '${PUBLIC_API_WORKSPACE_HEADER}' header`,
-        details: { reason: 'workspace_required' },
-      },
-    }
-  }
-  const notFound: { fail: KeyFailure } = {
-    fail: {
-      status: 404,
-      code: 'not_found',
-      message: 'Workspace not found',
-      details: { reason: 'workspace_not_found' },
-    },
-  }
-  if (!keyReaches(key.workspaceIds, workspaceId)) return notFound
-  if (key.workspaceIds !== null) return { workspaceId }
-  const accountId = await c.get('container').workspaceService.accountOf(workspaceId)
-  return accountId === key.accountId ? { workspaceId } : notFound
+  return result
 }
 
 /**
