@@ -36,7 +36,7 @@ on the published npm version** instead:
 // deploy/frontend/package.json
 "dependencies": {
   "@cat-factory/app": "^0.6.0",   // instead of "workspace:*"
-  "nuxt": "^4.4.8"
+  "nuxt": "^4.6.1"
 }
 ```
 

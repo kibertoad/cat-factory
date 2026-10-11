@@ -1,5 +1,58 @@
 # @cat-factory/orchestration
 
+## 0.320.4
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/integrations@0.175.3
+  - @cat-factory/agents@0.171.6
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/prompt-fragments@1.1.63
+  - @cat-factory/sandbox@0.12.77
+  - @cat-factory/spend@0.23.12
+  - @cat-factory/workspaces@0.29.24
+  - @cat-factory/caching@0.20.101
+
+## 0.320.3
+
+### Patch Changes
+
+- 22b6812: `GET /internal/agent-kinds` serves each distinct bundled skill and tool server once, in top-level
+  `bundledSkills` and `toolServers` lists, and each kind references them by index
+  (`skills.bundledRefs`, `toolServers.serverRefs`). A definition assigned to several kinds no longer
+  serialises once per kind (the Nuxt UI capability drops from ~300 KB to ~100 KB per mothership-mode
+  dispatch). The reply now carries a `version`, and a node refuses any version but its own with
+  `details.cause: 'mothership_version_mismatch'`.
+  
+  Boot validation refuses a bundled skill or tool server whose shape does not match its type
+  (`invalid_bundled_skill_definition`, `invalid_tool_server_definition`), naming the field.
+  
+  Internal wire break, with no compatibility path: update mothership-mode nodes together with the
+  mothership. Until then, on a deployment with assigned capabilities, every container dispatch on a
+  node whose build differs from its mothership fails with `agent_kinds_unreachable`. A newer node
+  names the cause; an older node cannot. An empty layer (no assigned capabilities) keeps working in
+  both directions.
+- Updated dependencies [22b6812]
+  - @cat-factory/agents@0.171.5
+  - @cat-factory/sandbox@0.12.76
+
+## 0.320.2
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/integrations@0.175.2
+  - @cat-factory/prompt-fragments@1.1.62
+  - @cat-factory/sandbox@0.12.75
+  - @cat-factory/spend@0.23.11
+  - @cat-factory/workspaces@0.29.23
+  - @cat-factory/caching@0.20.100
+
 ## 0.320.1
 
 ### Patch Changes

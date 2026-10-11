@@ -64,7 +64,6 @@
     }
   },
   "common": {
-    "loading": "Loading…",
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
@@ -181,7 +180,8 @@
     "reports": "Reports",
     "foundationalServices": "Foundational services",
     "tutorials": "Tutorials",
-    "help": "Help"
+    "help": "Help",
+    "setupChecklist": "Setup checklist"
   },
   "board": {
     "toast": {
@@ -924,6 +924,9 @@
       "title": "This view could not be loaded",
       "body": "Its code failed to load. That usually means the app was updated while this tab was open, so the files this page is asking for are no longer on the server. Reload to pick up the current version.",
       "reload": "Reload"
+    },
+    "reported": {
+      "description": "It ran and reported a failure. Show details to see what it said."
     }
   },
   "personalSubscriptions": {
@@ -1976,8 +1979,6 @@
     "exportJson": "Export JSON",
     "exportHint": "Download an LLM-friendly JSON export of this run",
     "closeEsc": "Close (Esc)",
-    "loadingActivity": "Loading model activity…",
-    "loadingContext": "Loading provided context…",
     "noCalls": "No model calls recorded for this run.",
     "noContext": "No agent context stored for this run. It is captured per dispatch when the workspace has 'Store full agent context' enabled.",
     "contextError": "Could not load the provided context.",
@@ -2069,7 +2070,6 @@
       "details": "Details"
     },
     "webSearch": "Web search",
-    "loadingSearch": "Loading web searches…",
     "noSearch": "No web searches recorded for this run. Queries are captured when web search runs and the workspace has 'Store full agent context' enabled.",
     "search": {
       "available": "Available",
@@ -2108,7 +2108,6 @@
     "toolCalls": {
       "title": "Tool calls",
       "subtitle": "what the agents did, in the order they did it",
-      "loading": "Loading tool calls…",
       "error": "Could not load the tool calls.",
       "none": "No tool calls recorded for this run.",
       "noneMatching": "No tool calls match this filter.",
@@ -2129,7 +2128,6 @@
     "title": "Platform observability",
     "refresh": "Refresh",
     "close": "Close",
-    "loading": "Loading platform health…",
     "retry": "Retry",
     "window": {
       "oneHour": "Last hour",
@@ -2210,7 +2208,6 @@
   "reports": {
     "title": "Reports",
     "refresh": "Refresh",
-    "loading": "Loading reports…",
     "retry": "Retry",
     "error": "Reports could not be loaded.",
     "period": "{from} to {to}",
@@ -2715,6 +2712,18 @@
         "action": "Check connection"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Agents can't run on this board yet: no runner pool is connected.",
+        "outage": "Agents can't run right now: this board's runner pool is unreachable."
+      },
+      "owner": {
+        "workspace_admin": "A board admin can fix this.",
+        "account_admin": "An account admin can fix this.",
+        "operator": "Only the deployment operator can fix this."
+      },
+      "fullSurface": "You can fix this yourself: switch your role at the top of the sidebar."
+    },
     "spendWarningBanner": {
       "title": "Spend limit reached, agent execution paused",
       "body": "This month's token spend has hit the configured budget, so running pipelines were paused to avoid further cost. Execution resumes automatically when the budget rolls over next month, or once the limit is raised.",
@@ -2792,7 +2801,10 @@
         "toggleUiMode": "Switch interface mode",
         "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
-        "notificationSettings": "Manage notification routing"
+        "notificationSettings": "Manage notification routing",
+        "setupChecklist": "Setup checklist",
+        "queueView": "Open the queue view",
+        "boardView": "Open the board view"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2820,7 +2832,11 @@
         "chooseRole": "role engineer product manager designer persona simpler view",
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
-        "notificationSettings": "notifications email routing channels inbox"
+        "notificationSettings": "notifications email routing channels inbox",
+        "setupChecklist": "setup checklist runner model github storage environment configure",
+        "queueView": "queue view needs you inbox list waiting",
+        "boardView": "board canvas map view plan",
+        "describeWork": "describe new work task add create feature bug sentence"
       }
     },
     "shortcuts": {
@@ -3082,7 +3098,6 @@
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
         "introBaseModel": "base model",
         "newPreset": "New preset",
-        "loadingCatalog": "Loading model catalog…",
         "default": "Default",
         "setDefaultTitle": "Set as workspace default",
         "editTitle": "Edit preset",
@@ -3091,7 +3106,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} overrides",
         "empty": "No presets yet. Create one to map models to your agents.",
-        "customRouteOrder": "custom route order"
+        "customRouteOrder": "custom route order",
+        "catalogFailed": "The model catalog did not load. Retry to see the presets."
       },
       "editor": {
         "useBaseModel": "Use base model",
@@ -3111,7 +3127,8 @@
         "deleteFailed": "Could not delete the preset",
         "nameRequiredTitle": "Name required",
         "nameRequiredBody": "Give the preset a name.",
-        "saveFailed": "Could not save the preset"
+        "saveFailed": "Could not save the preset",
+        "catalogFailed": "Could not load the model catalog"
       },
       "routes": {
         "direct": "The model's own provider API",
@@ -3266,7 +3283,6 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Override the workspace handler for this provision type on your own machine. Stored per user.",
         "removeOverride": "Remove override",
-        "loading": "Loading infrastructure settings…",
         "kubeNoun": "the Kubernetes handler",
         "kubeOverrideNoun": "the Kubernetes override",
         "customNoun": "this handler",
@@ -3448,7 +3464,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Choose which of this deployment's reusable operations this board offers. Hiding one removes it from the create-task picker here and refuses creating work under it; other boards are unaffected.",
-      "loading": "Loading operations…",
       "empty": "This deployment registers no reusable operations.",
       "offer": "Offer on this board",
       "saveFailed": "Could not change which operations this board offers"
@@ -4074,9 +4089,7 @@
       "toast": {
         "connected": "OpenRouter key connected",
         "connectFailed": "Could not connect key",
-        "rejected": "OpenRouter rejected the key.",
         "unreachable": "Could not reach OpenRouter",
-        "connectFirst": "Connect an OpenRouter key first.",
         "saved": "OpenRouter catalog saved",
         "saveFailed": "Could not save catalog"
       }
@@ -4680,7 +4693,6 @@
     "connect": {
       "yourInstallations": "Your installations",
       "refresh": "Refresh",
-      "lookingForInstallations": "Looking for installations…",
       "noInstallations": "No installations found for the App yet. Install it below, or connect by ID.",
       "installationMeta": "{targetType} · installation {id}",
       "linked": "linked",
@@ -4707,14 +4719,12 @@
       "resync": "Resync",
       "backfill": "Backfill",
       "disconnect": "Disconnect",
-      "loading": "Loading…",
       "tabs": {
         "repos": "Repositories",
         "issues": "Issues"
       },
       "linkedToBoard": "Linked to this board",
       "manageRepos": "Manage repos",
-      "loadingRepos": "Loading repositories…",
       "private": "private",
       "saveSelection": "Save selection",
       "noLinkedRepos": "No repositories linked yet. Use Manage repos to pick which repositories this board tracks.",
@@ -4806,7 +4816,6 @@
     },
     "repoTree": {
       "root": "root",
-      "loading": "Loading…",
       "noSubdirectories": "No subdirectories here.",
       "empty": "Nothing here.",
       "select": "Select",
@@ -5063,7 +5072,8 @@
         "scopes": "You will be asked to grant: {scopes}",
         "fallback": "Prefer a token? Use the fields below instead.",
         "failed": "Could not start the {source} sign-in"
-      }
+      },
+      "disconnectFailed": "Could not disconnect"
     },
     "spawn": {
       "title": "Preview structure",
@@ -5214,7 +5224,8 @@
       "updateConnection": "Update connection",
       "connect": "Connect",
       "oauthButton": "Connect with {label}",
-      "oauthOr": "or connect with an API key"
+      "oauthOr": "or connect with an API key",
+      "disconnectFailed": "Could not disconnect"
     }
   },
   "bugHunt": {
@@ -5329,12 +5340,10 @@
   "guidedReview": {
     "title": "Guided review",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "Loading the review…",
     "outOfDate": "Live updates failed, so this view may be out of date.",
     "openFromTask": "Explore with guided review",
     "picker": {
       "intro": "Pick a repository and a pull request. You get an overview of the change and can ask questions about it in separate threads.",
-      "loading": "Loading repositories…",
       "noRepos": "No repositories are linked to this workspace yet.",
       "repo": "Repository",
       "openPulls": "Open pull requests",
@@ -6096,7 +6105,6 @@
     "answerVerb": "Answer",
     "dismissVerb": "dismiss",
     "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
-    "loadingReview": "Loading the review…",
     "reviewing": "Reviewing the requirements…",
     "settled": "The requirements are settled. The document below is what every downstream agent step uses.",
     "exceeded": {
@@ -6249,7 +6257,6 @@
       "description": "Imperative verb 'dismiss' (wave off as irrelevant), used as an inline emphasized span in the intro sentence."
     },
     "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
-    "loadingReview": "Loading the review…",
     "triaging": "Triaging the bug report…",
     "converged": "The bug report is clarified. The report below is what every downstream agent step uses.",
     "capHeading": "Reached the {max}-iteration limit with findings still open.",
@@ -6329,7 +6336,6 @@
   "consensus": {
     "titlePrefix": "Consensus",
     "participantCount": "no participants | one participant | {count} participants",
-    "loading": "Loading consensus session…",
     "empty": "No consensus session has run for this step yet.",
     "failed": "Consensus failed: {error}",
     "unknownError": "unknown error",
@@ -6377,7 +6383,6 @@
     "introChoose": "Choose",
     "introDismiss": "dismiss",
     "empty": "No brainstorm yet. It runs automatically when this task's pipeline reaches the brainstorm step.",
-    "loading": "Loading the brainstorm…",
     "generating": "Generating options…",
     "settledBanner": "The {doc} is settled. The document below is what the next stage uses.",
     "exceeded": {
@@ -6458,7 +6463,6 @@
   },
   "spec": {
     "title": "Requirements",
-    "loading": "Loading the specification…",
     "error": "Could not load the specification. Try reopening this window.",
     "overview": "Overview",
     "noFeatureGroups": "No feature groups",
@@ -6666,8 +6670,7 @@
     },
     "shot": {
       "failed": "Failed",
-      "failedToLoad": "Failed to load",
-      "loading": "Loading…"
+      "failedToLoad": "Failed to load"
     },
     "screenshotAlt": "{view} (screenshot)",
     "screenshots": "Screenshots",
@@ -7389,7 +7392,6 @@
       "awaiting": "{total} candidates were generated and are waiting to be compared."
     },
     "asset": {
-      "loading": "Loading the file…",
       "loadFailed": "The stored file could not be loaded.",
       "retry": "Try again",
       "open": "Open",
@@ -8297,6 +8299,7 @@
     "connect": {
       "or": "or",
       "noneConfigured": "No source-control connection is configured for this deployment. Ask an operator to set up a GitHub App or GitLab access.",
+      "adminRequired": "Only a board admin can connect a repository host. Ask an admin of this board.",
       "gitlab": {
         "intro": "Paste a GitLab personal access token to connect this workspace. cat-factory uses it to list your projects, push branches and open merge requests.",
         "tokenLabel": "Personal access token",
@@ -8314,7 +8317,8 @@
     "onboarding": {
       "title": "Connect cat-factory to {provider}",
       "titleAny": "Connect cat-factory to your repositories",
-      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
+      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue.",
+      "switchBoard": "Not the board you meant? Switch to another one, or create your own."
     },
     "addService": {
       "intro": "Pick an existing {provider} repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",
@@ -8445,6 +8449,10 @@
           "canvas": {
             "title": "The board",
             "body": "Services, modules, and tasks live on this canvas. Drag to pan, scroll to zoom, and click any card to inspect it."
+          },
+          "views": {
+            "title": "Two views",
+            "body": "The board has a second view. The queue lists what needs you across every service. Once the tour is over, switch between the queue and this canvas here. The app opens on the view you used last."
           },
           "sidebar": {
             "title": "The sidebar",
@@ -9077,5 +9085,146 @@
         "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
       }
     }
+  },
+  "setup": {
+    "title": "Setup",
+    "progress": "{done} of {total} done",
+    "intro": "What this workspace needs before a task can run and merge.",
+    "required": "required",
+    "optional": "optional",
+    "action": {
+      "change": "Change",
+      "connect": "Set up",
+      "fix": "Fix",
+      "review": "Review",
+      "retry": "Try again"
+    },
+    "rows": {
+      "checking": "Checking…",
+      "notNeeded": "This deployment does not use it.",
+      "model": {
+        "title": "Model",
+        "done": "A model is available.",
+        "missing": "No model is available. No agent can run until you connect a provider."
+      },
+      "sourceControl": {
+        "title": "Source control",
+        "done": "Connected. Agents can push branches and open pull requests.",
+        "missing": "Not connected. Agents cannot open pull requests."
+      },
+      "agentExecutor": {
+        "title": "Where agents run",
+        "done": "A runner is configured.",
+        "missing": "No runner is configured. Nothing can run until you connect one.",
+        "notNeeded": "This deployment runs agents without a runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Test environments",
+        "done": "Configured. Testers can use a live preview.",
+        "missing": "Not set up. Testers that need a live preview do not run. All other agents run."
+      },
+      "binaryStorage": {
+        "title": "Screenshot storage",
+        "done": "Configured. Visual checks are on.",
+        "missing": "Not set up. Visual checks are off."
+      }
+    },
+    "causes": {
+      "unreachable": "Configured, but unreachable right now.",
+      "incomplete": "Connected, but a required setting is missing.",
+      "rejected": "GitHub rejected the access token.",
+      "underscoped": "The access token cannot push or open pull requests.",
+      "presetBroken": "The default model preset names a model that is not available.",
+      "probeFailed": "The check did not answer.",
+      "notReported": "This deployment does not report it."
+    },
+    "also": {
+      "title": "Also here",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Merge policies",
+      "modelPresets": "Model presets",
+      "counts": {
+        "repair": "To repair: {count}",
+        "outdated": "Outdated: {count}",
+        "new": "New: {count}"
+      },
+      "settings": "Settings and connections",
+      "workspaceSettings": "Workspace settings",
+      "integrations": "Integrations"
+    }
+  },
+  "queue": {
+    "title": "Queue",
+    "summary": "{needsYou} need you · {ready} ready to merge",
+    "filter": {
+      "allServices": "All services",
+      "service": "Filter by service"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Needs you",
+        "empty": "Nothing waits on you."
+      },
+      "inFlight": {
+        "label": "In flight",
+        "empty": "No agent is working now."
+      },
+      "readyToMerge": {
+        "label": "Ready to merge",
+        "empty": "No pull request waits to merge."
+      }
+    },
+    "waiting": {
+      "label": "Not started ({count})",
+      "empty": "Nothing waits to start."
+    },
+    "done": {
+      "count": "Merged since {date}: {count}",
+      "countAll": "Merged: {count}",
+      "show": "Show",
+      "hide": "Hide",
+      "capped": "Shows the newest {shown} of {total}."
+    },
+    "card": {
+      "waited": "waited {duration}",
+      "active": "active {duration} ago",
+      "merged": "merged {duration} ago",
+      "step": "step {current} of {total}",
+      "showOnBoard": "Show on the board",
+      "answer": "Answer",
+      "budgetPaused": "The spend limit paused this run. It continues when the limit goes up.",
+      "parked": "The run waits for a person. Open the task to see what it needs.",
+      "waitingOn": "Waits for {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Describe new work"
+  },
+  "views": {
+    "title": "Views",
+    "queue": "Queue",
+    "board": "Board",
+    "openQueue": "Open the queue view"
+  },
+  "describeWork": {
+    "title": "Describe new work",
+    "textLabel": "What must be done",
+    "textHint": "One sentence is enough. Add more detail if you have it.",
+    "textPlaceholder": "Add an audit log for sign-in events. Record each sign-in with the time, the user and the result.",
+    "savedAs": "Task title: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Select a service",
+    "kindLabel": "Kind",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "More kinds…",
+    "changeHowItRuns": "Change how this runs",
+    "workspaceDefault": "Workspace default",
+    "defaultPipelineHint": "The workspace default: {name}. A pipeline pinned here replaces it for this task.",
+    "attachContext": "Attach context (opens the full form)",
+    "add": "Add to queue",
+    "addAndStart": "Add and start",
+    "addedToast": "Added “{title}” to the queue"
   }
 }

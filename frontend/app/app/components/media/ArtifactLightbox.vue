@@ -10,6 +10,8 @@ import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
 import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 interface LightboxItem {
   artifactId: string
@@ -161,7 +163,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       v-if="open"
       ref="dialogRef"
       tabindex="-1"
-      class="fixed inset-0 z-[60] flex flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
+      class="z-[60] flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
+      :class="FULL_BLEED_TAKEOVER_CLASS"
       role="dialog"
       aria-modal="true"
       data-testid="artifact-lightbox"
@@ -170,7 +173,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           ? t('media.lightbox.ariaLabel', { label: current.label })
           : t('media.lightbox.ariaLabelFallback')
       "
-      @click.self="close"
     >
       <!-- Toolbar -->
       <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">
@@ -272,10 +274,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           @pointercancel="onPointerUp"
         />
         <div v-else class="flex flex-col items-center gap-2 text-dimmed">
-          <UIcon
-            :name="state === 'error' ? 'i-lucide-image-off' : 'i-lucide-loader'"
+          <Spinner
+            :name="state === 'error' ? 'i-lucide-image-off' : undefined"
+            :spinning="state !== 'error'"
             class="h-8 w-8"
-            :class="state === 'error' ? '' : 'animate-spin'"
           />
           <p class="text-xs">
             {{ state === 'error' ? t('media.lightbox.failed') : t('media.lightbox.loading') }}

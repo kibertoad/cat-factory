@@ -195,6 +195,16 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         bodyKey: 'tutorial.tours.boardBasics.steps.canvas.body',
       },
       {
+        // A new person lands on the QUEUE view, and every tour moves them to the canvas, so the
+        // orientation tour is where they learn the queue exists. The switcher renders in the rail
+        // and the expanded sidebar, in every tier and role, so the step needs no `when`.
+        id: 'views',
+        target: 'work-view-switcher',
+        placement: 'right',
+        titleKey: 'tutorial.tours.boardBasics.steps.views.title',
+        bodyKey: 'tutorial.tours.boardBasics.steps.views.body',
+      },
+      {
         id: 'sidebar',
         target: 'sidebar',
         placement: 'right',

@@ -1,5 +1,18 @@
 # @cat-factory/delegation-github-actions
 
+## 0.2.2
+
+### Patch Changes
+
+- @cat-factory/kernel@0.358.1
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/kernel@0.358.0
+
 ## 0.2.0
 
 ### Minor Changes

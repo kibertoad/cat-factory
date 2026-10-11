@@ -49,6 +49,16 @@ export {
   normalizeSkillRefs,
   normalizeToolRefs,
 } from './agents/kinds/capabilities.js'
+// The SHAPE of those definitions as valibot schemas, held equal to the types at compile time:
+// checked at boot (`validateRegistrations`) and by a mothership-mode node reading them off the wire.
+export {
+  bundledSkillDefinitionSchema,
+  catalogSkillRefSchema,
+  definitionIssues,
+  type Equals,
+  exactly,
+  mcpServerDefinitionSchema,
+} from './agents/kinds/definition-schemas.js'
 // The Nuxt UI capability: an OPT-IN bundled skill + MCP tool server a facade attaches to the coder
 // kinds. Not in `defaultAgentKindRegistry()` — the framework default stays stack-agnostic. See
 // `backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts`.

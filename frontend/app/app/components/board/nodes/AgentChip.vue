@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState, PipelineStep } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{
   step: PipelineStep
@@ -19,7 +20,7 @@ const stateRing: Record<AgentState, string> = {
 
 const stateIcon: Record<AgentState, string | null> = {
   pending: null,
-  working: 'i-lucide-loader',
+  working: null,
   waiting_decision: 'i-lucide-circle-help',
   done: 'i-lucide-check',
 }
@@ -39,7 +40,7 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
         v-if="step.state === 'working'"
         class="absolute -bottom-1 -end-1 rounded-full bg-default p-0.5"
       >
-        <UIcon :name="stateIcon.working!" class="h-3 w-3 animate-spin text-primary" />
+        <Spinner class="h-3 w-3 text-primary" />
       </span>
       <span
         v-else-if="stateIcon[step.state]"

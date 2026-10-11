@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // Per-step Kaizen grading status, shown inside the run window (NOT on the board). Reads
 // the grading for this run's step from the kaizen store, lazily loading the run's
@@ -54,7 +55,7 @@ const tone = computed(() => {
           <span class="text-muted">{{ t('kaizen.status.scheduled') }}</span>
         </template>
         <template v-else-if="grading.status === 'running'">
-          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin text-app-hue-teal" />
+          <Spinner class="h-3.5 w-3.5 text-app-hue-teal" />
           <span class="text-app-hue-teal">{{ t('kaizen.status.grading') }}</span>
         </template>
         <template v-else-if="grading.status === 'failed'">

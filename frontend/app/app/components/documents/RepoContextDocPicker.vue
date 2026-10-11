@@ -232,8 +232,8 @@ onMounted(() => {
       <div v-if="fileMode === 'search'" class="space-y-2">
         <UInput
           v-model="fileQuery"
-          :icon="loadingFiles ? 'i-lucide-loader-circle' : 'i-lucide-file-search'"
-          :ui="{ leadingIcon: loadingFiles ? 'animate-spin' : '' }"
+          icon="i-lucide-file-search"
+          :loading="loadingFiles"
           size="sm"
           class="w-full"
           :placeholder="t('documents.repoPicker.searchFilesPlaceholder')"
