@@ -74,7 +74,7 @@ pnpm typecheck          # typecheck every package
 pnpm test               # run the unit/integration suites (mutation testing is NOT in here)
 pnpm lint               # oxlint + oxfmt (repo-wide)
 pnpm dev:backend        # run the worker locally (deploy/backend)
-pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL + ENCRYPTION_KEY)
+pnpm dev:node           # run the Node.js service locally (deploy/node; required env in its README)
 pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 ```
 

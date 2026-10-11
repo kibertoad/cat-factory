@@ -55,6 +55,7 @@ import {
 // The app's own process logger, the one the container logs through: the harness composes this layer
 // (`createApp` below is its app factory), so its realtime tee reports on the same destination rather
 // than printing beside it.
+import { getErrorMessage } from '@cat-factory/kernel'
 import { logger } from '@cat-factory/server'
 import { fanOutRealtime, serveAuthBackend } from './authBackend.ts'
 import { holdKeepAliveSockets } from './keepAlive.ts'
@@ -62,7 +63,6 @@ import {
   AUTH_BACKEND_PORT,
   AUTH_FRONTEND_URL,
   BACKEND_PORT,
-  BACKEND_URL,
   CONTROL_PORT,
   FRONTEND_URL,
 } from './ports.ts'
@@ -214,8 +214,10 @@ async function seedRbacScenario(
   }
 }
 
-// A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
-// shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
+// A tiny, test-ONLY HTTP control channel (a separate listener, so the app's CORS/auth never
+// applies to it). Its routes write test state directly, with one exception: `/seeded-workspace`
+// creates the board as a CLIENT of the app's REST surface, over loopback to the listener this
+// process bound. A spec `POST`s `{ workspaceId, profile }` from Node
 // (Playwright's request context — not the browser), keyed to its own freshly-seeded
 // workspace, BEFORE it starts the run. Its port comes from `ports.ts`, the SAME module the
 // `setFakeProfile` helper reads, so PORT drives both ends. Bound to loopback: it's reached
@@ -277,7 +279,12 @@ const controlServer = createServer((req, res) => {
   // `infraless` provisioning choice) and return its snapshot. `createSeededWorkspace` in
   // tests/helpers.ts calls this and documents why each step is there; a developer seeding from a
   // shell calls it too, so the two cannot drift apart. The board is created over the app's own REST
-  // surface, as a spec would.
+  // surface, as a spec would, on the listener THIS process bound (never `BACKEND_URL`, which an
+  // override can point at another backend while the GitHub seed below writes this process's db).
+  //
+  // Status says which layer failed: 400 for a bad request body, 502 when the app refused or was
+  // unreachable, 500 when the GitHub seed failed. A failure after the board exists names its id:
+  // the board stays half-seeded, and a retry creates a second one.
   if (req.method === 'POST' && req.url === '/seeded-workspace') {
     void readBody(req)
       .then(async (raw) => {
@@ -285,27 +292,62 @@ const controlServer = createServer((req, res) => {
           res.writeHead(503).end('seeded workspace: db not ready')
           return
         }
-        const { name } = (raw ? JSON.parse(raw) : {}) as { name?: string }
-        const created = await fetch(`${BACKEND_URL}/workspaces`, {
+        let name: string | undefined
+        try {
+          name = ((raw ? JSON.parse(raw) : {}) as { name?: string }).name
+        } catch (err) {
+          fail(res, 400, err)
+          return
+        }
+        const app = `http://127.0.0.1:${BACKEND_PORT}`
+        const callApp = async (what: string, url: string, init: RequestInit): Promise<Response> => {
+          let upstream: Response
+          try {
+            upstream = await fetch(url, {
+              ...init,
+              headers: { 'content-type': 'application/json' },
+            })
+          } catch (err) {
+            throw Object.assign(new Error(`${what}: app unreachable: ${getErrorMessage(err)}`), {
+              status: 502,
+            })
+          }
+          if (!upstream.ok) {
+            const body = await upstream.text()
+            throw Object.assign(new Error(`${what}: app answered ${upstream.status}: ${body}`), {
+              status: 502,
+            })
+          }
+          return upstream
+        }
+        const created = await callApp('create workspace', `${app}/workspaces`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ seed: true, ...(name ? { name } : {}) }),
         })
-        if (!created.ok)
-          throw new Error(`create workspace ${created.status}: ${await created.text()}`)
         const snapshot = (await created.json()) as { workspace: { id: string } }
         const workspaceId = snapshot.workspace.id
-        await seedGitHubForWorkspace(seedDb, workspaceId, {})
-        const settings = await fetch(`${BACKEND_URL}/workspaces/${workspaceId}/settings`, {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ defaultProvisionType: 'infraless' }),
-        })
-        if (!settings.ok)
-          throw new Error(`workspace settings ${settings.status}: ${await settings.text()}`)
+        const partly = `(board ${workspaceId} was created and is left partly seeded)`
+        try {
+          await seedGitHubForWorkspace(seedDb, workspaceId, {})
+        } catch (err) {
+          throw Object.assign(new Error(`github seed ${partly}: ${getErrorMessage(err)}`), {
+            status: 500,
+          })
+        }
+        try {
+          await callApp('workspace settings', `${app}/workspaces/${workspaceId}/settings`, {
+            method: 'PUT',
+            body: JSON.stringify({ defaultProvisionType: 'infraless' }),
+          })
+        } catch (err) {
+          throw Object.assign(new Error(`${getErrorMessage(err)} ${partly}`), { status: 502 })
+        }
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(snapshot))
       })
-      .catch((err) => fail(res, 400, err))
+      .catch((err: unknown) => {
+        const status = (err as { status?: number }).status ?? 500
+        fail(res, status, err)
+      })
     return
   }
   // Seed (and return) a repo of the workspace's OWN, so a spec can import it as a service frame

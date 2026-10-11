@@ -1488,8 +1488,7 @@ pnpm i18n:parity                                     # locales are in parity
 ```
 
 To see the SPA with data while you work on it, run it against the e2e backend: it needs only a
-Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards into the states the e2e specs reach.
-See
+Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards. See
 [Running the SPA against the e2e backend](https://github.com/kibertoad/cat-factory/blob/main/backend/internal/e2e/README.md#running-the-spa-against-the-e2e-backend-ui-development).
 
 > Building/deploying the static site is covered in the deployment docs: see the

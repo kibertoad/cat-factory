@@ -400,9 +400,9 @@ async function json<T>(res: {
  *   explicitly (e.g. `github.spec.ts`) is safe.
  * - records `infraless` as the default test-environment provisioning mechanism, so
  *   `DefaultTestEnvBanner` (an advisory top overlay that would intercept clicks on the board
- *   chrome the specs drive) legitimately doesn't fire. That is the ACCURATE answer for this
- *   backend, not a mute button: e2e fakes the agent executor and wires no environment provider. A
- *   spec that wants to drive the banner creates its workspace directly and records no choice.
+ *   chrome the specs drive) legitimately doesn't fire. `infraless` is what this backend really
+ *   does: e2e fakes the agent executor and wires no environment provider. A spec that wants to
+ *   drive the banner creates its workspace directly and records no choice.
  */
 export async function createSeededWorkspace(
   request: APIRequestContext,
@@ -413,9 +413,11 @@ export async function createSeededWorkspace(
    */
   name?: string,
 ): Promise<WorkspaceSnapshot> {
-  return json<WorkspaceSnapshot>(
-    await request.post(`${CONTROL_URL}/seeded-workspace`, { data: name ? { name } : {} }),
-  )
+  const res = await request.post(`${CONTROL_URL}/seeded-workspace`, { data: name ? { name } : {} })
+  // The control route's status names the failing layer (502: the app, 500: the GitHub seed), so
+  // report it as the control channel's answer rather than through `json()`'s "backend" prefix.
+  if (!res.ok()) throw new Error(`seeded-workspace control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as WorkspaceSnapshot
 }
 
 /**
