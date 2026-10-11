@@ -16,6 +16,8 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
  */
 const { t, d } = useI18n()
 const workspaceSettings = useWorkspaceSettingsStore()
+const ui = useUiStore()
+const board = useBoardStore()
 
 /**
  * Where the Done window starts: the workspace's Done-lane retention, the same one each frame's
@@ -65,6 +67,14 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
   in_flight: 'text-primary',
   ready_to_merge: 'text-success',
 }
+
+/**
+ * Whether the inspector is on screen beside the queue. On a wide screen it floats over the
+ * board's right edge (`InspectorPanel`, `lg:w-80` at `lg:end-4`), which is where the queue's
+ * last column sits, so the columns give it that width (20rem, its 1rem offset and a 1rem gap)
+ * rather than letting it cover them. Below `lg` it is a bottom sheet the reader opens and closes.
+ */
+const inspectorOpen = computed(() => !!ui.selectedBlockId && !!board.getBlock(ui.selectedBlockId))
 </script>
 
 <template>
@@ -100,7 +110,8 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
     </header>
 
     <div
-      class="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto px-4 pb-6 sm:px-6 md:grid-cols-3 md:overflow-hidden"
+      class="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto px-4 pb-6 transition-[padding] sm:px-6 md:grid-cols-3 md:overflow-hidden"
+      :class="inspectorOpen ? 'lg:pe-[22rem]' : ''"
     >
       <section
         v-for="column in columns"

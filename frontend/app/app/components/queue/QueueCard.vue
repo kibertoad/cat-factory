@@ -133,10 +133,14 @@ function showOnBoard() {
 </script>
 
 <template>
+  <!-- The whole card opens the task. The title is the card's one real button, so keyboard focus
+       and the accessible name stay on it, and its `::after` stretches the click target over the
+       card. Every other control sits above that overlay (`relative z-10`) and keeps its own
+       action. -->
   <article
     v-if="task"
-    class="rounded-lg border border-muted bg-default p-3"
-    :class="ui.selectedBlockId === task.id ? 'border-inverted' : ''"
+    class="relative rounded-lg border bg-default p-3 transition hover:border-accented has-[[data-card-target]:focus-visible]:ring-2 has-[[data-card-target]:focus-visible]:ring-primary"
+    :class="ui.selectedBlockId === task.id ? 'border-inverted' : 'border-muted'"
     data-testid="queue-card"
     :data-queue-task="task.id"
     :data-reason="reason"
@@ -157,7 +161,7 @@ function showOnBoard() {
       <span v-if="entry.service" class="min-w-0 truncate">· {{ entry.service.title }}</span>
       <span v-if="timeFact" class="shrink-0 whitespace-nowrap">· {{ timeFact }}</span>
       <IconButton
-        class="ms-auto shrink-0"
+        class="relative z-10 ms-auto shrink-0"
         color="neutral"
         variant="ghost"
         size="xs"
@@ -167,11 +171,12 @@ function showOnBoard() {
       />
     </div>
 
-    <!-- The title opens the task: the one always-present target, like the board card's. -->
+    <!-- The title opens the task, and through its stretched `::after`, so does the whole card. -->
     <UButton
       color="neutral"
       variant="link"
-      class="mt-1 w-full p-0 text-start text-sm font-semibold leading-snug text-highlighted"
+      class="mt-1 w-full p-0 text-start text-sm font-semibold leading-snug text-highlighted cursor-pointer after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none"
+      data-card-target
       data-testid="queue-card-title"
       @click="openTask"
     >
@@ -187,7 +192,7 @@ function showOnBoard() {
       v-if="reason === 'failed' && runFailed && agentRun"
       :run="agentRun"
       variant="compact"
-      class="mt-2"
+      class="relative z-10 mt-2"
     />
 
     <div v-if="showProgress" class="mt-2 space-y-1">
@@ -195,7 +200,7 @@ function showOnBoard() {
       <p v-if="stepFact" class="text-2xs text-dimmed">{{ stepFact }}</p>
     </div>
 
-    <div class="mt-3 flex flex-wrap items-center gap-2">
+    <div class="relative z-10 mt-3 flex flex-wrap items-center gap-2 empty:hidden">
       <!-- Parked on a decision or an approval: the gate itself, one click away. -->
       <UButton
         v-if="attention"
@@ -256,16 +261,6 @@ function showOnBoard() {
         @click="openOutcome"
       >
         {{ t('board.task.readOutcome') }}
-      </UButton>
-
-      <UButton
-        color="neutral"
-        variant="outline"
-        size="xs"
-        data-testid="queue-card-open"
-        @click="openTask"
-      >
-        {{ t('queue.card.openTask') }}
       </UButton>
     </div>
   </article>

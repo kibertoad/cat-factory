@@ -8780,7 +8780,6 @@
       "active": "vor {duration} aktiv",
       "merged": "vor {duration} gemergt",
       "step": "Schritt {current} von {total}",
-      "openTask": "Aufgabe öffnen",
       "showOnBoard": "Auf dem Board zeigen",
       "answer": "Antworten",
       "budgetPaused": "Das Ausgabenlimit hat diesen Durchlauf angehalten. Er läuft weiter, sobald das Limit erhöht wird.",

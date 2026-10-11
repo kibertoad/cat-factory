@@ -42,6 +42,33 @@ test.describe('queue view', () => {
     await expect(page.getByTestId('work-view-board')).toHaveAttribute('aria-current', 'page')
   })
 
+  test('a click anywhere on a card opens the task, beside the queue rather than over it', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.getByTestId('work-view-queue').click()
+    const card = page.locator('[data-testid="queue-card"][data-queue-task="task_login"]')
+    await expect(card).toBeVisible()
+
+    // Not the title: the empty space at the card's right edge.
+    const box = (await card.boundingBox())!
+    await page.mouse.click(box.x + box.width - 12, box.y + box.height - 12)
+    const inspector = page.getByTestId('inspector-panel')
+    await expect(inspector).toHaveAttribute('data-inspector-block', 'task_login')
+
+    // The columns make room for the panel, so the last one stays readable.
+    const last = page.locator('[data-testid="queue-column"][data-column="ready_to_merge"]')
+    await expect
+      .poll(async () => {
+        const col = await last.boundingBox()
+        const panel = await inspector.boundingBox()
+        return !!col && !!panel && col.x + col.width <= panel.x
+      })
+      .toBe(true)
+  })
+
   test('a parked decision is listed under Needs you, and answering it there moves it out', async ({
     page,
     request,
