@@ -561,7 +561,8 @@ A board has two views (issue [#2258](https://github.com/kibertoad/cat-factory/is
 **queue**, which lists every task across every service in the column that says what it needs, and
 the **board**, the canvas where the work is planned. They are two views of one board, not two
 products. The sidebar's Views switcher (`components/layout/WorkViewSwitcher.vue`) moves between
-them, and so do the palette entries and a `?view=queue` / `?view=board` link.
+them, and so do the palette entries and a `?view=queue` / `?view=board` link. The initiative it
+starts, with the slices after it: [`delivery-surface.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/delivery-surface.md).
 
 - **Which view opens is the person's own choice**: the view they used last, per user and per
   browser (`stores/workView.ts`, persisted like the interface tier). A person who has not chosen
