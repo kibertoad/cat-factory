@@ -1,10 +1,16 @@
 # UX assessment: cat-factory against the jobs its users hire it for
 
-Status: assessment only, no implementation. Written 2026-09-20 against `main` at `585bcdaba`,
+Status: assessment, decided. Written 2026-09-20 against `main` at `585bcdaba`,
 the running local deployment on port 3010 (demo board "Checkout platform"), the website
 (catfactory.ai), and the frontend README. Annotated screenshots and wireframes are under
 `assets/ux-jtbd/` beside this file (section 8). The decision this report raises is filed as
 [#2258](https://github.com/kibertoad/cat-factory/issues/2258).
+
+**Decision (2026-10-11, on #2258):** the queue is the default entry point and the board stays as a
+view. They are two views of one board, and each person opens on the view they used last. This
+changes the recommendation in F2, section 7 and question 1 below: the queue does not REPLACE the
+home. The work is tracked in `docs/initiatives/delivery-surface.md` (#2325), with one PR per slice
+(#2341, #2342, #2343).
 
 Out of scope on purpose: visual consistency (typography, primitives, button variants, radius,
 feedback states). Issue #2246 and its slices #2247 to #2252 own that. This report is about
@@ -156,7 +162,8 @@ agents panel and Cursor's Agents Window all open on exactly this queue, without 
 
 Challenge.
 
-- Add a queue view as the default landing: three columns or lists across all services (Needs
+- (Decided: a view beside the board, not a replacement; see the decision note at the top.) Add a
+  queue view as the default landing: three columns or lists across all services (Needs
   you, In flight, Ready to merge), each entry carrying the one action the lane already computes
   (Resolve, Retry, Review, Merge). Keep the board as a second view named for what it is (Map or
   Plan). This is the "board stays one canvas or becomes routed pages" decision that #2246 defers.
@@ -349,7 +356,8 @@ banners, the AI-provider dialogs and the health advisories all become rows in it
 
 Three moves, in order. Each is independently valuable.
 
-1. Queue-first home. A routed queue page across services with the lane actions inline, the
+1. Queue-first home. (Built as a queue VIEW beside the board, with the last-used view remembered:
+   #2325.) A routed queue page across services with the lane actions inline, the
    board as a second page, one attention counter, deep links. Resolves F2, F4, part of F9.
 2. Sentence-first intake. Title, description, service; the assistant's prompt box as the entry;
    everything else behind "Change how this runs"; type inferred or toggled. Resolves F3, F7 on
@@ -383,7 +391,9 @@ board without committing to it.
 
 Answers I would suggest are in brackets.
 
-1. Does the canvas stay the home, or does the product become routed pages with the canvas as one
+1. (Answered on #2258: the queue is the default view, the board stays as a view, and each person
+   opens on the view they used last.) Does the canvas stay the home, or does the product become
+   routed pages with the canvas as one
    of them? #2246 defers this. [Routed pages. The canvas is a planning view, and the daily job
    is a queue.]
 2. Is the role prompt worth keeping at all, given two of three roles are the same surface?
