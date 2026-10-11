@@ -2,6 +2,7 @@
 import type { SetupRow, SetupRowCause, SetupRowId, SetupRowStatus } from '~/utils/setupChecklist'
 import type { SetupRemedy } from '~/utils/setupAudience'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 /**
  * The setup checklist: every prerequisite for "a task can run and merge", its state, and one
@@ -66,7 +67,7 @@ const STATUS_META: Record<SetupRowStatus, { icon: string; class: string }> = {
   done: { icon: 'i-lucide-circle-check', class: 'text-success' },
   missing: { icon: 'i-lucide-circle', class: 'text-dimmed' },
   attention: { icon: 'i-lucide-circle-alert', class: 'text-warning' },
-  checking: { icon: 'i-lucide-loader-circle', class: 'animate-spin text-dimmed' },
+  checking: { icon: 'i-lucide-loader-circle', class: 'text-dimmed' },
   not_needed: { icon: 'i-lucide-circle-minus', class: 'text-dimmed' },
 }
 
@@ -238,8 +239,9 @@ const also = computed(() =>
             :data-cause="row.cause ?? undefined"
             :data-remedy="row.remedy ?? undefined"
           >
-            <UIcon
+            <Spinner
               :name="STATUS_META[row.status].icon"
+              :spinning="row.status === 'checking'"
               class="h-5 w-5 shrink-0"
               :class="STATUS_META[row.status].class"
             />
