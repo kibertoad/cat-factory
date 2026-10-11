@@ -24,6 +24,7 @@ import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEd
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { SAFE_AREA_INSET_CLASS } from '~/utils/safeArea'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -301,6 +302,7 @@ async function save() {
       <div
         v-if="open"
         class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="SAFE_AREA_INSET_CLASS"
         role="dialog"
         aria-modal="true"
       >
