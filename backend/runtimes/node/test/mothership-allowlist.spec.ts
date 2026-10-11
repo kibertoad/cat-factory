@@ -237,6 +237,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `deleteOlderThan` is the retention sweep, which the mothership runs against its own store; a
   // node never drives it, and a node that could reach it could erase the trail that describes it.
   auditEventRepository: { append: 'admin', listByAccount: 'admin', deleteOlderThan: 'sweeper' },
+  // The directory change feed's prune is the mothership's retention sweep; every read is on the
+  // allow-list, account-bound, so a node can serve `/api/v1/directory/*`.
+  directoryRepository: { pruneChanges: 'sweeper' },
   // The auth-attempt ledger (SEC-4) is the password throttle's own state. A node that could
   // reach it over the RPC could read attempt patterns or flood a victim's bucket; nothing on
   // a satellite ever needs it. Mothership-internal by construction, like the roster above.

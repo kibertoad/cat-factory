@@ -1,8 +1,5 @@
-import { isDirectoryEntityType } from '@cat-factory/contracts'
-import type { DirectoryChangeRecord, DirectoryChangeRepository } from '@cat-factory/kernel'
-import { type SQL, and, asc, eq, gt, max, sql } from 'drizzle-orm'
+import { type SQL, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { directoryChanges } from '../db/schema.js'
 
 // The append half of the directory change feed (docs/initiatives/directory-sync.md), shared by
 // every repository that writes a directory entity. Mirror of the Cloudflare facade's
@@ -135,47 +132,4 @@ export function reposSource(workspaceId: string, githubIds: readonly number[]): 
                   githubIds.map((id) => sql`${id}`),
                   sql`, `,
                 )})`
-}
-
-function rowToChange(row: typeof directoryChanges.$inferSelect): DirectoryChangeRecord {
-  // The vocabulary is append-only, so an unknown value is a row this build cannot interpret, not
-  // one to skip: a reader that dropped it would advance its cursor past a change it never served.
-  if (!isDirectoryEntityType(row.entity_type)) {
-    throw new Error(`Unknown directory entity type '${row.entity_type}' at seq ${row.seq}`)
-  }
-  return {
-    accountId: row.account_id,
-    seq: row.seq,
-    entityType: row.entity_type,
-    workspaceId: row.workspace_id,
-    entityId: row.entity_id,
-    at: row.at,
-  }
-}
-
-/** Postgres read side of the directory change feed. */
-export class DrizzleDirectoryChangeRepository implements DirectoryChangeRepository {
-  constructor(private readonly db: DrizzleDb) {}
-
-  async listAfter(
-    accountId: string,
-    afterSeq: number,
-    limit: number,
-  ): Promise<DirectoryChangeRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(directoryChanges)
-      .where(and(eq(directoryChanges.account_id, accountId), gt(directoryChanges.seq, afterSeq)))
-      .orderBy(asc(directoryChanges.seq))
-      .limit(limit)
-    return rows.map(rowToChange)
-  }
-
-  async headSeq(accountId: string): Promise<number> {
-    const [row] = await this.db
-      .select({ head: max(directoryChanges.seq) })
-      .from(directoryChanges)
-      .where(eq(directoryChanges.account_id, accountId))
-    return row?.head ?? 0
-  }
 }

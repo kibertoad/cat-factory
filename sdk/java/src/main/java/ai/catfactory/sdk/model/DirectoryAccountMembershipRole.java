@@ -8,15 +8,15 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicRiskPoliciesResponsePolicyDryRunRole} vocabulary.
+ * The {@code DirectoryAccountMembershipRole} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum ListPublicRiskPoliciesResponsePolicyDryRunRole {
+public enum DirectoryAccountMembershipRole {
     ADMIN("admin"),
-    MEMBER("member"),
-    VIEWER("viewer"),
+    DEVELOPER("developer"),
+    PRODUCT("product"),
 
     /**
      * A value this SDK release does not know.
@@ -30,7 +30,7 @@ public enum ListPublicRiskPoliciesResponsePolicyDryRunRole {
 
     private final String wire;
 
-    ListPublicRiskPoliciesResponsePolicyDryRunRole(String wire) {
+    DirectoryAccountMembershipRole(String wire) {
         this.wire = wire;
     }
 
@@ -42,8 +42,8 @@ public enum ListPublicRiskPoliciesResponsePolicyDryRunRole {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static ListPublicRiskPoliciesResponsePolicyDryRunRole fromWire(@Nullable String wire) {
-        for (ListPublicRiskPoliciesResponsePolicyDryRunRole candidate : values()) {
+    public static DirectoryAccountMembershipRole fromWire(@Nullable String wire) {
+        for (DirectoryAccountMembershipRole candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

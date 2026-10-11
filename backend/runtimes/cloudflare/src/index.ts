@@ -39,6 +39,7 @@ import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOut
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
+import { D1DirectoryRepository } from './infrastructure/repositories/D1DirectoryRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import { registeredBinaryStoreRegistry } from './infrastructure/binaryStores'
@@ -654,6 +655,7 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // prune here that does not read `env.DB`: audit retention is measured in years and must not
       // compete with live transactional state for the per-database ceiling.
       auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      directoryRepository: new D1DirectoryRepository({ db: env.DB }),
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionDeps`).
       spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),

@@ -546,6 +546,45 @@ describe('account onboarding read surface (account-scoped)', () => {
   })
 })
 
+describe('directory read surface (account-scoped)', () => {
+  // `/api/v1/directory/*` served by a mothership-mode node. Every read names its account first,
+  // so the `account` rule binds it; each stub echoes the account, proving the call reached it.
+  const READS = [
+    'listChanges',
+    'headSeq',
+    'oldestSeq',
+    'listWorkspaces',
+    'listUsers',
+    'listAccountMemberships',
+    'listWorkspaceMemberships',
+    'listRepos',
+    'getWorkspaces',
+    'getUsers',
+    'getAccountMemberships',
+    'getWorkspaceMemberships',
+    'getRepos',
+  ]
+
+  for (const method of READS) {
+    it(`forwards directoryRepository.${method} for an in-scope account`, async () => {
+      const result = await remoteRegistry().directoryRepository![method]!(ACCOUNT)
+      expect(result).toEqual([{ accountId: ACCOUNT }])
+    })
+
+    it(`rejects directoryRepository.${method} for an out-of-scope account (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry().directoryRepository![method]!(OTHER_ACCOUNT),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  it('keeps the retention prune off the wire', async () => {
+    await expect(remoteRegistry().directoryRepository!.pruneChanges!(0)).rejects.toThrow(
+      /not callable/,
+    )
+  })
+})
+
 describe('Slack integration management surface', () => {
   // Account-scoped methods (arg0 is an accountId → the `account` rule): the per-account connection
   // read/delete + the member-mapping read/write. Each stub echoes the accountId, proving the call

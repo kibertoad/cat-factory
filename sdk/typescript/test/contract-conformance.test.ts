@@ -559,6 +559,49 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicVisualConfirmPairSchema>
 >()
 
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspace,
+  v.InferOutput<typeof contracts.directoryWorkspaceSchema>
+>()
+expectMutuallyAssignable<sdk.DirectoryUser, v.InferOutput<typeof contracts.directoryUserSchema>>()
+expectMutuallyAssignable<
+  sdk.DirectoryAccountMembership,
+  v.InferOutput<typeof contracts.directoryAccountMembershipSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspaceMembership,
+  v.InferOutput<typeof contracts.directoryWorkspaceMembershipSchema>
+>()
+expectMutuallyAssignable<sdk.DirectoryRepo, v.InferOutput<typeof contracts.directoryRepoSchema>>()
+expectMutuallyAssignable<
+  sdk.DirectoryChange,
+  v.InferOutput<typeof contracts.directoryChangeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryChangePage,
+  v.InferOutput<typeof contracts.directoryChangePageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspacePage,
+  v.InferOutput<typeof contracts.directoryWorkspacePageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryUserPage,
+  v.InferOutput<typeof contracts.directoryUserPageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryAccountMembershipPage,
+  v.InferOutput<typeof contracts.directoryAccountMembershipPageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspaceMembershipPage,
+  v.InferOutput<typeof contracts.directoryWorkspaceMembershipPageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryRepoPage,
+  v.InferOutput<typeof contracts.directoryRepoPageSchema>
+>()
+
 // What the platform TRIED about a frame whose provision failed. Inlined under
 // `PrReportEnvironments` rather than hoisted, so the coverage guard cannot see it, and the
 // generated names are path-derived (`PrReportEnvironmentsEntryRemediationDeployFix`) where the
@@ -580,6 +623,18 @@ expectMutuallyAssignable<
 /** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
 const ASSERTED_COMPONENTS = [
   'ErrorResponse',
+  'DirectoryWorkspace',
+  'DirectoryUser',
+  'DirectoryAccountMembership',
+  'DirectoryWorkspaceMembership',
+  'DirectoryRepo',
+  'DirectoryChange',
+  'DirectoryChangePage',
+  'DirectoryWorkspacePage',
+  'DirectoryUserPage',
+  'DirectoryAccountMembershipPage',
+  'DirectoryWorkspaceMembershipPage',
+  'DirectoryRepoPage',
   'PublicJob',
   'PublicJobAccepted',
   'CreatePublicJob',

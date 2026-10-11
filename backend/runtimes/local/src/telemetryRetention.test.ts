@@ -21,6 +21,8 @@ const RETENTION: RetentionConfig = {
   // The audit log is never in the LOCAL telemetry store (it is org state the mothership owns),
   // so a window here reaches nothing; named so the config stays exhaustive.
   auditEventsMs: 0,
+  // The directory change feed is org state too, so the same holds.
+  directoryChangesMs: 0,
 }
 
 const NOW = 100 * 24 * 60 * 60 * 1000

@@ -26,6 +26,7 @@ function fakeRepos(): {
     gateOutcomes: number | null
     runDays: number | null
     auditEvents: number | null
+    directoryChanges: number | null
     rollup: [number, number] | null
     spendRollup: [number, number] | null
     /** Every pass in the order it ran, so ordering constraints can be asserted. */
@@ -45,6 +46,7 @@ function fakeRepos(): {
     gateOutcomes: null as number | null,
     runDays: null as number | null,
     auditEvents: null as number | null,
+    directoryChanges: null as number | null,
     /** The [from, to) window the rollup pass recomputed. */
     rollup: null as [number, number] | null,
     /** The [from, to) window the durable spend rollup materialised. */
@@ -147,6 +149,12 @@ function fakeRepos(): {
           return 2
         },
       },
+      directoryRepository: {
+        pruneChanges: async (c) => {
+          cutoffs.directoryChanges = c
+          return 3
+        },
+      },
       // The durable cost-attribution rollup: a watermark read plus a materialise, and no
       // prune to fake, since the port has none.
       spendRollupRepository: {
@@ -172,6 +180,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     gateOutcomesMs: 90 * DAY,
     runDaysMs: 400 * DAY,
     auditEventsMs: 730 * DAY,
+    directoryChangesMs: 30 * DAY,
     ...overrides,
   }
 }
@@ -218,6 +227,7 @@ describe('sweepRetention', () => {
       gateOutcomes: 2,
       runDays: 1,
       auditEvents: 2,
+      directoryChanges: 3,
       runDaysRolledUp: 11,
       spendDaysRolledUp: 13,
       failedTables: [],
@@ -295,6 +305,7 @@ describe('sweepRetention', () => {
       gateOutcomes: 2,
       runDays: 1,
       auditEvents: 2,
+      directoryChanges: 3,
       // The rollups are WRITES, not prunes: disabling a RETENTION window says "never delete",
       // never "stop materialising", so they still run. `spend_days` has no window to disable
       // in the first place.

@@ -1,6 +1,6 @@
 import { defineDirectoryFeedSuite } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { D1DirectoryChangeRepository } from '../../src/infrastructure/repositories/D1DirectoryChangeRepository'
+import { D1DirectoryRepository } from '../../src/infrastructure/repositories/D1DirectoryRepository'
 import { D1MembershipRepository } from '../../src/infrastructure/repositories/D1MembershipRepository'
 import { D1RepoProjectionRepository } from '../../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1UserRepository } from '../../src/infrastructure/repositories/D1UserRepository'
@@ -18,6 +18,6 @@ defineDirectoryFeedSuite('cloudflare', () => {
     workspaces: new D1WorkspaceRepository({ db }),
     workspaceMembers: new D1WorkspaceMemberRepository({ db }),
     repos: new D1RepoProjectionRepository({ db }),
-    changes: new D1DirectoryChangeRepository({ db }),
+    changes: new D1DirectoryRepository({ db }),
   }
 })

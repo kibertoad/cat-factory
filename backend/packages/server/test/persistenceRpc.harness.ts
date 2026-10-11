@@ -867,6 +867,28 @@ function buildLibraryAndCommsRepos() {
       listByAccount: async (accountId: string) => [{ accountId }],
       create: async () => undefined,
     },
+    // The directory read side: every read echoes the account it was asked about. `pruneChanges`
+    // is the mothership's own retention sweep and stays off the allow-list.
+    directoryRepository: {
+      ...Object.fromEntries(
+        [
+          'listChanges',
+          'headSeq',
+          'oldestSeq',
+          'listWorkspaces',
+          'listUsers',
+          'listAccountMemberships',
+          'listWorkspaceMemberships',
+          'listRepos',
+          'getWorkspaces',
+          'getUsers',
+          'getAccountMemberships',
+          'getWorkspaceMemberships',
+          'getRepos',
+        ].map((method) => [method, async (accountId: string) => [{ accountId }]]),
+      ),
+      pruneChanges: async () => 0,
+    },
     emailConnectionRepository: {
       getByAccount: async (accountId: string) => ({ accountId }),
       upsert: async () => undefined,
