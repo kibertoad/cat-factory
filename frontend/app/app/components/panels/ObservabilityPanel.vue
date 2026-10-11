@@ -32,6 +32,7 @@ import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -537,17 +538,18 @@ function exportJson() {
     <Transition name="obs-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
       >
-        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+        <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
           >
             <UIcon name="i-lucide-activity" class="h-5 w-5 text-app-info-400" />
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('observability.modelActivity') }}
             </h1>
@@ -555,7 +557,11 @@ function exportJson() {
               {{ block.title }} · {{ runSubtitle }}
             </p>
           </div>
-          <div class="ms-auto flex items-center gap-1.5">
+          <!-- Below lg the controls take their own row, so the close button stays on screen.
+               The row scrolls sideways when the tabs are wider than the phone. -->
+          <div
+            class="order-last flex w-full min-w-0 items-center gap-1.5 overflow-x-auto lg:order-none lg:w-auto"
+          >
             <!-- Four VIEWS of the same run, which is what tabs mean. The trajectory is loaded
                  lazily the first time the tools view is opened, so the change is watched rather
                  than bound straight to `view`. -->
@@ -580,15 +586,16 @@ function exportJson() {
             >
               {{ t('observability.exportJson') }}
             </UButton>
-            <IconButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :label="t('observability.closeEsc')"
-              @click="close"
-            />
           </div>
+          <IconButton
+            class="lg:-ms-1.5"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :label="t('observability.closeEsc')"
+            @click="close"
+          />
         </header>
 
         <div class="flex-1 overflow-auto px-6 py-6">

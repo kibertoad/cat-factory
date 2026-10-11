@@ -21,6 +21,7 @@ import {
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -196,7 +197,8 @@ watch(
     <Transition name="reports-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
         data-testid="reports-panel"

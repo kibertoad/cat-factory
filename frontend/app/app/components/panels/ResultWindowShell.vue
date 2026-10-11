@@ -40,7 +40,7 @@ import {
   RESULT_WINDOW_WIDTH_CLASS,
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
-import { SAFE_AREA_GUTTER_CLASS } from '~/utils/safeArea'
+import { WINDOWED_OVERLAY_CLASS } from '~/utils/safeArea'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /** A pipeline step reference — passed by step-result windows to surface the shared
@@ -256,8 +256,8 @@ const chipClass = computed(() =>
 )
 
 const backdropClass = computed(() => [
-  'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-app-950/70 backdrop-blur-sm',
-  SAFE_AREA_GUTTER_CLASS,
+  WINDOWED_OVERLAY_CLASS,
+  'z-50 justify-center bg-app-950/70 backdrop-blur-sm',
   props.variant === 'centered' ? 'items-center' : 'items-stretch',
 ])
 // The centered cap is the smaller of 90dvh and the backdrop's padded box: with a large inset (a

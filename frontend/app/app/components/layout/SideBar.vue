@@ -154,6 +154,7 @@ watch(
     enter-from-class="opacity-0"
     leave-to-class="opacity-0"
   >
+    <!-- safe-area-ok: a scrim with no content; the drawer below pads its own edges -->
     <div
       v-if="ui.mobileNavOpen"
       class="fixed inset-0 z-30 bg-app-950/60 backdrop-blur-sm lg:hidden"
@@ -165,6 +166,8 @@ watch(
     />
   </Transition>
 
+  <!-- safe-area-ok: below lg, an edge drawer that pads the top, bottom and inline-start insets
+       itself. The start side is physical left in LTR and right in RTL, hence the `rtl:` override. -->
   <aside
     ref="aside"
     data-testid="sidebar"
@@ -173,7 +176,7 @@ watch(
     :aria-modal="drawerOpen ? 'true' : undefined"
     :aria-label="isCompact ? t('nav.menu') : undefined"
     :inert="isCompact && !ui.mobileNavOpen"
-    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-default bg-default/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-default/80"
+    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-default bg-default/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-lg:ps-[calc(0.75rem+env(safe-area-inset-left))] max-lg:pt-[calc(0.75rem+env(safe-area-inset-top))] max-lg:rtl:ps-[calc(0.75rem+env(safe-area-inset-right))] backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-default/80"
     :class="[
       ui.mobileNavOpen
         ? 'translate-x-0'
