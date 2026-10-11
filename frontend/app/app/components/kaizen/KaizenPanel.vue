@@ -67,7 +67,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
     <Transition name="kz-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-[60] flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
         :class="SAFE_AREA_INSET_CLASS"
         role="dialog"
         aria-modal="true"

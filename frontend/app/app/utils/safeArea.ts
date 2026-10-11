@@ -9,7 +9,7 @@
  */
 
 /**
- * A windowed overlay's gutter (`ResultWindowShell`): 1rem, or the inset on that side when it is
+ * A windowed overlay's gutter: 1rem, or the inset on that side when it is
  * larger, so the window always floats clear of the screen edge and of the notch.
  */
 export const SAFE_AREA_GUTTER_CLASS = [
@@ -20,9 +20,9 @@ export const SAFE_AREA_GUTTER_CLASS = [
 ].join(' ')
 
 /**
- * A full-bleed overlay's padding (`AgentStepDetail`, the model configuration takeover, the
- * observability, reports, operator dashboard and Kaizen takeovers): only the inset, so on a screen
- * without one the layout is exactly the edge-to-edge one it was designed as.
+ * A full-bleed takeover's padding: only the inset, so on a screen without one the layout is
+ * exactly the edge-to-edge one it was designed as. `safeArea.spec.ts` names every takeover that
+ * must carry it.
  */
 export const SAFE_AREA_INSET_CLASS = [
   'pt-[env(safe-area-inset-top)]',
