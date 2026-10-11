@@ -4,6 +4,7 @@ import {
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
   resolveDecision,
+  setFakeProfile,
   startRun,
   taskCard,
 } from './helpers'
@@ -63,7 +64,7 @@ test.describe('notifications inbox', () => {
     await expect(bell).toBeHidden({ timeout: LIVE_TIMEOUT })
   })
 
-  test('a parked decision carries "Answer", which opens the parked step', async ({
+  test('a parked decision carries "Answer", which opens the decision to answer', async ({
     page,
     request,
     seededBoard,
@@ -81,11 +82,48 @@ test.describe('notifications inbox', () => {
     )
     await expect(item).toBeVisible()
 
-    // The card's primary button is the action, not "Mark read", and it opens the parked step.
+    // The card's primary button is the action, not "Mark read". An agent's question opens the
+    // decision window, where it can be answered, and the inbox closes behind it.
     const goTo = item.getByTestId('notification-go-to')
     await expect(goTo).toHaveText('Answer')
     await goTo.click()
-    await expect(page.getByTestId('step-detail')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    const modal = page.getByTestId('decision-modal')
+    await expect(modal).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(item).toBeHidden()
+    await modal.getByTestId('decision-option').first().click()
+    await expect(modal).toBeHidden({ timeout: LIVE_TIMEOUT })
+  })
+
+  test('a parked approval gate carries "Answer", which opens the step to approve', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    const { workspaceId } = seededBoard
+    // No agent question: the run parks only on the approval gate after the architect step.
+    await setFakeProfile(request, workspaceId, { decisionOnSteps: [] })
+    const pipeline = await createSimplePipeline(
+      request,
+      workspaceId,
+      ['architect', 'coder'],
+      [true, false],
+    )
+    const card = taskCard(page, 'task_login')
+    await startRun(request, workspaceId, 'task_login', pipeline.id)
+    await expect(card.getByTestId('task-resolve')).toHaveText(/approve/i, {
+      timeout: LIVE_TIMEOUT,
+    })
+
+    await page.getByTestId('notifications-bell').click()
+    const item = page.locator(
+      '[data-testid="notification-item"][data-notification-type="decision_required"]',
+    )
+    const goTo = item.getByTestId('notification-go-to')
+    await expect(goTo).toHaveText('Answer')
+    await goTo.click()
+    const detail = page.getByTestId('step-detail')
+    await expect(detail).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(detail.getByTestId('step-approve')).toBeVisible()
   })
 
   test('dismissing the notification clears the bell and leaves the task pr_ready', async ({

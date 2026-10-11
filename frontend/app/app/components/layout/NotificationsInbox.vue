@@ -142,7 +142,21 @@ function actionLabel(n: Notification): string {
 function goToLabel(n: Notification): string | null {
   if (!n.blockId) return null
   const key = NOTIFICATION_GO_TO_KEYS[n.type]
+  if (n.type === 'decision_required' && !parkedStep(n)) return t('layout.notifications.goTo.open')
   return key ? t(key) : null
+}
+
+/** Each open card's go-to label, computed once per change rather than once per binding. */
+const goToLabels = computed(
+  () => new Map(notifications.open.map((n) => [n.id, goToLabel(n)] as const)),
+)
+
+// The popover is closed when a card takes the person somewhere, so it does not stay open under
+// the window it opened and reappear when that window closes.
+const open = ref(false)
+function goTo(n: Notification) {
+  open.value = false
+  reveal(n)
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -398,15 +412,30 @@ function revealFailingRun(run: { executionId: string; blockId: string | null }) 
  * panel (where the iteration-cap prompt lives). Falls back to focusing the block.
  */
 function revealDecision(n: Notification) {
+  const parked = parkedStep(n)
+  if (!parked) {
+    if (n.blockId) ui.select(n.blockId)
+    return
+  }
+  // An agent-raised question is answered in the decision window, as from the task card and the
+  // toolbar. The step detail only shows it read-only; it is the surface for the other parks (an
+  // approval gate, an iteration cap).
+  const decision = parked.step.decision
+  if (decision && !decision.chosen) ui.openDecision(parked.instanceId, decision.id)
+  else ui.openStepDetail(parked.instanceId, parked.index)
+}
+
+/** The step a `decision_required` card's run is parked on, when that run is loaded. */
+function parkedStep(n: Notification) {
   const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const idx = instance?.steps.findIndex((s) => s.state === 'waiting_decision') ?? -1
-  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
-  else if (n.blockId) ui.select(n.blockId)
+  const index = instance?.steps.findIndex((s) => s.state === 'waiting_decision') ?? -1
+  const step = instance?.steps[index]
+  return instance && step ? { instanceId: instance.id, index, step } : null
 }
 </script>
 
 <template>
-  <UPopover v-if="notifications.count" :content="{ align: 'end' }">
+  <UPopover v-if="notifications.count" v-model:open="open" :content="{ align: 'end' }">
     <UButton
       data-testid="notifications-bell"
       :color="hasUrgent ? 'error' : 'warning'"
@@ -446,7 +475,7 @@ function revealDecision(n: Notification) {
                   variant="link"
                   class="block min-w-0 flex-1 truncate p-0 text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
-                  @click="reveal(n)"
+                  @click="goTo(n)"
                 >
                   {{ n.title }}
                 </UButton>
@@ -523,19 +552,22 @@ function revealDecision(n: Notification) {
               />
               <div class="mt-2 flex items-center gap-1.5">
                 <!-- The action, where marking read is not one: opens what the title opens. -->
+                <!-- Soft, not solid: the inbox lists many cards, and a solid button on each would put
+                     many primaries in one view. -->
                 <UButton
-                  v-if="goToLabel(n)"
+                  v-if="goToLabels.get(n.id)"
                   data-testid="notification-go-to"
                   :color="accent(n)"
+                  variant="soft"
                   size="xs"
-                  @click="reveal(n)"
+                  @click="goTo(n)"
                 >
-                  {{ goToLabel(n) }}
+                  {{ goToLabels.get(n.id) }}
                 </UButton>
                 <UButton
                   data-testid="notification-act"
-                  :color="goToLabel(n) ? 'neutral' : accent(n)"
-                  :variant="goToLabel(n) ? 'ghost' : 'soft'"
+                  :color="goToLabels.get(n.id) ? 'neutral' : accent(n)"
+                  :variant="goToLabels.get(n.id) ? 'ghost' : 'soft'"
                   size="xs"
                   :loading="busy === n.id"
                   :disabled="!access.canExecuteRuns.value"

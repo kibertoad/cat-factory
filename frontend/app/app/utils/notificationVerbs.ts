@@ -8,7 +8,10 @@ import type { Notification } from '~/types/domain'
  * verb, so the one moment the product asks for a human carries the action rather than a way to
  * silence it.
  *
- * Exhaustive over the notification types, so a new type has to decide. `null` means the card's
+ * Exhaustive over the notification types, so a new type has to decide. A `decision_required` card
+ * says "Answer" only while its run is parked on a step; the same type is also raised after a run
+ * gave up (a Ralph loop, an exhausted gate), where there is nothing to answer and the card's route
+ * only opens the task, so it says "Open" there (`NotificationsInbox.goToLabel`). `null` means the card's
  * own act button already IS the action (Merge, Retry run, Acknowledge), or there is nowhere to
  * go beyond the card itself.
  */
@@ -24,6 +27,8 @@ export const NOTIFICATION_GO_TO_KEYS: Record<Notification['type'], string | null
   infra_unreachable: null,
   key_drift: null,
   budget_threshold: null,
+  // Raised with no block (`raiseBudgetPaused`), so there is nowhere to go beyond the card.
+  budget_paused: null,
   requirement_review: 'layout.notifications.goTo.review',
   clarity_review: 'layout.notifications.goTo.review',
   decision_required: 'layout.notifications.goTo.answer',
@@ -36,5 +41,4 @@ export const NOTIFICATION_GO_TO_KEYS: Record<Notification['type'], string | null
   pr_review_ready: 'layout.notifications.goTo.review',
   bug_fishing_triage: 'layout.notifications.goTo.triage',
   initiative: 'layout.notifications.goTo.open',
-  budget_paused: 'layout.notifications.goTo.open',
 }
