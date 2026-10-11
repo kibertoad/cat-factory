@@ -257,7 +257,7 @@ const chipClass = computed(() =>
 
 const backdropClass = computed(() => [
   WINDOWED_OVERLAY_CLASS,
-  'z-50 justify-center bg-app-950/70 backdrop-blur-sm',
+  'z-50 justify-center bg-elevated/75 backdrop-blur-sm',
   props.variant === 'centered' ? 'items-center' : 'items-stretch',
 ])
 // The centered cap is the smaller of 90dvh and the backdrop's padded box: with a large inset (a

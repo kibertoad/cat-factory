@@ -157,7 +157,7 @@ watch(
     <!-- safe-area-ok: a scrim with no content; the drawer below pads its own edges -->
     <div
       v-if="ui.mobileNavOpen"
-      class="fixed inset-0 z-30 bg-app-950/60 backdrop-blur-sm lg:hidden"
+      class="fixed inset-0 z-30 bg-elevated/75 backdrop-blur-sm lg:hidden"
       data-testid="sidebar-backdrop"
       role="button"
       tabindex="-1"
