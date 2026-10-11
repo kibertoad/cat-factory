@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/webhooks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Verify cat-factory outbound webhook deliveries: the HMAC-SHA256 signature over the raw body and the timestamp replay window, with Web Crypto only, so one receiver runs on Node, in a browser or in a worker isolate.",
   "keywords": [
     "cat-factory",
