@@ -683,7 +683,12 @@ export function usePipelineErrorToast() {
     // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
     // (better than the raw prose this replaced) and a bare key can never leak.
     const title = t(fallbackTitleKey, titleParams ?? {})
-    const description = t(failure.descriptionKey)
+    showFailure(title, t(failure.descriptionKey), detail)
+  }
+
+  /** The failure toast both generic paths render: translated title and description, the raw
+   * detail behind "Show details", and the whole report copyable. */
+  function showFailure(title: string, description: string, detail: string): void {
     const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
     const added = toast.add({
       title,
@@ -714,6 +719,25 @@ export function usePipelineErrorToast() {
   }
 
   /**
+   * A failure the backend reported as DATA rather than as a failed call: a job row with
+   * `status: 'failed'` and its `error` text, a probe verdict with a `message`. There is no
+   * envelope, so `present` would misread it as a network fault. The reported text is backend prose
+   * and so DETAIL, never the headline: it goes behind "Show details" and into the copied report,
+   * under a translated description (`descriptionKey`, or the generic "it reported a failure").
+   */
+  function presentReported(
+    detail: string | null | undefined,
+    titleKey: string,
+    opts: { params?: Record<string, unknown>; descriptionKey?: string } = {},
+  ): void {
+    showFailure(
+      t(titleKey, opts.params ?? {}),
+      t(opts.descriptionKey ?? 'errors.reported.description'),
+      detail?.trim() ?? '',
+    )
+  }
+
+  /**
    * Present `error` as a toast. `fallbackTitleKey` is an i18n message key used for
    * non-conflict failures and any conflict reason without a dedicated title; `titleParams` carries
    * that key's interpolation when it takes any (a title naming the thing that failed).
@@ -732,5 +756,5 @@ export function usePipelineErrorToast() {
     presentGenericFailure(error, fallbackTitleKey, titleParams)
   }
 
-  return { present }
+  return { present, presentReported }
 }

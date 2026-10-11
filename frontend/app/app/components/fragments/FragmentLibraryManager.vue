@@ -20,6 +20,7 @@ import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.v
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -41,7 +42,7 @@ const library =
     : useFragmentLibrary(props.kind, props.ownerId)
 const documents = useDocumentsStore()
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -207,7 +208,7 @@ async function saveEdit() {
           .filter(Boolean),
       })
       editDraft.value = null
-      toast.add({ title: t('fragments.toast.updated'), icon: 'i-lucide-check' })
+      actionToast.success('fragments.toast.updated')
     } catch (e) {
       present(e, 'fragments.toast.updateFailed')
     }
@@ -229,7 +230,7 @@ async function createFragment() {
         .filter(Boolean),
     })
     draft.value = { title: '', summary: '', body: '', brief: '', tags: '' }
-    toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
+    actionToast.success('fragments.toast.added')
   } catch (e) {
     present(e, 'fragments.toast.addFailed')
   } finally {
@@ -250,7 +251,7 @@ async function removeFragment(id: string) {
   await withRow(`remove:${id}`, async () => {
     try {
       await library.remove(id)
-      toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
+      actionToast.success('fragments.toast.removed')
     } catch (e) {
       present(e, 'fragments.toast.removeFailed')
     }
@@ -415,7 +416,7 @@ async function linkDocumentFragment() {
       // Free-text field: exactly one ref.
       await library.createDocumentFragment({ source, ref: docDraft.value.ref.trim(), tags })
       docDraft.value = { source: '', ref: '', tags: '' }
-      toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
+      actionToast.success('fragments.toast.documentLinked')
       return
     }
 
@@ -440,9 +441,9 @@ async function linkDocumentFragment() {
     if (linked > 0) {
       // A vue-i18n plural message (count as the plural choice) so Slavic few/many forms
       // render correctly, and the count==1 case reads naturally too.
-      toast.add({
-        title: t('fragments.toast.documentsLinked', { count: linked }, linked),
-        icon: 'i-lucide-link',
+      actionToast.success('fragments.toast.documentsLinked', {
+        params: { count: linked },
+        plural: linked,
       })
     }
     if (firstError) {
@@ -462,7 +463,7 @@ async function refreshFragment(id: string) {
   await withRow(`refresh:${id}`, async () => {
     try {
       await library.refreshDocumentFragment(id)
-      toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
+      actionToast.success('fragments.toast.refreshed')
     } catch (e) {
       present(e, 'fragments.toast.refreshFailed')
     }
@@ -519,7 +520,7 @@ async function linkSource() {
     // `syncSource` row wrapper): a failure here should surface as a link failure, and
     // the form-level `linkingSource` spinner already covers the whole operation.
     await library.syncSource(source.id)
-    toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
+    actionToast.success('fragments.toast.sourceLinked')
   } catch (e) {
     present(e, 'fragments.toast.linkSourceFailed')
   } finally {
@@ -531,13 +532,8 @@ async function syncSource(id: string) {
   await withRow(`sync:${id}`, async () => {
     try {
       const result = await library.syncSource(id)
-      toast.add({
-        title: t('fragments.toast.synced', {
-          updated: result.upserted,
-          removed: result.tombstoned,
-        }),
-        icon: 'i-lucide-refresh-cw',
-        color: 'info',
+      actionToast.success('fragments.toast.synced', {
+        params: { updated: result.upserted, removed: result.tombstoned },
       })
     } catch (e) {
       present(e, 'fragments.toast.syncFailed')
@@ -549,12 +545,9 @@ async function checkSource(id: string) {
   await withRow(`check:${id}`, async () => {
     try {
       const status = await library.checkSource(id)
-      toast.add({
-        title: status.changed
-          ? t('fragments.toast.changesAvailable')
-          : t('fragments.toast.upToDate'),
-        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-      })
+      actionToast.info(
+        status.changed ? 'fragments.toast.changesAvailable' : 'fragments.toast.upToDate',
+      )
     } catch (e) {
       present(e, 'fragments.toast.checkSourceFailed')
     }
@@ -575,7 +568,7 @@ async function unlinkSource(id: string) {
   await withRow(`unlink:${id}`, async () => {
     try {
       await library.unlinkSource(id)
-      toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+      actionToast.success('fragments.toast.sourceUnlinked')
     } catch (e) {
       present(e, 'fragments.toast.unlinkSourceFailed')
     }
@@ -771,13 +764,16 @@ async function unlinkSource(id: string) {
             </div>
           </div>
         </div>
-        <p v-if="!library.fragments.length" class="text-sm text-dimmed">
-          {{
+        <EmptyState
+          v-if="!library.fragments.length"
+          compact
+          icon="i-lucide-puzzle"
+          :title="
             isWorkspace
               ? t('fragments.authored.empty.workspace')
               : t('fragments.authored.empty.account')
-          }}
-        </p>
+          "
+        />
 
         <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
@@ -887,9 +883,12 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!documentFragments.length" class="text-sm text-dimmed">
-          {{ t('fragments.documents.empty') }}
-        </p>
+        <EmptyState
+          v-if="!documentFragments.length"
+          compact
+          icon="i-lucide-file-text"
+          :title="t('fragments.documents.empty')"
+        />
 
         <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
@@ -1053,9 +1052,12 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!library.sources.length" class="text-sm text-dimmed">
-          {{ t('fragments.sources.empty') }}
-        </p>
+        <EmptyState
+          v-if="!library.sources.length"
+          compact
+          icon="i-lucide-git-branch"
+          :title="t('fragments.sources.empty')"
+        />
 
         <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>

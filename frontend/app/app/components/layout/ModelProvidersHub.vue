@@ -13,6 +13,7 @@
 // "Back to Model providers" control (IntegrationBackTitle). Layout mirrors the Integrations
 // hub row-for-row so the two read as siblings.
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -197,9 +198,12 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
           class="w-full"
         />
 
-        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-dimmed">
-          {{ t('layout.modelProvidersHub.noMatches', { query }) }}
-        </p>
+        <EmptyState
+          v-if="!filteredGroups.length"
+          compact
+          icon="i-lucide-search-x"
+          :title="t('layout.modelProvidersHub.noMatches', { query })"
+        />
 
         <section v-for="group in filteredGroups" :key="group.title">
           <SectionLabel as="h3" class="mb-2 px-1">

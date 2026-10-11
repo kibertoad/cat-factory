@@ -23,6 +23,7 @@ import {
 } from './ServiceSpecWindow.logic'
 import type { BadgeColor } from '~/utils/badge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const board = useBoardStore()
@@ -225,12 +226,14 @@ function kindLabel(item: RequirementItem): string {
     </template>
 
     <!-- loading -->
-    <div
-      v-if="loading && !view"
-      class="flex flex-1 items-center justify-center gap-2 text-sm text-muted"
-    >
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-      {{ t('spec.loading') }}
+    <div v-if="loading && !view" class="flex min-h-0 flex-1">
+      <div class="w-64 shrink-0 space-y-2 border-e border-default px-3 py-4">
+        <USkeleton v-for="n in 6" :key="n" class="h-6 w-full" />
+      </div>
+      <div class="flex-1 space-y-3 px-6 py-4">
+        <USkeleton class="h-6 w-1/3" />
+        <USkeleton v-for="n in 4" :key="n" class="h-4 w-full" />
+      </div>
     </div>
 
     <!-- error -->
@@ -253,18 +256,13 @@ function kindLabel(item: RequirementItem): string {
     </div>
 
     <!-- empty: no spec on the repo's default branch yet -->
-    <div
+    <EmptyState
       v-else-if="!present"
-      class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
-    >
-      <UIcon name="i-lucide-scroll-text" class="h-8 w-8 text-app-600" />
-      <div>
-        <p class="text-sm font-medium text-toned">{{ t('spec.empty.title') }}</p>
-        <p class="mx-auto mt-1 max-w-md text-xs text-dimmed">
-          {{ t('spec.empty.description') }}
-        </p>
-      </div>
-    </div>
+      class="flex-1"
+      icon="i-lucide-scroll-text"
+      :title="t('spec.empty.title')"
+      :description="t('spec.empty.description')"
+    />
 
     <!-- spec body: navigable tree + detail -->
     <div v-else class="flex min-h-0 flex-1">
@@ -368,19 +366,22 @@ function kindLabel(item: RequirementItem): string {
               v-if="selectedFeature"
               class="mt-4 overflow-x-auto rounded-lg border border-default bg-app-950/60 p-4 text-xs leading-relaxed text-default"
             ><code>{{ selectedFeature.content }}</code></pre>
-            <div
+            <EmptyState
               v-else
-              class="mt-4 rounded-lg border border-dashed border-muted p-6 text-center text-sm text-dimmed"
-            >
-              {{ t('spec.noGherkinForGroup') }}
-            </div>
+              class="mt-4"
+              icon="i-lucide-file-code"
+              :title="t('spec.noGherkinForGroup')"
+            />
           </template>
 
           <!-- STRUCTURED view: requirements + acceptance + domain rules -->
           <template v-else>
-            <div v-if="reqCount(selectedGroup) === 0" class="mt-4 text-sm text-dimmed">
-              {{ t('spec.noRequirements') }}
-            </div>
+            <EmptyState
+              v-if="reqCount(selectedGroup) === 0"
+              class="mt-4"
+              icon="i-lucide-list-checks"
+              :title="t('spec.noRequirements')"
+            />
             <!-- per-group implementation-state rollup + the filter over the two halves -->
             <div
               v-else
@@ -421,12 +422,14 @@ function kindLabel(item: RequirementItem): string {
                  rendering a blank pane that reads like "no requirements". The filter is sticky
                  across groups, so the reader may have set it several groups ago — offer the way
                  back here rather than making them find the toggle again. -->
-            <div
+            <EmptyState
               v-if="reqCount(selectedGroup) > 0 && visibleRequirements.length === 0"
-              class="mt-4 flex flex-wrap items-center gap-2 text-sm text-dimmed"
+              class="mt-4"
+              compact
+              icon="i-lucide-filter-x"
+              :title="t('spec.state.noneMatchFilter')"
               data-testid="spec-state-filter-empty"
             >
-              {{ t('spec.state.noneMatchFilter') }}
               <UButton
                 variant="link"
                 size="xs"
@@ -440,7 +443,7 @@ function kindLabel(item: RequirementItem): string {
               >
                 {{ t('spec.state.showAll') }}
               </UButton>
-            </div>
+            </EmptyState>
             <ul class="mt-4 space-y-4">
               <li
                 v-for="req in visibleRequirements"

@@ -105,6 +105,7 @@ describe('resolvePending', () => {
     vi.stubGlobal('useWorkspaceStore', () => ({ workspaceId: 'ws_1' }))
     vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
     vi.stubGlobal('useI18n', () => ({ t: (key: string) => key }))
+    vi.stubGlobal('useNuxtApp', () => ({ $i18n: { t: (key: string) => key } }))
     vi.stubGlobal('useCopyToClipboard', () => ({ copyAction: () => ({ label: 'copy' }) }))
   }
 
@@ -192,6 +193,7 @@ describe('presentLinkFailures', () => {
     vi.stubGlobal('useWorkspaceStore', () => ({ workspaceId: 'ws_1' }))
     vi.stubGlobal('useToast', () => ({ add }))
     vi.stubGlobal('useI18n', () => ({ t: (key: string) => key }))
+    vi.stubGlobal('useNuxtApp', () => ({ $i18n: { t: (key: string) => key } }))
     vi.stubGlobal('useCopyToClipboard', () => ({ copyAction }))
     return { add, copyAction }
   }
@@ -221,6 +223,7 @@ describe('presentLinkFailures', () => {
     const toast = add.mock.calls[0]![0]
     // Sticky so the cause stays readable, titled by the count key, and per-item reason shown.
     expect(toast.title).toBe('board.addTask.linkFailed')
+    expect(toast.color).toBe('warning')
     expect(toast.duration).toBe(0)
     expect(toast.description).toContain('GitHub denied access')
     expect(toast.actions).toHaveLength(1)

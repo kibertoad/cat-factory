@@ -11,6 +11,7 @@
 import type { PromptFragment } from '~/types/domain'
 import { buildFragmentCategoryGroups } from '~/utils/fragmentPicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -123,9 +124,12 @@ function manageAccount() {
                   </UButton>
                 </div>
               </template>
-              <p v-else class="px-2 py-3 text-xs text-dimmed">
-                {{ t('inspector.fragments.pickerEmpty') }}
-              </p>
+              <EmptyState
+                v-else
+                compact
+                icon="i-lucide-puzzle"
+                :title="t('inspector.fragments.pickerEmpty')"
+              />
 
               <div class="mt-1 border-t border-default pt-1">
                 <UButton

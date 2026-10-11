@@ -9,9 +9,11 @@ import type { BootstrapStepState } from '@cat-factory/contracts'
 // every instance: the step list renders on every in-progress, parked and failed bootstrap card on
 // the board, plus the inspector and the failure card.
 
-/** How one step state renders: its icon, the icon's tone, and the label's. */
+/** How one step state renders: its icon, whether it spins (through `<Spinner :spinning>`), the
+ * icon's tone, and the label's. */
 export interface BootstrapStepStyle {
   icon: string
+  spin: boolean
   iconClass: string
   labelClass: string
 }
@@ -24,36 +26,43 @@ export interface BootstrapStepStyle {
 export const BOOTSTRAP_STEP_STYLE: Record<BootstrapStepState, BootstrapStepStyle> = {
   pending: {
     icon: 'i-lucide-circle',
+    spin: false,
     iconClass: 'text-dimmed',
     labelClass: 'text-dimmed',
   },
   running: {
     icon: 'i-lucide-loader-circle',
-    iconClass: 'animate-spin text-app-warning-400',
+    spin: true,
+    iconClass: 'text-app-warning-400',
     labelClass: 'text-app-warning-100',
   },
   awaiting_review: {
     icon: 'i-lucide-user-check',
+    spin: false,
     iconClass: 'text-app-warning-400',
     labelClass: 'text-app-warning-100',
   },
   done: {
     icon: 'i-lucide-check-circle-2',
+    spin: false,
     iconClass: 'text-app-success-400',
     labelClass: 'text-muted',
   },
   failed: {
     icon: 'i-lucide-alert-triangle',
+    spin: false,
     iconClass: 'text-app-error-400',
     labelClass: 'text-app-error-200',
   },
   stopped: {
     icon: 'i-lucide-circle-stop',
+    spin: false,
     iconClass: 'text-muted',
     labelClass: 'text-toned',
   },
   unknown: {
     icon: 'i-lucide-help-circle',
+    spin: false,
     iconClass: 'text-muted',
     labelClass: 'text-muted',
   },

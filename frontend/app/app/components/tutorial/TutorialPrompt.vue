@@ -14,6 +14,7 @@
 // The decision semantics live in the store: starting a tour or "No thanks" is SAVED (the
 // prompt never auto-opens again), while closing without answering defers to next launch.
 import { TUTORIAL_ACTION_KEYS } from '~/utils/tutorial'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const tutorial = useTutorialStore()
@@ -81,9 +82,12 @@ const undecided = computed(() => tutorial.decision === null)
              alone, where `board-basics` requires nothing at all — but a consumer's own slot
              filter can produce it, and "no tours exist" would be the wrong thing to say then.)
              The footer's browse button is the way on, so it stays. -->
-        <p v-if="offered.length === 0" class="text-sm text-muted">
-          {{ t('tutorial.prompt.empty') }}
-        </p>
+        <EmptyState
+          v-if="offered.length === 0"
+          compact
+          icon="i-lucide-graduation-cap"
+          :title="t('tutorial.prompt.empty')"
+        />
       </div>
     </template>
     <template #footer>

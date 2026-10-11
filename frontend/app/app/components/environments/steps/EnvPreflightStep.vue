@@ -6,6 +6,7 @@
 import { computed } from 'vue'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
 import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   input: { frameId: string | null }
@@ -48,13 +49,13 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
       </UButton>
     </div>
 
-    <p
+    <EmptyState
       v-if="!store.recipe.prerequisites?.length"
-      class="text-xs text-dimmed"
+      compact
+      icon="i-lucide-list-checks"
+      :title="t('environmentWizard.preflight.none')"
       data-testid="env-setup-preflight-none"
-    >
-      {{ t('environmentWizard.preflight.none') }}
-    </p>
+    />
     <p
       v-else-if="preflightsUnavailable"
       class="text-xs text-app-warning-300/80"

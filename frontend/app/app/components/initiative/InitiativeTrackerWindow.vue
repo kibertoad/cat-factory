@@ -31,6 +31,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import InitiativePlanReview from '~/components/initiative/InitiativePlanReview.vue'
 import InitiativePlanNotice from '~/components/initiative/InitiativePlanNotice.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
@@ -373,14 +374,12 @@ const { requestClose } = useUnsavedGuard({
         <!-- No entity yet (module unwired / still creating). Centred in the column when it is the
              only thing in it; merely inset when the notice above it means `h-full` would overflow
              the scroller by the notice's own height. -->
-        <div
+        <EmptyState
           v-if="!initiative"
-          class="flex flex-col items-center justify-center gap-2 text-center text-muted"
           :class="planApproval ? 'py-16' : 'h-full'"
-        >
-          <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
-        </div>
+          icon="i-lucide-milestone"
+          :title="t('initiative.tracker.empty')"
+        />
 
         <template v-else>
           <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
@@ -467,12 +466,13 @@ const { requestClose } = useUnsavedGuard({
           </section>
 
           <!-- Awaiting planning -->
-          <div
+          <EmptyState
             v-if="phases.length === 0"
-            class="mb-4 rounded-lg border border-dashed border-muted p-4 text-center text-xs text-muted"
-          >
-            {{ t('initiative.tracker.noPlan') }}
-          </div>
+            class="mb-4"
+            compact
+            icon="i-lucide-list-todo"
+            :title="t('initiative.tracker.noPlan')"
+          />
 
           <!-- Phases + items -->
           <section v-for="phase in phases" :key="phase.id" class="mb-5">
