@@ -18,12 +18,13 @@ import {
 // Who may act on a row is the banners' rule too (`utils/setupAudience.ts`).
 // ---------------------------------------------------------------------------
 
+/** The rows. The infrastructure rows are named by their `InfraSetupArea`, the server's vocabulary. */
 export const SETUP_ROWS = [
   'model',
   'sourceControl',
   'agentExecutor',
-  'testEnvironments',
-  'contentStorage',
+  'ephemeralEnvironments',
+  'binaryStorage',
 ] as const
 export type SetupRowId = (typeof SETUP_ROWS)[number]
 
@@ -55,14 +56,16 @@ export type SetupRowCause =
   | 'presetBroken'
   /** The probe itself failed, so the answer is unknown. The fix is to ask again. */
   | 'probeFailed'
+  /** The workspace loaded, and this backend does not report the area at all. */
+  | 'notReported'
 
 /** Whether a task can run without the row. An optional row only switches off the agents that use it. */
 export const SETUP_ROW_REQUIRED: Record<SetupRowId, boolean> = {
   model: true,
   sourceControl: true,
   agentExecutor: true,
-  testEnvironments: false,
-  contentStorage: false,
+  ephemeralEnvironments: false,
+  binaryStorage: false,
 }
 
 /** Everything the checklist reads, resolved by the caller so this stays pure. */
@@ -87,8 +90,10 @@ export interface SetupProbeInput {
     /** The token check's verdict, when it needs attention. */
     readonly patProblem: 'rejected' | 'underscoped' | null
   }
-  /** Null until the workspace snapshot has delivered it. */
+  /** Null until the workspace snapshot has delivered it, or from a backend that omits it. */
   readonly infra: InfraSetup | null
+  /** The workspace snapshot has loaded, so a null `infra` is an answer, not a wait. */
+  readonly workspaceLoaded: boolean
   /** Who can close each infrastructure gap; null from a backend that does not report it. */
   readonly infraOwners: InfraSetupOwners | null
   readonly providers: {
@@ -127,9 +132,10 @@ const attention = (cause: SetupRowCause): RowState => ({ status: 'attention', ca
 
 function infraRow(
   status: InfraSetupStatus | undefined,
+  workspaceLoaded: boolean,
   provider: { loaded: boolean; incomplete: boolean } | null,
 ): RowState {
-  if (status === undefined) return state('checking')
+  if (status === undefined) return workspaceLoaded ? attention('notReported') : state('checking')
   if (status === 'not_applicable') return state('not_needed')
   if (status === 'not_defined') return state('missing')
   if (isInfraSetupHealthStatus(status)) return attention('unreachable')
@@ -166,9 +172,9 @@ function rowOwner(id: SetupRowId, input: SetupProbeInput): unknown {
   switch (id) {
     case 'agentExecutor':
       return input.infraOwners?.agentExecutor
-    case 'testEnvironments':
+    case 'ephemeralEnvironments':
       return input.infraOwners?.ephemeralEnvironments
-    case 'contentStorage':
+    case 'binaryStorage':
       return input.infraOwners?.binaryStorage
     case 'model':
       return 'workspace_admin'
@@ -196,16 +202,16 @@ export function deriveSetupChecklist(input: SetupProbeInput): SetupChecklist {
   const states: Record<SetupRowId, RowState> = {
     model: modelRow(input.model),
     sourceControl: sourceControlRow(input.sourceControl),
-    agentExecutor: infraRow(input.infra?.agentExecutor, {
+    agentExecutor: infraRow(input.infra?.agentExecutor, input.workspaceLoaded, {
       loaded,
       incomplete: needingConfig.includes('runner-pool'),
     }),
-    testEnvironments: infraRow(input.infra?.ephemeralEnvironments, {
+    ephemeralEnvironments: infraRow(input.infra?.ephemeralEnvironments, input.workspaceLoaded, {
       loaded,
       incomplete: needingConfig.includes('environment'),
     }),
     // Storage has no provider connection, so nothing about it waits on the providers.
-    contentStorage: infraRow(input.infra?.binaryStorage, null),
+    binaryStorage: infraRow(input.infra?.binaryStorage, input.workspaceLoaded, null),
   }
   const rows = SETUP_ROWS.map((id) => ({
     id,

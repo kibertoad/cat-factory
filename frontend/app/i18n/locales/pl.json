@@ -8774,7 +8774,7 @@
       "notNeeded": "To wdrożenie tego nie używa.",
       "model": {
         "title": "Model",
-        "done": "Model jest dostępny i domyślny preset go używa.",
+        "done": "Model jest dostępny.",
         "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy."
       },
       "sourceControl": {
@@ -8788,12 +8788,12 @@
         "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
         "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
       },
-      "testEnvironments": {
+      "ephemeralEnvironments": {
         "title": "Środowiska testowe",
         "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
         "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają."
       },
-      "contentStorage": {
+      "binaryStorage": {
         "title": "Magazyn zrzutów ekranu",
         "done": "Skonfigurowano. Kontrole wizualne są włączone.",
         "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone."
@@ -8805,7 +8805,8 @@
       "rejected": "GitHub odrzucił token dostępu.",
       "underscoped": "Token dostępu nie może wypychać zmian ani otwierać pull requestów.",
       "presetBroken": "Domyślny preset modelu wskazuje model, który nie jest dostępny.",
-      "probeFailed": "Sprawdzenie nie odpowiedziało."
+      "probeFailed": "Sprawdzenie nie odpowiedziało.",
+      "notReported": "To wdrożenie tego nie zgłasza."
     },
     "also": {
       "title": "Także tutaj",

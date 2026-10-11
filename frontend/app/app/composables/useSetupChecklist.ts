@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import { githubPatCheckNeedsAttention } from '@cat-factory/contracts'
 import { deriveSetupChecklist, type SetupRow } from '~/utils/setupChecklist'
-import { githubPatRemintUrl } from '~/utils/vcs'
 
 /**
  * The store-facing half of `utils/setupChecklist.ts`: resolve every probe the checklist reads,
@@ -12,13 +11,16 @@ import { githubPatRemintUrl } from '~/utils/vcs'
  */
 export function useSetupChecklist() {
   const ui = useUiStore()
-  const auth = useAuthStore()
   const github = useGitHubStore()
   const models = useModelsStore()
   const workspace = useWorkspaceStore()
   const providerConnections = useProviderConnectionsStore()
   const ai = useAiReadiness()
   const { actor } = useSetupActor()
+  // Where each gap is fixed: the map the setup banners open through too.
+  const remedies = useSetupRemedies()
+  /** Local mode with no token: the row says where the new one goes, as the banner does. */
+  const patMissing = computed(() => !!remedies.patSetupUrl.value)
 
   // The catalog is loaded on board open, and a failed load is dropped there on purpose (it stays
   // retryable, see `models.prefetchForBoard`). The checklist is where that failure is stated, so
@@ -65,10 +67,11 @@ export function useSetupChecklist() {
         available: github.available,
         unavailableCause: github.unavailableCause,
         connected: github.connected,
-        patMissing: !!auth.localMode?.githubPatSetupUrl,
+        patMissing: patMissing.value,
         patProblem: patProblem.value,
       },
       infra: workspace.infraSetup ?? null,
+      workspaceLoaded: workspace.ready,
       infraOwners: workspace.infraSetupOwners ?? null,
       providers: {
         loaded: providerConnections.loaded,
@@ -78,42 +81,36 @@ export function useSetupChecklist() {
     }),
   )
 
-  /** The re-mint page the token banner links to, for the token GitHub rejected or under-scoped. */
-  function openPatRemint() {
-    const check = patCheck.value
-    const report = check?.state === 'checked' ? check.report : undefined
-    const url = githubPatRemintUrl(
-      report?.kind ?? 'unknown',
-      report?.webUrl ?? github.connection?.webUrl,
-    )
-    window.open(url, '_blank', 'noopener')
-  }
-
   /**
-   * Where a row's action goes, by row AND state: the surface the matching banner or dialog opens
-   * for that state. Null where there is nothing to open (the deployment does not use the area).
+   * Where a row's action goes, by row AND state, through the remedies the matching banner uses.
+   * Null where there is nothing to open: the deployment does not use the area, or does not report
+   * it.
    */
   function actionFor(row: SetupRow): (() => void) | null {
     if (row.status === 'not_needed' || row.status === 'checking') return null
+    if (row.cause === 'notReported') return null
     switch (row.id) {
       case 'model':
         if (row.cause === 'probeFailed') return () => void loadModels()
-        if (row.status === 'missing') return () => ui.openAiProviderSetup()
-        if (row.cause === 'presetBroken') return () => ui.openAiPresetMismatch()
+        if (row.status === 'missing') return remedies.openModelSetup
+        if (row.cause === 'presetBroken') return remedies.openPresetMismatch
         return () => ui.openModelProviders()
       case 'sourceControl': {
-        const setupUrl = auth.localMode?.githubPatSetupUrl
+        const setupUrl = remedies.patSetupUrl.value
         if (setupUrl) return () => window.open(setupUrl, '_blank', 'noopener')
-        if (row.cause === 'rejected' || row.cause === 'underscoped') return openPatRemint
+        if (row.cause === 'rejected' || row.cause === 'underscoped') {
+          const remint = remedies.patRemintUrl.value
+          return () => window.open(remint, '_blank', 'noopener')
+        }
         if (row.cause === 'probeFailed') return () => void github.probe()
         return () => ui.openGitHub()
       }
       case 'agentExecutor':
-        return () => ui.openProviderConnection('runner-pool')
-      case 'testEnvironments':
-        return () => ui.openProviderConnection('environment')
-      case 'contentStorage':
-        return () => ui.openContentStorageSettings()
+      case 'ephemeralEnvironments':
+      case 'binaryStorage': {
+        const area = row.id
+        return () => remedies.openInfraArea(area)
+      }
       default: {
         const unreachable: never = row.id
         return unreachable
@@ -121,5 +118,5 @@ export function useSetupChecklist() {
     }
   }
 
-  return { checklist, actionFor, refresh }
+  return { checklist, actionFor, refresh, patSource: remedies.patSource, patMissing }
 }

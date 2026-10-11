@@ -8774,7 +8774,7 @@
       "notNeeded": "Diese Bereitstellung nutzt das nicht.",
       "model": {
         "title": "Modell",
-        "done": "Ein Modell ist verfügbar, und das Standard-Preset nutzt es.",
+        "done": "Ein Modell ist verfügbar.",
         "missing": "Kein Modell verfügbar. Kein Agent kann laufen, bis du einen Anbieter verbindest."
       },
       "sourceControl": {
@@ -8788,12 +8788,12 @@
         "missing": "Kein Runner konfiguriert. Nichts kann laufen, bis du einen verbindest.",
         "notNeeded": "Diese Bereitstellung führt Agenten ohne Runner aus."
       },
-      "testEnvironments": {
+      "ephemeralEnvironments": {
         "title": "Testumgebungen",
         "done": "Konfiguriert. Tester können eine Live-Vorschau nutzen.",
         "missing": "Nicht eingerichtet. Tester, die eine Live-Vorschau brauchen, laufen nicht. Alle anderen Agenten laufen."
       },
-      "contentStorage": {
+      "binaryStorage": {
         "title": "Screenshot-Speicher",
         "done": "Konfiguriert. Visuelle Prüfungen sind aktiv.",
         "missing": "Nicht eingerichtet. Visuelle Prüfungen sind aus."
@@ -8805,7 +8805,8 @@
       "rejected": "GitHub hat den Zugriffstoken abgelehnt.",
       "underscoped": "Der Zugriffstoken kann weder pushen noch Pull Requests öffnen.",
       "presetBroken": "Das Standard-Modell-Preset nennt ein Modell, das nicht verfügbar ist.",
-      "probeFailed": "Die Prüfung hat nicht geantwortet."
+      "probeFailed": "Die Prüfung hat nicht geantwortet.",
+      "notReported": "Diese Bereitstellung meldet es nicht."
     },
     "also": {
       "title": "Außerdem hier",

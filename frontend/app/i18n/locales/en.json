@@ -9105,7 +9105,7 @@
       "notNeeded": "This deployment does not use it.",
       "model": {
         "title": "Model",
-        "done": "A model is available, and the default preset uses it.",
+        "done": "A model is available.",
         "missing": "No model is available. No agent can run until you connect a provider."
       },
       "sourceControl": {
@@ -9119,12 +9119,12 @@
         "missing": "No runner is configured. Nothing can run until you connect one.",
         "notNeeded": "This deployment runs agents without a runner."
       },
-      "testEnvironments": {
+      "ephemeralEnvironments": {
         "title": "Test environments",
         "done": "Configured. Testers can use a live preview.",
         "missing": "Not set up. Testers that need a live preview do not run. All other agents run."
       },
-      "contentStorage": {
+      "binaryStorage": {
         "title": "Screenshot storage",
         "done": "Configured. Visual checks are on.",
         "missing": "Not set up. Visual checks are off."
@@ -9136,7 +9136,8 @@
       "rejected": "GitHub rejected the access token.",
       "underscoped": "The access token cannot push or open pull requests.",
       "presetBroken": "The default model preset names a model that is not available.",
-      "probeFailed": "The check did not answer."
+      "probeFailed": "The check did not answer.",
+      "notReported": "This deployment does not report it."
     },
     "also": {
       "title": "Also here",

@@ -35,6 +35,7 @@ function input(overrides: Partial<SetupProbeInput> = {}): SetupProbeInput {
     model: { loaded: true, loadFailed: false, usable: true, presetBroken: false },
     sourceControl: SOURCE_OK,
     infra: ALL_CONFIGURED,
+    workspaceLoaded: true,
     infraOwners: null,
     providers: { loaded: true, needingConfig: [] },
     actor: ADMIN,
@@ -61,6 +62,7 @@ describe('deriveSetupChecklist', () => {
         model: { loaded: false, loadFailed: false, usable: false, presetBroken: false },
         sourceControl: { ...SOURCE_OK, available: null, connected: false },
         infra: null,
+        workspaceLoaded: false,
       }),
     )
     expect(c.rows.every((r) => r.status === 'checking')).toBe(true)
@@ -72,7 +74,7 @@ describe('deriveSetupChecklist', () => {
     expect(row(waiting, 'agentExecutor').status).toBe('checking')
     expect(deriveSetupChecklist(waiting).checking).toBe(true)
     // Storage has no provider connection, so it does not wait on them.
-    expect(row(waiting, 'contentStorage').status).toBe('done')
+    expect(row(waiting, 'binaryStorage').status).toBe('done')
   })
 
   it('names the cause of each broken setup, and tells it from an absent one', () => {
@@ -127,6 +129,12 @@ describe('deriveSetupChecklist', () => {
     expect(row(disabled, 'sourceControl').status).toBe('not_needed')
   })
 
+  it('says so when the loaded workspace does not report its infrastructure, never spins', () => {
+    const i = input({ infra: null, workspaceLoaded: true })
+    expect(row(i, 'agentExecutor')).toMatchObject({ status: 'attention', cause: 'notReported' })
+    expect(deriveSetupChecklist(i).checking).toBe(false)
+  })
+
   it('leaves an area the deployment does not use out of the count', () => {
     const c = deriveSetupChecklist(
       input({ infra: { ...ALL_CONFIGURED, ephemeralEnvironments: 'not_applicable' } }),
@@ -154,8 +162,8 @@ describe('deriveSetupChecklist', () => {
         actor: boardAdmin,
       })
       expect(row(i, 'agentExecutor').remedy).toBeNull()
-      expect(row(i, 'testEnvironments').remedy).toBe('operator')
-      expect(row(i, 'contentStorage').remedy).toBe('account_admin')
+      expect(row(i, 'ephemeralEnvironments').remedy).toBe('operator')
+      expect(row(i, 'binaryStorage').remedy).toBe('account_admin')
     })
 
     it('tells someone on the designer surface they can fix it themselves', () => {

@@ -8774,7 +8774,7 @@
       "notNeeded": "Questo deployment non lo usa.",
       "model": {
         "title": "Modello",
-        "done": "Un modello è disponibile e il preset predefinito lo usa.",
+        "done": "È disponibile un modello.",
         "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider."
       },
       "sourceControl": {
@@ -8788,12 +8788,12 @@
         "missing": "Nessun runner configurato. Nulla può essere eseguito finché non ne colleghi uno.",
         "notNeeded": "Questo deployment esegue gli agenti senza runner."
       },
-      "testEnvironments": {
+      "ephemeralEnvironments": {
         "title": "Ambienti di test",
         "done": "Configurato. I tester possono usare un’anteprima live.",
         "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì."
       },
-      "contentStorage": {
+      "binaryStorage": {
         "title": "Archiviazione degli screenshot",
         "done": "Configurato. I controlli visivi sono attivi.",
         "missing": "Non configurato. I controlli visivi sono disattivati."
@@ -8805,7 +8805,8 @@
       "rejected": "GitHub ha rifiutato il token di accesso.",
       "underscoped": "Il token di accesso non può fare push né aprire pull request.",
       "presetBroken": "Il preset di modello predefinito indica un modello non disponibile.",
-      "probeFailed": "La verifica non ha risposto."
+      "probeFailed": "La verifica non ha risposto.",
+      "notReported": "Questo deployment non lo segnala."
     },
     "also": {
       "title": "Anche qui",

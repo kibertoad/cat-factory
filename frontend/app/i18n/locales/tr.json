@@ -8774,7 +8774,7 @@
       "notNeeded": "Bu dağıtım bunu kullanmıyor.",
       "model": {
         "title": "Model",
-        "done": "Bir model kullanılabilir ve varsayılan ön ayar onu kullanıyor.",
+        "done": "Kullanılabilir bir model var.",
         "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz."
       },
       "sourceControl": {
@@ -8788,12 +8788,12 @@
         "missing": "Yapılandırılmış runner yok. Bir tane bağlayana kadar hiçbir şey çalışamaz.",
         "notNeeded": "Bu dağıtım ajanları runner olmadan çalıştırıyor."
       },
-      "testEnvironments": {
+      "ephemeralEnvironments": {
         "title": "Test ortamları",
         "done": "Yapılandırıldı. Test ajanları canlı önizleme kullanabilir.",
         "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır."
       },
-      "contentStorage": {
+      "binaryStorage": {
         "title": "Ekran görüntüsü depolama",
         "done": "Yapılandırıldı. Görsel denetimler açık.",
         "missing": "Kurulmadı. Görsel denetimler kapalı."
@@ -8805,7 +8805,8 @@
       "rejected": "GitHub erişim belirtecini reddetti.",
       "underscoped": "Erişim belirteci dal gönderemiyor ve pull request açamıyor.",
       "presetBroken": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor.",
-      "probeFailed": "Denetim yanıt vermedi."
+      "probeFailed": "Denetim yanıt vermedi.",
+      "notReported": "Bu dağıtım bunu bildirmiyor."
     },
     "also": {
       "title": "Burada ayrıca",

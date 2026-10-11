@@ -15,7 +15,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
  */
 const { t } = useI18n()
 const ui = useUiStore()
-const { checklist, actionFor, refresh } = useSetupChecklist()
+const { checklist, actionFor, refresh, patSource, patMissing } = useSetupChecklist()
 
 const open = computed({
   get: () => ui.setupChecklistOpen,
@@ -62,31 +62,38 @@ const pipelineHealth = usePipelineHealth()
 const riskPolicyHealth = useRiskPolicyHealth()
 const modelPresetHealth = useModelPresetHealth()
 
-const STATUS_META: Record<SetupRowStatus, { icon: string; class: string; actionKey: string }> = {
-  done: { icon: 'i-lucide-circle-check', class: 'text-success', actionKey: 'setup.action.change' },
-  missing: { icon: 'i-lucide-circle', class: 'text-dimmed', actionKey: 'setup.action.connect' },
-  attention: {
-    icon: 'i-lucide-circle-alert',
-    class: 'text-warning',
-    actionKey: 'setup.action.fix',
-  },
-  checking: {
-    icon: 'i-lucide-loader-circle',
-    class: 'animate-spin text-dimmed',
-    actionKey: 'setup.action.connect',
-  },
-  not_needed: {
-    icon: 'i-lucide-circle-minus',
-    class: 'text-dimmed',
-    actionKey: 'setup.action.change',
-  },
+const STATUS_META: Record<SetupRowStatus, { icon: string; class: string }> = {
+  done: { icon: 'i-lucide-circle-check', class: 'text-success' },
+  missing: { icon: 'i-lucide-circle', class: 'text-dimmed' },
+  attention: { icon: 'i-lucide-circle-alert', class: 'text-warning' },
+  checking: { icon: 'i-lucide-loader-circle', class: 'animate-spin text-dimmed' },
+  not_needed: { icon: 'i-lucide-circle-minus', class: 'text-dimmed' },
+}
+
+/**
+ * The action's word per state. Null for the two states that never carry an action
+ * (`useSetupChecklist.actionFor`), so no copy ships for a button that cannot render.
+ */
+const ACTION_KEYS: Record<SetupRowStatus, string | null> = {
+  done: 'setup.action.change',
+  missing: 'setup.action.connect',
+  attention: 'setup.action.fix',
+  checking: null,
+  not_needed: null,
 }
 
 function actionLabel(row: SetupRow): string {
-  return row.cause === 'probeFailed'
-    ? t('setup.action.retry')
-    : t(STATUS_META[row.status].actionKey)
+  if (row.cause === 'probeFailed') return t('setup.action.retry')
+  const key = ACTION_KEYS[row.status]
+  return key ? t(key) : ''
 }
+
+/** Whose token a token row is about: the remedy differs, so the row says it, as the banner does. */
+const patSourceKey = computed(() =>
+  patSource.value === 'deployment'
+    ? 'layout.githubPatPermissionsBanner.sourceDeployment'
+    : 'layout.githubPatPermissionsBanner.sourceInitiator',
+)
 
 /**
  * Each row's title and its line for the states that are about the row. An `attention` row's line
@@ -117,17 +124,17 @@ const ROW_COPY: Record<
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.agentExecutor.notNeeded',
   },
-  testEnvironments: {
-    title: 'setup.rows.testEnvironments.title',
-    done: 'setup.rows.testEnvironments.done',
-    missing: 'setup.rows.testEnvironments.missing',
+  ephemeralEnvironments: {
+    title: 'setup.rows.ephemeralEnvironments.title',
+    done: 'setup.rows.ephemeralEnvironments.done',
+    missing: 'setup.rows.ephemeralEnvironments.missing',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.notNeeded',
   },
-  contentStorage: {
-    title: 'setup.rows.contentStorage.title',
-    done: 'setup.rows.contentStorage.done',
-    missing: 'setup.rows.contentStorage.missing',
+  binaryStorage: {
+    title: 'setup.rows.binaryStorage.title',
+    done: 'setup.rows.binaryStorage.done',
+    missing: 'setup.rows.binaryStorage.missing',
     checking: 'setup.rows.checking',
     not_needed: 'setup.rows.notNeeded',
   },
@@ -139,6 +146,7 @@ const CAUSE_KEYS: Record<SetupRowCause, string> = {
   underscoped: 'setup.causes.underscoped',
   presetBroken: 'setup.causes.presetBroken',
   probeFailed: 'setup.causes.probeFailed',
+  notReported: 'setup.causes.notReported',
 }
 function rowLine(row: SetupRow): string {
   return row.status === 'attention' ? t(CAUSE_KEYS[row.cause]) : t(ROW_COPY[row.id][row.status])
@@ -243,6 +251,24 @@ const also = computed(() =>
                 </UBadge>
               </div>
               <p class="mt-0.5 text-xs text-muted">{{ rowLine(row) }}</p>
+              <!-- The token rows carry the banners' second half: whose token it is, and, for a
+                   missing local token, where the new one goes. -->
+              <p
+                v-if="row.cause === 'rejected' || row.cause === 'underscoped'"
+                class="mt-0.5 text-xs text-dimmed"
+              >
+                {{ t(patSourceKey) }}
+              </p>
+              <p
+                v-else-if="row.id === 'sourceControl' && row.status === 'missing' && patMissing"
+                class="mt-0.5 text-xs text-dimmed"
+              >
+                <i18n-t keypath="layout.githubPatBanner.thenSet" tag="span" scope="global">
+                  <template #envVar>
+                    <code class="font-mono">GITHUB_PAT</code>
+                  </template>
+                </i18n-t>
+              </p>
               <!-- A gap this caller cannot close: who can, in place of a button their save would
                    be refused on. A done row needs neither. -->
               <p
