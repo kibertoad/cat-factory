@@ -2647,7 +2647,9 @@
         "chooseRole": "役割を変更",
         "foundationalServices": "基盤サービス",
         "notificationSettings": "通知ルーティングを管理",
-        "setupChecklist": "セットアップ チェックリスト"
+        "setupChecklist": "セットアップ チェックリスト",
+        "queueView": "キュー ビューを開く",
+        "boardView": "ボード ビューを開く"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -2676,7 +2678,9 @@
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
         "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
         "notificationSettings": "通知 メール ルーティング チャネル 受信箱",
-        "setupChecklist": "セットアップ チェックリスト setup ランナー モデル github ストレージ 環境"
+        "setupChecklist": "セットアップ チェックリスト setup ランナー モデル github ストレージ 環境",
+        "queueView": "キュー ビュー 対応待ち 一覧",
+        "boardView": "ボード キャンバス マップ ビュー 計画"
       }
     },
     "integrationsHub": {
@@ -8118,6 +8122,10 @@
             "title": "ボード",
             "body": "サービス、モジュール、タスクはこのキャンバス上にあります。ドラッグで移動、スクロールでズーム、カードをクリックすると詳細を確認できます。"
           },
+          "views": {
+            "title": "2 つのビュー",
+            "body": "ボードには 2 つ目のビューがあります。キューには、すべてのサービスで対応が必要なものが並びます。ツアーが終わったら、ここでキューとこのキャンバスを切り替えます。アプリは最後に使ったビューで開きます。"
+          },
           "sidebar": {
             "title": "サイドバー",
             "body": "その他はすべてここにあります。パイプラインの構築、リポジトリや連携の接続、ワークスペース設定などです。"
@@ -8804,5 +8812,56 @@
       "workspaceSettings": "ワークスペース設定",
       "integrations": "連携"
     }
+  },
+  "queue": {
+    "title": "キュー",
+    "summary": "対応が必要 {needsYou} 件 · マージ可能 {ready} 件",
+    "filter": {
+      "allServices": "すべてのサービス",
+      "service": "サービスで絞り込む"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "対応が必要",
+        "empty": "あなたの対応を待っているものはありません。"
+      },
+      "inFlight": {
+        "label": "進行中",
+        "empty": "現在動作中のエージェントはありません。"
+      },
+      "readyToMerge": {
+        "label": "マージ可能",
+        "empty": "マージ待ちのプルリクエストはありません。"
+      }
+    },
+    "waiting": {
+      "label": "未着手（{count}）",
+      "empty": "開始待ちのものはありません。"
+    },
+    "done": {
+      "count": "{date} 以降にマージ済み: {count} 件",
+      "countAll": "マージ済み: {count} 件",
+      "show": "表示",
+      "hide": "非表示",
+      "capped": "{total} 件中、新しい {shown} 件を表示しています。"
+    },
+    "card": {
+      "waited": "{duration} 待機",
+      "active": "{duration} 前に動作",
+      "merged": "{duration} 前にマージ",
+      "step": "ステップ {current} / {total}",
+      "showOnBoard": "ボードで表示",
+      "answer": "回答",
+      "budgetPaused": "支出上限により、この実行は一時停止中です。上限を引き上げると再開します。",
+      "parked": "この実行は人の対応を待っています。タスクを開いて必要な内容を確認してください。",
+      "waitingOn": "{deps} を待機中",
+      "pr": "プルリクエスト #{number}"
+    }
+  },
+  "views": {
+    "title": "ビュー",
+    "queue": "キュー",
+    "board": "ボード",
+    "openQueue": "キュー ビューを開く"
   }
 }

@@ -2774,7 +2774,9 @@
         "chooseRole": "Cambia il tuo ruolo",
         "foundationalServices": "Servizi fondamentali",
         "notificationSettings": "Gestisci l'instradamento delle notifiche",
-        "setupChecklist": "Checklist di configurazione"
+        "setupChecklist": "Checklist di configurazione",
+        "queueView": "Apri la vista coda",
+        "boardView": "Apri la vista board"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2803,7 +2805,9 @@
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
         "notificationSettings": "notifiche email instradamento canali casella",
-        "setupChecklist": "configurazione checklist setup runner modello github archiviazione ambiente"
+        "setupChecklist": "configurazione checklist setup runner modello github archiviazione ambiente",
+        "queueView": "coda vista elenco in attesa",
+        "boardView": "board canvas mappa vista pianificare"
       }
     },
     "shortcuts": {
@@ -8118,6 +8122,10 @@
             "title": "La board",
             "body": "Servizi, moduli e attività vivono su questo canvas. Trascina per spostarti, scorri per lo zoom e clicca su una scheda per esaminarla."
           },
+          "views": {
+            "title": "Due viste",
+            "body": "La board ha una seconda vista. La coda elenca ciò che richiede te in tutti i servizi. Finito il tour, qui passi dalla coda a questa area di lavoro. L’app si apre sulla vista che hai usato per ultima."
+          },
           "sidebar": {
             "title": "La barra laterale",
             "body": "Tutto il resto è qui: creare pipeline, collegare repository e integrazioni, e le impostazioni dello workspace."
@@ -8804,5 +8812,56 @@
       "workspaceSettings": "Impostazioni del workspace",
       "integrations": "Integrazioni"
     }
+  },
+  "queue": {
+    "title": "Coda",
+    "summary": "{needsYou} richiedono te · {ready} pronte per il merge",
+    "filter": {
+      "allServices": "Tutti i servizi",
+      "service": "Filtra per servizio"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Richiede te",
+        "empty": "Non c’è nulla in attesa di te."
+      },
+      "inFlight": {
+        "label": "In corso",
+        "empty": "Nessun agente sta lavorando ora."
+      },
+      "readyToMerge": {
+        "label": "Pronta per il merge",
+        "empty": "Nessuna pull request attende il merge."
+      }
+    },
+    "waiting": {
+      "label": "Non iniziato ({count})",
+      "empty": "Non c’è nulla in attesa di partire."
+    },
+    "done": {
+      "count": "Unite dal {date}: {count}",
+      "countAll": "Unite: {count}",
+      "show": "Mostra",
+      "hide": "Nascondi",
+      "capped": "Mostra le {shown} più recenti su {total}."
+    },
+    "card": {
+      "waited": "ha atteso {duration}",
+      "active": "attiva {duration} fa",
+      "merged": "unita {duration} fa",
+      "step": "passo {current} di {total}",
+      "showOnBoard": "Mostra nella board",
+      "answer": "Rispondi",
+      "budgetPaused": "Il limite di spesa ha messo in pausa questa esecuzione. Riprende quando il limite aumenta.",
+      "parked": "L’esecuzione attende una persona. Apri l’attività per vedere cosa serve.",
+      "waitingOn": "In attesa di {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "views": {
+    "title": "Viste",
+    "queue": "Coda",
+    "board": "Board",
+    "openQueue": "Apri la vista coda"
   }
 }

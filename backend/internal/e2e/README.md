@@ -57,6 +57,10 @@ raise as a modal over the board: the tutorial offer (`tutorial: 'declined'`) and
 (`role: 'engineer'`, the full surface). Pass `'unanswered'` to see either one; pass a narrower role
 (`role: 'designer'`) to drive its surface. `ui-role.spec.ts` owns both the question and the narrowing.
 
+It also opens the SPA on the **canvas** (`view: 'board'`). A person who has never chosen lands on
+the queue view instead, and almost every spec drives the canvas, so pass `view: 'queue'` for a spec
+about the queue. `queue-view.spec.ts` owns the default and the remembered choice.
+
 ### Assert state the product HOLDS, never a state it passes THROUGH
 
 A web-first assertion polls, so it can only see what is still true when a poll lands. Aiming one

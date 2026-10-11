@@ -2647,7 +2647,9 @@
         "chooseRole": "Changer de rôle",
         "foundationalServices": "Services fondamentaux",
         "notificationSettings": "Gérer le routage des notifications",
-        "setupChecklist": "Liste de configuration"
+        "setupChecklist": "Liste de configuration",
+        "queueView": "Ouvrir la vue file d’attente",
+        "boardView": "Ouvrir la vue tableau"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -2676,7 +2678,9 @@
         "tutorial": "tutoriel visite guide aide apprendre découverte",
         "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue",
         "notificationSettings": "notifications e-mail routage canaux boîte",
-        "setupChecklist": "configuration liste setup runner modèle github stockage environnement"
+        "setupChecklist": "configuration liste setup runner modèle github stockage environnement",
+        "queueView": "file attente vue liste en attente",
+        "boardView": "tableau canevas carte vue planifier"
       }
     },
     "integrationsHub": {
@@ -8118,6 +8122,10 @@
             "title": "Le tableau",
             "body": "Les services, modules et tâches vivent sur ce canevas. Faites glisser pour vous déplacer, faites défiler pour zoomer et cliquez sur une carte pour l'inspecter."
           },
+          "views": {
+            "title": "Deux vues",
+            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Une fois la visite terminée, passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
+          },
           "sidebar": {
             "title": "La barre latérale",
             "body": "Tout le reste se trouve ici : créer des pipelines, connecter des dépôts et des intégrations, et les paramètres de l'espace de travail."
@@ -8804,5 +8812,56 @@
       "workspaceSettings": "Réglages du workspace",
       "integrations": "Intégrations"
     }
+  },
+  "queue": {
+    "title": "File d’attente",
+    "summary": "{needsYou} vous attendent · {ready} prêtes à fusionner",
+    "filter": {
+      "allServices": "Tous les services",
+      "service": "Filtrer par service"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Vous attend",
+        "empty": "Rien ne vous attend."
+      },
+      "inFlight": {
+        "label": "En cours",
+        "empty": "Aucun agent ne travaille en ce moment."
+      },
+      "readyToMerge": {
+        "label": "Prête à fusionner",
+        "empty": "Aucune pull request n’attend d’être fusionnée."
+      }
+    },
+    "waiting": {
+      "label": "Pas commencé ({count})",
+      "empty": "Rien n’attend de démarrer."
+    },
+    "done": {
+      "count": "Fusionnées depuis le {date} : {count}",
+      "countAll": "Fusionnées : {count}",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "capped": "Affiche les {shown} plus récentes sur {total}."
+    },
+    "card": {
+      "waited": "a attendu {duration}",
+      "active": "active il y a {duration}",
+      "merged": "fusionnée il y a {duration}",
+      "step": "étape {current} sur {total}",
+      "showOnBoard": "Afficher sur le tableau",
+      "answer": "Répondre",
+      "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",
+      "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",
+      "waitingOn": "Attend {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "views": {
+    "title": "Vues",
+    "queue": "File d’attente",
+    "board": "Tableau",
+    "openQueue": "Ouvrir la vue file d’attente"
   }
 }

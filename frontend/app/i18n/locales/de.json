@@ -2774,7 +2774,9 @@
         "chooseRole": "Rolle wechseln",
         "foundationalServices": "Basisdienste",
         "notificationSettings": "Benachrichtigungs-Routing verwalten",
-        "setupChecklist": "Einrichtungs-Checkliste"
+        "setupChecklist": "Einrichtungs-Checkliste",
+        "queueView": "Warteschlangen-Ansicht öffnen",
+        "boardView": "Board-Ansicht öffnen"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2803,7 +2805,9 @@
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
         "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
         "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang",
-        "setupChecklist": "einrichtung checkliste setup runner modell github speicher umgebung konfigurieren"
+        "setupChecklist": "einrichtung checkliste setup runner modell github speicher umgebung konfigurieren",
+        "queueView": "warteschlange ansicht wartet auf dich liste",
+        "boardView": "board canvas karte ansicht planen"
       }
     },
     "shortcuts": {
@@ -8118,6 +8122,10 @@
             "title": "Das Board",
             "body": "Services, Module und Aufgaben liegen auf dieser Fläche. Ziehe zum Verschieben, scrolle zum Zoomen und klicke auf eine Karte, um Details zu sehen."
           },
+          "views": {
+            "title": "Zwei Ansichten",
+            "body": "Das Board hat eine zweite Ansicht. Die Warteschlange zeigt, was über alle Services hinweg auf dich wartet. Nach der Tour wechselst du hier zwischen der Warteschlange und dieser Arbeitsfläche. Die App öffnet die Ansicht, die du zuletzt genutzt hast."
+          },
           "sidebar": {
             "title": "Die Seitenleiste",
             "body": "Alles Weitere findest du hier: Pipelines erstellen, Repositories und Integrationen verbinden, Workspace-Einstellungen."
@@ -8804,5 +8812,56 @@
       "workspaceSettings": "Workspace-Einstellungen",
       "integrations": "Integrationen"
     }
+  },
+  "queue": {
+    "title": "Warteschlange",
+    "summary": "{needsYou} warten auf dich · {ready} bereit zum Mergen",
+    "filter": {
+      "allServices": "Alle Services",
+      "service": "Nach Service filtern"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Wartet auf dich",
+        "empty": "Nichts wartet auf dich."
+      },
+      "inFlight": {
+        "label": "In Arbeit",
+        "empty": "Derzeit arbeitet kein Agent."
+      },
+      "readyToMerge": {
+        "label": "Bereit zum Mergen",
+        "empty": "Kein Pull Request wartet auf den Merge."
+      }
+    },
+    "waiting": {
+      "label": "Nicht begonnen ({count})",
+      "empty": "Nichts wartet auf den Start."
+    },
+    "done": {
+      "count": "Seit {date} gemergt: {count}",
+      "countAll": "Gemergt: {count}",
+      "show": "Anzeigen",
+      "hide": "Ausblenden",
+      "capped": "Zeigt die neuesten {shown} von {total}."
+    },
+    "card": {
+      "waited": "wartete {duration}",
+      "active": "vor {duration} aktiv",
+      "merged": "vor {duration} gemergt",
+      "step": "Schritt {current} von {total}",
+      "showOnBoard": "Auf dem Board zeigen",
+      "answer": "Antworten",
+      "budgetPaused": "Das Ausgabenlimit hat diesen Durchlauf angehalten. Er läuft weiter, sobald das Limit erhöht wird.",
+      "parked": "Der Durchlauf wartet auf einen Menschen. Öffne die Aufgabe, um zu sehen, was fehlt.",
+      "waitingOn": "Wartet auf {deps}",
+      "pr": "Pull Request #{number}"
+    }
+  },
+  "views": {
+    "title": "Ansichten",
+    "queue": "Warteschlange",
+    "board": "Board",
+    "openQueue": "Warteschlangen-Ansicht öffnen"
   }
 }

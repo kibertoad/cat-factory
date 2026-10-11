@@ -2647,7 +2647,9 @@
         "chooseRole": "החלפת תפקיד",
         "foundationalServices": "שירותי תשתית",
         "notificationSettings": "ניהול ניתוב התראות",
-        "setupChecklist": "רשימת הגדרה"
+        "setupChecklist": "רשימת הגדרה",
+        "queueView": "פתח את תצוגת התור",
+        "boardView": "פתח את תצוגת הלוח"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -2676,7 +2678,9 @@
         "tutorial": "מדריך סיור עזרה הדרכה לימוד",
         "foundationalServices": "יכולת משותפת פלטפורמה שירות api חוזה openapi קטלוג",
         "notificationSettings": "התראות אימייל ניתוב ערוצים תיבה",
-        "setupChecklist": "הגדרה רשימה setup runner מודל github אחסון סביבה"
+        "setupChecklist": "הגדרה רשימה setup runner מודל github אחסון סביבה",
+        "queueView": "תור תצוגה ממתין רשימה",
+        "boardView": "לוח קנבס מפה תצוגה תכנון"
       }
     },
     "integrationsHub": {
@@ -8118,6 +8122,10 @@
             "title": "הלוח",
             "body": "שירותים, מודולים ומשימות חיים על הקנבס הזה. גרור כדי לנוע, גלול כדי לשנות תקריב ולחץ על כל כרטיס כדי לבחון אותו."
           },
+          "views": {
+            "title": "שתי תצוגות",
+            "body": "ללוח יש תצוגה שנייה. התור מציג את מה שממתין לך בכל השירותים. בסיום הסיור, עוברים כאן בין התור לבין הקנבס הזה. האפליקציה נפתחת בתצוגה שבה השתמשת לאחרונה."
+          },
           "sidebar": {
             "title": "סרגל הצד",
             "body": "כל השאר נמצא כאן: בניית צינורות, חיבור מאגרים ואינטגרציות והגדרות סביבת העבודה."
@@ -8804,5 +8812,56 @@
       "workspaceSettings": "הגדרות סביבת העבודה",
       "integrations": "אינטגרציות"
     }
+  },
+  "queue": {
+    "title": "תור",
+    "summary": "{needsYou} ממתינים לך · {ready} מוכנים למיזוג",
+    "filter": {
+      "allServices": "כל השירותים",
+      "service": "סינון לפי שירות"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "ממתין לך",
+        "empty": "שום דבר לא ממתין לך."
+      },
+      "inFlight": {
+        "label": "בתהליך",
+        "empty": "אין כרגע סוכן שעובד."
+      },
+      "readyToMerge": {
+        "label": "מוכן למיזוג",
+        "empty": "אין בקשת משיכה שממתינה למיזוג."
+      }
+    },
+    "waiting": {
+      "label": "לא התחילו ({count})",
+      "empty": "אין דבר שממתין להתחלה."
+    },
+    "done": {
+      "count": "מוזגו מאז {date}: {count}",
+      "countAll": "מוזגו: {count}",
+      "show": "הצגה",
+      "hide": "הסתרה",
+      "capped": "מוצגים {shown} החדשים ביותר מתוך {total}."
+    },
+    "card": {
+      "waited": "המתין {duration}",
+      "active": "פעיל לפני {duration}",
+      "merged": "מוזג לפני {duration}",
+      "step": "שלב {current} מתוך {total}",
+      "showOnBoard": "הצגה בלוח",
+      "answer": "מענה",
+      "budgetPaused": "מגבלת ההוצאות השהתה את ההרצה הזו. היא תמשיך כשהמגבלה תועלה.",
+      "parked": "ההרצה ממתינה לאדם. פתחו את המשימה כדי לראות מה נדרש.",
+      "waitingOn": "ממתין ל-{deps}",
+      "pr": "בקשת משיכה #{number}"
+    }
+  },
+  "views": {
+    "title": "תצוגות",
+    "queue": "תור",
+    "board": "לוח",
+    "openQueue": "פתח את תצוגת התור"
   }
 }
