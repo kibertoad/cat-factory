@@ -73,6 +73,7 @@ export function useNavContributions() {
     // The QUESTION, not a toggle: with three roles there is no unambiguous "next one", and the
     // prompt is the one surface that states what each role gives you before you pick it.
     chooseRole: () => useUiRoleStore().openPrompt(),
+    describeWork: () => ui.openDescribeWork(),
     queueView: () => useWorkViewStore().show('queue'),
     boardView: () => useWorkViewStore().show('board'),
   }

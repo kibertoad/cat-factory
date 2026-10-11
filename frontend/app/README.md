@@ -1492,6 +1492,13 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
 - **Palettes** (`components/palettes`): drag blocks, pipelines and agents onto
   the board.
+- **Describe new work** (`components/queue/DescribeWorkModal.vue`, `utils/describeWork.ts`): the
+  one-sentence intake, from Create, the palette and the queue header. It files a feature or a bug
+  from a sentence and a service, titled by the first sentence; the overrides sit behind one
+  disclosure, and the merge policy and model preset follow the full form's tier rule
+  (`showOverrideField`), so basic mode and the designer role see the pipeline only.
+  It rebuilds no other kind: "More kinds" and "Attach context" hand the text to `AddTaskModal`,
+  which stays the one home of those rules. Both share `utils/reviewFriction.ts` for the review-debt 409.
 - **Setup checklist** (`components/setup/SetupChecklistPanel.vue`, `utils/setupChecklist.ts`):
   every prerequisite for "a task can run and merge" in one list, for people who can change the
   setup. It adds no probe of its own: each row reads what its banner or startup dialog already

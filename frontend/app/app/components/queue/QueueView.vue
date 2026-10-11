@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { NAV_CONTRIBUTIONS, navItemVisible } from '~/modular/nav-contributions'
+import { createNavGates } from '~/modular/nav-gates'
 import type { QueueEntry } from '~/utils/queueSections'
 import QueueCard from '~/components/queue/QueueCard.vue'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
@@ -68,6 +70,12 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
   ready_to_merge: 'text-success',
 }
 
+// The header button is the nav entry's twin, so it follows that entry's visibility rule (board
+// write, and a service to put the task in) rather than a copy of it.
+const navGates = createNavGates()
+const describeWorkEntry = NAV_CONTRIBUTIONS.find((c) => c.id === 'describe-work')!
+const canDescribeWork = computed(() => navItemVisible(describeWorkEntry, navGates))
+
 /**
  * Whether the inspector is on screen beside the queue. On a wide screen it floats over the
  * board's right edge (`InspectorPanel`, `lg:w-80` at `lg:end-4`), which is where the queue's
@@ -106,6 +114,16 @@ const inspectorOpen = computed(() => !!ui.selectedBlockId && !!board.getBlock(ui
         <!-- The inbox still holds what is NOT a task: platform alerts, budget thresholds, key
              drift. The canvas shows it in its toolbar, which this view does not have. -->
         <NotificationsInbox />
+        <!-- The one-sentence intake, opened on the service the queue is filtered to, if any. -->
+        <UButton
+          v-if="canDescribeWork"
+          icon="i-lucide-plus"
+          size="sm"
+          data-testid="queue-describe-work"
+          @click="ui.openDescribeWork(queueStore.activeFilter)"
+        >
+          {{ t('queue.describeWork') }}
+        </UButton>
       </div>
     </header>
 

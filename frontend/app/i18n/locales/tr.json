@@ -2680,7 +2680,8 @@
         "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu",
         "setupChecklist": "kurulum kontrol listesi setup runner model github depolama ortam",
         "queueView": "kuyruk görünüm liste bekleyen",
-        "boardView": "pano tuval harita görünüm planlama"
+        "boardView": "pano tuval harita görünüm planlama",
+        "describeWork": "yeni iş tanımla görev ekle oluştur özellik hata"
       }
     },
     "integrationsHub": {
@@ -8856,12 +8857,35 @@
       "parked": "Çalıştırma bir kişiyi bekliyor. Neye ihtiyaç duyduğunu görmek için görevi aç.",
       "waitingOn": "{deps} bekleniyor",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Yeni iş tanımla"
   },
   "views": {
     "title": "Görünümler",
     "queue": "Kuyruk",
     "board": "Pano",
     "openQueue": "Kuyruk görünümünü aç"
+  },
+  "describeWork": {
+    "title": "Yeni iş tanımla",
+    "textLabel": "Ne yapılmalı",
+    "textHint": "Bir cümle yeterli. Elinde varsa daha fazla ayrıntı ekle.",
+    "textPlaceholder": "Oturum açma olayları için bir denetim günlüğü ekle. Her oturum açmayı zaman, kullanıcı ve sonuçla kaydet.",
+    "savedAs": "Görev başlığı: {title}",
+    "serviceLabel": "Servis",
+    "servicePlaceholder": "Bir servis seç",
+    "kindLabel": "Tür",
+    "kind": {
+      "feature": "Özellik",
+      "bug": "Hata"
+    },
+    "moreKinds": "Daha fazla tür…",
+    "changeHowItRuns": "Nasıl çalışacağını değiştir",
+    "workspaceDefault": "Çalışma alanı varsayılanı",
+    "defaultPipelineHint": "Çalışma alanı varsayılanı: {name}. Burada seçilen pipeline bu görev için onun yerine geçer.",
+    "attachContext": "Bağlam ekle (tam formu açar)",
+    "add": "Kuyruğa ekle",
+    "addAndStart": "Ekle ve başlat",
+    "addedToast": "“{title}” kuyruğa eklendi"
   }
 }

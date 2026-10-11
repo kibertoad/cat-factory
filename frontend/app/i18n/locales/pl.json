@@ -2680,7 +2680,8 @@
         "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
         "setupChecklist": "konfiguracja lista setup runner model github magazyn środowisko",
         "queueView": "kolejka widok lista oczekuje",
-        "boardView": "tablica kanwa mapa widok planowanie"
+        "boardView": "tablica kanwa mapa widok planowanie",
+        "describeWork": "opisz nową pracę zadanie dodaj utwórz funkcja błąd"
       }
     },
     "integrationsHub": {
@@ -8856,12 +8857,35 @@
       "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
       "waitingOn": "Czeka na {deps}",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Opisz nową pracę"
   },
   "views": {
     "title": "Widoki",
     "queue": "Kolejka",
     "board": "Tablica",
     "openQueue": "Otwórz widok kolejki"
+  },
+  "describeWork": {
+    "title": "Opisz nową pracę",
+    "textLabel": "Co trzeba zrobić",
+    "textHint": "Wystarczy jedno zdanie. Dodaj więcej szczegółów, jeśli je masz.",
+    "textPlaceholder": "Dodaj dziennik audytu dla zdarzeń logowania. Zapisuj każde logowanie z czasem, użytkownikiem i wynikiem.",
+    "savedAs": "Tytuł zadania: {title}",
+    "serviceLabel": "Serwis",
+    "servicePlaceholder": "Wybierz serwis",
+    "kindLabel": "Rodzaj",
+    "kind": {
+      "feature": "Funkcja",
+      "bug": "Błąd"
+    },
+    "moreKinds": "Więcej rodzajów…",
+    "changeHowItRuns": "Zmień sposób uruchomienia",
+    "workspaceDefault": "Domyślne dla workspace'u",
+    "defaultPipelineHint": "Domyślny dla workspace'u: {name}. Pipeline wybrany tutaj zastępuje go w tym zadaniu.",
+    "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
+    "add": "Dodaj do kolejki",
+    "addAndStart": "Dodaj i uruchom",
+    "addedToast": "Dodano „{title}” do kolejki"
   }
 }

@@ -164,6 +164,7 @@ const TutorialNudge = defineAsyncView(() => import('~/components/tutorial/Tutori
 const RolePrompt = defineAsyncView(() => import('~/components/layout/RolePrompt.vue'))
 // The queue: the board's second view (issue #2258), loaded the first time someone opens it.
 const QueueView = defineAsyncView(() => import('~/components/queue/QueueView.vue'))
+const DescribeWorkModal = defineAsyncView(() => import('~/components/queue/DescribeWorkModal.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -532,6 +533,7 @@ watch(
         <AddTaskModal />
         <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
         <CreateInitiativeModal />
+        <DescribeWorkModal v-if="ui.describeWorkOpen" />
         <CommandBar />
         <PersonalCredentialModal />
         <ConfirmDialog />

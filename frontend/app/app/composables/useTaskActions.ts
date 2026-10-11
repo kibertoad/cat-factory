@@ -43,6 +43,7 @@ export function useTaskActions(taskId: () => string) {
 
   const pipelineFor = useStartPipelineResolver()
   const defaultPipeline = computed(() => pipelineFor(task.value))
+  const { startTask } = useStartWithFeedback()
 
   /**
    * Whether the outcome summary has something to show, asked of the SAME reduction the window
@@ -77,35 +78,12 @@ export function useTaskActions(taskId: () => string) {
       })
       return
     }
-    const pipeline = defaultPipeline.value
-    if (!pipeline) {
-      toast.error('board.task.noPipelineTitle', { description: t('board.task.noPipelineBody') })
-      return
-    }
+    const block = task.value
+    if (!block) return
     starting.value = true
-    // false ⇒ the run never started (the user cancelled the personal-password prompt, or the
-    // start was refused: the store surfaces the actionable toast itself). Revert the optimistic
-    // state; on success the button unmounts once the stream pushes in_progress.
-    const started = await execution.start(taskId(), pipeline)
-    if (started) {
-      // Confirm the (optimistic) start landed: the button unmounts once the stream pushes
-      // in_progress, so without this the successful action gives no feedback. A sandboxed start
-      // says so here rather than borrowing the live wording: this is the moment the reader learns
-      // what they just started, and the two runs differ in what they will end up doing.
-      // A sandboxed run is `warning`: it ran, and its outcome differs in a way the reader should
-      // know (it opens a pull request and merges nothing), so it stays until closed.
-      if (sandboxed.value) {
-        toast.warning('board.dryRunToast.title', {
-          description: t('board.dryRunToast.body', { name: pipeline.name }),
-        })
-      } else {
-        toast.success('board.task.startedToast.title', {
-          description: t('board.task.startedToast.body', { name: pipeline.name }),
-        })
-      }
-    } else {
-      starting.value = false
-    }
+    // On success the button unmounts once the stream pushes in_progress; otherwise revert the
+    // optimistic state (`startTask` has said why).
+    if (!(await startTask(block))) starting.value = false
   }
 
   async function merge() {
@@ -197,6 +175,51 @@ export function useTaskActions(taskId: () => string) {
     reviewStageLabel,
     attention,
   }
+}
+
+/**
+ * Start a task on the pipeline a plain "Start" uses, and tell the person what happened: the
+ * card's Start and the intake's "Add and start" both go through it, so the two say the same thing.
+ * Resolves false when nothing started (no pipeline to run, a cancelled credential prompt, or a
+ * refused start, which `execution.start` reports itself).
+ */
+export function useStartWithFeedback() {
+  const execution = useExecutionStore()
+  const toast = useActionToast()
+  const { t } = useI18n()
+  const { forcedFor } = useDryRunPolicy()
+  const pipelineFor = useStartPipelineResolver()
+
+  async function startTask(block: Pick<Block, 'id' | 'pipelineId'>): Promise<boolean> {
+    const pipeline = pipelineFor(block)
+    if (!pipeline) {
+      // A refusal decided in the browser, in translated copy: the `error` tone.
+      toast.error('board.task.noPipelineTitle', { description: t('board.task.noPipelineBody') })
+      return false
+    }
+    // Read before the start: the sandbox policy is a fact about this task and role now.
+    const sandboxed = forcedFor(block.id)
+    const started = await execution.start(block.id, pipeline)
+    if (started) {
+      // Confirm the start landed: without this the action gives no feedback until the stream
+      // moves the card. A sandboxed start says so rather than borrowing the live wording: this is
+      // the moment the reader learns what they just started, and the two runs end differently.
+      // A sandboxed run is `warning`: it ran, and it ends differently (it opens a pull request and
+      // merges nothing), so the toast stays until closed.
+      if (sandboxed) {
+        toast.warning('board.dryRunToast.title', {
+          description: t('board.dryRunToast.body', { name: pipeline.name }),
+        })
+      } else {
+        toast.success('board.task.startedToast.title', {
+          description: t('board.task.startedToast.body', { name: pipeline.name }),
+        })
+      }
+    }
+    return started
+  }
+
+  return { startTask }
 }
 
 /** The pipeline a plain "Start" runs, as the descriptor `execution.start` takes. */

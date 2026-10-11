@@ -2680,7 +2680,8 @@
         "notificationSettings": "notifications e-mail routage canaux boîte",
         "setupChecklist": "configuration liste setup runner modèle github stockage environnement",
         "queueView": "file attente vue liste en attente",
-        "boardView": "tableau canevas carte vue planifier"
+        "boardView": "tableau canevas carte vue planifier",
+        "describeWork": "décrire nouveau travail tâche ajouter créer fonctionnalité bug"
       }
     },
     "integrationsHub": {
@@ -8856,12 +8857,35 @@
       "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",
       "waitingOn": "Attend {deps}",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Décrire un nouveau travail"
   },
   "views": {
     "title": "Vues",
     "queue": "File d’attente",
     "board": "Tableau",
     "openQueue": "Ouvrir la vue file d’attente"
+  },
+  "describeWork": {
+    "title": "Décrire un nouveau travail",
+    "textLabel": "Ce qu’il faut faire",
+    "textHint": "Une phrase suffit. Ajoutez plus de détails si vous en avez.",
+    "textPlaceholder": "Ajouter un journal d’audit pour les connexions. Enregistrer chaque connexion avec l’heure, l’utilisateur et le résultat.",
+    "savedAs": "Titre de la tâche : {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Sélectionnez un service",
+    "kindLabel": "Type",
+    "kind": {
+      "feature": "Fonctionnalité",
+      "bug": "Bogue"
+    },
+    "moreKinds": "Plus de types…",
+    "changeHowItRuns": "Modifier le déroulement",
+    "workspaceDefault": "Défaut du workspace",
+    "defaultPipelineHint": "Le défaut du workspace : {name}. Un pipeline choisi ici le remplace pour cette tâche.",
+    "attachContext": "Joindre du contexte (ouvre le formulaire complet)",
+    "add": "Ajouter à la file",
+    "addAndStart": "Ajouter et démarrer",
+    "addedToast": "« {title} » a été ajoutée à la file"
   }
 }

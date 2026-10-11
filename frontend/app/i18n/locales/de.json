@@ -2807,7 +2807,8 @@
         "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang",
         "setupChecklist": "einrichtung checkliste setup runner modell github speicher umgebung konfigurieren",
         "queueView": "warteschlange ansicht wartet auf dich liste",
-        "boardView": "board canvas karte ansicht planen"
+        "boardView": "board canvas karte ansicht planen",
+        "describeWork": "neue arbeit beschreiben aufgabe hinzufügen erstellen feature bug"
       }
     },
     "shortcuts": {
@@ -8856,12 +8857,35 @@
       "parked": "Der Durchlauf wartet auf einen Menschen. Öffne die Aufgabe, um zu sehen, was fehlt.",
       "waitingOn": "Wartet auf {deps}",
       "pr": "Pull Request #{number}"
-    }
+    },
+    "describeWork": "Neue Arbeit beschreiben"
   },
   "views": {
     "title": "Ansichten",
     "queue": "Warteschlange",
     "board": "Board",
     "openQueue": "Warteschlangen-Ansicht öffnen"
+  },
+  "describeWork": {
+    "title": "Neue Arbeit beschreiben",
+    "textLabel": "Was zu tun ist",
+    "textHint": "Ein Satz reicht. Füge mehr Details hinzu, wenn du welche hast.",
+    "textPlaceholder": "Füge ein Audit-Log für Anmeldeereignisse hinzu. Erfasse jede Anmeldung mit Zeit, Benutzer und Ergebnis.",
+    "savedAs": "Aufgabentitel: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Service auswählen",
+    "kindLabel": "Art",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "Weitere Arten…",
+    "changeHowItRuns": "Ablauf ändern",
+    "workspaceDefault": "Workspace-Standard",
+    "defaultPipelineHint": "Der Workspace-Standard: {name}. Eine hier gewählte Pipeline ersetzt ihn für diese Aufgabe.",
+    "attachContext": "Kontext anhängen (öffnet das vollständige Formular)",
+    "add": "Zur Warteschlange hinzufügen",
+    "addAndStart": "Hinzufügen und starten",
+    "addedToast": "„{title}“ zur Warteschlange hinzugefügt"
   }
 }
