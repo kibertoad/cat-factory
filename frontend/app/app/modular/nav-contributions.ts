@@ -220,6 +220,8 @@ export const NAV_ACTIONS = [
   'tutorial',
   'toggleUiMode',
   'chooseRole',
+  'queueView',
+  'boardView',
 ] as const
 
 export type NavActionId = (typeof NAV_ACTIONS)[number]
@@ -735,6 +737,35 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       group: 'workspace',
       order: 95,
       keywordsKey: 'layout.commandBar.keywords.chooseRole',
+    },
+  },
+  {
+    // The board's two views (issue #2258). The sidebar's Views switcher is the everyday route;
+    // these make each view reachable by name from the palette too. Every tier and role: which view
+    // a person works in is their own choice, and neither view is an override of the other.
+    id: 'queue-view',
+    labelKey: 'layout.commandBar.cmd.queueView',
+    icon: 'i-lucide-list-checks',
+    surfaces: S('command'),
+    intake: true,
+    action: 'queueView',
+    command: {
+      group: 'workspace',
+      order: 130,
+      keywordsKey: 'layout.commandBar.keywords.queueView',
+    },
+  },
+  {
+    id: 'board-view',
+    labelKey: 'layout.commandBar.cmd.boardView',
+    icon: 'i-lucide-map',
+    surfaces: S('command'),
+    intake: true,
+    action: 'boardView',
+    command: {
+      group: 'workspace',
+      order: 131,
+      keywordsKey: 'layout.commandBar.keywords.boardView',
     },
   },
 ]

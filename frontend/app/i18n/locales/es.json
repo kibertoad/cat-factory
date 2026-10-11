@@ -2645,7 +2645,9 @@
         "toggleUiMode": "Cambiar el modo de interfaz",
         "chooseRole": "Cambiar tu rol",
         "foundationalServices": "Servicios fundamentales",
-        "notificationSettings": "Gestionar el enrutamiento de notificaciones"
+        "notificationSettings": "Gestionar el enrutamiento de notificaciones",
+        "queueView": "Abrir la vista de cola",
+        "boardView": "Abrir la vista de tablero"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -2673,7 +2675,9 @@
         "chooseRole": "rol ingeniero gestor de producto diseñador perfil vista sencilla",
         "tutorial": "tutorial recorrido guía ayuda aprender introducción",
         "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo",
-        "notificationSettings": "notificaciones correo enrutamiento canales bandeja"
+        "notificationSettings": "notificaciones correo enrutamiento canales bandeja",
+        "queueView": "cola vista te necesita lista pendiente",
+        "boardView": "tablero lienzo mapa vista planificar"
       }
     },
     "integrationsHub": {
@@ -8115,6 +8119,10 @@
             "title": "El tablero",
             "body": "Los servicios, módulos y tareas viven en este lienzo. Arrastra para desplazarte, usa la rueda para hacer zoom y haz clic en cualquier tarjeta para inspeccionarla."
           },
+          "views": {
+            "title": "Dos vistas",
+            "body": "El tablero tiene una segunda vista. La cola muestra lo que te necesita en todos los servicios. Cuando termine el recorrido, cambia aquí entre la cola y este lienzo. La aplicación se abre en la vista que usaste por última vez."
+          },
           "sidebar": {
             "title": "La barra lateral",
             "body": "Aquí está todo lo demás: crear canalizaciones, conectar repositorios e integraciones y los ajustes del espacio de trabajo."
@@ -8734,5 +8742,56 @@
         "unsupportedVersion": "Este tema se creó con un formato del editor más nuevo del que esta aplicación entiende."
       }
     }
+  },
+  "queue": {
+    "title": "Cola",
+    "summary": "{needsYou} te necesitan · {ready} listas para fusionar",
+    "filter": {
+      "allServices": "Todos los servicios",
+      "service": "Filtrar por servicio"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Te necesita",
+        "empty": "Nada espera por ti."
+      },
+      "inFlight": {
+        "label": "En curso",
+        "empty": "Ningún agente está trabajando ahora."
+      },
+      "readyToMerge": {
+        "label": "Lista para fusionar",
+        "empty": "Ninguna pull request espera su fusión."
+      }
+    },
+    "waiting": {
+      "label": "Sin empezar ({count})",
+      "empty": "Nada espera para empezar."
+    },
+    "done": {
+      "count": "Fusionadas desde el {date}: {count}",
+      "countAll": "Fusionadas: {count}",
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "capped": "Muestra las {shown} más recientes de {total}."
+    },
+    "card": {
+      "waited": "esperó {duration}",
+      "active": "activa hace {duration}",
+      "merged": "fusionada hace {duration}",
+      "step": "paso {current} de {total}",
+      "showOnBoard": "Mostrar en el tablero",
+      "answer": "Responder",
+      "budgetPaused": "El límite de gasto pausó esta ejecución. Continúa cuando se suba el límite.",
+      "parked": "La ejecución espera a una persona. Abre la tarea para ver qué necesita.",
+      "waitingOn": "Espera a {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "views": {
+    "title": "Vistas",
+    "queue": "Cola",
+    "board": "Tablero",
+    "openQueue": "Abrir la vista de cola"
   }
 }

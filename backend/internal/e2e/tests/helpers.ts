@@ -780,6 +780,10 @@ export async function startBootstrap(
  * always a first-ever launch. `role` defaults to `engineer`, the full surface, so a spec asserting
  * anything else drives the product every other spec drives; `'unanswered'` opts back into the
  * first-run behaviour for the specs whose subject IS one of those questions.
+ *
+ * `view` is which of the board's two views the SPA opens on. A person who has not chosen lands on
+ * the QUEUE, but almost every spec drives the canvas, so the default here is `board`; a spec about
+ * the queue passes `'queue'` (or drives the switch itself).
  */
 export async function pinWorkspace(
   page: Page,
@@ -787,10 +791,12 @@ export async function pinWorkspace(
   opts: {
     tutorial?: 'accepted' | 'declined' | 'unanswered'
     role?: 'engineer' | 'product-manager' | 'designer' | 'unanswered'
+    view?: 'queue' | 'board'
   } = {},
 ): Promise<void> {
   await answerTutorialPrompt(page, tutorialAnswer(opts.tutorial))
   await answerRolePrompt(page, opts.role === 'unanswered' ? null : (opts.role ?? 'engineer'))
+  await openOnView(page, opts.view ?? 'board')
   await page.addInitScript(
     ({ id, dismissKey, areas }) => {
       window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
@@ -876,6 +882,20 @@ export async function answerRolePrompt(
 }
 
 /**
+ * Open the SPA on one of the board's two views: the queue or the canvas. The choice is the
+ * person's own and persisted (store `workView`), and COOKIE-backed like the other first-run state.
+ */
+export async function openOnView(page: Page, view: 'queue' | 'board'): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: 'workView',
+      value: encodeURIComponent(JSON.stringify({ storedView: view })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
+/**
  * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated as a
  * specific user, pinned to a specific board (the workspace-RBAC spec).
  *
@@ -918,6 +938,7 @@ export async function pinBoardForUser(
 ): Promise<void> {
   await answerTutorialPrompt(page, 'declined')
   await answerRolePrompt(page, 'engineer')
+  await openOnView(page, 'board')
   const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
   const cookie = (name: string, value: unknown) => ({
     name,

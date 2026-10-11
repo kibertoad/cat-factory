@@ -2645,7 +2645,9 @@
         "toggleUiMode": "Zmień tryb interfejsu",
         "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
-        "notificationSettings": "Zarządzaj routingiem powiadomień"
+        "notificationSettings": "Zarządzaj routingiem powiadomień",
+        "queueView": "Otwórz widok kolejki",
+        "boardView": "Otwórz widok tablicy"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2673,7 +2675,9 @@
         "chooseRole": "rola inżynier menedżer produktu projektant persona prostszy widok",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
-        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
+        "queueView": "kolejka widok lista oczekuje",
+        "boardView": "tablica kanwa mapa widok planowanie"
       }
     },
     "integrationsHub": {
@@ -8115,6 +8119,10 @@
             "title": "Tablica",
             "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
           },
+          "views": {
+            "title": "Dwa widoki",
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Po zakończeniu przewodnika przełączasz się tutaj między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
+          },
           "sidebar": {
             "title": "Pasek boczny",
             "body": "Tu znajdziesz całą resztę: budowanie potoków, podłączanie repozytoriów i integracji oraz ustawienia obszaru roboczego."
@@ -8734,5 +8742,56 @@
         "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
       }
     }
+  },
+  "queue": {
+    "title": "Kolejka",
+    "summary": "Czeka na ciebie: {needsYou} · gotowe do scalenia: {ready}",
+    "filter": {
+      "allServices": "Wszystkie serwisy",
+      "service": "Filtruj według serwisu"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Czeka na ciebie",
+        "empty": "Nic na ciebie nie czeka."
+      },
+      "inFlight": {
+        "label": "W toku",
+        "empty": "Żaden agent teraz nie pracuje."
+      },
+      "readyToMerge": {
+        "label": "Gotowe do scalenia",
+        "empty": "Żaden pull request nie czeka na scalenie."
+      }
+    },
+    "waiting": {
+      "label": "Nierozpoczęte ({count})",
+      "empty": "Nic nie czeka na start."
+    },
+    "done": {
+      "count": "Scalone od {date}: {count}",
+      "countAll": "Scalone: {count}",
+      "show": "Pokaż",
+      "hide": "Ukryj",
+      "capped": "Pokazuje najnowsze {shown} z {total}."
+    },
+    "card": {
+      "waited": "czekało {duration}",
+      "active": "aktywne {duration} temu",
+      "merged": "scalone {duration} temu",
+      "step": "krok {current} z {total}",
+      "showOnBoard": "Pokaż na tablicy",
+      "answer": "Odpowiedz",
+      "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
+      "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
+      "waitingOn": "Czeka na {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "views": {
+    "title": "Widoki",
+    "queue": "Kolejka",
+    "board": "Tablica",
+    "openQueue": "Otwórz widok kolejki"
   }
 }

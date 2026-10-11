@@ -2800,7 +2800,9 @@
         "toggleUiMode": "Switch interface mode",
         "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
-        "notificationSettings": "Manage notification routing"
+        "notificationSettings": "Manage notification routing",
+        "queueView": "Open the queue view",
+        "boardView": "Open the board view"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2828,7 +2830,9 @@
         "chooseRole": "role engineer product manager designer persona simpler view",
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
-        "notificationSettings": "notifications email routing channels inbox"
+        "notificationSettings": "notifications email routing channels inbox",
+        "queueView": "queue view needs you inbox list waiting",
+        "boardView": "board canvas map view plan"
       }
     },
     "shortcuts": {
@@ -8434,6 +8438,10 @@
             "title": "The board",
             "body": "Services, modules, and tasks live on this canvas. Drag to pan, scroll to zoom, and click any card to inspect it."
           },
+          "views": {
+            "title": "Two views",
+            "body": "The board has a second view. The queue lists what needs you across every service. Once the tour is over, switch between the queue and this canvas here. The app opens on the view you used last."
+          },
           "sidebar": {
             "title": "The sidebar",
             "body": "Everything else lives here: building pipelines, connecting repositories and integrations, and workspace settings."
@@ -9065,5 +9073,56 @@
         "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
       }
     }
+  },
+  "queue": {
+    "title": "Queue",
+    "summary": "{needsYou} need you · {ready} ready to merge",
+    "filter": {
+      "allServices": "All services",
+      "service": "Filter by service"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Needs you",
+        "empty": "Nothing waits on you."
+      },
+      "inFlight": {
+        "label": "In flight",
+        "empty": "No agent is working now."
+      },
+      "readyToMerge": {
+        "label": "Ready to merge",
+        "empty": "No pull request waits to merge."
+      }
+    },
+    "waiting": {
+      "label": "Not started ({count})",
+      "empty": "Nothing waits to start."
+    },
+    "done": {
+      "count": "Merged since {date}: {count}",
+      "countAll": "Merged: {count}",
+      "show": "Show",
+      "hide": "Hide",
+      "capped": "Shows the newest {shown} of {total}."
+    },
+    "card": {
+      "waited": "waited {duration}",
+      "active": "active {duration} ago",
+      "merged": "merged {duration} ago",
+      "step": "step {current} of {total}",
+      "showOnBoard": "Show on the board",
+      "answer": "Answer",
+      "budgetPaused": "The spend limit paused this run. It continues when the limit goes up.",
+      "parked": "The run waits for a person. Open the task to see what it needs.",
+      "waitingOn": "Waits for {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "views": {
+    "title": "Views",
+    "queue": "Queue",
+    "board": "Board",
+    "openQueue": "Open the queue view"
   }
 }

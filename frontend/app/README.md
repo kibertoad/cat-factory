@@ -17,6 +17,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [Layout](#layout)
 - [Nuxt UI: agent tooling and overrides](#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill)
 - [Task swimlanes](#task-swimlanes)
+- [Queue view](#queue-view)
 - [Roles (engineer / product manager / designer)](#roles-engineer--product-manager--designer)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
@@ -623,6 +624,32 @@ the same answer through the shared `moduleNameInContainer` (`@cat-factory/contra
 does not visibly jump when the response lands. "No module" is the EMPTY STRING on the wire, the way
 every other clearable field spells a clear; `undefined` is dropped by `JSON.stringify` and reaches
 the server as an empty patch.
+
+## Queue view
+
+A board has two views (issue [#2258](https://github.com/kibertoad/cat-factory/issues/2258)): the
+**queue**, which lists every task across every service in the column that says what it needs, and
+the **board**, the canvas where the work is planned. They are two views of one board, not two
+products. The sidebar's Views switcher (`components/layout/WorkViewSwitcher.vue`) moves between
+them, and so do the palette entries and a `?view=queue` / `?view=board` link. The initiative it
+starts, with the slices after it: [`delivery-surface.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/delivery-surface.md).
+
+- **Which view opens is the person's own choice**: the view they used last in this browser
+  (`stores/workView.ts`, a cookie persisted like the interface tier, so two accounts on one browser
+  share it). A person who has not chosen
+  lands on the queue, because it answers the first question a person opens the app with. Both
+  views exist in every tier and every role: neither is an override of the other.
+- **The queue states the canvas's verdict, regrouped.** `useTaskLaneClassifier` is the one
+  classifier the frame swimlanes and the queue share; `utils/queueSections.ts` only regroups its
+  output (a waiting pull request gets its own column), and no task crosses a lane. The
+  workspace-wide walk lives on one store (`stores/workspaceQueue.ts`), per the swimlane rule on
+  workspace-wide derivations.
+- **A card's actions are the board card's** (`useTaskActions`), so Start, Resolve and Merge
+  cannot drift between the two views.
+- **The queue sits over the canvas**, which stays mounted, so switching back keeps its camera and
+  selection. The advisory banners render in the page flow above the queue's columns
+  (`BoardTopOverlays` with `in-flow`), and the canvas toolbar does not, being the canvas's own
+  chrome. The canvas's decision counter opens the queue view.
 
 ## Roles (engineer / product manager / designer)
 
