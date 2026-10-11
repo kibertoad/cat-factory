@@ -64,6 +64,18 @@ export interface TeamScenarioRequest {
    * board's fixed block ids (`task_login`) are absent there and can be asserted on.
    */
   spareBoard?: boolean
+  /**
+   * Leave the primary board WITHOUT a repository-host connection (default: connected). For a spec
+   * whose subject is the onboarding gate itself, and what each role is told on it.
+   */
+  githubConnected?: boolean
+  /**
+   * Load the sample architecture onto the primary board (default: true). `false` gives the empty
+   * board a real first run lands on, for a spec or a recording that shows what a new board looks
+   * like. The board-opening helpers wait for the sample `task_login`, so such a board needs its
+   * own wait.
+   */
+  seed?: boolean
 }
 
 export interface TeamScenario {
@@ -141,19 +153,27 @@ export async function seedTeamScenario(
   sessionSecret: string,
   request: TeamScenarioRequest,
 ): Promise<TeamScenario> {
-  const { tag, restricted = false, principals: specs = [], spareBoard = false } = request
+  const {
+    tag,
+    restricted = false,
+    principals: specs = [],
+    spareBoard = false,
+    githubConnected = true,
+    seed = true,
+  } = request
   const probe = makeOnboardingProbe(container)
   const { accountId, ownerUserId } = await probe.makeOrgOwner(`team-${tag}`)
 
   // Seed the sample architecture (so the board carries the runnable `task_login` every board-opening
-  // helper asserts on) and connect the faked GitHub App, or the SPA sits on the onboarding gate.
+  // helper asserts on) unless the request asks for the empty board, and connect the faked GitHub
+  // App unless it asks for none, or the SPA sits on the onboarding gate.
   const snapshot = await container.workspaceService.create(
-    { name: `Team board ${tag}`, seed: true },
+    { name: `Team board ${tag}`, seed },
     null,
     accountId,
   )
   const workspaceId = snapshot.workspace.id
-  await seedGitHubForWorkspace(db, workspaceId, {})
+  if (githubConnected) await seedGitHubForWorkspace(db, workspaceId, {})
 
   const members = new DrizzleWorkspaceMemberRepository(db)
   const principals: Record<string, SeededPrincipal> = {}

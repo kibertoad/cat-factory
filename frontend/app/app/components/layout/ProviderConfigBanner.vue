@@ -6,11 +6,13 @@
 // link into its connect panel. Dismissible per session.
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
+import { canActOnSetup } from '~/utils/setupAudience'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const store = useProviderConnectionsStore()
+const { actor } = useSetupActor()
 
 // Exhaustive per-kind title/action keys (leaf names mirror the kind verbatim).
 const TITLE_KEYS: Record<ProviderConnectionKind, string> = {
@@ -33,7 +35,12 @@ watch(
 
 const dismissed = ref(false)
 const pending = computed(() => store.needingConfig as ProviderConnectionKind[])
-const show = computed(() => pending.value.length > 0 && !dismissed.value)
+// Only for the people whose save would land: the connection fields are a workspace-admin write,
+// and a member or a designer could only open the panel and be refused.
+const show = computed(
+  () =>
+    pending.value.length > 0 && !dismissed.value && canActOnSetup('workspace_admin', actor.value),
+)
 </script>
 
 <template>
