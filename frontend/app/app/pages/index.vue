@@ -103,6 +103,9 @@ const ModelProvidersHub = defineAsyncView(() => import('~/components/layout/Mode
 const PersonalSetupModal = defineAsyncView(
   () => import('~/components/layout/PersonalSetupModal.vue'),
 )
+const SetupChecklistPanel = defineAsyncView(
+  () => import('~/components/setup/SetupChecklistPanel.vue'),
+)
 const WorkspaceSettingsPanel = defineAsyncView(
   () => import('~/components/settings/WorkspaceSettingsPanel.vue'),
 )
@@ -530,6 +533,7 @@ watch(
         <IntegrationsHub v-if="ui.integrationsOpen" />
         <ModelProvidersHub v-if="ui.modelProvidersOpen" />
         <PersonalSetupModal v-if="ui.personalSetupOpen" />
+        <SetupChecklistPanel v-if="ui.setupChecklistOpen" />
         <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
         <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
         <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />

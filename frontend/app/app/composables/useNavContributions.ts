@@ -54,6 +54,7 @@ export function useNavContributions() {
     foundationalServices: () => ui.openFoundationalServices(),
     mergeThresholds: () => ui.openWorkspaceSettings('merge'),
     workspaceSettings: () => ui.openWorkspaceSettings(),
+    setupChecklist: () => ui.openSetupChecklist(),
     modelConfiguration: () => ui.openModelConfig(),
     serviceFragmentDefaults: () => ui.openWorkspaceSettings('fragments'),
     localModels: () => ui.openLocalModels(),

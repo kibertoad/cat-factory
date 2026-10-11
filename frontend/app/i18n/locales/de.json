@@ -2764,7 +2764,8 @@
         "toggleUiMode": "Oberflächenmodus wechseln",
         "chooseRole": "Rolle wechseln",
         "foundationalServices": "Basisdienste",
-        "notificationSettings": "Benachrichtigungs-Routing verwalten"
+        "notificationSettings": "Benachrichtigungs-Routing verwalten",
+        "setupChecklist": "Einrichtungs-Checkliste"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2792,7 +2793,8 @@
         "chooseRole": "rolle entwickler produktmanager designer persona einfachere ansicht",
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
         "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
-        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang"
+        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang",
+        "setupChecklist": "einrichtung checkliste setup runner modell github speicher umgebung konfigurieren"
       }
     },
     "shortcuts": {
@@ -6300,7 +6302,8 @@
     "reports": "Berichte",
     "foundationalServices": "Basisdienste",
     "tutorials": "Tutorials",
-    "help": "Hilfe"
+    "help": "Hilfe",
+    "setupChecklist": "Einrichtungs-Checkliste"
   },
   "errors": {
     "generic": {
@@ -8737,6 +8740,67 @@
         "presetShorthand": "Dieser Link nennt eine Vorlage des Nuxt UI Editors, die diese App nicht kennt. Ändere eine beliebige Einstellung im Editor, damit der Link das ganze Design enthält, und kopiere ihn erneut.",
         "unsupportedVersion": "Dieses Design stammt aus einem neueren Editor-Format, als diese App versteht."
       }
+    }
+  },
+  "setup": {
+    "title": "Einrichtung",
+    "progress": "{done} von {total} erledigt",
+    "intro": "Was dieser Workspace braucht, damit eine Aufgabe laufen und gemergt werden kann.",
+    "noAccess": {
+      "title": "Du kannst die Einrichtung nicht ändern",
+      "body": "Ein Workspace-Admin kann die Einrichtung abschließen."
+    },
+    "required": "erforderlich",
+    "optional": "optional",
+    "action": {
+      "change": "Ändern",
+      "connect": "Einrichten",
+      "fix": "Beheben",
+      "review": "Prüfen"
+    },
+    "rows": {
+      "checking": "Wird geprüft…",
+      "notNeeded": "Diese Bereitstellung nutzt das nicht.",
+      "model": {
+        "title": "Modell",
+        "done": "Ein Modell ist verfügbar, und das Standard-Preset nutzt es.",
+        "missing": "Kein Modell verfügbar. Kein Agent kann laufen, bis du einen Anbieter verbindest.",
+        "attention": "Das Standard-Modell-Preset nennt ein Modell, das nicht verfügbar ist."
+      },
+      "sourceControl": {
+        "title": "Quellcodeverwaltung",
+        "done": "Verbunden. Agenten können Branches pushen und Pull Requests öffnen.",
+        "missing": "Nicht verbunden. Agenten können keine Pull Requests öffnen.",
+        "attention": "Der Zugriffstoken kann weder pushen noch Pull Requests öffnen."
+      },
+      "agentExecutor": {
+        "title": "Wo Agenten laufen",
+        "done": "Ein Runner ist konfiguriert.",
+        "missing": "Kein Runner konfiguriert. Nichts kann laufen, bis du einen verbindest.",
+        "attention": "Der Runner ist nicht erreichbar, oder eine erforderliche Einstellung fehlt.",
+        "notNeeded": "Diese Bereitstellung führt Agenten ohne Runner aus."
+      },
+      "testEnvironments": {
+        "title": "Testumgebungen",
+        "done": "Konfiguriert. Tester können eine Live-Vorschau nutzen.",
+        "missing": "Nicht eingerichtet. Tester, die eine Live-Vorschau brauchen, laufen nicht. Alle anderen Agenten laufen.",
+        "attention": "Der Umgebungsanbieter ist nicht erreichbar, oder eine erforderliche Einstellung fehlt."
+      },
+      "contentStorage": {
+        "title": "Screenshot-Speicher",
+        "done": "Konfiguriert. Visuelle Prüfungen sind aktiv.",
+        "missing": "Nicht eingerichtet. Visuelle Prüfungen sind aus.",
+        "attention": "Der Speicher ist nicht erreichbar."
+      }
+    },
+    "also": {
+      "title": "Außerdem hier",
+      "pipelines": "Pipelines: {count} zu reparieren, {fresh} neue Standard-Pipelines",
+      "riskPolicies": "Merge-Richtlinien: {count} veraltet, {fresh} neu",
+      "modelPresets": "Modell-Presets: {count} veraltet, {fresh} neu",
+      "settings": "Einstellungen und Verbindungen",
+      "workspaceSettings": "Workspace-Einstellungen",
+      "integrations": "Integrationen"
     }
   }
 }

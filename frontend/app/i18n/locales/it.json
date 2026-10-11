@@ -2764,7 +2764,8 @@
         "toggleUiMode": "Cambia modalità interfaccia",
         "chooseRole": "Cambia il tuo ruolo",
         "foundationalServices": "Servizi fondamentali",
-        "notificationSettings": "Gestisci l'instradamento delle notifiche"
+        "notificationSettings": "Gestisci l'instradamento delle notifiche",
+        "setupChecklist": "Checklist di configurazione"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2792,7 +2793,8 @@
         "chooseRole": "ruolo ingegnere responsabile di prodotto designer profilo vista semplice",
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
-        "notificationSettings": "notifiche email instradamento canali casella"
+        "notificationSettings": "notifiche email instradamento canali casella",
+        "setupChecklist": "configurazione checklist setup runner modello github archiviazione ambiente"
       }
     },
     "shortcuts": {
@@ -6300,7 +6302,8 @@
     "reports": "Report",
     "foundationalServices": "Servizi fondamentali",
     "tutorials": "Tutorial",
-    "help": "Aiuto"
+    "help": "Aiuto",
+    "setupChecklist": "Checklist di configurazione"
   },
   "errors": {
     "generic": {
@@ -8737,6 +8740,67 @@
         "presetShorthand": "Questo link indica una preimpostazione dell'editor Nuxt UI che questa app non conosce. Modifica un'impostazione qualsiasi nell'editor così che il link contenga l'intero tema, poi copialo di nuovo.",
         "unsupportedVersion": "Questo tema è stato creato con un formato dell'editor più recente di quello che questa app comprende."
       }
+    }
+  },
+  "setup": {
+    "title": "Configurazione",
+    "progress": "{done} su {total} completati",
+    "intro": "Ciò che serve a questo workspace perché un’attività possa essere eseguita e unita.",
+    "noAccess": {
+      "title": "Non puoi modificare la configurazione",
+      "body": "Un amministratore del workspace può completare la configurazione."
+    },
+    "required": "obbligatorio",
+    "optional": "facoltativo",
+    "action": {
+      "change": "Modifica",
+      "connect": "Configura",
+      "fix": "Correggi",
+      "review": "Verifica"
+    },
+    "rows": {
+      "checking": "Verifica in corso…",
+      "notNeeded": "Questo deployment non lo usa.",
+      "model": {
+        "title": "Modello",
+        "done": "Un modello è disponibile e il preset predefinito lo usa.",
+        "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider.",
+        "attention": "Il preset di modello predefinito indica un modello non disponibile."
+      },
+      "sourceControl": {
+        "title": "Controllo del codice sorgente",
+        "done": "Collegato. Gli agenti possono fare push dei branch e aprire pull request.",
+        "missing": "Non collegato. Gli agenti non possono aprire pull request.",
+        "attention": "Il token di accesso non può fare push né aprire pull request."
+      },
+      "agentExecutor": {
+        "title": "Dove vengono eseguiti gli agenti",
+        "done": "Un runner è configurato.",
+        "missing": "Nessun runner configurato. Nulla può essere eseguito finché non ne colleghi uno.",
+        "attention": "Il runner non è raggiungibile, oppure manca un’impostazione obbligatoria.",
+        "notNeeded": "Questo deployment esegue gli agenti senza runner."
+      },
+      "testEnvironments": {
+        "title": "Ambienti di test",
+        "done": "Configurato. I tester possono usare un’anteprima live.",
+        "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì.",
+        "attention": "Il provider degli ambienti non è raggiungibile, oppure manca un’impostazione obbligatoria."
+      },
+      "contentStorage": {
+        "title": "Archiviazione degli screenshot",
+        "done": "Configurato. I controlli visivi sono attivi.",
+        "missing": "Non configurato. I controlli visivi sono disattivati.",
+        "attention": "L’archiviazione non è raggiungibile."
+      }
+    },
+    "also": {
+      "title": "Anche qui",
+      "pipelines": "Pipeline: {count} da riparare, {fresh} nuove predefinite",
+      "riskPolicies": "Policy di merge: {count} obsolete, {fresh} nuove",
+      "modelPresets": "Preset di modello: {count} obsoleti, {fresh} nuovi",
+      "settings": "Impostazioni e connessioni",
+      "workspaceSettings": "Impostazioni del workspace",
+      "integrations": "Integrazioni"
     }
   }
 }

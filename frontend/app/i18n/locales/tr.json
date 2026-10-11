@@ -151,7 +151,8 @@
     "reports": "Raporlar",
     "foundationalServices": "Temel hizmetler",
     "tutorials": "Eğitimler",
-    "help": "Yardım"
+    "help": "Yardım",
+    "setupChecklist": "Kurulum kontrol listesi"
   },
   "board": {
     "toast": {
@@ -2637,7 +2638,8 @@
         "toggleUiMode": "Arayüz modunu değiştir",
         "chooseRole": "Rolünüzü değiştirin",
         "foundationalServices": "Temel hizmetler",
-        "notificationSettings": "Bildirim yönlendirmesini yönet"
+        "notificationSettings": "Bildirim yönlendirmesini yönet",
+        "setupChecklist": "Kurulum kontrol listesi"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -2665,7 +2667,8 @@
         "chooseRole": "rol mühendis ürün yöneticisi tasarımcı persona daha yalın görünüm",
         "tutorial": "eğitim tur rehber yardım öğren tanıtım",
         "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog",
-        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu"
+        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu",
+        "setupChecklist": "kurulum kontrol listesi setup runner model github depolama ortam"
       }
     },
     "integrationsHub": {
@@ -8737,6 +8740,67 @@
         "presetShorthand": "Bu bağlantı, bu uygulamanın tanımadığı bir Nuxt UI düzenleyici ön ayarını adlandırıyor. Bağlantının tüm temayı taşıması için düzenleyicide herhangi bir ayarı değiştirin ve yeniden kopyalayın.",
         "unsupportedVersion": "Bu tema, bu uygulamanın anladığından daha yeni bir düzenleyici biçimiyle oluşturulmuş."
       }
+    }
+  },
+  "setup": {
+    "title": "Kurulum",
+    "progress": "{done} / {total} tamamlandı",
+    "intro": "Bu çalışma alanının bir görevi çalıştırıp birleştirebilmesi için gerekenler.",
+    "noAccess": {
+      "title": "Kurulumu değiştiremezsin",
+      "body": "Kurulumu bir çalışma alanı yöneticisi tamamlayabilir."
+    },
+    "required": "zorunlu",
+    "optional": "isteğe bağlı",
+    "action": {
+      "change": "Değiştir",
+      "connect": "Kur",
+      "fix": "Düzelt",
+      "review": "İncele"
+    },
+    "rows": {
+      "checking": "Denetleniyor…",
+      "notNeeded": "Bu dağıtım bunu kullanmıyor.",
+      "model": {
+        "title": "Model",
+        "done": "Bir model kullanılabilir ve varsayılan ön ayar onu kullanıyor.",
+        "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz.",
+        "attention": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor."
+      },
+      "sourceControl": {
+        "title": "Kaynak denetimi",
+        "done": "Bağlı. Ajanlar dal gönderip pull request açabilir.",
+        "missing": "Bağlı değil. Ajanlar pull request açamaz.",
+        "attention": "Erişim belirteci dal gönderemiyor ve pull request açamıyor."
+      },
+      "agentExecutor": {
+        "title": "Ajanların çalıştığı yer",
+        "done": "Bir runner yapılandırıldı.",
+        "missing": "Yapılandırılmış runner yok. Bir tane bağlayana kadar hiçbir şey çalışamaz.",
+        "attention": "Runner'a ulaşılamıyor veya gerekli bir ayar eksik.",
+        "notNeeded": "Bu dağıtım ajanları runner olmadan çalıştırıyor."
+      },
+      "testEnvironments": {
+        "title": "Test ortamları",
+        "done": "Yapılandırıldı. Test ajanları canlı önizleme kullanabilir.",
+        "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır.",
+        "attention": "Ortam sağlayıcısına ulaşılamıyor veya gerekli bir ayar eksik."
+      },
+      "contentStorage": {
+        "title": "Ekran görüntüsü depolama",
+        "done": "Yapılandırıldı. Görsel denetimler açık.",
+        "missing": "Kurulmadı. Görsel denetimler kapalı.",
+        "attention": "Depolamaya ulaşılamıyor."
+      }
+    },
+    "also": {
+      "title": "Burada ayrıca",
+      "pipelines": "Pipeline'lar: onarılacak {count}, yeni yerleşik {fresh}",
+      "riskPolicies": "Birleştirme ilkeleri: {count} eski, {fresh} yeni",
+      "modelPresets": "Model ön ayarları: {count} eski, {fresh} yeni",
+      "settings": "Ayarlar ve bağlantılar",
+      "workspaceSettings": "Çalışma alanı ayarları",
+      "integrations": "Entegrasyonlar"
     }
   }
 }

@@ -181,7 +181,8 @@
     "reports": "Reports",
     "foundationalServices": "Foundational services",
     "tutorials": "Tutorials",
-    "help": "Help"
+    "help": "Help",
+    "setupChecklist": "Setup checklist"
   },
   "board": {
     "toast": {
@@ -2792,7 +2793,8 @@
         "toggleUiMode": "Switch interface mode",
         "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
-        "notificationSettings": "Manage notification routing"
+        "notificationSettings": "Manage notification routing",
+        "setupChecklist": "Setup checklist"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2820,7 +2822,8 @@
         "chooseRole": "role engineer product manager designer persona simpler view",
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
-        "notificationSettings": "notifications email routing channels inbox"
+        "notificationSettings": "notifications email routing channels inbox",
+        "setupChecklist": "setup checklist runner model github storage environment configure"
       }
     },
     "shortcuts": {
@@ -9068,6 +9071,67 @@
         "presetShorthand": "This link names a Nuxt UI editor preset this app does not know. Change any setting in the editor so the link carries the whole theme, then copy it again.",
         "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
       }
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "progress": "{done} of {total} done",
+    "intro": "What this workspace needs before a task can run and merge.",
+    "noAccess": {
+      "title": "You cannot change the setup",
+      "body": "A workspace admin can finish the setup."
+    },
+    "required": "required",
+    "optional": "optional",
+    "action": {
+      "change": "Change",
+      "connect": "Set up",
+      "fix": "Fix",
+      "review": "Review"
+    },
+    "rows": {
+      "checking": "Checking…",
+      "notNeeded": "This deployment does not use it.",
+      "model": {
+        "title": "Model",
+        "done": "A model is available, and the default preset uses it.",
+        "missing": "No model is available. No agent can run until you connect a provider.",
+        "attention": "The default model preset names a model that is not available."
+      },
+      "sourceControl": {
+        "title": "Source control",
+        "done": "Connected. Agents can push branches and open pull requests.",
+        "missing": "Not connected. Agents cannot open pull requests.",
+        "attention": "The access token cannot push or open pull requests."
+      },
+      "agentExecutor": {
+        "title": "Where agents run",
+        "done": "A runner is configured.",
+        "missing": "No runner is configured. Nothing can run until you connect one.",
+        "attention": "The runner is unreachable, or a required setting is missing.",
+        "notNeeded": "This deployment runs agents without a runner."
+      },
+      "testEnvironments": {
+        "title": "Test environments",
+        "done": "Configured. Testers can use a live preview.",
+        "missing": "Not set up. Testers that need a live preview do not run. All other agents run.",
+        "attention": "The environment provider is unreachable, or a required setting is missing."
+      },
+      "contentStorage": {
+        "title": "Screenshot storage",
+        "done": "Configured. Visual checks are on.",
+        "missing": "Not set up. Visual checks are off.",
+        "attention": "The storage is unreachable."
+      }
+    },
+    "also": {
+      "title": "Also here",
+      "pipelines": "Pipelines: {count} to repair, {fresh} new built-ins",
+      "riskPolicies": "Merge policies: {count} outdated, {fresh} new",
+      "modelPresets": "Model presets: {count} outdated, {fresh} new",
+      "settings": "Settings and connections",
+      "workspaceSettings": "Workspace settings",
+      "integrations": "Integrations"
     }
   }
 }
