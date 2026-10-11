@@ -11,10 +11,10 @@ export type ResultWindowWidth = '3xl' | '4xl' | '5xl' | 'full'
 
 /**
  * The bucket → cap mapping. `full` is deliberately `max-w-none` rather than a bigger number:
- * the panel's `w-full` then spans the backdrop, which the variant insets by one gutter (`m-4`
- * stretched, `p-4` centered), so the window fills the screen and still reads as a window rather
- * than a repaint of the app. A `Record` over the union, so a new bucket fails to compile until
- * it is mapped.
+ * the panel's `w-full` then spans the backdrop, which insets it by one gutter
+ * (`WINDOWED_OVERLAY_CLASS`, `utils/safeArea.ts`), so the window fills the screen and still reads
+ * as a window rather than a repaint of the app. A `Record` over the union, so a new bucket fails to
+ * compile until it is mapped.
  */
 export const RESULT_WINDOW_WIDTH_CLASS: Record<ResultWindowWidth, string> = {
   '3xl': 'max-w-3xl',

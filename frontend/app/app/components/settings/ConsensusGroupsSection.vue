@@ -15,6 +15,7 @@ import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
@@ -291,9 +292,12 @@ async function remove(group: ConsensusGroup) {
           </div>
         </div>
       </div>
-      <p v-else class="py-4 text-center text-sm text-dimmed">
-        {{ t('settings.consensusGroups.list.empty') }}
-      </p>
+      <EmptyState
+        v-else
+        compact
+        icon="i-lucide-users"
+        :title="t('settings.consensusGroups.list.empty')"
+      />
     </template>
 
     <!-- ===== editor ===== -->

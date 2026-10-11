@@ -17,12 +17,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { TaskSourceKind, TaskSourceState, TrackerKind } from '~/types/domain'
 import TaskSourceCard from '~/components/settings/TaskSourceCard.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 // --- filing tracker + writeback (one Save, persisted on tracker settings) -----
@@ -114,11 +115,7 @@ async function save() {
       writebackResolveOnMerge: resolveOnMerge.value,
       writebackQuestionsOnPark: questionsOnPark.value,
     })
-    toast.add({
-      title: t('settings.issueTracker.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.issueTracker.toast.saved')
   } catch (e) {
     present(e, 'settings.issueTracker.toast.saveFailed')
   } finally {
@@ -379,9 +376,12 @@ async function checkSetup(source: TaskSourceKind) {
         @remedy="openRemedy(source)"
       />
 
-      <p v-if="tasks.sources.length === 0" class="text-2xs text-dimmed">
-        {{ t('settings.issueTracker.linking.none') }}
-      </p>
+      <EmptyState
+        v-if="tasks.sources.length === 0"
+        compact
+        icon="i-lucide-list-todo"
+        :title="t('settings.issueTracker.linking.none')"
+      />
     </section>
 
     <!-- 3. Writeback ---------------------------------------------------------->

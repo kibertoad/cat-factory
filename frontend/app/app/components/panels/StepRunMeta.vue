@@ -4,6 +4,7 @@ import type { PipelineStep } from '~/types/execution'
 import { useStepTimer } from '~/composables/useStepTimer'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // Shared run-metadata + observability block for the step-backed result windows
 // (the CI/conflicts gate, the tester report). It carries the facts every step has in
@@ -71,11 +72,7 @@ async function copyRunId() {
         {{ t('panels.stepMeta.duration') }}
       </SectionLabel>
       <p class="flex items-center gap-1.5 text-xs tabular-nums text-toned">
-        <UIcon
-          v-if="isRunning"
-          name="i-lucide-loader-circle"
-          class="h-3 w-3 animate-spin text-primary"
-        />
+        <Spinner v-if="isRunning" class="h-3 w-3 text-primary" />
         {{ durationLabel }}
         <span v-if="isRunning" class="text-2xs text-dimmed">{{
           t('panels.stepMeta.elapsed')

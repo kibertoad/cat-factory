@@ -9,6 +9,7 @@ import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAle
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -19,7 +20,7 @@ const props = defineProps<{ accountId: string }>()
 const accounts = useAccountsStore()
 const uiMode = useUiModeStore()
 const auth = useAuthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -77,7 +78,7 @@ async function revokeSessions(userId: string, label: string) {
   if (!(await confirmAction('revoke', label))) return
   try {
     await accounts.revokeMemberSessions(props.accountId, userId)
-    toast.add({ title: t('layout.accountTeam.members.sessionsRevoked'), icon: 'i-lucide-check' })
+    actionToast.success('layout.accountTeam.members.sessionsRevoked')
   } catch (e) {
     present(e, 'layout.accountTeam.errors.revokeSessions')
   }
@@ -114,7 +115,7 @@ async function createOrganization() {
   try {
     await accounts.createOrg(name)
     newOrgName.value = ''
-    toast.add({ title: t('layout.accountTeam.org.created'), icon: 'i-lucide-check' })
+    actionToast.success('layout.accountTeam.org.created')
   } catch (e) {
     present(e, 'layout.accountTeam.errors.createOrg')
   } finally {
@@ -136,12 +137,10 @@ async function sendInvite() {
       inviteRoles.value.length ? inviteRoles.value : ['developer'],
     )
     inviteEmail.value = ''
-    toast.add({
-      title: t('layout.accountTeam.invite.created'),
+    actionToast.success('layout.accountTeam.invite.created', {
       description: acceptUrl
         ? t('layout.accountTeam.invite.createdEmailed')
         : t('layout.accountTeam.invite.createdShareLink'),
-      icon: 'i-lucide-mail-check',
     })
   } catch (e) {
     present(e, 'layout.accountTeam.errors.sendInvite')
@@ -175,7 +174,7 @@ async function connectEmail() {
       fromAddress: emailFrom.value.trim(),
     })
     emailApiKey.value = ''
-    toast.add({ title: t('layout.accountTeam.email.connected'), icon: 'i-lucide-check' })
+    actionToast.success('layout.accountTeam.email.connected')
   } catch (e) {
     present(e, 'layout.accountTeam.errors.connectEmail')
   } finally {
@@ -261,8 +260,12 @@ async function disconnectEmail() {
             @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
           />
         </li>
-        <li v-if="accounts.members.length === 0" class="text-dimmed">
-          {{ t('layout.accountTeam.members.empty') }}
+        <li v-if="accounts.members.length === 0">
+          <EmptyState
+            compact
+            icon="i-lucide-users"
+            :title="t('layout.accountTeam.members.empty')"
+          />
         </li>
       </ul>
     </section>

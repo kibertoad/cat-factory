@@ -15,7 +15,7 @@ const props = defineProps<{ job: BootstrapJob }>()
 const emit = defineEmits<{ close: [] }>()
 
 const agentRuns = useAgentRunsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -146,13 +146,10 @@ async function submit() {
       })),
       ...(overallNotes.value.trim() ? { notes: overallNotes.value.trim() } : {}),
     })
-    toast.add({
-      title: t('bootstrap.adoption.toast.approved'),
+    actionToast.success('bootstrap.adoption.toast.approved', {
       description: t('bootstrap.adoption.toast.approvedDesc', {
         directory: props.job.monorepo?.directory ?? '',
       }),
-      icon: 'i-lucide-check',
-      color: 'success',
     })
     open.value = false
     emit('close')
@@ -309,7 +306,7 @@ watch(open, (isOpen) => {
               </div>
 
               <div class="grid gap-2 text-xs sm:grid-cols-2">
-                <div class="rounded-sm bg-default/60 p-2">
+                <div class="rounded-sm bg-elevated/60 p-2">
                   <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.monorepo') }}
                   </p>
@@ -317,7 +314,7 @@ watch(open, (isOpen) => {
                     {{ decision.monorepoPractice ?? t('bootstrap.adoption.side.nothing') }}
                   </p>
                 </div>
-                <div class="rounded-sm bg-default/60 p-2">
+                <div class="rounded-sm bg-elevated/60 p-2">
                   <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.template') }}
                   </p>

@@ -20,9 +20,10 @@ import type { ApiContractFormat, FoundationalServiceTier } from '~/types/domain'
 import { useFoundationalServicesStore } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const catalog = useFoundationalServicesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -71,7 +72,7 @@ async function suppress(serviceId: string) {
   await withRow(`suppress:${serviceId}`, async () => {
     try {
       await catalog.suppress(serviceId)
-      toast.add({ title: t('foundational.toast.suppressed'), icon: 'i-lucide-eye-off' })
+      actionToast.success('foundational.toast.suppressed')
     } catch (e) {
       present(e, 'foundational.toast.suppressFailed')
     }
@@ -156,8 +157,11 @@ async function suppress(serviceId: string) {
       </div>
     </div>
 
-    <p v-if="!catalog.resolved.length" class="text-sm text-dimmed">
-      {{ t('foundational.catalog.empty') }}
-    </p>
+    <EmptyState
+      v-if="!catalog.resolved.length"
+      compact
+      icon="i-lucide-package"
+      :title="t('foundational.catalog.empty')"
+    />
   </div>
 </template>

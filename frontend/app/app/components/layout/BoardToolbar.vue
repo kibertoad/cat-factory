@@ -17,7 +17,7 @@ const queue = useWorkspaceQueueStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, n } = useI18n()
@@ -26,11 +26,7 @@ const { fitView, zoomIn, zoomOut, resetZoom } = useBoardFlow()
 async function mountService(serviceId: string, title: string) {
   try {
     await services.mount(serviceId)
-    toast.add({
-      title: t('board.toolbar.serviceAdded', { title }),
-      icon: 'i-lucide-box',
-      color: 'success',
-    })
+    actionToast.success('board.toolbar.serviceAdded', { params: { title } })
   } catch (e) {
     present(e, 'board.toolbar.serviceAddFailed')
   }
@@ -53,11 +49,7 @@ const mountableItems = computed(() =>
 async function restoreService(id: string, title: string) {
   try {
     await board.restoreService(id)
-    toast.add({
-      title: t('board.toast.restored', { name: title }),
-      icon: 'i-lucide-archive-restore',
-      color: 'neutral',
-    })
+    actionToast.success('board.toast.restored', { params: { name: title } })
   } catch (e) {
     present(e, 'board.toast.restoreFailed')
   }

@@ -19,6 +19,7 @@
 // service-directory field). Nothing in the tree can be the target then, so the pick is the
 // folder the caller is standing in and the emitted value is that folder plus the new name.
 import type { RepoTreeEntry } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -194,12 +195,15 @@ watch(
 
     <!-- listing -->
     <div class="max-h-56 overflow-auto rounded-sm border border-default">
-      <div v-if="loading" class="p-3 text-sm text-muted">
-        {{ t('github.repoTree.loading') }}
+      <div v-if="loading" class="space-y-1 p-2">
+        <USkeleton v-for="i in 4" :key="i" class="h-7 w-full" />
       </div>
-      <div v-else-if="isEmpty" class="p-3 text-sm text-muted">
-        {{ mode === 'dir' ? t('github.repoTree.noSubdirectories') : t('github.repoTree.empty') }}
-      </div>
+      <EmptyState
+        v-else-if="isEmpty"
+        compact
+        icon="i-lucide-folder-open"
+        :title="mode === 'dir' ? t('github.repoTree.noSubdirectories') : t('github.repoTree.empty')"
+      />
       <ul v-else class="divide-y divide-default">
         <li
           v-for="entry in dirEntries"

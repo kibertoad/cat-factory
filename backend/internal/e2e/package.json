@@ -18,6 +18,7 @@
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/example-custom-agent": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
     "@cat-factory/node-server": "workspace:*",
     "@cat-factory/server": "workspace:*"
   },

@@ -15,7 +15,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -105,12 +105,10 @@ async function save() {
     // (backend/docs/security-model.md). Best-effort: the save already succeeded, so a probe
     // failure must not read as one.
     testResult.value = await store.test(kind.value, payload).catch(() => null)
-    toast.add({
-      title: t('settings.userSecrets.toast.saved', {
+    actionToast.success('settings.userSecrets.toast.saved', {
+      params: {
         label: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
-      }),
-      icon: 'i-lucide-check',
-      color: 'success',
+      },
     })
   } catch (e) {
     present(e, 'settings.userSecrets.toast.saveFailed')
@@ -134,7 +132,7 @@ async function remove() {
   try {
     await store.remove(kind.value)
     resetDraft()
-    toast.add({ title: t('settings.userSecrets.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.userSecrets.toast.removed')
   } catch (e) {
     present(e, 'settings.userSecrets.toast.removeFailed')
   } finally {
