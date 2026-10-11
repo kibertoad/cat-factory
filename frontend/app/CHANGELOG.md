@@ -1,5 +1,40 @@
 # @cat-factory/app
 
+## 0.311.1
+
+### Patch Changes
+
+- c8d3870: Upgrade `nuxt` to 4.6.1 or later so a cold `nuxt dev` pre-bundles the SPA's dependencies and the
+  first page load no longer reloads. The layer's `nuxt` peer range is now `^4.5.2 <4.6.0 || ^4.6.1`,
+  so a deployment locked to 4.6.0 gets a peer warning.
+  
+  Nuxt 4.6.0 broke Vite's dependency scan in any app that uses `@nuxtjs/i18n` (nuxt/nuxt#36473), so
+  `nuxt dev` found every dependency while the page loaded and reloaded the page after each batch. The
+  peer range only warns: the fix is the `nuxt` upgrade. A deployment that links the layer from a
+  workspace, not from `node_modules`, must also add the layer's files as scan entries, because Nuxt
+  adds them only for an installed layer. The in-repo frontend deployment
+  (`deploy/frontend/nuxt.config.ts`) shows how.
+- 1c7d921: Full-screen overlays keep clear of a phone's notch and home indicator, and dragging inside one no
+  longer reloads the app.
+  
+  The result window shell now insets every window by the larger of 1rem and the device's safe-area
+  inset on each side, and caps a centered window at the padded height, so a full-height window's
+  header no longer sits under the notch. The step detail reader and the model configuration takeover
+  pad by the inset alone. `html` and `body` set `overscroll-behavior-y: none`, so a vertical drag
+  that reaches the viewport no longer triggers pull-to-refresh, which reloaded the app and dropped the
+  open window. Inner scrollers still hand the scroll on to the scroller around them.
+- b884a6d: The observability, reports, operator dashboard and Kaizen takeovers and the artifact lightbox pad
+  by the device's safe-area inset and cap to the dynamic viewport, so their headers, close buttons
+  and bottom edges no longer sit under a phone's notch, home indicator or browser chrome. On a phone,
+  the observability and operator dashboard headers put their tabs on a second row, so the close
+  button stays on screen. The sidebar drawer pads its top and inline-start insets, and the
+  inspector's bottom sheet pads its side insets. A tap in the lightbox's inset strips no longer
+  closes it.
+  
+  Every full-screen overlay now takes its root classes from `utils/safeArea.ts`
+  (`FULL_BLEED_TAKEOVER_CLASS`, `WINDOWED_OVERLAY_CLASS`), which replace the exported
+  `SAFE_AREA_INSET_CLASS` and `SAFE_AREA_GUTTER_CLASS`.
+
 ## 0.311.0
 
 ### Minor Changes
