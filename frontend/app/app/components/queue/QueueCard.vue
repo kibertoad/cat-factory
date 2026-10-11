@@ -115,6 +115,9 @@ const showProgress = computed(
   () => reason.value === 'running' || reason.value === 'background_review',
 )
 
+/** The inspector is showing this card's task. Its border wins over the hover one. */
+const selected = computed(() => ui.selectedBlockId === props.entry.task.id)
+
 function openTask() {
   ui.select(props.entry.task.id)
 }
@@ -133,14 +136,14 @@ function showOnBoard() {
 </script>
 
 <template>
-  <!-- The whole card opens the task. The title is the card's one real button, so keyboard focus
-       and the accessible name stay on it, and its `::after` stretches the click target over the
-       card. Every other control sits above that overlay (`relative z-10`) and keeps its own
-       action. -->
+  <!-- The whole card opens the task, as the board's card does: a click anywhere on it selects
+       the task, and each control inside stops its own click. The title stays a button, so the
+       card is reachable by keyboard. -->
   <article
     v-if="task"
-    class="relative rounded-lg border bg-default p-3 transition hover:border-accented has-[[data-card-target]:focus-visible]:ring-2 has-[[data-card-target]:focus-visible]:ring-primary"
-    :class="ui.selectedBlockId === task.id ? 'border-inverted' : 'border-muted'"
+    class="rounded-lg border bg-default p-3 transition-colors"
+    :class="selected ? 'border-inverted' : 'border-muted hover:border-accented'"
+    @click="openTask"
     data-testid="queue-card"
     :data-queue-task="task.id"
     :data-reason="reason"
@@ -161,24 +164,23 @@ function showOnBoard() {
       <span v-if="entry.service" class="min-w-0 truncate">· {{ entry.service.title }}</span>
       <span v-if="timeFact" class="shrink-0 whitespace-nowrap">· {{ timeFact }}</span>
       <IconButton
-        class="relative z-10 ms-auto shrink-0"
+        class="ms-auto shrink-0"
         color="neutral"
         variant="ghost"
         size="xs"
         icon="i-lucide-map"
         :label="t('queue.card.showOnBoard')"
-        @click="showOnBoard"
+        @click.stop="showOnBoard"
       />
     </div>
 
-    <!-- The title opens the task, and through its stretched `::after`, so does the whole card. -->
+    <!-- The card's keyboard target: Enter on it opens the task, as a click on the card does. -->
     <UButton
       color="neutral"
       variant="link"
-      class="mt-1 w-full p-0 text-start text-sm font-semibold leading-snug text-highlighted cursor-pointer after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none"
-      data-card-target
+      class="mt-1 w-full p-0 text-start text-sm font-semibold leading-snug text-highlighted"
       data-testid="queue-card-title"
-      @click="openTask"
+      @click.stop="openTask"
     >
       {{ task.title }}
     </UButton>
@@ -192,7 +194,7 @@ function showOnBoard() {
       v-if="reason === 'failed' && runFailed && agentRun"
       :run="agentRun"
       variant="compact"
-      class="relative z-10 mt-2"
+      class="mt-2"
     />
 
     <div v-if="showProgress" class="mt-2 space-y-1">
@@ -200,7 +202,7 @@ function showOnBoard() {
       <p v-if="stepFact" class="text-2xs text-dimmed">{{ stepFact }}</p>
     </div>
 
-    <div class="relative z-10 mt-3 flex flex-wrap items-center gap-2 empty:hidden">
+    <div class="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
       <!-- Parked on a decision or an approval: the gate itself, one click away. -->
       <UButton
         v-if="attention"
@@ -209,7 +211,7 @@ function showOnBoard() {
         size="xs"
         :icon="attention.icon"
         data-testid="queue-card-primary"
-        @click="attention.open()"
+        @click.stop="attention.open()"
       >
         {{ reason === 'decision' ? t('queue.card.answer') : attention.action }}
       </UButton>
@@ -221,7 +223,7 @@ function showOnBoard() {
           size="xs"
           icon="i-lucide-clipboard-check"
           data-testid="queue-card-primary"
-          @click="openOutcome"
+          @click.stop="openOutcome"
         >
           {{ t('board.task.readOutcome') }}
         </UButton>
@@ -232,7 +234,7 @@ function showOnBoard() {
           icon="i-lucide-git-merge"
           :disabled="!canExecute"
           :title="executeDeniedTitle"
-          @click="merge"
+          @click.stop="merge"
         >
           {{ t('board.task.merge') }}
         </UButton>
@@ -247,7 +249,7 @@ function showOnBoard() {
         :disabled="!runnable || starting || !canExecute"
         :title="executeDeniedTitle"
         data-testid="queue-card-primary"
-        @click="start"
+        @click.stop="start"
       >
         {{ starting ? t('board.task.starting') : t('board.task.start') }}
       </UButton>
@@ -258,7 +260,7 @@ function showOnBoard() {
         variant="soft"
         icon="i-lucide-clipboard-check"
         data-testid="queue-card-primary"
-        @click="openOutcome"
+        @click.stop="openOutcome"
       >
         {{ t('board.task.readOutcome') }}
       </UButton>
