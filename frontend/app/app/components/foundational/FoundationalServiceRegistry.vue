@@ -21,6 +21,7 @@ import {
 } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
 
@@ -28,7 +29,7 @@ const catalog =
   props.kind === 'workspace'
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirm } = useConfirm()
@@ -131,7 +132,7 @@ async function save() {
         capabilities: capabilityList.value,
         ...(contracts ? { contracts } : {}),
       })
-      toast.add({ title: t('foundational.toast.created'), icon: 'i-lucide-check' })
+      actionToast.success('foundational.toast.created')
     } else {
       await catalog.update(draft.id, {
         name: draft.name.trim(),
@@ -140,7 +141,7 @@ async function save() {
         capabilities: capabilityList.value,
         ...(contracts ? { contracts } : {}),
       })
-      toast.add({ title: t('foundational.toast.updated'), icon: 'i-lucide-check' })
+      actionToast.success('foundational.toast.updated')
     }
     editing.value = null
   } catch (e) {
@@ -171,7 +172,7 @@ async function remove(service: FoundationalService) {
   if (!ok) return
   try {
     await catalog.remove(service.id)
-    toast.add({ title: t('foundational.toast.deleted'), icon: 'i-lucide-trash-2' })
+    actionToast.success('foundational.toast.deleted')
   } catch (e) {
     present(e, 'foundational.toast.deleteFailed')
   }
@@ -224,9 +225,12 @@ async function remove(service: FoundationalService) {
         </div>
       </div>
     </div>
-    <p v-if="!catalog.services.length" class="text-sm text-dimmed">
-      {{ t('foundational.registry.empty') }}
-    </p>
+    <EmptyState
+      v-if="!catalog.services.length"
+      compact
+      icon="i-lucide-package"
+      :title="t('foundational.registry.empty')"
+    />
 
     <UButton
       v-if="editing === null"

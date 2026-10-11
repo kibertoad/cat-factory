@@ -66,7 +66,7 @@ const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const fragments = useFragmentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -806,9 +806,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     const { resolved, failures } = await resolvePending(pendingContext.value)
     pendingContext.value = resolved
     if (failures.length) {
-      presentLinkFailures(failures, undefined, {
-        title: (count) => t('board.addTask.contextFailed', { count }, count),
-      })
+      presentLinkFailures(failures, undefined, { titleKey: 'board.addTask.contextFailed' })
       return
     }
     const typeFields = buildTypeFields()
@@ -863,12 +861,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     }
     const refusal = createRefusalMessage(e)
     if (refusal) {
-      toast.add({
-        title: t('board.addTask.addFailedTitle'),
-        description: refusal,
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      actionToast.error('board.addTask.addFailedTitle', { description: refusal })
     } else present(e, 'board.addTask.addFailedTitle')
   } finally {
     saving.value = false

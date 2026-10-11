@@ -32,7 +32,7 @@ const store = useWorkspaceSettingsStore()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const pipelines = usePipelinesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const slots = useReactiveSlots<AppSlots>()
 // Whether the deployment registers any reusable operation at all, hidden or not, so the
@@ -283,11 +283,7 @@ async function save() {
   // Mirror the backend's enforce-mode validation client-side so the user gets an immediate,
   // localized message instead of the raw 422 (enforce needs at least one hard trigger).
   if (draft.reviewFrictionMode === 'enforce' && blockCount == null && blockStuckMinutes == null) {
-    toast.add({
-      title: t('settings.workspaceSettings.reviewFriction.needsTrigger'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
-    })
+    actionToast.error('settings.workspaceSettings.reviewFriction.needsTrigger')
     return
   }
   saving.value = true
@@ -322,11 +318,7 @@ async function save() {
       reviewFrictionBlockCount: blockCount,
       reviewFrictionBlockStuckMinutes: blockStuckMinutes,
     })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.workspaceSettings.toast.saved')
   } catch (e) {
     present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {

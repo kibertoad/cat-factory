@@ -14,6 +14,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -149,13 +150,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
     </template>
 
     <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-      <div
-        v-if="!judge"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-      >
-        <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('judge.empty') }}</p>
-      </div>
+      <EmptyState v-if="!judge" :icon="meta.icon" :title="t('judge.empty')" />
 
       <template v-else>
         <!-- The score against the task's threshold — the whole verdict in one line. -->

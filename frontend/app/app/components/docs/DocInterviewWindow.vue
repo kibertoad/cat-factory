@@ -25,6 +25,7 @@ import {
   interviewStepReached,
 } from '~/utils/interviewGate'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
@@ -123,13 +124,12 @@ const onProceed = () =>
 
     <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
       <!-- No session yet -->
-      <div
+      <EmptyState
         v-if="!session"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-      >
-        <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('docInterview.empty') }}</p>
-      </div>
+        class="h-full"
+        icon="i-lucide-messages-square"
+        :title="t('docInterview.empty')"
+      />
 
       <template v-else>
         <p class="mb-4 text-sm leading-relaxed text-toned">

@@ -29,7 +29,7 @@ const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
 const access = useWorkspaceAccess()
 const uiMode = useUiModeStore()
-const toast = useToast()
+const toast = useActionToast()
 const { present } = usePipelineErrorToast()
 const pipelineFor = useStartPipelineResolver()
 const { startTask } = useStartWithFeedback()
@@ -197,11 +197,7 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
     // started".
     const started = startNow ? await startTask(block) : false
     if (!started) {
-      toast.add({
-        title: t('describeWork.addedToast', { title: block.title }),
-        icon: 'i-lucide-list-plus',
-        color: 'success',
-      })
+      toast.success('describeWork.addedToast', { params: { title: block.title } })
     }
   } catch (e) {
     const conflict = parseConflict(e)

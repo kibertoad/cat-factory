@@ -13,7 +13,7 @@ const props = defineProps<{ block: Block }>()
 const store = useReleaseHealthStore()
 const ui = useUiStore()
 const uiMode = useUiModeStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -61,11 +61,7 @@ async function save() {
       sloIds: parseIds(draft.sloIds),
       envTag: draft.envTag.trim() || null,
     })
-    toast.add({
-      title: t('inspector.releaseHealth.savedToast'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('inspector.releaseHealth.savedToast')
   } catch (e) {
     present(e, 'inspector.releaseHealth.saveFailed')
   } finally {

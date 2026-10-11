@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
@@ -417,9 +418,12 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
           class="w-full"
         />
 
-        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-dimmed">
-          {{ t('layout.integrationsHub.noMatches', { query }) }}
-        </p>
+        <EmptyState
+          v-if="!filteredGroups.length"
+          compact
+          icon="i-lucide-search-x"
+          :title="t('layout.integrationsHub.noMatches', { query })"
+        />
 
         <section v-for="group in filteredGroups" :key="group.title">
           <SectionLabel as="h3" class="mb-2 px-1">

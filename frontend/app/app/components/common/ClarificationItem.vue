@@ -8,6 +8,8 @@
 // -specific extras (severity/category badges, a window's own recommendation section) ride the
 // `badges` / `actions` slots; the recommend button only EMITS, so each window wires its own
 // recommend mechanism. `dismissed`/`requested` hide the textarea (nothing to answer right now).
+import Spinner from '~/components/common/Spinner.vue'
+
 const props = defineProps<{
   /** The question / finding headline. */
   prompt: string
@@ -82,7 +84,7 @@ const draft = computed({
       class="mt-2 inline-flex items-center gap-1 text-2xs text-primary"
       data-testid="clarification-requested"
     >
-      <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+      <Spinner class="h-3.5 w-3.5" />
       {{ t('clarification.generating') }}
     </div>
 

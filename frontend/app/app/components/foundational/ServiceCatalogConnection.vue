@@ -22,8 +22,8 @@ import {
 } from '~/utils/serviceCatalog'
 
 const catalog = useFoundationalServicesStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -137,7 +137,7 @@ async function connect() {
   await withBusy('connect', async () => {
     try {
       await catalog.connectServiceCatalog(buildInput())
-      toast.add({ title: t('serviceCatalog.toast.connected'), color: 'success' })
+      actionToast.success('serviceCatalog.toast.connected')
     } catch (error) {
       present(error, 'serviceCatalog.toast.connectFailed')
       return
@@ -154,13 +154,13 @@ async function probe() {
   await withBusy('probe', async () => {
     try {
       const result = await catalog.probeServiceCatalog(buildInput())
-      toast.add({
-        title: result.ok
-          ? t('serviceCatalog.toast.probeOk')
-          : t('serviceCatalog.toast.probeFailed'),
-        description: result.message,
-        color: result.ok ? 'success' : 'error',
-      })
+      if (result.ok) {
+        // The probe's `message` is backend prose: on a failure it is detail behind the disclosure,
+        // and on a success the translated title is the whole of what the reader needs.
+        actionToast.success('serviceCatalog.toast.probeOk')
+      } else {
+        presentReported(result.message, 'serviceCatalog.toast.probeFailed')
+      }
     } catch (error) {
       present(error, 'serviceCatalog.toast.probeFailed')
     }
@@ -175,15 +175,15 @@ async function importNow() {
 async function runImport(): Promise<void> {
   try {
     const result = await catalog.importServiceCatalog()
-    toast.add({
-      title: t('serviceCatalog.toast.imported'),
+    const imported = {
       description: t('serviceCatalog.toast.importedDetail', {
         upserted: result.upserted,
         unchanged: result.unchanged,
         tombstoned: result.tombstoned,
       }),
-      color: result.status === 'ok' ? 'success' : 'warning',
-    })
+    }
+    if (result.status === 'ok') actionToast.success('serviceCatalog.toast.imported', imported)
+    else actionToast.warning('serviceCatalog.toast.imported', imported)
   } catch (error) {
     present(error, 'serviceCatalog.toast.importFailed')
   }
@@ -206,7 +206,7 @@ async function disconnect() {
   await withBusy('disconnect', async () => {
     try {
       await catalog.disconnectServiceCatalog()
-      toast.add({ title: t('serviceCatalog.toast.disconnected'), color: 'success' })
+      actionToast.success('serviceCatalog.toast.disconnected')
     } catch (error) {
       present(error, 'serviceCatalog.toast.disconnectFailed')
     }

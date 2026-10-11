@@ -7,6 +7,7 @@
 // available actions (connected integrations, etc.) show.
 
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 interface Command {
   id: string
@@ -273,9 +274,12 @@ function indexOf(cmd: Command) {
         </div>
 
         <div class="max-h-80 overflow-y-auto p-1.5">
-          <p v-if="filtered.length === 0" class="px-3 py-6 text-center text-sm text-dimmed">
-            {{ t('layout.commandBar.noMatches') }}
-          </p>
+          <EmptyState
+            v-if="filtered.length === 0"
+            compact
+            icon="i-lucide-search-x"
+            :title="t('layout.commandBar.noMatches')"
+          />
 
           <div v-for="group in groups" :key="group.name" class="mb-1">
             <SectionLabel as="p" class="px-2 pb-1 pt-2">

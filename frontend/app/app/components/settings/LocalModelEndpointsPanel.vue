@@ -23,7 +23,7 @@ import IconButton from '~/components/common/IconButton.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -230,12 +230,10 @@ async function save() {
       models: selected.value.map((id) => ({ id, ...modalityOf(imageInput.value[id]) })),
     })
     apiKey.value = ''
-    toast.add({
-      title: t('settings.localModelEndpoints.toast.saved', {
+    actionToast.success('settings.localModelEndpoints.toast.saved', {
+      params: {
         name: LOCAL_RUNNER_LABELS[provider.value],
-      }),
-      icon: 'i-lucide-check',
-      color: 'success',
+      },
     })
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.saveFailed')
@@ -261,7 +259,7 @@ async function remove(p: LocalRunner) {
     // The row is gone from the store, so re-seeding the draft it was showing yields the
     // fresh-runner defaults: the same reset, without a second copy of what a reset means.
     if (provider.value === p) seedDraft(p)
-    toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.localModelEndpoints.toast.removed')
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.removeFailed')
   } finally {

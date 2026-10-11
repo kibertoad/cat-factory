@@ -13,6 +13,7 @@
 import { buildCatalogueRows, summarizeProgress } from './TutorialCatalogue.logic'
 import type { TutorialCatalogueRow } from './TutorialCatalogue.logic'
 import { TUTORIAL_ACTION_KEYS, TUTORIAL_STATUS_KEYS } from '~/utils/tutorial'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const tutorial = useTutorialStore()
@@ -129,9 +130,12 @@ const statusColor = (row: TutorialCatalogueRow) =>
         </ul>
         <!-- No tours at all is a real state (a deployment may register none of its own and
              strip the built-ins), and it is not the same as one whose tours are all blocked. -->
-        <p v-if="rows.length === 0" class="text-sm text-muted">
-          {{ t('tutorial.catalogue.empty') }}
-        </p>
+        <EmptyState
+          v-if="rows.length === 0"
+          compact
+          icon="i-lucide-graduation-cap"
+          :title="t('tutorial.catalogue.empty')"
+        />
       </div>
     </template>
     <template #footer>
