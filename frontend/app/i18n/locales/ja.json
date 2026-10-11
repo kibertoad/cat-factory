@@ -8781,7 +8781,6 @@
       "active": "{duration} 前に動作",
       "merged": "{duration} 前にマージ",
       "step": "ステップ {current} / {total}",
-      "openTask": "タスクを開く",
       "showOnBoard": "ボードで表示",
       "answer": "回答",
       "budgetPaused": "支出上限により、この実行は一時停止中です。上限を引き上げると再開します。",

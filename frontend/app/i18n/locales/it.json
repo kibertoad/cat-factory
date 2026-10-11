@@ -8781,7 +8781,6 @@
       "active": "attiva {duration} fa",
       "merged": "unita {duration} fa",
       "step": "passo {current} di {total}",
-      "openTask": "Apri attività",
       "showOnBoard": "Mostra nella board",
       "answer": "Rispondi",
       "budgetPaused": "Il limite di spesa ha messo in pausa questa esecuzione. Riprende quando il limite aumenta.",

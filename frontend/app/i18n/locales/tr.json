@@ -8781,7 +8781,6 @@
       "active": "{duration} önce etkindi",
       "merged": "{duration} önce birleştirildi",
       "step": "adım {current} / {total}",
-      "openTask": "Görevi aç",
       "showOnBoard": "Panoda göster",
       "answer": "Yanıtla",
       "budgetPaused": "Harcama sınırı bu çalıştırmayı duraklattı. Sınır yükseltilince devam eder.",

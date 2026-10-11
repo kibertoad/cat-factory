@@ -8781,7 +8781,6 @@
       "active": "active il y a {duration}",
       "merged": "fusionnée il y a {duration}",
       "step": "étape {current} sur {total}",
-      "openTask": "Ouvrir la tâche",
       "showOnBoard": "Afficher sur le tableau",
       "answer": "Répondre",
       "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",

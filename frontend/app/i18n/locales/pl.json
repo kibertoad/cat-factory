@@ -8781,7 +8781,6 @@
       "active": "aktywne {duration} temu",
       "merged": "scalone {duration} temu",
       "step": "krok {current} z {total}",
-      "openTask": "Otwórz zadanie",
       "showOnBoard": "Pokaż na tablicy",
       "answer": "Odpowiedz",
       "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",

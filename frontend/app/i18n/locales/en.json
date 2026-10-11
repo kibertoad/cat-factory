@@ -9112,7 +9112,6 @@
       "active": "active {duration} ago",
       "merged": "merged {duration} ago",
       "step": "step {current} of {total}",
-      "openTask": "Open task",
       "showOnBoard": "Show on the board",
       "answer": "Answer",
       "budgetPaused": "The spend limit paused this run. It continues when the limit goes up.",

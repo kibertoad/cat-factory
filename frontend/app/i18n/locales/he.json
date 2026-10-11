@@ -8781,7 +8781,6 @@
       "active": "פעיל לפני {duration}",
       "merged": "מוזג לפני {duration}",
       "step": "שלב {current} מתוך {total}",
-      "openTask": "פתיחת המשימה",
       "showOnBoard": "הצגה בלוח",
       "answer": "מענה",
       "budgetPaused": "מגבלת ההוצאות השהתה את ההרצה הזו. היא תמשיך כשהמגבלה תועלה.",
