@@ -6,28 +6,32 @@
 // from NUXT_PUBLIC_API_BASE (see README). `ssr`, modules, css and the runtime
 // `apiBase` default are inherited from the layer.
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 
-const layerAppDir = join(
-  dirname(createRequire(import.meta.url).resolve('@cat-factory/app/package.json')),
-  'app',
-)
+// Forward slashes on every OS: Vite globs `optimizeDeps.entries`, and a glob reads a
+// Windows backslash as an escape character, so a `node:path` path would match nothing.
+const layerAppDir = `${dirname(
+  createRequire(import.meta.url).resolve('@cat-factory/app/package.json'),
+).replaceAll('\\', '/')}/app`
 
 export default defineNuxtConfig({
   extends: ['@cat-factory/app'],
 
   // Let Vite's dependency scan crawl the layer's own code. Nuxt adds a layer's files as
-  // scan entries only when the layer lives in `node_modules`, which is true for an npm
-  // install but not for this monorepo, where pnpm links the layer to `frontend/app`.
-  // Without these entries the scan finds none of the layer's dependencies, so `nuxt dev`
-  // discovers them while the first page loads and reloads the page after each batch.
+  // scan entries only when the layer lives in `node_modules` (nuxt/nuxt#36208), which is
+  // true for an npm install but not for this monorepo, where pnpm links the layer to
+  // `frontend/app`. Without these entries the scan misses every dependency that only the
+  // layer imports, so `nuxt dev` discovers them while the first page loads and reloads the
+  // page after each batch. The same rule and extensions as Nuxt's: the scan crawls every
+  // layer file, including ones the first page never imports, which costs a fraction of a
+  // second per cold start and saves the reloads.
   vite: layerAppDir.includes('/node_modules/')
     ? {}
     : {
         optimizeDeps: {
           entries: [
-            join(layerAppDir, '**/*.{vue,ts}'),
-            `!${join(layerAppDir, '**/*.{spec,test}.ts')}`,
+            `${layerAppDir}/**/*.{vue,js,jsx,mjs,ts,tsx,mts}`,
+            `!${layerAppDir}/**/*.{spec,test}.ts`,
           ],
         },
       },

@@ -88,13 +88,12 @@ export default defineConfig({
     {
       // The SPA (the @cat-factory/app layer via the deploy/frontend consumer), pointed at
       // the backend above. We serve a PRODUCTION build (`nuxt build` → `nuxt preview`), not
-      // `nuxt dev`: the dev server pre-bundles deps by crawling static imports only, so the
-      // board page's `defineAsyncComponent(() => import(...))` panels hide their transitive
-      // deps from the startup scan. Vite then discovers them at runtime and re-optimizes,
-      // each re-optimization forcing a full page reload that aborts an in-flight `page.goto`
-      // (`net::ERR_ABORTED`) and hangs a spec to its timeout — a flaky ~3min stall. A
-      // production build has all chunks emitted ahead of time (no runtime re-optimization,
-      // no reloads), which also makes this a more faithful test of the shipped artifact.
+      // `nuxt dev`: it is the artifact that ships, and it has every chunk emitted ahead of
+      // time. The dev server pre-bundles deps from a startup scan, and any dep the scan
+      // misses is discovered at runtime and forces a full page reload, which aborts an
+      // in-flight `page.goto` (`net::ERR_ABORTED`) and hangs a spec to its timeout.
+      // deploy/frontend's `optimizeDeps.entries` now makes that scan cover the layer, but a
+      // spec should not depend on it staying complete.
       // `--filter` makes the command cwd-independent; Nuxt's preview server binds `PORT`.
       command:
         'pnpm --filter @cat-factory/deploy-frontend run build && pnpm --filter @cat-factory/deploy-frontend run preview',
