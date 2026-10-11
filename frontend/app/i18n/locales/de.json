@@ -2606,7 +2606,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} weitere nicht angezeigt",
-      "failingRunGone": "Dieser Lauf ist nicht mehr geladen und hat keine Aufgabe zum Öffnen."
+      "failingRunGone": "Dieser Lauf ist nicht mehr geladen und hat keine Aufgabe zum Öffnen.",
+      "goTo": {
+        "review": "Prüfen",
+        "answer": "Antworten",
+        "test": "Testen",
+        "confirm": "Bestätigen",
+        "triage": "Sichten",
+        "choose": "Auswählen",
+        "open": "Öffnen"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

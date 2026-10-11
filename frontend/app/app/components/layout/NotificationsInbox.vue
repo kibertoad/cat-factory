@@ -2,6 +2,7 @@
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { NOTIFICATION_GO_TO_KEYS } from '~/utils/notificationVerbs'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -131,6 +132,17 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
 function actionLabel(n: Notification): string {
   const key = ACTION_KEYS[n.type]
   return te(key) ? t(key) : t('layout.notifications.action.markRead')
+}
+
+/**
+ * The primary verb for a card whose act button only marks it read: the route the title click
+ * already takes, named (see `utils/notificationVerbs.ts`). Null when the act button is itself the
+ * action, or when there is no block to go to.
+ */
+function goToLabel(n: Notification): string | null {
+  if (!n.blockId) return null
+  const key = NOTIFICATION_GO_TO_KEYS[n.type]
+  return key ? t(key) : null
 }
 
 /** A notification the escalation sweep has flagged as overdue (waited past the threshold). */
@@ -510,10 +522,20 @@ function revealDecision(n: Notification) {
                 @update:model-value="effortByCard[n.id] = $event"
               />
               <div class="mt-2 flex items-center gap-1.5">
+                <!-- The action, where marking read is not one: opens what the title opens. -->
+                <UButton
+                  v-if="goToLabel(n)"
+                  data-testid="notification-go-to"
+                  :color="accent(n)"
+                  size="xs"
+                  @click="reveal(n)"
+                >
+                  {{ goToLabel(n) }}
+                </UButton>
                 <UButton
                   data-testid="notification-act"
-                  :color="accent(n)"
-                  variant="soft"
+                  :color="goToLabel(n) ? 'neutral' : accent(n)"
+                  :variant="goToLabel(n) ? 'ghost' : 'soft'"
                   size="xs"
                   :loading="busy === n.id"
                   :disabled="!access.canExecuteRuns.value"

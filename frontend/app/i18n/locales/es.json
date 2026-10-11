@@ -2479,7 +2479,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} más sin mostrar",
-      "failingRunGone": "Esta ejecución ya no está cargada y no tiene ninguna tarea que abrir."
+      "failingRunGone": "Esta ejecución ya no está cargada y no tiene ninguna tarea que abrir.",
+      "goTo": {
+        "review": "Revisar",
+        "answer": "Responder",
+        "test": "Probar",
+        "confirm": "Confirmar",
+        "triage": "Clasificar",
+        "choose": "Elegir",
+        "open": "Abrir"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

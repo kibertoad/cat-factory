@@ -2479,7 +2479,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "עוד {count} שאינן מוצגות",
-      "failingRunGone": "ההרצה הזו כבר לא טעונה ואין לה משימה לפתוח."
+      "failingRunGone": "ההרצה הזו כבר לא טעונה ואין לה משימה לפתוח.",
+      "goTo": {
+        "review": "סקירה",
+        "answer": "מענה",
+        "test": "בדיקה",
+        "confirm": "אישור",
+        "triage": "מיון",
+        "choose": "בחירה",
+        "open": "פתיחה"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

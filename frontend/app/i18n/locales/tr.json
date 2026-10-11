@@ -2479,7 +2479,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} tane daha gösterilmiyor",
-      "failingRunGone": "Bu çalıştırma artık yüklü değil ve açılacak bir görevi yok."
+      "failingRunGone": "Bu çalıştırma artık yüklü değil ve açılacak bir görevi yok.",
+      "goTo": {
+        "review": "İncele",
+        "answer": "Yanıtla",
+        "test": "Test et",
+        "confirm": "Onayla",
+        "triage": "Önceliklendir",
+        "choose": "Seç",
+        "open": "Aç"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

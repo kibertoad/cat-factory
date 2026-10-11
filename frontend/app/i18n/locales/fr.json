@@ -2479,7 +2479,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} de plus non affichées",
-      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir."
+      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir.",
+      "goTo": {
+        "review": "Relire",
+        "answer": "Répondre",
+        "test": "Tester",
+        "confirm": "Confirmer",
+        "triage": "Trier",
+        "choose": "Choisir",
+        "open": "Ouvrir"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

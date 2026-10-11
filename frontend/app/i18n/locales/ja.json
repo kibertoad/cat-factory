@@ -2479,7 +2479,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "他に {count} 件（非表示）",
-      "failingRunGone": "この実行はすでに読み込まれておらず、開けるタスクもありません。"
+      "failingRunGone": "この実行はすでに読み込まれておらず、開けるタスクもありません。",
+      "goTo": {
+        "review": "レビュー",
+        "answer": "回答",
+        "test": "テスト",
+        "confirm": "確認",
+        "triage": "仕分け",
+        "choose": "選択",
+        "open": "開く"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

@@ -63,6 +63,31 @@ test.describe('notifications inbox', () => {
     await expect(bell).toBeHidden({ timeout: LIVE_TIMEOUT })
   })
 
+  test('a parked decision carries "Answer", which opens the parked step', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    const pipeline = await createSimplePipeline(request, seededBoard.workspaceId)
+    const card = taskCard(page, 'task_login')
+    await startRun(request, seededBoard.workspaceId, 'task_login', pipeline.id)
+    await expect(card).toHaveAttribute('data-status', 'blocked', { timeout: LIVE_TIMEOUT })
+
+    const bell = page.getByTestId('notifications-bell')
+    await expect(bell).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await bell.click()
+    const item = page.locator(
+      '[data-testid="notification-item"][data-notification-type="decision_required"]',
+    )
+    await expect(item).toBeVisible()
+
+    // The card's primary button is the action, not "Mark read", and it opens the parked step.
+    const goTo = item.getByTestId('notification-go-to')
+    await expect(goTo).toHaveText('Answer')
+    await goTo.click()
+    await expect(page.getByTestId('step-detail')).toBeVisible({ timeout: LIVE_TIMEOUT })
+  })
+
   test('dismissing the notification clears the bell and leaves the task pr_ready', async ({
     page,
     request,
