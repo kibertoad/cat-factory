@@ -12,11 +12,19 @@ import { DEFAULT_WORK_VIEW, isWorkView, WORK_VIEW_PARAM, type WorkView } from '~
 export const useWorkViewStore = defineStore(
   'workView',
   () => {
+    const tutorial = useTutorialStore()
     // Stored raw and narrowed on read, as `uiMode` does: the persisted value is untrusted input.
     const storedView = ref<string>(DEFAULT_WORK_VIEW)
-    const view = computed<WorkView>(() =>
-      isWorkView(storedView.value) ? storedView.value : DEFAULT_WORK_VIEW,
-    )
+    /**
+     * The view on screen. A running tour holds the CANVAS for its whole length: every tour anchors
+     * to canvas nodes and the canvas toolbar, which the queue covers or unmounts, so a switch mid-
+     * tour would leave its later steps with nothing to point at. A choice made meanwhile is kept
+     * and applies when the tour ends.
+     */
+    const view = computed<WorkView>(() => {
+      if (tutorial.touring) return 'board'
+      return isWorkView(storedView.value) ? storedView.value : DEFAULT_WORK_VIEW
+    })
 
     function show(next: WorkView) {
       storedView.value = next

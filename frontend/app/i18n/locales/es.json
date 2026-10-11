@@ -8139,7 +8139,7 @@
           },
           "views": {
             "title": "Dos vistas",
-            "body": "El tablero tiene una segunda vista. La cola muestra lo que te necesita en todos los servicios. Aquí cambias entre la cola y este lienzo. La aplicación se abre en la vista que usaste por última vez."
+            "body": "El tablero tiene una segunda vista. La cola muestra lo que te necesita en todos los servicios. Cuando termine el recorrido, cambia aquí entre la cola y este lienzo. La aplicación se abre en la vista que usaste por última vez."
           },
           "sidebar": {
             "title": "La barra lateral",
@@ -8787,11 +8787,11 @@
       "empty": "Nada espera para empezar."
     },
     "done": {
-      "count": "Fusionadas en los últimos 7 días: {count}",
+      "count": "Fusionadas desde el {date}: {count}",
+      "countAll": "Fusionadas: {count}",
       "show": "Mostrar",
       "hide": "Ocultar",
-      "capped": "Muestra las {shown} más recientes de {total}.",
-      "undated": "No se muestran, sin fecha de finalización: {count}"
+      "capped": "Muestra las {shown} más recientes de {total}."
     },
     "card": {
       "waited": "esperó {duration}",

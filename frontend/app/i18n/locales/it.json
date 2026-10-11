@@ -8139,7 +8139,7 @@
           },
           "views": {
             "title": "Due viste",
-            "body": "La board ha una seconda vista. La coda elenca ciò che richiede te in tutti i servizi. Qui passi dalla coda a questa area di lavoro. L’app si apre sulla vista che hai usato per ultima."
+            "body": "La board ha una seconda vista. La coda elenca ciò che richiede te in tutti i servizi. Finito il tour, qui passi dalla coda a questa area di lavoro. L’app si apre sulla vista che hai usato per ultima."
           },
           "sidebar": {
             "title": "La barra laterale",
@@ -8787,11 +8787,11 @@
       "empty": "Non c’è nulla in attesa di partire."
     },
     "done": {
-      "count": "Unite negli ultimi 7 giorni: {count}",
+      "count": "Unite dal {date}: {count}",
+      "countAll": "Unite: {count}",
       "show": "Mostra",
       "hide": "Nascondi",
-      "capped": "Mostra le {shown} più recenti su {total}.",
-      "undated": "Non mostrate, senza data di completamento: {count}"
+      "capped": "Mostra le {shown} più recenti su {total}."
     },
     "card": {
       "waited": "ha atteso {duration}",

@@ -14,7 +14,18 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
  * what a person opening the app came to act on first. The canvas stays one click away as the
  * planning view.
  */
-const { t } = useI18n()
+const { t, d } = useI18n()
+const workspaceSettings = useWorkspaceSettingsStore()
+
+/**
+ * Where the Done window starts: the workspace's Done-lane retention, the same one each frame's
+ * Done lane applies. Stated as a date, so no sentence has to agree with a number of days. Null
+ * when the workspace keeps no age cap.
+ */
+const doneSince = computed(() => {
+  const days = workspaceSettings.settings.doneLaneRetentionDays
+  return days == null ? null : new Date(Date.now() - days * 86_400_000)
+})
 const queueStore = useWorkspaceQueueStore()
 
 const sections = computed(() => queueStore.queue.sections)
@@ -129,7 +140,14 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
             <USeparator class="my-3" />
             <div class="flex items-center gap-2 px-1 text-xs text-muted">
               <span data-testid="queue-done-count">
-                {{ t('queue.done.count', { count: queueStore.queue.doneInWindow }) }}
+                {{
+                  doneSince
+                    ? t('queue.done.count', {
+                        count: queueStore.queue.doneInWindow,
+                        date: d(doneSince, 'short'),
+                      })
+                    : t('queue.done.countAll', { count: queueStore.queue.doneInWindow })
+                }}
               </span>
               <UButton
                 v-if="queueStore.queue.doneInWindow > 0"
@@ -141,10 +159,6 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
                 {{ doneOpen ? t('queue.done.hide') : t('queue.done.show') }}
               </UButton>
             </div>
-            <!-- Merges with no completion time cannot be placed in the window. Said, not hidden. -->
-            <p v-if="queueStore.queue.doneUndated > 0" class="px-1 text-2xs text-dimmed">
-              {{ t('queue.done.undated', { count: queueStore.queue.doneUndated }) }}
-            </p>
             <template v-if="doneOpen">
               <QueueCard v-for="entry in sections.done" :key="entry.task.id" :entry="entry" />
               <p

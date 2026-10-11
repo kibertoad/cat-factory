@@ -94,6 +94,12 @@ Slice 4 (#2343) is stacked on slice 1 (#2325), because it reuses `useStartPipeli
 - **Every tour walks the canvas.** Starting a tour on the queue view switches to the board view,
   which is then the view used last, and Board basics has a step on the two views. A tour about the
   queue itself (answer a decision from it) is a later idea; it would need its own view declared.
+- **One classification serves every lane surface.** `useWorkspaceQueueStore.classified` holds each
+  task's verdict once, and every frame's swimlanes and the queue read it. A second classifier,
+  even a cheaper one, would let two surfaces disagree about one task. The queue's Done column is
+  the frames' Done lane over all services (`selectDoneLaneTasks`, the workspace's caps).
+- **A park on a block no swimlane holds** (an initiative's planning run, a frame-level run) is
+  listed under Needs you, because the toolbar's decision count includes it.
 - **The toolbar counter counts decisions only**, while the queue's "need you" count also holds
   approvals, failures and parks, so the number changes after the click. Kept on purpose for now:
   the counter names its subset ("1 decision"), and the e2e suite reads it as the "a decision is

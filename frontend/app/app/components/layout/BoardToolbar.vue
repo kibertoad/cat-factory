@@ -13,6 +13,7 @@ const board = useBoardStore()
 const { toolbarItems, invoke: invokeNav } = useNavContributions()
 const execution = useExecutionStore()
 const views = useWorkViewStore()
+const queue = useWorkspaceQueueStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
@@ -113,6 +114,12 @@ const spendLabel = computed(() => {
   }
   return `${fmt(s.costSpent)} / ${fmt(s.costLimit)}`
 })
+/** The decisions this counts are in every service, so the queue opens on all of them. */
+function openQueue() {
+  queue.clearFilter()
+  views.show('queue')
+}
+
 const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
 </script>
 
@@ -198,7 +205,7 @@ const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
       icon="i-lucide-circle-help"
       :title="t('views.openQueue')"
       data-testid="decision-badge"
-      @click="views.show('queue')"
+      @click="openQueue"
     >
       {{ execution.pendingDecisionCount
       }}<span class="hidden sm:inline"
