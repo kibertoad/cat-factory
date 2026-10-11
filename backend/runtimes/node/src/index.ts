@@ -359,6 +359,10 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
 // wrapper can type its `seedSharedStacks` (and hand-write an inline compose layer) without a
 // direct `@cat-factory/kernel` / `@cat-factory/contracts` import.
 export type { ComposeFileRef, ComposeSource, CreateSharedStackInput } from '@cat-factory/kernel'
+// The shape of a declared runner pool, for `seedRunnerPool`: the `{ config, secrets }` an admin would
+// submit through Infrastructure → Runner pool, with the backend config types it is built from.
+export type { RunnerPoolSeed } from '@cat-factory/integrations'
+export type { RunnerBackendConfig } from '@cat-factory/kernel'
 export { SystemClock, CryptoIdGenerator } from './runtime.js'
 // Re-exported so the local facade can build its own provisioning-log recorder for the
 // per-workspace transport chooser without taking a direct @cat-factory/integrations dep.

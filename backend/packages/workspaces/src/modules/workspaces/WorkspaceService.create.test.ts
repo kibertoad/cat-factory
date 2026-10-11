@@ -7,6 +7,7 @@ import type {
   PipelineRepository,
   RiskPolicy,
   RiskPolicyRepository,
+  RunnerPoolSeeder,
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -85,6 +86,29 @@ describe('WorkspaceService.create — environment-handler seeding', () => {
     const snapshot = await service.create(INPUT, null, null)
 
     expect(getEnvironmentHandlerSeeder).toHaveBeenCalled()
+    expect(snapshot.workspace.id).toBe('ws-new')
+  })
+})
+
+describe('WorkspaceService.create: runner-pool seeding', () => {
+  // The same late binding as the handler seeder: on a deployment where a pool is the only
+  // executor, this is what lets a brand-new board run an agent with no Infrastructure step.
+  it('registers the declared runner pool on the new workspace via the late-bound accessor', async () => {
+    const ensureForWorkspace = vi.fn(() => Promise.resolve())
+    const seeder: RunnerPoolSeeder = { ensureForWorkspace }
+    const getRunnerPoolSeeder = vi.fn(() => seeder)
+    const { service } = makeService({ getRunnerPoolSeeder })
+
+    await service.create(INPUT, null, null)
+
+    expect(ensureForWorkspace).toHaveBeenCalledWith('ws-new')
+  })
+
+  it('still creates the workspace when the accessor resolves to no seeder', async () => {
+    const { service } = makeService({ getRunnerPoolSeeder: () => undefined })
+
+    const snapshot = await service.create(INPUT, null, null)
+
     expect(snapshot.workspace.id).toBe('ws-new')
   })
 })

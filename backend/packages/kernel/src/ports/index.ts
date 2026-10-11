@@ -741,6 +741,7 @@ export type {
 export type {
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
+  RunnerPoolSeeder,
 } from './runner-pool-repositories.js'
 export type {
   SubscriptionVendor,

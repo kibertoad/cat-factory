@@ -482,6 +482,12 @@ export interface StartOptions {
    */
   seedSharedStacks?: NodeContainerOptions['seedSharedStacks']
   /**
+   * A deployment's pre-declared RUNNER POOL, threaded and backfilled like
+   * {@link seedEnvironmentHandlers}. A workspace that already has a pool keeps it. Omitted ⇒ no
+   * seeding.
+   */
+  seedRunnerPool?: NodeContainerOptions['seedRunnerPool']
+  /**
    * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
    * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
    * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
@@ -789,13 +795,14 @@ function startBackgroundSweepers(deps: {
 export async function backfillDeclaredSeeds(
   container: Pick<
     ServerContainer,
-    'environmentHandlerSeeder' | 'sharedStackSeeder' | 'workspaceService'
+    'environmentHandlerSeeder' | 'sharedStackSeeder' | 'runnerPoolSeeder' | 'workspaceService'
   >,
   log: Logger,
 ): Promise<void> {
   const seeders = [
     { label: 'environment-handler', seeder: container.environmentHandlerSeeder },
     { label: 'shared-stack', seeder: container.sharedStackSeeder },
+    { label: 'runner-pool', seeder: container.runnerPoolSeeder },
   ].filter((entry) => entry.seeder !== undefined)
   if (seeders.length === 0) return
   try {
@@ -903,6 +910,8 @@ async function bootServer(
     seedEnvironmentHandlers: options.seedEnvironmentHandlers,
     // …and its declared shared stacks, forwarded the same way and backfilled by the same call.
     seedSharedStacks: options.seedSharedStacks,
+    // …and its declared runner pool, the same way.
+    seedRunnerPool: options.seedRunnerPool,
   })
   bootClock.mark('container')
   // Install the OTLP log export as soon as config is resolved (a no-op unless `OTEL_LOGS=true`

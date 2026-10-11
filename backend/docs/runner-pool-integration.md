@@ -396,6 +396,14 @@ curl -X POST "$API/workspaces/$WS/runner-pool/connection" \
 All under `/workspaces/:workspaceId`. Once registered, that workspace's agent steps
 run on your pool; unregister to revert.
 
+**Or declare it once (Platform):** a deployment can pass `seedRunnerPool` (the same `{ config,
+secrets }`) to `start()` or `startLocal()`. The server registers it on every existing workspace at
+boot and on each new one, and never replaces a pool a workspace already has. On stock Node, where a
+pool is the only executor, this is what lets a new board run an agent with no step above. Same seam
+as `seedEnvironmentHandlers`: kernel `RunnerPoolSeeder`, built in `@cat-factory/integrations`
+beside the runners module. The Worker does not take it, because there a pool is an optional target
+beside the built-in containers.
+
 ---
 
 ## 5. Mapping the manifest onto k3s / Nomad / Kubernetes _(Platform team)_

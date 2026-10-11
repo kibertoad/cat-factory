@@ -332,6 +332,9 @@ export {
   type RunnerPoolConnectionServiceDependencies,
   type ResolvedRunnerBackend,
 } from './modules/runners/RunnerPoolConnectionService.js'
+// The generic seeder that registers a deployment's pre-declared runner pool onto a workspace that has
+// none: the concrete implementation of the kernel `RunnerPoolSeeder` port.
+export { createRunnerPoolSeeder, type RunnerPoolSeed } from './modules/runners/RunnerPoolSeeder.js'
 export * as runnersLogic from './modules/runners/runners.logic.js'
 // The universal "agent runner backend" provider-registry seam: maps a backend kind
 // (`manifest` | `kubernetes` | future `nomad`/`eks`) → a RunnerTransport. The registry is

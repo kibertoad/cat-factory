@@ -32,6 +32,7 @@ import type {
 import type {
   BlockRepository,
   EnvironmentHandlerSeeder,
+  RunnerPoolSeeder,
   SharedStackSeeder,
   ExecutionRepository,
   GroupCacheHandle,
@@ -162,6 +163,11 @@ export interface WorkspaceServiceDependencies {
    * no seeding.
    */
   getSharedStackSeeder?: () => SharedStackSeeder | undefined
+  /**
+   * Late-bound the same way: `create` registers the deployment's declared RUNNER POOL on a new
+   * workspace that has none. Absent ⇒ no seeding.
+   */
+  getRunnerPoolSeeder?: () => RunnerPoolSeeder | undefined
 }
 
 /** Creates, reads and deletes boards (workspaces) and assembles snapshots. */
@@ -187,6 +193,7 @@ export class WorkspaceService {
   private readonly logger?: Logger
   private readonly getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
   private readonly getSharedStackSeeder?: () => SharedStackSeeder | undefined
+  private readonly getRunnerPoolSeeder?: () => RunnerPoolSeeder | undefined
 
   constructor({
     workspaceRepository,
@@ -207,6 +214,7 @@ export class WorkspaceService {
     logger,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
+    getRunnerPoolSeeder,
   }: WorkspaceServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -226,6 +234,7 @@ export class WorkspaceService {
     this.logger = logger
     this.getEnvironmentHandlerSeeder = getEnvironmentHandlerSeeder
     this.getSharedStackSeeder = getSharedStackSeeder
+    this.getRunnerPoolSeeder = getRunnerPoolSeeder
   }
 
   /**
@@ -339,6 +348,9 @@ export class WorkspaceService {
     // …and the pre-declared shared stacks, under exactly the same rules (idempotent, late-bound,
     // per-seed fault-tolerant), so a board comes up able to attach to the deployment's infra.
     await this.getSharedStackSeeder?.()?.ensureForWorkspace(workspace.id)
+    // …and the pre-declared runner pool, when the board has none, so on a deployment where a pool is
+    // the only executor a new board can run an agent without an Infrastructure step.
+    await this.getRunnerPoolSeeder?.()?.ensureForWorkspace(workspace.id)
     return this.snapshot(workspace.id)
   }
 

@@ -68,6 +68,9 @@ prerequisites are configured.
   stack whose layers are all inline / from other repos needs NO repo of its own and materializes an
   empty working tree instead of cloning. `SharedStackSeeder.ts` is the deployment-declared side:
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
+- `runners/RunnerPoolSeeder.ts`: the deployment-declared runner pool (`seedRunnerPool`), the third
+  seeder beside the handler and shared-stack ones. ONE seed, registered only on a workspace with no
+  pool, so an admin's own pool is never replaced.
 - `serviceCatalog/`: the workspace's DEVELOPER PORTAL connection (Backstage), whose services are
   imported into the foundational-services catalog as `workspace`-tier rows.
   `ServiceCatalogConnectionService.ts` owns the sealed connection plus the probe and is the only

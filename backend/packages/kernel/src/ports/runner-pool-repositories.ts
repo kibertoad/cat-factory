@@ -45,3 +45,21 @@ export interface RunnerPoolConnectionRepository {
   /** Tombstone the workspace's connection. */
   softDelete(workspaceId: string, at: number): Promise<void>
 }
+
+/**
+ * Idempotently ensures a deployment's PRE-DECLARED runner pool is registered for a workspace: the
+ * runner-pool sibling of `EnvironmentHandlerSeeder` and `SharedStackSeeder`, with the same two
+ * wiring sites (a boot backfill over every existing workspace, plus `WorkspaceService.create`'s
+ * on-create hook).
+ *
+ * On a deployment where a runner pool is the only executor (stock Node), a pool is registered per
+ * workspace, so without a seed every new board starts unable to run an agent until an admin fills
+ * the Infrastructure form. A seed never replaces a pool a workspace already has: an admin's own
+ * choice wins, and a second boot is a no-op.
+ *
+ * Kept free of integrations knowledge: the port speaks only `workspaceId`; the concrete seeder
+ * (built over `RunnerPoolConnectionService`) lives in `@cat-factory/integrations`.
+ */
+export interface RunnerPoolSeeder {
+  ensureForWorkspace(workspaceId: string): Promise<void>
+}

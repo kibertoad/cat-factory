@@ -19,6 +19,7 @@ import type {
   EnvironmentBackendRegistry,
   RegisterHandlerInput,
   RunnerBackendRegistry,
+  RunnerPoolSeed,
   UserSecretKindRegistry,
   VcsPatConnectionService,
 } from '@cat-factory/integrations'
@@ -933,6 +934,16 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * `kubernetes` kinds (`defaultRunnerBackendRegistry()`).
    */
   runnerBackendRegistry?: RunnerBackendRegistry
+  /**
+   * A deployment's pre-declared RUNNER POOL (the same `{ config, secrets }` an admin submits through
+   * Infrastructure → Runner pool), the runner-pool sibling of {@link seedEnvironmentHandlers}. When
+   * supplied (and the runners module is wired), `createCore` builds a `RunnerPoolSeeder` and exposes
+   * it on the container: the runtime boot-backfills every existing workspace and
+   * `WorkspaceService.create` seeds each new one. A workspace that already has a pool keeps it.
+   * On stock Node, where a pool is the only executor, this is what lets a new board run an agent
+   * with no Infrastructure step. Absent ⇒ no seeding.
+   */
+  seedRunnerPool?: RunnerPoolSeed
   /**
    * The app-owned registry of per-user secret KINDS (a GitHub PAT built-in today). Carried on
    * the dependency bag so each facade reads the SAME instance off `overrides` and threads it

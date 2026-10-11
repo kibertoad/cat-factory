@@ -9,6 +9,7 @@
 import { InitiativeLoopService } from '../modules/initiative/InitiativeLoopService.js'
 import type { InitiativeService } from '../modules/initiative/InitiativeService.js'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/kernel'
+import { createRunnerPoolSeeder } from '@cat-factory/integrations'
 import {
   createBootstrapModule,
   createGitHubModule,
@@ -72,7 +73,20 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
       })
     : undefined
   modules.build('github', () => createGitHubModule(dependencies, caches, externalMergeObserver))
-  modules.build('runners', () => createRunnersModule(dependencies))
+  const runners = modules.build('runners', () => createRunnersModule(dependencies))
+  // The deployment-declared runner-pool seeder, the sibling of the environment-handler seeder: built
+  // over the runners module, so only where a pool can be registered at all, and a no-op without a
+  // seed. `WorkspaceService.create` reads it late-bound through the registry, and the runtime
+  // boot-backfills every existing workspace through the container field.
+  modules.build('runnerPoolSeeder', () =>
+    runners
+      ? createRunnerPoolSeeder({
+          connectionService: runners.connectionService,
+          seed: dependencies.seedRunnerPool,
+          logger: dependencies.logger,
+        })
+      : undefined,
+  )
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by running the
   // mapping agent against the service frame — a SINGLE-KIND run, not a pipeline: there is one
   // step, and the preset that used to wrap it sat in the task picker beside the build presets

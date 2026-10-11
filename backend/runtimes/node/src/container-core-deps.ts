@@ -471,6 +471,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // …and the pre-declared shared stacks, under the same rules. `createCore` builds the seeder
     // over them (when the shared-stacks module is wired) and exposes it for the same two sites.
     seedSharedStacks: options.seedSharedStacks,
+    // …and the pre-declared runner pool, which `createCore` seeds beside the runners module.
+    seedRunnerPool: options.seedRunnerPool,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
