@@ -5,7 +5,8 @@ import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /**
- * The preview's home: every task across every service, in the column that says what it needs.
+ * The queue: every task across every service, in the column that says what it needs. One of the
+ * board's two views (issue #2258); the canvas is the other.
  *
  * Three columns, read left to right in order of urgency: what is stalled on you, what agents are
  * doing, what is finished and waiting to land. Work nobody has started sits under "In flight" as
@@ -15,9 +16,6 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
  */
 const { t } = useI18n()
 const queueStore = useWorkspaceQueueStore()
-const preview = useHomePreviewStore()
-const access = useWorkspaceAccess()
-const { checklist, canAct } = useSetupChecklist()
 
 const sections = computed(() => queueStore.queue.sections)
 const doneOpen = ref(false)
@@ -60,7 +58,8 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
 
 <template>
   <div class="flex h-full flex-col overflow-hidden" data-testid="queue-view">
-    <header class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-4 pb-3 sm:px-6">
+    <!-- `ps-14` below lg leaves room for the drawer's menu button in the corner. -->
+    <header class="flex flex-wrap items-center gap-x-4 gap-y-2 ps-14 pe-4 pt-4 pb-3 sm:pe-6 lg:ps-6">
       <div class="flex items-baseline gap-2">
         <h1 class="text-xl font-semibold text-highlighted">{{ t('queue.title') }}</h1>
         <span class="text-sm text-muted" data-testid="queue-summary">
@@ -82,42 +81,11 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
           data-testid="queue-service-filter"
         />
         <!-- The inbox still holds what is NOT a task: platform alerts, budget thresholds, key
-             drift. Kept here so the preview drops no signal the board shows. -->
+             drift. The canvas shows it in its toolbar, which this view does not have. -->
         <NotificationsInbox />
-        <UButton
-          v-if="access.canWriteBoard.value"
-          icon="i-lucide-plus"
-          size="sm"
-          data-testid="queue-describe-work"
-          @click="preview.openDescribeWork(queueStore.serviceFilter)"
-        >
-          {{ t('queue.describeWork') }}
-        </UButton>
       </div>
     </header>
 
-    <!-- One line, once, instead of the operator's banners: the workspace cannot run tasks. -->
-    <UAlert
-      v-if="checklist.blocking"
-      class="mx-4 mb-3 sm:mx-6"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-triangle-alert"
-      :title="t('queue.setupBlocking', { done: checklist.done, total: checklist.total })"
-      :description="canAct ? undefined : t('queue.setupBlockingNoAccess')"
-      :actions="
-        canAct
-          ? [
-              {
-                label: t('queue.openSetup'),
-                color: 'warning',
-                onClick: () => preview.show('setup'),
-              },
-            ]
-          : []
-      "
-      data-testid="queue-setup-line"
-    />
 
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto px-4 pb-6 sm:px-6 md:grid-cols-3 md:overflow-hidden"
@@ -152,15 +120,6 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
             <QueueCard v-for="entry in sections.waiting" :key="entry.task.id" :entry="entry" />
             <p v-if="sections.waiting.length === 0" class="px-1 text-xs text-dimmed">
               {{ t('queue.waiting.empty') }}
-              <UButton
-                v-if="access.canWriteBoard.value"
-                variant="link"
-                size="xs"
-                class="p-0"
-                @click="preview.openDescribeWork(queueStore.serviceFilter)"
-              >
-                {{ t('queue.describeWork') }}
-              </UButton>
             </p>
           </template>
 

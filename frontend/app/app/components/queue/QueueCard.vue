@@ -19,7 +19,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const execution = useExecutionStore()
 const agentRuns = useAgentRunsStore()
-const preview = useHomePreviewStore()
+const views = useWorkViewStore()
 const access = useWorkspaceAccess()
 
 const taskId = () => props.entry.task.id
@@ -122,7 +122,7 @@ function openTask() {
 
 /** Leave the queue for the canvas, with this task selected. */
 function showOnBoard() {
-  preview.show('board')
+  views.show('board')
   ui.select(props.entry.task.id)
 }
 </script>

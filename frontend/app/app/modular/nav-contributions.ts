@@ -220,7 +220,8 @@ export const NAV_ACTIONS = [
   'tutorial',
   'toggleUiMode',
   'chooseRole',
-  'toggleHomePreview',
+  'queueView',
+  'boardView',
 ] as const
 
 export type NavActionId = (typeof NAV_ACTIONS)[number]
@@ -739,20 +740,32 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     },
   },
   {
-    // The queue-first preview (issue #2258): a second shell for the same app, switched per
-    // browser so the home-surface decision can be made by using both. Palette-only and in every
-    // tier and role, because it is how a person gets IN and back OUT; the sidebar carries a
-    // "back to the current layout" link only while the preview is on.
-    id: 'home-preview',
-    labelKey: 'layout.commandBar.cmd.toggleHomePreview',
-    icon: 'i-lucide-flask-conical',
+    // The board's two views (issue #2258). The sidebar's Views switcher is the everyday route;
+    // these make each view reachable by name from the palette too. Every tier and role: which view
+    // a person works in is their own choice, and neither view is an override of the other.
+    id: 'queue-view',
+    labelKey: 'layout.commandBar.cmd.queueView',
+    icon: 'i-lucide-list-checks',
     surfaces: S('command'),
     intake: true,
-    action: 'toggleHomePreview',
+    action: 'queueView',
     command: {
       group: 'workspace',
-      order: 97,
-      keywordsKey: 'layout.commandBar.keywords.toggleHomePreview',
+      order: 130,
+      keywordsKey: 'layout.commandBar.keywords.queueView',
+    },
+  },
+  {
+    id: 'board-view',
+    labelKey: 'layout.commandBar.cmd.boardView',
+    icon: 'i-lucide-map',
+    surfaces: S('command'),
+    intake: true,
+    action: 'boardView',
+    command: {
+      group: 'workspace',
+      order: 131,
+      keywordsKey: 'layout.commandBar.keywords.boardView',
     },
   },
 ]

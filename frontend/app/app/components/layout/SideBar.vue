@@ -21,7 +21,7 @@ import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
 import SectionLabel from '~/components/common/SectionLabel.vue'
-import HomePreviewNav from '~/components/layout/HomePreviewNav.vue'
+import WorkViewSwitcher from '~/components/layout/WorkViewSwitcher.vue'
 
 const { t } = useI18n()
 
@@ -33,7 +33,6 @@ const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
 const providerConnections = useProviderConnectionsStore()
 const ui = useUiStore()
-const preview = useHomePreviewStore()
 
 // The nav catalog + its reactive RBAC/availability gating now lives in the shared
 // modular-vue manifest (backend/docs/adr/0049-modular-vue-adoption.md, slice 1): every
@@ -226,8 +225,9 @@ watch(
     </div>
 
     <div class="contents" @click="onNavAction">
-      <!-- The queue-first preview's views (issue #2258), first because they are its home. -->
-      <HomePreviewNav v-if="preview.enabled" :collapsed="railed" />
+      <!-- The two views of the board (issue #2258), first because they decide what the main
+           area shows. -->
+      <WorkViewSwitcher :collapsed="railed" />
 
       <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
          and reach every action below. -->

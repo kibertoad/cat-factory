@@ -158,18 +158,15 @@ const TutorialNudge = defineAsyncView(() => import('~/components/tutorial/Tutori
 // The first-run role question (Engineer / Product manager / Designer). Same shape as the tutorial
 // launch prompt: mounted only while its store flag is set, so an answered question costs nothing.
 const RolePrompt = defineAsyncView(() => import('~/components/layout/RolePrompt.vue'))
-// The queue-first preview (issue #2258): its two main-area views and its intake dialog. Each
-// loads only once the preview is switched on, so a browser that never tries it pays nothing.
+// The queue: the board's second view (issue #2258), loaded the first time someone opens it.
 const QueueView = defineAsyncView(() => import('~/components/queue/QueueView.vue'))
-const SetupView = defineAsyncView(() => import('~/components/queue/SetupView.vue'))
-const DescribeWorkModal = defineAsyncView(() => import('~/components/queue/DescribeWorkModal.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
 const models = useModelsStore()
 const ui = useUiStore()
 const aiReadiness = useAiReadiness()
-const preview = useHomePreviewStore()
+const views = useWorkViewStore()
 
 // App-wide keyboard shortcuts (Escape to deselect, Delete to remove the selected block, ?
 // for the cheatsheet). Registered ONCE here so a single global listener owns them.
@@ -181,8 +178,8 @@ onMounted(() => {
   // board it names is the one that opens. This is what makes the observability link on an
   // engine-published PR verification report resolve.
   useRunDeepLink()
-  // `?preview=queue` / `?preview=off`: how the queue-first preview is handed over as a link.
-  preview.consumeDeepLink()
+  // `?view=queue` / `?view=board`: a link that opens one of the board's two views.
+  views.consumeDeepLink()
   void workspace.init()
   // Honour a `cat-factory k3s` CLI hand-off (`?infraSetup=local-k3s&…`): open the Infrastructure
   // window pre-seeded with the provisioned connection so the user only pastes the token + saves.
@@ -235,10 +232,9 @@ watch(
 // Detection is reactive, so this fires as soon as the snapshot hydrates.
 const { hasIssues: pipelineIssues } = usePipelineHealth()
 watch(
-  () => [workspace.ready, pipelineIssues.value, preview.enabled],
+  () => [workspace.ready, pipelineIssues.value],
   () => {
-    // The preview lists these on its setup page instead of interrupting the first minute.
-    if (workspace.ready && pipelineIssues.value && !preview.enabled) ui.maybeOpenPipelineHealth()
+    if (workspace.ready && pipelineIssues.value) ui.maybeOpenPipelineHealth()
   },
   { immediate: true },
 )
@@ -246,9 +242,9 @@ watch(
 // to the pipeline advisory when both fire, so at most one modal auto-opens on a given load.
 const { hasIssues: riskPolicyIssues } = useRiskPolicyHealth()
 watch(
-  () => [workspace.ready, riskPolicyIssues.value, ui.pipelineHealthOpen, preview.enabled],
+  () => [workspace.ready, riskPolicyIssues.value, ui.pipelineHealthOpen],
   () => {
-    if (workspace.ready && riskPolicyIssues.value && !ui.pipelineHealthOpen && !preview.enabled) {
+    if (workspace.ready && riskPolicyIssues.value && !ui.pipelineHealthOpen) {
       ui.maybeOpenRiskPolicyHealth()
     }
   },
@@ -259,16 +255,9 @@ watch(
 // to the pipeline + merge-preset advisories when they fire, so at most one modal auto-opens.
 const { hasIssues: modelPresetIssues } = useModelPresetHealth()
 watch(
-  () => [
-    workspace.ready,
-    modelPresetIssues.value,
-    ui.pipelineHealthOpen,
-    ui.riskPolicyHealthOpen,
-    preview.enabled,
-  ],
+  () => [workspace.ready, modelPresetIssues.value, ui.pipelineHealthOpen, ui.riskPolicyHealthOpen],
   () => {
     if (
-      !preview.enabled &&
       workspace.ready &&
       modelPresetIssues.value &&
       !ui.pipelineHealthOpen &&
@@ -289,11 +278,9 @@ watch(
     aiReadiness.ready.value,
     aiReadiness.hasUsableModel.value,
     aiReadiness.defaultPresetBroken.value,
-    preview.enabled,
   ],
   () => {
-    // The preview states both gaps as rows on its setup page rather than as startup dialogs.
-    if (!aiReadiness.ready.value || preview.enabled) return
+    if (!aiReadiness.ready.value) return
     if (!aiReadiness.hasUsableModel.value) {
       if (!autoOpenedSetup.value && !ui.aiSetupDismissed) {
         autoOpenedSetup.value = true
@@ -352,12 +339,8 @@ const githubProbePending = computed(() => github.available === null)
 // below), no store reads.
 const tutorial = useTutorialStore()
 const uiRole = useUiRoleStore()
-// The queue-first preview counts as a standing advisory here, so the role and tour offers YIELD
-// to it rather than being cancelled: they re-arm and ask as before once the preview is switched
-// off, and a browser that tried the preview loses no first-run question by having done so.
 const startupAdvisoryOpen = computed(
   () =>
-    preview.enabled ||
     needsGitHubInstall.value ||
     githubProbePending.value ||
     ui.pipelineHealthOpen ||
@@ -482,25 +465,31 @@ watch(
         <SideBar />
         <main class="relative min-w-0 flex-1">
           <BoardCanvas />
-          <!-- The queue-first preview's views sit OVER the canvas rather than replacing it, so
-               switching back to the board keeps its camera and selection. Below the inspector
-               (z-20), so opening a task from the queue shows its panel over the queue. -->
-          <div
-            v-if="preview.view !== 'board'"
-            class="absolute inset-0 z-10 bg-app-950 pt-12 lg:pt-0"
-            data-testid="home-preview-view"
-            :data-view="preview.view"
-          >
-            <QueueView v-if="preview.view === 'queue'" />
-            <SetupView v-else-if="preview.view === 'setup'" />
-          </div>
           <!-- Toolbar, nav trigger and every advisory banner, in ONE stacked region that owns
                their placement, so no two of them can cover each other. -->
           <BoardTopOverlays
+            v-if="views.view === 'board'"
             :connected="streamConnected"
             :ever-connected="streamEverConnected"
             :connection-failed="streamConnectionFailed"
           />
+          <!-- The queue view sits OVER the canvas rather than replacing it, so switching back keeps
+               the canvas's camera and selection. Below the inspector (z-20), so a task opened from
+               the queue shows its panel beside it. The same advisories render here IN FLOW, above
+               the columns, so they push the queue down instead of covering its header. -->
+          <div
+            v-else
+            class="absolute inset-0 z-10 flex flex-col bg-app-950"
+            data-testid="queue-view-host"
+          >
+            <BoardTopOverlays
+              in-flow
+              :connected="streamConnected"
+              :ever-connected="streamEverConnected"
+              :connection-failed="streamConnectionFailed"
+            />
+            <QueueView class="min-h-0 flex-1" />
+          </div>
           <InspectorPanel />
           <!-- Code-split focus view. The fade lives here (not inside the component) so the
                leave animation still plays when `focusBlockId` clears and the v-if unmounts
@@ -529,7 +518,6 @@ watch(
         <AddTaskModal />
         <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
         <CreateInitiativeModal />
-        <DescribeWorkModal v-if="preview.describeWorkOpen" />
         <CommandBar />
         <PersonalCredentialModal />
         <ConfirmDialog />

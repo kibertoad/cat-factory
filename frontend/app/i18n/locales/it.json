@@ -2765,7 +2765,8 @@
         "chooseRole": "Cambia il tuo ruolo",
         "foundationalServices": "Servizi fondamentali",
         "notificationSettings": "Gestisci l'instradamento delle notifiche",
-        "toggleHomePreview": "Anteprima con la coda in primo piano: attiva o disattiva"
+        "queueView": "Apri la vista coda",
+        "boardView": "Apri la vista board"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2794,7 +2795,8 @@
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
         "notificationSettings": "notifiche email instradamento canali casella",
-        "toggleHomePreview": "coda home anteprima layout posta configurazione queue preview inbox setup"
+        "queueView": "coda vista elenco in attesa",
+        "boardView": "board canvas mappa vista pianificare"
       }
     },
     "shortcuts": {
@@ -8748,10 +8750,6 @@
       "allServices": "Tutti i servizi",
       "service": "Filtra per servizio"
     },
-    "describeWork": "Descrivi nuovo lavoro",
-    "setupBlocking": "Questo workspace non può ancora eseguire attività. Configurazione: {done} su {total} completati.",
-    "setupBlockingNoAccess": "Un amministratore del workspace deve completare la configurazione prima che le attività possano essere eseguite.",
-    "openSetup": "Apri configurazione",
     "columns": {
       "needsYou": {
         "label": "Richiede te",
@@ -8792,108 +8790,10 @@
       "pr": "Pull request #{number}"
     }
   },
-  "setup": {
-    "title": "Configurazione",
-    "progress": "{done} su {total} completati",
-    "intro": "Ciò che serve a questo workspace perché un’attività possa essere eseguita e unita. Solo chi può modificare questi elementi vede questa pagina. Gli altri vedono una riga nella coda.",
-    "noAccess": {
-      "title": "Non puoi modificare la configurazione",
-      "body": "Un amministratore del workspace può completare la configurazione. Finché le attività non possono essere eseguite, la coda mostra una riga in merito."
-    },
-    "required": "obbligatorio",
-    "optional": "facoltativo",
-    "action": {
-      "change": "Modifica",
-      "connect": "Configura",
-      "fix": "Correggi",
-      "review": "Verifica"
-    },
-    "rows": {
-      "checking": "Verifica in corso…",
-      "notNeeded": "Questo deployment non lo usa.",
-      "model": {
-        "title": "Modello",
-        "done": "Un modello è disponibile e il preset predefinito lo usa.",
-        "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider.",
-        "attention": "Il preset di modello predefinito indica un modello non disponibile."
-      },
-      "sourceControl": {
-        "title": "Controllo del codice sorgente",
-        "done": "Collegato. Gli agenti possono fare push dei branch e aprire pull request.",
-        "missing": "Non collegato. Gli agenti non possono aprire pull request.",
-        "attention": "Il token di accesso non può fare push né aprire pull request."
-      },
-      "agentExecutor": {
-        "title": "Dove vengono eseguiti gli agenti",
-        "done": "Un runner è configurato.",
-        "missing": "Nessun runner configurato. Nulla può essere eseguito finché non ne colleghi uno.",
-        "attention": "Il runner non è raggiungibile, oppure manca un’impostazione obbligatoria.",
-        "notNeeded": "Questo deployment esegue gli agenti senza runner."
-      },
-      "testEnvironments": {
-        "title": "Ambienti di test",
-        "done": "Configurato. I tester possono usare un’anteprima live.",
-        "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì.",
-        "attention": "Il provider degli ambienti non è raggiungibile, oppure manca un’impostazione obbligatoria."
-      },
-      "contentStorage": {
-        "title": "Archiviazione degli screenshot",
-        "done": "Configurato. I controlli visivi sono attivi.",
-        "missing": "Non configurato. I controlli visivi sono disattivati.",
-        "attention": "L’archiviazione non è raggiungibile."
-      }
-    },
-    "also": {
-      "title": "Anche qui",
-      "pipelines": "Pipeline: {count} da riparare, {fresh} nuove predefinite",
-      "riskPolicies": "Policy di merge: {count} obsolete, {fresh} nuove",
-      "modelPresets": "Preset di modello: {count} obsoleti, {fresh} nuovi",
-      "settings": "Impostazioni e connessioni",
-      "workspaceSettings": "Impostazioni del workspace",
-      "integrations": "Integrazioni"
-    }
-  },
-  "describeWork": {
-    "title": "Descrivi nuovo lavoro",
-    "textLabel": "Cosa va fatto",
-    "textHint": "Basta una frase. Aggiungi più dettagli se ne hai.",
-    "textPlaceholder": "Aggiungi un audit log per gli accessi. Registra ogni accesso con ora, utente ed esito.",
-    "savedAs": "Titolo dell’attività: {title}",
-    "serviceLabel": "Servizio",
-    "servicePlaceholder": "Seleziona un servizio",
-    "kindLabel": "Tipo",
-    "kind": {
-      "feature": "Funzionalità",
-      "bug": "Bug"
-    },
-    "moreKinds": "Altri tipi…",
-    "changeHowItRuns": "Cambia come viene eseguita",
-    "workspaceDefault": "Predefinito del workspace",
-    "attachContext": "Allega contesto (apre il modulo completo)",
-    "footerHint": "L’attività viene aggiunta come non iniziata. Parte quando premi Avvia.",
-    "add": "Aggiungi alla coda",
-    "addAndStart": "Aggiungi e avvia",
-    "addedToast": "«{title}» aggiunta alla coda"
-  },
-  "homePreview": {
-    "nav": {
-      "title": "Lavoro",
-      "queue": "Coda",
-      "board": "Board (mappa)",
-      "setup": "Configurazione",
-      "setupProgress": "{done} su {total}"
-    },
-    "leave": "Torna al layout attuale",
-    "inbox": {
-      "verb": {
-        "review": "Rivedi",
-        "answer": "Rispondi",
-        "test": "Testa",
-        "confirm": "Conferma",
-        "triage": "Smista",
-        "choose": "Scegli",
-        "open": "Apri"
-      }
-    }
+  "views": {
+    "title": "Viste",
+    "queue": "Coda",
+    "board": "Board",
+    "openQueue": "Apri la vista coda"
   }
 }

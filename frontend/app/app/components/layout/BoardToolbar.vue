@@ -12,7 +12,7 @@ const board = useBoardStore()
 // the sidebar/command entries with zero edits here.
 const { toolbarItems, invoke: invokeNav } = useNavContributions()
 const execution = useExecutionStore()
-const preview = useHomePreviewStore()
+const views = useWorkViewStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
@@ -115,17 +115,6 @@ const spendLabel = computed(() => {
 })
 const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
 
-const decisionItems = computed(() =>
-  execution.openDecisions.map((d) => {
-    const b = board.getBlock(d.blockId)
-    return {
-      label: b?.title ?? t('common.block'),
-      description: d.decision.question,
-      icon: 'i-lucide-circle-help',
-      onSelect: () => ui.openDecision(d.instanceId, d.decision.id),
-    }
-  }),
-)
 </script>
 
 <template>
@@ -200,22 +189,23 @@ const decisionItems = computed(() =>
 
     <USeparator orientation="vertical" class="mx-1 h-6" />
 
-    <!-- decisions queue. The queue-first preview drops it: its sidebar "Queue" count is the one
-         attention counter, and the queue lists every decision with its Answer button. -->
-    <UDropdownMenu v-if="execution.pendingDecisionCount && !preview.enabled" :items="decisionItems">
-      <UButton
-        color="warning"
-        variant="soft"
-        size="sm"
-        icon="i-lucide-circle-help"
-        data-testid="decision-badge"
+    <!-- The decision count. It opens the queue view, which lists every decision with its Answer
+         button beside the rest of what needs a person (issue #2258). -->
+    <UButton
+      v-if="execution.pendingDecisionCount"
+      color="warning"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-circle-help"
+      :title="t('views.openQueue')"
+      data-testid="decision-badge"
+      @click="views.show('queue')"
+    >
+      {{ execution.pendingDecisionCount
+      }}<span class="hidden sm:inline"
+        >&nbsp;{{ t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
       >
-        {{ execution.pendingDecisionCount
-        }}<span class="hidden sm:inline"
-          >&nbsp;{{ t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
-        >
-      </UButton>
-    </UDropdownMenu>
+    </UButton>
 
     <!-- how every frame's swimlanes are ordered + grouped (an override; advanced tier) -->
     <LaneViewControl />
@@ -258,9 +248,8 @@ const decisionItems = computed(() =>
       @click="invokeNav(item)"
     />
 
-    <!-- human-actionable notifications (merge review, pipeline complete, CI failed). In the
-         queue-first preview the inbox lives in the queue's header instead. -->
-    <NotificationsInbox v-if="!preview.enabled" />
+    <!-- human-actionable notifications (merge review, pipeline complete, CI failed) -->
+    <NotificationsInbox />
 
     <!-- spend safeguard usage -->
     <UButton

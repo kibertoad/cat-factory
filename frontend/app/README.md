@@ -17,7 +17,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [Layout](#layout)
 - [Nuxt UI: agent tooling and overrides](#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill)
 - [Task swimlanes](#task-swimlanes)
-- [Queue-first preview](#queue-first-preview)
+- [Queue view](#queue-view)
 - [Roles (engineer / product manager / designer)](#roles-engineer--product-manager--designer)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
@@ -555,40 +555,29 @@ does not visibly jump when the response lands. "No module" is the EMPTY STRING o
 every other clearable field spells a clear; `undefined` is dropped by `JSON.stringify` and reaches
 the server as an empty patch.
 
-## Queue-first preview
+## Queue view
 
-A second shell for the same app, built so the home-surface decision in
-[#2258](https://github.com/kibertoad/cat-factory/issues/2258) can be made by using both layouts
-rather than by reading wireframes. It is OFF by default, per user and per browser
-(`stores/homePreview.ts`, persisted like the interface tier), and while it is off nothing in the
-current product changes. Switch it on with `?preview=queue` (and off with `?preview=off`) or the
-palette entry "Queue-first preview".
+A board has two views (issue [#2258](https://github.com/kibertoad/cat-factory/issues/2258)): the
+**queue**, which lists every task across every service in the column that says what it needs, and
+the **board**, the canvas where the work is planned. They are two views of one board, not two
+products. The sidebar's Views switcher (`components/layout/WorkViewSwitcher.vue`) moves between
+them, and so do the palette entries and a `?view=queue` / `?view=board` link.
 
-While it is on:
-
-- **The queue is the home.** `components/queue/QueueView.vue` lists every task across every service
-  in three columns (Needs you, In flight, Ready to merge), each card carrying the one action its
-  lane reason implies. It reads the SAME verdict the frame swimlanes do: `useTaskLaneClassifier` is
-  the classifier both share, and `utils/queueSections.ts` only regroups it (a waiting pull request
-  gets its own column; nothing crosses a lane). The workspace-wide walk lives on one store
-  (`stores/workspaceQueue.ts`), per the swimlane rule on workspace-wide derivations. The card's
-  actions are the board card's (`useTaskActions`), so Start, Resolve and Merge cannot drift apart.
-- **The canvas is a second view** ("Board (map)"), mounted underneath the queue so switching keeps
-  its camera. Its toolbar drops the decisions counter and the inbox, which the queue header and the
-  sidebar's single "Queue" count replace.
-- **Intake is one sentence** (`components/queue/DescribeWorkModal.vue`): text, service, feature or
-  bug, with pipeline, merge policy and model preset behind one "Change how this runs" disclosure.
-  Every other kind, and context attachments, hand the text over to the full `AddTaskModal`.
-- **Setup is one page** (`components/queue/SetupView.vue`, `utils/setupChecklist.ts`) composed from
-  the probes the banners already use. The setup banners, the AI-provider dialogs and the three
-  health advisories stand down, and the role and tour prompts YIELD to the preview (they re-arm
-  when it is switched off).
-- **An inbox card carries its verb** (`utils/notificationVerbs.ts`): "Answer", "Review" and the
-  rest open the surface the title click already opened, and "Mark read" becomes secondary.
-
-The preview is a decision aid, not a migration. If the queue is adopted, the preference goes and
-the pieces move into the default shell; if it is not, the branch is dropped and the two shared
-extractions (`useTaskLaneClassifier`, `useTaskActions`) are worth keeping on their own.
+- **Which view opens is the person's own choice**: the view they used last, per user and per
+  browser (`stores/workView.ts`, persisted like the interface tier). A person who has not chosen
+  lands on the queue, because it answers the first question a person opens the app with. Both
+  views exist in every tier and every role: neither is an override of the other.
+- **The queue states the canvas's verdict, regrouped.** `useTaskLaneClassifier` is the one
+  classifier the frame swimlanes and the queue share; `utils/queueSections.ts` only regroups its
+  output (a waiting pull request gets its own column), and no task crosses a lane. The
+  workspace-wide walk lives on one store (`stores/workspaceQueue.ts`), per the swimlane rule on
+  workspace-wide derivations.
+- **A card's actions are the board card's** (`useTaskActions`), so Start, Resolve and Merge
+  cannot drift between the two views.
+- **The queue sits over the canvas**, which stays mounted, so switching back keeps its camera and
+  selection. The advisory banners render in the page flow above the queue's columns
+  (`BoardTopOverlays` with `in-flow`), and the canvas toolbar does not, being the canvas's own
+  chrome. The canvas's decision counter opens the queue view.
 
 ## Roles (engineer / product manager / designer)
 
