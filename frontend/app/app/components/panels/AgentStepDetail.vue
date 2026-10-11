@@ -31,7 +31,7 @@ import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
-import { SAFE_AREA_INSET_CLASS } from '~/utils/safeArea'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -394,8 +394,8 @@ async function copyOutput() {
     v-if="open && step && agent"
     data-testid="step-detail"
     :data-agent-kind="step?.agentKind"
-    class="fixed inset-0 z-50 flex max-h-[100dvh] bg-app-950/96 backdrop-blur-sm"
-    :class="SAFE_AREA_INSET_CLASS"
+    class="z-50 bg-app-950/96 backdrop-blur-sm"
+    :class="FULL_BLEED_TAKEOVER_CLASS"
     role="dialog"
     aria-modal="true"
   >

@@ -10,7 +10,7 @@ import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
 import IconButton from '~/components/common/IconButton.vue'
-import { SAFE_AREA_INSET_CLASS } from '~/utils/safeArea'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 interface LightboxItem {
   artifactId: string
@@ -162,8 +162,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       v-if="open"
       ref="dialogRef"
       tabindex="-1"
-      class="fixed inset-0 z-[60] flex max-h-[100dvh] flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
-      :class="SAFE_AREA_INSET_CLASS"
+      class="z-[60] flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
+      :class="FULL_BLEED_TAKEOVER_CLASS"
       role="dialog"
       aria-modal="true"
       data-testid="artifact-lightbox"
@@ -172,7 +172,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           ? t('media.lightbox.ariaLabel', { label: current.label })
           : t('media.lightbox.ariaLabelFallback')
       "
-      @click.self="close"
     >
       <!-- Toolbar -->
       <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">

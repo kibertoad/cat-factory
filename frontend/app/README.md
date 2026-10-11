@@ -321,6 +321,15 @@ That is the whole mechanism, and it is why there is no rule here about WHICH ste
 
 The default `radius` lives on the `Cat Factory` document in `app/utils/theme/builtins.ts`. It equals `THEME_DEFAULTS.radius` and so writes no CSS, which is the point: changing the number there is the whole edit.
 
+### Full-screen overlays bind their root class
+
+A phone's notch and home indicator cover whatever sits at the screen edge, and on a screen without them nothing looks wrong. So a full-screen overlay never spells `fixed inset-0` itself. Its root binds one of the two class lists in [`utils/safeArea.ts`](./app/utils/safeArea.ts), which carry the positioning, the `100dvh` cap and the safe-area padding, and the site adds only its stacking, direction and backdrop:
+
+- **`FULL_BLEED_TAKEOVER_CLASS`** for a takeover that fills the screen (`AgentStepDetail`, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, the artifact lightbox). It pads by the inset alone, so a screen without one keeps the edge-to-edge layout.
+- **`WINDOWED_OVERLAY_CLASS`** for a window on a backdrop (`ResultWindowShell`). Its gutter is 1rem or the inset, whichever is larger.
+
+`scripts/check-frontend-safe-area.mjs` (CI) refuses any other `fixed` surface that spans a whole side of the viewport, in `.vue`, `.ts` and `.css`. A surface with no edge content (a scrim, a drawing layer) or one that pads its own edges (the sidebar drawer, the inspector's bottom sheet) says why with a `safe-area-ok:` comment, on the line or the one above it, or above the element's opening tag.
+
 ### A control is its Nuxt UI component
 
 Every CONTROL in the SPA is the Nuxt UI component for it, never the raw HTML element. A raw `<button>` beside a `UButton` is the same control rendered twice, and only one of the two follows the theme, the focus ring, the disabled state and the size scale; the SPA carried 152 of them, 24 raw `<input>`, five hand-built tables and six hand-rolled `<details>`, each with its own border, background and hover recipe.

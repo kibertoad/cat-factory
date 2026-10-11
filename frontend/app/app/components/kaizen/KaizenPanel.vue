@@ -4,7 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { KaizenGrading } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
-import { SAFE_AREA_INSET_CLASS } from '~/utils/safeArea'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // The Kaizen screen: a full-panel overlay listing the workspace's grading history and
 // its verified-combo library. Opened via `ui.openKaizen()` from the sidebar. Read-only —
@@ -67,8 +67,8 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
     <Transition name="kz-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
-        :class="SAFE_AREA_INSET_CLASS"
+        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
       >
