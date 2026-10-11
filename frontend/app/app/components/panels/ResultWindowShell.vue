@@ -255,7 +255,7 @@ const chipClass = computed(() =>
 )
 
 const backdropClass = computed(() => [
-  'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-app-950/70 backdrop-blur-sm',
+  'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-elevated/75 backdrop-blur-sm',
   props.variant === 'centered' ? 'items-center p-4' : 'items-stretch',
 ])
 const panelClass = computed(() => [
