@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { PipelineStep } from '~/types/execution'
 import { prReviewPhase, type PrReviewPhaseKind } from '~/utils/prReviewProgress'
+import Spinner from '~/components/common/Spinner.vue'
 
 // Compact, at-a-glance phase label for a live `pr-reviewer` step, so the BOARD surfaces (the
 // task-card mini pipeline + the focus-view timeline) tell the reviewer's sub-phase apart —
@@ -64,10 +65,10 @@ const spinning = computed(
     class="inline-flex items-center gap-1"
     :class="runFailed ? 'text-app-error-400' : PHASE_META[phase.kind].class"
   >
-    <UIcon
+    <Spinner
       :name="runFailed ? 'i-lucide-circle-x' : PHASE_META[phase.kind].icon"
+      :spinning="spinning"
       class="h-3 w-3 shrink-0"
-      :class="spinning ? 'animate-spin' : ''"
     />
     <span class="truncate">{{ label }}</span>
   </span>

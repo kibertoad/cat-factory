@@ -15,7 +15,7 @@ const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -127,11 +127,7 @@ async function add() {
     })
     token.value = ''
     label.value = ''
-    toast.add({
-      title: t('providers.vendorCredentials.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('providers.vendorCredentials.toast.connected')
   } catch (e) {
     present(e, 'providers.vendorCredentials.toast.connectFailed')
   } finally {
@@ -206,13 +202,7 @@ function vendorLabel(v: SubscriptionVendor): string {
               <p class="min-w-0 flex-1 text-sm text-toned">
                 {{ t('providers.vendorCredentials.personalCallout.text') }}
               </p>
-              <UButton
-                size="xs"
-                color="primary"
-                variant="subtle"
-                class="shrink-0"
-                @click="activeTab = 'personal'"
-              >
+              <UButton size="xs" variant="subtle" class="shrink-0" @click="activeTab = 'personal'">
                 {{ t('providers.vendorCredentials.personalCallout.cta') }}
               </UButton>
             </div>

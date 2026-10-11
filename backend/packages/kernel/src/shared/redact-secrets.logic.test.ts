@@ -174,34 +174,46 @@ describe('redactSecrets', () => {
       // Single-character filler: the body the agent-context size-budget test scrubs.
       filler: fill('x'),
     }
-    // Best-of-N: a scheduler stall inflates a single sample, and this suite shares a machine
-    // with the rest of the monorepo's tests. Every body is measured the same way in the same
-    // process, so contention that survives the minimum hits both sides of the ratio.
-    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
-    // a millisecond's granularity is noise against samples an order of magnitude larger.
-    const fastest = (body: string): number => {
-      let best = Number.POSITIVE_INFINITY
-      for (let i = 0; i < 3; i++) {
+    // Best-of-N over INTERLEAVED rounds: each round times the baseline and every shape once,
+    // and each body keeps its fastest sample. This suite shares a CI runner with other
+    // packages' suites, and a contention burst there can cover several consecutive samples.
+    // Interleaved, a burst must slow the same body in EVERY round to survive the minimum, so
+    // a sustained slowdown hits both sides of the ratio. Odd rounds run in reverse, so each
+    // body follows a different neighbour (and its garbage) on alternate rounds, and the even
+    // round count gives both orders the same weight.
+    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone. Its
+    // 1ms step is not noise against prose's ~8ms on a fast machine: the best-of minimum can
+    // round the baseline down and a shape up, which moves a ratio by up to ~1.3x. Parity sits
+    // near 1x, so that still leaves the 4x bound well clear.
+    const baseline = { name: 'prose', body: prose, best: Number.POSITIVE_INFINITY }
+    const measured = Object.entries(shapes).map(([name, body]) => ({
+      name,
+      body,
+      best: Number.POSITIVE_INFINITY,
+    }))
+    const forward = [baseline, ...measured]
+    const reverse = [...forward].reverse()
+    for (let round = 0; round < 2 * forward.length; round++) {
+      for (const entry of round % 2 === 0 ? forward : reverse) {
         const started = Date.now()
-        redactSecrets(body)
-        best = Math.min(best, Date.now() - started)
+        redactSecrets(entry.body)
+        entry.best = Math.min(entry.best, Date.now() - started)
       }
-      return best
     }
-    const baseline = fastest(prose)
     // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
-    // with no hint of why, so it is asserted as its own condition. 2MB of prose is ~17ms, so
-    // this only trips if the body stopped being scrubbed at all.
+    // with no hint of why, so it is asserted as its own condition. 2MB of prose takes several
+    // milliseconds, so this only trips if the body stopped being scrubbed at all.
     expect(
-      baseline,
+      baseline.best,
       'prose baseline must be measurable at millisecond granularity',
     ).toBeGreaterThan(0)
-    for (const [name, body] of Object.entries(shapes)) {
-      const ratio = fastest(body) / baseline
+    for (const { name, best } of measured) {
+      const ratio = best / baseline.best
       // Parity is ~1x once no rule rescans per offset or per marker; both regressions above
       // are an order of magnitude away, so 4x separates them without riding on absolute
-      // timings. Measured worst case under 2x CPU oversubscription is 1.5x.
-      expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline}ms)`).toBeLessThan(4)
+      // timings. Measured worst case under 2x CPU oversubscription, with the suite's coverage
+      // instrumentation on, is 1.1x.
+      expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline.best}ms)`).toBeLessThan(4)
     }
   })
 })

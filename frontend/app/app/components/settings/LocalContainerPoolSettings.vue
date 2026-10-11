@@ -13,7 +13,7 @@ import { reactive, ref, watch } from 'vue'
 
 const { t } = useI18n()
 const store = useLocalSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const saving = ref(false)
@@ -60,11 +60,7 @@ async function save() {
       },
       checkout: { workspaceRoot: draft.workspaceRoot.trim() || '/workspace', cleanKeep },
     })
-    toast.add({
-      title: t('settings.localMode.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.localMode.toast.saved')
   } catch (e) {
     present(e, 'settings.localMode.toast.saveFailed')
   } finally {
@@ -164,7 +160,7 @@ async function save() {
     </section>
 
     <div class="flex justify-end">
-      <UButton color="primary" icon="i-lucide-save" :loading="saving" @click="save">
+      <UButton icon="i-lucide-save" :loading="saving" @click="save">
         {{ t('common.save') }}
       </UButton>
     </div>

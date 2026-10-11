@@ -21,6 +21,8 @@ import {
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -196,7 +198,8 @@ watch(
     <Transition name="reports-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
         data-testid="reports-panel"
@@ -243,10 +246,11 @@ watch(
               color="neutral"
               variant="ghost"
               icon="i-lucide-refresh-cw"
+              :loading="loading"
               :label="t('reports.refresh')"
               :ui="{
                 base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+                leadingIcon: 'h-4 w-4',
               }"
               @click="refresh"
             />
@@ -281,8 +285,9 @@ watch(
             </UButton>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
-            {{ t('reports.loading') }}
+          <div v-else-if="loading && !view" class="mx-auto flex max-w-5xl flex-col gap-6">
+            <USkeleton class="h-20 w-full rounded-lg" />
+            <USkeleton v-for="n in 2" :key="n" class="h-36 w-full rounded-lg" />
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
@@ -372,9 +377,12 @@ watch(
                 {{ t('reports.trend.title') }}
               </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
-                <div v-if="!hasSpend" class="py-6 text-center text-xs text-dimmed">
-                  {{ t('reports.trend.empty') }}
-                </div>
+                <EmptyState
+                  v-if="!hasSpend"
+                  compact
+                  icon="i-lucide-chart-column"
+                  :title="t('reports.trend.empty')"
+                />
                 <div v-else class="flex h-28 items-end gap-0.5" data-testid="reports-trend">
                   <div
                     v-for="point in view.trend.points"
@@ -503,12 +511,12 @@ watch(
                     {{ t('reports.activity.heading') }}
                   </h3>
                   <div class="rounded-lg border border-default bg-default/40 p-4">
-                    <div
+                    <EmptyState
                       v-if="!activityByDimension.length"
-                      class="py-4 text-center text-xs text-dimmed"
-                    >
-                      {{ t('reports.activity.empty') }}
-                    </div>
+                      compact
+                      icon="i-lucide-activity"
+                      :title="t('reports.activity.empty')"
+                    />
                     <template v-else>
                       <ul class="flex flex-col gap-3" data-testid="reports-activity">
                         <li

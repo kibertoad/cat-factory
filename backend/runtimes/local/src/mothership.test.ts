@@ -227,13 +227,20 @@ describe('composeMothership', () => {
       seen.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') })
       return new Response(
         JSON.stringify({
+          version: 2,
           kinds: [
             {
               kind: 'coder',
-              skills: { bundled: [], catalog: [{ skillId: 'src:s1:playbook' }], unknown: [] },
-              toolServers: { servers: [], unknown: [] },
+              skills: {
+                bundledRefs: [],
+                catalog: [{ skillId: 'src:s1:playbook', optional: false }],
+                unknown: [],
+              },
+              toolServers: { serverRefs: [], unknown: [] },
             },
           ],
+          bundledSkills: [],
+          toolServers: [],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       )
@@ -244,7 +251,7 @@ describe('composeMothership', () => {
     )
     try {
       const views = await agentKinds.capabilities()
-      expect(views[0]?.skills.catalog).toEqual([{ skillId: 'src:s1:playbook' }])
+      expect(views[0]?.skills.catalog).toEqual([{ skillId: 'src:s1:playbook', optional: false }])
       // Same base URL and same per-request machine token as the persistence RPC.
       expect(seen).toEqual([
         { url: 'https://m.test/internal/agent-kinds', auth: 'Bearer machine-tok' },

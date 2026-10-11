@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Yükleniyor…",
     "save": "Kaydet",
     "cancel": "İptal",
     "retry": "Yeniden dene",
@@ -151,7 +150,8 @@
     "reports": "Raporlar",
     "foundationalServices": "Temel hizmetler",
     "tutorials": "Eğitimler",
-    "help": "Yardım"
+    "help": "Yardım",
+    "setupChecklist": "Kurulum kontrol listesi"
   },
   "board": {
     "toast": {
@@ -833,6 +833,9 @@
       "title": "Bu görünüm yüklenemedi",
       "body": "Kodu yüklenemedi. Bu genellikle bu sekme açıkken uygulamanın güncellendiği anlamına gelir; sayfanın istediği dosyalar artık sunucuda değildir. Geçerli sürümü almak için yeniden yükleyin.",
       "reload": "Yeniden yükle"
+    },
+    "reported": {
+      "description": "İşlem çalıştı ve bir hata bildirdi. Ne bildirdiğini görmek için ayrıntıları gösterin."
     }
   },
   "personalSubscriptions": {
@@ -1850,8 +1853,6 @@
     "exportJson": "JSON dışa aktar",
     "exportHint": "Bu çalıştırmanın LLM dostu JSON dışa aktarımını indirin",
     "closeEsc": "Kapat (Esc)",
-    "loadingActivity": "Model etkinliği yükleniyor…",
-    "loadingContext": "Sağlanan bağlam yükleniyor…",
     "noCalls": "Bu çalışma için kaydedilmiş model çağrısı yok.",
     "noContext": "Bu çalışma için saklanmış aracı bağlamı yok. Çalışma alanında 'Tam aracı bağlamını sakla' etkinleştirildiğinde her gönderim için yakalanır.",
     "contextError": "Sağlanan bağlam yüklenemedi.",
@@ -1943,7 +1944,6 @@
       "details": "Ayrıntılar"
     },
     "webSearch": "Web araması",
-    "loadingSearch": "Web aramaları yükleniyor…",
     "noSearch": "Bu çalıştırma için web araması kaydedilmedi. Sorgular, web araması çalıştığında ve çalışma alanında 'Tam aracı bağlamını depola' etkinleştirildiğinde yakalanır.",
     "search": {
       "available": "Kullanılabilir",
@@ -1982,7 +1982,6 @@
     "toolCalls": {
       "title": "Araç çağrıları",
       "subtitle": "aracıların ne yaptığı, yaptıkları sırayla",
-      "loading": "Araç çağrıları yükleniyor…",
       "error": "Araç çağrıları yüklenemedi.",
       "none": "Bu çalışma için kaydedilmiş araç çağrısı yok.",
       "noneMatching": "Bu filtreye uyan araç çağrısı yok.",
@@ -2003,7 +2002,6 @@
     "title": "Platform gözlemlenebilirliği",
     "refresh": "Yenile",
     "close": "Kapat",
-    "loading": "Platform durumu yükleniyor…",
     "retry": "Yeniden dene",
     "window": {
       "oneHour": "Son bir saat",
@@ -2084,7 +2082,6 @@
   "reports": {
     "title": "Raporlar",
     "refresh": "Yenile",
-    "loading": "Raporlar yükleniyor…",
     "retry": "Yeniden dene",
     "error": "Raporlar yüklenemedi.",
     "period": "{from} – {to}",
@@ -2562,6 +2559,18 @@
         "action": "Bağlantıyı denetle"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Bu panoda aracılar henüz çalışamaz: bağlı bir runner havuzu yok.",
+        "outage": "Aracılar şu anda çalışamıyor: bu panonun runner havuzuna erişilemiyor."
+      },
+      "owner": {
+        "workspace_admin": "Bir pano yöneticisi bunu düzeltebilir.",
+        "account_admin": "Bir hesap yöneticisi bunu düzeltebilir.",
+        "operator": "Bunu yalnızca dağıtımın operatörü düzeltebilir."
+      },
+      "fullSurface": "Bunu kendiniz düzeltebilirsiniz: kenar çubuğunun üstünden rolünüzü değiştirin."
+    },
     "spendWarningBanner": {
       "title": "Harcama limitine ulaşıldı, ajan yürütmesi duraklatıldı",
       "body": "Bu ayki belirteç harcaması yapılandırılan bütçeye ulaştı, bu yüzden daha fazla maliyeti önlemek için çalışan boru hatları duraklatıldı. Yürütme, bütçe gelecek ay yenilendiğinde veya limit yükseltildiğinde otomatik olarak devam eder.",
@@ -2639,7 +2648,10 @@
         "toggleUiMode": "Arayüz modunu değiştir",
         "chooseRole": "Rolünüzü değiştirin",
         "foundationalServices": "Temel hizmetler",
-        "notificationSettings": "Bildirim yönlendirmesini yönet"
+        "notificationSettings": "Bildirim yönlendirmesini yönet",
+        "setupChecklist": "Kurulum kontrol listesi",
+        "queueView": "Kuyruk görünümünü aç",
+        "boardView": "Pano görünümünü aç"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -2667,7 +2679,11 @@
         "chooseRole": "rol mühendis ürün yöneticisi tasarımcı persona daha yalın görünüm",
         "tutorial": "eğitim tur rehber yardım öğren tanıtım",
         "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog",
-        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu"
+        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu",
+        "setupChecklist": "kurulum kontrol listesi setup runner model github depolama ortam",
+        "queueView": "kuyruk görünüm liste bekleyen",
+        "boardView": "pano tuval harita görünüm planlama",
+        "describeWork": "yeni iş tanımla görev ekle oluştur özellik hata"
       }
     },
     "integrationsHub": {
@@ -2925,7 +2941,6 @@
         "intro": "Her hazır ayar, isteğe bağlı ajan başına geçersiz kılmalarla birlikte her ajan için bir {baseModel} belirler. Bir görevde sabitlenmiş bir model yine de hazır ayarı geçersiz kılar.",
         "introBaseModel": "temel model",
         "newPreset": "Yeni hazır ayar",
-        "loadingCatalog": "Model kataloğu yükleniyor…",
         "default": "Varsayılan",
         "setDefaultTitle": "Çalışma alanı varsayılanı olarak ayarla",
         "editTitle": "Hazır ayarı düzenle",
@@ -2934,7 +2949,8 @@
         "basePrefix": "Temel:",
         "overrideCount": "{count} geçersiz kılma | {count} geçersiz kılma",
         "empty": "Henüz hazır ayar yok. Modelleri ajanlarınıza eşlemek için bir tane oluşturun.",
-        "customRouteOrder": "özel rota sırası"
+        "customRouteOrder": "özel rota sırası",
+        "catalogFailed": "Model kataloğu yüklenmedi. Hazır ayarları görmek için yeniden deneyin."
       },
       "editor": {
         "useBaseModel": "Temel modeli kullan",
@@ -2954,7 +2970,8 @@
         "deleteFailed": "Hazır ayar silinemedi",
         "nameRequiredTitle": "Ad gerekli",
         "nameRequiredBody": "Hazır ayara bir ad verin.",
-        "saveFailed": "Hazır ayar kaydedilemedi"
+        "saveFailed": "Hazır ayar kaydedilemedi",
+        "catalogFailed": "Model kataloğu yüklenemedi"
       },
       "confirmDelete": {
         "title": "Bu model ön ayarı silinsin mi?",
@@ -3113,7 +3130,6 @@
         "overrideActive": "Etkin",
         "personalOverrideHint": "Bu sağlama türü için çalışma alanı işleyicisini kendi makinende geçersiz kıl. Kullanıcı başına saklanır.",
         "removeOverride": "Geçersiz kılmayı kaldır",
-        "loading": "Altyapı ayarları yükleniyor…",
         "kubeNoun": "Kubernetes işleyicisi",
         "kubeOverrideNoun": "Kubernetes geçersiz kılması",
         "customNoun": "bu işleyici",
@@ -3292,7 +3308,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Bu dağıtımın yeniden kullanılabilir operasyonlarından hangilerinin bu panoda sunulacağını seçin. Birini gizlemek onu buradaki görev oluşturma seçicisinden kaldırır ve o türde iş oluşturmayı reddeder; diğer panolar etkilenmez.",
-      "loading": "Operasyonlar yükleniyor…",
       "empty": "Bu dağıtım hiçbir yeniden kullanılabilir operasyon kaydetmiyor.",
       "offer": "Bu panoda sun",
       "saveFailed": "Bu panoda sunulan operasyonlar değiştirilemedi"
@@ -3909,9 +3924,7 @@
       "toast": {
         "connected": "OpenRouter anahtarı bağlandı",
         "connectFailed": "Anahtar bağlanamadı",
-        "rejected": "OpenRouter anahtarı reddetti.",
         "unreachable": "OpenRouter'a ulaşılamadı",
-        "connectFirst": "Önce bir OpenRouter anahtarı bağlayın.",
         "saved": "OpenRouter kataloğu kaydedildi",
         "saveFailed": "Katalog kaydedilemedi"
       }
@@ -4506,7 +4519,6 @@
     "connect": {
       "yourInstallations": "Yüklemeleriniz",
       "refresh": "Yenile",
-      "lookingForInstallations": "Yüklemeler aranıyor…",
       "noInstallations": "App için henüz bir yükleme bulunamadı. Aşağıdan yükleyin veya kimlik ile bağlanın.",
       "installationMeta": "{targetType} · yükleme {id}",
       "linked": "bağlı",
@@ -4533,14 +4545,12 @@
       "resync": "Yeniden eşitle",
       "backfill": "Geriye doldur",
       "disconnect": "Bağlantıyı kes",
-      "loading": "Yükleniyor…",
       "tabs": {
         "repos": "Depolar",
         "issues": "Sorunlar"
       },
       "linkedToBoard": "Bu panoya bağlı",
       "manageRepos": "Depoları yönet",
-      "loadingRepos": "Depolar yükleniyor…",
       "private": "özel",
       "saveSelection": "Seçimi kaydet",
       "noLinkedRepos": "Henüz bağlı depo yok. Bu panonun hangi depoları takip ettiğini seçmek için Depoları yönet seçeneğini kullanın.",
@@ -4623,7 +4633,6 @@
     },
     "repoTree": {
       "root": "kök",
-      "loading": "Yükleniyor…",
       "noSubdirectories": "Burada alt dizin yok.",
       "empty": "Burada bir şey yok.",
       "select": "Seç",
@@ -4880,7 +4889,8 @@
         "scopes": "Şu izinler istenecek: {scopes}",
         "fallback": "Belirteç mi tercih edersin? Aşağıdaki alanları kullan.",
         "failed": "{source} oturumu başlatılamadı"
-      }
+      },
+      "disconnectFailed": "Bağlantı kesilemedi"
     },
     "spawn": {
       "title": "Yapıyı önizle",
@@ -5028,7 +5038,8 @@
       "updateConnection": "Bağlantıyı güncelle",
       "connect": "Bağla",
       "oauthButton": "{label} ile bağlan",
-      "oauthOr": "veya bir API anahtarıyla bağlan"
+      "oauthOr": "veya bir API anahtarıyla bağlan",
+      "disconnectFailed": "Bağlantı kesilemedi"
     }
   },
   "bugHunt": {
@@ -5137,12 +5148,10 @@
   "guidedReview": {
     "title": "Rehberli inceleme",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "İnceleme yükleniyor…",
     "outOfDate": "Canlı güncellemeler başarısız oldu, bu nedenle bu görünüm güncel olmayabilir.",
     "openFromTask": "Rehberli incelemeyle keşfet",
     "picker": {
       "intro": "Bir depo ve bir pull request seçin. Değişikliğin özetini görür, ayrı konularda onunla ilgili soru sorabilirsiniz.",
-      "loading": "Depolar yükleniyor…",
       "noRepos": "Bu çalışma alanına henüz bağlı bir depo yok.",
       "repo": "Depo",
       "openPulls": "Açık pull requestler",
@@ -5810,7 +5819,6 @@
     "answerVerb": "Yanıtlayın",
     "dismissVerb": "yok sayın",
     "empty": "Henüz inceleme yok. İncelemeci, bu görevin pipeline'ı başladığında ilk adım olarak otomatik çalışır.",
-    "loadingReview": "İnceleme yükleniyor…",
     "reviewing": "Gereksinimler inceleniyor…",
     "settled": "Gereksinimler kesinleşti. Aşağıdaki belge, her sonraki agent adımının kullandığı belgedir.",
     "exceeded": {
@@ -5950,7 +5958,6 @@
     "introAnswer": "Yanıtlayın",
     "introDismiss": "göz ardı edin",
     "empty": "Henüz inceleme yok. Denetleyici, bu görevin boru hattı başladığında ilk adım olarak otomatik çalışır.",
-    "loadingReview": "İnceleme yükleniyor…",
     "triaging": "Hata raporu triyaj ediliyor…",
     "converged": "Hata raporu netleştirildi. Aşağıdaki rapor, tüm sonraki agent adımlarının kullandığı rapordur.",
     "capHeading": "{max} yinelemelik sınıra bulgular hâlâ açıkken ulaşıldı.",
@@ -6024,7 +6031,6 @@
   "consensus": {
     "titlePrefix": "Konsensüs",
     "participantCount": "katılımcı yok | bir katılımcı | {count} katılımcı",
-    "loading": "Konsensüs oturumu yükleniyor…",
     "empty": "Bu adım için henüz konsensüs oturumu çalışmadı.",
     "failed": "Konsensüs başarısız oldu: {error}",
     "unknownError": "bilinmeyen hata",
@@ -6072,7 +6078,6 @@
     "introChoose": "Seçin",
     "introDismiss": "yok sayın",
     "empty": "Henüz beyin fırtınası yok. Bu görevin hattı beyin fırtınası adımına ulaştığında otomatik olarak çalışır.",
-    "loading": "Beyin fırtınası yükleniyor…",
     "generating": "Seçenekler oluşturuluyor…",
     "settledBanner": "{doc} kesinleşti. Aşağıdaki belge bir sonraki aşamanın kullandığı belgedir.",
     "exceeded": {
@@ -6150,7 +6155,6 @@
   },
   "spec": {
     "title": "Gereksinimler",
-    "loading": "Belirtim yükleniyor…",
     "error": "Belirtim yüklenemedi. Bu pencereyi yeniden açmayı deneyin.",
     "overview": "Genel bakış",
     "noFeatureGroups": "Özellik grubu yok",
@@ -6340,8 +6344,7 @@
     },
     "shot": {
       "failed": "Başarısız",
-      "failedToLoad": "Yüklenemedi",
-      "loading": "Yükleniyor…"
+      "failedToLoad": "Yüklenemedi"
     },
     "screenshotAlt": "{view} (ekran görüntüsü)",
     "screenshots": "Ekran görüntüleri",
@@ -7053,7 +7056,6 @@
       "awaiting": "{total} aday üretildi ve karşılaştırılmayı bekliyor."
     },
     "asset": {
-      "loading": "Dosya yükleniyor…",
       "loadFailed": "Saklanan dosya yüklenemedi.",
       "retry": "Yeniden dene",
       "open": "Aç",
@@ -7995,6 +7997,7 @@
     "connect": {
       "or": "veya",
       "noneConfigured": "Bu dağıtım için yapılandırılmış bir kaynak denetimi bağlantısı yok. Bir operatörden GitHub App veya GitLab erişimi kurmasını isteyin.",
+      "adminRequired": "Bir depo sağlayıcısını yalnızca pano yöneticisi bağlayabilir. Bu panonun bir yöneticisinden isteyin.",
       "gitlab": {
         "intro": "Bu çalışma alanını bağlamak için bir GitLab kişisel erişim belirteci yapıştırın. cat-factory bunu projelerinizi listelemek, dal göndermek ve merge request açmak için kullanır.",
         "tokenLabel": "Kişisel erişim belirteci",
@@ -8012,7 +8015,8 @@
     "onboarding": {
       "title": "cat-factory'yi {provider}'a bağla",
       "titleAny": "cat-factory'yi depolarınıza bağlayın",
-      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
+      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın.",
+      "switchBoard": "Aradığınız pano bu değil mi? Başka bir panoya geçin veya kendinizinkini oluşturun."
     },
     "addService": {
       "intro": "Pano servisi olarak eklenecek mevcut bir {provider} deposu seçin. Bootstrap yok: depo olduğu gibi yeni bir servis çerçevesine bağlanır ve üzerinde çalıştırdığınız görevler o depoyu hedefler.",
@@ -8128,6 +8132,10 @@
           "canvas": {
             "title": "Pano",
             "body": "Servisler, modüller ve görevler bu tuval üzerinde yaşar. Kaydırmak için sürükleyin, yakınlaştırmak için kaydırın ve incelemek için herhangi bir karta tıklayın."
+          },
+          "views": {
+            "title": "İki görünüm",
+            "body": "Panonun ikinci bir görünümü var. Kuyruk, tüm servislerde seni bekleyenleri listeler. Tur bitince kuyruk ile bu tuval arasında buradan geçiş yaparsın. Uygulama en son kullandığın görünümde açılır."
           },
           "sidebar": {
             "title": "Kenar çubuğu",
@@ -8748,5 +8756,146 @@
         "unsupportedVersion": "Bu tema, bu uygulamanın anladığından daha yeni bir düzenleyici biçimiyle oluşturulmuş."
       }
     }
+  },
+  "setup": {
+    "title": "Kurulum",
+    "progress": "{done} / {total} tamamlandı",
+    "intro": "Bu çalışma alanının bir görevi çalıştırıp birleştirebilmesi için gerekenler.",
+    "required": "zorunlu",
+    "optional": "isteğe bağlı",
+    "action": {
+      "change": "Değiştir",
+      "connect": "Kur",
+      "fix": "Düzelt",
+      "review": "İncele",
+      "retry": "Yeniden dene"
+    },
+    "rows": {
+      "checking": "Denetleniyor…",
+      "notNeeded": "Bu dağıtım bunu kullanmıyor.",
+      "model": {
+        "title": "Model",
+        "done": "Kullanılabilir bir model var.",
+        "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz."
+      },
+      "sourceControl": {
+        "title": "Kaynak denetimi",
+        "done": "Bağlı. Ajanlar dal gönderip pull request açabilir.",
+        "missing": "Bağlı değil. Ajanlar pull request açamaz."
+      },
+      "agentExecutor": {
+        "title": "Ajanların çalıştığı yer",
+        "done": "Bir runner yapılandırıldı.",
+        "missing": "Yapılandırılmış runner yok. Bir tane bağlayana kadar hiçbir şey çalışamaz.",
+        "notNeeded": "Bu dağıtım ajanları runner olmadan çalıştırıyor."
+      },
+      "ephemeralEnvironments": {
+        "title": "Test ortamları",
+        "done": "Yapılandırıldı. Test ajanları canlı önizleme kullanabilir.",
+        "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır."
+      },
+      "binaryStorage": {
+        "title": "Ekran görüntüsü depolama",
+        "done": "Yapılandırıldı. Görsel denetimler açık.",
+        "missing": "Kurulmadı. Görsel denetimler kapalı."
+      }
+    },
+    "causes": {
+      "unreachable": "Yapılandırılmış, ancak şu anda ulaşılamıyor.",
+      "incomplete": "Bağlı, ancak gerekli bir ayar eksik.",
+      "rejected": "GitHub erişim belirtecini reddetti.",
+      "underscoped": "Erişim belirteci dal gönderemiyor ve pull request açamıyor.",
+      "presetBroken": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor.",
+      "probeFailed": "Denetim yanıt vermedi.",
+      "notReported": "Bu dağıtım bunu bildirmiyor."
+    },
+    "also": {
+      "title": "Burada ayrıca",
+      "pipelines": "Pipeline'lar",
+      "riskPolicies": "Birleştirme ilkeleri",
+      "modelPresets": "Model ön ayarları",
+      "counts": {
+        "repair": "Onarılacak: {count}",
+        "outdated": "Eski: {count}",
+        "new": "Yeni: {count}"
+      },
+      "settings": "Ayarlar ve bağlantılar",
+      "workspaceSettings": "Çalışma alanı ayarları",
+      "integrations": "Entegrasyonlar"
+    }
+  },
+  "queue": {
+    "title": "Kuyruk",
+    "summary": "{needsYou} seni bekliyor · {ready} birleştirmeye hazır",
+    "filter": {
+      "allServices": "Tüm servisler",
+      "service": "Servise göre filtrele"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Seni bekliyor",
+        "empty": "Seni bekleyen bir şey yok."
+      },
+      "inFlight": {
+        "label": "Sürüyor",
+        "empty": "Şu an çalışan bir ajan yok."
+      },
+      "readyToMerge": {
+        "label": "Birleştirmeye hazır",
+        "empty": "Birleştirilmeyi bekleyen pull request yok."
+      }
+    },
+    "waiting": {
+      "label": "Başlamadı ({count})",
+      "empty": "Başlamayı bekleyen bir şey yok."
+    },
+    "done": {
+      "count": "{date} tarihinden beri birleştirilen: {count}",
+      "countAll": "Birleştirilen: {count}",
+      "show": "Göster",
+      "hide": "Gizle",
+      "capped": "{total} içinden en yeni {shown} gösteriliyor."
+    },
+    "card": {
+      "waited": "{duration} bekledi",
+      "active": "{duration} önce etkindi",
+      "merged": "{duration} önce birleştirildi",
+      "step": "adım {current} / {total}",
+      "showOnBoard": "Panoda göster",
+      "answer": "Yanıtla",
+      "budgetPaused": "Harcama sınırı bu çalıştırmayı duraklattı. Sınır yükseltilince devam eder.",
+      "parked": "Çalıştırma bir kişiyi bekliyor. Neye ihtiyaç duyduğunu görmek için görevi aç.",
+      "waitingOn": "{deps} bekleniyor",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Yeni iş tanımla"
+  },
+  "views": {
+    "title": "Görünümler",
+    "queue": "Kuyruk",
+    "board": "Pano",
+    "openQueue": "Kuyruk görünümünü aç"
+  },
+  "describeWork": {
+    "title": "Yeni iş tanımla",
+    "textLabel": "Ne yapılmalı",
+    "textHint": "Bir cümle yeterli. Elinde varsa daha fazla ayrıntı ekle.",
+    "textPlaceholder": "Oturum açma olayları için bir denetim günlüğü ekle. Her oturum açmayı zaman, kullanıcı ve sonuçla kaydet.",
+    "savedAs": "Görev başlığı: {title}",
+    "serviceLabel": "Servis",
+    "servicePlaceholder": "Bir servis seç",
+    "kindLabel": "Tür",
+    "kind": {
+      "feature": "Özellik",
+      "bug": "Hata"
+    },
+    "moreKinds": "Daha fazla tür…",
+    "changeHowItRuns": "Nasıl çalışacağını değiştir",
+    "workspaceDefault": "Çalışma alanı varsayılanı",
+    "defaultPipelineHint": "Çalışma alanı varsayılanı: {name}. Burada seçilen pipeline bu görev için onun yerine geçer.",
+    "attachContext": "Bağlam ekle (tam formu açar)",
+    "add": "Kuyruğa ekle",
+    "addAndStart": "Ekle ve başlat",
+    "addedToast": "“{title}” kuyruğa eklendi"
   }
 }

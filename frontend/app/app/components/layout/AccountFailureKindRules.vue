@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 import type { AgentFailureKind, PlatformFailureKindRule } from '~/types/execution'
 import {
   AGENT_FAILURE_KINDS,
@@ -165,13 +166,13 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
     </div>
 
     <template v-if="overriding">
-      <p
+      <EmptyState
         v-if="rules.length === 0"
-        class="text-2xs text-dimmed"
+        compact
+        icon="i-lucide-list-filter"
+        :title="t('settings.platformAlerts.failureKinds.empty')"
         data-testid="platform-alert-failure-kinds-empty"
-      >
-        {{ t('settings.platformAlerts.failureKinds.empty') }}
-      </p>
+      />
 
       <div
         v-for="(rule, index) in rules"

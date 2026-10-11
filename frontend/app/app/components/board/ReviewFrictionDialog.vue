@@ -53,17 +53,20 @@ const body = computed(() => {
 /** Deep-link to a waiting task's block and dismiss the whole friction flow. */
 function goToBlock(blockId: string) {
   if (blockId) ui.select(blockId)
+  leave()
+}
+
+/** Close the friction and the form that raised it. */
+function leave() {
+  const onLeave = ctx.value?.onLeave
   ui.closeReviewFriction()
-  ui.closeAddTask()
+  onLeave?.()
 }
 
 function goReview() {
   const first = ctx.value?.debt[0]
   if (first) goToBlock(first.blockId)
-  else {
-    ui.closeReviewFriction()
-    ui.closeAddTask()
-  }
+  else leave()
 }
 
 function createAnyway() {
@@ -135,13 +138,7 @@ function createAnyway() {
           >
             {{ t('errors.reviewFriction.createAnyway') }}
           </UButton>
-          <UButton
-            color="primary"
-            size="sm"
-            icon="i-lucide-list-checks"
-            :disabled="pending"
-            @click="goReview"
-          >
+          <UButton size="sm" icon="i-lucide-list-checks" :disabled="pending" @click="goReview">
             {{ t('errors.reviewFriction.goReview') }}
           </UButton>
         </div>

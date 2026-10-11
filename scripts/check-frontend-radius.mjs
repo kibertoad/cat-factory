@@ -38,7 +38,7 @@
 // Usage:  node scripts/check-frontend-radius.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import { isCliEntry, isWaived, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 // An arbitrary radius in either v4 syntax, behind any side or corner prefix. `(?<![\w-])` is a LEFT
 // boundary, so `group-rounded-[…]` does not match on a substring. Neither bracket form is a word,
@@ -77,7 +77,7 @@ const LITERAL_OK = 'radius-literal-ok:'
  * `radius-literal-ok:` waiver is read from the raw line OR the raw line before it (the
  * `eslint-disable-next-line` shape). Pure, so the companion test can drive it with fixtures. */
 export function findFixedRadii({ raw, code, prev }) {
-  if (raw.includes(LITERAL_OK) || prev.includes(LITERAL_OK)) return []
+  if (isWaived(raw, prev, LITERAL_OK)) return []
 
   const found = [...(code.match(ARBITRARY_UTILITY) ?? [])]
   for (const pattern of [DECLARATION, STYLE_PROPERTY]) {

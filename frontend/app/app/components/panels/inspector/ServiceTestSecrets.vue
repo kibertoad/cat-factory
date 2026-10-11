@@ -18,7 +18,7 @@ import { uid } from '~/utils/catalog'
 const props = defineProps<{ block: Block }>()
 
 const store = useTestSecretsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -111,11 +111,7 @@ async function save() {
         value: r.value,
       })),
     })
-    toast.add({
-      title: t('inspector.testSecrets.savedToast'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('inspector.testSecrets.savedToast')
   } catch (e) {
     present(e, 'inspector.testSecrets.saveFailed')
   } finally {
@@ -152,7 +148,7 @@ async function clearAll() {
       <UButton
         v-if="configured.length"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="xs"
         icon="i-lucide-trash-2"
         :loading="busy"
@@ -250,7 +246,6 @@ async function clearAll() {
           {{ t('inspector.testSecrets.addRow') }}
         </UButton>
         <UButton
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-save"

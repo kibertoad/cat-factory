@@ -35,7 +35,7 @@
 // Usage:  node scripts/check-frontend-type-scale.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import { isCliEntry, isWaived, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 // `(?<![\w-])` is a LEFT boundary on each spelling, so a utility that merely ENDS in `text-`, or a
 // property that merely ends in `font`, does not match out of the middle of a longer token. A
@@ -63,7 +63,7 @@ const LITERAL_OK = 'type-literal-ok:'
  * `type-literal-ok:` waiver is read from the raw line OR the raw line before it (the
  * `eslint-disable-next-line` shape). Pure, so the companion test can drive it with fixtures. */
 export function findTypeLiterals({ raw, code, prev }) {
-  if (raw.includes(LITERAL_OK) || prev.includes(LITERAL_OK)) return []
+  if (isWaived(raw, prev, LITERAL_OK)) return []
   return [...new Set(code.match(TYPE_LITERAL) ?? [])]
 }
 

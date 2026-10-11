@@ -81,7 +81,6 @@ async function choose(option: string) {
           <UButton
             v-for="opt in decision.options"
             :key="opt"
-            color="primary"
             variant="soft"
             block
             data-testid="decision-option"
