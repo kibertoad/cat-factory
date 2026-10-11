@@ -135,81 +135,91 @@ const also = computed(() =>
       </span>
     </template>
     <template #body>
-    <div data-testid="setup-checklist">
-      <p class="text-sm text-muted">{{ t('setup.intro') }}</p>
+      <div data-testid="setup-checklist">
+        <p class="text-sm text-muted">{{ t('setup.intro') }}</p>
 
-      <UAlert
-        v-if="!canAct"
-        class="mt-6"
-        color="neutral"
-        variant="subtle"
-        icon="i-lucide-lock"
-        :title="t('setup.noAccess.title')"
-        :description="t('setup.noAccess.body')"
-      />
+        <UAlert
+          v-if="!canAct"
+          class="mt-6"
+          color="neutral"
+          variant="subtle"
+          icon="i-lucide-lock"
+          :title="t('setup.noAccess.title')"
+          :description="t('setup.noAccess.body')"
+        />
 
-      <ul v-else class="mt-6 space-y-3">
-        <li
-          v-for="row in checklist.rows"
-          :key="row.id"
-          class="flex items-center gap-3 rounded-lg border border-muted bg-default p-4"
-          data-testid="setup-row"
-          :data-row="row.id"
-          :data-status="row.status"
-        >
-          <UIcon
-            :name="STATUS_META[row.status].icon"
-            class="h-5 w-5 shrink-0"
-            :class="STATUS_META[row.status].class"
-          />
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="font-medium text-highlighted">{{ t(ROW_COPY[row.id].title) }}</span>
-              <UBadge v-if="row.status !== 'done'" size="sm" color="neutral" variant="outline">
-                {{ row.required ? t('setup.required') : t('setup.optional') }}
-              </UBadge>
-            </div>
-            <p class="mt-0.5 text-xs text-muted">
-              {{ t(ROW_COPY[row.id][row.status]) }}
-            </p>
-          </div>
-          <UButton
-            v-if="row.status !== 'checking'"
-            size="sm"
-            :color="row.status === 'done' || row.status === 'not_needed' ? 'neutral' : 'primary'"
-            :variant="row.status === 'done' || row.status === 'not_needed' ? 'outline' : 'solid'"
-            data-testid="setup-row-action"
-            @click="act(row.id)"
+        <ul v-else class="mt-6 space-y-3">
+          <li
+            v-for="row in checklist.rows"
+            :key="row.id"
+            class="flex items-center gap-3 rounded-lg border border-muted bg-default p-4"
+            data-testid="setup-row"
+            :data-row="row.id"
+            :data-status="row.status"
           >
-            {{ t(STATUS_META[row.status].actionKey) }}
-          </UButton>
-        </li>
-      </ul>
-
-      <template v-if="canAct">
-        <USeparator class="my-6" />
-        <SectionLabel as="h2" class="mb-3">{{ t('setup.also.title') }}</SectionLabel>
-        <ul class="space-y-2 text-sm">
-          <li v-for="row in also" :key="row.id" class="flex items-center gap-3">
-            <span class="flex-1 text-muted">
-              {{ t(row.labelKey, { count: row.count, fresh: row.fresh }) }}
-            </span>
-            <UButton size="xs" color="neutral" variant="outline" @click="row.open()">
-              {{ t('setup.action.review') }}
-            </UButton>
-          </li>
-          <li class="flex flex-wrap items-center gap-2 text-muted">
-            <span class="flex-1">{{ t('setup.also.settings') }}</span>
-            <UButton size="xs" color="neutral" variant="ghost" @click="go(() => ui.openWorkspaceSettings())">
-              {{ t('setup.also.workspaceSettings') }}
-            </UButton>
-            <UButton size="xs" color="neutral" variant="ghost" @click="go(() => ui.openIntegrations())">
-              {{ t('setup.also.integrations') }}
+            <UIcon
+              :name="STATUS_META[row.status].icon"
+              class="h-5 w-5 shrink-0"
+              :class="STATUS_META[row.status].class"
+            />
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-highlighted">{{ t(ROW_COPY[row.id].title) }}</span>
+                <UBadge v-if="row.status !== 'done'" size="sm" color="neutral" variant="outline">
+                  {{ row.required ? t('setup.required') : t('setup.optional') }}
+                </UBadge>
+              </div>
+              <p class="mt-0.5 text-xs text-muted">
+                {{ t(ROW_COPY[row.id][row.status]) }}
+              </p>
+            </div>
+            <UButton
+              v-if="row.status !== 'checking'"
+              size="sm"
+              :color="row.status === 'done' || row.status === 'not_needed' ? 'neutral' : 'primary'"
+              :variant="row.status === 'done' || row.status === 'not_needed' ? 'outline' : 'solid'"
+              data-testid="setup-row-action"
+              @click="act(row.id)"
+            >
+              {{ t(STATUS_META[row.status].actionKey) }}
             </UButton>
           </li>
         </ul>
-      </template>
-    </div>
+
+        <template v-if="canAct">
+          <USeparator class="my-6" />
+          <SectionLabel as="h2" class="mb-3">{{ t('setup.also.title') }}</SectionLabel>
+          <ul class="space-y-2 text-sm">
+            <li v-for="row in also" :key="row.id" class="flex items-center gap-3">
+              <span class="flex-1 text-muted">
+                {{ t(row.labelKey, { count: row.count, fresh: row.fresh }) }}
+              </span>
+              <UButton size="xs" color="neutral" variant="outline" @click="row.open()">
+                {{ t('setup.action.review') }}
+              </UButton>
+            </li>
+            <li class="flex flex-wrap items-center gap-2 text-muted">
+              <span class="flex-1">{{ t('setup.also.settings') }}</span>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="go(() => ui.openWorkspaceSettings())"
+              >
+                {{ t('setup.also.workspaceSettings') }}
+              </UButton>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="go(() => ui.openIntegrations())"
+              >
+                {{ t('setup.also.integrations') }}
+              </UButton>
+            </li>
+          </ul>
+        </template>
+      </div>
     </template>
   </UModal>
 </template>
