@@ -15,7 +15,7 @@ export function useTaskActions(taskId: () => string) {
   const execution = useExecutionStore()
   const ui = useUiStore()
   const reviews = useReviewStage()
-  const toast = useToast()
+  const toast = useActionToast()
   const { t } = useI18n()
   const { confirm } = useConfirm()
   const access = useWorkspaceAccess()
@@ -69,21 +69,17 @@ export function useTaskActions(taskId: () => string) {
 
   async function start() {
     if (!runnable.value) {
-      toast.add({
-        title: t('board.task.blockedByDependenciesTitle'),
+      // A refusal decided in the browser, in translated copy: the `error` tone (`useActionToast`).
+      toast.error('board.task.blockedByDependenciesTitle', {
         description: t('board.task.waitingOn', {
           deps: unmet.value.map((d) => d.title).join(', '),
         }),
-        icon: 'i-lucide-lock',
       })
       return
     }
     const pipeline = defaultPipeline.value
     if (!pipeline) {
-      toast.add({
-        title: t('board.task.noPipelineTitle'),
-        description: t('board.task.noPipelineBody'),
-      })
+      toast.error('board.task.noPipelineTitle', { description: t('board.task.noPipelineBody') })
       return
     }
     starting.value = true
@@ -96,14 +92,17 @@ export function useTaskActions(taskId: () => string) {
       // in_progress, so without this the successful action gives no feedback. A sandboxed start
       // says so here rather than borrowing the live wording: this is the moment the reader learns
       // what they just started, and the two runs differ in what they will end up doing.
-      toast.add({
-        title: sandboxed.value ? t('board.dryRunToast.title') : t('board.task.startedToast.title'),
-        description: sandboxed.value
-          ? t('board.dryRunToast.body', { name: pipeline.name })
-          : t('board.task.startedToast.body', { name: pipeline.name }),
-        color: sandboxed.value ? 'warning' : 'success',
-        icon: sandboxed.value ? 'i-lucide-shield' : 'i-lucide-play',
-      })
+      // A sandboxed run is `warning`: it ran, and its outcome differs in a way the reader should
+      // know (it opens a pull request and merges nothing), so it stays until closed.
+      if (sandboxed.value) {
+        toast.warning('board.dryRunToast.title', {
+          description: t('board.dryRunToast.body', { name: pipeline.name }),
+        })
+      } else {
+        toast.success('board.task.startedToast.title', {
+          description: t('board.task.startedToast.body', { name: pipeline.name }),
+        })
+      }
     } else {
       starting.value = false
     }
