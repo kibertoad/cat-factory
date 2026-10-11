@@ -2,6 +2,8 @@ import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 import {
   LIVE_TIMEOUT,
+  RUN_TERMINAL_TIMEOUT,
+  createInitiative,
   createSeededWorkspace,
   createSimplePipeline,
   openBoard,
@@ -71,6 +73,28 @@ test.describe('queue view', () => {
     ).toHaveCount(1)
   })
 
+  test('a decision on an initiative, which no swimlane holds, is listed under Needs you', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    test.slow()
+    const { workspaceId } = seededBoard
+    // The fake agent's default parks the planning run's first step on a decision.
+    const { block } = await createInitiative(request, workspaceId, 'blk_auth', 'preset_generic')
+    await startRun(request, workspaceId, block.id, 'pl_initiative')
+    await expect(page.getByTestId('decision-badge')).toBeVisible({ timeout: RUN_TERMINAL_TIMEOUT })
+
+    // The badge counts it, so the queue it opens must list it, with the decision one click away.
+    await page.getByTestId('decision-badge').click()
+    const card = column(page, 'needs_you').locator(
+      `[data-testid="queue-card"][data-queue-task="${block.id}"]`,
+    )
+    await expect(card).toHaveAttribute('data-reason', 'decision', { timeout: LIVE_TIMEOUT })
+    await card.getByTestId('queue-card-primary').click()
+    await expect(page.getByTestId('decision-modal')).toBeVisible()
+  })
+
   test("the canvas's decision counter opens the queue view", async ({
     page,
     request,
@@ -80,6 +104,13 @@ test.describe('queue view', () => {
     await setFakeProfile(request, workspaceId, { decisionOnSteps: [0] })
     const pipeline = await createSimplePipeline(request, workspaceId)
     await startRun(request, workspaceId, 'task_login', pipeline.id)
+
+    // A filter set earlier, to a service the decision is not in, must not hide it: the badge
+    // counts decisions in every service, so it opens the queue on all of them.
+    await page.getByTestId('work-view-queue').click()
+    await page.getByTestId('queue-service-filter').click()
+    await page.getByRole('option', { name: 'API Gateway' }).click()
+    await page.getByTestId('work-view-board').click()
 
     await page.getByTestId('decision-badge').click()
     await expect(page.getByTestId('queue-view')).toBeVisible()

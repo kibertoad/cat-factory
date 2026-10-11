@@ -8140,7 +8140,7 @@
           },
           "views": {
             "title": "Deux vues",
-            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
+            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Une fois la visite terminée, passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
           },
           "sidebar": {
             "title": "La barre latérale",
@@ -8788,11 +8788,11 @@
       "empty": "Rien n’attend de démarrer."
     },
     "done": {
-      "count": "Fusionnées ces 7 derniers jours : {count}",
+      "count": "Fusionnées depuis le {date} : {count}",
+      "countAll": "Fusionnées : {count}",
       "show": "Afficher",
       "hide": "Masquer",
-      "capped": "Affiche les {shown} plus récentes sur {total}.",
-      "undated": "Non affichées, sans date de fin : {count}"
+      "capped": "Affiche les {shown} plus récentes sur {total}."
     },
     "card": {
       "waited": "a attendu {duration}",

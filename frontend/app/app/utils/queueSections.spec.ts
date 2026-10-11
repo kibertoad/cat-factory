@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Block } from '~/types/domain'
 import { LANE_BY_REASON, LANE_REASONS, type LaneReason } from '~/utils/swimlanes'
-import {
-  assembleQueue,
-  QUEUE_DONE_MAX_ITEMS,
-  QUEUE_DONE_WINDOW_DAYS,
-  QUEUE_SECTION_BY_REASON,
-  type QueueEntry,
-} from '~/utils/queueSections'
+import { assembleQueue, QUEUE_SECTION_BY_REASON, type QueueEntry } from '~/utils/queueSections'
+import type { DoneLaneCaps } from '~/utils/swimlanes'
 
 // The queue reads the frame lanes' verdict and must never contradict it. The one place it
 // splits differently (a PR waiting to merge gets its own column) is a regrouping INSIDE the
@@ -15,6 +10,8 @@ import {
 
 const NOW = 1_800_000_000_000
 const DAY = 86_400_000
+/** The caps a workspace sets for its frames' Done lane, which the queue applies too. */
+const CAPS: DoneLaneCaps = { maxItems: 20, retentionDays: 14 }
 
 function entry(id: string, reason: LaneReason, overrides: Partial<QueueEntry> = {}): QueueEntry {
   return {
@@ -56,6 +53,7 @@ describe('assembleQueue', () => {
         entry('pr', 'pr_awaiting_merge'),
       ],
       NOW,
+      CAPS,
     )
     expect(sections.needs_you.map((e) => e.task.id).sort()).toEqual(['broken', 'decide', 'parked'])
     expect(sections.ready_to_merge.map((e) => e.task.id)).toEqual(['pr'])
@@ -69,11 +67,12 @@ describe('assembleQueue', () => {
         entry('broken', 'failed', { order: 2 }),
       ],
       NOW,
+      CAPS,
     )
     expect(sections.needs_you.map((e) => e.task.id)).toEqual(['broken', 'old', 'recent'])
   })
 
-  it('lists only merges inside the window, newest first, and counts the undated ones apart', () => {
+  it("applies the frames' Done-lane window: newest first, undated last, older ones left out", () => {
     const merged = (id: string, completedAt: number | undefined) =>
       entry(id, 'merged', {
         task: { id, title: id, status: 'done', level: 'task', completedAt } as Block,
@@ -82,18 +81,18 @@ describe('assembleQueue', () => {
       [
         merged('yesterday', NOW - DAY),
         merged('today', NOW - 1000),
-        merged('ancient', NOW - (QUEUE_DONE_WINDOW_DAYS + 1) * DAY),
+        merged('ancient', NOW - (CAPS.retentionDays! + 1) * DAY),
         merged('undated', undefined),
       ],
       NOW,
+      CAPS,
     )
-    expect(queue.sections.done.map((e) => e.task.id)).toEqual(['today', 'yesterday'])
-    expect(queue.doneInWindow).toBe(2)
-    expect(queue.doneUndated).toBe(1)
+    expect(queue.sections.done.map((e) => e.task.id)).toEqual(['today', 'yesterday', 'undated'])
+    expect(queue.doneInWindow).toBe(3)
   })
 
   it('caps the Done list but never the count above it', () => {
-    const many = Array.from({ length: QUEUE_DONE_MAX_ITEMS + 3 }, (_, i) =>
+    const many = Array.from({ length: CAPS.maxItems + 3 }, (_, i) =>
       entry(`m${i}`, 'merged', {
         order: i,
         task: {
@@ -105,8 +104,8 @@ describe('assembleQueue', () => {
         } as Block,
       }),
     )
-    const queue = assembleQueue(many, NOW)
-    expect(queue.sections.done).toHaveLength(QUEUE_DONE_MAX_ITEMS)
+    const queue = assembleQueue(many, NOW, CAPS)
+    expect(queue.sections.done).toHaveLength(CAPS.maxItems)
     expect(queue.doneInWindow).toBe(many.length)
   })
 })

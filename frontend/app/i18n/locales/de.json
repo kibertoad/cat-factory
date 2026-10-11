@@ -8140,7 +8140,7 @@
           },
           "views": {
             "title": "Zwei Ansichten",
-            "body": "Das Board hat eine zweite Ansicht. Die Warteschlange zeigt, was über alle Services hinweg auf dich wartet. Hier wechselst du zwischen der Warteschlange und dieser Arbeitsfläche. Die App öffnet die Ansicht, die du zuletzt genutzt hast."
+            "body": "Das Board hat eine zweite Ansicht. Die Warteschlange zeigt, was über alle Services hinweg auf dich wartet. Nach der Tour wechselst du hier zwischen der Warteschlange und dieser Arbeitsfläche. Die App öffnet die Ansicht, die du zuletzt genutzt hast."
           },
           "sidebar": {
             "title": "Die Seitenleiste",
@@ -8788,11 +8788,11 @@
       "empty": "Nichts wartet auf den Start."
     },
     "done": {
-      "count": "In den letzten 7 Tagen gemergt: {count}",
+      "count": "Seit {date} gemergt: {count}",
+      "countAll": "Gemergt: {count}",
       "show": "Anzeigen",
       "hide": "Ausblenden",
-      "capped": "Zeigt die neuesten {shown} von {total}.",
-      "undated": "Nicht angezeigt, ohne Abschlussdatum: {count}"
+      "capped": "Zeigt die neuesten {shown} von {total}."
     },
     "card": {
       "waited": "wartete {duration}",

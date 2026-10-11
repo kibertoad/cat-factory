@@ -8140,7 +8140,7 @@
           },
           "views": {
             "title": "İki görünüm",
-            "body": "Panonun ikinci bir görünümü var. Kuyruk, tüm servislerde seni bekleyenleri listeler. Kuyruk ile bu tuval arasında buradan geçiş yaparsın. Uygulama en son kullandığın görünümde açılır."
+            "body": "Panonun ikinci bir görünümü var. Kuyruk, tüm servislerde seni bekleyenleri listeler. Tur bitince kuyruk ile bu tuval arasında buradan geçiş yaparsın. Uygulama en son kullandığın görünümde açılır."
           },
           "sidebar": {
             "title": "Kenar çubuğu",
@@ -8788,11 +8788,11 @@
       "empty": "Başlamayı bekleyen bir şey yok."
     },
     "done": {
-      "count": "Son 7 günde birleştirilen: {count}",
+      "count": "{date} tarihinden beri birleştirilen: {count}",
+      "countAll": "Birleştirilen: {count}",
       "show": "Göster",
       "hide": "Gizle",
-      "capped": "{total} içinden en yeni {shown} gösteriliyor.",
-      "undated": "Gösterilmeyen, tamamlanma tarihi olmayan: {count}"
+      "capped": "{total} içinden en yeni {shown} gösteriliyor."
     },
     "card": {
       "waited": "{duration} bekledi",

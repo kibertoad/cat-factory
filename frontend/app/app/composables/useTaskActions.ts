@@ -141,11 +141,13 @@ export function useTaskActions(taskId: () => string) {
           : null,
   )
   const pendingApproval = computed(() => {
-    const a = execution.approvalsByBlock.get(taskId())?.[0]
     // A reviewer gate whose review is incorporating / re-reviewing in the driver is doing
-    // background work, not awaiting a human: don't surface it as "Approval needed".
-    if (a && reviews.isBackground(a.agentKind, taskId())) return undefined
-    return a
+    // background work, not awaiting a human: skip it, and offer the first gate a human IS
+    // awaiting. The lane classifier counts any such gate, so a card filed under Needs you for an
+    // approval always has that approval to open.
+    return execution.approvalsByBlock
+      .get(taskId())
+      ?.find((a) => !reviews.isBackground(a.agentKind, taskId()))
   })
 
   /**

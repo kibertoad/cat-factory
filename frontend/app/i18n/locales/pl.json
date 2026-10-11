@@ -8140,7 +8140,7 @@
           },
           "views": {
             "title": "Dwa widoki",
-            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Tutaj przełączasz się między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Po zakończeniu przewodnika przełączasz się tutaj między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
           },
           "sidebar": {
             "title": "Pasek boczny",
@@ -8788,11 +8788,11 @@
       "empty": "Nic nie czeka na start."
     },
     "done": {
-      "count": "Scalone w ostatnich 7 dniach: {count}",
+      "count": "Scalone od {date}: {count}",
+      "countAll": "Scalone: {count}",
       "show": "Pokaż",
       "hide": "Ukryj",
-      "capped": "Pokazuje najnowsze {shown} z {total}.",
-      "undated": "Niewyświetlone, bez daty ukończenia: {count}"
+      "capped": "Pokazuje najnowsze {shown} z {total}."
     },
     "card": {
       "waited": "czekało {duration}",

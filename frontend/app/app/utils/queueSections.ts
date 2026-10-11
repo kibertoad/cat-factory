@@ -1,6 +1,11 @@
 import type { Block } from '~/types/domain'
 import { sortLaneTasks, type LaneTaskEntry } from '~/utils/laneSort'
-import type { LaneReason, TaskLane } from '~/utils/swimlanes'
+import {
+  selectDoneLaneTasks,
+  type DoneLaneCaps,
+  type LaneReason,
+  type TaskLane,
+} from '~/utils/swimlanes'
 
 // ---------------------------------------------------------------------------
 // The workspace queue: the swimlane model lifted out of the service frames.
@@ -49,20 +54,14 @@ export const QUEUE_SECTION_BY_REASON: Record<LaneReason, QueueSection> = {
 /**
  * The frame lane whose `smart` order each section borrows. The queue adds no comparator of its
  * own: an order that differed from the frame's would make the two surfaces disagree about what
- * to look at first.
+ * to look at first. Done takes the Done lane's own selection and order (below).
  */
-const SORT_LANE_BY_SECTION: Record<QueueSection, TaskLane> = {
+const SORT_LANE_BY_SECTION: Record<Exclude<QueueSection, 'done'>, TaskLane> = {
   needs_you: 'needs_you',
   in_flight: 'in_progress',
   waiting: 'not_started',
   ready_to_merge: 'needs_you',
-  done: 'done',
 }
-
-/** How far back the Done section reaches. The queue is about now, not the archive. */
-export const QUEUE_DONE_WINDOW_DAYS = 7
-/** Most merged tasks the Done section lists when opened. The count above it is never capped. */
-export const QUEUE_DONE_MAX_ITEMS = 20
 
 /** One queue entry: the lane entry plus the service the task belongs to. */
 export interface QueueEntry extends LaneTaskEntry {
@@ -73,39 +72,46 @@ export interface QueueEntry extends LaneTaskEntry {
 /** The assembled queue. */
 export interface QueueAssembly {
   readonly sections: Record<QueueSection, QueueEntry[]>
-  /** Every merged task inside the window, before {@link QUEUE_DONE_MAX_ITEMS}. */
+  /** Every merged task inside the retention window, before the item cap. */
   readonly doneInWindow: number
-  /**
-   * Merged tasks with no `completedAt`. They have no honest age, so the window cannot place
-   * them; they are counted here and left out of the section rather than guessed into it.
-   */
-  readonly doneUndated: number
 }
 
 /**
  * Bucket and order classified entries into queue sections. Pure, so the ordering rules are
  * testable without a Pinia instance.
+ *
+ * The Done section is the frames' Done lane over every service: the same selection
+ * (`selectDoneLaneTasks`) under the same workspace caps, so the queue and a frame never disagree
+ * about which merges are recent.
  */
-export function assembleQueue(entries: readonly QueueEntry[], now: number): QueueAssembly {
+export function assembleQueue(
+  entries: readonly QueueEntry[],
+  now: number,
+  doneCaps: DoneLaneCaps,
+): QueueAssembly {
   const sections = Object.fromEntries(QUEUE_SECTIONS.map((s) => [s, [] as QueueEntry[]])) as Record<
     QueueSection,
     QueueEntry[]
   >
   for (const entry of entries) sections[QUEUE_SECTION_BY_REASON[entry.reason]].push(entry)
 
-  const cutoff = now - QUEUE_DONE_WINDOW_DAYS * 86_400_000
-  const merged = sections.done
-  const inWindow = merged.filter((e) => e.task.completedAt != null && e.task.completedAt >= cutoff)
+  const byId = new Map(sections.done.map((e) => [e.task.id, e]))
+  const done = selectDoneLaneTasks(
+    sections.done.map((e) => e.task),
+    doneCaps,
+    now,
+  )
 
   for (const section of QUEUE_SECTIONS) {
-    const pool = section === 'done' ? inWindow : sections[section]
-    const ordered = sortLaneTasks(pool, 'smart', SORT_LANE_BY_SECTION[section]) as QueueEntry[]
-    sections[section] = section === 'done' ? ordered.slice(0, QUEUE_DONE_MAX_ITEMS) : ordered
+    if (section === 'done') continue
+    sections[section] = sortLaneTasks(
+      sections[section],
+      'smart',
+      SORT_LANE_BY_SECTION[section],
+    ) as QueueEntry[]
   }
+  // Newest completion first, as the frame's Done lane orders it.
+  sections.done = done.shown.map((task) => byId.get(task.id)!)
 
-  return {
-    sections,
-    doneInWindow: inWindow.length,
-    doneUndated: merged.filter((e) => e.task.completedAt == null).length,
-  }
+  return { sections, doneInWindow: done.shown.length + done.hiddenByCap }
 }

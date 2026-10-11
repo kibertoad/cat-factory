@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { agentKindMeta } from '~/utils/catalog'
-import { formatDuration } from '~/composables/useStepTimer'
+import { formatDuration, useNowTick } from '~/composables/useStepTimer'
+import { useFramePlacement } from '~/composables/useFramePlacement'
 import { LANE_REASON_LABEL_KEYS } from '~/utils/swimlanes'
 import type { QueueEntry } from '~/utils/queueSections'
 import IconButton from '~/components/common/IconButton.vue'
@@ -25,6 +26,10 @@ const ui = useUiStore()
 const execution = useExecutionStore()
 const agentRuns = useAgentRunsStore()
 const views = useWorkViewStore()
+const { focusFrame } = useFramePlacement()
+// A shared 30s clock, so "waited 4m" advances on a quiet board instead of freezing until some
+// unrelated event re-evaluates the card.
+const nowTick = useNowTick(30_000)
 
 const taskId = () => props.entry.task.id
 const {
@@ -51,7 +56,9 @@ const runFailed = computed(() => agentRun.value?.status === 'failed')
 
 /** The eyebrow's time fact: how long a human has kept it waiting, or how fresh the run is. */
 const timeFact = computed(() => {
-  const now = Date.now()
+  const now = nowTick.value
+  // The clock reads 0 until the card has mounted and subscribed.
+  if (!now) return null
   const e = props.entry
   if (reason.value === 'merged' && e.task.completedAt != null)
     return t('queue.card.merged', { duration: formatDuration(now - e.task.completedAt) })
@@ -112,10 +119,16 @@ function openTask() {
   ui.select(props.entry.task.id)
 }
 
-/** Leave the queue for the canvas, with this task selected. */
+/**
+ * Leave the queue for the canvas, with this task selected and its service in view. The canvas
+ * kept its own camera while the queue covered it, so without the pan the task is usually off
+ * screen. A task has no position of its own (it lives in its frame's swimlanes), so the camera
+ * centres on the frame.
+ */
 function showOnBoard() {
   views.show('board')
   ui.select(props.entry.task.id)
+  void focusFrame(props.entry.service?.id ?? props.entry.task.id)
 }
 </script>
 

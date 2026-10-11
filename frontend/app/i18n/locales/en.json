@@ -8459,7 +8459,7 @@
           },
           "views": {
             "title": "Two views",
-            "body": "The board has a second view. The queue lists what needs you across every service. Switch between the queue and this canvas here. The app opens on the view you used last."
+            "body": "The board has a second view. The queue lists what needs you across every service. Once the tour is over, switch between the queue and this canvas here. The app opens on the view you used last."
           },
           "sidebar": {
             "title": "The sidebar",
@@ -9119,11 +9119,11 @@
       "empty": "Nothing waits to start."
     },
     "done": {
-      "count": "Merged in the last 7 days: {count}",
+      "count": "Merged since {date}: {count}",
+      "countAll": "Merged: {count}",
       "show": "Show",
       "hide": "Hide",
-      "capped": "Shows the newest {shown} of {total}.",
-      "undated": "Not shown, no completion date: {count}"
+      "capped": "Shows the newest {shown} of {total}."
     },
     "card": {
       "waited": "waited {duration}",

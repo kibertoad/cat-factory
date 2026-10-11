@@ -406,10 +406,8 @@ useTutorialNudge()
 // plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it
 // simply has nothing to talk to, and the browser-persisted store carries on alone.
 useTutorialSync()
-// Every tour walks the CANVAS: its anchors are canvas nodes and the canvas toolbar. The queue view
-// covers the canvas, which stays mounted, so a tour started there would ring and explain elements
-// nobody can see. Starting a tour therefore moves the person to the canvas, which is then the view
-// they used last.
+// Starting a tour switches to the canvas, which every tour walks (the view store holds it for the
+// tour's length), and the canvas is then the view used last.
 watch(
   () => tutorial.touring,
   (touring) => {
@@ -477,29 +475,31 @@ watch(
         <main class="relative min-w-0 flex-1">
           <BoardCanvas />
           <!-- Toolbar, nav trigger and every advisory banner, in ONE stacked region that owns
-               their placement, so no two of them can cover each other. -->
-          <BoardTopOverlays
-            v-if="views.view === 'board'"
-            :connected="streamConnected"
-            :ever-connected="streamEverConnected"
-            :connection-failed="streamConnectionFailed"
-          />
-          <!-- The queue view sits OVER the canvas rather than replacing it, so switching back keeps
+               their placement, so no two of them can cover each other.
+
+               The queue view sits OVER the canvas rather than replacing it, so switching back keeps
                the canvas's camera and selection. Below the inspector (z-20), so a task opened from
-               the queue shows its panel beside it. The same advisories render here IN FLOW, above
-               the columns, so they push the queue down instead of covering its header. -->
+               the queue shows its panel beside it. The same advisories render IN FLOW above its
+               columns, so they push the queue down instead of covering its header.
+
+               ONE overlay instance serves both views, at the same place in this template: two
+               instances would remount every banner on each switch, and a banner whose dismissal
+               is its own component state would come back. On the canvas the wrapper is
+               `display: contents`, so it adds no box and the overlays float over the canvas as
+               before. -->
           <div
-            v-else
-            class="absolute inset-0 z-10 flex flex-col bg-app-950"
-            data-testid="queue-view-host"
+            :class="
+              views.view === 'queue' ? 'absolute inset-0 z-10 flex flex-col bg-app-950' : 'contents'
+            "
+            :data-testid="views.view === 'queue' ? 'queue-view-host' : undefined"
           >
             <BoardTopOverlays
-              in-flow
+              :in-flow="views.view === 'queue'"
               :connected="streamConnected"
               :ever-connected="streamEverConnected"
               :connection-failed="streamConnectionFailed"
             />
-            <QueueView class="min-h-0 flex-1" />
+            <QueueView v-if="views.view === 'queue'" class="min-h-0 flex-1" />
           </div>
           <InspectorPanel />
           <!-- Code-split focus view. The fade lives here (not inside the component) so the

@@ -93,6 +93,12 @@ test.describe('in-app tutorial', () => {
         )
       })
       .toBe(true)
+
+    // A click on Queue mid-tour does not take the canvas away from the tour: the next step's
+    // anchor, the canvas toolbar, is still there.
+    await page.getByTestId('work-view-queue').click()
+    await expect(page.getByTestId('queue-view')).toHaveCount(0)
+    await expect(page.getByTestId('board-fit-view')).toBeVisible()
   })
 
   test('remembers "no thanks" across a reload', async ({ page, request }) => {

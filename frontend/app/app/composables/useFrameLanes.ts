@@ -6,7 +6,6 @@ import {
   type LaneTaskEntry,
   type RenderedLane,
 } from '~/utils/laneSort'
-import { useTaskLaneClassifier } from '~/composables/useTaskLaneClassifier'
 import {
   selectDoneLaneTasks,
   TASK_LANES,
@@ -27,7 +26,8 @@ export function useFrameLanes(frameId: Ref<string>) {
   const board = useBoardStore()
   const settings = useWorkspaceSettingsStore()
   const laneView = useLaneViewStore()
-  const { classify } = useTaskLaneClassifier()
+  // The workspace-wide classification: every frame and the queue read one verdict per task.
+  const queue = useWorkspaceQueueStore()
 
   /** Tasks directly in the frame plus those inside its modules: a module renders no box now. */
   const tasks = computed(() => board.allTasksUnder(frameId.value))
@@ -40,10 +40,11 @@ export function useFrameLanes(frameId: Ref<string>) {
   /** Every task bucketed by lane, in board order, before sorting. */
   const byLane = computed(() => {
     const buckets = new Map<TaskLane, LaneTaskEntry[]>(TASK_LANES.map((lane) => [lane, []]))
-    tasks.value.forEach((task, order) => {
-      const { lane, entry } = classify(task, order)
+    for (const task of tasks.value) {
+      // The store walks every frame's tasks, this one's included, so each has a verdict.
+      const { lane, entry } = queue.classified.get(task.id)!
       buckets.get(lane)!.push(entry)
-    })
+    }
     return buckets
   })
 
