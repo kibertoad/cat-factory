@@ -32,6 +32,7 @@ import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { SAFE_AREA_INSET_CLASS } from '~/utils/safeArea'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -538,6 +539,7 @@ function exportJson() {
       <div
         v-if="open"
         class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="SAFE_AREA_INSET_CLASS"
         role="dialog"
         aria-modal="true"
       >

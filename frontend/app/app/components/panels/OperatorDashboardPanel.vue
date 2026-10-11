@@ -7,6 +7,7 @@ import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { SAFE_AREA_INSET_CLASS } from '~/utils/safeArea'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -123,6 +124,7 @@ watch(
       <div
         v-if="open"
         class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="SAFE_AREA_INSET_CLASS"
         role="dialog"
         aria-modal="true"
         data-testid="operator-dashboard"

@@ -20,8 +20,9 @@ export const SAFE_AREA_GUTTER_CLASS = [
 ].join(' ')
 
 /**
- * A full-bleed overlay's padding (`AgentStepDetail`, the model configuration takeover): only the
- * inset, so on a screen without one the layout is exactly the edge-to-edge one it was designed as.
+ * A full-bleed overlay's padding (`AgentStepDetail`, the model configuration takeover, the
+ * observability, reports, operator dashboard and Kaizen takeovers): only the inset, so on a screen
+ * without one the layout is exactly the edge-to-edge one it was designed as.
  */
 export const SAFE_AREA_INSET_CLASS = [
   'pt-[env(safe-area-inset-top)]',
