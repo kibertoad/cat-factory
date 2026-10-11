@@ -224,6 +224,7 @@ describe('navSlotFilter', () => {
       tutorial: 'the walkthroughs - the surface with the fewest destinations needs them most',
       'keyboard-shortcuts': 'the cheatsheet covers the board and the palette, which every role has',
       'ui-role': 'the way BACK out of the narrowed role',
+      'describe-work': 'filing a task from one sentence is the job the intake role exists for',
       'queue-view': 'which view of the board a person works in is their own choice, in every role',
       'board-view': 'the way back to the canvas from the queue view, in every role',
     }

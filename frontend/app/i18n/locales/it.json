@@ -2796,7 +2796,8 @@
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
         "notificationSettings": "notifiche email instradamento canali casella",
         "queueView": "coda vista elenco in attesa",
-        "boardView": "board canvas mappa vista pianificare"
+        "boardView": "board canvas mappa vista pianificare",
+        "describeWork": "descrivi nuovo lavoro attività aggiungi crea funzionalità bug"
       }
     },
     "shortcuts": {
@@ -8788,12 +8789,35 @@
       "parked": "L’esecuzione attende una persona. Apri l’attività per vedere cosa serve.",
       "waitingOn": "In attesa di {deps}",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Descrivi nuovo lavoro"
   },
   "views": {
     "title": "Viste",
     "queue": "Coda",
     "board": "Board",
     "openQueue": "Apri la vista coda"
+  },
+  "describeWork": {
+    "title": "Descrivi nuovo lavoro",
+    "textLabel": "Cosa va fatto",
+    "textHint": "Basta una frase. Aggiungi più dettagli se ne hai.",
+    "textPlaceholder": "Aggiungi un audit log per gli accessi. Registra ogni accesso con ora, utente ed esito.",
+    "savedAs": "Titolo dell’attività: {title}",
+    "serviceLabel": "Servizio",
+    "servicePlaceholder": "Seleziona un servizio",
+    "kindLabel": "Tipo",
+    "kind": {
+      "feature": "Funzionalità",
+      "bug": "Bug"
+    },
+    "moreKinds": "Altri tipi…",
+    "changeHowItRuns": "Cambia come viene eseguita",
+    "workspaceDefault": "Predefinito del workspace",
+    "attachContext": "Allega contesto (apre il modulo completo)",
+    "footerHint": "L’attività viene aggiunta come non iniziata. Parte quando premi Avvia.",
+    "add": "Aggiungi alla coda",
+    "addAndStart": "Aggiungi e avvia",
+    "addedToast": "«{title}» aggiunta alla coda"
   }
 }

@@ -2669,7 +2669,8 @@
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
         "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
         "queueView": "kolejka widok lista oczekuje",
-        "boardView": "tablica kanwa mapa widok planowanie"
+        "boardView": "tablica kanwa mapa widok planowanie",
+        "describeWork": "opisz nową pracę zadanie dodaj utwórz funkcja błąd"
       }
     },
     "integrationsHub": {
@@ -8788,12 +8789,35 @@
       "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
       "waitingOn": "Czeka na {deps}",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Opisz nową pracę"
   },
   "views": {
     "title": "Widoki",
     "queue": "Kolejka",
     "board": "Tablica",
     "openQueue": "Otwórz widok kolejki"
+  },
+  "describeWork": {
+    "title": "Opisz nową pracę",
+    "textLabel": "Co trzeba zrobić",
+    "textHint": "Wystarczy jedno zdanie. Dodaj więcej szczegółów, jeśli je masz.",
+    "textPlaceholder": "Dodaj dziennik audytu dla zdarzeń logowania. Zapisuj każde logowanie z czasem, użytkownikiem i wynikiem.",
+    "savedAs": "Tytuł zadania: {title}",
+    "serviceLabel": "Serwis",
+    "servicePlaceholder": "Wybierz serwis",
+    "kindLabel": "Rodzaj",
+    "kind": {
+      "feature": "Funkcja",
+      "bug": "Błąd"
+    },
+    "moreKinds": "Więcej rodzajów…",
+    "changeHowItRuns": "Zmień sposób uruchomienia",
+    "workspaceDefault": "Domyślne dla workspace'u",
+    "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
+    "footerHint": "Zadanie zostanie dodane jako nierozpoczęte. Ruszy, gdy naciśniesz Start.",
+    "add": "Dodaj do kolejki",
+    "addAndStart": "Dodaj i uruchom",
+    "addedToast": "Dodano „{title}” do kolejki"
   }
 }

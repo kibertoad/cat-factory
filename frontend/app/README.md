@@ -1413,6 +1413,13 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
 - **Palettes** (`components/palettes`): drag blocks, pipelines and agents onto
   the board.
+- **Describe new work** (`components/queue/DescribeWorkModal.vue`, `utils/describeWork.ts`): the
+  one-sentence intake, from Create, the palette and the queue header. It files a feature or a bug
+  from a sentence and a service, titled by the first sentence; pipeline, merge policy and model
+  preset sit behind one disclosure that opens by itself when a value is set (`showOverrideField`).
+  It rebuilds no other kind: "More kinds" and "Attach context" hand the text to `AddTaskModal`,
+  which stays the one home of those rules. Both share `utils/reviewFriction.ts` for the review-debt
+  409.
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task

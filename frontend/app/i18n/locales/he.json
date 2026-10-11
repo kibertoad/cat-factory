@@ -2669,7 +2669,8 @@
         "foundationalServices": "יכולת משותפת פלטפורמה שירות api חוזה openapi קטלוג",
         "notificationSettings": "התראות אימייל ניתוב ערוצים תיבה",
         "queueView": "תור תצוגה ממתין רשימה",
-        "boardView": "לוח קנבס מפה תצוגה תכנון"
+        "boardView": "לוח קנבס מפה תצוגה תכנון",
+        "describeWork": "תאר עבודה חדשה משימה הוסף צור תכונה באג"
       }
     },
     "integrationsHub": {
@@ -8788,12 +8789,35 @@
       "parked": "ההרצה ממתינה לאדם. פתחו את המשימה כדי לראות מה נדרש.",
       "waitingOn": "ממתין ל-{deps}",
       "pr": "בקשת משיכה #{number}"
-    }
+    },
+    "describeWork": "תיאור עבודה חדשה"
   },
   "views": {
     "title": "תצוגות",
     "queue": "תור",
     "board": "לוח",
     "openQueue": "פתח את תצוגת התור"
+  },
+  "describeWork": {
+    "title": "תיאור עבודה חדשה",
+    "textLabel": "מה צריך לעשות",
+    "textHint": "משפט אחד מספיק. הוסיפו פרטים נוספים אם יש לכם.",
+    "textPlaceholder": "הוסיפו יומן ביקורת לאירועי כניסה. תעדו כל כניסה עם הזמן, המשתמש והתוצאה.",
+    "savedAs": "כותרת המשימה: {title}",
+    "serviceLabel": "שירות",
+    "servicePlaceholder": "בחירת שירות",
+    "kindLabel": "סוג",
+    "kind": {
+      "feature": "פיצ׳ר",
+      "bug": "באג"
+    },
+    "moreKinds": "סוגים נוספים…",
+    "changeHowItRuns": "שינוי אופן ההרצה",
+    "workspaceDefault": "ברירת המחדל של סביבת העבודה",
+    "attachContext": "צירוף הקשר (פותח את הטופס המלא)",
+    "footerHint": "המשימה נוספת כלא התחילה. היא מתחילה כשלוחצים על התחלה.",
+    "add": "הוספה לתור",
+    "addAndStart": "הוספה והתחלה",
+    "addedToast": "“{title}” נוספה לתור"
   }
 }

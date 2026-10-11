@@ -340,6 +340,17 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeStartFromDesign() {
     startFromDesign.value = null
   }
+  // The one-sentence intake ("Describe new work", issue #2258): open, and the service it opened
+  // on, or null to let the reader pick one. The full form above stays the home of every other kind.
+  const describeWorkOpen = ref(false)
+  const describeWorkServiceId = ref<string | null>(null)
+  function openDescribeWork(serviceId: string | null = null) {
+    describeWorkServiceId.value = serviceId
+    describeWorkOpen.value = true
+  }
+  function closeDescribeWork() {
+    describeWorkOpen.value = false
+  }
   function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
     addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
@@ -405,6 +416,10 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeStartFromDesign,
     openAddTask,
     closeAddTask,
+    describeWorkOpen,
+    describeWorkServiceId,
+    openDescribeWork,
+    closeDescribeWork,
     openReviewFriction,
     closeReviewFriction,
     openAddRecurring,

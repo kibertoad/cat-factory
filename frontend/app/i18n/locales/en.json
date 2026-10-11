@@ -2824,7 +2824,8 @@
         "foundationalServices": "shared capability platform service api contract openapi catalog",
         "notificationSettings": "notifications email routing channels inbox",
         "queueView": "queue view needs you inbox list waiting",
-        "boardView": "board canvas map view plan"
+        "boardView": "board canvas map view plan",
+        "describeWork": "describe new work task add create feature bug sentence"
       }
     },
     "shortcuts": {
@@ -9119,12 +9120,35 @@
       "parked": "The run waits for a person. Open the task to see what it needs.",
       "waitingOn": "Waits for {deps}",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Describe new work"
   },
   "views": {
     "title": "Views",
     "queue": "Queue",
     "board": "Board",
     "openQueue": "Open the queue view"
+  },
+  "describeWork": {
+    "title": "Describe new work",
+    "textLabel": "What must be done",
+    "textHint": "One sentence is enough. Add more detail if you have it.",
+    "textPlaceholder": "Add an audit log for sign-in events. Record each sign-in with the time, the user and the result.",
+    "savedAs": "Task title: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Select a service",
+    "kindLabel": "Kind",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "More kinds…",
+    "changeHowItRuns": "Change how this runs",
+    "workspaceDefault": "Workspace default",
+    "attachContext": "Attach context (opens the full form)",
+    "footerHint": "The task is added as not started. It starts when you press Start.",
+    "add": "Add to queue",
+    "addAndStart": "Add and start",
+    "addedToast": "Added “{title}” to the queue"
   }
 }

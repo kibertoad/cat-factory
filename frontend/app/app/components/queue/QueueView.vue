@@ -16,6 +16,8 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
  */
 const { t } = useI18n()
 const queueStore = useWorkspaceQueueStore()
+const ui = useUiStore()
+const access = useWorkspaceAccess()
 
 const sections = computed(() => queueStore.queue.sections)
 const doneOpen = ref(false)
@@ -85,6 +87,16 @@ const COLUMN_ACCENT: Record<Column['id'], string> = {
         <!-- The inbox still holds what is NOT a task: platform alerts, budget thresholds, key
              drift. The canvas shows it in its toolbar, which this view does not have. -->
         <NotificationsInbox />
+        <!-- The one-sentence intake, opened on the service the queue is filtered to, if any. -->
+        <UButton
+          v-if="access.canWriteBoard.value"
+          icon="i-lucide-plus"
+          size="sm"
+          data-testid="queue-describe-work"
+          @click="ui.openDescribeWork(queueStore.serviceFilter)"
+        >
+          {{ t('queue.describeWork') }}
+        </UButton>
       </div>
     </header>
 

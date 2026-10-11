@@ -2669,7 +2669,8 @@
         "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo",
         "notificationSettings": "notificaciones correo enrutamiento canales bandeja",
         "queueView": "cola vista te necesita lista pendiente",
-        "boardView": "tablero lienzo mapa vista planificar"
+        "boardView": "tablero lienzo mapa vista planificar",
+        "describeWork": "describir nuevo trabajo tarea añadir crear funcionalidad error"
       }
     },
     "integrationsHub": {
@@ -8788,12 +8789,35 @@
       "parked": "La ejecución espera a una persona. Abre la tarea para ver qué necesita.",
       "waitingOn": "Espera a {deps}",
       "pr": "Pull request #{number}"
-    }
+    },
+    "describeWork": "Describir trabajo nuevo"
   },
   "views": {
     "title": "Vistas",
     "queue": "Cola",
     "board": "Tablero",
     "openQueue": "Abrir la vista de cola"
+  },
+  "describeWork": {
+    "title": "Describir trabajo nuevo",
+    "textLabel": "Qué hay que hacer",
+    "textHint": "Una frase basta. Añade más detalle si lo tienes.",
+    "textPlaceholder": "Añade un registro de auditoría para los inicios de sesión. Registra cada inicio con la hora, el usuario y el resultado.",
+    "savedAs": "Título de la tarea: {title}",
+    "serviceLabel": "Servicio",
+    "servicePlaceholder": "Selecciona un servicio",
+    "kindLabel": "Tipo",
+    "kind": {
+      "feature": "Funcionalidad",
+      "bug": "Error"
+    },
+    "moreKinds": "Más tipos…",
+    "changeHowItRuns": "Cambiar cómo se ejecuta",
+    "workspaceDefault": "Predeterminado del workspace",
+    "attachContext": "Adjuntar contexto (abre el formulario completo)",
+    "footerHint": "La tarea se añade sin empezar. Empieza cuando pulses Iniciar.",
+    "add": "Añadir a la cola",
+    "addAndStart": "Añadir e iniciar",
+    "addedToast": "Se añadió «{title}» a la cola"
   }
 }

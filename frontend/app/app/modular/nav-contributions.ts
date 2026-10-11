@@ -196,6 +196,7 @@ export interface NavCommandSpec {
  * dead button. Consumer modules don't use these — they carry their own `run`.
  */
 export const NAV_ACTIONS = [
+  'describeWork',
   'assistant',
   'guidedReview',
   'buildPipeline',
@@ -345,6 +346,26 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  * the whole sidebar costs it nothing it is there to do.
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
+  {
+    // The one-sentence intake (issue #2258): what needs doing, a service, feature or bug. First in
+    // Create, because filing a task is the most frequent thing anyone creates, and until now it had
+    // no entry here at all (it lived on each frame). Every tier and the intake role: describing
+    // work is what that role is for.
+    id: 'describe-work',
+    labelKey: 'queue.describeWork',
+    icon: 'i-lucide-plus',
+    surfaces: S('sidebar', 'command'),
+    gate: (g) => g.canWriteBoard && g.boardHasService,
+    action: 'describeWork',
+    intake: true,
+    testId: 'nav-describe-work',
+    sidebar: { group: 'create', order: 1 },
+    command: {
+      group: 'create',
+      order: 1,
+      keywordsKey: 'layout.commandBar.keywords.describeWork',
+    },
+  },
   {
     // The in-app assistant. `intake: true` and not `advanced`, because it is the shortest route
     // to the two things a narrowed role is on the board to do (put a repository on it, file a
