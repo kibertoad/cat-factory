@@ -41,6 +41,11 @@ export interface ClientOptions {
   /** Headers sent on every request. */
   headers?: Record<string, string>
   /**
+   * The workspace every workspace-scoped call acts on, sent as `x-cat-factory-workspace`. Needed
+   * only for a key that reaches more than one workspace; a per-call `headers` entry overrides it.
+   */
+  workspaceId?: string
+  /**
    * The personal password of the user this key is BOUND to, if any: it unlocks that user's own
    * model subscription for the runs this client starts, retries and answers parks on. Sent as
    * `X-Personal-Password`, never stored by the deployment. `setPersonalPassword` supplies it later,
@@ -139,6 +144,7 @@ export class Transport {
       accept: 'application/json',
       'user-agent': `${agent}cat-factory-sdk-js/${SDK_VERSION}`,
       ...options.headers,
+      ...(options.workspaceId ? { 'x-cat-factory-workspace': options.workspaceId } : {}),
     }
     this.doFetch = options.fetch ?? globalThis.fetch.bind(globalThis)
     this.personalPassword = options.personalPassword

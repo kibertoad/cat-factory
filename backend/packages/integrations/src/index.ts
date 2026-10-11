@@ -505,9 +505,12 @@ export {
 } from './modules/providers/ApiKeyService.js'
 export {
   PublicApiKeyService,
+  keyReaches,
+  reachCovers,
   scopeSatisfies,
   type PublicApiKeyServiceDependencies,
   type PublicApiKeyAuth,
+  type PublicApiKeyIdentity,
   type IssuedPublicApiKey,
 } from './modules/publicApi/PublicApiKeyService.js'
 export {

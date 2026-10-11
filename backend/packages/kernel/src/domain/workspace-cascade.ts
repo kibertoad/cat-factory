@@ -93,7 +93,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'platform_run_days',
   'provider_model_catalog',
   'provider_subscription_tokens',
-  'public_api_keys',
+  'public_api_key_workspaces',
   'reference_architectures',
   'release_health_configs',
   'requirement_reviews',

@@ -18,9 +18,9 @@ import { publicMcpController } from '../src/modules/publicApi/PublicMcpControlle
 // The loopback is real (`appLoopback` over the same app), with a stub `/api/v1` route standing in
 // for `PublicApiController` — so this exercises the wiring rather than a hand-made `fetch`.
 
-const KEYS: Record<string, { scope: 'read' | 'write' | 'admin'; workspaceId: string }> = {
-  'reader.secret': { scope: 'read', workspaceId: 'ws_1' },
-  'writer.secret': { scope: 'write', workspaceId: 'ws_1' },
+const KEYS: Record<string, { scope: 'read' | 'write' | 'admin'; workspaceIds: string[] }> = {
+  'reader.secret': { scope: 'read', workspaceIds: ['ws_1'] },
+  'writer.secret': { scope: 'write', workspaceIds: ['ws_1'] },
 }
 
 /** A key service that resolves the table above and nothing else. */
@@ -29,7 +29,12 @@ function keyService(): PublicApiKeyService {
     authenticate: async (raw?: string) => {
       const found = raw ? KEYS[raw] : undefined
       return found
-        ? { keyId: 'key_1', accountId: 'acc_1', workspaceId: found.workspaceId, scope: found.scope }
+        ? {
+            keyId: 'key_1',
+            accountId: 'acc_1',
+            workspaceIds: found.workspaceIds,
+            scope: found.scope,
+          }
         : null
     },
   } as unknown as PublicApiKeyService

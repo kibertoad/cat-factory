@@ -4,7 +4,7 @@ import { documentSourceKindSchema } from './documents.js'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
-import { publicApiScopeSchema } from './public-api-keys.js'
+import { publicApiKeyWorkspaceIdsSchema, publicApiScopeSchema } from './public-api-keys.js'
 import { MAX_FRAGMENT_ID_LENGTH } from './fragment-library.js'
 import { MAX_TASK_FRAGMENTS } from './public-fragments.js'
 import { cursorSchema, epochMsQuerySchema, pageLimitSchema } from './public-paging.js'
@@ -991,8 +991,13 @@ export const publicIdentitySchema = v.object({
   keyId: v.string(),
   /** The account the key belongs to. */
   accountId: v.string(),
-  /** The ONE workspace every call under this key acts within. */
+  /**
+   * The workspace this request acted on: the one the `x-cat-factory-workspace` header named, or
+   * the key's only workspace. A key reaching several workspaces must send the header here too.
+   */
   workspaceId: v.string(),
+  /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
+  workspaceIds: publicApiKeyWorkspaceIdsSchema,
   /**
    * What the key may do. The ladder is inclusive (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
    * integration comparing its own scope against what it needs should test the RUNG, not equality.

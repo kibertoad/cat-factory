@@ -9,6 +9,7 @@ function key(over: Partial<PublicApiKey> = {}): PublicApiKey {
     id: 'pak_1',
     accountId: 'acc1',
     workspaceId: 'ws1',
+    workspaceIds: ['ws1'],
     label: 'CI',
     scope: 'write',
     createdByUserId: null,
@@ -108,6 +109,33 @@ describe('publicApiKeys store', () => {
 
     await store.create('mine', 'write', true)
     expect(body).toHaveBeenCalledWith({ label: 'mine', scope: 'write', actsAsSelf: true })
+  })
+
+  it('sends a reach only when one was chosen, so the default stays this workspace alone', async () => {
+    // An omitted `workspaceIds` and a `null` one mean opposite things on the wire (this board vs
+    // every board in the account), so the store must never turn "not chosen" into a value.
+    const body = vi.fn((_body: unknown) => Promise.resolve({ key: key(), secret: 's' }))
+    vi.stubGlobal('useApi', () => ({ createPublicApiKey: (_ws: string, b: unknown) => body(b) }))
+
+    const store = usePublicApiKeysStore()
+    await store.create('ci', 'read')
+    expect(body).toHaveBeenLastCalledWith({ label: 'ci', scope: 'read', actsAsSelf: false })
+
+    await store.create('all', 'read', false, null)
+    expect(body).toHaveBeenLastCalledWith({
+      label: 'all',
+      scope: 'read',
+      actsAsSelf: false,
+      workspaceIds: null,
+    })
+
+    await store.create('two', 'read', false, ['ws1', 'ws2'])
+    expect(body).toHaveBeenLastCalledWith({
+      label: 'two',
+      scope: 'read',
+      actsAsSelf: false,
+      workspaceIds: ['ws1', 'ws2'],
+    })
   })
 
   it('revoke drops the key from the list', async () => {
