@@ -438,6 +438,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             </p>
             <template v-if="infraSetup.logs">
               <UButton
+                color="neutral"
                 :icon="showInfraSetupLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
                 variant="ghost"
                 size="xs"
@@ -476,6 +477,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
           <div v-if="executionId">
             <UButton
+              color="neutral"
               :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
               variant="ghost"
               size="xs"

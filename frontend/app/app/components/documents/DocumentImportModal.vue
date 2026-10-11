@@ -87,7 +87,6 @@ function preview(externalId: string) {
           <UButton
             v-for="s in documents.sources"
             :key="s.source"
-            color="primary"
             variant="soft"
             :icon="s.icon"
             @click="ui.openDocumentConnect(s.source)"
@@ -115,7 +114,6 @@ function preview(externalId: string) {
             />
           </UFormField>
           <UButton
-            color="primary"
             icon="i-lucide-file-down"
             :loading="importing"
             :disabled="!ref_.trim()"
@@ -149,7 +147,6 @@ function preview(externalId: string) {
                 <DocumentSyncState :doc="doc" class="mt-1" />
               </div>
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-wand-sparkles"

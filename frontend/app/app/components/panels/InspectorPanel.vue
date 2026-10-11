@@ -678,7 +678,7 @@ const showOriginalDescription = ref(false)
         </UButton>
         <UButton
           color="error"
-          variant="ghost"
+          variant="soft"
           size="sm"
           icon="i-lucide-trash-2"
           :class="isServiceFrame ? '' : 'ms-auto'"

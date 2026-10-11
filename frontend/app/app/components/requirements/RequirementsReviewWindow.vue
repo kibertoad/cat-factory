@@ -921,7 +921,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             v-if="autoDefaults.get(item.id)!.groundedInFragment"
                             size="xs"
                             variant="subtle"
-                            color="primary"
                           >
                             {{
                               t('requirements.currentStandard', {
@@ -1027,7 +1026,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             </p>
                             <div class="mt-2 flex flex-wrap items-center gap-2">
                               <UButton
-                                color="primary"
                                 variant="soft"
                                 size="xs"
                                 icon="i-lucide-check"
@@ -1231,7 +1229,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             class="border-t border-default pt-4"
           >
             <UButton
-              color="primary"
               variant="soft"
               size="sm"
               block
@@ -1255,7 +1252,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <div v-if="review && status === 'ready'" class="space-y-2 border-t border-default pt-4">
             <UButton
               v-if="canProceed"
-              color="primary"
               size="sm"
               block
               icon="i-lucide-arrow-right"
@@ -1270,7 +1266,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </UButton>
             <UButton
               v-else
-              color="primary"
               size="sm"
               block
               icon="i-lucide-wand-sparkles"
@@ -1296,7 +1291,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- action: merged (inspect → re-review / redo) -->
           <div v-if="review && merged" class="space-y-2 border-t border-default pt-4">
             <UButton
-              color="primary"
               size="sm"
               block
               icon="i-lucide-sparkles"
@@ -1333,7 +1327,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 :placeholder="t('requirements.redoPlaceholder')"
               />
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 block

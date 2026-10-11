@@ -81,6 +81,7 @@ async function restore(serviceId: string) {
         </p>
       </div>
       <UButton
+        color="neutral"
         icon="i-lucide-eye"
         size="xs"
         variant="ghost"

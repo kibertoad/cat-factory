@@ -100,12 +100,7 @@ async function unlink(doc: SourceDocument) {
         <div v-if="!documents.documents.length" class="space-y-3 text-center">
           <UIcon name="i-lucide-file-plus" class="mx-auto h-8 w-8 text-dimmed" />
           <p class="text-sm text-muted">{{ t('documents.templates.importFirst') }}</p>
-          <UButton
-            color="primary"
-            variant="soft"
-            icon="i-lucide-file-down"
-            @click="ui.openDocumentImport()"
-          >
+          <UButton variant="soft" icon="i-lucide-file-down" @click="ui.openDocumentImport()">
             {{ t('documents.templates.importButton') }}
           </UButton>
         </div>
@@ -215,7 +210,6 @@ async function unlink(doc: SourceDocument) {
               />
             </UFormField>
             <UButton
-              color="primary"
               variant="soft"
               icon="i-lucide-file-badge"
               :loading="busy"

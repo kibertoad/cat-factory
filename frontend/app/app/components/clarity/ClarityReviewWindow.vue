@@ -552,7 +552,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <div v-if="review && status === 'ready'" class="space-y-2 border-t border-default pt-4">
             <UButton
               v-if="canProceed"
-              color="primary"
               size="sm"
               block
               icon="i-lucide-arrow-right"
@@ -566,7 +565,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </UButton>
             <UButton
               v-else
-              color="primary"
               size="sm"
               block
               icon="i-lucide-wand-sparkles"
@@ -591,7 +589,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- action: merged (inspect → re-review / redo) -->
           <div v-if="review && merged" class="space-y-2 border-t border-default pt-4">
             <UButton
-              color="primary"
               size="sm"
               block
               icon="i-lucide-sparkles"
@@ -626,7 +623,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 :placeholder="t('clarity.redoPlaceholder')"
               />
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 block

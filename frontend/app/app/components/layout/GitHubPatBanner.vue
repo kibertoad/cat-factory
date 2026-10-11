@@ -53,7 +53,6 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
                 target="_blank"
                 rel="noopener noreferrer"
                 color="warning"
-                variant="solid"
                 icon="i-lucide-external-link"
                 trailing
               >

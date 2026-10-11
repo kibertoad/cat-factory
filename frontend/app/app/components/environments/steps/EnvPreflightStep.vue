@@ -39,7 +39,6 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
       <UButton
         size="xs"
         variant="soft"
-        color="primary"
         icon="i-lucide-list-checks"
         :loading="store.preflightRunning"
         data-testid="env-setup-preflight-run"
@@ -101,7 +100,6 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
     <JourneyStepNav :go-back="goBack">
       <template #primary>
         <UButton
-          color="primary"
           trailing-icon="i-lucide-arrow-right"
           data-testid="env-setup-next"
           @click="exit('advance')"

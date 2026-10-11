@@ -82,7 +82,6 @@ function openConfig(event: MouseEvent) {
               :to="configUrl"
               size="sm"
               color="info"
-              variant="solid"
               icon="i-lucide-settings"
               data-testid="default-test-env-configure"
               @click="openConfig"

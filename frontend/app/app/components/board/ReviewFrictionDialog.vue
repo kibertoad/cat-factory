@@ -135,13 +135,7 @@ function createAnyway() {
           >
             {{ t('errors.reviewFriction.createAnyway') }}
           </UButton>
-          <UButton
-            color="primary"
-            size="sm"
-            icon="i-lucide-list-checks"
-            :disabled="pending"
-            @click="goReview"
-          >
+          <UButton size="sm" icon="i-lucide-list-checks" :disabled="pending" @click="goReview">
             {{ t('errors.reviewFriction.goReview') }}
           </UButton>
         </div>

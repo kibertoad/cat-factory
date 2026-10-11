@@ -12,6 +12,17 @@ export default defineAppConfig({
       error: 'rose',
       neutral: 'slate',
     },
+    // The default button and badge are Nuxt UI's own, stated so they have one visible home and
+    // `scripts/check-frontend-variants.mjs` can refuse a literal equal to them (the variant policy
+    // in `frontend/app/README.md`). They must stay the PRIMARY tier: a theme's `style.defaults`
+    // replaces these for every control that does not state the prop, so the unstyled group is the
+    // one a theme restyles, and the quiet chrome states `color="neutral" variant="ghost"` itself.
+    button: {
+      defaultVariants: { color: 'primary', variant: 'solid', size: 'md' },
+    },
+    badge: {
+      defaultVariants: { color: 'primary', variant: 'solid', size: 'md' },
+    },
     // Give every overlay the same layered surface the agent-run-details reader uses: the deep
     // `app-950` surface (below `bg-default`) so the `bg-default` panels/cards inside pop, with
     // `border-default` chrome. All tokens are theme role tokens (`app-950` is the hand-defined

@@ -230,7 +230,6 @@ function resetToDefaults() {
               {{ t('notificationSettings.action.reset') }}
             </UButton>
             <UButton
-              color="primary"
               variant="soft"
               size="xs"
               icon="i-lucide-save"

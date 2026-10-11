@@ -151,7 +151,6 @@ async function connectManually() {
         <UButton
           v-else
           size="xs"
-          color="primary"
           variant="subtle"
           icon="i-lucide-plug"
           :loading="connectingId === inst.installationId"
@@ -164,7 +163,7 @@ async function connectManually() {
     </section>
 
     <USeparator :label="t('github.connect.or')" />
-    <UButton color="primary" icon="i-lucide-github" :loading="installing" @click="install">
+    <UButton icon="i-lucide-github" :loading="installing" @click="install">
       {{ t('github.connect.installApp') }}
     </UButton>
 

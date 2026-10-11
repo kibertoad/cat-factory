@@ -243,7 +243,6 @@ function backToApp() {
           </UButton>
           <UButton
             block
-            color="primary"
             :loading="screen === 'submitting'"
             :disabled="!workspaceId"
             data-testid="mcp-authorize-approve"

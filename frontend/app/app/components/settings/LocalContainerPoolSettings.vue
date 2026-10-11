@@ -164,7 +164,7 @@ async function save() {
     </section>
 
     <div class="flex justify-end">
-      <UButton color="primary" icon="i-lucide-save" :loading="saving" @click="save">
+      <UButton icon="i-lucide-save" :loading="saving" @click="save">
         {{ t('common.save') }}
       </UButton>
     </div>

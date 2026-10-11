@@ -139,7 +139,6 @@ function toggle(id: string) {
       <UBadge
         v-for="(s, i) in queued"
         :key="s.id"
-        color="primary"
         variant="subtle"
         size="sm"
         class="cursor-pointer"

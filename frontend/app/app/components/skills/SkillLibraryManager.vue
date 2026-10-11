@@ -236,6 +236,7 @@ async function unlinkSource(id: string) {
           </UBadge>
           <div class="ms-auto flex gap-1">
             <IconButton
+              color="neutral"
               icon="i-lucide-search-check"
               size="xs"
               variant="ghost"
@@ -244,6 +245,7 @@ async function unlinkSource(id: string) {
               @click="checkSource(s.id)"
             />
             <IconButton
+              color="neutral"
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"

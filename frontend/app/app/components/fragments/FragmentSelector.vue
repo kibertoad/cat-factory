@@ -169,7 +169,6 @@ function manageAccount() {
       <UBadge
         v-for="f in selectedFragments"
         :key="f.id"
-        color="primary"
         variant="subtle"
         size="sm"
         class="cursor-pointer"

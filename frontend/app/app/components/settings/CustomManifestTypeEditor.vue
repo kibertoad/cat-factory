@@ -192,7 +192,7 @@ async function remove(type: CustomManifestType) {
         <UButton v-if="editing" color="neutral" variant="ghost" size="sm" @click="startAdd">
           {{ t('common.cancel') }}
         </UButton>
-        <UButton color="primary" size="sm" :loading="busy" :disabled="!canSave" @click="save">
+        <UButton size="sm" :loading="busy" :disabled="!canSave" @click="save">
           {{ editing ? t('common.save') : t('settings.infrastructure.customType.add') }}
         </UButton>
       </div>

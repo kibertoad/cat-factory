@@ -124,7 +124,6 @@ function revert() {
           {{ t('inspector.testingContext.revert') }}
         </UButton>
         <UButton
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-save"

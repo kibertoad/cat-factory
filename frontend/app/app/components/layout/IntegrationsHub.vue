@@ -400,7 +400,6 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
               v-for="item in recommendedActions"
               :key="`rec:${item.key}`"
               size="xs"
-              color="primary"
               variant="soft"
               :icon="item.icon"
               @click="item.onClick()"
@@ -450,7 +449,6 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                   }}</span>
                   <UBadge
                     v-if="!anyConnected && item.recommended && !item.connected"
-                    color="primary"
                     variant="subtle"
                     size="sm"
                   >

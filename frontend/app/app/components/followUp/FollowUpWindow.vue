@@ -246,7 +246,6 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                   <div class="flex flex-wrap items-center gap-2">
                     <UButton
                       size="xs"
-                      color="primary"
                       :loading="followUps.isActing(item.id)"
                       :disabled="!(drafts[item.id] ?? '').trim() || !access.canExecuteRuns.value"
                       :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
@@ -287,7 +286,6 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                 <div v-else class="flex flex-wrap items-center gap-2">
                   <UButton
                     size="xs"
-                    color="primary"
                     icon="i-lucide-ticket"
                     :loading="followUps.isActing(item.id)"
                     :disabled="!access.canExecuteRuns.value"

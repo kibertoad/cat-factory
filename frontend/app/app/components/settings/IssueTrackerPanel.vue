@@ -437,14 +437,7 @@ async function checkSetup(source: TaskSourceKind) {
     </section>
 
     <div class="flex justify-end">
-      <UButton
-        color="primary"
-        icon="i-lucide-save"
-        size="sm"
-        :loading="saving"
-        :disabled="!canSave"
-        @click="save"
-      >
+      <UButton icon="i-lucide-save" size="sm" :loading="saving" :disabled="!canSave" @click="save">
         {{ t('common.save') }}
       </UButton>
     </div>

@@ -597,7 +597,6 @@ function done() {
 
                 <div class="flex justify-end">
                   <UButton
-                    color="primary"
                     icon="i-lucide-plus"
                     size="sm"
                     :loading="adding"
@@ -675,7 +674,6 @@ function done() {
             </UButton>
             <UButton
               v-if="!isMonorepo && !configuredBlock"
-              color="primary"
               icon="i-lucide-plus"
               :loading="adding"
               :disabled="!canAdd"

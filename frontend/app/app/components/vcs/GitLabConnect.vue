@@ -78,7 +78,6 @@ async function connect() {
     </p>
 
     <UButton
-      color="primary"
       icon="i-lucide-gitlab"
       :loading="connecting"
       :disabled="!pat.trim()"

@@ -356,6 +356,7 @@ function fieldHelp(key: string): string | undefined {
     <div class="flex items-start justify-between gap-3">
       <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
+        color="neutral"
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
         size="xs"
@@ -506,13 +507,7 @@ function fieldHelp(key: string): string | undefined {
       <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          size="sm"
-          :loading="busy"
-          :disabled="!canSave"
-          @click="saveNative()"
-        >
+        <UButton size="sm" :loading="busy" :disabled="!canSave" @click="saveNative()">
           {{ connection ? t('common.save') : t('settings.providerConnection.form.connect') }}
         </UButton>
       </div>

@@ -428,7 +428,6 @@ function kindLabel(item: RequirementItem): string {
             >
               {{ t('spec.state.noneMatchFilter') }}
               <UButton
-                color="primary"
                 variant="link"
                 size="xs"
                 class="p-0"

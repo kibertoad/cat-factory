@@ -22,7 +22,7 @@ function reload() {
       <p class="mt-2 text-xs leading-relaxed text-muted">
         {{ t('errors.asyncView.body') }}
       </p>
-      <UButton class="mt-4" color="primary" variant="soft" size="xs" @click="reload">
+      <UButton class="mt-4" variant="soft" size="xs" @click="reload">
         {{ t('errors.asyncView.reload') }}
       </UButton>
     </div>

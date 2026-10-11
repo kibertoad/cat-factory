@@ -242,13 +242,7 @@ async function remove() {
           />
 
           <div class="flex justify-end">
-            <UButton
-              color="primary"
-              size="sm"
-              :loading="busy"
-              :disabled="!buildPayload()"
-              @click="save()"
-            >
+            <UButton size="sm" :loading="busy" :disabled="!buildPayload()" @click="save()">
               {{ status ? t('common.save') : t('settings.userSecrets.addToken') }}
             </UButton>
           </div>

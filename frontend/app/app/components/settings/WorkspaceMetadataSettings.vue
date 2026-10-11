@@ -133,7 +133,6 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
 
       <div class="flex justify-end">
         <UButton
-          color="primary"
           size="sm"
           icon="i-lucide-save"
           :loading="saving"

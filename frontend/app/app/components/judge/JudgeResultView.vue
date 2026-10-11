@@ -280,6 +280,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
               {{ t('judge.stop') }}
             </UButton>
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-undo-2"
@@ -293,7 +294,6 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             </UButton>
             <UButton
               size="sm"
-              color="primary"
               icon="i-lucide-circle-check"
               :loading="busy"
               :disabled="!canAct"

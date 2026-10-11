@@ -204,7 +204,7 @@ async function onDiscard() {
     @close="close"
   >
     <template v-if="initiative" #header-extras>
-      <UBadge color="primary" variant="subtle" size="sm">
+      <UBadge variant="subtle" size="sm">
         {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}
       </UBadge>
     </template>
@@ -343,7 +343,7 @@ async function onDiscard() {
       <UButton
         v-if="canDiscard"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="sm"
         icon="i-lucide-trash-2"
         :loading="resetting"
@@ -383,7 +383,6 @@ async function onDiscard() {
           {{ t('initiative.planning.proceed') }}
         </UButton>
         <UButton
-          color="primary"
           size="sm"
           :loading="resuming"
           :disabled="unanswered > 0 || resetting"

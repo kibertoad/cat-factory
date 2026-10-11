@@ -124,7 +124,6 @@ async function disconnect() {
 
         <div v-if="oauth" class="space-y-2">
           <UButton
-            color="primary"
             icon="i-lucide-shield-check"
             :loading="startingOAuth"
             data-testid="document-connect-oauth"
@@ -158,20 +157,14 @@ async function disconnect() {
           <UButton
             v-if="connected"
             color="error"
-            variant="ghost"
+            variant="soft"
             icon="i-lucide-unplug"
             @click="disconnect"
           >
             {{ t('documents.connect.disconnect') }}
           </UButton>
           <div v-else />
-          <UButton
-            color="primary"
-            icon="i-lucide-plug"
-            :loading="saving"
-            :disabled="!canSubmit"
-            @click="submit"
-          >
+          <UButton icon="i-lucide-plug" :loading="saving" :disabled="!canSubmit" @click="submit">
             {{ connected ? t('documents.connect.update') : t('documents.connect.connect') }}
           </UButton>
         </div>

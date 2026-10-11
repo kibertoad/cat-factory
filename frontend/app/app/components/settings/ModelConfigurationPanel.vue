@@ -365,13 +365,7 @@ async function save() {
                     </template>
                   </i18n-t>
                 </p>
-                <UButton
-                  icon="i-lucide-plus"
-                  color="primary"
-                  size="sm"
-                  class="shrink-0"
-                  @click="startCreate"
-                >
+                <UButton icon="i-lucide-plus" size="sm" class="shrink-0" @click="startCreate">
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
@@ -388,7 +382,7 @@ async function save() {
                 >
                   <div class="flex items-center gap-2">
                     <span class="truncate text-sm font-semibold text-app-100">{{ p.name }}</span>
-                    <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
+                    <UBadge v-if="p.isDefault" variant="subtle" size="xs">
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ms-auto flex items-center gap-1">
@@ -483,7 +477,6 @@ async function save() {
                   >
                     <UButton
                       size="sm"
-                      color="primary"
                       variant="subtle"
                       trailing-icon="i-lucide-chevron-down"
                       class="w-full justify-between"
@@ -576,7 +569,7 @@ async function save() {
                 >
                   {{ t('common.cancel') }}
                 </UButton>
-                <UButton color="primary" size="sm" :loading="busy" @click="save">
+                <UButton size="sm" :loading="busy" @click="save">
                   {{
                     editor.id
                       ? t('settings.modelConfiguration.editor.saveChanges')

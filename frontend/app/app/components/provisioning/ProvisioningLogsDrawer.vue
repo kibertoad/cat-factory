@@ -120,6 +120,7 @@ function when(epochMs: number): string {
         {{ t('provisioning.title') }}
       </SectionLabel>
       <UButton
+        color="neutral"
         icon="i-lucide-rotate-ccw"
         variant="ghost"
         size="xs"

@@ -196,7 +196,6 @@ async function draftComments(): Promise<void> {
           />
           <div class="flex flex-wrap items-center gap-2">
             <UButton
-              color="primary"
               icon="i-lucide-upload"
               :loading="posting"
               :disabled="!toPost.length"
@@ -242,7 +241,6 @@ async function draftComments(): Promise<void> {
           data-testid="guided-review-deep"
         />
         <UButton
-          color="primary"
           icon="i-lucide-send"
           :loading="sending"
           :disabled="!canSend"

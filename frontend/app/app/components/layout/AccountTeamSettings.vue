@@ -214,7 +214,7 @@ async function disconnectEmail() {
           :placeholder="t('layout.accountTeam.org.namePlaceholder')"
           class="flex-1"
         />
-        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-plus">
+        <UButton type="submit" :loading="busy" icon="i-lucide-plus">
           {{ t('layout.accountTeam.org.create') }}
         </UButton>
       </UForm>
@@ -280,7 +280,7 @@ async function disconnectEmail() {
           class="flex-1"
         />
         <USelect v-model="inviteRoles" multiple :items="ROLE_ITEMS" class="w-44" />
-        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-send">
+        <UButton type="submit" :loading="busy" icon="i-lucide-send">
           {{ t('layout.accountTeam.invite.submit') }}
         </UButton>
       </UForm>
@@ -328,7 +328,7 @@ async function disconnectEmail() {
             </template>
             <template #from>{{ accounts.emailConnection.fromAddress }}</template>
           </i18n-t>
-          <UButton size="xs" color="error" variant="ghost" :loading="busy" @click="disconnectEmail">
+          <UButton size="xs" color="error" variant="soft" :loading="busy" @click="disconnectEmail">
             {{ t('layout.accountTeam.email.disconnect') }}
           </UButton>
         </div>
@@ -345,7 +345,7 @@ async function disconnectEmail() {
             :placeholder="t('layout.accountTeam.email.apiKeyPlaceholder')"
             class="w-full"
           />
-          <UButton type="submit" color="primary" :loading="busy">
+          <UButton type="submit" :loading="busy">
             {{ t('layout.accountTeam.email.connect') }}
           </UButton>
         </UForm>

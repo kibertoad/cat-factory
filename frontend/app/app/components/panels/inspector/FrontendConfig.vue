@@ -238,7 +238,6 @@ onUnmounted(() => preview.stopPolling(props.block.id))
         <UButton
           size="xs"
           variant="soft"
-          color="primary"
           icon="i-lucide-wand-sparkles"
           :loading="detecting"
           data-testid="frontend-detect-button"
@@ -285,7 +284,6 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           <UButton
             size="xs"
             variant="soft"
-            color="primary"
             icon="i-lucide-check"
             data-testid="frontend-detect-apply"
             @click="applyDetection"
@@ -627,7 +625,6 @@ onUnmounted(() => preview.stopPolling(props.block.id))
               rel="noopener"
               size="xs"
               variant="soft"
-              color="primary"
               trailing-icon="i-lucide-external-link"
               data-testid="preview-url"
             >
@@ -640,7 +637,6 @@ onUnmounted(() => preview.stopPolling(props.block.id))
               v-if="previewStatus === 'stopped' || previewStatus === 'failed'"
               size="xs"
               variant="soft"
-              color="primary"
               icon="i-lucide-play"
               :loading="previewBusy"
               data-testid="preview-start"

@@ -209,7 +209,7 @@ async function clear() {
       <UButton
         v-if="configured"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="xs"
         icon="i-lucide-trash-2"
         :loading="busy"
@@ -319,7 +319,6 @@ async function clear() {
             {{ t('inspector.validationChecks.addCheck') }}
           </UButton>
           <UButton
-            color="primary"
             variant="soft"
             size="xs"
             icon="i-lucide-save"

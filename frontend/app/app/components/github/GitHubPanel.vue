@@ -453,7 +453,6 @@ async function merge(pr: GitHubPullRequest) {
                   {{ t('common.cancel') }}
                 </UButton>
                 <UButton
-                  color="primary"
                   size="sm"
                   icon="i-lucide-save"
                   :loading="github.savingRepos"
@@ -625,7 +624,6 @@ async function merge(pr: GitHubPullRequest) {
               </div>
               <div class="flex justify-end">
                 <UButton
-                  color="primary"
                   icon="i-lucide-git-pull-request"
                   :loading="openingPr"
                   :disabled="!canOpenPr"

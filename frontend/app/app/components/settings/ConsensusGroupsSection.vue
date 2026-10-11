@@ -483,7 +483,6 @@ async function remove(group: ConsensusGroup) {
           {{ t('settings.consensusGroups.editor.cancel') }}
         </UButton>
         <UButton
-          color="primary"
           size="sm"
           :loading="busy"
           :disabled="!editor.name.trim() || gatingIncomplete"

@@ -636,7 +636,6 @@ onUnmounted(() => {
           <p class="mt-0.5 text-xs text-muted">{{ t(nextTour.descriptionKey) }}</p>
           <UButton
             size="xs"
-            color="primary"
             variant="soft"
             class="mt-2"
             data-testid="tutorial-next-tour-start"
@@ -671,7 +670,6 @@ onUnmounted(() => {
             <UButton
               v-if="step.advanceOn !== 'target-click' || isLast"
               size="xs"
-              color="primary"
               data-testid="tutorial-next"
               @click="advance('nav-control')"
             >

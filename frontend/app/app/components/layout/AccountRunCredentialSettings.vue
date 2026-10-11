@@ -80,7 +80,6 @@ async function save() {
 
     <div class="flex justify-end">
       <UButton
-        color="primary"
         size="xs"
         icon="i-lucide-save"
         :loading="saving"

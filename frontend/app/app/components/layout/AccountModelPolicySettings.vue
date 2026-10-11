@@ -232,7 +232,6 @@ async function save() {
 
     <div class="flex gap-2">
       <UButton
-        color="primary"
         size="xs"
         icon="i-lucide-save"
         :loading="saving"

@@ -220,7 +220,6 @@ function reveal(blockId: string): void {
 
           <div class="flex flex-wrap items-center gap-2">
             <UButton
-              color="primary"
               icon="i-lucide-sparkles"
               :loading="assistant.running"
               :disabled="gate.state !== 'ready'"

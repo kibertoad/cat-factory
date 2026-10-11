@@ -100,19 +100,13 @@ const routes = computed<Route[]>(() => [
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <p class="text-sm font-semibold text-app-100">{{ r.title }}</p>
-                <UBadge v-if="r.badge" color="primary" variant="subtle" size="sm">
+                <UBadge v-if="r.badge" variant="subtle" size="sm">
                   {{ r.badge }}
                 </UBadge>
               </div>
               <p class="mt-0.5 text-sm leading-relaxed text-muted">{{ r.body }}</p>
             </div>
-            <UButton
-              size="sm"
-              color="primary"
-              variant="subtle"
-              class="shrink-0"
-              @click="r.onSelect()"
-            >
+            <UButton size="sm" variant="subtle" class="shrink-0" @click="r.onSelect()">
               {{ r.cta }}
             </UButton>
           </div>

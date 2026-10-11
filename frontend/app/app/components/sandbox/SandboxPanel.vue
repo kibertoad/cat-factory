@@ -457,7 +457,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 </span>
               </span>
               <UButton
-                color="primary"
                 icon="i-lucide-play"
                 size="sm"
                 :loading="store.launching"
@@ -630,9 +629,9 @@ async function archive(prompt: SandboxPromptVersion) {
                      Offered on a graded candidate and on an older workspace revision (rolling
                      back), but not on the one already live, where it would be a no-op. -->
                 <IconButton
+                  color="neutral"
                   v-if="canPromote(p)"
                   icon="i-lucide-rocket"
-                  color="primary"
                   variant="ghost"
                   size="xs"
                   :loading="promoting === p.id"
@@ -674,7 +673,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 icon="i-lucide-save"
                 size="sm"
                 :loading="savingPrompt"

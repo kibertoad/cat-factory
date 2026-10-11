@@ -479,19 +479,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingSlack"
-          @click="saveSlack"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingSlack" @click="saveSlack">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.slackOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingSlack"
           @click="clearSlack"
@@ -540,19 +534,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingLinear"
-          @click="saveLinear"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingLinear" @click="saveLinear">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.linearOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingLinear"
           @click="clearLinear"
@@ -601,19 +589,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingFigma"
-          @click="saveFigma"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingFigma" @click="saveFigma">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.figmaOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingFigma"
           @click="clearFigma"
@@ -658,19 +640,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingWeb"
-          @click="saveWeb"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingWeb" @click="saveWeb">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.webSearch"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingWeb"
           @click="clearWeb"
@@ -795,13 +771,7 @@ async function clearWeb() {
       </template>
 
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingStorage"
-          @click="saveStorage"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingStorage" @click="saveStorage">
           {{ t('common.save') }}
         </UButton>
       </div>

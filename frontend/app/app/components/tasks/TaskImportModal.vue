@@ -133,7 +133,6 @@ async function doSpawnEpic() {
           <UButton
             v-for="choice in addableSources"
             :key="choice.source"
-            color="primary"
             variant="soft"
             :icon="choice.icon"
             @click="ui.openTaskConnect(choice.source)"
@@ -197,7 +196,6 @@ async function doSpawnEpic() {
               />
             </UFormField>
             <UButton
-              color="primary"
               variant="soft"
               icon="i-lucide-layers"
               :loading="importing"

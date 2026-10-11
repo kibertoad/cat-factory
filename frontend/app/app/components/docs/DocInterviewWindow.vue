@@ -255,7 +255,6 @@ const onProceed = () =>
           {{ t('docInterview.proceed') }}
         </UButton>
         <UButton
-          color="primary"
           size="sm"
           :loading="resuming"
           :disabled="!!continueBlockedReason"

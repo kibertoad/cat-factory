@@ -406,6 +406,7 @@ watch(pendingUpload, async (file) => {
               {{ t('visualConfirm.requestFix.foldedHint') }}
             </span>
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-wrench"
@@ -490,7 +491,6 @@ watch(pendingUpload, async (file) => {
           {{ t('visualConfirm.recapture') }}
         </UButton>
         <UButton
-          color="primary"
           icon="i-lucide-circle-check"
           :loading="busy"
           :disabled="!canApprove || !access.canExecuteRuns.value"

@@ -174,7 +174,6 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
                 target="_blank"
                 rel="noopener noreferrer"
                 color="error"
-                variant="solid"
                 icon="i-lucide-external-link"
                 trailing
               >

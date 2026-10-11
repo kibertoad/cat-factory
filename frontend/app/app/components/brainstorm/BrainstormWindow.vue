@@ -408,7 +408,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     />
                     <div class="mt-2 flex flex-wrap items-center gap-2">
                       <UButton
-                        color="primary"
                         variant="soft"
                         size="xs"
                         icon="i-lucide-corner-down-left"
@@ -519,7 +518,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <div v-if="session && status === 'ready'" class="space-y-2 border-t border-default pt-4">
             <UButton
               v-if="canProceed"
-              color="primary"
               size="sm"
               block
               icon="i-lucide-arrow-right"
@@ -533,7 +531,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </UButton>
             <UButton
               v-else
-              color="primary"
               size="sm"
               block
               icon="i-lucide-wand-sparkles"
@@ -558,7 +555,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- action: merged (inspect → re-run / redo) -->
           <div v-if="session && merged" class="space-y-2 border-t border-default pt-4">
             <UButton
-              color="primary"
               size="sm"
               block
               icon="i-lucide-sparkles"
@@ -593,7 +589,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 :placeholder="t('brainstorm.redoPlaceholder')"
               />
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 block
