@@ -5,9 +5,9 @@ import { DEFAULT_WORK_VIEW, isWorkView, WORK_VIEW_PARAM, type WorkView } from '~
 /**
  * Which view of the board this person is looking at: the queue or the canvas.
  *
- * Per USER and per BROWSER, persisted like the interface tier and the lane order: it is the view
- * they used LAST, so a person who prefers the canvas stays on it, and nobody is moved by somebody
- * else's choice. See `utils/workView.ts` for why the queue is the default.
+ * Persisted per BROWSER in a cookie, like the interface tier and the lane order: it is the view
+ * used LAST in this browser, so a person who prefers the canvas stays on it, and nobody on another
+ * browser is moved by their choice. See `utils/workView.ts` for why the queue is the default.
  */
 export const useWorkViewStore = defineStore(
   'workView',

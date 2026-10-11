@@ -84,8 +84,19 @@ Slice 4 (#2343) is stacked on slice 1 (#2325), because it reuses `useStartPipeli
 - **Banners render in the page flow on the queue view** (`BoardTopOverlays` with `in-flow`), so
   they push the columns down instead of covering the queue header; the canvas toolbar does not
   render there.
-- **The variant guard counts solid siblings.** A queue card's primary action is solid and its
-  others are outline or soft; a second solid button beside the first fails
-  `check-frontend-variants.mjs`.
+- **Queue card actions are `soft`, as on the board card.** The queue lists many cards, so a solid
+  action on each would put many primaries in one view. `check-frontend-variants.mjs` cannot see
+  this: it counts sibling buttons, and a `v-for` counts as one.
+- **The queue card does not carry `data-block-id`.** The canvas measures dependency arrows through
+  that attribute (`utils/blockRects.ts`) and the e2e `taskCard()` helper selects by it, so a second
+  element with it gives the arrows a rect off the canvas and the helper two matches. The queue card
+  uses `data-queue-task`.
+- **Every tour walks the canvas.** Starting a tour on the queue view switches to the board view,
+  which is then the view used last, and Board basics has a step on the two views. A tour about the
+  queue itself (answer a decision from it) is a later idea; it would need its own view declared.
+- **The toolbar counter counts decisions only**, while the queue's "need you" count also holds
+  approvals, failures and parks, so the number changes after the click. Kept on purpose for now:
+  the counter names its subset ("1 decision"), and the e2e suite reads it as the "a decision is
+  pending" signal. One count for both is an open question for a later slice.
 - **The demo backend reports no runner.** On the e2e backend the setup checklist truthfully says
   that no runner is configured, though runs work, because the agents are faked.

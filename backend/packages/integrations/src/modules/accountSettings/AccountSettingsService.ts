@@ -108,6 +108,16 @@ export class AccountSettingsService {
     await this.cache?.invalidate(accountId, accountId)
   }
 
+  /**
+   * Whether an account admin can select a content-storage backend on this deployment at all. A
+   * capability offering only `off` and registering no store leaves the admin a picker with nothing
+   * in it, so a missing store is then the operator's to fix, not the admin's.
+   */
+  canSelectContentStorage(): boolean {
+    const { supportedBackends, customStores } = this.contentStorageCapability
+    return supportedBackends.some((backend) => backend !== 'off') || customStores.length > 0
+  }
+
   /** Admin read: config + non-secret summary + runtime capability; NEVER returns secrets. */
   async read(accountId: string): Promise<AccountSettingsView> {
     const record = await this.repo.getByAccount(accountId)

@@ -2560,6 +2560,18 @@
         "action": "Sprawdź połączenie"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Na tej tablicy agenci nie mogą jeszcze działać: nie podłączono żadnej puli runnerów.",
+        "outage": "Agenci nie mogą teraz działać: pula runnerów tej tablicy jest nieosiągalna."
+      },
+      "owner": {
+        "workspace_admin": "Może to naprawić administrator tablicy.",
+        "account_admin": "Może to naprawić administrator konta.",
+        "operator": "Może to naprawić tylko operator wdrożenia."
+      },
+      "fullSurface": "Możesz to naprawić sam: zmień rolę u góry panelu bocznego."
+    },
     "spendWarningBanner": {
       "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
       "body": "Wydatki na tokeny w tym miesiącu osiągnęły skonfigurowany budżet, dlatego działające potoki zostały wstrzymane, aby uniknąć dalszych kosztów. Wykonywanie wznowi się automatycznie po odnowieniu budżetu w przyszłym miesiącu lub po podniesieniu limitu.",
@@ -7990,6 +8002,7 @@
     "connect": {
       "or": "lub",
       "noneConfigured": "W tym wdrożeniu nie skonfigurowano połączenia z systemem kontroli źródeł. Poproś operatora o skonfigurowanie aplikacji GitHub lub dostępu do GitLab.",
+      "adminRequired": "Tylko administrator tablicy może podłączyć hosta repozytoriów. Poproś o to administratora tej tablicy.",
       "gitlab": {
         "intro": "Wklej osobisty token dostępu GitLab, aby połączyć ten obszar roboczy. cat-factory używa go do wyświetlania Twoich projektów, wypychania gałęzi i otwierania merge requestów.",
         "tokenLabel": "Osobisty token dostępu",
@@ -8007,7 +8020,8 @@
     "onboarding": {
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
-      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować.",
+      "switchBoard": "To nie ta tablica? Przełącz się na inną albo utwórz własną."
     },
     "addService": {
       "intro": "Wybierz istniejące repozytorium {provider}, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
@@ -8123,6 +8137,10 @@
           "canvas": {
             "title": "Tablica",
             "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
+          },
+          "views": {
+            "title": "Dwa widoki",
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Tutaj przełączasz się między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
           },
           "sidebar": {
             "title": "Pasek boczny",
@@ -8783,7 +8801,6 @@
       "step": "krok {current} z {total}",
       "openTask": "Otwórz zadanie",
       "showOnBoard": "Pokaż na tablicy",
-      "retry": "Ponów",
       "answer": "Odpowiedz",
       "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
       "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",

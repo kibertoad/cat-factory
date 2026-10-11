@@ -2560,6 +2560,18 @@
         "action": "Vérifier la connexion"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Les agents ne peuvent pas encore s'exécuter sur ce tableau : aucun pool de runners n'est connecté.",
+        "outage": "Les agents ne peuvent pas s'exécuter pour le moment : le pool de runners de ce tableau est injoignable."
+      },
+      "owner": {
+        "workspace_admin": "Un administrateur du tableau peut corriger cela.",
+        "account_admin": "Un administrateur du compte peut corriger cela.",
+        "operator": "Seul l'opérateur du déploiement peut corriger cela."
+      },
+      "fullSurface": "Vous pouvez corriger cela vous-même : changez de rôle en haut de la barre latérale."
+    },
     "spendWarningBanner": {
       "title": "Limite de dépense atteinte, exécution des agents en pause",
       "body": "La dépense en jetons de ce mois a atteint le budget configuré, les pipelines en cours ont donc été mis en pause pour éviter des coûts supplémentaires. L'exécution reprend automatiquement au renouvellement du budget le mois prochain, ou dès que la limite est relevée.",
@@ -7990,6 +8002,7 @@
     "connect": {
       "or": "ou",
       "noneConfigured": "Aucune connexion de gestion de code n'est configurée pour ce déploiement. Demandez à un opérateur de configurer une GitHub App ou un accès GitLab.",
+      "adminRequired": "Seul un administrateur du tableau peut connecter un hébergeur de dépôts. Demandez-le à un administrateur de ce tableau.",
       "gitlab": {
         "intro": "Collez un jeton d'accès personnel GitLab pour connecter cet espace de travail. cat-factory l'utilise pour lister vos projets, pousser des branches et ouvrir des merge requests.",
         "tokenLabel": "Jeton d'accès personnel",
@@ -8007,7 +8020,8 @@
     "onboarding": {
       "title": "Connecter cat-factory à {provider}",
       "titleAny": "Connecter cat-factory à vos dépôts",
-      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer."
+      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer.",
+      "switchBoard": "Ce n'est pas le bon tableau ? Passez à un autre, ou créez le vôtre."
     },
     "addService": {
       "intro": "Choisissez un dépôt {provider} existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",
@@ -8123,6 +8137,10 @@
           "canvas": {
             "title": "Le tableau",
             "body": "Les services, modules et tâches vivent sur ce canevas. Faites glisser pour vous déplacer, faites défiler pour zoomer et cliquez sur une carte pour l'inspecter."
+          },
+          "views": {
+            "title": "Deux vues",
+            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
           },
           "sidebar": {
             "title": "La barre latérale",
@@ -8783,7 +8801,6 @@
       "step": "étape {current} sur {total}",
       "openTask": "Ouvrir la tâche",
       "showOnBoard": "Afficher sur le tableau",
-      "retry": "Réessayer",
       "answer": "Répondre",
       "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",
       "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",
