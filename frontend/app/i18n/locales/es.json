@@ -8137,6 +8137,10 @@
             "title": "El tablero",
             "body": "Los servicios, módulos y tareas viven en este lienzo. Arrastra para desplazarte, usa la rueda para hacer zoom y haz clic en cualquier tarjeta para inspeccionarla."
           },
+          "views": {
+            "title": "Dos vistas",
+            "body": "El tablero tiene una segunda vista. La cola muestra lo que te necesita en todos los servicios. Aquí cambias entre la cola y este lienzo. La aplicación se abre en la vista que usaste por última vez."
+          },
           "sidebar": {
             "title": "La barra lateral",
             "body": "Aquí está todo lo demás: crear canalizaciones, conectar repositorios e integraciones y los ajustes del espacio de trabajo."

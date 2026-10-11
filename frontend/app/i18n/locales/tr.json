@@ -8137,6 +8137,10 @@
             "title": "Pano",
             "body": "Servisler, modüller ve görevler bu tuval üzerinde yaşar. Kaydırmak için sürükleyin, yakınlaştırmak için kaydırın ve incelemek için herhangi bir karta tıklayın."
           },
+          "views": {
+            "title": "İki görünüm",
+            "body": "Panonun ikinci bir görünümü var. Kuyruk, tüm servislerde seni bekleyenleri listeler. Kuyruk ile bu tuval arasında buradan geçiş yaparsın. Uygulama en son kullandığın görünümde açılır."
+          },
           "sidebar": {
             "title": "Kenar çubuğu",
             "body": "Geri kalan her şey burada: işlem hattı oluşturma, depoları ve entegrasyonları bağlama ve çalışma alanı ayarları."

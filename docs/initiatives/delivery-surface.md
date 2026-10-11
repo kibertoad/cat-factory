@@ -92,7 +92,8 @@ Slice 4 (#2343) is stacked on slice 1 (#2325), because it reuses `useStartPipeli
   element with it gives the arrows a rect off the canvas and the helper two matches. The queue card
   uses `data-queue-task`.
 - **Every tour walks the canvas.** Starting a tour on the queue view switches to the board view,
-  which is then the view used last. A tour about the queue would need its own view declared.
+  which is then the view used last, and Board basics has a step on the two views. A tour about the
+  queue itself (answer a decision from it) is a later idea; it would need its own view declared.
 - **The toolbar counter counts decisions only**, while the queue's "need you" count also holds
   approvals, failures and parks, so the number changes after the click. Kept on purpose for now:
   the counter names its subset ("1 decision"), and the e2e suite reads it as the "a decision is

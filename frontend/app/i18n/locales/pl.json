@@ -8137,6 +8137,10 @@
             "title": "Tablica",
             "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
           },
+          "views": {
+            "title": "Dwa widoki",
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Tutaj przełączasz się między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
+          },
           "sidebar": {
             "title": "Pasek boczny",
             "body": "Tu znajdziesz całą resztę: budowanie potoków, podłączanie repozytoriów i integracji oraz ustawienia obszaru roboczego."

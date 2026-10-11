@@ -8137,6 +8137,10 @@
             "title": "Le tableau",
             "body": "Les services, modules et tâches vivent sur ce canevas. Faites glisser pour vous déplacer, faites défiler pour zoomer et cliquez sur une carte pour l'inspecter."
           },
+          "views": {
+            "title": "Deux vues",
+            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
+          },
           "sidebar": {
             "title": "La barre latérale",
             "body": "Tout le reste se trouve ici : créer des pipelines, connecter des dépôts et des intégrations, et les paramètres de l'espace de travail."

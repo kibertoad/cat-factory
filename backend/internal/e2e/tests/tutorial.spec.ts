@@ -74,7 +74,25 @@ test.describe('in-app tutorial', () => {
     await expect(page.getByTestId('work-view-board')).toHaveAttribute('aria-current', 'page')
     const tooltip = page.getByTestId('tutorial-tooltip')
     await tooltip.getByTestId('tutorial-next').click()
-    await expect(page.getByTestId('tutorial-highlight')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    const highlight = page.getByTestId('tutorial-highlight')
+    await expect(highlight).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // The step after the canvas names the two views, ringing the switcher it switched with.
+    await tooltip.getByTestId('tutorial-next').click()
+    const switcher = await page.getByTestId('work-view-switcher').boundingBox()
+    await expect
+      .poll(async () => {
+        const ring = await highlight.boundingBox()
+        return (
+          !!ring &&
+          !!switcher &&
+          ring.x <= switcher.x &&
+          ring.y <= switcher.y &&
+          ring.x + ring.width >= switcher.x + switcher.width &&
+          ring.y + ring.height >= switcher.y + switcher.height
+        )
+      })
+      .toBe(true)
   })
 
   test('remembers "no thanks" across a reload', async ({ page, request }) => {

@@ -8137,6 +8137,10 @@
             "title": "Das Board",
             "body": "Services, Module und Aufgaben liegen auf dieser Fläche. Ziehe zum Verschieben, scrolle zum Zoomen und klicke auf eine Karte, um Details zu sehen."
           },
+          "views": {
+            "title": "Zwei Ansichten",
+            "body": "Das Board hat eine zweite Ansicht. Die Warteschlange zeigt, was über alle Services hinweg auf dich wartet. Hier wechselst du zwischen der Warteschlange und dieser Arbeitsfläche. Die App öffnet die Ansicht, die du zuletzt genutzt hast."
+          },
           "sidebar": {
             "title": "Die Seitenleiste",
             "body": "Alles Weitere findest du hier: Pipelines erstellen, Repositories und Integrationen verbinden, Workspace-Einstellungen."

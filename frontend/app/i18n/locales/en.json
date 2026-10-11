@@ -8456,6 +8456,10 @@
             "title": "The board",
             "body": "Services, modules, and tasks live on this canvas. Drag to pan, scroll to zoom, and click any card to inspect it."
           },
+          "views": {
+            "title": "Two views",
+            "body": "The board has a second view. The queue lists what needs you across every service. Switch between the queue and this canvas here. The app opens on the view you used last."
+          },
           "sidebar": {
             "title": "The sidebar",
             "body": "Everything else lives here: building pipelines, connecting repositories and integrations, and workspace settings."

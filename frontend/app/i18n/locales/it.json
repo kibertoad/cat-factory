@@ -8137,6 +8137,10 @@
             "title": "La board",
             "body": "Servizi, moduli e attività vivono su questo canvas. Trascina per spostarti, scorri per lo zoom e clicca su una scheda per esaminarla."
           },
+          "views": {
+            "title": "Due viste",
+            "body": "La board ha una seconda vista. La coda elenca ciò che richiede te in tutti i servizi. Qui passi dalla coda a questa area di lavoro. L’app si apre sulla vista che hai usato per ultima."
+          },
           "sidebar": {
             "title": "La barra laterale",
             "body": "Tutto il resto è qui: creare pipeline, collegare repository e integrazioni, e le impostazioni dello workspace."
