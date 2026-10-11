@@ -22,16 +22,18 @@ export default defineNuxtConfig({
   // true for an npm install but not for this monorepo, where pnpm links the layer to
   // `frontend/app`. Without these entries the scan misses every dependency that only the
   // layer imports, so `nuxt dev` discovers them while the first page loads and reloads the
-  // page after each batch. The same rule and extensions as Nuxt's: the scan crawls every
-  // layer file, including ones the first page never imports, which costs a fraction of a
-  // second per cold start and saves the reloads.
+  // page after each batch. The first two globs are Nuxt's own (`installedScanEntries`);
+  // the third is ours, so test-only imports (vitest, msw) are not pre-bundled. The scan
+  // crawls every layer file, including ones the first page never imports, which costs a
+  // fraction of a second per cold start and saves the reloads.
   vite: layerAppDir.includes('/node_modules/')
     ? {}
     : {
         optimizeDeps: {
           entries: [
             `${layerAppDir}/**/*.{vue,js,jsx,mjs,ts,tsx,mts}`,
-            `!${layerAppDir}/**/*.{spec,test}.ts`,
+            `!${layerAppDir}/**/node_modules/**`,
+            `!${layerAppDir}/**/*.{spec,test}.{vue,js,jsx,mjs,ts,tsx,mts}`,
           ],
         },
       },

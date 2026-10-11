@@ -91,8 +91,10 @@ export default defineConfig({
       // `nuxt dev`: it is the artifact that ships, and it has every chunk emitted ahead of
       // time. The dev server pre-bundles deps from a startup scan, and any dep the scan
       // misses is discovered at runtime and forces a full page reload, which aborts an
-      // in-flight `page.goto` (`net::ERR_ABORTED`) and hangs a spec to its timeout.
-      // deploy/frontend's `optimizeDeps.entries` now makes that scan cover the layer, but a
+      // in-flight `page.goto` (`net::ERR_ABORTED`) and hangs a spec to its timeout. The
+      // board page's `defineAsyncComponent(() => import(...))` panels are the known source
+      // of such misses, and a dep reached only by a dynamic import outside the scanned tree
+      // (a module's runtime dir) is still one. deploy/frontend's `optimizeDeps.entries` now makes that scan cover the layer, but a
       // spec should not depend on it staying complete.
       // `--filter` makes the command cwd-independent; Nuxt's preview server binds `PORT`.
       command:
