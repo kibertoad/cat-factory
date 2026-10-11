@@ -55,7 +55,7 @@ export const useWorkspaceQueueStore = defineStore('workspaceQueue', () => {
   )
 
   /**
-   * The ONE attention count the preview shows: tasks a human must act on before an agent can
+   * The ONE attention count the queue view shows: tasks a human must act on before an agent can
    * continue, across every service and regardless of the filter. A pull request waiting to merge
    * is not in it, because nothing is stalled behind it (see `utils/queueSections.ts`).
    */

@@ -53,7 +53,7 @@ test.describe('queue view', () => {
     await startRun(request, workspaceId, 'task_login', pipeline.id)
 
     const card = column(page, 'needs_you').locator(
-      '[data-testid="queue-card"][data-block-id="task_login"]',
+      '[data-testid="queue-card"][data-queue-task="task_login"]',
     )
     await expect(card).toHaveAttribute('data-reason', 'decision', { timeout: LIVE_TIMEOUT })
 
@@ -67,7 +67,7 @@ test.describe('queue view', () => {
     // Nothing is waiting on a person any more, so the card cannot come back to this column.
     await expect(card).toHaveCount(0, { timeout: LIVE_TIMEOUT })
     await expect(
-      page.locator('[data-testid="queue-card"][data-block-id="task_login"]'),
+      page.locator('[data-testid="queue-card"][data-queue-task="task_login"]'),
     ).toHaveCount(1)
   })
 
@@ -84,7 +84,7 @@ test.describe('queue view', () => {
     await page.getByTestId('decision-badge').click()
     await expect(page.getByTestId('queue-view')).toBeVisible()
     await expect(
-      column(page, 'needs_you').locator('[data-testid="queue-card"][data-block-id="task_login"]'),
+      column(page, 'needs_you').locator('[data-testid="queue-card"][data-queue-task="task_login"]'),
     ).toBeVisible({ timeout: LIVE_TIMEOUT })
   })
 })

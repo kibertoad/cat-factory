@@ -8782,7 +8782,6 @@
       "step": "étape {current} sur {total}",
       "openTask": "Ouvrir la tâche",
       "showOnBoard": "Afficher sur le tableau",
-      "retry": "Réessayer",
       "answer": "Répondre",
       "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",
       "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",

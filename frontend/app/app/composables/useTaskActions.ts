@@ -18,6 +18,7 @@ export function useTaskActions(taskId: () => string) {
   const toast = useToast()
   const { t } = useI18n()
   const { confirm } = useConfirm()
+  const access = useWorkspaceAccess()
 
   const task = computed<Block | undefined>(() => board.getBlock(taskId()))
 
@@ -31,6 +32,14 @@ export function useTaskActions(taskId: () => string) {
   /** Deps that haven't merged yet: these block this task from running. */
   const unmet = computed(() => board.unmetDeps(taskId()))
   const runnable = computed(() => board.isRunnable(taskId()))
+
+  // Start and Merge both need `runs.execute`. A read-only member sees them disabled with the reason,
+  // the way the shared failure banner treats Retry, rather than pressing a button the server
+  // refuses. Asked once here so the two cards cannot gate them differently.
+  const canExecute = computed(() => access.canExecuteRuns.value)
+  const executeDeniedTitle = computed(() =>
+    canExecute.value ? undefined : t('access.noRunExecute'),
+  )
 
   const pipelineFor = useStartPipelineResolver()
   const defaultPipeline = computed(() => pipelineFor(task.value))
@@ -174,6 +183,8 @@ export function useTaskActions(taskId: () => string) {
     sandboxed,
     unmet,
     runnable,
+    canExecute,
+    executeDeniedTitle,
     defaultPipeline,
     outcomeReadable,
     openOutcome,
@@ -195,7 +206,7 @@ export interface StartPipeline {
 
 /**
  * Resolve the pipeline a plain "Start" uses for a task. A function rather than a computed so
- * the intake dialog can ask it about a task it has just created, and the cards about their own.
+ * a caller can ask it about any task, not only about the one its card shows.
  */
 export function useStartPipelineResolver() {
   const pipelines = usePipelinesStore()

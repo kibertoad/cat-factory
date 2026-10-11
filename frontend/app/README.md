@@ -564,8 +564,9 @@ products. The sidebar's Views switcher (`components/layout/WorkViewSwitcher.vue`
 them, and so do the palette entries and a `?view=queue` / `?view=board` link. The initiative it
 starts, with the slices after it: [`delivery-surface.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/delivery-surface.md).
 
-- **Which view opens is the person's own choice**: the view they used last, per user and per
-  browser (`stores/workView.ts`, persisted like the interface tier). A person who has not chosen
+- **Which view opens is the person's own choice**: the view they used last in this browser
+  (`stores/workView.ts`, a cookie persisted like the interface tier, so two accounts on one browser
+  share it). A person who has not chosen
   lands on the queue, because it answers the first question a person opens the app with. Both
   views exist in every tier and every role: neither is an override of the other.
 - **The queue states the canvas's verdict, regrouped.** `useTaskLaneClassifier` is the one

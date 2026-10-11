@@ -8782,7 +8782,6 @@
       "step": "passo {current} di {total}",
       "openTask": "Apri attività",
       "showOnBoard": "Mostra nella board",
-      "retry": "Riprova",
       "answer": "Rispondi",
       "budgetPaused": "Il limite di spesa ha messo in pausa questa esecuzione. Riprende quando il limite aumenta.",
       "parked": "L’esecuzione attende una persona. Apri l’attività per vedere cosa serve.",

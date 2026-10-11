@@ -18,6 +18,8 @@ const {
   sandboxed,
   unmet,
   runnable,
+  canExecute,
+  executeDeniedTitle,
   defaultPipeline,
   outcomeReadable,
   openOutcome,
@@ -69,17 +71,16 @@ const prLabel = computed(() =>
 
 const laneView = useLaneViewStore()
 /**
- * Reading the result starts at the OUTCOME summary (what changed in product terms, with the
- * captured evidence), and the pull request is one click inside it. In BASIC mode that replaces
- * the card's raw PR chip: the diff is still exactly as reachable, through a surface that says
- * what the diff is about first. Advanced mode keeps both, since a reader who wants the diff
- * directly is the reader that tier is for.
+ * The card's raw pull-request chip. Reading the result starts at the OUTCOME summary (what changed
+ * in product terms, with the captured evidence), and the pull request is one click inside it, so
+ * BASIC mode drops the chip in favour of the outcome card carrying the same link at the top: the
+ * diff is still exactly as reachable, through a surface that says what the diff is about first.
+ * Advanced mode keeps both, since a reader who wants the diff directly is the reader that tier is
+ * for.
  *
- * The card's raw pull-request chip, which basic mode drops in favour of the outcome card
- * carrying the same link at the top. Written as the INVARIANT ("the diff never stops being
- * reachable from this card") rather than as `isAdvanced` alone, so the tier can only ever
- * reorder two routes and never remove the last one: where the outcome card is not offered,
- * the chip stays in both tiers.
+ * Written as the INVARIANT ("the diff never stops being reachable from this card") rather than as
+ * `isAdvanced` alone, so the tier can only ever reorder two routes and never remove the last one:
+ * where the outcome card is not offered, the chip stays in both tiers.
  */
 const showPrChip = computed(
   () => Boolean(pr.value) && (uiMode.isAdvanced || !outcomeReadable.value),
@@ -285,10 +286,11 @@ function selectTask() {
           size="xs"
           :icon="!runnable ? 'i-lucide-lock' : sandboxed ? 'i-lucide-shield' : 'i-lucide-play'"
           :loading="starting"
-          :disabled="!runnable || starting"
+          :disabled="!runnable || starting || !canExecute"
           data-testid="task-start"
           :title="
-            !runnable
+            executeDeniedTitle ??
+            (!runnable
               ? t('board.task.waitingOn', { deps: unmet.map((d) => d.title).join(', ') })
               : sandboxed
                 ? t('board.task.startPipelineDryRun', {
@@ -296,7 +298,7 @@ function selectTask() {
                   })
                 : t('board.task.startPipeline', {
                     name: defaultPipeline?.name ?? t('board.task.pipelineFallback'),
-                  })
+                  }))
           "
           @click.stop="run"
         >
@@ -353,7 +355,14 @@ function selectTask() {
         >
           {{ t('board.task.review') }}
         </UButton>
-        <UButton color="success" size="xs" icon="i-lucide-git-merge" @click.stop="merge">
+        <UButton
+          color="success"
+          size="xs"
+          icon="i-lucide-git-merge"
+          :disabled="!canExecute"
+          :title="executeDeniedTitle"
+          @click.stop="merge"
+        >
           {{ t('board.task.merge') }}
         </UButton>
       </template>

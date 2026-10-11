@@ -405,6 +405,16 @@ useTutorialNudge()
 // plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it
 // simply has nothing to talk to, and the browser-persisted store carries on alone.
 useTutorialSync()
+// Every tour walks the CANVAS: its anchors are canvas nodes and the canvas toolbar. The queue view
+// covers the canvas, which stays mounted, so a tour started there would ring and explain elements
+// nobody can see. Starting a tour therefore moves the person to the canvas, which is then the view
+// they used last.
+watch(
+  () => tutorial.touring,
+  (touring) => {
+    if (touring) views.show('board')
+  },
+)
 
 // Subscribe to the backend's real-time event stream and (re)connect whenever the
 // active workspace changes. Runs advance durably server-side; progress arrives as

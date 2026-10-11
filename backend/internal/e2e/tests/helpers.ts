@@ -867,20 +867,6 @@ export async function answerTutorialPrompt(
  * Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}). Must run BEFORE
  * `page.goto`.
  */
-/**
- * Open the SPA on one of the board's two views: the queue or the canvas. The choice is the
- * person's own and persisted (store `workView`), and COOKIE-backed like the other first-run state.
- */
-export async function openOnView(page: Page, view: 'queue' | 'board'): Promise<void> {
-  await page.context().addCookies([
-    {
-      name: 'workView',
-      value: encodeURIComponent(JSON.stringify({ storedView: view })),
-      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
-    },
-  ])
-}
-
 export async function answerRolePrompt(
   page: Page,
   role: 'engineer' | 'product-manager' | 'designer' | null,
@@ -890,6 +876,20 @@ export async function answerRolePrompt(
     {
       name: 'uiRole',
       value: encodeURIComponent(JSON.stringify({ storedRole: role })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
+/**
+ * Open the SPA on one of the board's two views: the queue or the canvas. The choice is the
+ * person's own and persisted (store `workView`), and COOKIE-backed like the other first-run state.
+ */
+export async function openOnView(page: Page, view: 'queue' | 'board'): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: 'workView',
+      value: encodeURIComponent(JSON.stringify({ storedView: view })),
       url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
     },
   ])

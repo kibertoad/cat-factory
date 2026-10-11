@@ -8782,7 +8782,6 @@
       "step": "adım {current} / {total}",
       "openTask": "Görevi aç",
       "showOnBoard": "Panoda göster",
-      "retry": "Yeniden dene",
       "answer": "Yanıtla",
       "budgetPaused": "Harcama sınırı bu çalıştırmayı duraklattı. Sınır yükseltilince devam eder.",
       "parked": "Çalıştırma bir kişiyi bekliyor. Neye ihtiyaç duyduğunu görmek için görevi aç.",

@@ -8782,7 +8782,6 @@
       "step": "paso {current} de {total}",
       "openTask": "Abrir tarea",
       "showOnBoard": "Mostrar en el tablero",
-      "retry": "Reintentar",
       "answer": "Responder",
       "budgetPaused": "El límite de gasto pausó esta ejecución. Continúa cuando se suba el límite.",
       "parked": "La ejecución espera a una persona. Abre la tarea para ver qué necesita.",

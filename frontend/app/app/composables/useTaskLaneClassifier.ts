@@ -12,7 +12,7 @@ export interface ClassifiedEntry {
  * The store-facing half of `classifyTask`: resolve one task's lane, reason and rendered entry.
  *
  * Shared by the two surfaces that lay tasks out in lanes, a service frame's swimlanes
- * (`useFrameLanes`) and the workspace-wide queue (`useWorkspaceQueue`), so both state the SAME
+ * (`useFrameLanes`) and the workspace-wide queue (`useWorkspaceQueueStore`), so both state the SAME
  * claim about a task. A card in "Needs you" on the board and in "In flight" in the queue would
  * make the reader arbitrate between two answers to one question.
  *

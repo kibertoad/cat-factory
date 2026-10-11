@@ -8782,7 +8782,6 @@
       "step": "Schritt {current} von {total}",
       "openTask": "Aufgabe öffnen",
       "showOnBoard": "Auf dem Board zeigen",
-      "retry": "Wiederholen",
       "answer": "Antworten",
       "budgetPaused": "Das Ausgabenlimit hat diesen Durchlauf angehalten. Er läuft weiter, sobald das Limit erhöht wird.",
       "parked": "Der Durchlauf wartet auf einen Menschen. Öffne die Aufgabe, um zu sehen, was fehlt.",

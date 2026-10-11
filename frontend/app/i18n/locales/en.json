@@ -9113,7 +9113,6 @@
       "step": "step {current} of {total}",
       "openTask": "Open task",
       "showOnBoard": "Show on the board",
-      "retry": "Retry",
       "answer": "Answer",
       "budgetPaused": "The spend limit paused this run. It continues when the limit goes up.",
       "parked": "The run waits for a person. Open the task to see what it needs.",

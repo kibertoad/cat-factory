@@ -8782,7 +8782,6 @@
       "step": "krok {current} z {total}",
       "openTask": "Otwórz zadanie",
       "showOnBoard": "Pokaż na tablicy",
-      "retry": "Ponów",
       "answer": "Odpowiedz",
       "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
       "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
